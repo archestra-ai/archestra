@@ -56,7 +56,7 @@ describe("compareSkillVersionFiles", () => {
   it("sorts by path so the change list does not reshuffle between selections", () => {
     const compared = compareSkillVersionFiles(
       [file("z.md", "z"), file("a.md", "a"), file("m.md", "m")],
-      [],
+      [file("m.md", "m"), file("z.md", "older")],
     );
 
     expect(compared.map((entry) => entry.path)).toEqual([

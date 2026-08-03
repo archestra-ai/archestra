@@ -135,6 +135,8 @@ Every edit that changes a skill's `SKILL.md` or resource files creates a new imm
 
 Open **Version history** from the skill's row menu. Pick a version to see every file it holds. Each file is marked as added, changed, or removed against the version before it. A file that changed opens as a diff — one that did not opens as itself.
 
+The earliest version has no version before it to compare against, so its files are listed without those marks.
+
 The **Instructions** row holds the `SKILL.md` body. Frontmatter like the name and description is not versioned, so it never appears here.
 
 ### Restoring a Version
@@ -147,7 +149,7 @@ It changes nothing else. The name, description, and other frontmatter fields are
 
 A GitHub-synced skill cannot be restored, since its content comes from the repo. Stop the sync in the skill editor to make the skill editable again.
 
-Built-in skills also offer **Reset to default** in the version history dialog. It overwrites your local edits with the content Archestra ships, recorded as a new version.
+Built-in skills also offer **Reset to default** in the skill's row menu. It overwrites your local edits with the content Archestra ships, recorded as a new version.
 
 ## Environments
 

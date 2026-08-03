@@ -6,7 +6,6 @@ import {
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
 import {
-  useResetSkill,
   useRestoreSkillVersion,
   useSkill,
   useSkillVersion,
@@ -22,7 +21,6 @@ vi.mock("@/lib/skills/skill.query", () => ({
   useSkillVersions: vi.fn(),
   useSkillVersion: vi.fn(),
   useRestoreSkillVersion: vi.fn(),
-  useResetSkill: vi.fn(),
 }));
 
 // Monaco needs a real browser layout engine, so both editors stand in as plain
@@ -99,7 +97,6 @@ const file = (path: string, content: string) => ({
 });
 
 const mutateAsync = vi.fn();
-const resetAsync = vi.fn();
 
 function mockSkill(overrides: Record<string, unknown> = {}) {
   vi.mocked(useSkill).mockReturnValue({
@@ -196,11 +193,10 @@ function renderDialog() {
 describe("SkillVersionHistoryDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // `clearAllMocks` leaves implementations in place, so both mutations are
+    // `clearAllMocks` leaves implementations in place, so the mutation is
     // re-stubbed here rather than inheriting whatever the last test set. Null
     // is the "nothing was written" resolution; success cases override it.
     mutateAsync.mockResolvedValue(null);
-    resetAsync.mockResolvedValue(null);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
@@ -208,11 +204,6 @@ describe("SkillVersionHistoryDialog", () => {
     vi.mocked(useMissingPermissions).mockReturnValue({});
     vi.mocked(useRestoreSkillVersion).mockReturnValue({
       mutateAsync,
-      isPending: false,
-      // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
-    } as any);
-    vi.mocked(useResetSkill).mockReturnValue({
-      mutateAsync: resetAsync,
       isPending: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
     } as any);
@@ -361,7 +352,11 @@ describe("SkillVersionHistoryDialog", () => {
       screen.getByRole("button", { name: "Restore this version" }),
     );
 
-    expect(screen.getByText(/not\s+versioned/)).toHaveTextContent(
+    // scoped to the confirmation: the preview pane says something similar
+    // about the manifest row, and this is a claim about the restore
+    expect(
+      screen.getByRole("dialog", { name: /Restore version 2/ }),
+    ).toHaveTextContent(
       "the name, description, and other frontmatter fields are not versioned",
     );
   });
@@ -377,20 +372,6 @@ describe("SkillVersionHistoryDialog", () => {
       screen.getByRole("button", { name: "Restore this version" }),
     ).toBeDisabled();
     expect(screen.getByText(/synced from GitHub/)).toBeInTheDocument();
-  });
-
-  it("offers reset to default only for built-in skills", () => {
-    const { unmount } = renderDialog();
-    expect(
-      screen.queryByRole("button", { name: /Reset to default/ }),
-    ).not.toBeInTheDocument();
-    unmount();
-
-    mockSkill({ sourceType: "built_in" });
-    renderDialog();
-    expect(
-      screen.getByRole("button", { name: /Reset to default/ }),
-    ).toBeInTheDocument();
   });
 
   it("lists the whole version, nested under its folders, badging what moved", async () => {
@@ -462,8 +443,6 @@ describe("SkillVersionHistoryDialog", () => {
 
     await user.click(screen.getByRole("button", { name: /v3/ }));
 
-    // waiting on a settled failure would hang the comparison forever
-    expect(screen.queryByText(/^Comparing with/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "extract.py" }),
     ).toBeInTheDocument();
@@ -554,7 +533,59 @@ describe("SkillVersionHistoryDialog", () => {
     expect(refetch).toHaveBeenCalled();
   });
 
-  it("does not annotate a version before its baseline settles", () => {
+  it("does not call a skill versionless while its head is still unknown", () => {
+    // on open both reads are in flight, so nothing yet names a head version
+    vi.mocked(useSkill).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      refetch: vi.fn(),
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    vi.mocked(useSkillVersions).mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      refetch: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    renderDialog();
+
+    // every skill has at least version 1, so "no versions yet" is never a true
+    // reading — in flight or failed, it is one of those two instead
+    expect(screen.queryByText(/no recorded versions/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Loading version...")).toBeInTheDocument();
+  });
+
+  it("offers a retry when the skill itself cannot be read", async () => {
+    const user = userEvent.setup();
+    const refetchSkill = vi.fn();
+    const refetchVersions = vi.fn();
+    // the skill 404s and the list fails, so no read names a head version
+    vi.mocked(useSkill).mockReturnValue({
+      data: null,
+      isPending: false,
+      refetch: refetchSkill,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    mockVersionsError(refetchVersions);
+    renderDialog();
+
+    expect(screen.queryByText(/no recorded versions/i)).not.toBeInTheDocument();
+    const failure = screen
+      .getByText("Could not load this skill.")
+      .closest("div");
+    await user.click(
+      within(failure as HTMLElement).getByRole("button", { name: "Retry" }),
+    );
+
+    expect(refetchSkill).toHaveBeenCalled();
+    expect(refetchVersions).toHaveBeenCalled();
+  });
+
+  it("shows a version without waiting on the baseline, and without guessing", () => {
     // only the selected version has arrived; its predecessor is still in flight
     mockVersionDetails({
       3: versionDetail({
@@ -566,11 +597,12 @@ describe("SkillVersionHistoryDialog", () => {
     });
     renderDialog();
 
-    // annotating now would guess; the version is shown once there is a baseline
-    expect(screen.getByText("Comparing with version 2...")).toBeInTheDocument();
+    // the version asked for is already in hand, so it is rendered rather than
+    // held back behind a second fetch — just not annotated until that lands
     expect(
-      screen.queryByRole("button", { name: "extract.py" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "extract.py" }).closest("li"),
+    ).not.toHaveTextContent(/added|removed|changed/);
+    expect(screen.getByTestId("editor")).toHaveTextContent(HEAD_BODY);
   });
 
   it("reads a file this version stores as text, whatever the last one stored", async () => {
@@ -599,7 +631,7 @@ describe("SkillVersionHistoryDialog", () => {
     expect(screen.getByTestId("editor")).toHaveTextContent("<svg />");
   });
 
-  it("reads a version whose predecessor is gone as newly added", async () => {
+  it("lists a version whose predecessor is gone without claiming what moved", async () => {
     const user = userEvent.setup();
     mockVersionDetails({
       3: versionDetail({
@@ -615,17 +647,17 @@ describe("SkillVersionHistoryDialog", () => {
 
     await user.click(screen.getByRole("button", { name: /v3/ }));
 
-    expect(screen.queryByText(/^Comparing with/)).not.toBeInTheDocument();
-    // with no baseline the whole version reads as added, manifest included
+    // there is one rule: no baseline, no badges — a 404 predecessor supports
+    // "added" no better than a failed one does
     expect(
       screen.getByRole("button", { name: "Instructions" }).closest("li"),
-    ).toHaveTextContent("added");
+    ).not.toHaveTextContent(/added|removed|changed/);
     expect(
       screen.getByRole("button", { name: "extract.py" }).closest("li"),
-    ).toHaveTextContent("added");
+    ).not.toHaveTextContent(/added|removed|changed/);
   });
 
-  it("reads the earliest version as newly added, having nothing to diff against", async () => {
+  it("lists the earliest version on its own, having nothing to compare against", async () => {
     const user = userEvent.setup();
     mockVersionDetails({
       1: versionDetail({
@@ -639,11 +671,13 @@ describe("SkillVersionHistoryDialog", () => {
 
     await user.click(screen.getByRole("button", { name: /v1/ }));
 
-    // version 1 has no predecessor to wait for, so it never blocks on one
-    expect(screen.queryByText(/^Comparing with/)).not.toBeInTheDocument();
+    // version 1 has no predecessor, so it is shown rather than annotated, and
+    // there is no failure to report either
     expect(
       screen.getByRole("button", { name: "extract.py" }).closest("li"),
-    ).toHaveTextContent("added");
+    ).not.toHaveTextContent(/added|removed|changed/);
+    expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("editor")).toHaveTextContent(OLD_BODY);
   });
 });
 

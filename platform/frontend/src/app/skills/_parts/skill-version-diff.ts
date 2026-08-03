@@ -26,10 +26,10 @@ export interface ComparedSkillFile<T extends ComparableFile> {
  * Pair a version's files against its predecessor's, keyed by path and sorted by
  * path so the list is stable across selections.
  *
- * An empty `previous` is a supported baseline, not a misuse: the oldest
- * retained version has no predecessor, and neither does one whose predecessor
- * has been pruned or could not be fetched. Every file then reads as `added`,
- * which is what the history dialog renders for those cases.
+ * Both sides are versions that were actually read. A version with no baseline —
+ * the oldest one, or one whose predecessor could not be fetched — is not
+ * compared at all: it is listed on its own, since calling every file `added`
+ * would report the absence of a baseline as a fact about the skill's history.
  */
 export function compareSkillVersionFiles<T extends ComparableFile>(
   current: T[],

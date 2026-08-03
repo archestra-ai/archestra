@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
+  type QueryClient,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -160,9 +161,9 @@ export function useSkillVersions(id: string | null) {
         path: { id: id as string },
         query: { limit: SKILL_VERSIONS_PAGE_SIZE, offset: pageParam },
       });
-      // The history dialog renders its own failure state with a retry, and a
-      // query retries before it settles — toasting here would stack one per
-      // attempt behind a dialog that already says the same thing.
+      // The history dialog renders its own failure state with a retry, so a
+      // toast here would say the same thing twice, the second time behind the
+      // dialog that already said it.
       throwOnApiError(error, { toastOnError: false });
       return data;
     },
@@ -241,10 +242,9 @@ export function useUpdateSkill() {
       }
       return data;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data) => {
       if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
-      queryClient.invalidateQueries({ queryKey: ["skills", variables.id] });
+      invalidateSkills(queryClient);
       toast.success("Skill updated");
     },
   });
@@ -380,13 +380,9 @@ export function useRestoreSkillVersion() {
     },
     // Every outcome refreshes, not just the write: a rejected compare-and-set
     // means the head moved under the preview, and a suppressed fork still
-    // touched the skill row. Version *details* are exempt — their bytes are
-    // immutable, so re-fetching megabytes of base64 would buy nothing.
+    // touched the skill row.
     onSettled: () => {
-      queryClient.invalidateQueries({
-        predicate: ({ queryKey }) =>
-          queryKey[0] === "skills" && queryKey[2] !== "version",
-      });
+      invalidateSkills(queryClient);
     },
   });
 }
@@ -404,8 +400,7 @@ export function useResetSkill() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
-      queryClient.invalidateQueries({ queryKey: ["skills", data.id] });
+      invalidateSkills(queryClient);
       toast.success("Skill reset to default");
     },
   });
@@ -519,5 +514,23 @@ export function useImportGithubSkills() {
         );
       }
     },
+  });
+}
+
+// ===== Internal =====
+
+/**
+ * Invalidate everything about a skill except its version *details*.
+ *
+ * A plain `["skills"]` invalidation prefix-matches `["skills", id, "version",
+ * n]` too, which would refetch a whole snapshot — every resource file in full,
+ * base64 for binaries — for bytes that are immutable and cannot have changed.
+ * Every skill write uses this instead, so `useSkillVersion`'s infinite
+ * `staleTime` is not quietly undone on the next mount.
+ */
+function invalidateSkills(queryClient: QueryClient) {
+  return queryClient.invalidateQueries({
+    predicate: ({ queryKey }) =>
+      queryKey[0] === "skills" && queryKey[2] !== "version",
   });
 }

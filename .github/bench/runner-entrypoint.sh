@@ -10,12 +10,12 @@ umask 077
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (shared with the postgres sidecar)}"
 BENCH_ENVS="${BENCH_ENVS:-basic}"
 BENCH_LANES="${BENCH_LANES:-glm}"
+service_account_dir=/var/run/secrets/kubernetes.io/serviceaccount
 
 cleanup_dagger() {
   status=$?
   trap - EXIT
   if [ -n "${DAGGER_ENGINE_POD:-}" ]; then
-    service_account_dir=/var/run/secrets/kubernetes.io/serviceaccount
     # Never let cleanup decide the exit code: under `set -e` a failed read here would replace the
     # publish status, and that status is the run-health signal CI reads off the pod's terminal phase.
     namespace=$(cat "${service_account_dir}/namespace" 2>/dev/null) || namespace=archestra
@@ -33,7 +33,29 @@ trap cleanup_dagger EXIT
 trap 'exit 143' HUP INT TERM
 
 # Check with the pod's actual identity; the CI deploy identity deliberately cannot impersonate it.
-namespace=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+namespace=$(cat "${service_account_dir}/namespace")
+KUBECONFIG=/tmp/bench-kubeconfig
+export KUBECONFIG
+cat > "${KUBECONFIG}" <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+  - name: in-cluster
+    cluster:
+      server: https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS:-443}
+      certificate-authority: ${service_account_dir}/ca.crt
+users:
+  - name: in-cluster
+    user:
+      tokenFile: ${service_account_dir}/token
+contexts:
+  - name: in-cluster
+    context:
+      cluster: in-cluster
+      user: in-cluster
+      namespace: ${namespace}
+current-context: in-cluster
+EOF
 require_rbac() {
   description=$1
   shift

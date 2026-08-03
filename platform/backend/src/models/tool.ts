@@ -75,6 +75,7 @@ import type {
 import { isUniqueConstraintError } from "@/utils/db";
 import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import AgentExcludedToolModel from "./agent-excluded-tool";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
@@ -1891,6 +1892,17 @@ class ToolModel {
 
       const agentIds =
         await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
+      // An older build may have pre-excluded one of these before it became a
+      // default; the agent would hold the assignment and still be refused.
+      const unblocked =
+        await AgentExcludedToolModel.clearExclusionsForDefaultTools(toolIds);
+      if (unblocked > 0) {
+        logger.info(
+          { organizationId, unblocked },
+          "Cleared stale exclusions for default tools",
+        );
+      }
+
       const missing = await AgentToolModel.findAgentIdsMissingAnyTool(
         agentIds,
         toolIds,

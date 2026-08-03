@@ -12,7 +12,7 @@ import {
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -553,6 +553,49 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const afterSecond = await assignedToolNames(agent.id);
 
     expect(afterSecond.sort()).toEqual(afterFirst.sort());
+  });
+
+  test("backfillDefaultToolsToAgents clears a stale exclusion that would refuse an assigned default tool", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "All-tools",
+      accessAllTools: true,
+    });
+    const toolIds = await defaultToolIds();
+
+    // The state an older build leaves: the tool is assigned AND excluded, so
+    // dispatch refuses it as unassigned even though the agent holds the row.
+    await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
+    await db
+      .insert(schema.agentExcludedToolsTable)
+      .values(toolIds.map((toolId) => ({ agentId: agent.id, toolId })))
+      .onConflictDoNothing();
+    const excludedDefaults = async () =>
+      db
+        .select()
+        .from(schema.agentExcludedToolsTable)
+        .where(
+          and(
+            eq(schema.agentExcludedToolsTable.agentId, agent.id),
+            inArray(schema.agentExcludedToolsTable.toolId, toolIds),
+          ),
+        );
+    expect((await excludedDefaults()).length).toBe(toolIds.length);
+
+    await ToolModel.backfillDefaultToolsToAgents();
+
+    expect(await excludedDefaults()).toHaveLength(0);
+    // Auto-mode exclusions for non-default built-ins are left alone.
+    const remaining = await db
+      .select()
+      .from(schema.agentExcludedToolsTable)
+      .where(eq(schema.agentExcludedToolsTable.agentId, agent.id));
+    expect(remaining.length).toBeGreaterThan(0);
   });
 
   test("findAgentIdsMissingAnyTool returns only agents missing at least one tool", async ({

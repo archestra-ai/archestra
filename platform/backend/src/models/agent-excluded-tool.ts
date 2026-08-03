@@ -118,6 +118,25 @@ class AgentExcludedToolModel {
    * skipped. Exempt short names are skipped like the per-agent pre-fill.
    * Returns the number of rows inserted.
    */
+  /**
+   * Drop exclusions for tools that are assigned to every agent by default.
+   *
+   * An older build could pre-exclude a tool before it joined the default set,
+   * and nothing since removes that row — the agent then holds the tool in
+   * `agent_tools` while dispatch refuses it as excluded. Runs each boot so an
+   * environment that took the two releases separately repairs itself.
+   */
+  static async clearExclusionsForDefaultTools(
+    toolIds: string[],
+  ): Promise<number> {
+    if (toolIds.length === 0) return 0;
+    const removed = await db
+      .delete(schema.agentExcludedToolsTable)
+      .where(inArray(schema.agentExcludedToolsTable.toolId, toolIds))
+      .returning({ agentId: schema.agentExcludedToolsTable.agentId });
+    return removed.length;
+  }
+
   static async prefillNewBuiltInToolsForAllToolsAgents(
     toolIds: string[],
   ): Promise<number> {

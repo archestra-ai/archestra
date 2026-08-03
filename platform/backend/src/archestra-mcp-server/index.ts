@@ -169,7 +169,11 @@ export function getArchestraMcpTools() {
     ...appTools,
     ...appDataTools,
     ...appLlmTools,
-    ...(config.advisor.enabled ? advisorTools : []),
+    // Registered regardless of the beta gate, so the tool registry — and the
+    // docs generated from it — does not vary by deployment. The gate is
+    // enforced where it is observable instead: tools/list withholds it and the
+    // handler refuses.
+    ...advisorTools,
   ];
 
   // Descriptions are shipped strings frozen at module load, so they cannot read

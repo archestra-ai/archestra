@@ -851,7 +851,10 @@ export function getCreationDefaultArchestraToolShortNames(params: {
 const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  // Every default tool: assigning a tool to all agents and pre-excluding it
+  // from All-tools agents are contradictory, and the exclusion wins at
+  // dispatch — an agent ends up holding a tool it is refused.
+  ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
   ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 ] as const satisfies readonly ArchestraToolShortName[];

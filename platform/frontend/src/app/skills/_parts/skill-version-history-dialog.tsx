@@ -36,12 +36,26 @@ import {
   type SkillFileChange,
 } from "./skill-version-diff";
 
-/** SKILL.md is not a resource file, but the tree lists it like one. */
-const SKILL_MANIFEST_LABEL = "SKILL.md";
+/**
+ * The manifest row is deliberately not called "SKILL.md": a version stores the
+ * body alone, so this is a different document from the SKILL.md the editor
+ * writes, which carries the frontmatter on top. Naming both files the same
+ * thing would say the editor lost an edit that was never versioned.
+ */
+const SKILL_MANIFEST_LABEL = "Instructions";
+/** The body is markdown; the row's label no longer carries an extension to read. */
+const SKILL_MANIFEST_LANGUAGE = "markdown";
 
 type ComparedVersionFile = ComparedSkillFile<
   SkillVersionDetail["files"][number]
 >;
+
+/**
+ * What the tree says about a row. `unknown` is not a comparison result: it is
+ * what a row reads as when the baseline could not be fetched, where every other
+ * value would be a claim about a version nobody managed to look at.
+ */
+type VersionEntryChange = SkillFileChange | "unknown";
 
 /**
  * Browse a skill's immutable version history and restore an earlier one.
@@ -108,11 +122,16 @@ function VersionHistory({
   );
   const predecessor = predecessorQuery.data ?? null;
   // A disabled query never leaves `pending`, so version 1's readiness is the
-  // absence of a predecessor rather than the query's own status. A predecessor
-  // that 404s or fails is settled too: the baseline is empty and the version
-  // reads as newly added, which is what "no baseline" means. The failure itself
-  // is reported by the query's toast.
+  // absence of a predecessor rather than the query's own status. A 404 settles
+  // too: the version was pruned, the baseline is genuinely empty, and this
+  // version reads as newly added.
   const isBaselineSettled = !hasPredecessor || !predecessorQuery.isPending;
+  // A predecessor that *failed* is a third state. It settles like a 404 — the
+  // baseline is empty either way — but it means something different: nobody
+  // read the older version, so nothing here can be called added or changed.
+  // Annotating it like a pruned predecessor would report a transport failure
+  // as a fact about the skill's history.
+  const isBaselineUnavailable = hasPredecessor && predecessorQuery.isError;
 
   const comparedFiles = useMemo(
     () =>
@@ -247,6 +266,8 @@ function VersionHistory({
               detail={detail ?? null}
               predecessor={predecessor}
               isBaselineSettled={isBaselineSettled}
+              isBaselineUnavailable={isBaselineUnavailable}
+              onRetryBaseline={() => predecessorQuery.refetch()}
               isLoading={isDetailLoading}
               comparedFiles={comparedFiles}
               activeFilePath={activeFilePath}
@@ -422,7 +443,7 @@ function VersionTimeline({
  */
 interface VersionEntry {
   path: string | null;
-  change: SkillFileChange;
+  change: VersionEntryChange;
 }
 
 /**
@@ -437,6 +458,8 @@ function VersionPreview({
   detail,
   predecessor,
   isBaselineSettled,
+  isBaselineUnavailable,
+  onRetryBaseline,
   isLoading,
   comparedFiles,
   activeFilePath,
@@ -447,6 +470,9 @@ function VersionPreview({
   detail: SkillVersionDetail | null;
   predecessor: SkillVersionDetail | null;
   isBaselineSettled: boolean;
+  /** The predecessor could not be read, so nothing here is a comparison. */
+  isBaselineUnavailable: boolean;
+  onRetryBaseline: () => void;
   isLoading: boolean;
   comparedFiles: ComparedVersionFile[];
   activeFilePath: string | null;
@@ -469,16 +495,28 @@ function VersionPreview({
     );
   }
 
+  // A baseline that failed to load is empty exactly like a pruned one, and
+  // comparing against it yields `added` for everything — a reading the failure
+  // does not support. Every annotation goes through here so the tree, the
+  // manifest row, and the preview pane cannot disagree about it.
+  const annotate = (change: SkillFileChange): VersionEntryChange =>
+    isBaselineUnavailable ? "unknown" : change;
+
   // No baseline — version 1, or a predecessor the API no longer has — makes the
   // whole version read as added, matching how its files compare.
-  const manifestChange: SkillFileChange = !predecessor
-    ? "added"
-    : predecessor.content !== detail.content
-      ? "changed"
-      : "unchanged";
+  const manifestChange = annotate(
+    !predecessor
+      ? "added"
+      : predecessor.content !== detail.content
+        ? "changed"
+        : "unchanged",
+  );
   const entries: VersionEntry[] = [
     { path: null, change: manifestChange },
-    ...comparedFiles.map((file) => ({ path: file.path, change: file.change })),
+    ...comparedFiles.map((file) => ({
+      path: file.path,
+      change: annotate(file.change),
+    })),
   ];
 
   // Selecting a version clears the file selection, so a path missing from this
@@ -487,7 +525,7 @@ function VersionPreview({
   const compared = activeFilePath
     ? (comparedFiles.find((file) => file.path === activeFilePath) ?? null)
     : null;
-  const change = compared ? compared.change : manifestChange;
+  const change = compared ? annotate(compared.change) : manifestChange;
   const original = compared
     ? (compared.previous?.content ?? "")
     : (predecessor?.content ?? "");
@@ -501,10 +539,16 @@ function VersionPreview({
   const rendered = compared ? (compared.current ?? compared.previous) : null;
   const isBinary = rendered?.encoding === "base64";
   // A diff needs two readable sides, and identical bytes have nothing to show;
-  // either way the file is shown whole instead.
+  // either way the file is shown whole instead. An unreadable baseline is the
+  // same situation: diffing against the empty string would draw the file as
+  // wholly new when all that is known is that the older copy never arrived.
   const canDiff =
-    change !== "unchanged" && compared?.previous?.encoding !== "base64";
-  const language = languageForPath(activeFilePath ?? SKILL_MANIFEST_LABEL);
+    change !== "unchanged" &&
+    change !== "unknown" &&
+    compared?.previous?.encoding !== "base64";
+  const language = activeFilePath
+    ? languageForPath(activeFilePath)
+    : SKILL_MANIFEST_LANGUAGE;
 
   return (
     <>
@@ -518,6 +562,23 @@ function VersionPreview({
           {detail.contentHash.slice(0, 7)}
         </span>
       </header>
+
+      {isBaselineUnavailable ? (
+        <div className="mx-4 mt-3 flex items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          <span className="flex-1">
+            Version {version - 1} could not be loaded, so this version is shown
+            as it stands rather than as a comparison.
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onRetryBaseline}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
       {isBaselineSettled ? (
         <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3 p-4">
@@ -537,39 +598,51 @@ function VersionPreview({
             />
           </div>
 
-          <div className="min-h-0 overflow-hidden rounded-md border">
-            {isBinary ? (
-              <p className="p-4 text-sm text-muted-foreground">
-                This file is binary, so there is nothing to show here.
+          <div className="flex min-h-0 flex-col overflow-hidden rounded-md border">
+            {/* The manifest row is the one file whose name does not say what it
+                holds, so the pane says it instead: a reader comparing this
+                against the editor's SKILL.md would otherwise find the
+                frontmatter missing and read that as a lost edit. */}
+            {compared ? null : (
+              <p className="shrink-0 border-b bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+                The SKILL.md body. Name, description, and the rest of the
+                frontmatter are stored separately and are not versioned.
               </p>
-            ) : !canDiff ? (
-              <Editor
-                height="100%"
-                language={language}
-                value={modified}
-                options={{
-                  readOnly: true,
-                  minimap: { enabled: false },
-                  scrollBeyondLastLine: false,
-                }}
-              />
-            ) : (
-              <DiffEditor
-                height="100%"
-                language={language}
-                original={original}
-                modified={modified}
-                options={{
-                  // A unified diff fits this dialog's narrow preview pane;
-                  // side-by-side would halve the width for each revision.
-                  renderSideBySide: false,
-                  // Long, mostly-unchanged SKILL.md bodies collapse to the
-                  // edited regions, so a one-line change does not require
-                  // scrolling past everything that stayed the same.
-                  hideUnchangedRegions: { enabled: true },
-                }}
-              />
             )}
+            <div className="min-h-0 flex-1">
+              {isBinary ? (
+                <p className="p-4 text-sm text-muted-foreground">
+                  This file is binary, so there is nothing to show here.
+                </p>
+              ) : !canDiff ? (
+                <Editor
+                  height="100%"
+                  language={language}
+                  value={modified}
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                  }}
+                />
+              ) : (
+                <DiffEditor
+                  height="100%"
+                  language={language}
+                  original={original}
+                  modified={modified}
+                  options={{
+                    // A unified diff fits this dialog's narrow preview pane;
+                    // side-by-side would halve the width for each revision.
+                    renderSideBySide: false,
+                    // Long, mostly-unchanged bodies collapse to the edited
+                    // regions, so a one-line change does not require scrolling
+                    // past everything that stayed the same.
+                    hideUnchangedRegions: { enabled: true },
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
       ) : (
@@ -699,7 +772,7 @@ function VersionFileRow({
   onSelect,
 }: {
   label: string;
-  change: SkillFileChange;
+  change: VersionEntryChange;
   isActive: boolean;
   isManifest?: boolean;
   onSelect: () => void;
@@ -728,7 +801,10 @@ function VersionFileRow({
       >
         {label}
       </button>
-      {change === "unchanged" ? null : (
+      {/* `unchanged` and `unknown` both go unbadged, for opposite reasons: one
+          is a comparison that found nothing, the other is no comparison at all.
+          The banner above the tree carries the distinction. */}
+      {change === "unchanged" || change === "unknown" ? null : (
         <span
           className={cn(
             "shrink-0 text-[10px] font-semibold uppercase",

@@ -165,6 +165,7 @@ function mockVersionsError(refetch = vi.fn()) {
  */
 function mockVersionDetails(
   details: Record<number, ReturnType<typeof versionDetail> | null | "error">,
+  refetch = vi.fn(),
 ) {
   vi.mocked(useSkillVersion).mockImplementation(((
     _id: string | null,
@@ -174,6 +175,10 @@ function mockVersionDetails(
     return {
       data: entry === "error" ? undefined : (entry ?? null),
       isPending: !(version !== null && version in details),
+      // A 404 resolves as a settled `null`, so only an outright failure is an
+      // error — that is the whole distinction the dialog reads.
+      isError: entry === "error",
+      refetch,
     };
   }) as never);
 }
@@ -450,18 +455,9 @@ describe("SkillVersionHistoryDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("reads a predecessor that failed to load as no baseline, not as pending", async () => {
+  it("shows a version whose predecessor failed to load, without waiting on it", async () => {
     const user = userEvent.setup();
-    mockVersionDetails({
-      3: versionDetail({
-        version: 3,
-        content: HEAD_BODY,
-        contentHash: "hash-head",
-        files: [file("scripts/extract.py", "new")],
-      }),
-      // v2 errored — settled, but unknown rather than absent
-      2: "error",
-    });
+    mockFailedBaseline();
     renderDialog();
 
     await user.click(screen.getByRole("button", { name: /v3/ }));
@@ -471,6 +467,62 @@ describe("SkillVersionHistoryDialog", () => {
     expect(
       screen.getByRole("button", { name: "extract.py" }),
     ).toBeInTheDocument();
+  });
+
+  it("does not call a version added when the baseline could not be read", async () => {
+    const user = userEvent.setup();
+    mockFailedBaseline();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+
+    // an empty baseline is what a pruned predecessor and a failed fetch have in
+    // common; only the first of them means the files are new
+    expect(
+      screen.getByRole("button", { name: "extract.py" }).closest("li"),
+    ).not.toHaveTextContent(/added|removed|changed/);
+    expect(
+      screen.getByRole("button", { name: "Instructions" }).closest("li"),
+    ).not.toHaveTextContent(/added|removed|changed/);
+    expect(
+      screen.getByText(/Version 2 could not be loaded/),
+    ).toBeInTheDocument();
+  });
+
+  it("opens a file whole when there is no baseline to diff it against", async () => {
+    const user = userEvent.setup();
+    mockFailedBaseline();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+    await user.click(screen.getByRole("button", { name: "extract.py" }));
+
+    // diffing against the empty string would draw the file as wholly new
+    expect(screen.getByTestId("editor")).toHaveTextContent("new");
+    expect(screen.queryByTestId("diff")).not.toBeInTheDocument();
+  });
+
+  it("offers a retry for a baseline that failed", async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    mockFailedBaseline(refetch);
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it("says the manifest row holds the body alone, not the editor's SKILL.md", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+
+    // the editor's SKILL.md carries frontmatter this document does not, so the
+    // pane says so rather than letting the two read as the same file
+    expect(screen.getByText(/are not versioned/)).toBeInTheDocument();
   });
 
   it("offers a retry instead of claiming a skill has no versions", async () => {
@@ -549,7 +601,7 @@ describe("SkillVersionHistoryDialog", () => {
     expect(screen.queryByText(/^Comparing with/)).not.toBeInTheDocument();
     // with no baseline the whole version reads as added, manifest included
     expect(
-      screen.getByRole("button", { name: "SKILL.md" }).closest("li"),
+      screen.getByRole("button", { name: "Instructions" }).closest("li"),
     ).toHaveTextContent("added");
     expect(
       screen.getByRole("button", { name: "extract.py" }).closest("li"),
@@ -577,6 +629,22 @@ describe("SkillVersionHistoryDialog", () => {
     ).toHaveTextContent("added");
   });
 });
+
+/** v3 has arrived; the v2 it would be compared against failed outright. */
+function mockFailedBaseline(refetch = vi.fn()) {
+  mockVersionDetails(
+    {
+      3: versionDetail({
+        version: 3,
+        content: HEAD_BODY,
+        contentHash: "hash-head",
+        files: [file("scripts/extract.py", "new")],
+      }),
+      2: "error",
+    },
+    refetch,
+  );
+}
 
 /** v3 rewrites one script and leaves another alone. */
 function mockChangedScript() {

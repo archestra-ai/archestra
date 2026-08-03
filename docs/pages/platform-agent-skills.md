@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-08-03
+lastUpdated: 2026-08-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -134,6 +134,8 @@ Every edit that changes a skill's `SKILL.md` or resource files creates a new imm
 ### Browsing Versions
 
 Open **Version history** from the skill's row menu. Pick a version to see every file it holds. Each file is marked as added, changed, or removed against the version before it. A file that changed opens as a diff — one that did not opens as itself.
+
+The **Instructions** row holds the `SKILL.md` body. Frontmatter like the name and description is not versioned, so it never appears here.
 
 ### Restoring a Version
 

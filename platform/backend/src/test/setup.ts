@@ -33,10 +33,10 @@ process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING = "true";
 // PGlite-backed tests do not provide a session-stable pg.Client connection for
 // LISTEN/NOTIFY, so use the polling compatibility notifier by default in tests.
 process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
-// Advisor Mode ships behind a beta gate; register it in tests so its tool is
-// seeded and assigned like any other built-in. Suites that exercise the gate
-// itself flip config.advisor.enabled at runtime.
-process.env.ARCHESTRA_ADVISOR_ENABLED = "true";
+// Advisor Mode rides the beta switch; turn it on so its tool is seeded and
+// assigned like any other built-in. Suites exercising the gate itself flip
+// config.advisor.enabled at runtime.
+process.env.ARCHESTRA_BETA = "true";
 // Pin "My Files" byte storage to the inline (db) provider for hermetic tests,
 // independent of the dev .env. The filesystem-specific suites opt in by
 // overriding config.fileStorage at runtime against a temp root.

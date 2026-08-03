@@ -1,3 +1,15 @@
+/**
+ * `advisor` — a second opinion a working model asks for mid-task. The org's
+ * ADVISOR built-in agent supplies the model and credential, so the advisor can
+ * be a stronger model on an entirely different provider from the caller's; the
+ * call goes through the limit-enforcing LLM proxy under its own interaction
+ * source, and is billed at the advisor model's rates rather than the caller's.
+ *
+ * The advisor sees only what the caller passes. It is deliberately not given
+ * the conversation: the same definition serves in-app chat and every external
+ * MCP client, and an external client's transcript is not Archestra's to read.
+ */
+
 import { BUILT_IN_AGENT_IDS, TOOL_ADVISOR_SHORT_NAME } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { APICallError, generateText } from "ai";
@@ -14,17 +26,6 @@ import {
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
-/**
- * `advisor` — a second opinion a working model asks for mid-task. The org's
- * ADVISOR built-in agent supplies the model and credential, so the advisor can
- * be a stronger model on an entirely different provider from the caller's; the
- * call goes through the limit-enforcing LLM proxy under its own interaction
- * source, and is billed at the advisor model's rates rather than the caller's.
- *
- * The advisor sees only what the caller passes. It is deliberately not given
- * the conversation: the same definition serves in-app chat and every external
- * MCP client, and an external client's transcript is not Archestra's to read.
- */
 const QUESTION_MAX_LENGTH = 4_000;
 const CONTEXT_MAX_LENGTH = 50_000;
 
@@ -93,8 +94,8 @@ async function runAdvisorConsultation(
   args: z.infer<typeof AdvisorSchema>,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
-  // The tool is unregistered while the beta gate is off, but an assigned tool
-  // row outlives the flag — so a direct call or run_tool can still land here.
+  // tools/list withholds the advisor while the gate is off, but a direct
+  // tools/call or run_tool bypasses that list and lands here regardless.
   if (!config.advisor.enabled) {
     return advisorErrorResult(
       "advisor_unavailable",

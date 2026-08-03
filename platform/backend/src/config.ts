@@ -2431,13 +2431,12 @@ const config = {
     enabled: skillsSandboxEnabled,
   },
   /**
-   * BETA gate for Advisor Mode — the `advisor` tool and its built-in agent.
-   * Off by default; a blank value falls back to the ARCHESTRA_BETA master
-   * switch (see betaFeatureEnabled). While off the tool is not registered at
-   * all, so it reaches no surface and the built-in agent has nothing to back.
+   * Advisor Mode — the `advisor` tool and its built-in agent — rides the
+   * ARCHESTRA_BETA master switch with no per-feature flag of its own. While
+   * off the tool is withheld from tools/list and every call is refused.
    */
   advisor: {
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_ADVISOR_ENABLED),
+    enabled: process.env.ARCHESTRA_BETA === "true",
   },
   /**
    * unified Dagger runtime — a per-target pool of pre-warmed base-container

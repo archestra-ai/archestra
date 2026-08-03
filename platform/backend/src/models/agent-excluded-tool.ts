@@ -118,6 +118,16 @@ class AgentExcludedToolModel {
    * skipped. Exempt short names are skipped like the per-agent pre-fill.
    * Returns the number of rows inserted.
    */
+  static async prefillNewBuiltInToolsForAllToolsAgents(
+    toolIds: string[],
+  ): Promise<number> {
+    if (toolIds.length === 0) return 0;
+    return AgentExcludedToolModel.insertBuiltInPrefillRows({
+      toolIds,
+      executor: db,
+    });
+  }
+
   /**
    * Drop exclusions for tools that are assigned to every agent by default.
    *
@@ -135,16 +145,6 @@ class AgentExcludedToolModel {
       .where(inArray(schema.agentExcludedToolsTable.toolId, toolIds))
       .returning({ agentId: schema.agentExcludedToolsTable.agentId });
     return removed.length;
-  }
-
-  static async prefillNewBuiltInToolsForAllToolsAgents(
-    toolIds: string[],
-  ): Promise<number> {
-    if (toolIds.length === 0) return 0;
-    return AgentExcludedToolModel.insertBuiltInPrefillRows({
-      toolIds,
-      executor: db,
-    });
   }
 
   /**

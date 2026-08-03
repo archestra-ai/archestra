@@ -463,12 +463,10 @@ export async function createAgentServer(params: {
     // The advisor refuses every call until an administrator configures its
     // model, and its description is long enough to be worth real tokens in
     // every request. Advertising a tool that can only fail costs the model a
-    // wasted call and every other org the prompt weight, so withhold it until
-    // it can actually answer. The handler still refuses on its own — a client
-    // may hold a tool list from before the model was cleared.
-    // These come from the agent's assigned tool rows, which outlive both the
-    // beta flag and the advisor's model — an org that once had either keeps the
-    // row. Withhold on the current state instead.
+    // wasted call and every other org the prompt weight. Assigned tool rows
+    // outlive both the beta flag and the advisor's model, so the decision reads
+    // current state rather than the rows. The handler still refuses on its own —
+    // a client may hold a tool list issued before either was cleared.
     const advertisesAdvisor = chatOnlyFiltered.some(
       (tool) =>
         archestraMcpBranding.getToolShortName(tool.name) ===

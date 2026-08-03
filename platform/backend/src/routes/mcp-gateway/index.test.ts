@@ -1400,8 +1400,7 @@ describe("MCP Gateway (stateless mode)", () => {
       ].sort(),
     );
     expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
-    // No advisor model is configured above, so the advisor is withheld — see
-    // the pair of advisor tests below.
+    // No advisor model is configured above, so the advisor is withheld.
     expect(toolNames).not.toContain(TOOL_ADVISOR_FULL_NAME);
   });
 

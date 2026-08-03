@@ -47,7 +47,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     return rows.map((row) => row.name);
   }
 
-  /** Tool ids for the given short names, from the Archestra catalog. */
+  /** Catalog tool ids for every short name in the default set. */
   async function defaultToolIds(): Promise<string[]> {
     const names = DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.map((n) =>
       getArchestraToolFullName(n),

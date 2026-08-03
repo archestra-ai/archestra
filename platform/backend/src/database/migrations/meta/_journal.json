@@ -2773,6 +2773,13 @@
       "when": 1785783742289,
       "tag": "0395_purge_ex_member_personal_mcp_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 396,
+      "version": "7",
+      "when": 1785800057394,
+      "tag": "0396_purge_membershipless_personal_mcp_credentials",
+      "breakpoints": true
     }
   ]
 }

@@ -107,15 +107,19 @@ function VersionHistory({
   // Versions are contiguous from 1, so the diff baseline is simply the previous
   // number; version 1 has none and renders as an all-new document.
   const hasPredecessor = activeVersion !== null && activeVersion > 1;
-  const { data: predecessor } = useSkillVersion(
+  const predecessorQuery = useSkillVersion(
     open ? skillId : null,
     hasPredecessor ? (activeVersion as number) - 1 : null,
   );
+  const predecessor = predecessorQuery.data;
 
-  // The oldest version compares against nothing, so its whole file set reads as
-  // added. Waiting for a predecessor that will never arrive would leave it
-  // looking permanently empty.
-  const isBaselineReady = detail && (predecessor || !hasPredecessor);
+  // Readiness is the query's status, not its data: a predecessor that answered
+  // 404 settles as null, and reading that as "still loading" would leave the
+  // diff waiting forever. Either way the baseline is empty and the version
+  // reads as an all-new document. The disabled query for version 1 never
+  // succeeds, so its own absence of a predecessor is the ready signal.
+  const isBaselineReady =
+    !!detail && (!hasPredecessor || predecessorQuery.isSuccess);
   const comparedFiles = useMemo(
     () =>
       isBaselineReady
@@ -182,7 +186,12 @@ function VersionHistory({
               permissions={{ skill: ["update"] }}
               disabled={!canRestore || restoreVersion.isPending}
               onClick={() => setConfirmingRestore(true)}
-              tooltip={restoreTooltip({ isSynced, isHead, appName })}
+              tooltip={restoreTooltip({
+                isSynced,
+                isHead,
+                hasHeadHash: !!headContentHash,
+                appName,
+              })}
             >
               {restoreVersion.isPending
                 ? "Restoring..."
@@ -203,7 +212,7 @@ function VersionHistory({
       <div className="flex min-h-0 flex-1">
         <nav
           aria-label="Versions"
-          className="w-64 shrink-0 overflow-y-auto border-r py-2"
+          className="w-48 shrink-0 overflow-y-auto border-r py-2"
         >
           <VersionTimeline
             versions={versions}
@@ -231,8 +240,7 @@ function VersionHistory({
               isHead={isHead}
               detail={detail ?? null}
               predecessor={predecessor ?? null}
-              hasPredecessor={hasPredecessor}
-              isBaselineReady={!!isBaselineReady}
+              isBaselineReady={isBaselineReady}
               isLoading={isDetailLoading}
               comparedFiles={comparedFiles}
               viewMode={viewMode}
@@ -321,7 +329,7 @@ function VersionTimeline({
     <>
       {groupByDay(versions).map((group) => (
         <div key={group.label}>
-          <h3 className="sticky top-0 bg-background px-4 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+          <h3 className="sticky top-0 bg-background px-3 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
             {group.label}
           </h3>
           {group.versions.map((version) => {
@@ -333,13 +341,13 @@ function VersionTimeline({
                 aria-current={isActive}
                 onClick={() => onSelect(version.version)}
                 className={cn(
-                  "block w-full cursor-pointer border-l-2 border-transparent px-4 py-2 text-left hover:bg-muted",
+                  "block w-full cursor-pointer border-l-2 border-transparent px-3 py-2 text-left hover:bg-muted",
                   isActive && "border-l-primary bg-accent",
                 )}
               >
                 {/* One line per version: the day heading already dates them,
                     and the selected version's own header carries the time. */}
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5">
                   <span className="font-mono text-xs font-medium">
                     v{version.version}
                   </span>
@@ -389,7 +397,6 @@ function VersionPreview({
   isHead,
   detail,
   predecessor,
-  hasPredecessor,
   isBaselineReady,
   isLoading,
   comparedFiles,
@@ -402,7 +409,6 @@ function VersionPreview({
   isHead: boolean;
   detail: SkillVersionDetail | null;
   predecessor: SkillVersionDetail | null;
-  hasPredecessor: boolean;
   isBaselineReady: boolean;
   isLoading: boolean;
   comparedFiles: ComparedSkillFile<SkillVersionDetail["files"][number]>[];
@@ -431,11 +437,16 @@ function VersionPreview({
   const changeByPath = new Map(
     comparedFiles.map((file) => [file.path, file.change]),
   );
-  const manifestChange: SkillFileChange = !hasPredecessor
-    ? "added"
-    : predecessor && predecessor.content !== detail.content
-      ? "changed"
-      : "unchanged";
+  // No baseline — version 1, or a predecessor the API no longer has — makes the
+  // whole version read as added, matching how its files compare. Annotating
+  // anything before the baseline settles would only guess.
+  const manifestChange: SkillFileChange = !isBaselineReady
+    ? "unchanged"
+    : !predecessor
+      ? "added"
+      : predecessor.content !== detail.content
+        ? "changed"
+        : "unchanged";
   const changedFiles = comparedFiles.filter(
     (file) => file.change !== "unchanged",
   );
@@ -796,16 +807,23 @@ function groupByDay(versions: SkillVersionSummary[]) {
 function restoreTooltip({
   isSynced,
   isHead,
+  hasHeadHash,
   appName,
 }: {
   isSynced: boolean;
   isHead: boolean;
+  hasHeadHash: boolean;
   appName: string;
 }): string | undefined {
   if (isSynced) {
     return `This skill is synced from GitHub. Stop syncing it to edit and restore it in ${appName}.`;
   }
   if (isHead) return "This is the skill's current version.";
+  // A restore needs the head's content hash to tell a real restore from a no-op,
+  // and the history list it comes from can still be in flight or a page behind.
+  if (!hasHeadHash) {
+    return "Still loading this skill's current version — try again in a moment.";
+  }
   return undefined;
 }
 

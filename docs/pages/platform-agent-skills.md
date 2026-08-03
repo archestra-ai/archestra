@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -130,6 +130,20 @@ A synced skill can lose its GitHub token while it sits in the trash. It still re
 Every edit that changes a skill's `SKILL.md` or resource files creates a new immutable version. An edit that changes nothing does not. Version numbers count up from 1, and the full history is kept.
 
 `GET /api/skills/:id/versions` lists versions as metadata, newest first. `GET /api/skills/:id/versions/:version` returns one version's body and file snapshots. Sandboxes mount a pinned version, so a running skill never changes mid-conversation.
+
+### Browsing Versions
+
+Open **Version history** from the skill's row menu, or from the button in the skill editor. Pick a version to see what it changed — a diff against the version before it, file by file. Switch to **All files** to read the whole version instead.
+
+### Restoring a Version
+
+**Restore this version** republishes an older version's content. It creates a new version rather than rewinding to the old one, so nothing in the history is rewritten. Restoring a version identical to the current one does nothing.
+
+A restore replaces the skill's instructions and resource files. It changes nothing else. The name, description, and other frontmatter fields are not versioned. Neither are scope, teams, environments, or GitHub settings — so a restore will not undo a rename.
+
+A GitHub-synced skill cannot be restored, since its content comes from the repo. Stop the sync in the skill editor to make the skill editable again.
+
+Built-in skills also offer **Reset to default** in the version history dialog. It overwrites your local edits with the content Archestra ships, recorded as a new version.
 
 ## Environments
 

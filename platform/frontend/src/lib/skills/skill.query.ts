@@ -169,8 +169,8 @@ export function useSkillVersions(id: string | null) {
 
 /**
  * One version's SKILL.md body and resource files. A missing version resolves to
- * null rather than an error: the diff view asks for the predecessor of the
- * oldest loaded row, which legitimately may not exist.
+ * null rather than an error, so callers must tell a settled `null` apart from a
+ * still-loading query by the query's own status rather than by data truthiness.
  */
 export function useSkillVersion(id: string | null, version: number | null) {
   return useQuery({

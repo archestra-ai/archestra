@@ -138,16 +138,25 @@ function mockVersions() {
   } as any);
 }
 
+/**
+ * Versions listed here have settled: a detail object is a hit, `null` is the
+ * 404 a pruned version answers. Anything absent is still in flight, which is
+ * how the dialog tells "not known yet" from "known to be gone".
+ */
 function mockVersionDetails(
-  details: Record<number, ReturnType<typeof versionDetail>>,
+  details: Record<number, ReturnType<typeof versionDetail> | null>,
 ) {
   vi.mocked(useSkillVersion).mockImplementation(((
     _id: string | null,
     version: number | null,
-  ) => ({
-    data: version === null ? null : (details[version] ?? null),
-    isPending: false,
-  })) as never);
+  ) => {
+    const hasSettled = version !== null && version in details;
+    return {
+      data: version === null ? null : (details[version] ?? null),
+      isPending: !hasSettled,
+      isSuccess: hasSettled,
+    };
+  }) as never);
 }
 
 function renderDialog() {
@@ -383,6 +392,32 @@ describe("SkillVersionHistoryDialog", () => {
     expect(
       screen.queryByText(/Nothing changed in this version/),
     ).not.toBeInTheDocument();
+  });
+
+  it("reads a version whose predecessor is gone as newly added", async () => {
+    const user = userEvent.setup();
+    mockVersionDetails({
+      3: versionDetail({
+        version: 3,
+        content: HEAD_BODY,
+        contentHash: "hash-head",
+        files: [file("scripts/extract.py", "new")],
+      }),
+      // v2 answers 404 — a settled absence, not a slow response
+      2: null,
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+
+    expect(screen.queryByText("Loading changes...")).not.toBeInTheDocument();
+    // with no baseline the whole version reads as added, manifest included
+    expect(screen.getByRole("button", { name: /^Changes/ })).toHaveTextContent(
+      "Changes (2)",
+    );
+    expect(
+      screen.getByRole("button", { name: "extract.py" }),
+    ).toBeInTheDocument();
   });
 
   it("reads the earliest version as newly added, having nothing to diff against", async () => {

@@ -73,10 +73,9 @@ export function SidebarUserMenu() {
         // trigger sits in the bottom-left corner.
         collisionPadding={8}
         className="min-w-56"
-        // Closing via an outside click otherwise returns focus to the trigger,
-        // which re-shows its focus ring and reads as a stray border. Keep focus
-        // off the trigger on pointer-driven close (keyboard Tab still rings it).
-        onCloseAutoFocus={(e) => e.preventDefault()}
+        // Let Radix restore focus to the trigger on close (WCAG 2.4.3) — the
+        // trigger's ring is focus-visible-only, so pointer-driven closes don't
+        // show a stray border.
       >
         <DropdownMenuItem asChild>
           <Link href="/account">

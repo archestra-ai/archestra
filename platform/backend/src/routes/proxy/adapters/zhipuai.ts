@@ -30,6 +30,7 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { upstreamHttpError } from "./upstream-http-error";
 
 // =============================================================================
 // TYPE ALIASES
@@ -96,7 +97,7 @@ class ZhipuaiClient {
         errorMessage += ` - ${errorText}`;
       }
 
-      throw new Error(errorMessage);
+      throw upstreamHttpError(errorMessage, response.status);
     }
 
     return response.json() as Promise<ZhipuaiResponse>;
@@ -140,7 +141,7 @@ class ZhipuaiClient {
         errorMessage += ` - ${errorText}`;
       }
 
-      throw new Error(errorMessage);
+      throw upstreamHttpError(errorMessage, response.status);
     }
 
     return this.parseSSEStream(response);

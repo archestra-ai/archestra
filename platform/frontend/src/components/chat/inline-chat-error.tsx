@@ -316,9 +316,19 @@ export function InlineChatError({
                     </p>
                   )}
                   {chatError.originalError && (
-                    <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground">
-                      {formatOriginalError(chatError.originalError)}
-                    </pre>
+                    <>
+                      {/* biome-ignore-start lint/a11y/noNoninteractiveTabindex: scrollable error detail must be keyboard focusable (WCAG 2.1.1) */}
+                      <section
+                        tabIndex={0}
+                        aria-label="Error details"
+                        className="max-h-48 overflow-auto rounded-md bg-muted/50"
+                      >
+                        {/* biome-ignore-end lint/a11y/noNoninteractiveTabindex: scrollable error detail must be keyboard focusable (WCAG 2.1.1) */}
+                        <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground">
+                          {formatOriginalError(chatError.originalError)}
+                        </pre>
+                      </section>
+                    </>
                   )}
                 </CollapsibleContent>
               </Collapsible>

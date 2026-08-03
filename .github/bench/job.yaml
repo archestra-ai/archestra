@@ -58,6 +58,7 @@ spec:
         - name: bench
           image: ${BENCH_IMAGE}
           command: ["run-benchmark"]
+          terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: POSTGRES_PASSWORD
               value: "${POSTGRES_PASSWORD}"

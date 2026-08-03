@@ -178,8 +178,12 @@ export function AppShell({ children }: AppShellProps) {
         <NavigationStatusProvider>
           <SidebarProvider defaultOpen={!shouldCollapse}>
             <SkipToContentLink />
-            <AppSidebar />
+            {/* The toggle is position:fixed, so DOM order only affects focus
+                order: keeping it before the sidebar means expanding it with
+                the keyboard tabs forward into the revealed sidebar content
+                instead of skipping to <main> (WCAG 2.4.3). */}
             <NavAwareSidebarCircleToggle />
+            <AppSidebar />
             <MaintenanceModeOverlay />
             <main
               id={MAIN_CONTENT_ID}

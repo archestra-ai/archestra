@@ -10,12 +10,12 @@ umask 077
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (shared with the postgres sidecar)}"
 BENCH_ENVS="${BENCH_ENVS:-basic}"
 BENCH_LANES="${BENCH_LANES:-glm}"
+service_account_dir=/var/run/secrets/kubernetes.io/serviceaccount
 
 cleanup_dagger() {
   status=$?
   trap - EXIT
   if [ -n "${DAGGER_ENGINE_POD:-}" ]; then
-    service_account_dir=/var/run/secrets/kubernetes.io/serviceaccount
     # Never let cleanup decide the exit code: under `set -e` a failed read here would replace the
     # publish status, and that status is the run-health signal CI reads off the pod's terminal phase.
     namespace=$(cat "${service_account_dir}/namespace" 2>/dev/null) || namespace=archestra
@@ -31,6 +31,49 @@ cleanup_dagger() {
 }
 trap cleanup_dagger EXIT
 trap 'exit 143' HUP INT TERM
+
+# Check with the pod's actual identity; the CI deploy identity deliberately cannot impersonate it.
+namespace=$(cat "${service_account_dir}/namespace")
+KUBECONFIG=/tmp/bench-kubeconfig
+export KUBECONFIG
+cat > "${KUBECONFIG}" <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+  - name: in-cluster
+    cluster:
+      server: https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS:-443}
+      certificate-authority: ${service_account_dir}/ca.crt
+users:
+  - name: in-cluster
+    user:
+      tokenFile: ${service_account_dir}/token
+contexts:
+  - name: in-cluster
+    context:
+      cluster: in-cluster
+      user: in-cluster
+      namespace: ${namespace}
+current-context: in-cluster
+EOF
+require_rbac() {
+  description=$1
+  shift
+  if verdict=$(kubectl auth can-i "$@" --namespace "${namespace}" --request-timeout=10s 2>&1) && \
+    [ "${verdict}" = yes ]; then
+    return 0
+  fi
+  if [ "${verdict}" = no ]; then
+    printf 'error: benchmark service account cannot %s in %s\n' "${description}" "${namespace}" >&2
+  else
+    printf 'error: could not check permission to %s: %s\n' "${description}" "${verdict}" >&2
+  fi
+  return 1
+}
+rbac_failures=0
+require_rbac 'exec into pods' create pods --subresource=exec || rbac_failures=$((rbac_failures + 1))
+require_rbac 'delete pods' delete pods || rbac_failures=$((rbac_failures + 1))
+[ "${rbac_failures}" -eq 0 ] || exit 1
 
 # The bench resolves its Postgres from ARCHESTRA_BENCH_DATABASE_URL and creates a fresh per-run
 # database on it; the backend's own ARCHESTRA_DATABASE_URL is then derived from that. `Instance::start`

@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { HookFileModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -28,6 +29,7 @@ describe("hook routes", () => {
         }
       ).organizationId = organizationId;
     });
+    registerAuditLogHook(app);
 
     const { default: hookRoutes } = await import("./hook");
     await app.register(hookRoutes);
@@ -179,6 +181,28 @@ describe("hook routes", () => {
 
       // The batch is one user action → exactly one new config version.
       expect(await getLatestVersion(agentId)).toBe(versionBefore + 1);
+
+      const auditRows = await db
+        .select({
+          resourceType: schema.auditLogsTable.resourceType,
+          resourceId: schema.auditLogsTable.resourceId,
+          before: schema.auditLogsTable.before,
+          after: schema.auditLogsTable.after,
+        })
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.action, "hook.bulk_created"),
+            eq(schema.auditLogsTable.resourceId, organizationId),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
+      expect(auditRows[0]).toMatchObject({
+        resourceType: "hook",
+        resourceId: organizationId,
+      });
+      expect(auditRows[0].before).toMatchObject({ hookFileCount: 0 });
+      expect(auditRows[0].after).toMatchObject({ hookFileCount: 3 });
     });
 
     test("rejects the whole batch on conflicts, listing every pair", async () => {

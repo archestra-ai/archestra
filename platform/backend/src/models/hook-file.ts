@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   HookEvent,
@@ -96,6 +96,20 @@ class HookFileModel {
         ),
       )
       .orderBy(asc(schema.hookFilesTable.fileName));
+  }
+
+  /**
+   * Org-wide hook count snapshot for the audit log's before/after diff on
+   * bulk creation (same shape as AgentToolModel.countAssignmentsForOrganization).
+   */
+  static async countForOrganization(
+    organizationId: string,
+  ): Promise<Record<string, unknown>> {
+    const [row] = await db
+      .select({ c: count() })
+      .from(schema.hookFilesTable)
+      .where(eq(schema.hookFilesTable.organizationId, organizationId));
+    return { hookFileCount: Number(row?.c ?? 0) };
   }
 
   static async update(params: {

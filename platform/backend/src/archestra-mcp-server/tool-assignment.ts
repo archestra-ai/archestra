@@ -252,7 +252,7 @@ async function handleBulkAssignTool(params: {
       ),
     ];
     const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
-      AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
+      AgentModel.findByIdsForPermissionCheck(uniqueTargetIds, organizationId),
       getAgentTypePermissionChecker({
         userId,
         organizationId,
@@ -370,7 +370,7 @@ async function handleBulkRemoveTool(params: {
 
     const uniqueAgentIds = [...new Set(removals.map((r) => r.agentId))];
     const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
-      AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
+      AgentModel.findByIdsForPermissionCheck(uniqueAgentIds, organizationId),
       getAgentTypePermissionChecker({ userId, organizationId }),
       AgentModel.findEnvironmentId(contextAgent.id),
     ]);

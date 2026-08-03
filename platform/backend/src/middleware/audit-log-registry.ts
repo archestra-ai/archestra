@@ -9,6 +9,7 @@ import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import GithubAppConfigModel from "@/models/github-app-config";
 import GithubPatModel from "@/models/github-pat";
+import HookFileModel from "@/models/hook-file";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -668,6 +669,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     fetchById: (id, _orgId) =>
       AgentToolModel.countAssignmentsForOrganization(id),
+  },
+  // Hook files are executable agent configuration; bulk creation must leave a
+  // trail. Org-count snapshot, same model as the agent-tool bulk routes.
+  "/api/hooks/bulk": {
+    resourceType: "hook",
+    action: "hook.bulk_created",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, _orgId) => HookFileModel.countForOrganization(id),
   },
   "/api/agent-tools/auto-configure-policies": {
     resourceType: "toolInvocationPolicy",

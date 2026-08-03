@@ -1610,3 +1610,76 @@ describe("AgentToolModel.create", () => {
     expect(agentTool.mcpServerId).toBe(server.id);
   });
 });
+
+describe("AgentToolModel.bulkApply", () => {
+  test("applies a multi-row credential batch atomically with correct counts", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeMcpServer,
+  }) => {
+    const agent = await makeAgent();
+    const [toolA, toolB, toolC, toolD, toolE] = await Promise.all([
+      makeTool(),
+      makeTool(),
+      makeTool(),
+      makeTool(),
+      makeTool(),
+    ]);
+    const server = await makeMcpServer({ name: "Batch Server" });
+    const atA = await makeAgentTool(agent.id, toolA.id, {
+      credentialResolutionMode: "static",
+    });
+    const atB = await makeAgentTool(agent.id, toolB.id, {
+      credentialResolutionMode: "static",
+    });
+    const atC = await makeAgentTool(agent.id, toolC.id, {
+      credentialResolutionMode: "static",
+    });
+    const atE = await makeAgentTool(agent.id, toolE.id, {
+      credentialResolutionMode: "static",
+    });
+
+    const result = await AgentToolModel.bulkApply({
+      assignments: [
+        // Three credential updates in one batch — one UPDATE statement.
+        {
+          agentId: agent.id,
+          toolId: toolA.id,
+          credentialResolutionMode: "dynamic",
+        },
+        { agentId: agent.id, toolId: toolB.id, mcpServerId: server.id },
+        {
+          agentId: agent.id,
+          toolId: toolC.id,
+          credentialResolutionMode: "dynamic",
+        },
+        // New pair — insert.
+        { agentId: agent.id, toolId: toolD.id },
+        // Identical to the persisted row — unchanged.
+        { agentId: agent.id, toolId: toolE.id },
+      ],
+      unassignments: [],
+    });
+
+    expect(result).toMatchObject({
+      assigned: 1,
+      updated: 3,
+      unchanged: 1,
+      unassigned: 0,
+    });
+    expect(result.changedAgentIds).toEqual([agent.id]);
+
+    const [rowA, rowB, rowC, rowE] = await Promise.all([
+      AgentToolModel.findById(atA.id),
+      AgentToolModel.findById(atB.id),
+      AgentToolModel.findById(atC.id),
+      AgentToolModel.findById(atE.id),
+    ]);
+    expect(rowA?.credentialResolutionMode).toBe("dynamic");
+    expect(rowB?.mcpServerId).toBe(server.id);
+    expect(rowC?.credentialResolutionMode).toBe("dynamic");
+    expect(rowE?.credentialResolutionMode).toBe("static");
+    expect(rowE?.mcpServerId).toBeNull();
+  });
+});

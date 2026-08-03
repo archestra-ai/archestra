@@ -53,6 +53,7 @@ export const AuditEventNameSchema = z.enum([
   "githubPat.created",
   "githubPat.updated",
   "githubPat.deleted",
+  "hook.bulk_created",
   "identityProvider.created",
   "identityProvider.updated",
   "identityProvider.deleted",

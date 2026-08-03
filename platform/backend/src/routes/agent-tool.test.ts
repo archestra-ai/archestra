@@ -1,6 +1,7 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -890,6 +891,7 @@ describe("POST /api/agents/tools/bulk-update", () => {
       (request as typeof request & { organizationId: string }).organizationId =
         organizationId;
     });
+    registerAuditLogHook(app);
 
     const { default: agentToolRoutes } = await import("./agent-tool");
     await app.register(agentToolRoutes);
@@ -1029,7 +1031,10 @@ describe("POST /api/agents/tools/bulk-update", () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.message).toContain("No changes applied");
+    const message = response.json().error.message;
+    expect(message).toContain("No changes applied");
+    // Failures are rendered with display names, not raw UUID pairs.
+    expect(message).toContain(`"${agent.name}"`);
 
     // All-or-nothing: the valid assignment must not have been applied.
     const rows = await db
@@ -1085,6 +1090,215 @@ describe("POST /api/agents/tools/bulk-update", () => {
         ),
       );
     expect(rows).toHaveLength(1);
+  });
+
+  test("returns 404 when an assign targets an agent from another organization", async ({
+    makeAgent,
+    makeTool,
+    makeOrganization,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const foreignAgent = await makeAgent({ organizationId: otherOrg.id });
+    const tool = await makeTool();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [{ agentId: foreignAgent.id, toolId: tool.id }],
+        unassign: [],
+      },
+    });
+
+    // Same 404 as a nonexistent agent — no cross-org existence oracle.
+    expect(response.statusCode).toBe(404);
+
+    const rows = await db
+      .select({ toolId: schema.agentToolsTable.toolId })
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, foreignAgent.id));
+    expect(rows).toHaveLength(0);
+  });
+
+  test("returns 404 when an unassign targets an agent from another organization", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeOrganization,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const foreignAgent = await makeAgent({ organizationId: otherOrg.id });
+    const tool = await makeTool();
+    await makeAgentTool(foreignAgent.id, tool.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [],
+        unassign: [{ agentId: foreignAgent.id, toolId: tool.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+
+    // The foreign agent's assignment must be untouched.
+    const rows = await db
+      .select({ toolId: schema.agentToolsTable.toolId })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, foreignAgent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+  });
+
+  test("writes an agentTool.bulk_updated audit record with count snapshots", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const tool = await makeTool();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [{ agentId: agent.id, toolId: tool.id }],
+        unassign: [],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const auditRows = await db
+      .select({
+        resourceType: schema.auditLogsTable.resourceType,
+        resourceId: schema.auditLogsTable.resourceId,
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "agentTool.bulk_updated"),
+          eq(schema.auditLogsTable.resourceId, organizationId),
+        ),
+      );
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]).toMatchObject({
+      resourceType: "agentTool",
+      resourceId: organizationId,
+    });
+    expect(auditRows[0].before).toMatchObject({ agentToolAssignmentCount: 0 });
+    expect(auditRows[0].after).toMatchObject({ agentToolAssignmentCount: 1 });
+  });
+
+  test("a pair present in both lists nets out to the reassignment", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+    const versionBefore = await getLatestVersion(agent.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            credentialResolutionMode: "dynamic",
+          },
+        ],
+        unassign: [{ agentId: agent.id, toolId: tool.id }],
+      },
+    });
+
+    // Unassign runs first, so the pair ends assigned with the new credentials
+    // (not deleted) — pins the delete-then-insert ordering inside bulkApply.
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      assigned: 1,
+      unassigned: 1,
+      updated: 0,
+      unchanged: 0,
+    });
+
+    const [row] = await db
+      .select({
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(row?.credentialResolutionMode).toBe("dynamic");
+    expect(await getLatestVersion(agent.id)).toBe(versionBefore + 1);
+  });
+
+  test("a pair listed twice in assign dedups last-wins and counts once", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const tool = await makeTool();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [
+          { agentId: agent.id, toolId: tool.id },
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            credentialResolutionMode: "dynamic",
+          },
+        ],
+        unassign: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      assigned: 1,
+      updated: 0,
+      unchanged: 0,
+    });
+
+    const rows = await db
+      .select({
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].credentialResolutionMode).toBe("dynamic");
   });
 });
 

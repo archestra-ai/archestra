@@ -1853,8 +1853,15 @@ class AgentModel {
   /**
    * Includes `environmentId` so callers can apply the environment fence beside
    * the permission checks, without a second round-trip per target.
+   *
+   * Scoped to `organizationId`: an agent from another organization is simply
+   * absent from the result, so callers' existing "missing agent" handling
+   * fails closed without leaking whether the id exists elsewhere.
    */
-  static async findByIdsForPermissionCheck(ids: string[]): Promise<
+  static async findByIdsForPermissionCheck(
+    ids: string[],
+    organizationId: string,
+  ): Promise<
     Map<
       string,
       {
@@ -1883,6 +1890,7 @@ class AgentModel {
         .where(
           and(
             inArray(schema.agentsTable.id, ids),
+            eq(schema.agentsTable.organizationId, organizationId),
             notDeleted(schema.agentsTable),
           ),
         ),
@@ -1911,6 +1919,30 @@ class AgentModel {
     }
 
     return result;
+  }
+
+  /**
+   * Batch fetch agent display names. Used on error paths to render
+   * human-readable messages instead of raw UUIDs.
+   */
+  static async findNamesByIds(ids: string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const rows = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          inArray(schema.agentsTable.id, ids),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+    return new Map(rows.map((r) => [r.id, r.name]));
   }
 
   /**

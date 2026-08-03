@@ -250,10 +250,9 @@ export function McpAssignmentsDialog({
           toRemove.length === 0
         ) {
           affectedAgentIds.add(profileId);
-          const toolsToUpdate = current.tools.filter(
-            (at) => !toRemove.includes(at.tool.id),
-          );
-          for (const at of toolsToUpdate) {
+          // The branch requires toRemove to be empty, so every current tool
+          // gets the new credential.
+          for (const at of current.tools) {
             assign.push({
               agentId: profileId,
               toolId: at.tool.id,

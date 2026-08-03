@@ -65,6 +65,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "githubPat.created": "GitHub token saved",
   "githubPat.updated": "GitHub token updated",
   "githubPat.deleted": "GitHub token deleted",
+  // Hook
+  "hook.bulk_created": "Hooks bulk created",
   // Identity provider
   "identityProvider.created": "Identity provider created",
   "identityProvider.updated": "Identity provider updated",
@@ -281,6 +283,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "environment",
   "githubAppConfig",
   "githubPat",
+  "hook",
   "identityProvider",
   "internalMcpCatalog",
   "invitation",

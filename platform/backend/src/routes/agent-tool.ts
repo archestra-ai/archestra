@@ -225,7 +225,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Batch fetch agents for permission checks (avoids N+1 findById calls)
       const [agentsForPermCheck, checker] = await Promise.all([
-        AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
+        AgentModel.findByIdsForPermissionCheck(
+          uniqueAgentIds,
+          request.organizationId,
+        ),
         getAgentTypePermissionChecker({
           userId: request.user.id,
           organizationId: request.organizationId,
@@ -419,7 +422,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
 
       const [agentsForPermCheck, checker] = await Promise.all([
-        AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
+        AgentModel.findByIdsForPermissionCheck(
+          uniqueAgentIds,
+          request.organizationId,
+        ),
         getAgentTypePermissionChecker({
           userId: request.user.id,
           organizationId: request.organizationId,
@@ -524,12 +530,25 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
       if (failures.length > 0) {
+        // Rare path: resolve display names for the failing pairs so the
+        // message is actionable without UUID archaeology, and cap the list so
+        // a big batch cannot produce a multi-kilobyte error.
+        const maxListed = 5;
+        const agentNames = await AgentModel.findNamesByIds([
+          ...new Set(failures.map((f) => f.agentId)),
+        ]);
+        const listed = failures.slice(0, maxListed).map((f) => {
+          const toolName = toolsMap.get(f.toolId)?.name ?? `tool ${f.toolId}`;
+          const agentName = agentNames.get(f.agentId) ?? `agent ${f.agentId}`;
+          return `"${toolName}" on "${agentName}": ${f.message}`;
+        });
+        const overflow =
+          failures.length > maxListed
+            ? `; … and ${failures.length - maxListed} more`
+            : "";
         throw new ApiError(
           mapAgentToolAssignmentErrorCodeToHttpStatus(failures[0].code),
-          `No changes applied — ${failures.length} of ${assignments.length} assignments failed validation: ` +
-            failures
-              .map((f) => `tool ${f.toolId} → agent ${f.agentId}: ${f.message}`)
-              .join("; "),
+          `No changes applied — ${failures.length} of ${assignments.length} assignments failed validation: ${listed.join("; ")}${overflow}`,
         );
       }
 

@@ -339,9 +339,12 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // High-volume / best-effort artifact + recording surfaces.
   { kind: "prefix", value: "/api/skill-sandbox/artifacts" },
   { kind: "prefix", value: "/api/app-recordings" },
-  // Agent hook scripts (hookFilesTable is audited:false — child of the audited
-  // agent). Elevating hooks to a first-class audited resource is a follow-up.
-  { kind: "prefix", value: "/api/hooks" },
+  // Agent hook scripts: single-hook create/update/delete are still unaudited
+  // (hookFilesTable is audited:false — child of the audited agent); elevating
+  // them is a follow-up. The bulk create route IS audited (hook.bulk_created),
+  // so these are route entries, not a blanket /api/hooks prefix.
+  { kind: "route", value: "/api/hooks" },
+  { kind: "route", value: "/api/hooks/:id" },
   // Read-only probes / navigational / suggestion routes — mutate no org state.
   {
     kind: "exact",

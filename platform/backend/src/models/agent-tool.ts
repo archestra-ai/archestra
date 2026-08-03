@@ -1022,6 +1022,11 @@ class AgentToolModel {
         );
 
         const toCreate: typeof assignments = [];
+        const toUpdate: Array<{
+          id: string;
+          mcpServerId: string | null;
+          credentialResolutionMode: CredentialResolutionMode;
+        }> = [];
         for (const assignment of assignments) {
           const existingRow = existingMap.get(
             `${assignment.agentId}:${assignment.toolId}`,
@@ -1037,20 +1042,37 @@ class AgentToolModel {
             existingRow.credentialResolutionMode !==
               normalizeCredentialResolutionMode(assignment);
           if (needsUpdate) {
-            await tx
-              .update(schema.agentToolsTable)
-              .set({
-                mcpServerId: assignment.mcpServerId ?? null,
-                credentialResolutionMode:
-                  normalizeCredentialResolutionMode(assignment),
-                updatedAt: new Date(),
-              })
-              .where(eq(schema.agentToolsTable.id, existingRow.id));
+            toUpdate.push({
+              id: existingRow.id,
+              mcpServerId: assignment.mcpServerId ?? null,
+              credentialResolutionMode:
+                normalizeCredentialResolutionMode(assignment),
+            });
             updated++;
             changedAgentIds.add(assignment.agentId);
           } else {
             unchanged++;
           }
+        }
+
+        // One statement for all credential changes: per-row UPDATEs would hold
+        // the transaction's row locks across up to batch-size round-trips.
+        if (toUpdate.length > 0) {
+          await tx.execute(sql`
+            update ${schema.agentToolsTable} as at
+            set
+              mcp_server_id = v.mcp_server_id::uuid,
+              credential_resolution_mode = v.credential_resolution_mode,
+              updated_at = now()
+            from (values ${sql.join(
+              toUpdate.map(
+                (u) =>
+                  sql`(${u.id}::uuid, ${u.mcpServerId}, ${u.credentialResolutionMode})`,
+              ),
+              sql`, `,
+            )}) as v(id, mcp_server_id, credential_resolution_mode)
+            where at.id = v.id
+          `);
         }
 
         if (toCreate.length > 0) {

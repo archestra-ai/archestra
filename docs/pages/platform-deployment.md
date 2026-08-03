@@ -741,7 +741,6 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_BETA`** - Fallback for per-feature `ARCHESTRA_*_ENABLED` gates (see `betaFeatureEnabled`).
   - Default: `false`
   - Values: `true`, `false`
-  - Also enables Advisor Mode: the `advisor` tool an agent calls for a second opinion. It stays inert until an administrator sets the built-in Advisor agent's model, after which each consultation is billed at that model's rates.
 
 ### Code Sandbox
 

@@ -46,6 +46,16 @@ async function expandQuery(params: {
     );
     return [{ queryText, weight: 1.0, type: "semantic" }];
   }
+  if (rerankerConfig.kind !== "llm") {
+    // A dedicated rerank-API model (Cohere Rerank) can only score documents —
+    // it cannot generate rephrasings, so expansion degrades like an
+    // unconfigured reranker.
+    logger.debug(
+      { organizationId },
+      "[QueryExpansion] Reranker is a native rerank model, skipping expansion",
+    );
+    return [{ queryText, weight: 1.0, type: "semantic" }];
+  }
 
   const [semanticResult, keywordResult] = await Promise.allSettled([
     semanticRephrase({ queryText, rerankerConfig, connectorId }),

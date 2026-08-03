@@ -146,6 +146,14 @@ export function getConnectorNamePlaceholder(
 export const RERANKER_MIN_RELEVANCE_SCORE = 3;
 
 /**
+ * Minimum relevance score (0..1) for chunks reranked through a native rerank
+ * API (Cohere Rerank). Cohere scores are query-relative with no universal
+ * cutoff, so this is a conservative floor that only drops clearly irrelevant
+ * chunks rather than mirroring the 3/10 LLM threshold.
+ */
+export const RERANKER_NATIVE_MIN_RELEVANCE_SCORE = 0.1;
+
+/**
  * Nomic embedding models require task instruction prefixes in the input text.
  * Documents should use "search_document: " and queries should use "search_query: ".
  * See: https://huggingface.co/nomic-ai/nomic-embed-text-v1.5

@@ -1363,6 +1363,72 @@ class McpServerModel {
    * Best-effort per install: a failed K8s teardown or secret delete is logged
    * and the purge continues, so one wedged install can't block the deletion.
    */
+  /**
+   * Transaction-scoped variant of {@link purgePersonalServersForUser} for
+   * callers already inside a database transaction (temp-user cleanup in auth
+   * flows). SQL only, on the caller's executor: base-db queries under an open
+   * transaction deadlock the single-connection test database, and the full
+   * purge's runtime/secret-manager side effects cannot join a transaction
+   * anyway. Mirrors the backfill migration's semantics — install rows go,
+   * plain secret rows go with them, Vault/BYOS secret rows are RETAINED (SQL
+   * cannot reach the backing store; the row is the only pointer left for a
+   * manual sweep). No K8s teardown: these auth-flow shell users cannot have
+   * running local installs.
+   */
+  static async purgePersonalServersForUserInTransaction(
+    userId: string,
+    tx: Transaction,
+  ): Promise<void> {
+    const servers = await tx
+      .select({
+        id: schema.mcpServersTable.id,
+        secretId: schema.mcpServersTable.secretId,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
+      })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.mcpServersTable.secretId, schema.secretsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.ownerId, userId),
+          eq(schema.mcpServersTable.scope, "personal"),
+        ),
+      );
+
+    if (servers.length === 0) {
+      return;
+    }
+
+    // Install rows first: `mcp_server.secret_id` is `set null`, so deleting
+    // the secret first would erase the pointer mid-flight.
+    await tx.delete(schema.mcpServersTable).where(
+      inArray(
+        schema.mcpServersTable.id,
+        servers.map((server) => server.id),
+      ),
+    );
+
+    const plainSecretIds = servers
+      .filter(
+        (server) =>
+          server.secretId && !server.secretIsVault && !server.secretIsByosVault,
+      )
+      .map((server) => server.secretId as string);
+    if (plainSecretIds.length > 0) {
+      await tx
+        .delete(schema.secretsTable)
+        .where(inArray(schema.secretsTable.id, plainSecretIds));
+    }
+
+    logger.info(
+      { userId, purgedCount: servers.length },
+      "McpServerModel.purgePersonalServersForUserInTransaction: purged personal MCP installs and their credentials",
+    );
+  }
+
   static async purgePersonalServersForUser(userId: string): Promise<string[]> {
     // Deliberately NOT filtered by `notDeleted` — retained secrets on
     // soft-deleted installs are exactly the residue this purge exists to clear.

@@ -244,6 +244,25 @@ class UserModel {
   static async delete(userId: string, tx?: Transaction): Promise<boolean> {
     logger.debug("UserModel.delete: deleting user");
 
+    if (tx) {
+      // Inside a caller's transaction the cleanup MUST run on the same
+      // executor: a base-db query under an open transaction deadlocks the
+      // single-connection test database, and base-db cleanup would escape the
+      // caller's rollback. No best-effort swallowing here either — after a
+      // failed statement the transaction is aborted, so the transaction is
+      // the unit of success.
+      await McpServerModel.purgePersonalServersForUserInTransaction(userId, tx);
+      await AgentModel.deletePersonalMcpGatewaysForUser(userId, tx);
+      await AgentModel.deletePersonalLlmProxiesForUser(userId, tx);
+      const result = await tx
+        .delete(schema.usersTable)
+        .where(eq(schema.usersTable.id, userId))
+        .returning();
+      const deleted = result.length > 0;
+      logger.debug({ deleted }, "UserModel.delete: completed");
+      return deleted;
+    }
+
     // Personal MCP installs hold the user's own credentials (OAuth tokens,
     // prompted secrets). `mcp_server.owner_id` is `set null`, so without this
     // the install survives ownerless with its secret bag intact.
@@ -280,8 +299,7 @@ class UserModel {
       );
     }
 
-    const dbOrTx = tx ?? db;
-    const result = await dbOrTx
+    const result = await db
       .delete(schema.usersTable)
       .where(eq(schema.usersTable.id, userId))
       .returning();

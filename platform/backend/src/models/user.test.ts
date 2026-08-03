@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
 import McpServerModel from "./mcp-server";
 import MemberModel from "./member";
@@ -285,5 +285,54 @@ describe("UserModel.delete personal MCP credential cleanup", () => {
 
     expect(await UserModel.delete(user.id)).toBe(true);
     expect(await McpServerModel.findById(server.id)).toBeNull();
+  });
+
+  // Regression: the auth flows (rejected-SSO cleanup, linked-IdP temp users)
+  // call UserModel.delete inside withDbTransaction. Cleanup running on the
+  // base connection while the caller's transaction is open deadlocks the
+  // single-connection test database — this test hangs, not fails, if that
+  // regresses.
+  test("delete inside a caller's transaction purges installs on the same executor", async ({
+    makeUser,
+    makeMcpServer,
+  }) => {
+    const user = await makeUser();
+    const plainSecret = await SecretModel.create({
+      name: "tx-plain",
+      secret: { access_token: "at-tx" },
+    });
+    const plainServer = await makeMcpServer({
+      ownerId: user.id,
+      scope: "personal",
+      serverType: "remote",
+      secretId: plainSecret.id,
+    });
+    const vaultSecret = await SecretModel.create({
+      name: "tx-vault",
+      secret: { vaultPath: "kv/data/creds" },
+      isVault: true,
+    });
+    const vaultServer = await makeMcpServer({
+      ownerId: user.id,
+      scope: "personal",
+      serverType: "remote",
+      secretId: vaultSecret.id,
+    });
+
+    await withDbTransaction(async (tx) => {
+      expect(await UserModel.delete(user.id, tx)).toBe(true);
+    });
+
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, user.id));
+    expect(userRow).toBeUndefined();
+    expect(await McpServerModel.findById(plainServer.id)).toBeNull();
+    expect(await McpServerModel.findById(vaultServer.id)).toBeNull();
+    expect(await SecretModel.findById(plainSecret.id)).toBeNull();
+    // Vault-backed secret rows survive: SQL cannot purge the backing store,
+    // and the row is the only pointer left for a manual sweep.
+    expect(await SecretModel.findById(vaultSecret.id)).not.toBeNull();
   });
 });

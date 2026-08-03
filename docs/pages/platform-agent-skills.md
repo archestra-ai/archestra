@@ -133,13 +133,15 @@ Every edit that changes a skill's `SKILL.md` or resource files creates a new imm
 
 ### Browsing Versions
 
-Open **Version history** from the skill's row menu, or from the button in the skill editor. Pick a version to see what it changed — a diff against the version before it, file by file. Switch to **All files** to read the whole version instead.
+Open **Version history** from the skill's row menu. Pick a version to see every file it holds. Each file is marked as added, changed, or removed against the version before it. A file that changed opens as a diff — one that did not opens as itself.
 
 ### Restoring a Version
 
 **Restore this version** republishes an older version's content. It creates a new version rather than rewinding to the old one, so nothing in the history is rewritten. Restoring a version identical to the current one does nothing.
 
-A restore replaces the skill's instructions and resource files. It changes nothing else. The name, description, and other frontmatter fields are not versioned. Neither are scope, teams, environments, or GitHub settings — so a restore will not undo a rename.
+A restore replaces the skill's instructions and its resource files. Files the skill has today that the restored version does not are removed. The confirmation tells you how many, and a later restore brings them back.
+
+It changes nothing else. The name, description, and other frontmatter fields are not versioned. Neither are scope, teams, environments, or GitHub settings — so a restore will not undo a rename.
 
 A GitHub-synced skill cannot be restored, since its content comes from the repo. Stop the sync in the skill editor to make the skill editable again.
 

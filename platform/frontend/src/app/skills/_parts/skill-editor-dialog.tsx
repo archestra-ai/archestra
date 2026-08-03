@@ -13,7 +13,6 @@ import {
   Folder,
   FolderOpen,
   Github,
-  History,
   Lock,
   MessageSquare,
   Plus,
@@ -121,7 +120,6 @@ export function SkillEditorDialog({
   open,
   onOpenChange,
   onSaved,
-  onShowHistory,
   preview,
   isPreviewLoading,
 }: {
@@ -129,8 +127,6 @@ export function SkillEditorDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
-  /** Swap this dialog for the skill's version history (existing skills only). */
-  onShowHistory?: () => void;
   preview?: SkillPreview | null;
   isPreviewLoading?: boolean;
 }) {
@@ -420,17 +416,6 @@ export function SkillEditorDialog({
           </>
         ) : (
           <>
-            {isEdit && onShowHistory ? (
-              <Button
-                type="button"
-                variant="ghost"
-                className="mr-auto"
-                onClick={onShowHistory}
-              >
-                <History className="h-4 w-4" />
-                <span>Version history</span>
-              </Button>
-            ) : null}
             <Button
               type="button"
               variant="outline"

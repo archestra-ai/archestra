@@ -602,10 +602,6 @@ function SkillsList() {
           skillId={editingSkill.id}
           open={!!editingSkill}
           onOpenChange={(open) => !open && closeEditor()}
-          // History opens over the editor rather than replacing it: the editor
-          // tracks no dirty state, so closing it would drop an in-progress edit
-          // silently. Stacked, closing history returns to the untouched form.
-          onShowHistory={() => setHistorySkillId(editingSkill.id)}
         />
       )}
 

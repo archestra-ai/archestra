@@ -10,6 +10,7 @@ import { trackEvent } from "@/lib/analytics";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
   getApiErrorMessage,
+  getApiErrorType,
   handleApiError,
   throwOnApiError,
 } from "@/lib/utils";
@@ -286,10 +287,10 @@ export function useRestoreSkill() {
  * restored bytes become a *new* head version, so nothing in the history is
  * rewritten.
  *
- * Until a dedicated restore endpoint exists this rides on the regular update
- * route, which means the concurrency guard is a client-side re-read rather than
- * a server-side check, and the resulting version is recorded as an ordinary
- * edit (no "restored from" provenance).
+ * There is no dedicated restore endpoint; this rides on the regular update
+ * route, so the resulting version is recorded as an ordinary edit with no
+ * "restored from" provenance. Concurrency is the route's own compare-and-set
+ * (`baseVersion`), not a client-side re-read.
  */
 export function useRestoreSkillVersion() {
   const queryClient = useQueryClient();
@@ -297,57 +298,29 @@ export function useRestoreSkillVersion() {
     mutationFn: async ({
       skillId,
       version,
-      expectedHeadVersion,
+      baseVersion,
     }: {
       skillId: string;
       version: number;
-      /** Head the preview was rendered against; a moved head aborts the write. */
-      expectedHeadVersion: number;
+      /** Head the preview was rendered against; a moved head 409s the write. */
+      baseVersion: number;
     }) => {
-      // Re-read the head at submit time: the previewed history may be minutes
-      // old, and restoring over someone else's newer edit would bury it.
-      const { data: current, error: currentError } = await getSkill({
-        path: { id: skillId },
-      });
-      if (currentError) {
-        handleApiError(currentError);
+      // The frontmatter is read fresh rather than taken from the preview: it
+      // lives in columns, not in the snapshot, and a frontmatter-only edit does
+      // not move the head — so `baseVersion` cannot stand in for reading it now.
+      const [
+        { data: skill, error: skillError },
+        { data: snapshot, error: snapshotError },
+      ] = await Promise.all([
+        getSkill({ path: { id: skillId } }),
+        getSkillVersion({ path: { id: skillId, version } }),
+      ]);
+      const readError = skillError ?? snapshotError;
+      if (readError) {
+        handleApiError(readError);
         return null;
       }
-      if (!current) return null;
-      if (current.latestVersion !== expectedHeadVersion) {
-        toast.error(
-          "This skill changed while you were previewing it. Review the latest version and try again.",
-        );
-        return null;
-      }
-
-      // Both reads are anchored to the head just confirmed above, rather than
-      // to whatever the history list happened to have loaded when the preview
-      // was rendered.
-      const [{ data: snapshot, error: snapshotError }, { data: head }] =
-        await Promise.all([
-          getSkillVersion({ path: { id: skillId, version } }),
-          getSkillVersion({
-            path: { id: skillId, version: current.latestVersion },
-          }),
-        ]);
-      if (snapshotError) {
-        handleApiError(snapshotError);
-        return null;
-      }
-      if (!snapshot) return null;
-
-      // Identical content does not fork a version (the backend suppresses no-op
-      // forks by content hash), so reporting a restore would name a version
-      // that was never created. An unreadable head is not evidence of equality,
-      // so it skips the shortcut rather than blocking the write — `onSuccess`
-      // catches a suppressed fork either way.
-      if (head && snapshot.contentHash === head.contentHash) {
-        toast.info(
-          `Version ${version} is identical to the current version — nothing to restore.`,
-        );
-        return null;
-      }
+      if (!skill || !snapshot) return null;
 
       const { data, error } = await updateSkill({
         path: { id: skillId },
@@ -356,7 +329,7 @@ export function useRestoreSkillVersion() {
           // and is not versioned — while the API writes a whole SKILL.md. So
           // the old body is republished under the skill's current frontmatter,
           // which is exactly the edit the snapshot describes.
-          content: composeManifest({ ...current, content: snapshot.content }),
+          content: composeManifest({ ...skill, content: snapshot.content }),
           // Always sent, even when empty: omitting `files` leaves the skill's
           // current resource files untouched, which would pair an old body
           // with newer files. `kind` is re-derived from the path server-side.
@@ -365,35 +338,49 @@ export function useRestoreSkillVersion() {
             content: file.content,
             encoding: file.encoding,
           })),
+          baseVersion,
         },
       });
       if (error) {
+        // The only 409 a restore can raise is that compare-and-set: the name is
+        // carried over from the skill itself, so it cannot collide with another.
+        if (getApiErrorType(error) === "api_conflict_error") {
+          toast.error(
+            "This skill changed while you were previewing it. Review the latest version and try again.",
+          );
+          return null;
+        }
         handleApiError(error);
         return null;
       }
-      // The backend suppresses a fork whose payload hashes equal to the head,
-      // so an unmoved `latestVersion` means nothing was written — whatever the
-      // hash shortcut above concluded. Reporting success here would name a
-      // version that does not exist.
-      if (data && data.latestVersion === expectedHeadVersion) {
+      // The backend suppresses a fork whose payload hashes equal to the head, so
+      // an unmoved `latestVersion` means the chosen version was already the
+      // current one and nothing was written. That still settles the request, so
+      // it resolves with the skill — only `null` means "ask again".
+      if (data && data.latestVersion === baseVersion) {
         toast.info(
           `Version ${version} is identical to the current version — nothing to restore.`,
         );
-        return null;
       }
       return data;
     },
+    // Reporting success on a suppressed fork would name a version that does not
+    // exist, so the toast follows the head actually moving.
     onSuccess: (data, variables) => {
-      if (!data) return;
+      if (!data || data.latestVersion === variables.baseVersion) return;
       toast.success(
         `Restored version ${variables.version} — created version ${data.latestVersion}`,
       );
     },
-    // Every outcome refreshes, not just the write. An abort means the head moved
-    // under the preview, and a suppressed fork still touched the skill row — in
-    // both cases what is on screen is the thing that was just proven stale.
+    // Every outcome refreshes, not just the write: a rejected compare-and-set
+    // means the head moved under the preview, and a suppressed fork still
+    // touched the skill row. Version *details* are exempt — their bytes are
+    // immutable, so re-fetching megabytes of base64 would buy nothing.
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({
+        predicate: ({ queryKey }) =>
+          queryKey[0] === "skills" && queryKey[2] !== "version",
+      });
     },
   });
 }

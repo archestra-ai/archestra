@@ -16,7 +16,6 @@ import { Editor } from "@/components/editor";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -37,11 +36,12 @@ import {
   type SkillFileChange,
 } from "./skill-version-diff";
 
-/** Whether the right pane shows only what moved, or the whole version. */
-type VersionViewMode = "changes" | "all";
-
 /** SKILL.md is not a resource file, but the tree lists it like one. */
 const SKILL_MANIFEST_LABEL = "SKILL.md";
+
+type ComparedVersionFile = ComparedSkillFile<
+  SkillVersionDetail["files"][number]
+>;
 
 /**
  * Browse a skill's immutable version history and restore an earlier one.
@@ -84,8 +84,6 @@ function VersionHistory({
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   // null = SKILL.md is open; otherwise a resource file path.
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
-  // Survives version selection: whoever came to read diffs keeps reading diffs.
-  const [viewMode, setViewMode] = useState<VersionViewMode>("changes");
   const [confirmingRestore, setConfirmingRestore] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
 
@@ -108,25 +106,31 @@ function VersionHistory({
     open ? skillId : null,
     hasPredecessor ? (activeVersion as number) - 1 : null,
   );
-  const predecessor = predecessorQuery.data;
+  const predecessor = predecessorQuery.data ?? null;
+  // A disabled query never leaves `pending`, so version 1's readiness is the
+  // absence of a predecessor rather than the query's own status. A predecessor
+  // that 404s or fails is settled too: the baseline is empty and the version
+  // reads as newly added, which is what "no baseline" means. The failure itself
+  // is reported by the query's toast.
+  const isBaselineSettled = !hasPredecessor || !predecessorQuery.isPending;
 
-  // Readiness is the query's status, not its data: a predecessor that answered
-  // 404 settles as null, and reading that as "still loading" would leave the
-  // diff waiting forever. A predecessor that failed outright is settled too —
-  // unknown, but not pending, and treating it as pending would hang the diff on
-  // every transient 5xx. Either way the baseline is empty and the version reads
-  // as an all-new document. The disabled query for version 1 never settles at
-  // all, so its own absence of a predecessor is the ready signal.
-  const isBaselineReady =
-    !!detail &&
-    (!hasPredecessor || predecessorQuery.isSuccess || predecessorQuery.isError);
   const comparedFiles = useMemo(
     () =>
-      isBaselineReady
+      detail && isBaselineSettled
         ? compareSkillVersionFiles(detail.files, predecessor?.files ?? [])
         : [],
-    [detail, predecessor, isBaselineReady],
+    [detail, predecessor, isBaselineSettled],
   );
+
+  // What a restore would do to the skill *as it stands today* — a different
+  // question from what this version changed, and the one a confirmation has to
+  // answer. `files` is a full replacement, so anything the skill has now and
+  // this version lacks is dropped.
+  const filesDroppedByRestore = useMemo(() => {
+    if (!skill || !detail) return 0;
+    const restoredPaths = new Set(detail.files.map((file) => file.path));
+    return skill.files.filter((file) => !restoredPaths.has(file.path)).length;
+  }, [skill, detail]);
 
   const isSynced = !!skill?.githubSyncInterval;
   const isBuiltIn = skill?.sourceType === "built_in";
@@ -136,12 +140,13 @@ function VersionHistory({
     if (!skill || !detail || activeVersion === null) return;
     // A handled failure resolves to null and a transport failure rejects; both
     // keep the confirmation open, so the toast explaining why still has the
-    // dialog it refers to on screen.
+    // dialog it refers to on screen. A restore that wrote nothing because the
+    // version was already current still settles, and closes.
     const result = await restoreVersion
       .mutateAsync({
         skillId: skill.id,
         version: activeVersion,
-        expectedHeadVersion: skill.latestVersion,
+        baseVersion: skill.latestVersion,
       })
       .catch(() => null);
     if (!result) return;
@@ -158,8 +163,8 @@ function VersionHistory({
       title="Version history"
       description={
         skill
-          ? `Every edit to "${skill.name}" is kept as a version. Restoring one adds a new version.`
-          : "Every edit is kept as a version."
+          ? `Every change to "${skill.name}"'s instructions or files is kept as a version. Restoring one adds a new version.`
+          : "Every change to a skill's instructions or files is kept as a version."
       }
       size="large"
       bodyClassName="flex flex-col overflow-hidden p-0"
@@ -240,13 +245,10 @@ function VersionHistory({
               version={activeVersion}
               isHead={isHead}
               detail={detail ?? null}
-              predecessor={predecessor ?? null}
-              isBaselineReady={isBaselineReady}
-              baselineFailed={predecessorQuery.isError}
+              predecessor={predecessor}
+              isBaselineSettled={isBaselineSettled}
               isLoading={isDetailLoading}
               comparedFiles={comparedFiles}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
               activeFilePath={activeFilePath}
               onSelectFile={setActiveFilePath}
             />
@@ -264,6 +266,7 @@ function VersionHistory({
               version={activeVersion}
               nextVersion={skill.latestVersion + 1}
               fileCount={detail.files.length}
+              droppedCount={filesDroppedByRestore}
             />
           }
           isPending={restoreVersion.isPending}
@@ -368,7 +371,7 @@ function VersionTimeline({
               <button
                 key={version.id}
                 type="button"
-                aria-current={isActive}
+                aria-current={isActive ? "true" : undefined}
                 onClick={() => onSelect(version.version)}
                 className={cn(
                   "block w-full cursor-pointer border-l-2 border-transparent px-3 py-2 text-left hover:bg-muted",
@@ -422,17 +425,20 @@ interface VersionEntry {
   change: SkillFileChange;
 }
 
+/**
+ * The whole version as one annotated file list: every file it holds, plus the
+ * ones its predecessor had and it dropped, each badged with what moved. A file
+ * that changed opens as a diff against the predecessor; one that did not opens
+ * as itself, since a diff of identical bytes shows nothing.
+ */
 function VersionPreview({
   version,
   isHead,
   detail,
   predecessor,
-  isBaselineReady,
-  baselineFailed,
+  isBaselineSettled,
   isLoading,
   comparedFiles,
-  viewMode,
-  onViewModeChange,
   activeFilePath,
   onSelectFile,
 }: {
@@ -440,13 +446,9 @@ function VersionPreview({
   isHead: boolean;
   detail: SkillVersionDetail | null;
   predecessor: SkillVersionDetail | null;
-  isBaselineReady: boolean;
-  /** The predecessor could not be read, so "what moved" is unknown, not empty. */
-  baselineFailed: boolean;
+  isBaselineSettled: boolean;
   isLoading: boolean;
-  comparedFiles: ComparedSkillFile<SkillVersionDetail["files"][number]>[];
-  viewMode: VersionViewMode;
-  onViewModeChange: (mode: VersionViewMode) => void;
+  comparedFiles: ComparedVersionFile[];
   activeFilePath: string | null;
   onSelectFile: (path: string | null) => void;
 }) {
@@ -467,73 +469,42 @@ function VersionPreview({
     );
   }
 
-  const changeByPath = new Map(
-    comparedFiles.map((file) => [file.path, file.change]),
-  );
   // No baseline — version 1, or a predecessor the API no longer has — makes the
-  // whole version read as added, matching how its files compare. Annotating
-  // anything before the baseline settles would only guess.
-  const manifestChange: SkillFileChange = !isBaselineReady
-    ? "unchanged"
-    : !predecessor
-      ? "added"
-      : predecessor.content !== detail.content
-        ? "changed"
-        : "unchanged";
-  const changedFiles = comparedFiles.filter(
-    (file) => file.change !== "unchanged",
-  );
-  const changeCount =
-    changedFiles.length + (manifestChange === "unchanged" ? 0 : 1);
+  // whole version read as added, matching how its files compare.
+  const manifestChange: SkillFileChange = !predecessor
+    ? "added"
+    : predecessor.content !== detail.content
+      ? "changed"
+      : "unchanged";
+  const entries: VersionEntry[] = [
+    { path: null, change: manifestChange },
+    ...comparedFiles.map((file) => ({ path: file.path, change: file.change })),
+  ];
 
-  // "Changes" lists only what moved — an unchanged SKILL.md has no place in it.
-  // "All files" is the whole version, annotated with what moved.
-  const entries: VersionEntry[] =
-    viewMode === "all"
-      ? [
-          { path: null, change: manifestChange },
-          ...detail.files.map((file) => ({
-            path: file.path,
-            change: changeByPath.get(file.path) ?? "unchanged",
-          })),
-        ]
-      : [
-          ...(manifestChange === "unchanged"
-            ? []
-            : [{ path: null, change: manifestChange }]),
-          ...changedFiles.map((file) => ({
-            path: file.path,
-            change: file.change,
-          })),
-        ];
-
-  // The chosen path is a preference, not a guarantee: switching modes can hide
-  // it (an unchanged file, or one this version removed), so fall back to the
-  // first row rather than rendering an empty pane.
-  const activeEntry =
-    entries.find((entry) => entry.path === activeFilePath) ??
-    entries[0] ??
-    null;
-  const activePath = activeEntry?.path ?? null;
-  const isManifest = !!activeEntry && activePath === null;
-  const compared = activePath
-    ? (comparedFiles.find((file) => file.path === activePath) ?? null)
+  // Selecting a version clears the file selection, so a path missing from this
+  // version's list can only be a transient render — read it as SKILL.md, which
+  // every version has.
+  const compared = activeFilePath
+    ? (comparedFiles.find((file) => file.path === activeFilePath) ?? null)
     : null;
-  const currentSnapshot = activePath
-    ? (detail.files.find((file) => file.path === activePath) ??
-      compared?.current ??
-      null)
-    : null;
-  // Only the diff reads both sides. In "All files" the predecessor's encoding
-  // says nothing about the copy on screen — a binary that was re-saved as text
-  // is readable in this version even though it was not in the last one.
-  const isBinary =
-    currentSnapshot?.encoding === "base64" ||
-    (viewMode === "changes" && compared?.previous?.encoding === "base64");
-  // Until the predecessor lands there is nothing to compare against, and an
-  // empty change set would read as "nothing changed" rather than "not yet
-  // known". Browsing the whole version needs no baseline, so it renders now.
-  const isComparing = viewMode === "changes" && !isBaselineReady;
+  const change = compared ? compared.change : manifestChange;
+  const original = compared
+    ? (compared.previous?.content ?? "")
+    : (predecessor?.content ?? "");
+  const modified = compared
+    ? (compared.current?.content ?? "")
+    : detail.content;
+  // The copy actually rendered: this version's file, or — for one it removed —
+  // the predecessor's. Only that side's encoding decides readability, so a
+  // binary re-saved as text reads fine here even though the last version's copy
+  // would not have.
+  const rendered = compared ? (compared.current ?? compared.previous) : null;
+  const isBinary = rendered?.encoding === "base64";
+  // A diff needs two readable sides, and identical bytes have nothing to show;
+  // either way the file is shown whole instead.
+  const canDiff =
+    change !== "unchanged" && compared?.previous?.encoding !== "base64";
+  const language = languageForPath(activeFilePath ?? SKILL_MANIFEST_LABEL);
 
   return (
     <>
@@ -548,50 +519,12 @@ function VersionPreview({
         </span>
       </header>
 
-      <div className="px-4 pt-2">
-        <ButtonGroup>
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === "all" ? "secondary" : "outline"}
-            onClick={() => onViewModeChange("all")}
-          >
-            All files ({detail.files.length + 1})
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === "changes" ? "secondary" : "outline"}
-            onClick={() => onViewModeChange("changes")}
-          >
-            {/* No baseline yet means no count either — "Changes (0)" would
-                assert that nothing moved before that is known. */}
-            {isBaselineReady ? `Changes (${changeCount})` : "Changes"}
-          </Button>
-        </ButtonGroup>
-      </div>
-
-      {baselineFailed && viewMode === "changes" ? (
-        <p className="mx-4 mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-          Version {version - 1} could not be loaded, so there is nothing to
-          compare against — everything below is shown as newly added.
-        </p>
-      ) : null}
-
-      <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3 p-4">
-        <div className="min-h-0 overflow-y-auto rounded-md border p-2">
-          {isComparing ? (
-            <p className="px-2 py-1 text-xs text-muted-foreground">
-              Loading changes...
-            </p>
-          ) : entries.length === 0 ? (
-            <p className="px-2 py-1 text-xs text-muted-foreground">
-              Nothing changed in this version.
-            </p>
-          ) : (
+      {isBaselineSettled ? (
+        <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3 p-4">
+          <div className="min-h-0 overflow-y-auto rounded-md border p-2">
             <VersionFileTree
               entries={entries}
-              activePath={activePath}
+              activePath={compared?.path ?? null}
               collapsedFolders={collapsedFolders}
               onToggleFolder={(folder) =>
                 setCollapsedFolders((current) => {
@@ -602,47 +535,48 @@ function VersionPreview({
               }
               onSelect={onSelectFile}
             />
-          )}
-        </div>
+          </div>
 
-        <div className="min-h-0 overflow-hidden rounded-md border">
-          {isComparing || !activeEntry ? (
-            <p className="p-4 text-sm text-muted-foreground">
-              Nothing to show here.
-            </p>
-          ) : isBinary ? (
-            <p className="p-4 text-sm text-muted-foreground">
-              This file is binary, so there is nothing to show here.
-            </p>
-          ) : viewMode === "changes" ? (
-            <DiffEditor
-              height="100%"
-              language={languageForPath(activePath ?? SKILL_MANIFEST_LABEL)}
-              original={
-                isManifest
-                  ? (predecessor?.content ?? "")
-                  : (compared?.previous?.content ?? "")
-              }
-              modified={
-                isManifest ? detail.content : (currentSnapshot?.content ?? "")
-              }
-            />
-          ) : (
-            <Editor
-              height="100%"
-              language={languageForPath(activePath ?? SKILL_MANIFEST_LABEL)}
-              value={
-                isManifest ? detail.content : (currentSnapshot?.content ?? "")
-              }
-              options={{
-                readOnly: true,
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-              }}
-            />
-          )}
+          <div className="min-h-0 overflow-hidden rounded-md border">
+            {isBinary ? (
+              <p className="p-4 text-sm text-muted-foreground">
+                This file is binary, so there is nothing to show here.
+              </p>
+            ) : !canDiff ? (
+              <Editor
+                height="100%"
+                language={language}
+                value={modified}
+                options={{
+                  readOnly: true,
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                }}
+              />
+            ) : (
+              <DiffEditor
+                height="100%"
+                language={language}
+                original={original}
+                modified={modified}
+                options={{
+                  // A unified diff fits this dialog's narrow preview pane;
+                  // side-by-side would halve the width for each revision.
+                  renderSideBySide: false,
+                  // Long, mostly-unchanged SKILL.md bodies collapse to the
+                  // edited regions, so a one-line change does not require
+                  // scrolling past everything that stayed the same.
+                  hideUnchangedRegions: { enabled: true },
+                }}
+              />
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <p className="p-6 text-sm text-muted-foreground">
+          Comparing with version {version - 1}...
+        </p>
+      )}
     </>
   );
 }
@@ -785,6 +719,7 @@ function VersionFileRow({
       />
       <button
         type="button"
+        aria-current={isActive ? "true" : undefined}
         className={cn(
           "flex-1 cursor-pointer truncate text-left font-mono text-xs",
           isManifest && "font-medium",
@@ -813,10 +748,13 @@ function RestoreEffects({
   version,
   nextVersion,
   fileCount,
+  droppedCount,
 }: {
   version: number;
   nextVersion: number;
   fileCount: number;
+  /** Files the skill has today that this version does not, so a restore drops them. */
+  droppedCount: number;
 }) {
   return (
     <span className="block space-y-2">
@@ -826,10 +764,21 @@ function RestoreEffects({
       </span>
       <span className="block">
         It replaces the skill&apos;s instructions and its {fileCount} resource
-        {fileCount === 1 ? " file" : " files"}. Everything else is left as it
-        is: the name, description, and other frontmatter fields are not
-        versioned, and neither are scope, teams, environments, or GitHub
-        settings.
+        {fileCount === 1 ? " file" : " files"}.
+        {droppedCount > 0 ? (
+          <span>
+            {" "}
+            The {droppedCount} resource{droppedCount === 1 ? " file" : " files"}{" "}
+            the skill has today that version {version} does not{" "}
+            {droppedCount === 1 ? "is" : "are"} removed — recoverable by
+            restoring a later version.
+          </span>
+        ) : null}
+      </span>
+      <span className="block">
+        Everything else is left as it is: the name, description, and other
+        frontmatter fields are not versioned, and neither are scope, teams,
+        environments, or GitHub settings.
       </span>
     </span>
   );

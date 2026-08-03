@@ -27,14 +27,8 @@ export function DiffEditor({
         // tab character, so keyboard users are not trapped inside embedded
         // editors (WCAG 2.1.2). Ctrl+M / Ctrl+Shift+M toggles it back.
         tabFocusMode: true,
+        // A diff of two stored revisions is a view, never an edit surface.
         readOnly: true,
-        // A unified diff fits the dialog's narrow preview pane; side-by-side
-        // would halve the usable width for each revision.
-        renderSideBySide: false,
-        // Long, mostly-unchanged SKILL.md bodies collapse to the edited
-        // regions, so a one-line change does not require scrolling past
-        // everything that stayed the same.
-        hideUnchangedRegions: { enabled: true },
         scrollBeyondLastLine: false,
         minimap: { enabled: false },
         ...options,

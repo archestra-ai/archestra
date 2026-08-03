@@ -165,35 +165,29 @@ RUN set -eux; \
     rm -f picomatch-4.0.4.tgz; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
-# <----- Builder base stage ----->
-FROM base AS builder-base
+# <----- Per-workspace builder stages ----->
+# Deliberately split so each stage's cache key covers only ITS sources. On
+# ephemeral CI runners the RUN cache mounts below are always empty (only the
+# registry layer cache persists), so with one combined `pnpm build` stage ANY
+# source change recompiled everything — including a ~6 min cold cargo build
+# of the N-API crates on a JS-only merge. Split, a JS-only change reuses
+# builder-rust as a cached layer, and a Rust-only change skips `next build`.
+# BuildKit also builds these sibling stages concurrently.
+
+# ---- Rust N-API crates: cache key = Rust sources + manifests ----
+FROM base AS builder-rust
 WORKDIR /app
 
-# Install the Rust toolchain used to compile the N-API addons during `pnpm build`.
-# Kept ABOVE the node_modules/source COPYs so this layer depends only on `base` and
-# stays cache-stable across ordinary source changes. When it lived below the COPYs
-# the ~12s apk install re-ran on every source-changing build because the preceding
-# COPY layers were invalidated.
+# Toolchain above the COPYs so this layer survives source changes.
 RUN apk add --no-cache build-base cargo rust
 
-# Version arg for Sentry release tracking
-ARG VERSION=dev
-
-# Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/backend/node_modules ./backend/node_modules
-COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
-COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
 COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
 
-# Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY patches ./patches
-COPY backend ./backend
-COPY frontend ./frontend
-COPY shared ./shared
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
@@ -203,13 +197,16 @@ COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 COPY archestra-rs/image-core ./archestra-rs/image-core
 COPY archestra-rs/image-rs ./archestra-rs/image-rs
 
-# Build all workspace
-ENV NEXT_TELEMETRY_DISABLED=1
+# The crate build tasks are cache:false in turbo (platform-specific .node
+# artifacts must not travel through the shared remote cache), so no turbo
+# secrets here — this always compiles when the layer cache misses. The cache
+# mounts still help persistent builders (local docker builds).
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/app/archestra-rs/target \
+    pnpm exec turbo build --filter=@archestra/sandbox-rs --filter=@archestra/app-runtime-rs --filter=@archestra/image-rs
 
-# VERSION is exported as env var for child processes (used by Sentry source map upload)
-ENV VERSION=${VERSION}
-
-FROM builder-base AS rust-napi-musl-smoke
+FROM builder-rust AS rust-napi-musl-smoke
 # cache cargo registry/git + the workspace target dir so heavy deps
 # (dagger-sdk, tokio, …) aren't recompiled on every build of this stage.
 # Smokes every N-API addon under musl: build the .node, then load and call it so
@@ -219,35 +216,77 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/app/archestra-rs/target \
     pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs check:musl
 
-# <----- Builder stage ----->
-FROM builder-base AS builder
-
-# Use Docker secrets to securely pass various sensitive environment variables during build
-# These environment variables are NOT persisted in the final image
-#
-# TURBO_TEAM and TURBO_TOKEN are used for Turbo remote caching
-# https://turborepo.com/docs/guides/tools/docker#example
-#
-# SENTRY_AUTH_TOKEN is used by backend/frontend builds to upload source maps
-# SENTRY_URL points to the EU region where the archestra org is hosted
-#
+# ---- Frontend: cache key = frontend + shared sources ----
+# Secrets (not persisted in the final image): TURBO_TEAM/TURBO_TOKEN for
+# turbo remote caching, SENTRY_AUTH_TOKEN for source map upload; SENTRY_URL
+# points at the EU region where the org is hosted.
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
-# https://docs.docker.com/build/building/secrets/#target
-# Cache cargo registry/git, the Rust workspace target dir, turbo's local cache,
-# and Next.js's build cache so a cold `pnpm build` (which recompiles the Rust
-# N-API addon and builds the frontend) reuses prior work on subsequent builds.
-# The cargo targets match the rust-napi-musl-smoke stage above, so that stage
-# warms the registry for this one; cargo isolates artifacts by target triple.
-RUN --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
-    --mount=type=cache,target=/app/archestra-rs/target \
-    --mount=type=cache,target=/app/.turbo \
+FROM base AS builder-frontend
+WORKDIR /app
+
+# Version arg for Sentry release tracking; exported as env var for child
+# processes (the source map upload).
+ARG VERSION=dev
+ENV VERSION=${VERSION}
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
+COPY --from=deps /app/shared/node_modules ./shared/node_modules
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY patches ./patches
+COPY shared ./shared
+COPY frontend ./frontend
+
+RUN --mount=type=cache,target=/app/.turbo \
     --mount=type=cache,target=/app/frontend/.next/cache \
     --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
     --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     SENTRY_URL=https://de.sentry.io/ \
-    pnpm build
+    pnpm exec turbo build --filter=@frontend
+
+# ---- Backend bundle: cache key = backend + shared sources ----
+FROM base AS builder-backend
+WORKDIR /app
+
+ARG VERSION=dev
+ENV VERSION=${VERSION}
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/backend/node_modules ./backend/node_modules
+COPY --from=deps /app/shared/node_modules ./shared/node_modules
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY patches ./patches
+COPY shared ./shared
+COPY backend ./backend
+
+# --only runs just @backend#build: tsdown bundles TypeScript and needs no
+# N-API binaries at build time, and without it turbo's dependsOn ^build would
+# recompile the (cache:false) crates a second time in this stage.
+RUN --mount=type=cache,target=/app/.turbo \
+    --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
+    --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
+    --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
+    SENTRY_URL=https://de.sentry.io/ \
+    pnpm exec turbo build --filter=@backend --only
+
+# <----- Builder stage (assembly: `pnpm deploy` of the backend) ----->
+FROM base AS builder
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/shared/node_modules ./shared/node_modules
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY patches ./patches
+COPY shared ./shared
+# Built trees, node_modules included, from the per-workspace stages: backend
+# with dist/, the crates with their compiled *.node addons.
+COPY --from=builder-backend /app/backend ./backend
+COPY --from=builder-rust /app/archestra-rs ./archestra-rs
 
 # Assemble the production backend with `pnpm deploy` — pnpm's recommended
 # monorepo packaging step (https://pnpm.io/cli/deploy). It produces a
@@ -259,9 +298,10 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 # node_modules (the layout that dropped @archestra/napi-loader and crashed the
 # image with MODULE_NOT_FOUND).
 #
-# Ordering matters: this runs AFTER `pnpm build`, so the compiled *.node addons
-# already exist in each crate dir. deploy copies them via the crates' `files`
-# globs — it never rebuilds (install scripts are disabled repo-wide).
+# Ordering matters: the COPY --from stages above already built everything, so
+# the compiled *.node addons exist in each crate dir. deploy copies them via
+# the crates' `files` globs — it never rebuilds (install scripts are disabled
+# repo-wide).
 #
 # --legacy keeps pnpm's original deploy implementation, which does not require
 # inject-workspace-packages=true. We deliberately avoid enabling that setting:
@@ -442,20 +482,21 @@ RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
 COPY --from=builder /prod/backend ./backend
 RUN chmod +x /app/backend/scripts/start-production.sh
 
-# Copy built frontend
-COPY --from=builder /app/frontend/public ./frontend/public
-COPY --from=builder /app/frontend/.next/standalone ./
+# Copy built frontend (straight from its builder stage — the assembly stage
+# above only exists for the backend's pnpm deploy)
+COPY --from=builder-frontend /app/frontend/public ./frontend/public
+COPY --from=builder-frontend /app/frontend/.next/standalone ./
 
 # Copy previous version's static assets first (from CI build context)
 # Content-hashed filenames ensure no conflicts between versions
 COPY prev-static-assets/ ./frontend/.next/static/
 
 # Copy current build's assets on top
-COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
+COPY --from=builder-frontend /app/frontend/.next/static ./frontend/.next/static
 
 # Keep a clean copy of ONLY this build's assets (not accumulated)
 # CI will extract from this path for the NEXT deployment
-COPY --from=builder /app/frontend/.next/static /static-assets-source/
+COPY --from=builder-frontend /app/frontend/.next/static /static-assets-source/
 
 RUN chmod +x /docker-entrypoint.sh
 RUN chmod +x /app/docker-banner.sh

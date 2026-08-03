@@ -614,9 +614,6 @@ class AgentToolModel {
   }
 
   /**
-   * Bulk create agent-tool relationships in one query to avoid N+1
-   */
-  /**
    * Which of `agentIds` are missing at least one of `toolIds`. One query, so a
    * reconcile that has nothing to do costs a single round trip rather than one
    * per agent.
@@ -647,6 +644,9 @@ class AgentToolModel {
     );
   }
 
+  /**
+   * Bulk create agent-tool relationships in one query to avoid N+1
+   */
   static async createManyIfNotExists(
     agentId: string,
     toolIds: string[],

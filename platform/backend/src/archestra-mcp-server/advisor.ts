@@ -176,6 +176,10 @@ async function runAdvisorConsultation(
     sessionId,
     source: "advisor:consultation",
     baseUrl: selection.baseUrl,
+    // Binds per-key state to the row that supplied the credential. Omitting it
+    // makes the proxy redeem a rotating subscription token bare and discard the
+    // rotation, burning the stored credential.
+    chatApiKeyId: selection.chatApiKeyId,
   });
 
   const timeout = AbortSignal.timeout(ADVISOR_TIMEOUT_MS);

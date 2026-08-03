@@ -2,7 +2,17 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   isPrefillExemptArchestraToolShortName,
 } from "@archestra/shared";
-import { and, asc, eq, inArray, isNull, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNull,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -129,12 +139,17 @@ class AgentExcludedToolModel {
   }
 
   /**
-   * Drop exclusions for tools that are assigned to every agent by default.
+   * Drop the exclusions that contradict a default tool's assignment.
    *
    * An older build could pre-exclude a tool before it joined the default set,
    * and nothing since removes that row — the agent then holds the tool in
    * `agent_tools` while dispatch refuses it as excluded. Runs each boot so an
    * environment that took the two releases separately repairs itself.
+   *
+   * Only an exclusion older than the assignment it contradicts is stale. An
+   * exclusion is the sole way to take a default tool off an Auto-mode agent,
+   * so one added after the tool was assigned is an administrator's decision
+   * and survives.
    */
   static async clearExclusionsForDefaultTools(
     toolIds: string[],
@@ -142,7 +157,32 @@ class AgentExcludedToolModel {
     if (toolIds.length === 0) return 0;
     const removed = await db
       .delete(schema.agentExcludedToolsTable)
-      .where(inArray(schema.agentExcludedToolsTable.toolId, toolIds))
+      .where(
+        and(
+          inArray(schema.agentExcludedToolsTable.toolId, toolIds),
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(schema.agentToolsTable)
+              .where(
+                and(
+                  eq(
+                    schema.agentToolsTable.agentId,
+                    schema.agentExcludedToolsTable.agentId,
+                  ),
+                  eq(
+                    schema.agentToolsTable.toolId,
+                    schema.agentExcludedToolsTable.toolId,
+                  ),
+                  gt(
+                    schema.agentToolsTable.createdAt,
+                    schema.agentExcludedToolsTable.createdAt,
+                  ),
+                ),
+              ),
+          ),
+        ),
+      )
       .returning({ agentId: schema.agentExcludedToolsTable.agentId });
     return removed.length;
   }

@@ -290,6 +290,17 @@ ARG TARGETARCH
 ENV NODE_ENV=production
 # disable telemetry for next.js
 ENV NEXT_TELEMETRY_DISABLED=1
+# Resolve `localhost` to [127.0.0.1, ::1] rather than [::1, 127.0.0.1].
+# getaddrinfo ranks ::1 first per RFC 6724 no matter how /etc/hosts is ordered
+# (and musl, which this image uses, has no /etc/gai.conf to retune it), while
+# every listener here binds 0.0.0.0 -- so `localhost` otherwise always tries a
+# guaranteed-refused ::1 first. See issue #4917. IPv6 is reordered, not
+# removed: ::1 stays as the fallback.
+# Applies to every Node process in the image -- the Next.js server that proxies
+# /api to the backend, drizzle-kit in the migration Job, and the backend itself
+# (which also sets the flag directly in scripts/start-production.sh, so
+# overriding NODE_OPTIONS cannot take it away from the server processes).
+ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 
 ENV ARCHESTRA_VERSION=${VERSION}
 ENV ARCHESTRA_INTERNAL_API_BASE_URL="http://localhost:9000"

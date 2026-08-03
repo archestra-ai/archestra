@@ -79573,8 +79573,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -79957,8 +79956,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -122672,8 +122670,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -123056,8 +123053,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -136881,8 +136877,7 @@
                                           },
                                           "required": [
                                             "object",
-                                            "embedding",
-                                            "index"
+                                            "embedding"
                                           ],
                                           "additionalProperties": false
                                         }
@@ -137579,8 +137574,7 @@
                                           },
                                           "required": [
                                             "object",
-                                            "embedding",
-                                            "index"
+                                            "embedding"
                                           ],
                                           "additionalProperties": false
                                         }
@@ -138277,8 +138271,7 @@
                                           },
                                           "required": [
                                             "object",
-                                            "embedding",
-                                            "index"
+                                            "embedding"
                                           ],
                                           "additionalProperties": false
                                         }
@@ -167710,8 +167703,7 @@
                                     },
                                     "required": [
                                       "object",
-                                      "embedding",
-                                      "index"
+                                      "embedding"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -168408,8 +168400,7 @@
                                     },
                                     "required": [
                                       "object",
-                                      "embedding",
-                                      "index"
+                                      "embedding"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -169106,8 +169097,7 @@
                                     },
                                     "required": [
                                       "object",
-                                      "embedding",
-                                      "index"
+                                      "embedding"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -245796,8 +245786,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -246180,8 +246169,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -248892,8 +248880,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -249276,8 +249263,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -251536,8 +251522,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -251920,8 +251905,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -254253,8 +254237,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -254637,8 +254620,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -316810,8 +316792,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -317194,8 +317175,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -318704,8 +318684,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }
@@ -319088,8 +319067,7 @@
                         },
                         "required": [
                           "object",
-                          "embedding",
-                          "index"
+                          "embedding"
                         ],
                         "additionalProperties": false
                       }

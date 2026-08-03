@@ -555,7 +555,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     expect(afterSecond.sort()).toEqual(afterFirst.sort());
   });
 
-  test("backfillDefaultToolsToAgents clears a stale exclusion that would refuse an assigned default tool", async ({
+  test("backfillDefaultToolsToAgents removes no exclusion, whenever it was made", async ({
     makeOrganization,
     makeAgent,
   }) => {
@@ -568,69 +568,23 @@ describe("Archestra Tools Dynamic Assignment", () => {
     });
     const toolIds = await defaultToolIds();
 
-    // The state an older build leaves: the Auto-mode pre-fill excluded the
-    // tool while it was still a non-default, and the assignment arrived later
-    // when it joined the default set. Dispatch then refuses a tool the agent
-    // holds. The exclusion predating the assignment is what marks it stale.
+    // Excluding a default tool is the only way to take it off an Auto-mode
+    // agent, so the rows have to outlive a boot. Both ages are covered because
+    // nothing distinguishes an administrator's row from an older pre-fill one.
+    await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
     await db
       .insert(schema.agentExcludedToolsTable)
       .values(
-        toolIds.map((toolId) => ({
+        toolIds.map((toolId, index) => ({
           agentId: agent.id,
           toolId,
-          createdAt: new Date("2026-01-01T00:00:00Z"),
+          createdAt:
+            index % 2 === 0
+              ? new Date("2026-01-01T00:00:00Z")
+              : new Date("2099-01-01T00:00:00Z"),
         })),
       )
       .onConflictDoNothing();
-    await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
-    const excludedDefaults = async () =>
-      db
-        .select()
-        .from(schema.agentExcludedToolsTable)
-        .where(
-          and(
-            eq(schema.agentExcludedToolsTable.agentId, agent.id),
-            inArray(schema.agentExcludedToolsTable.toolId, toolIds),
-          ),
-        );
-    expect((await excludedDefaults()).length).toBe(toolIds.length);
-
-    await ToolModel.backfillDefaultToolsToAgents();
-
-    expect(await excludedDefaults()).toHaveLength(0);
-    // Auto-mode exclusions for non-default built-ins are left alone.
-    const remaining = await db
-      .select()
-      .from(schema.agentExcludedToolsTable)
-      .where(eq(schema.agentExcludedToolsTable.agentId, agent.id));
-    expect(remaining.length).toBeGreaterThan(0);
-  });
-
-  test("backfillDefaultToolsToAgents keeps an exclusion an admin added after the tool was assigned", async ({
-    makeOrganization,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "All-tools",
-      accessAllTools: true,
-    });
-    const [advisorToolId] = await db
-      .select({ id: schema.toolsTable.id })
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.name, TOOL_ADVISOR_FULL_NAME));
-
-    // Excluding a default tool is the only way to take it off an Auto-mode
-    // agent, so the row an admin creates must outlive a boot. It is told apart
-    // from the stale pre-fill row by arriving after the assignment.
-    await AgentToolModel.createManyIfNotExists(agent.id, [advisorToolId.id]);
-    await db.insert(schema.agentExcludedToolsTable).values({
-      agentId: agent.id,
-      toolId: advisorToolId.id,
-      createdAt: new Date("2099-01-01T00:00:00Z"),
-    });
 
     await ToolModel.backfillDefaultToolsToAgents();
 
@@ -640,10 +594,10 @@ describe("Archestra Tools Dynamic Assignment", () => {
       .where(
         and(
           eq(schema.agentExcludedToolsTable.agentId, agent.id),
-          eq(schema.agentExcludedToolsTable.toolId, advisorToolId.id),
+          inArray(schema.agentExcludedToolsTable.toolId, toolIds),
         ),
       );
-    expect(kept).toHaveLength(1);
+    expect(kept).toHaveLength(toolIds.length);
   });
 
   test("findAgentIdsMissingAnyTool returns only agents missing at least one tool", async ({

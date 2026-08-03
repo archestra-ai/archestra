@@ -75,7 +75,6 @@ import type {
 import { isUniqueConstraintError } from "@/utils/db";
 import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
-import AgentExcludedToolModel from "./agent-excluded-tool";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
@@ -1875,11 +1874,15 @@ class ToolModel {
    *
    * Deliberately NOT keyed on the names {@link seedArchestraTools} just
    * created. A backfill that only fires on the run which creates the tool row
-   * is one-shot: if the row is created by a build that predates this backfill —
-   * separate releases of the tool and the backfill, a canary, a rolled-back
-   * deploy — the pre-fill excludes the tool for Auto-mode agents and no later
-   * boot can ever repair it. Reconciling the full default set every boot makes
-   * it self-healing, and costs one query when there is nothing to do.
+   * is one-shot, so an agent that predates the row never receives the tool when
+   * the two ship in separate releases, behind a canary, or across a rolled-back
+   * deploy. Reconciling the full default set every boot covers those, and costs
+   * one query when there is nothing to do.
+   *
+   * Additive only, like the other backfills here. An exclusion row is the sole
+   * way to take a default tool off an Auto-mode agent, and nothing here can
+   * tell one an administrator made from one an older pre-fill left behind, so
+   * this removes none of them.
    */
   static async backfillDefaultToolsToAgents(): Promise<void> {
     const organizationIds = await OrganizationModel.findAllIds();
@@ -1892,17 +1895,6 @@ class ToolModel {
 
       const agentIds =
         await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
-      // An older build may have pre-excluded one of these before it became a
-      // default; the agent would hold the assignment and still be refused.
-      const unblocked =
-        await AgentExcludedToolModel.clearExclusionsForDefaultTools(toolIds);
-      if (unblocked > 0) {
-        logger.info(
-          { organizationId, unblocked },
-          "Cleared stale exclusions for default tools",
-        );
-      }
-
       const missing = await AgentToolModel.findAgentIdsMissingAnyTool(
         agentIds,
         toolIds,

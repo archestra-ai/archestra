@@ -116,7 +116,7 @@ Version history is an API surface today:
 
 Two admins can edit the same entry at once. By default the second save wins — it overwrites the first without warning.
 
-Every entry carries a `revision` that increments on each change. `PUT /api/internal_mcp_catalog/:id` and `POST /api/internal_mcp_catalog/:id/reset-deployment-yaml` both take an optional `expectedRevision` to guard against the overwrite. Send the revision you read, and Archestra refuses the write if the entry has moved on since.
+Every entry carries a `revision` that increments on each edit. Background work — a reinstall, for example — leaves it alone, so an open editor stays valid. `PUT /api/internal_mcp_catalog/:id` and `POST /api/internal_mcp_catalog/:id/reset-deployment-yaml` both take an optional `expectedRevision` to guard against the overwrite. Send the revision you read, and Archestra refuses the write if the entry has moved on since.
 
 A refused write returns `409` with `internal_code: "catalog_stale_write"`. Re-read the entry and retry with its new revision — retrying with the old one fails again.
 

@@ -16,10 +16,12 @@
  *   play, so a legacy bundle-less row's inline `oauthConfig.client_secret`
  *   (still read by OAuth flows when no bundle resolves) survives a
  *   passthrough update.
- * - `stripAllPlaintextSecretFields` — the version-snapshot builder.
- *   Unconditional, including prompt-on-install template values: history never
- *   needs secret values, and snapshots are immutable, so a value that leaked
- *   into one could never be purged.
+ * - `stripAllPlaintextSecretFields` — the version-snapshot builder. Across the
+ *   three config blobs above it is unconditional, including prompt-on-install
+ *   template values: history never needs secret values, and snapshots are
+ *   immutable, so a value that leaked into one could never be purged. It does
+ *   NOT reach `userConfig`, whose `sensitive` fields can carry a `default` —
+ *   those are snapshotted as-is, matching how they already sit in the row.
  *
  * Every function is pure — callers reuse the expanded config object after a
  * write for deployment work, so inputs must never be mutated — and walks the

@@ -7,12 +7,24 @@ import {
 } from "fastify-type-provider-zod";
 import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
-import { InternalMcpCatalogModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
 vi.mock("@/auth");
+
+// Only the K8s-touching leaves are stubbed; the cascade's own gates stay real,
+// which is the point — a reset with installs must actually run through them.
+vi.mock("@/services/mcp-reinstall", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/services/mcp-reinstall")>();
+  return {
+    ...original,
+    autoReinstallServer: vi.fn(),
+    reinstallMultitenantCatalog: vi.fn(),
+  };
+});
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -268,6 +280,10 @@ describe("internal MCP catalog deployment YAML routes", () => {
      * instead of reopening. Answering with the token read before the write
      * would hand it one the row has already moved past, so the user's next save
      * would be refused for a conflict with nobody.
+     *
+     * The catalog carries an install on purpose: with none, the reinstall
+     * cascade returns before it inspects anything, and this passes without ever
+     * exercising the paths that could move the token behind the response.
      */
     test("answers with the post-write token, not the one it read", async () => {
       const catalog = await InternalMcpCatalogModel.create(
@@ -280,6 +296,12 @@ describe("internal MCP catalog deployment YAML routes", () => {
         },
         { organizationId, authorId: user.id },
       );
+      await McpServerModel.create({
+        name: "local-server-reset-token-install",
+        catalogId: catalog.id,
+        serverType: "local",
+        scope: "org",
+      });
 
       const response = await app.inject({
         method: "POST",

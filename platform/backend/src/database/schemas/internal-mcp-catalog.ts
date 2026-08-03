@@ -231,9 +231,12 @@ const internalMcpCatalogTable = softDeletablePgTable(
      * config HASH changes — sharing-only edits dedup to a no-op there, so it
      * cannot serve as a write token. This bumps on every config write, via
      * `update`, `renameCascade`, and `restore`. `create` needs no bump (a new
-     * row starts at 1). Direct column writes outside those paths — currently
-     * `markImageApprovalPending` — deliberately do not bump: approval state
-     * is not part of the guarded config surface.
+     * row starts at 1). Writes of reconciler-owned state deliberately do not
+     * bump — it is not part of the guarded config surface, and moving the
+     * token would refuse an in-flight edit that conflicts with nobody. That
+     * covers both the direct column writes in `markImageApprovalPending` and
+     * the `catalogReinstallRequired` flips that go through `update` (see
+     * `OPERATIONAL_COLUMNS` there).
      */
     revision: integer("revision").notNull().default(1),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

@@ -259,6 +259,42 @@ describe("PUT /api/internal_mcp_catalog/:id — optimistic concurrency", () => {
   });
 
   /**
+   * `catalogReinstallRequired` is reconciler bookkeeping, not config an editor
+   * authored. The flips arrive from background reinstall paths at times no
+   * human controls, so bumping the token on them would refuse an open editor's
+   * save for a conflict with nobody — and the editor's only remedy in that
+   * banner is to discard what they typed.
+   */
+  test("a reconciler's reinstall flip moves neither the token nor the version", async () => {
+    const catalog = await createCatalog({
+      name: "cas-reconciler-flip",
+      serverType: "local",
+      localConfig: { command: "node" },
+    });
+    const before = await revisionOf(catalog.id);
+    const versionBefore = (await InternalMcpCatalogModel.findById(catalog.id))
+      ?.latestVersion;
+
+    await InternalMcpCatalogModel.update(catalog.id, {
+      catalogReinstallRequired: true,
+    });
+
+    expect(await revisionOf(catalog.id)).toBe(before);
+    const reloaded = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(reloaded?.catalogReinstallRequired).toBe(true);
+    // The flag is excluded from the snapshot, so a fork here could only ever
+    // dedup — it is skipped outright rather than paying for the round trip.
+    expect(reloaded?.latestVersion).toBe(versionBefore);
+
+    // An edit arriving alongside a flip is still a real edit.
+    await InternalMcpCatalogModel.update(catalog.id, {
+      catalogReinstallRequired: false,
+      description: "edited while the reconciler was flipping",
+    });
+    expect(await revisionOf(catalog.id)).toBeGreaterThan(before);
+  });
+
+  /**
    * Reset to default sits one button away from the guarded save in the same
    * dialog, and clears the whole stored manifest before cascading every pod
    * onto the generated template. Leaving it unguarded would make it a way to

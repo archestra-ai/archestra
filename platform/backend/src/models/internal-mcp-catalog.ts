@@ -857,21 +857,6 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * The row's current concurrency token, without the visibility gate or the
-   * junction-table joins `findById` performs. Used by the update route to
-   * refresh the token on its response after the post-write cascades have run.
-   * Returns 0 for a missing row — a value no live row holds, so a client that
-   * replays it gets a 409 rather than a silent pass.
-   */
-  static async getRevision(id: string): Promise<number> {
-    const [row] = await db
-      .select({ revision: schema.internalMcpCatalogTable.revision })
-      .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, id));
-    return row?.revision ?? 0;
-  }
-
-  /**
    * `opts.expectedRevision` opts this write into compare-and-set: the row must
    * still be at that revision or the write is refused with a 409. Omitting it
    * keeps last-writer-wins, which is what the background reconcilers
@@ -985,18 +970,29 @@ class InternalMcpCatalogModel {
 
     // Bump the concurrency token on anything that actually mutates the item,
     // including a sharing-only edit (labels/teams live in junction tables, so
-    // they leave `setValues` empty). A true no-op keeps the SELECT fallback
-    // below, so saving an unchanged dialog neither bumps `updatedAt` nor
-    // reshuffles the registry listing, which orders by it.
+    // they leave `setValues` empty). The SELECT fallback below is for callers
+    // that pass no field at all — the edit dialog always sends `labels`, so a
+    // save with nothing changed still counts as a mutation.
     const isMutation =
       Object.keys(setValues).length > 0 ||
       labels !== undefined ||
       teams !== undefined;
 
+    // A write of nothing but reconciler-owned columns leaves the token alone —
+    // see `touchesOnlyOperationalColumns`. Labels and teams are part of the
+    // guarded surface, so a flip that arrives alongside one still bumps.
+    const operationalOnly =
+      labels === undefined &&
+      teams === undefined &&
+      touchesOnlyOperationalColumns(setValues);
+    const bumpsRevision = isMutation && !operationalOnly;
+
     if (isMutation) {
       const writeValues: Record<string, unknown> = {
         ...setValues,
-        revision: sql`${schema.internalMcpCatalogTable.revision} + 1`,
+        ...(bumpsRevision
+          ? { revision: sql`${schema.internalMcpCatalogTable.revision} + 1` }
+          : {}),
       };
       [dbItem] = await db
         .update(schema.internalMcpCatalogTable)
@@ -1073,10 +1069,15 @@ class InternalMcpCatalogModel {
     // The row write above may have changed the canonical config — fork a
     // version if so. Sharing-only updates (labels/teams) dedup to a no-op.
     // Best-effort: a versioning failure must never fail the update itself.
-    const fork =
-      await InternalMcpCatalogVersionModel.forkIfChangedBestEffort(id);
-    if (fork) {
-      dbItem.latestVersion = fork.version;
+    // Skipped for reconciler-only writes: the snapshot excludes those columns,
+    // so the fork could only ever dedup — and it would cost a transaction and
+    // a `SELECT … FOR UPDATE` on the row inside a reinstall retry loop.
+    if (bumpsRevision) {
+      const fork =
+        await InternalMcpCatalogVersionModel.forkIfChangedBestEffort(id);
+      if (fork) {
+        dbItem.latestVersion = fork.version;
+      }
     }
 
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
@@ -1922,6 +1923,24 @@ class InternalMcpCatalogModel {
 export default InternalMcpCatalogModel;
 
 // === Internal helpers ===
+
+/**
+ * Columns a background reconciler owns rather than the edit dialog. A write
+ * touching nothing else must not move `revision`: the token certifies the
+ * config an editor is holding, and a reinstall flip landing mid-edit would
+ * otherwise 409 a save that conflicts with nobody. Same reasoning as the
+ * direct column writes in `markImageApprovalPending`, which bypass `update`
+ * entirely for exactly this purpose.
+ *
+ * These columns are also absent from the version snapshot, so a write of only
+ * them can never fork a version either.
+ */
+const OPERATIONAL_COLUMNS = new Set<string>(["catalogReinstallRequired"]);
+
+function touchesOnlyOperationalColumns(setValues: object): boolean {
+  const keys = Object.keys(setValues);
+  return keys.length > 0 && keys.every((key) => OPERATIONAL_COLUMNS.has(key));
+}
 
 /**
  * Strip managed plaintext secret values from a write payload, replacing the

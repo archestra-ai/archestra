@@ -735,12 +735,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // Optimistic-concurrency gate, deliberately BEFORE any side effect. The
-      // handler below commits a rename cascade and creates external secrets
-      // long before it reaches the row write, so a stale save rejected at the
-      // model layer would already have renamed installs and orphaned secrets
-      // in the secrets backend. Refuse here, while nothing has happened yet.
-      // The model re-checks under the write itself for the window in between.
+      // Optimistic-concurrency gate, and the ONLY staleness check on this
+      // route. It sits before any side effect on purpose: the handler below
+      // commits a rename cascade and creates external secrets long before it
+      // reaches the row write, so refusing later would leave installs renamed
+      // and secrets rotated on a save the caller was told was rejected. Refuse
+      // here, while nothing has happened yet, and from this point the request
+      // is committing. (`renameCascade` re-checks under its own write because
+      // it is the first side effect and rolls back atomically; nothing after
+      // it does.)
       if (
         expectedRevision !== undefined &&
         originalCatalogItem.revision !== expectedRevision
@@ -865,14 +868,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // undefined leaves the existing rows untouched.
       restBody.teams = scopeChanged || teamsChanged ? newTeams : undefined;
 
-      // The token the model's compare-and-set compares against. It starts as
-      // the client's, but tracks the ROW rather than the request: the writes
-      // below are this request's own, so re-arming after each one is what
-      // keeps the save from conflicting with itself. The user-facing staleness
-      // check is the gate above; from here the token only covers the window
-      // between our own writes.
-      let casRevision = expectedRevision;
-
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
       // gated (409) and applied atomically by renameCascade — a pure DB
@@ -919,7 +914,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           restBody.deploymentSpecYaml !== undefined
             ? restBody.deploymentSpecYaml
             : originalCatalogItemForGate.deploymentSpecYaml;
-        const renamedRevision = await InternalMcpCatalogModel.renameCascade({
+        await InternalMcpCatalogModel.renameCascade({
           id,
           newName: newCatalogName,
           flagReinstallRequired:
@@ -937,10 +932,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // version (new name, old rest-of-config) the user never saved.
           skipVersionFork: true,
         });
-        // The cascade bumped the row itself, so the pre-rename token would
-        // now fail the model's compare-and-set — against this very request.
-        casRevision =
-          expectedRevision === undefined ? undefined : renamedRevision;
 
         // Downstream must see NO name diff: the row is already renamed, and
         // the reinstall gates below would otherwise misread the rename as a
@@ -1280,11 +1271,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         originalCatalogItem.serverType === "local" &&
         mcpServerRuntimeManager.isEnabled;
 
-      // Update the catalog item
+      // Update the catalog item. No `expectedRevision` here: the gate at the
+      // top of the handler already refused a stale save, and re-checking now
+      // could only refuse a request that has committed its rename cascade and
+      // secret writes — reporting a conflict while leaving those applied.
       const catalogItem = await withCatalogTeamFkErrorMapped(() =>
-        InternalMcpCatalogModel.update(id, restBody, {
-          expectedRevision: casRevision,
-        }),
+        InternalMcpCatalogModel.update(id, restBody),
       );
 
       if (!catalogItem) {
@@ -1380,14 +1372,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: catalogItem.description,
         });
       }
-
-      // `catalogItem` was captured before the reinstall/app cascades above, and
-      // those write the row again through paths that bump `revision`. Re-read
-      // just that column so the client's next save carries a live token instead
-      // of one already a bump or two behind. Only the column — a full re-read
-      // would go through the visibility gate, which a scope- or team-narrowing
-      // edit can legitimately close against its own author.
-      catalogItem.revision = await InternalMcpCatalogModel.getRevision(id);
 
       return reply.send(catalogItem);
     },

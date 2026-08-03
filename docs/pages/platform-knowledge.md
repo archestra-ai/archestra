@@ -33,10 +33,12 @@ To change the embedding model, click **Drop** to clear the existing index — ev
 
 ![Reranking Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_reranking-configuration.webp)
 
-Pick the LLM that scores and reorders search results by relevance. Reranking is optional — without it, search returns fused results unranked.
+Pick the model that scores and reorders search results by relevance. Reranking is optional — without it, search returns fused results unranked.
 
 - **Key** — any LLM provider key.
-- **Model** — any chat model from that provider. Dedicated rerank-API models (Cohere Rerank, for example) don't work here — reranking uses a chat model with structured output.
+- **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
+
+A chat model also powers query expansion (rephrasings that improve recall). A Cohere Rerank model only scores results, so expansion is skipped with one configured.
 
 ## Creating a Knowledge Base
 

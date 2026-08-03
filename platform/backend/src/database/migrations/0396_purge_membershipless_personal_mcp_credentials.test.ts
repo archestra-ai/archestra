@@ -164,6 +164,57 @@ describe("0396 membership-less personal MCP credential purge", () => {
     expect(await AppModel.findById(memberApp.id)).not.toBeNull();
   });
 
+  test("shared-scope installs and BYOS-vault secret rows survive a membership-less owner", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTeam,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const exMember = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, exMember.id, { name: "Shared Team" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "remote",
+    });
+    // Org- and team-scoped installs outlive their installer — the
+    // scope = 'personal' boundary is what keeps them out of the sweep.
+    const orgServer = await makeMcpServer({
+      ownerId: exMember.id,
+      scope: "org",
+      serverType: "remote",
+      catalogId: catalog.id,
+    });
+    const teamServer = await makeMcpServer({
+      ownerId: exMember.id,
+      scope: "team",
+      teamId: team.id,
+      serverType: "remote",
+      catalogId: catalog.id,
+    });
+    const byosSecret = await SecretModel.create({
+      name: "ex-member-byos-0396",
+      secret: { vaultPath: "byos/creds" },
+      isByosVault: true,
+    });
+    const byosServer = await makeMcpServer({
+      ownerId: exMember.id,
+      scope: "personal",
+      serverType: "remote",
+      catalogId: catalog.id,
+      secretId: byosSecret.id,
+    });
+
+    await runMigration();
+
+    expect(await McpServerModel.findById(orgServer.id)).not.toBeNull();
+    expect(await McpServerModel.findById(teamServer.id)).not.toBeNull();
+    // The personal install goes, but the BYOS-vault secret row is retained.
+    expect(await McpServerModel.findById(byosServer.id)).toBeNull();
+    expect(await SecretModel.findById(byosSecret.id)).not.toBeNull();
+  });
+
   test("is idempotent", async ({ makeMcpServer, makeUser }) => {
     const exMember = await makeUser();
     const server = await makeMcpServer({

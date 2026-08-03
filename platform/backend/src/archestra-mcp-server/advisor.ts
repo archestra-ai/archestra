@@ -29,14 +29,21 @@ import type { ArchestraContext } from "./types";
 const QUESTION_MAX_LENGTH = 4_000;
 const CONTEXT_MAX_LENGTH = 50_000;
 
-/** Advice is a decision plus its reasoning; past this it is writing the code. */
-const ADVISOR_MAX_OUTPUT_TOKENS = 2048;
+/**
+ * Bounds thinking plus answer, and on a reasoning model thinking is the larger
+ * share. The answer alone is already bounded by the length instruction in the
+ * advisor's system prompt.
+ */
+const ADVISOR_MAX_OUTPUT_TOKENS = 4096;
 
 /**
  * A consultation blocks the caller's turn, and `generateText` has no timeout of
  * its own — without this a stalled provider stalls the whole conversation.
+ * Archestra's own tools run in-process, so the bound that competes with this
+ * one is the caller's: an MCP client on the SDK default gives up at 60s, and
+ * only a shorter bound here lets "continue without it" reach it first.
  */
-const ADVISOR_TIMEOUT_MS = 60_000;
+const ADVISOR_TIMEOUT_MS = 45_000;
 
 const AdvisorSchema = z.strictObject({
   question: z
@@ -103,8 +110,12 @@ async function runAdvisorConsultation(
     );
   }
 
+  // Organization scope is what authenticates a caller here. A user is absent
+  // by design on org and team tokens, and the advisor resolves against the
+  // organization's own configured model and credential, so there is nothing
+  // for a user identity to decide.
   const { userId, organizationId, sessionId } = context;
-  if (!userId || !organizationId) {
+  if (!organizationId) {
     return advisorErrorResult(
       "advisor_unavailable",
       "A consultation requires an authenticated caller.",
@@ -198,6 +209,15 @@ async function runAdvisorConsultation(
       // No tools: an advisor that could consult an advisor turns one decision
       // point into a chain of them, each billed.
     });
+    // A model that spends the whole budget reasoning returns no answer at all.
+    // The notice below would then be the entire guidance, and a success result
+    // invites the executor to act on it.
+    if (result.finishReason === "length" && !result.text.trim()) {
+      return advisorErrorResult(
+        "advisor_unavailable",
+        "The advisor used its entire output budget without producing an answer — continue without it.",
+      );
+    }
     // A cut-off answer reads like a whole one: the executor would act on half
     // an argument believing it had the rest. Say so in the guidance itself,
     // which is the only part the calling model reads.

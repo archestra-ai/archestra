@@ -208,7 +208,7 @@ describe("advisor consultation", () => {
     // An advisor that can consult an advisor turns one decision into a
     // billed chain of them.
     expect(call.tools).toBeUndefined();
-    expect(call.maxOutputTokens).toBe(2048);
+    expect(call.maxOutputTokens).toBe(4096);
   });
 
   // 429 is an upstream rate limit, 402 the platform's own cost-limit block.
@@ -317,6 +317,28 @@ describe("advisor consultation", () => {
     expect((result as any).isError).toBeFalsy();
   });
 
+  test("reports a consultation that produced no answer as unavailable", async ({
+    makeAgent,
+  }) => {
+    await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
+    // A reasoning model can spend the whole output budget thinking and return
+    // no text. A cut-off notice on its own is not guidance, and a success
+    // result invites the executor to act on it.
+    vi.mocked(generateText).mockResolvedValue({
+      text: "  \n",
+      finishReason: "length",
+    } as any);
+
+    const result = await executeArchestraTool(
+      advisorTool,
+      { question: "A or B?" },
+      context,
+    );
+
+    expect((result as any).isError).toBe(true);
+    expect(archestraError(result as any).type).toBe("advisor_unavailable");
+  });
+
   test("returns complete guidance unmarked", async ({ makeAgent }) => {
     await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
     vi.mocked(generateText).mockResolvedValue({
@@ -353,12 +375,32 @@ describe("advisor consultation", () => {
     const result = await executeArchestraTool(
       advisorTool,
       { question: "A or B?" },
-      { ...context, userId: undefined },
+      { ...context, organizationId: undefined },
     );
 
     expect(archestraError(result as any).type).toBe("advisor_unavailable");
     expect(vi.mocked(resolveAgentLlmOrDefault)).not.toHaveBeenCalled();
     expect(vi.mocked(generateText)).not.toHaveBeenCalled();
+  });
+
+  test("consults for an org or team token, which has no acting user", async ({
+    makeAgent,
+  }) => {
+    await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
+    vi.mocked(generateText).mockResolvedValue({ text: "Do B." } as any);
+
+    const result = await executeArchestraTool(
+      advisorTool,
+      { question: "A or B?" },
+      { ...context, userId: undefined },
+    );
+
+    expect((result as any).structuredContent).toEqual({ guidance: "Do B." });
+    // The advisor resolves against the organization's own configured model and
+    // credential, so an absent user decides nothing.
+    expect(vi.mocked(resolveAgentLlmOrDefault)).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId, userId: undefined }),
+    );
   });
 
   test("refuses while the beta gate is off, even if fully configured", async ({

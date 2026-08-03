@@ -3745,6 +3745,10 @@ describe("auth event audit logging", () => {
       }),
     );
 
+    // Simulate better-auth's own removal — the after-hook verifies the
+    // membership is actually gone before treating the operation as a success.
+    await MemberModel.deleteByMemberOrUserId(target.id, org.id);
+
     const getSessionSpy = vi
       .spyOn(auth.api, "getSession")
       .mockResolvedValueOnce({
@@ -3814,6 +3818,10 @@ describe("auth event audit logging", () => {
         request: beforeRequest,
       }),
     );
+
+    // Simulate better-auth's own removal — the after-hook verifies the
+    // membership is actually gone before treating the operation as a success.
+    await MemberModel.deleteByMemberOrUserId(target.id, org.id);
 
     const getSessionSpy = vi
       .spyOn(auth.api, "getSession")
@@ -4057,6 +4065,63 @@ describe("membership removal cleanup", () => {
       .from(schema.usersTable)
       .where(eq(schema.usersTable.id, target.id));
     expect(userRow).toBeUndefined();
+  });
+
+  test("a rejected removal purges nothing — the membership survives, so cleanup and audit are skipped", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const admin = await makeUser();
+    const target = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const membership = await makeMember(target.id, org.id, { role: "member" });
+    const install = await makePersonalInstall({
+      ownerId: target.id,
+      organizationId: org.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/remove-member",
+      { method: "POST" },
+    );
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id },
+        request: beforeRequest,
+      }),
+    );
+
+    // No member deletion in between: better-auth rejected the operation, but
+    // after-hooks still run on error responses — the hook must notice the
+    // membership survived and do nothing.
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id },
+        request: beforeRequest,
+      }),
+    );
+    await settle();
+
+    expect(await McpServerModel.findById(install.server.id)).not.toBeNull();
+    expect(await SecretModel.findById(install.secret.id)).not.toBeNull();
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(
+      data.filter((r) => r.action === "member.deleted"),
+    ).toHaveLength(0);
   });
 
   test("organization leave is audited and cleaned up like remove-member", async ({

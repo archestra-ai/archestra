@@ -1762,7 +1762,12 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   if (path === "/organization/remove-member" && method === "POST" && request) {
     const stash = memberRemoveByRequest.get(request);
     memberRemoveByRequest.delete(request);
-    if (stash) {
+    // After-hooks also run when better-auth REJECTED the operation (it turns
+    // the endpoint's APIError into a response before dispatching them), so the
+    // stash alone doesn't prove a removal happened. Re-check the membership —
+    // otherwise a failed removal would still write a member.deleted audit row
+    // and purge a member's personal resources.
+    if (stash && !(await membershipStillExists(stash))) {
       try {
         const headers = new Headers(request.headers as HeadersInit);
         const resolved = await auth.api.getSession({ headers });
@@ -1822,7 +1827,8 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   if (path === "/organization/leave" && method === "POST" && request) {
     const stash = memberLeaveByRequest.get(request);
     memberLeaveByRequest.delete(request);
-    if (stash) {
+    // Same rejected-operation guard as remove-member above.
+    if (stash && !(await membershipStillExists(stash))) {
       try {
         await AuditLogModel.create({
           organizationId: stash.organizationId,
@@ -2274,6 +2280,21 @@ async function assertSsoEmailDomainAllowed(params: {
   throw new APIError("FORBIDDEN", {
     message: "Your email domain is not allowed for this identity provider.",
   });
+}
+
+/**
+ * Whether the stashed membership still exists — the discriminator between a
+ * removal that succeeded and one better-auth rejected after the before-hook
+ * had already stashed its snapshot.
+ */
+async function membershipStillExists(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  return (
+    (await MemberModel.getByUserId(params.userId, params.organizationId)) !=
+    null
+  );
 }
 
 /**

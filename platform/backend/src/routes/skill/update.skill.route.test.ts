@@ -96,6 +96,79 @@ describe("PUT /api/skills/:id", () => {
     expect(body.files[0].path).toBe("references/NEW.md");
   });
 
+  test("baseVersion rejects an edit composed from a superseded head", async () => {
+    const created = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST },
+      })
+    ).json();
+    expect(created.latestVersion).toBe(1);
+
+    // Only the body and resource files are versioned, so a fork needs a body
+    // edit — changing frontmatter alone would leave the head where it is.
+    const bodyAt = (text: string) =>
+      MANIFEST.replace("Use pdftotext -layout.", text);
+
+    // An edit anchored to the head it was composed from goes through and forks.
+    const first = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: bodyAt("First edit."), baseVersion: 1 },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().latestVersion).toBe(2);
+
+    // A second edit still anchored to version 1 was composed before that fork,
+    // so it is rejected instead of burying it.
+    const stale = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: bodyAt("Stale edit."), baseVersion: 1 },
+    });
+    expect(stale.statusCode).toBe(409);
+
+    // The rejected write rolled back: the skill still reads as the first edit.
+    const current = (
+      await ctx.app.inject({
+        method: "GET",
+        url: `/api/skills/${created.id}`,
+      })
+    ).json();
+    expect(current.latestVersion).toBe(2);
+    expect(current.content).toContain("First edit.");
+  });
+
+  test("omitting baseVersion keeps last-write-wins", async () => {
+    const created = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST },
+      })
+    ).json();
+    await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: {
+        content: MANIFEST.replace("Use pdftotext -layout.", "Second."),
+      },
+    });
+
+    // No anchor, so a self-contained manifest edit overwrites whatever is there.
+    const response = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: {
+        content: MANIFEST.replace("Use pdftotext -layout.", "Third."),
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().content).toContain("Third.");
+  });
+
   test("explicit allowedTools overrides the frontmatter on update", async () => {
     const created = (
       await ctx.app.inject({

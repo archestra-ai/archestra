@@ -76030,6 +76030,10 @@ export type UpdateSkillData = {
          * Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.
          */
         allowedTools?: Array<string>;
+        /**
+         * The skill's `latestVersion` at the time this edit was composed. When set, the update is rejected with 409 if the skill has moved past it.
+         */
+        baseVersion?: number;
     };
     path: {
         id: string;

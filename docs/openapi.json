@@ -295022,6 +295022,12 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "baseVersion": {
+                    "description": "The skill's `latestVersion` at the time this edit was composed. When set, the update is rejected with 409 if the skill has moved past it.",
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [

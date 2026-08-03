@@ -230,32 +230,54 @@ const ConvertAgentToSkillInputSchema = z.object({
  * files untouched; passing `[]` clears them. `scope` defaults to `personal`;
  * `teamIds` is only meaningful for `scope = 'team'`.
  */
-const SkillManifestInputSchema = z
-  .object({
-    content: SkillManifestContentSchema,
-    files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
-    scope: ResourceVisibilityScopeSchema.optional(),
-    teamIds: z.array(z.string()).optional(),
-    /** Only meaningful for `scope = 'personal'`; ignored for team/org skills. */
-    userIds: z.array(z.string()).optional(),
-    environmentIds: z
-      .array(UuidIdSchema)
-      .optional()
-      .describe(
-        "Environments the skill is restricted to. Empty (or omitted on " +
-          "create) makes the skill available to agents in every " +
-          "environment; otherwise only agents in one of the listed " +
-          "environments see it.",
-      ),
-    allowedTools: z
-      .array(z.string())
-      .optional()
-      .describe(
-        "Tools the skill expects, overriding the SKILL.md `allowed-tools` " +
-          "frontmatter. Omit to use the frontmatter; pass [] to clear.",
-      ),
-  })
-  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
+const SkillManifestFieldsSchema = z.object({
+  content: SkillManifestContentSchema,
+  files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
+  scope: ResourceVisibilityScopeSchema.optional(),
+  teamIds: z.array(z.string()).optional(),
+  /** Only meaningful for `scope = 'personal'`; ignored for team/org skills. */
+  userIds: z.array(z.string()).optional(),
+  environmentIds: z
+    .array(UuidIdSchema)
+    .optional()
+    .describe(
+      "Environments the skill is restricted to. Empty (or omitted on " +
+        "create) makes the skill available to agents in every " +
+        "environment; otherwise only agents in one of the listed " +
+        "environments see it.",
+    ),
+  allowedTools: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Tools the skill expects, overriding the SKILL.md `allowed-tools` " +
+        "frontmatter. Omit to use the frontmatter; pass [] to clear.",
+    ),
+});
+
+const SkillManifestInputSchema = SkillManifestFieldsSchema.superRefine(
+  (data, ctx) => refineUniqueFilePaths(data.files, ctx),
+);
+
+/**
+ * Update payload: the manifest fields plus an optional compare-and-set on the
+ * skill's head version, mirroring the `baseVersion` the `edit_skill` MCP tool
+ * takes. A client that composed its edit from a version it read earlier — the
+ * version-history restore, say — passes that version so a concurrent write
+ * landing in between is rejected (409) instead of silently buried. Omit it for
+ * last-write-wins, which is what a self-contained manifest edit wants.
+ */
+const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
+  baseVersion: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "The skill's `latestVersion` at the time this edit was composed. When " +
+        "set, the update is rejected with 409 if the skill has moved past it.",
+    ),
+}).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 /** A comma-separated query param parsed into a string[] (mirrors the agents list). */
 const CommaSeparatedIds = z.preprocess(
@@ -812,7 +834,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update a skill's SKILL.md, resource files, and scope",
         tags: ["Skills"],
         params: z.object({ id: z.string() }),
-        body: SkillManifestInputSchema,
+        body: SkillManifestUpdateSchema,
         response: constructResponseSchema(SkillDetailSchema),
       },
     },
@@ -915,6 +937,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               body.files === undefined ? undefined : toSkillFiles(body.files),
             teamIds: scopeChanged || teamsChanged ? newTeamIds : undefined,
             environmentIds: environmentsChanged ? newEnvironmentIds : undefined,
+            // Compare-and-set against the head the caller composed from; the
+            // transaction rejects (409) rather than burying a concurrent edit.
+            expectedLatestVersion: body.baseVersion,
           }),
         );
       } catch (error) {

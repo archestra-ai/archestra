@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-08-01
+lastUpdated: 2026-08-03
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -201,6 +201,7 @@ The following table lists all available permissions that can be assigned to cust
 | `knowledgeSource:create` | Create Knowledge Bases and Connectors |
 | `knowledgeSource:update` | Modify Knowledge Bases and Connectors |
 | `knowledgeSource:delete` | Delete Knowledge Bases and Connectors |
+| `knowledgeSource:manage-deleted` | View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors |
 | `knowledgeSource:query` | Query knowledge sources for information retrieval |
 | `knowledgeSource:admin` | View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions |
 | `knowledgeSource:deploy-to-restricted` | Assign Knowledge Bases and Connectors to restricted deployment environments |

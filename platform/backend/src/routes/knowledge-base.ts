@@ -49,6 +49,8 @@ import { invalidateGroupTokenCache } from "@/knowledge-base/group-token-cache";
 import {
   deleteConnector,
   deleteKnowledgeBase,
+  restoreConnector,
+  restoreKnowledgeBase,
 } from "@/knowledge-base/knowledge-source-deletion";
 import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedule";
 import logger from "@/logging";
@@ -135,10 +137,20 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetKnowledgeBases,
-        description: "List all knowledge bases for the organization",
+        description:
+          "List all knowledge bases for the organization. `status=deleted` " +
+          "lists soft-deleted knowledge bases org-wide and requires the " +
+          "manage-deleted permission (granted to admins by default); `search` " +
+          "does not apply to that slice.",
         tags: ["Knowledge Bases"],
         querystring: PaginationQuerySchema.extend({
           search: z.string().optional(),
+          status: z
+            .enum(["active", "deleted"])
+            .default("active")
+            .describe(
+              "Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires the manage-deleted permission (granted to admins by default).",
+            ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),
@@ -146,7 +158,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, search }, organizationId, user },
+      { query: { limit, offset, search, status }, organizationId, user },
       reply,
     ) => {
       const access =
@@ -154,18 +166,47 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
         });
-      const [knowledgeBases, total] = await Promise.all([
-        KnowledgeBaseModel.findByOrganization({
+
+      let knowledgeBases: Awaited<
+        ReturnType<typeof KnowledgeBaseModel.findByOrganization>
+      >;
+      let total: number;
+      if (status === "deleted") {
+        // Soft-deleted KBs are visible only to holders of the dedicated
+        // manage-deleted capability (admins by default) — the ordinary delete
+        // permission must not unlock the org-wide tombstone view. The listing
+        // is deliberately org-wide, bypassing team visibility, matching the
+        // MCP catalog's trash.
+        const canManageDeleted = await userHasPermission(
+          user.id,
           organizationId,
-          limit,
-          offset,
-          search,
-        }),
-        KnowledgeBaseModel.countByOrganization({
-          organizationId,
-          search,
-        }),
-      ]);
+          "knowledgeSource",
+          "manage-deleted",
+        );
+        if (!canManageDeleted) {
+          throw new ApiError(
+            403,
+            "You do not have permission to list deleted knowledge bases.",
+          );
+        }
+        const deleted =
+          await KnowledgeBaseModel.findDeletedForOrganization(organizationId);
+        total = deleted.length;
+        knowledgeBases = deleted.slice(offset, offset + limit);
+      } else {
+        [knowledgeBases, total] = await Promise.all([
+          KnowledgeBaseModel.findByOrganization({
+            organizationId,
+            limit,
+            offset,
+            search,
+          }),
+          KnowledgeBaseModel.countByOrganization({
+            organizationId,
+            search,
+          }),
+        ]);
+      }
 
       const kbIds = knowledgeBases.map((kb) => kb.id);
       const [allConnectors, docsIndexedByKbId, agentIdsByKbId] =
@@ -342,6 +383,78 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/knowledge-bases/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreKnowledgeBase,
+        description:
+          "Restore a soft-deleted knowledge base (requires the manage-deleted " +
+          "permission). Agent assignments and connector links survive deletion, " +
+          "so the restored knowledge base is immediately live for previously-" +
+          "assigned agents. 404 if there is no soft-deleted knowledge base with " +
+          "that id in the org.",
+        tags: ["Knowledge Bases"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const kb = await KnowledgeBaseModel.findDeletedByIdForOrganization(
+        id,
+        organizationId,
+      );
+      if (!kb) {
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      const success = await restoreKnowledgeBase(id);
+      if (!success) {
+        // Restored (or purged) between the lookup and the write.
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/knowledge-bases/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PurgeKnowledgeBase,
+        description:
+          "Permanently delete a soft-deleted knowledge base (requires the " +
+          "manage-deleted permission). Destroys the row and its assignments; " +
+          "the data cannot be recovered. A trash action, never a shortcut: " +
+          "404 unless the knowledge base is already soft-deleted.",
+        tags: ["Knowledge Bases"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const kb = await KnowledgeBaseModel.findDeletedByIdForOrganization(
+        id,
+        organizationId,
+      );
+      if (!kb) {
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      // 0 days: any soft-deleted row qualifies; the in-transaction FOR UPDATE
+      // re-check makes a concurrent restore win over the purge.
+      const purged = await KnowledgeBaseModel.hardDelete(id, {
+        onlyIfDeletedForDays: 0,
+      });
+      if (!purged) {
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.get(
     "/api/knowledge-bases/:id/health",
     {
@@ -381,12 +494,22 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetConnectors,
-        description: "List all connectors for the organization",
+        description:
+          "List all connectors for the organization. `status=deleted` lists " +
+          "soft-deleted connectors org-wide and requires the manage-deleted " +
+          "permission (granted to admins by default); the other filters do " +
+          "not apply to that slice.",
         tags: ["Connectors"],
         querystring: PaginationQuerySchema.extend({
           knowledgeBaseId: z.string().optional(),
           search: z.string().optional(),
           connectorType: ConnectorTypeSchema.optional(),
+          status: z
+            .enum(["active", "deleted"])
+            .default("active")
+            .describe(
+              "Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires the manage-deleted permission (granted to admins by default).",
+            ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(
@@ -399,7 +522,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, knowledgeBaseId, search, connectorType },
+        query: {
+          limit,
+          offset,
+          knowledgeBaseId,
+          search,
+          connectorType,
+          status,
+        },
         organizationId,
         user,
       },
@@ -415,7 +545,31 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       >;
       let total: number;
 
-      if (knowledgeBaseId) {
+      if (status === "deleted") {
+        // Soft-deleted connectors are visible only to holders of the dedicated
+        // manage-deleted capability (admins by default) — the ordinary delete
+        // permission must not unlock the org-wide tombstone view. The listing
+        // is deliberately org-wide, bypassing team visibility, matching the
+        // MCP catalog's trash.
+        const canManageDeleted = await userHasPermission(
+          user.id,
+          organizationId,
+          "knowledgeSource",
+          "manage-deleted",
+        );
+        if (!canManageDeleted) {
+          throw new ApiError(
+            403,
+            "You do not have permission to list deleted connectors.",
+          );
+        }
+        const deleted =
+          await KnowledgeBaseConnectorModel.findDeletedForOrganization(
+            organizationId,
+          );
+        total = deleted.length;
+        data = deleted.slice(offset, offset + limit);
+      } else if (knowledgeBaseId) {
         await findKnowledgeBaseOrThrow({
           id: knowledgeBaseId,
           organizationId,
@@ -1166,12 +1320,87 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // invalidates the knowledge-source cache. A re-delete 404s at
       // findConnectorOrThrow above.
       //
-      // The connector's SECRET is intentionally NOT revoked here — soft-delete
-      // preserves it so a future restore is credential-preserving. Secret
-      // revocation is deferred to the purge / hard-delete follow-up, which will
-      // run the real child cascade (documents, runs, ACLs, …) alongside it.
+      // The connector's stored SECRET is destroyed here too (see
+      // revokeConnectorSecret in the service): a stamped connector 404s from
+      // every route, so the secret could never be rotated or revoked afterwards.
+      // A restored connector comes back disabled and re-authenticates instead.
       const success = await deleteConnector(id);
       if (!success) {
+        throw new ApiError(404, "Connector not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/connectors/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreConnector,
+        description:
+          "Restore a soft-deleted connector (requires the manage-deleted " +
+          "permission). The stored credential was destroyed when the connector " +
+          "was deleted, so it is restored DISABLED — re-authenticate, then " +
+          "re-enable it to resume syncing. 404 if there is no soft-deleted " +
+          "connector with that id in the org.",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const connector =
+        await KnowledgeBaseConnectorModel.findDeletedByIdForOrganization(
+          id,
+          organizationId,
+        );
+      if (!connector) {
+        throw new ApiError(404, "Connector not found");
+      }
+
+      const success = await restoreConnector(id);
+      if (!success) {
+        // Restored (or purged) between the lookup and the write.
+        throw new ApiError(404, "Connector not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PurgeConnector,
+        description:
+          "Permanently delete a soft-deleted connector (requires the " +
+          "manage-deleted permission). Destroys its documents, chunks, runs, " +
+          "ACLs, and assignments; the data cannot be recovered. A trash " +
+          "action, never a shortcut: 404 unless the connector is already " +
+          "soft-deleted.",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const connector =
+        await KnowledgeBaseConnectorModel.findDeletedByIdForOrganization(
+          id,
+          organizationId,
+        );
+      if (!connector) {
+        throw new ApiError(404, "Connector not found");
+      }
+
+      // 0 days: any soft-deleted row qualifies; the in-transaction FOR UPDATE
+      // re-check makes a concurrent restore win over the purge.
+      const purged = await KnowledgeBaseConnectorModel.hardDelete(id, {
+        onlyIfDeletedForDays: 0,
+      });
+      if (!purged) {
         throw new ApiError(404, "Connector not found");
       }
 

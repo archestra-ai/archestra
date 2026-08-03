@@ -1,4 +1,13 @@
-import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  or,
+} from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -6,6 +15,7 @@ import {
   type HardDeleteOpts,
   hardDelete,
   lockRowForPurge,
+  restore,
   softDelete,
 } from "@/database/soft-delete";
 import type {
@@ -130,6 +140,67 @@ class KnowledgeBaseModel {
     );
 
     return count > 0;
+  }
+
+  /**
+   * Restore: clears `deleted_at`, pure stamp-removal. Junction rows (agent
+   * assignments, connector links) were never stamped, so the KB comes back
+   * with its prior assignments live. Returns false when no soft-deleted row
+   * matched, which the restore route surfaces as a 404.
+   */
+  static async restore(id: string): Promise<boolean> {
+    const count = await restore(
+      db,
+      schema.knowledgeBasesTable,
+      eq(schema.knowledgeBasesTable.id, id),
+    );
+
+    return count > 0;
+  }
+
+  /**
+   * Org-scoped listing of SOFT-DELETED knowledge bases, for the
+   * `status=deleted` trash view. Does NOT filter `notDeleted` — it is a
+   * deleted-only read, and deliberately org-wide rather than team-visibility
+   * scoped: deleted-resource lifecycle is one org-scoped capability
+   * (`knowledgeSource:manage-deleted`), matching the MCP catalog's trash.
+   */
+  static async findDeletedForOrganization(
+    organizationId: string,
+  ): Promise<KnowledgeBase[]> {
+    return await db
+      .select()
+      .from(schema.knowledgeBasesTable)
+      .where(
+        and(
+          eq(schema.knowledgeBasesTable.organizationId, organizationId),
+          isNotNull(schema.knowledgeBasesTable.deletedAt),
+        ),
+      )
+      .orderBy(desc(schema.knowledgeBasesTable.deletedAt));
+  }
+
+  /**
+   * Org-scoped lookup of a SOFT-DELETED knowledge base, for the restore and
+   * permanent-delete routes. Does NOT filter `notDeleted` — it is the one
+   * point read that must see deleted rows.
+   */
+  static async findDeletedByIdForOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<KnowledgeBase | null> {
+    const [result] = await db
+      .select()
+      .from(schema.knowledgeBasesTable)
+      .where(
+        and(
+          eq(schema.knowledgeBasesTable.id, id),
+          eq(schema.knowledgeBasesTable.organizationId, organizationId),
+          isNotNull(schema.knowledgeBasesTable.deletedAt),
+        ),
+      );
+
+    return result ?? null;
   }
 
   /**

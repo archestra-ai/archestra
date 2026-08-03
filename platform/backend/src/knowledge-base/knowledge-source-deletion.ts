@@ -11,11 +11,12 @@ import { agentKnowledgeSourcesCache } from "@/models/agent-knowledge-sources-cac
 import { secretManager } from "@/secrets-manager";
 
 /**
- * Shared soft-delete orchestration for knowledge bases and connectors.
+ * Shared soft-delete and restore orchestration for knowledge bases and
+ * connectors.
  *
- * These functions own the cross-model *side-effects* of a delete — queued-sync
- * cancellation and knowledge-source cache invalidation — so every write surface
- * behaves identically. Both the REST routes (`routes/knowledge-base.ts`) and the
+ * These functions own the cross-model *side-effects* of a delete or restore —
+ * queued-sync cancellation and knowledge-source cache invalidation — so every
+ * write surface behaves identically. Both the REST routes (`routes/knowledge-base.ts`) and the
  * Archestra MCP delete tools (`archestra-mcp-server/knowledge-management.ts`)
  * call in here rather than reaching for the model `.delete()` directly; calling
  * the model alone would soft-delete the row but skip the side-effects, orphaning
@@ -98,6 +99,52 @@ export async function deleteKnowledgeBase(
   }
 
   return deleted;
+}
+
+/**
+ * Restore a soft-deleted connector and invalidate the knowledge-source cache
+ * for every agent still holding an assignment (assignment rows are never
+ * stamped, so they survive the trash round-trip). The model restore clears the
+ * stamp and disables the connector in one UPDATE — the stored credential was
+ * destroyed at delete time, so the connector must be re-authenticated and
+ * re-enabled before it syncs again. Returns false when no soft-deleted
+ * connector matched, which callers surface as a 404.
+ */
+export async function restoreConnector(connectorId: string): Promise<boolean> {
+  const restored = await KnowledgeBaseConnectorModel.restore(connectorId);
+
+  if (restored) {
+    const assignments =
+      await AgentConnectorAssignmentModel.findByConnector(connectorId);
+    for (const agentId of new Set(assignments.map((a) => a.agentId))) {
+      agentKnowledgeSourcesCache.invalidate(agentId);
+    }
+  }
+
+  return restored;
+}
+
+/**
+ * Restore a soft-deleted knowledge base and invalidate the knowledge-source
+ * cache for every agent still holding an assignment. Pure stamp-removal: the
+ * KB's junction rows (agent assignments, connector links) were never stamped,
+ * so the restored KB is immediately live for previously-assigned agents.
+ * Returns false when no soft-deleted KB matched.
+ */
+export async function restoreKnowledgeBase(
+  knowledgeBaseId: string,
+): Promise<boolean> {
+  const restored = await KnowledgeBaseModel.restore(knowledgeBaseId);
+
+  if (restored) {
+    const assignments =
+      await AgentKnowledgeBaseModel.findByKnowledgeBase(knowledgeBaseId);
+    for (const agentId of new Set(assignments.map((a) => a.agentId))) {
+      agentKnowledgeSourcesCache.invalidate(agentId);
+    }
+  }
+
+  return restored;
 }
 
 // ===== Internal =====

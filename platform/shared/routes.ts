@@ -600,6 +600,8 @@ export const RouteId = {
   GetKnowledgeBase: "getKnowledgeBase",
   UpdateKnowledgeBase: "updateKnowledgeBase",
   DeleteKnowledgeBase: "deleteKnowledgeBase",
+  RestoreKnowledgeBase: "restoreKnowledgeBase",
+  PurgeKnowledgeBase: "purgeKnowledgeBase",
   GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
 
   // Knowledge Base Connector Routes
@@ -610,6 +612,8 @@ export const RouteId = {
   GetConnectorDocument: "getConnectorDocument",
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
+  RestoreConnector: "restoreConnector",
+  PurgeConnector: "purgeConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
   TriggerPermissionSync: "triggerPermissionSync",

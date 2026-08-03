@@ -1,5 +1,15 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
-import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -521,6 +531,84 @@ class KnowledgeBaseConnectorModel {
     );
 
     return count > 0;
+  }
+
+  /**
+   * Restore: clears `deleted_at` AND sets `enabled = false` in the same
+   * UPDATE. Not the shared stamp-removal helper on purpose: the stored secret
+   * was destroyed at soft-delete (see revokeConnectorSecret in the
+   * knowledge-source-deletion service), and both sync schedulers select on
+   * `enabled = true` every 30s (findAllEnabled /
+   * findEnabledAutoSyncPermissions) — a restore that left `enabled` alone
+   * would enroll a credential-less connector into an immediately-failing sync
+   * loop. One statement means no window between revive and disable. The
+   * connector comes back disabled; an admin re-authenticates, then re-enables.
+   * Returns false when no soft-deleted row matched (restore route 404s).
+   */
+  static async restore(id: string): Promise<boolean> {
+    const rows = await db
+      .update(schema.knowledgeBaseConnectorsTable)
+      .set({ deletedAt: null, enabled: false })
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          isNotNull(schema.knowledgeBaseConnectorsTable.deletedAt),
+        ),
+      )
+      .returning({ id: schema.knowledgeBaseConnectorsTable.id });
+
+    return rows.length > 0;
+  }
+
+  /**
+   * Org-scoped listing of SOFT-DELETED connectors, for the `status=deleted`
+   * trash view. Does NOT filter `notDeleted` — it is a deleted-only read, and
+   * deliberately org-wide rather than team-visibility scoped: deleted-resource
+   * lifecycle is one org-scoped capability (`knowledgeSource:manage-deleted`),
+   * matching the MCP catalog's trash.
+   */
+  static async findDeletedForOrganization(
+    organizationId: string,
+  ): Promise<KnowledgeBaseConnector[]> {
+    return await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+          isNotNull(schema.knowledgeBaseConnectorsTable.deletedAt),
+        ),
+      )
+      .orderBy(desc(schema.knowledgeBaseConnectorsTable.deletedAt));
+  }
+
+  /**
+   * Org-scoped lookup of a SOFT-DELETED connector, for the restore and
+   * permanent-delete routes. Does NOT filter `notDeleted` — it is the one
+   * point read that must see deleted rows.
+   */
+  static async findDeletedByIdForOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<KnowledgeBaseConnector | null> {
+    const [result] = await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+          isNotNull(schema.knowledgeBaseConnectorsTable.deletedAt),
+        ),
+      );
+
+    return result ?? null;
   }
 
   /**

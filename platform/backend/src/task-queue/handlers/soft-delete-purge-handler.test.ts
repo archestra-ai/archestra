@@ -211,12 +211,124 @@ describe("handleSoftDeletePurge", () => {
     expect(audit).toMatchObject({ action: "agent.purged", outcome: "success" });
   });
 
-  test("skips a row whose organization cannot be resolved", async ({
+  test("attributes an unowned+teamless install to its catalog's organization", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
-    // Legacy unowned+teamless system install: no team, no owner — no org to
-    // attribute the purge to, so it is left in place.
-    const server = await makeMcpServer({ teamId: null, ownerId: null });
+    // No team and no owner, so the only link left is the catalog. One catalog
+    // per install (`catalog_id` is NOT NULL), so this answer is exact.
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: null,
+      ownerId: null,
+    });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ deletedAt: FORTY_DAYS_AGO() })
+      .where(eq(schema.mcpServersTable.id, server.id));
+    enableRetention();
+
+    await handleSoftDeletePurge();
+
+    const [row] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, server.id));
+    expect(row).toBeUndefined();
+    const [audit] = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceId, server.id));
+    expect(audit).toMatchObject({
+      organizationId: org.id,
+      action: "mcpServer.purged",
+      actorType: "system",
+    });
+  });
+
+  test("attributes a personal install to the same org on every run", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    // An owner in two orgs on a global catalog entry has no single right
+    // answer, but it must be the SAME answer every time: an unordered
+    // LIMIT 1 flips between orgs, and whichever org loses the toss loses the
+    // record that the install was destroyed.
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, orgA.id);
+    await makeMember(user.id, orgB.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: orgA.id });
+    // Global/public entry: no owning org, so resolution has to fall through
+    // to the owner's memberships.
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({ organizationId: null })
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+
+    const servers: { id: string }[] = [];
+    for (let i = 0; i < 3; i++) {
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        teamId: null,
+        ownerId: user.id,
+      });
+      await db
+        .update(schema.mcpServersTable)
+        .set({ deletedAt: FORTY_DAYS_AGO() })
+        .where(eq(schema.mcpServersTable.id, server.id));
+      servers.push(server);
+    }
+
+    // An unrelated write to one membership row rewrites its tuple at the end
+    // of the heap — enough to flip an unordered LIMIT 1.
+    const [firstMembership] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(eq(schema.membersTable.userId, user.id));
+    await db
+      .update(schema.membersTable)
+      .set({ role: "member" })
+      .where(eq(schema.membersTable.id, firstMembership.id));
+
+    enableRetention();
+    await handleSoftDeletePurge();
+
+    const audits = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.action, "mcpServer.purged"));
+    const attributed = audits
+      .filter((a) => servers.some((s) => s.id === a.resourceId))
+      .map((a) => a.organizationId);
+    expect(attributed).toHaveLength(3);
+    expect(new Set(attributed).size).toBe(1);
+  });
+
+  test("skips a row whose organization cannot be resolved", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    // No team, no owner, and a global catalog entry that names no org: every
+    // link misses. `audit_logs.organization_id` is NOT NULL, so this purge
+    // could not be recorded at all — left in place instead.
+    const catalog = await makeInternalMcpCatalog();
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({ organizationId: null })
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    const server = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: null,
+      ownerId: null,
+    });
     await db
       .update(schema.mcpServersTable)
       .set({ deletedAt: FORTY_DAYS_AGO() })

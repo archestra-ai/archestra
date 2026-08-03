@@ -1392,11 +1392,27 @@ class McpServerModel {
 
   /**
    * The purge sweep's find-expired scan. `mcp_server` has no org column, so
-   * the org is inferred from the row's own links, mirroring
-   * {@link findByIdInOrg}: the team's org, else any org the owner is a member
-   * of. Legacy unowned+teamless rows resolve to no org and are excluded —
-   * purging them would destroy data with no audit trail (see
-   * {@link countExpiredDeletedUnresolvable}).
+   * the org is inferred from the row's own links, in descending order of how
+   * well-defined the answer is:
+   *
+   *   1. the team's org — unambiguous, and what {@link findByIdInOrg} keys on
+   *   2. the catalog's org — one catalog per install (`catalog_id` is NOT
+   *      NULL), so this is deterministic wherever the entry is org-owned
+   *   3. the owner's membership — the only option left for a personal install
+   *      on a global catalog entry. An owner in several orgs has no single
+   *      right answer here, so it is at least made STABLE (`ORDER BY`) rather
+   *      than left to the plan: an unordered `LIMIT 1` flips between orgs
+   *      across runs, which loses the purge record from whichever org lost
+   *      the toss.
+   *
+   * Rows where all three miss (unowned + teamless on a global entry, or an
+   * owner offboarded from every org) resolve to no org and are excluded —
+   * `audit_logs.organization_id` is NOT NULL, so those purges could not be
+   * recorded at all, and destroying data with no audit trail is worse than
+   * leaving it (see {@link countExpiredDeletedUnresolvable}).
+   *
+   * The catalog join is deliberately not filtered on `deleted_at`: a
+   * soft-deleted catalog entry still names the org the install belonged to.
    */
   static async findExpiredDeleted(params: {
     retentionDays: number;
@@ -1407,14 +1423,18 @@ class McpServerModel {
       id: string;
       organization_id: string;
     }>(sql`
-      SELECT s.id, COALESCE(t.organization_id, m.organization_id) AS organization_id
+      SELECT s.id, ${RESOLVED_ORG_SQL} AS organization_id
       FROM mcp_server s
       LEFT JOIN team t ON t.id = s.team_id
+      LEFT JOIN internal_mcp_catalog c ON c.id = s.catalog_id
       LEFT JOIN LATERAL (
-        SELECT organization_id FROM member WHERE user_id = s.owner_id LIMIT 1
+        SELECT organization_id FROM member
+        WHERE user_id = s.owner_id
+        ORDER BY organization_id
+        LIMIT 1
       ) m ON true
       WHERE s.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
-        AND COALESCE(t.organization_id, m.organization_id) IS NOT NULL
+        AND ${RESOLVED_ORG_SQL} IS NOT NULL
       ORDER BY s.deleted_at, s.id
       LIMIT ${params.limit}
       OFFSET ${params.offset}
@@ -1433,11 +1453,15 @@ class McpServerModel {
       SELECT COUNT(*)::int AS count
       FROM mcp_server s
       LEFT JOIN team t ON t.id = s.team_id
+      LEFT JOIN internal_mcp_catalog c ON c.id = s.catalog_id
       LEFT JOIN LATERAL (
-        SELECT organization_id FROM member WHERE user_id = s.owner_id LIMIT 1
+        SELECT organization_id FROM member
+        WHERE user_id = s.owner_id
+        ORDER BY organization_id
+        LIMIT 1
       ) m ON true
       WHERE s.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
-        AND COALESCE(t.organization_id, m.organization_id) IS NULL
+        AND ${RESOLVED_ORG_SQL} IS NULL
     `);
     return Number(rows[0]?.count ?? 0);
   }
@@ -1923,3 +1947,14 @@ class McpServerModel {
 }
 
 export default McpServerModel;
+
+// === Internal ===
+
+/**
+ * The org a soft-deleted install is attributed to, most to least
+ * well-defined: team → catalog → owner membership. Shared by the purge
+ * sweep's find-expired scan and its unresolvable count so the two can never
+ * disagree about which rows are purgeable. Expects the `s`/`t`/`c`/`m`
+ * aliases those queries bind.
+ */
+const RESOLVED_ORG_SQL = sql`COALESCE(t.organization_id, c.organization_id, m.organization_id)`;

@@ -2,11 +2,18 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useTeams } from "@/lib/teams/team.query";
 import KnowledgeBasesPage from "./page.client";
 
 const mockUseKnowledgeBasesPaginated = vi.fn();
 const mockUseConnectors = vi.fn();
+const mockRestoreMutate = vi.fn();
+const mockPurgeMutateAsync = vi.fn();
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBasesPaginated: (params: unknown) =>
@@ -15,6 +22,14 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBase: () => ({ data: undefined }),
   useDeleteKnowledgeBase: () => ({
     mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useRestoreKnowledgeBase: () => ({
+    mutate: mockRestoreMutate,
+    isPending: false,
+  }),
+  usePurgeKnowledgeBase: () => ({
+    mutateAsync: mockPurgeMutateAsync,
     isPending: false,
   }),
 }));
@@ -36,6 +51,18 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 vi.mock("next/navigation");
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/auth/auth.query");
+
+// The status filter reads permissions and URL state of its own; its behavior
+// is the shared component's contract, not this page's.
+vi.mock("@/components/resource-scope-filter", () => ({
+  ResourceDeletedStatusFilter: () => <div>status filter</div>,
+}));
+
+vi.mock("@/components/delete-confirm-dialog", () => ({
+  DeleteConfirmDialog: ({ open, title }: { open: boolean; title: string }) =>
+    open ? <div>{title}</div> : null,
+}));
 
 // Heavy child dialogs, the chat hook, and the create-gate layout chrome are
 // out of scope.
@@ -89,6 +116,16 @@ function makeConnector(overrides: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useMissingPermissions).mockReturnValue(
+    [] as unknown as ReturnType<typeof useMissingPermissions>,
+  );
+  vi.mocked(useFeature).mockReturnValue(
+    undefined as ReturnType<typeof useFeature>,
+  );
   vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
   vi.mocked(useSearchParams).mockReturnValue({
     get: () => null,
@@ -144,5 +181,66 @@ describe("KnowledgeBasesPage", () => {
     expect(screen.getByText("Org Connector")).toBeInTheDocument();
     expect(screen.getByText("Organization")).toBeInTheDocument();
     expect(screen.getAllByText(/Every 6 hours/i).length).toBeGreaterThan(0);
+  });
+
+  it("deleted view: rows collapse to Restore + Delete permanently with the purge countdown", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useFeature).mockReturnValue({
+      enabled: true,
+      days: 30,
+    } as unknown as ReturnType<typeof useFeature>);
+    const deletedAt = new Date(
+      Date.now() - 5 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    mockUseKnowledgeBasesPaginated.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "kb-trashed",
+            name: "Trashed KB",
+            description: null,
+            connectors: [],
+            totalDocsIndexed: 0,
+            deletedAt,
+          },
+        ],
+        pagination: { total: 1 },
+      },
+      isPending: false,
+      isFetching: false,
+      isLoadingError: false,
+      refetch: vi.fn(),
+    });
+
+    render(<KnowledgeBasesPage />);
+
+    // The list is requested with the deleted slice.
+    expect(mockUseKnowledgeBasesPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "deleted" }),
+    );
+
+    // Trash metadata: "Deleted N ago" plus the retention countdown, phrased
+    // as eligibility — the sweep can lag, so no exact purge moment.
+    expect(screen.getByText(/^Deleted /)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Eligible for deletion in \d+ days/),
+    ).toBeInTheDocument();
+
+    // The connector sub-table is an active-KB surface; no expander in trash.
+    expect(
+      screen.queryByRole("button", { name: "Toggle row" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText(/^Restore/));
+    expect(mockRestoreMutate).toHaveBeenCalledWith("kb-trashed");
+
+    await userEvent.click(screen.getByLabelText(/^Delete permanently/));
+    expect(
+      screen.getByText("Delete knowledge base permanently"),
+    ).toBeInTheDocument();
   });
 });

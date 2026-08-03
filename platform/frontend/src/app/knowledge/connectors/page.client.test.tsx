@@ -1,10 +1,18 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useTeams } from "@/lib/teams/team.query";
 import ConnectorsPage from "./page.client";
 
 const mockUseConnectorsPaginated = vi.fn();
+const mockRestoreMutate = vi.fn();
+const mockPurgeMutateAsync = vi.fn();
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectorsPaginated: (params: unknown) =>
@@ -14,10 +22,31 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+  useRestoreConnector: () => ({
+    mutate: mockRestoreMutate,
+    isPending: false,
+  }),
+  usePurgeConnector: () => ({
+    mutateAsync: mockPurgeMutateAsync,
+    isPending: false,
+  }),
 }));
 
 vi.mock("next/navigation");
 vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
+
+// The status filter reads permissions and URL state of its own; its behavior
+// is the shared component's contract, not this page's.
+vi.mock("@/components/resource-scope-filter", () => ({
+  ResourceDeletedStatusFilter: () => <div>status filter</div>,
+}));
+
+vi.mock("@/components/delete-confirm-dialog", () => ({
+  DeleteConfirmDialog: ({ open, title }: { open: boolean; title: string }) =>
+    open ? <div>{title}</div> : null,
+}));
 
 // Heavy child dialogs and the create-gate layout chrome are out of scope.
 vi.mock(
@@ -65,6 +94,7 @@ function makeConnector(overrides: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.mocked(usePathname).mockReturnValue("/knowledge/connectors");
   vi.mocked(useSearchParams).mockReturnValue({
     get: () => null,
@@ -76,6 +106,15 @@ beforeEach(() => {
   vi.mocked(useTeams).mockReturnValue({
     data: [{ id: "team-1", name: "Platform Team" }],
   } as unknown as ReturnType<typeof useTeams>);
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useMissingPermissions).mockReturnValue(
+    [] as unknown as ReturnType<typeof useMissingPermissions>,
+  );
+  vi.mocked(useFeature).mockReturnValue(
+    undefined as ReturnType<typeof useFeature>,
+  );
   mockUseConnectorsPaginated.mockReturnValue({
     data: {
       data: [
@@ -109,6 +148,61 @@ describe("ConnectorsPage", () => {
     expect(screen.getByText("Source permissions")).toBeInTheDocument();
     expect(
       screen.getByText(/mirrors the source system's own permissions/),
+    ).toBeInTheDocument();
+  });
+
+  it("deleted view: rows collapse to Restore + Delete permanently with the purge countdown", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useFeature).mockReturnValue({
+      enabled: true,
+      days: 30,
+    } as unknown as ReturnType<typeof useFeature>);
+    const deletedAt = new Date(
+      Date.now() - 5 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    mockUseConnectorsPaginated.mockReturnValue({
+      data: {
+        data: [
+          makeConnector({
+            id: "conn-1",
+            name: "Trashed Connector",
+            deletedAt,
+          }),
+        ],
+        pagination: { total: 1 },
+      },
+      isPending: false,
+      isFetching: false,
+      isLoadingError: false,
+      refetch: vi.fn(),
+    });
+
+    render(<ConnectorsPage />);
+
+    // The list is requested with the deleted slice.
+    expect(mockUseConnectorsPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "deleted" }),
+    );
+
+    // Trash metadata: "Deleted N ago" plus the retention countdown, phrased
+    // as eligibility — the sweep can lag, so no exact purge moment.
+    expect(screen.getByText(/^Deleted /)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Eligible for deletion in \d+ days/),
+    ).toBeInTheDocument();
+
+    // The active-view actions are gone; the trash pair remains.
+    expect(screen.queryByLabelText(/Edit connector/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText(/^Restore/));
+    expect(mockRestoreMutate).toHaveBeenCalledWith("conn-1");
+
+    await userEvent.click(screen.getByLabelText(/^Delete permanently/));
+    expect(
+      screen.getByText("Delete connector permanently"),
     ).toBeInTheDocument();
   });
 });

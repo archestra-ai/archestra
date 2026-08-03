@@ -273,7 +273,11 @@ export const EmbeddingResponseSchema = z.object({
     z.object({
       object: z.literal("embedding"),
       embedding: z.array(z.number()),
-      index: z.number(),
+      // OpenAI itself always sends `index`, but the openai routes also front
+      // arbitrary OpenAI-compatible upstreams via custom base URLs, and a
+      // deviating upstream that omits it would fail response serialization
+      // (500). Tolerated like ChoiceSchema.index above.
+      index: z.number().optional(),
     }),
   ),
   model: z.string(),

@@ -521,6 +521,52 @@ describe("SkillVersionHistoryDialog", () => {
     expect(screen.getByText(/are not versioned/)).toBeInTheDocument();
   });
 
+  it("lists a version once when a page boundary re-returns it", () => {
+    // Pages are read by offset, so a version created between the two loads
+    // shifts every row down and page two repeats the row page one ended on.
+    vi.mocked(useSkillVersions).mockReturnValue({
+      data: {
+        pages: [
+          { data: [versionRow(3, "hash-head"), versionRow(2, "hash-two")] },
+          { data: [versionRow(2, "hash-two"), versionRow(1, "hash-one")] },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    renderDialog();
+
+    expect(screen.getAllByRole("button", { name: /^v2/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /^v1/ })).toBeInTheDocument();
+  });
+
+  it("loads older versions on request", async () => {
+    const user = userEvent.setup();
+    const fetchNextPage = vi.fn();
+    vi.mocked(useSkillVersions).mockReturnValue({
+      data: { pages: [{ data: [versionRow(3, "hash-head")] }] },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+      hasNextPage: true,
+      isFetchingNextPage: false,
+      fetchNextPage,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    renderDialog();
+
+    await user.click(
+      screen.getByRole("button", { name: "Load older versions" }),
+    );
+
+    expect(fetchNextPage).toHaveBeenCalled();
+  });
+
   it("offers a retry instead of claiming a skill has no versions", async () => {
     const user = userEvent.setup();
     const refetch = vi.fn();

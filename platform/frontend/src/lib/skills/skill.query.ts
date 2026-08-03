@@ -1,6 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
-  type QueryClient,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -10,8 +9,8 @@ import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
+  getApiErrorInternalCode,
   getApiErrorMessage,
-  getApiErrorType,
   handleApiError,
   throwOnApiError,
 } from "@/lib/utils";
@@ -184,7 +183,13 @@ export function useSkillVersions(id: string | null) {
  */
 export function useSkillVersion(id: string | null, version: number | null) {
   return useQuery({
-    queryKey: ["skills", id, "version", version],
+    // Deliberately outside the `["skills", ...]` prefix. A version's bytes are
+    // immutable, so no skill write can invalidate them — but every
+    // `invalidateQueries({ queryKey: ["skills"] })` in the app prefix-matches,
+    // and there are more of those than this file can police. Keying the
+    // snapshots apart makes the `staleTime` below hold unconditionally instead
+    // of depending on each call site remembering to exclude them.
+    queryKey: ["skill-version", id, version],
     enabled: !!id && version !== null && version > 0,
     // A version's bytes never change, and its snapshots carry every resource
     // file in full (base64 for binaries). Re-fetching one on focus or on an
@@ -237,6 +242,16 @@ export function useUpdateSkill() {
     }) => {
       const { data, error } = await updateSkill({ path: { id }, body });
       if (error) {
+        // A 409 here is either the compare-and-set or a name collision, so the
+        // internal code decides — the status alone cannot. The generic handler
+        // would show the backend's version numbers, which say nothing to
+        // someone who was editing a form.
+        if (isSkillVersionConflict(error)) {
+          toast.error(
+            "This skill changed while you were editing it. Reopen it to pick up the latest version, then reapply your changes.",
+          );
+          return null;
+        }
         handleApiError(error);
         return null;
       }
@@ -244,7 +259,7 @@ export function useUpdateSkill() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      invalidateSkills(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill updated");
     },
   });
@@ -348,9 +363,7 @@ export function useRestoreSkillVersion() {
         },
       });
       if (error) {
-        // The only 409 a restore can raise is that compare-and-set: the name is
-        // carried over from the skill itself, so it cannot collide with another.
-        if (getApiErrorType(error) === "api_conflict_error") {
+        if (isSkillVersionConflict(error)) {
           toast.error(
             "This skill changed while you were previewing it. Review the latest version and try again.",
           );
@@ -382,7 +395,7 @@ export function useRestoreSkillVersion() {
     // means the head moved under the preview, and a suppressed fork still
     // touched the skill row.
     onSettled: () => {
-      invalidateSkills(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
     },
   });
 }
@@ -400,7 +413,7 @@ export function useResetSkill() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      invalidateSkills(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill reset to default");
     },
   });
@@ -520,17 +533,13 @@ export function useImportGithubSkills() {
 // ===== Internal =====
 
 /**
- * Invalidate everything about a skill except its version *details*.
+ * The update route's compare-and-set rejected the write: the skill moved past
+ * the head the edit was composed from.
  *
- * A plain `["skills"]` invalidation prefix-matches `["skills", id, "version",
- * n]` too, which would refetch a whole snapshot — every resource file in full,
- * base64 for binaries — for bytes that are immutable and cannot have changed.
- * Every skill write uses this instead, so `useSkillVersion`'s infinite
- * `staleTime` is not quietly undone on the next mount.
+ * Read off the internal code rather than the 409, which the route also uses for
+ * a name collision. The backend's message names version numbers, so every
+ * caller replaces it with copy about the read *it* made.
  */
-function invalidateSkills(queryClient: QueryClient) {
-  return queryClient.invalidateQueries({
-    predicate: ({ queryKey }) =>
-      queryKey[0] === "skills" && queryKey[2] !== "version",
-  });
+function isSkillVersionConflict(error: unknown): boolean {
+  return getApiErrorInternalCode(error) === "skill_version_conflict";
 }

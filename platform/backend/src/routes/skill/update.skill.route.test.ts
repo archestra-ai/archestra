@@ -128,6 +128,10 @@ describe("PUT /api/skills/:id", () => {
       payload: { content: bodyAt("Stale edit."), baseVersion: 1 },
     });
     expect(stale.statusCode).toBe(409);
+    // A name collision is a 409 on this route too, so the compare-and-set
+    // carries a code that tells the two apart — a client showing "reopen and
+    // reapply" must not show it for a taken name.
+    expect(stale.json().error.internal_code).toBe("skill_version_conflict");
 
     // The rejected write rolled back: the skill still reads as the first edit.
     const current = (

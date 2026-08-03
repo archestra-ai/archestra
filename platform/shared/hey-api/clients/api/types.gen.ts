@@ -76031,7 +76031,7 @@ export type UpdateSkillData = {
          */
         allowedTools?: Array<string>;
         /**
-         * The skill's `latestVersion` at the time this edit was composed. When set, the update is rejected with 409 if the skill has moved past it.
+         * The skill's `latestVersion` when this edit was composed. Rejected with 409 if the skill has moved past it. Omit only when the payload owes nothing to a prior read of the skill.
          */
         baseVersion?: number;
     };

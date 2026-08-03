@@ -139,6 +139,8 @@ The earliest version has no version before it to compare against, so its files a
 
 The **Instructions** row holds the `SKILL.md` body. Frontmatter like the name and description is not versioned, so it never appears here.
 
+A binary file — an icon, for example — has no text to show. Its row opens empty.
+
 ### Restoring a Version
 
 **Restore this version** republishes an older version's content. It creates a new version rather than rewinding to the old one, so nothing in the history is rewritten. Restoring a version identical to the current one does nothing.
@@ -150,6 +152,14 @@ It changes nothing else. The name, description, and other frontmatter fields are
 A GitHub-synced skill cannot be restored, since its content comes from the repo. Stop the sync in the skill editor to make the skill editable again.
 
 Built-in skills also offer **Reset to default** in the skill's row menu. It overwrites your local edits with the content Archestra ships, recorded as a new version.
+
+### Concurrent Edits
+
+An edit is anchored to the version it started from. If the skill changes before you save, the save is refused. Nothing is overwritten. Reopen the skill to pick up the change, then reapply your own.
+
+The same guard covers a restore and the `edit_skill` tool.
+
+Over the API, `PUT /api/skills/:id` takes `baseVersion` — the skill's `latestVersion` when you composed the edit. The request fails with 409 if the skill has moved past it.
 
 ## Environments
 

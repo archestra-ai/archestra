@@ -103,10 +103,20 @@ function VersionHistory({
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [confirmingRestore, setConfirmingRestore] = useState(false);
 
-  const versions = useMemo(
-    () => versionsQuery.data?.pages.flatMap((page) => page?.data ?? []) ?? [],
-    [versionsQuery.data],
-  );
+  // Pages are read by offset from a list that grows at the head, so a version
+  // created between two page loads shifts every row down and the next page
+  // re-returns rows the previous one already held. Keyed by id, the second copy
+  // is dropped instead of rendering the version twice under a duplicate key.
+  const versions = useMemo(() => {
+    const seen = new Set<string>();
+    return (versionsQuery.data?.pages ?? []).flatMap((page) =>
+      (page?.data ?? []).filter((version) => {
+        if (seen.has(version.id)) return false;
+        seen.add(version.id);
+        return true;
+      }),
+    );
+  }, [versionsQuery.data]);
   const headVersion = skill?.latestVersion ?? versions[0]?.version ?? null;
   const activeVersion = selectedVersion ?? headVersion;
   const isHead = activeVersion !== null && activeVersion === headVersion;

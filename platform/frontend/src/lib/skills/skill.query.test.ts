@@ -4,7 +4,11 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useRestoreSkillVersion } from "@/lib/skills/skill.query";
+import {
+  useRestoreSkillVersion,
+  useSkillVersion,
+  useUpdateSkill,
+} from "@/lib/skills/skill.query";
 
 vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
@@ -98,7 +102,10 @@ function setup() {
   });
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
-  return renderHook(() => useRestoreSkillVersion(), { wrapper });
+  return {
+    ...renderHook(() => useRestoreSkillVersion(), { wrapper }),
+    queryClient,
+  };
 }
 
 /** Version 12 is the head the preview was rendered against throughout. */
@@ -227,10 +234,13 @@ describe("useRestoreSkillVersion", () => {
     sdk.getSkillVersion.mockResolvedValue(versionResponse());
     sdk.updateSkill.mockResolvedValue({
       data: undefined,
+      // The route raises a second kind of 409 (a name collision), so the
+      // internal code — not the status — is what marks this one.
       error: {
         error: {
           message: "has moved to version 13",
           type: "api_conflict_error",
+          internal_code: "skill_version_conflict",
         },
       },
     } as never);
@@ -295,5 +305,104 @@ describe("useRestoreSkillVersion", () => {
 
     expect(sdk.updateSkill).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("useUpdateSkill", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function setupUpdate() {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    return renderHook(() => useUpdateSkill(), { wrapper });
+  }
+
+  const editArgs = {
+    id: "skill-1",
+    body: { content: "---\nname: x\ndescription: y\n---\n\nbody" },
+  };
+
+  it("tells the author their copy went stale rather than quoting version numbers", async () => {
+    sdk.updateSkill.mockResolvedValue({
+      data: undefined,
+      error: {
+        error: {
+          message: 'Skill "pdf-tools" has moved to version 13.',
+          type: "api_conflict_error",
+          internal_code: "skill_version_conflict",
+        },
+      },
+    } as never);
+
+    const { result } = setupUpdate();
+    result.current.mutate(editArgs);
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "This skill changed while you were editing it. Reopen it to pick up the latest version, then reapply your changes.",
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("still reports a name collision as itself, though it is a 409 too", async () => {
+    sdk.updateSkill.mockResolvedValue({
+      data: undefined,
+      error: {
+        error: {
+          message: 'A skill named "pdf-tools" already exists',
+          type: "api_conflict_error",
+        },
+      },
+    } as never);
+
+    const { result } = setupUpdate();
+    result.current.mutate(editArgs);
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+
+    expect(toast.error).toHaveBeenCalledWith(
+      'A skill named "pdf-tools" already exists',
+      expect.anything(),
+    );
+  });
+});
+
+describe("useSkillVersion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * A version's bytes are immutable, and a snapshot carries every resource file
+   * in full (base64 for binaries). Nothing a skill write does can change them,
+   * so no skill invalidation may drop them — and skill invalidations are fired
+   * from all over the app, not just from this file.
+   */
+  it("survives a skill invalidation, so a snapshot is downloaded once", async () => {
+    sdk.getSkillVersion.mockResolvedValue(versionResponse());
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useSkillVersion("skill-1", 6), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.data).not.toBeNull());
+    expect(sdk.getSkillVersion).toHaveBeenCalledTimes(1);
+
+    // Stands in for every `invalidateQueries({ queryKey: ["skills"] })` in the
+    // app — the skill list, the skill itself, and its version *list* all refresh
+    // on a write; the snapshots must not.
+    await queryClient.invalidateQueries({ queryKey: ["skills"] });
+
+    expect(sdk.getSkillVersion).toHaveBeenCalledTimes(1);
   });
 });

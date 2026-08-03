@@ -260,12 +260,11 @@ const SkillManifestInputSchema = SkillManifestFieldsSchema.superRefine(
 );
 
 /**
- * Update payload: the manifest fields plus an optional compare-and-set on the
- * skill's head version, mirroring the `baseVersion` the `edit_skill` MCP tool
- * takes. A client that composed its edit from a version it read earlier — the
- * version-history restore, say — passes that version so a concurrent write
- * landing in between is rejected (409) instead of silently buried. Omit it for
- * last-write-wins, which is what a self-contained manifest edit wants.
+ * Update payload: the manifest fields plus `baseVersion`, the compare-and-set
+ * the `edit_skill` MCP tool takes under the same name. Anything that read the
+ * skill before editing it — the editor, the version-history restore — anchors
+ * on what it read, so a write landing in between is rejected (409) instead of
+ * silently buried.
  */
 const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
   baseVersion: z
@@ -274,8 +273,9 @@ const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
     .positive()
     .optional()
     .describe(
-      "The skill's `latestVersion` at the time this edit was composed. When " +
-        "set, the update is rejected with 409 if the skill has moved past it.",
+      "The skill's `latestVersion` when this edit was composed. Rejected " +
+        "with 409 if the skill has moved past it. Omit only when the payload " +
+        "owes nothing to a prior read of the skill.",
     ),
 }).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 

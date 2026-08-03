@@ -92,6 +92,25 @@ function versionResponse({
   } as never;
 }
 
+/**
+ * The restore re-reads both the version being restored and the current head, so
+ * it decides the no-op case from the head it just confirmed rather than from a
+ * hash the caller passed in. Version 12 is the head throughout these tests.
+ */
+function mockVersionReads({
+  snapshot = versionResponse(),
+  head = versionResponse({ content: "current body", contentHash: "hash-head" }),
+}: {
+  snapshot?: ReturnType<typeof versionResponse>;
+  head?:
+    | ReturnType<typeof versionResponse>
+    | { data: undefined; error: unknown };
+} = {}) {
+  sdk.getSkillVersion.mockImplementation((async (args: {
+    path: { version: number };
+  }) => (args.path.version === 12 ? head : snapshot)) as never);
+}
+
 function setup() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -105,7 +124,6 @@ const restoreArgs = {
   skillId: "skill-1",
   version: 6,
   expectedHeadVersion: 12,
-  headContentHash: "hash-head",
 };
 
 describe("useRestoreSkillVersion", () => {
@@ -115,7 +133,7 @@ describe("useRestoreSkillVersion", () => {
 
   it("restores by writing the old version's content and files forward", async () => {
     sdk.getSkill.mockResolvedValue(skillResponse(12));
-    sdk.getSkillVersion.mockResolvedValue(versionResponse());
+    mockVersionReads();
     sdk.updateSkill.mockResolvedValue({
       data: { id: "skill-1", latestVersion: 13 },
       error: undefined,
@@ -164,7 +182,7 @@ describe("useRestoreSkillVersion", () => {
         templated: true,
       }),
     );
-    sdk.getSkillVersion.mockResolvedValue(versionResponse());
+    mockVersionReads();
     sdk.updateSkill.mockResolvedValue({
       data: { id: "skill-1", latestVersion: 13 },
       error: undefined,
@@ -186,7 +204,7 @@ describe("useRestoreSkillVersion", () => {
 
   it("sends an empty files array so a fileless version does not inherit current files", async () => {
     sdk.getSkill.mockResolvedValue(skillResponse(12));
-    sdk.getSkillVersion.mockResolvedValue(versionResponse({ files: [] }));
+    mockVersionReads({ snapshot: versionResponse({ files: [] }) });
     sdk.updateSkill.mockResolvedValue({
       data: { id: "skill-1", latestVersion: 13 },
       error: undefined,
@@ -214,9 +232,9 @@ describe("useRestoreSkillVersion", () => {
 
   it("does not write when the chosen version is identical to the current one", async () => {
     sdk.getSkill.mockResolvedValue(skillResponse(12));
-    sdk.getSkillVersion.mockResolvedValue(
-      versionResponse({ contentHash: "hash-head" }),
-    );
+    mockVersionReads({
+      snapshot: versionResponse({ contentHash: "hash-head" }),
+    });
 
     const { result } = setup();
     result.current.mutate(restoreArgs);
@@ -226,9 +244,55 @@ describe("useRestoreSkillVersion", () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
+  it("writes anyway when the head cannot be read, rather than assuming a no-op", async () => {
+    sdk.getSkill.mockResolvedValue(skillResponse(12));
+    // A pruned or unreachable head leaves the shortcut undecidable — that is
+    // not evidence the two versions match.
+    mockVersionReads({
+      head: {
+        data: undefined,
+        error: { error: { message: "gone", type: "api_not_found_error" } },
+      },
+    });
+    sdk.updateSkill.mockResolvedValue({
+      data: { id: "skill-1", latestVersion: 13 },
+      error: undefined,
+    } as never);
+
+    const { result } = setup();
+    result.current.mutate(restoreArgs);
+    await waitFor(() => expect(sdk.updateSkill).toHaveBeenCalled());
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Restored version 6 — created version 13",
+      ),
+    );
+  });
+
+  it("reports nothing restored when the backend suppressed the fork", async () => {
+    sdk.getSkill.mockResolvedValue(skillResponse(12));
+    mockVersionReads();
+    // The write went through but the payload hashed equal to the head, so no
+    // version was created and `latestVersion` did not move.
+    sdk.updateSkill.mockResolvedValue({
+      data: { id: "skill-1", latestVersion: 12 },
+      error: undefined,
+    } as never);
+
+    const { result } = setup();
+    result.current.mutate(restoreArgs);
+    await waitFor(() => expect(toast.info).toHaveBeenCalled());
+
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalledWith(
+      "Version 6 is identical to the current version — nothing to restore.",
+    );
+  });
+
   it("reports no success when the write itself fails", async () => {
     sdk.getSkill.mockResolvedValue(skillResponse(12));
-    sdk.getSkillVersion.mockResolvedValue(versionResponse());
+    mockVersionReads();
     sdk.updateSkill.mockResolvedValue({
       data: undefined,
       error: { error: { message: "name taken", type: "api_conflict_error" } },

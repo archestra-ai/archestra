@@ -96,9 +96,6 @@ function VersionHistory({
   const headVersion = skill?.latestVersion ?? versions[0]?.version ?? null;
   const activeVersion = selectedVersion ?? headVersion;
   const isHead = activeVersion !== null && activeVersion === headVersion;
-  const headContentHash = versions.find(
-    (version) => version.version === headVersion,
-  )?.contentHash;
 
   const { data: detail, isPending: isDetailLoading } = useSkillVersion(
     open ? skillId : null,
@@ -115,11 +112,14 @@ function VersionHistory({
 
   // Readiness is the query's status, not its data: a predecessor that answered
   // 404 settles as null, and reading that as "still loading" would leave the
-  // diff waiting forever. Either way the baseline is empty and the version
-  // reads as an all-new document. The disabled query for version 1 never
-  // succeeds, so its own absence of a predecessor is the ready signal.
+  // diff waiting forever. A predecessor that failed outright is settled too —
+  // unknown, but not pending, and treating it as pending would hang the diff on
+  // every transient 5xx. Either way the baseline is empty and the version reads
+  // as an all-new document. The disabled query for version 1 never settles at
+  // all, so its own absence of a predecessor is the ready signal.
   const isBaselineReady =
-    !!detail && (!hasPredecessor || predecessorQuery.isSuccess);
+    !!detail &&
+    (!hasPredecessor || predecessorQuery.isSuccess || predecessorQuery.isError);
   const comparedFiles = useMemo(
     () =>
       isBaselineReady
@@ -130,21 +130,25 @@ function VersionHistory({
 
   const isSynced = !!skill?.githubSyncInterval;
   const isBuiltIn = skill?.sourceType === "built_in";
-  const canRestore =
-    !!detail && !!skill && !isHead && !isSynced && !!headContentHash;
+  const canRestore = !!detail && !!skill && !isHead && !isSynced;
 
   const handleRestore = async () => {
-    if (!skill || !detail || !headContentHash || activeVersion === null) return;
-    const result = await restoreVersion.mutateAsync({
-      skillId: skill.id,
-      version: activeVersion,
-      expectedHeadVersion: skill.latestVersion,
-      headContentHash,
-    });
+    if (!skill || !detail || activeVersion === null) return;
+    // A handled failure resolves to null and a transport failure rejects; both
+    // keep the confirmation open, so the toast explaining why still has the
+    // dialog it refers to on screen.
+    const result = await restoreVersion
+      .mutateAsync({
+        skillId: skill.id,
+        version: activeVersion,
+        expectedHeadVersion: skill.latestVersion,
+      })
+      .catch(() => null);
+    if (!result) return;
     setConfirmingRestore(false);
     // A restore lands as the new head, so the previewed version is no longer
     // what the skill looks like — jump the selection to the version just made.
-    if (result) setSelectedVersion(result.latestVersion);
+    setSelectedVersion(result.latestVersion);
   };
 
   return (
@@ -186,12 +190,7 @@ function VersionHistory({
               permissions={{ skill: ["update"] }}
               disabled={!canRestore || restoreVersion.isPending}
               onClick={() => setConfirmingRestore(true)}
-              tooltip={restoreTooltip({
-                isSynced,
-                isHead,
-                hasHeadHash: !!headContentHash,
-                appName,
-              })}
+              tooltip={restoreTooltip({ isSynced, isHead, appName })}
             >
               {restoreVersion.isPending
                 ? "Restoring..."
@@ -219,6 +218,8 @@ function VersionHistory({
             headVersion={headVersion}
             activeVersion={activeVersion}
             isLoading={versionsQuery.isPending || isSkillLoading}
+            isError={versionsQuery.isError}
+            onRetry={() => versionsQuery.refetch()}
             hasMore={!!versionsQuery.hasNextPage}
             isLoadingMore={versionsQuery.isFetchingNextPage}
             onLoadMore={() => versionsQuery.fetchNextPage()}
@@ -241,6 +242,7 @@ function VersionHistory({
               detail={detail ?? null}
               predecessor={predecessor ?? null}
               isBaselineReady={isBaselineReady}
+              baselineFailed={predecessorQuery.isError}
               isLoading={isDetailLoading}
               comparedFiles={comparedFiles}
               viewMode={viewMode}
@@ -266,6 +268,9 @@ function VersionHistory({
           }
           isPending={restoreVersion.isPending}
           onConfirm={handleRestore}
+          // A restore only ever appends to the history, so it does not get the
+          // red the delete and reset confirmations use.
+          confirmVariant="default"
           confirmLabel={`Restore version ${activeVersion}`}
           pendingLabel="Restoring..."
         />
@@ -298,6 +303,8 @@ function VersionTimeline({
   headVersion,
   activeVersion,
   isLoading,
+  isError,
+  onRetry,
   hasMore,
   isLoadingMore,
   onLoadMore,
@@ -307,6 +314,8 @@ function VersionTimeline({
   headVersion: number | null;
   activeVersion: number | null;
   isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
   hasMore: boolean;
   isLoadingMore: boolean;
   onLoadMore: () => void;
@@ -317,6 +326,27 @@ function VersionTimeline({
       <p className="px-4 py-3 text-sm text-muted-foreground">
         Loading versions...
       </p>
+    );
+  }
+  // Every skill has at least version 1, so an empty list after a failed fetch
+  // is an outage, not a history. Saying "No versions" would state something
+  // that is never true of a live skill.
+  if (isError && versions.length === 0) {
+    return (
+      <div className="space-y-2 px-3 py-3">
+        <p className="text-sm text-muted-foreground">
+          Could not load this skill&apos;s versions.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={onRetry}
+        >
+          Retry
+        </Button>
+      </div>
     );
   }
   if (versions.length === 0) {
@@ -398,6 +428,7 @@ function VersionPreview({
   detail,
   predecessor,
   isBaselineReady,
+  baselineFailed,
   isLoading,
   comparedFiles,
   viewMode,
@@ -410,6 +441,8 @@ function VersionPreview({
   detail: SkillVersionDetail | null;
   predecessor: SkillVersionDetail | null;
   isBaselineReady: boolean;
+  /** The predecessor could not be read, so "what moved" is unknown, not empty. */
+  baselineFailed: boolean;
   isLoading: boolean;
   comparedFiles: ComparedSkillFile<SkillVersionDetail["files"][number]>[];
   viewMode: VersionViewMode;
@@ -491,9 +524,12 @@ function VersionPreview({
       compared?.current ??
       null)
     : null;
+  // Only the diff reads both sides. In "All files" the predecessor's encoding
+  // says nothing about the copy on screen — a binary that was re-saved as text
+  // is readable in this version even though it was not in the last one.
   const isBinary =
     currentSnapshot?.encoding === "base64" ||
-    compared?.previous?.encoding === "base64";
+    (viewMode === "changes" && compared?.previous?.encoding === "base64");
   // Until the predecessor lands there is nothing to compare against, and an
   // empty change set would read as "nothing changed" rather than "not yet
   // known". Browsing the whole version needs no baseline, so it renders now.
@@ -528,10 +564,19 @@ function VersionPreview({
             variant={viewMode === "changes" ? "secondary" : "outline"}
             onClick={() => onViewModeChange("changes")}
           >
-            Changes ({changeCount})
+            {/* No baseline yet means no count either — "Changes (0)" would
+                assert that nothing moved before that is known. */}
+            {isBaselineReady ? `Changes (${changeCount})` : "Changes"}
           </Button>
         </ButtonGroup>
       </div>
+
+      {baselineFailed && viewMode === "changes" ? (
+        <p className="mx-4 mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+          Version {version - 1} could not be loaded, so there is nothing to
+          compare against — everything below is shown as newly added.
+        </p>
+      ) : null}
 
       <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3 p-4">
         <div className="min-h-0 overflow-y-auto rounded-md border p-2">
@@ -807,23 +852,16 @@ function groupByDay(versions: SkillVersionSummary[]) {
 function restoreTooltip({
   isSynced,
   isHead,
-  hasHeadHash,
   appName,
 }: {
   isSynced: boolean;
   isHead: boolean;
-  hasHeadHash: boolean;
   appName: string;
 }): string | undefined {
   if (isSynced) {
     return `This skill is synced from GitHub. Stop syncing it to edit and restore it in ${appName}.`;
   }
   if (isHead) return "This is the skill's current version.";
-  // A restore needs the head's content hash to tell a real restore from a no-op,
-  // and the history list it comes from can still be in flight or a page behind.
-  if (!hasHeadHash) {
-    return "Still loading this skill's current version — try again in a moment.";
-  }
   return undefined;
 }
 
@@ -833,11 +871,16 @@ function languageForPath(path: string): string {
 }
 
 const LANGUAGES_BY_EXTENSION: Record<string, string> = {
+  css: "css",
+  csv: "plaintext",
+  html: "html",
   js: "javascript",
   json: "json",
+  jsonl: "json",
   md: "markdown",
   py: "python",
   sh: "shell",
+  toml: "ini",
   ts: "typescript",
   txt: "plaintext",
   yaml: "yaml",

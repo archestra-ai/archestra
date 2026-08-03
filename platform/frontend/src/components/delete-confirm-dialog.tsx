@@ -1,5 +1,5 @@
 import { FormDialog } from "@/components/form-dialog";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 
 type DeleteConfirmDialogProps = {
@@ -12,6 +12,12 @@ type DeleteConfirmDialogProps = {
   confirmLabel?: string;
   pendingLabel?: string;
   confirmDisabled?: boolean;
+  /**
+   * Defaults to the destructive red this dialog is named for. Reusable by
+   * confirmations that are merely irreversible-looking rather than destructive,
+   * where red would overstate what the action does.
+   */
+  confirmVariant?: ButtonProps["variant"];
 };
 
 export function DeleteConfirmDialog({
@@ -24,6 +30,7 @@ export function DeleteConfirmDialog({
   confirmLabel = "Delete",
   pendingLabel = "Deleting...",
   confirmDisabled = false,
+  confirmVariant = "destructive",
 }: DeleteConfirmDialogProps) {
   return (
     <FormDialog
@@ -63,7 +70,7 @@ export function DeleteConfirmDialog({
           </Button>
           <Button
             type="submit"
-            variant="destructive"
+            variant={confirmVariant}
             disabled={isPending || confirmDisabled}
           >
             {isPending ? pendingLabel : confirmLabel}

@@ -24,9 +24,12 @@ export interface ComparedSkillFile<T extends ComparableFile> {
 
 /**
  * Pair a version's files against its predecessor's, keyed by path and sorted by
- * path so the list is stable across selections. Callers that have no
- * predecessor (the oldest retained version) should not call this — there is no
- * baseline to describe a change against.
+ * path so the list is stable across selections.
+ *
+ * An empty `previous` is a supported baseline, not a misuse: the oldest
+ * retained version has no predecessor, and neither does one whose predecessor
+ * has been pruned or could not be fetched. Every file then reads as `added`,
+ * which is what the history dialog renders for those cases.
  */
 export function compareSkillVersionFiles<T extends ComparableFile>(
   current: T[],

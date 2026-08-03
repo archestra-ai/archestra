@@ -131,6 +131,22 @@ function mockVersions() {
       ],
     },
     isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: vi.fn(),
+    // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+  } as any);
+}
+
+/** The history list failed outright — no pages, and not still loading. */
+function mockVersionsError(refetch = vi.fn()) {
+  vi.mocked(useSkillVersions).mockReturnValue({
+    data: undefined,
+    isPending: false,
+    isError: true,
+    refetch,
     hasNextPage: false,
     isFetchingNextPage: false,
     fetchNextPage: vi.fn(),
@@ -140,21 +156,24 @@ function mockVersions() {
 
 /**
  * Versions listed here have settled: a detail object is a hit, `null` is the
- * 404 a pruned version answers. Anything absent is still in flight, which is
- * how the dialog tells "not known yet" from "known to be gone".
+ * 404 a pruned version answers, and `"error"` is a fetch that failed outright.
+ * Anything absent is still in flight, which is how the dialog tells "not known
+ * yet" from "known to be gone" and from "could not be read".
  */
 function mockVersionDetails(
-  details: Record<number, ReturnType<typeof versionDetail> | null>,
+  details: Record<number, ReturnType<typeof versionDetail> | null | "error">,
 ) {
   vi.mocked(useSkillVersion).mockImplementation(((
     _id: string | null,
     version: number | null,
   ) => {
     const hasSettled = version !== null && version in details;
+    const entry = version === null ? null : details[version];
     return {
-      data: version === null ? null : (details[version] ?? null),
+      data: entry === "error" ? undefined : (entry ?? null),
       isPending: !hasSettled,
-      isSuccess: hasSettled,
+      isSuccess: hasSettled && entry !== "error",
+      isError: entry === "error",
     };
   }) as never);
 }
@@ -172,6 +191,11 @@ function renderDialog() {
 describe("SkillVersionHistoryDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // `clearAllMocks` leaves implementations in place, so both mutations are
+    // re-stubbed here rather than inheriting whatever the last test set. Null
+    // is the "nothing was written" resolution; success cases override it.
+    mutateAsync.mockResolvedValue(null);
+    resetAsync.mockResolvedValue(null);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
@@ -256,7 +280,6 @@ describe("SkillVersionHistoryDialog", () => {
       skillId: "skill-1",
       version: 2,
       expectedHeadVersion: 3,
-      headContentHash: "hash-head",
     });
   });
 
@@ -374,6 +397,102 @@ describe("SkillVersionHistoryDialog", () => {
     expect(screen.getByRole("button", { name: "keep.py" })).toBeInTheDocument();
     expect(screen.getByTestId("editor")).toHaveTextContent("head body");
     expect(screen.queryByTestId("diff")).not.toBeInTheDocument();
+  });
+
+  it("keeps the confirmation open when the restore does not go through", async () => {
+    const user = userEvent.setup();
+    // A handled failure (moved head, identical content, rejected write) resolves
+    // to null, and its toast needs the dialog it refers to still on screen.
+    mutateAsync.mockResolvedValue(null);
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 2" }));
+
+    expect(
+      screen.getByRole("button", { name: "Restore version 2" }),
+    ).toBeInTheDocument();
+  });
+
+  it("reads a predecessor that failed to load as no baseline, not as pending", async () => {
+    const user = userEvent.setup();
+    mockVersionDetails({
+      3: versionDetail({
+        version: 3,
+        content: HEAD_BODY,
+        contentHash: "hash-head",
+        files: [file("scripts/extract.py", "new")],
+      }),
+      // v2 errored — settled, but unknown rather than absent
+      2: "error",
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+
+    expect(screen.queryByText("Loading changes...")).not.toBeInTheDocument();
+    expect(screen.getByText(/could not be loaded/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "extract.py" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers a retry instead of claiming a skill has no versions", async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    mockVersionsError(refetch);
+    renderDialog();
+
+    expect(screen.queryByText("No versions")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it("does not count changes before the baseline settles", () => {
+    mockVersionDetails({
+      3: versionDetail({
+        version: 3,
+        content: HEAD_BODY,
+        contentHash: "hash-head",
+        files: [file("scripts/extract.py", "new")],
+      }),
+    });
+    renderDialog();
+
+    // "Changes (0)" would assert that nothing moved before that is knowable
+    expect(screen.getByRole("button", { name: /^Changes/ })).toHaveTextContent(
+      /^Changes$/,
+    );
+  });
+
+  it("reads a file this version stores as text, whatever the last one stored", async () => {
+    const user = userEvent.setup();
+    mockVersionDetails({
+      3: versionDetail({
+        version: 3,
+        content: HEAD_BODY,
+        contentHash: "hash-head",
+        files: [file("assets/logo.svg", "<svg />")],
+      }),
+      2: versionDetail({
+        version: 2,
+        content: HEAD_BODY,
+        contentHash: "hash-two",
+        files: [
+          { ...file("assets/logo.svg", "PHN2ZyAvPg=="), encoding: "base64" },
+        ],
+      }),
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /^All files/ }));
+    await user.click(screen.getByRole("button", { name: "logo.svg" }));
+
+    expect(screen.getByTestId("editor")).toHaveTextContent("<svg />");
   });
 
   it("does not claim nothing changed while the baseline is still loading", () => {

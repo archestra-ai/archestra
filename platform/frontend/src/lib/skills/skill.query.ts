@@ -148,6 +148,10 @@ export function useSkillVersions(id: string | null) {
   return useInfiniteQuery({
     queryKey: ["skills", id, "versions"],
     enabled: !!id,
+    // Version rows are immutable, so a loaded page never goes stale on its own.
+    // The only change that matters is a *new* version appearing, which arrives
+    // through the `["skills"]` invalidation every skill mutation already fires.
+    staleTime: Number.POSITIVE_INFINITY,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
       const { data, error } = await getSkillVersions({
@@ -176,6 +180,10 @@ export function useSkillVersion(id: string | null, version: number | null) {
   return useQuery({
     queryKey: ["skills", id, "version", version],
     enabled: !!id && version !== null && version > 0,
+    // A version's bytes never change, and its snapshots carry every resource
+    // file in full (base64 for binaries). Re-fetching one on focus or on an
+    // unrelated skill edit would re-download all of that for nothing.
+    staleTime: Number.POSITIVE_INFINITY,
     queryFn: async () => {
       const { data, error } = await getSkillVersion({
         path: { id: id as string, version: version as number },
@@ -289,14 +297,11 @@ export function useRestoreSkillVersion() {
       skillId,
       version,
       expectedHeadVersion,
-      headContentHash,
     }: {
       skillId: string;
       version: number;
       /** Head the preview was rendered against; a moved head aborts the write. */
       expectedHeadVersion: number;
-      /** Content hash of that head, used to detect a restore that changes nothing. */
-      headContentHash: string;
     }) => {
       // Re-read the head at submit time: the previewed history may be minutes
       // old, and restoring over someone else's newer edit would bury it.
@@ -315,9 +320,16 @@ export function useRestoreSkillVersion() {
         return null;
       }
 
-      const { data: snapshot, error: snapshotError } = await getSkillVersion({
-        path: { id: skillId, version },
-      });
+      // Both reads are anchored to the head just confirmed above, rather than
+      // to whatever the history list happened to have loaded when the preview
+      // was rendered.
+      const [{ data: snapshot, error: snapshotError }, { data: head }] =
+        await Promise.all([
+          getSkillVersion({ path: { id: skillId, version } }),
+          getSkillVersion({
+            path: { id: skillId, version: current.latestVersion },
+          }),
+        ]);
       if (snapshotError) {
         handleApiError(snapshotError);
         return null;
@@ -326,8 +338,10 @@ export function useRestoreSkillVersion() {
 
       // Identical content does not fork a version (the backend suppresses no-op
       // forks by content hash), so reporting a restore would name a version
-      // that was never created.
-      if (snapshot.contentHash === headContentHash) {
+      // that was never created. An unreadable head is not evidence of equality,
+      // so it skips the shortcut rather than blocking the write — `onSuccess`
+      // catches a suppressed fork either way.
+      if (head && snapshot.contentHash === head.contentHash) {
         toast.info(
           `Version ${version} is identical to the current version — nothing to restore.`,
         );
@@ -354,6 +368,17 @@ export function useRestoreSkillVersion() {
       });
       if (error) {
         handleApiError(error);
+        return null;
+      }
+      // The backend suppresses a fork whose payload hashes equal to the head,
+      // so an unmoved `latestVersion` means nothing was written — whatever the
+      // hash shortcut above concluded. Reporting success here would name a
+      // version that does not exist.
+      if (data && data.latestVersion === expectedHeadVersion) {
+        queryClient.invalidateQueries({ queryKey: ["skills"] });
+        toast.info(
+          `Version ${version} is identical to the current version — nothing to restore.`,
+        );
         return null;
       }
       return data;

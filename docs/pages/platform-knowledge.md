@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
-lastUpdated: 2026-07-28
+lastUpdated: 2026-08-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -120,6 +120,16 @@ Create the key in [Atlassian administration](https://admin.atlassian.com) under 
 3. Copy the key into the connector's **Organization admin API key** field.
 
 The API token stays required. Atlassian does not accept admin API keys on the Jira and Confluence APIs.
+
+## Deleting and Restoring
+
+Deleting a knowledge base or connector moves it to a trash — the record is hidden but kept. Deleting a connector also stops its syncs and destroys its stored credential.
+
+Switch the status filter to **Deleted** to open the trash. Each entry there can be restored or permanently deleted. Permanent deletion destroys the connector's indexed documents; the data cannot be recovered.
+
+A restored knowledge base is immediately live for its previously-assigned agents. A restored connector comes back disabled — re-authenticate it, then enable it to resume syncing.
+
+The trash requires the `knowledgeSource:manage-deleted` permission. Only admins hold it by default; grant it to a [custom role](/docs/platform-access-control) to delegate recovery. The [soft-delete retention sweep](/docs/platform-deployment#soft-delete-retention), when enabled, purges trashed records after a configured window.
 
 ## Supported Connectors
 

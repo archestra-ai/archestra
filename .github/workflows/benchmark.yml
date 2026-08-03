@@ -211,6 +211,9 @@ jobs:
             case "${PHASE}" in
               Failed)
                 echo "::error::pod ${POD} terminated Failed within the fast-fail window — harness broken"
+                kubectl get pod "${POD}" -n archestra \
+                  -o jsonpath='{.status.containerStatuses[?(@.name=="bench")].state.terminated.message}' || true
+                echo
                 kubectl logs "${POD}" -n archestra -c bench --tail=80 || true
                 exit 1 ;;
               Succeeded)

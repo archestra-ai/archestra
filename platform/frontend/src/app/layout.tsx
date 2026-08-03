@@ -228,3 +228,5 @@ export default function RootLayout({
     </html>
   );
 }
+
+// touch: cache-granularity measurement for the stage-split (frontend-only change)

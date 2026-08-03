@@ -51,6 +51,15 @@ export const REMOTE_SERVER_URL_NOT_ALLOWED_CODE =
  */
 export const CATALOG_NAME_CONFLICT_CODE = "catalog_name_conflict";
 
+/**
+ * `internal_code` the backend sets when a save carried an `expectedRevision`
+ * that the row has since moved past — someone else edited the item while this
+ * dialog was open. Surfaced as a toast (it is about the item, not any one
+ * field); reopening the dialog re-hydrates it at the current revision. Keep in
+ * sync with the backend constant of the same value.
+ */
+export const CATALOG_STALE_WRITE_CODE = "catalog_stale_write";
+
 /** Read the backend `internal_code` off an error thrown by a catalog mutation. */
 export function getCatalogMutationErrorCode(
   error: unknown,
@@ -208,6 +217,12 @@ export function useUpdateInternalMcpCatalogItem() {
         code === CATALOG_NAME_CONFLICT_CODE
       ) {
         return;
+      }
+      if (code === CATALOG_STALE_WRITE_CODE) {
+        // Someone else moved the row. Refresh the cached item so reopening the
+        // dialog shows their version rather than the one this save was built
+        // on, then let the toast below carry the backend's explanation.
+        queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       }
       toast.error(
         error instanceof Error

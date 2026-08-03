@@ -49917,6 +49917,7 @@ export type GetInternalMcpCatalogResponses = {
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
         latestVersion: number;
+        revision: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -50055,7 +50056,6 @@ export type CreateInternalMcpCatalogItemData = {
         clonedFrom?: string | null;
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
-        latestVersion?: number;
         labels?: Array<{
             key: string;
             value: string;
@@ -50265,6 +50265,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
         latestVersion: number;
+        revision: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -50568,6 +50569,7 @@ export type GetInternalMcpCatalogItemResponses = {
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
         latestVersion: number;
+        revision: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -50698,7 +50700,6 @@ export type UpdateInternalMcpCatalogItemData = {
         scope?: 'personal' | 'team' | 'org';
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
-        latestVersion?: number;
         labels?: Array<{
             key: string;
             value: string;
@@ -50711,6 +50712,7 @@ export type UpdateInternalMcpCatalogItemData = {
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
         localConfigVaultKey?: string;
+        expectedRevision?: number;
     };
     path: {
         id: string;
@@ -50910,6 +50912,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
         latestVersion: number;
+        revision: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -51645,6 +51648,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
         latestVersion: number;
+        revision: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -51863,6 +51867,7 @@ export type ApproveCatalogItemImageResponses = {
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
         latestVersion: number;
+        revision: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;

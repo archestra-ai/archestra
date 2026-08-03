@@ -677,6 +677,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           localConfigVaultPath: z.string().optional(),
           // BYOS: External Vault key for local config secret env vars
           localConfigVaultKey: z.string().optional(),
+          // Optimistic concurrency: the `revision` the client last read. When
+          // present the save is refused with a 409 if the row has moved on.
+          // Optional so existing clients and the background reconcilers keep
+          // last-writer-wins.
+          expectedRevision: z.number().int().positive().optional(),
         }),
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
@@ -698,6 +703,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
+        // Compared, never written: kept out of the value payload entirely and
+        // handed to the model as an option below.
+        expectedRevision,
         ...restBodyInput
       } = body;
       // Downstream secret extraction removes plaintext values from the payload
@@ -725,6 +733,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!originalCatalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Optimistic-concurrency gate, deliberately BEFORE any side effect. The
+      // handler below commits a rename cascade and creates external secrets
+      // long before it reaches the row write, so a stale save rejected at the
+      // model layer would already have renamed installs and orphaned secrets
+      // in the secrets backend. Refuse here, while nothing has happened yet.
+      // The model re-checks under the write itself for the window in between.
+      if (
+        expectedRevision !== undefined &&
+        originalCatalogItem.revision !== expectedRevision
+      ) {
+        throw new ApiError(
+          409,
+          `Catalog item is at revision ${originalCatalogItem.revision}, not ${expectedRevision}; re-read and retry.`,
+          // Kept in sync with the frontend constant of the same value.
+          "catalog_stale_write",
+        );
       }
 
       // App backing catalogs are owned by the Apps flow. Through this generic
@@ -1240,7 +1266,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Update the catalog item
       const catalogItem = await withCatalogTeamFkErrorMapped(() =>
-        InternalMcpCatalogModel.update(id, restBody),
+        InternalMcpCatalogModel.update(id, restBody, { expectedRevision }),
       );
 
       if (!catalogItem) {
@@ -1336,6 +1362,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description: catalogItem.description,
         });
       }
+
+      // `catalogItem` was captured before the reinstall/app cascades above, and
+      // those write the row again through paths that bump `revision`. Re-read
+      // just that column so the client's next save carries a live token instead
+      // of one already a bump or two behind. Only the column — a full re-read
+      // would go through the visibility gate, which a scope- or team-narrowing
+      // edit can legitimately close against its own author.
+      catalogItem.revision = await InternalMcpCatalogModel.getRevision(id);
 
       return reply.send(catalogItem);
     },

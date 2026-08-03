@@ -231,6 +231,15 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     // InternalMcpCatalogModel.create / the startup adopt pass, never
     // accepted from input.
     deploymentName: true,
+    // Server-managed head pointer into mcp_catalog_versions — forked by
+    // InternalMcpCatalogVersionModel, never client-settable (a supplied value
+    // would corrupt the version counter and can collide on the
+    // (catalog_id, version) index).
+    latestVersion: true,
+    // Optimistic-concurrency token, bumped by the model on every config write.
+    // Clients COMPARE it via `expectedRevision` on the update route; they never
+    // assign it (a supplied value would let a stale writer forge agreement).
+    revision: true,
     ...PRESET_COLUMNS_OMIT,
     ...CATALOG_ITEM_APPROVAL_COLUMNS_OMIT,
   });
@@ -274,6 +283,15 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     deploymentName: true,
     // Clone lineage is locked after creation
     clonedFrom: true,
+    // Server-managed head pointer into mcp_catalog_versions — forked by
+    // InternalMcpCatalogVersionModel, never client-settable (a supplied value
+    // would corrupt the version counter and can collide on the
+    // (catalog_id, version) index).
+    latestVersion: true,
+    // Optimistic-concurrency token, bumped by the model on every config write.
+    // Clients COMPARE it via `expectedRevision` on the update route; they never
+    // assign it (a supplied value would let a stale writer forge agreement).
+    revision: true,
     ...PRESET_COLUMNS_OMIT,
     ...CATALOG_ITEM_APPROVAL_COLUMNS_OMIT,
   });

@@ -43,6 +43,7 @@ export function makeCatalogItem(
     catalogItemApprovalReviewedBy: null,
     catalogItemApprovalReviewedAt: null,
     latestVersion: 0,
+    revision: 1,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     deletedAt: null,

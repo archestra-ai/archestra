@@ -103,6 +103,12 @@ export function EditCatalogContent({
     (s) => s.catalogId === item.id,
   ).length;
 
+  // Optimistic-concurrency token for the snapshot the form is showing, set by
+  // the form each time it hydrates. Not read from `item` at save time: that
+  // prop advances on every background refetch, so using it would let a save
+  // built from older data silently overwrite whoever moved the row.
+  const [expectedRevision, setExpectedRevision] = useState<number | null>(null);
+
   const onSubmit = (
     values: McpCatalogFormValues,
     form: UseFormReturn<McpCatalogFormValues>,
@@ -113,9 +119,18 @@ export function EditCatalogContent({
     // Callback form so the dialog only closes on success; on a validation
     // error it stays open for correction.
     updateMutation.mutate(
-      { id: item.id, data: updateData },
       {
-        onSuccess: () => {
+        id: item.id,
+        data:
+          expectedRevision === null
+            ? updateData
+            : { ...updateData, expectedRevision },
+      },
+      {
+        onSuccess: (updated) => {
+          // The response carries the post-cascade revision, so a second save
+          // without reopening (keepOpenOnSave) starts from a live token.
+          setExpectedRevision(updated.revision);
           if (!keepOpenOnSave) {
             onClose();
           }
@@ -192,6 +207,7 @@ export function EditCatalogContent({
         mode="edit"
         initialValues={item}
         onSubmit={onSubmit}
+        onHydrate={setExpectedRevision}
         embedded={keepOpenOnSave}
         onDirtyChange={onDirtyChange}
         submitRef={submitRef}

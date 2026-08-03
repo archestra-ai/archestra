@@ -66,13 +66,19 @@ export function YamlConfigContent({
   // Track original YAML to detect changes
   const [originalYaml, setOriginalYaml] = useState("");
 
+  // Optimistic-concurrency token for the item as it stood when this editor
+  // was filled. A whole deployment document is the widest single-field
+  // overwrite in the registry, so it is worth guarding.
+  const [expectedRevision, setExpectedRevision] = useState<number | null>(null);
+
   // Initialize form state when YAML preview is loaded
   useEffect(() => {
     if (yamlPreview?.yaml) {
       setDeploymentYaml(yamlPreview.yaml);
       setOriginalYaml(yamlPreview.yaml);
+      setExpectedRevision(item?.revision ?? null);
     }
-  }, [yamlPreview]);
+  }, [yamlPreview, item?.revision]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -94,6 +100,7 @@ export function YamlConfigContent({
       id: item.id,
       data: {
         deploymentSpecYaml: deploymentYaml || undefined,
+        ...(expectedRevision === null ? {} : { expectedRevision }),
       },
     });
 

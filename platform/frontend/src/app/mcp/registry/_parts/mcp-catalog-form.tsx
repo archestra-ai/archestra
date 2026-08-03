@@ -183,6 +183,15 @@ interface McpCatalogFormProps {
   formValues?: McpCatalogFormValues;
   /** Called when form dirty state changes */
   onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * Fired with the item's `revision` each time the form (re-)hydrates from
+   * `initialValues`, i.e. whenever the snapshot on screen becomes that item.
+   * The optimistic-concurrency token must be captured here rather than read
+   * from the prop at save time: the prop advances on every background
+   * refetch, and a token that advanced without the form advancing would let a
+   * save clobber whoever moved the row.
+   */
+  onHydrate?: (revision: number) => void;
   /** Ref to imperatively trigger form submission */
   submitRef?: React.MutableRefObject<(() => Promise<void>) | null>;
   embedded?: boolean;
@@ -198,6 +207,7 @@ export function McpCatalogForm({
   mode,
   initialValues,
   onSubmit,
+  onHydrate,
   footer,
   catalogButton,
   notice,
@@ -207,6 +217,11 @@ export function McpCatalogForm({
   embedded = false,
   affectedServerCount = 0,
 }: McpCatalogFormProps) {
+  // The item snapshot the form is currently showing. Identity, not a copy —
+  // it only answers "has a different snapshot arrived since we hydrated?".
+  const hydratedFromRef = useRef<McpCatalogFormProps["initialValues"] | null>(
+    null,
+  );
   const localConfigSecretId =
     initialValues?.serverType === "local"
       ? initialValues.localConfigSecretId
@@ -853,6 +868,28 @@ export function McpCatalogForm({
   // Also reset when localConfigSecret loads (if it exists)
   useEffect(() => {
     if (initialValues) {
+      // A background refetch (TanStack refetches on window focus) replaces
+      // `initialValues` with whatever landed since. Re-hydrating from it would
+      // silently discard whatever the user has typed, so once the form is
+      // dirty a NEW item snapshot is ignored: their edits stay, and so does
+      // the token describing the snapshot they edited — which is what turns
+      // the eventual save into a conflict instead of a silent clobber.
+      //
+      // Scoped to a changed item identity on purpose. The first hydration, and
+      // a later one triggered by `localConfigSecret` arriving for the SAME
+      // item, must still run or the form would keep showing placeholder
+      // secrets it would then save back.
+      const isNewSnapshot = hydratedFromRef.current !== initialValues;
+      if (
+        isNewSnapshot &&
+        hydratedFromRef.current !== null &&
+        form.formState.isDirty
+      ) {
+        return;
+      }
+      hydratedFromRef.current = initialValues;
+      onHydrate?.(initialValues.revision);
+
       const transformedValues = transformCatalogItemToFormValues(
         initialValues,
         localConfigSecret ?? undefined,
@@ -874,7 +911,7 @@ export function McpCatalogForm({
         transformedValues.oauthClientSecretVaultKey || null,
       );
     }
-  }, [initialValues, localConfigSecret, form]);
+  }, [initialValues, localConfigSecret, form, onHydrate]);
 
   // The bar's mode is captured at submit-time so the bar stays consistent
   // even if the form state drifts during the confirm step. `null` means

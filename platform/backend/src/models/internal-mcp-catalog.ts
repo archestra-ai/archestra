@@ -23,6 +23,7 @@ import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import {
+  ApiError,
   type CatalogItemApprovalStatus,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
   type InsertInternalMcpCatalog,
@@ -734,9 +735,15 @@ class InternalMcpCatalogModel {
       // (2) Catalog name — written directly: the generic update() enforces
       // name immutability precisely so renames flow only through this
       // cascade.
+      // Bumped with the name so a rename is visible to the concurrency token:
+      // an editor holding a pre-rename revision must be told to re-read rather
+      // than allowed to clobber the new name.
       await tx
         .update(schema.internalMcpCatalogTable)
-        .set({ name: newName })
+        .set({
+          name: newName,
+          revision: sql`${schema.internalMcpCatalogTable.revision} + 1`,
+        })
         .where(eq(schema.internalMcpCatalogTable.id, id));
 
       // (3) Install names. Pairs map each install's ACTUAL old name (which
@@ -800,9 +807,37 @@ class InternalMcpCatalogModel {
     }
   }
 
+  /**
+   * The row's current concurrency token, without the visibility gate or the
+   * junction-table joins `findById` performs. Used by the update route to
+   * refresh the token on its response after the post-write cascades have run.
+   * Returns 0 for a missing row — a value no live row holds, so a client that
+   * replays it gets a 409 rather than a silent pass.
+   */
+  static async getRevision(id: string): Promise<number> {
+    const [row] = await db
+      .select({ revision: schema.internalMcpCatalogTable.revision })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, id));
+    return row?.revision ?? 0;
+  }
+
+  /**
+   * `opts.expectedRevision` opts this write into compare-and-set: the row must
+   * still be at that revision or the write is refused with a 409. Omitting it
+   * keeps last-writer-wins, which is what the background reconcilers
+   * (reinstall, app backing) depend on — they issue narrow updates from retry
+   * loops that must never start failing on a concurrent edit.
+   *
+   * It is deliberately an option rather than a field on
+   * `UpdateInternalMcpCatalog`: the token is COMPARED, never assigned, and
+   * mixing it into the value type would put a request-only concern on the
+   * shape every caller shares.
+   */
   static async update(
     id: string,
     catalogItem: Partial<UpdateInternalMcpCatalog>,
+    opts?: { expectedRevision?: number },
   ): Promise<InternalMcpCatalog | null> {
     const { labels, teams, ...dbValues } = catalogItem;
 
@@ -899,12 +934,55 @@ class InternalMcpCatalogModel {
 
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 
-    if (Object.keys(setValues).length > 0) {
+    // Bump the concurrency token on anything that actually mutates the item,
+    // including a sharing-only edit (labels/teams live in junction tables, so
+    // they leave `setValues` empty). A true no-op keeps the SELECT fallback
+    // below, so saving an unchanged dialog neither bumps `updatedAt` nor
+    // reshuffles the registry listing, which orders by it.
+    const isMutation =
+      Object.keys(setValues).length > 0 ||
+      labels !== undefined ||
+      teams !== undefined;
+
+    if (isMutation) {
+      const writeValues: Record<string, unknown> = {
+        ...setValues,
+        revision: sql`${schema.internalMcpCatalogTable.revision} + 1`,
+      };
       [dbItem] = await db
         .update(schema.internalMcpCatalogTable)
-        .set(setValues)
-        .where(eq(schema.internalMcpCatalogTable.id, id))
+        .set(writeValues)
+        .where(
+          opts?.expectedRevision === undefined
+            ? eq(schema.internalMcpCatalogTable.id, id)
+            : and(
+                eq(schema.internalMcpCatalogTable.id, id),
+                eq(
+                  schema.internalMcpCatalogTable.revision,
+                  opts.expectedRevision,
+                ),
+              ),
+        )
         .returning();
+
+      // No row matched. With a CAS predicate that is either a stale token or a
+      // missing row; disambiguate so a concurrent edit reads as 409 and a
+      // deleted item keeps its existing 404. The re-read is non-transactional,
+      // so a hard delete racing this check reports 404 — the benign direction.
+      if (!dbItem && opts?.expectedRevision !== undefined) {
+        const [current] = await db
+          .select({ revision: schema.internalMcpCatalogTable.revision })
+          .from(schema.internalMcpCatalogTable)
+          .where(eq(schema.internalMcpCatalogTable.id, id));
+        if (current) {
+          throw new ApiError(
+            409,
+            `Catalog item is at revision ${current.revision}, not ${opts.expectedRevision}; re-read and retry.`,
+            // Kept in sync with the frontend constant of the same value.
+            "catalog_stale_write",
+          );
+        }
+      }
     } else {
       [dbItem] = await db
         .select()
@@ -1162,13 +1240,16 @@ class InternalMcpCatalogModel {
           tx,
         );
       }
-      if (target.multitenant) {
-        // Multitenant catalogs re-provision at the catalog level, not per-install.
-        await tx
-          .update(schema.internalMcpCatalogTable)
-          .set({ catalogReinstallRequired: true })
-          .where(eq(schema.internalMcpCatalogTable.id, id));
-      }
+      // A revived row is a config boundary — bump so any token held from
+      // before the delete no longer validates.
+      await tx
+        .update(schema.internalMcpCatalogTable)
+        .set({
+          revision: sql`${schema.internalMcpCatalogTable.revision} + 1`,
+          // Multitenant catalogs re-provision at the catalog level, not per-install.
+          ...(target.multitenant ? { catalogReinstallRequired: true } : {}),
+        })
+        .where(eq(schema.internalMcpCatalogTable.id, id));
     });
 
     // Capture any config drift missed while the row was soft-deleted (fork

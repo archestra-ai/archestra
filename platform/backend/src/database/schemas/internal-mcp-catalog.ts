@@ -218,6 +218,24 @@ const internalMcpCatalogTable = softDeletablePgTable(
      * catalogs are excluded from versioning (see internal-mcp-catalog-version).
      */
     latestVersion: integer("latest_version").notNull().default(0),
+    /**
+     * Optimistic-concurrency token. The edit dialog is a wide
+     * read-modify-write whose stale window spans the HTTP round trip, so no
+     * server-side lock can catch a save built from a form hydrated minutes
+     * ago — only a token the client carries and returns. Callers opt in by
+     * passing `expectedRevision`; omitting it keeps the last-writer-wins
+     * default, which is what the background reconcilers rely on.
+     *
+     * Distinct from both neighbours: `version` above is a user-supplied
+     * display label, and `latest_version` only advances when the canonical
+     * config HASH changes — sharing-only edits dedup to a no-op there, so it
+     * cannot serve as a write token. This bumps on every config write, via
+     * `update`, `renameCascade`, and `restore`. `create` needs no bump (a new
+     * row starts at 1). Direct column writes outside those paths — currently
+     * `markImageApprovalPending` — deliberately do not bump: approval state
+     * is not part of the guarded config surface.
+     */
+    revision: integer("revision").notNull().default(1),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

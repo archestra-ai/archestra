@@ -196032,6 +196032,11 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
+                      "revision": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -196156,6 +196161,7 @@
                       "catalogItemApprovalReviewedBy",
                       "catalogItemApprovalReviewedAt",
                       "latestVersion",
+                      "revision",
                       "createdAt",
                       "updatedAt",
                       "deletedAt",
@@ -196926,11 +196932,6 @@
                   "catalogReinstallRequired": {
                     "type": "boolean"
                   },
-                  "latestVersion": {
-                    "type": "integer",
-                    "minimum": -2147483648,
-                    "maximum": 2147483647
-                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -197563,6 +197564,11 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -197667,6 +197673,7 @@
                     "catalogItemApprovalReviewedBy",
                     "catalogItemApprovalReviewedAt",
                     "latestVersion",
+                    "revision",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -198495,6 +198502,11 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -198599,6 +198611,7 @@
                     "catalogItemApprovalReviewedBy",
                     "catalogItemApprovalReviewedAt",
                     "latestVersion",
+                    "revision",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -199353,11 +199366,6 @@
                   "catalogReinstallRequired": {
                     "type": "boolean"
                   },
-                  "latestVersion": {
-                    "type": "integer",
-                    "minimum": -2147483648,
-                    "maximum": 2147483647
-                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -199419,6 +199427,11 @@
                   },
                   "localConfigVaultKey": {
                     "type": "string"
+                  },
+                  "expectedRevision": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
                   }
                 }
               }
@@ -199998,6 +200011,11 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -200102,6 +200120,7 @@
                     "catalogItemApprovalReviewedBy",
                     "catalogItemApprovalReviewedAt",
                     "latestVersion",
+                    "revision",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -203010,6 +203029,11 @@
                         "minimum": -2147483648,
                         "maximum": 2147483647
                       },
+                      "revision": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -203114,6 +203138,7 @@
                       "catalogItemApprovalReviewedBy",
                       "catalogItemApprovalReviewedAt",
                       "latestVersion",
+                      "revision",
                       "createdAt",
                       "updatedAt",
                       "deletedAt",
@@ -203943,6 +203968,11 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -204047,6 +204077,7 @@
                     "catalogItemApprovalReviewedBy",
                     "catalogItemApprovalReviewedAt",
                     "latestVersion",
+                    "revision",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",

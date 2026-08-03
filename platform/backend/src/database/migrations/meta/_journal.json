@@ -2766,6 +2766,13 @@
       "when": 1785699955045,
       "tag": "0394_safe_norrin_radd",
       "breakpoints": true
+    },
+    {
+      "idx": 395,
+      "version": "7",
+      "when": 1785786169138,
+      "tag": "0395_majestic_sandman",
+      "breakpoints": true
     }
   ]
 }

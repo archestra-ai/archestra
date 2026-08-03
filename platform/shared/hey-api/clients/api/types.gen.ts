@@ -22841,7 +22841,7 @@ export type AzureEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -22951,7 +22951,7 @@ export type AzureEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -33889,7 +33889,7 @@ export type GeminiEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -33999,7 +33999,7 @@ export type GeminiEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -37998,7 +37998,7 @@ export type GetInteractionsResponses = {
                 data: Array<{
                     object: 'embedding';
                     embedding: Array<number>;
-                    index: number;
+                    index?: number;
                     truncatedFrom?: number;
                 }>;
                 model: string;
@@ -38109,7 +38109,7 @@ export type GetInteractionsResponses = {
                 data: Array<{
                     object: 'embedding';
                     embedding: Array<number>;
-                    index: number;
+                    index?: number;
                     truncatedFrom?: number;
                 }>;
                 model: string;
@@ -38220,7 +38220,7 @@ export type GetInteractionsResponses = {
                 data: Array<{
                     object: 'embedding';
                     embedding: Array<number>;
-                    index: number;
+                    index?: number;
                     truncatedFrom?: number;
                 }>;
                 model: string;
@@ -44225,7 +44225,7 @@ export type GetInteractionResponses = {
             data: Array<{
                 object: 'embedding';
                 embedding: Array<number>;
-                index: number;
+                index?: number;
                 truncatedFrom?: number;
             }>;
             model: string;
@@ -44336,7 +44336,7 @@ export type GetInteractionResponses = {
             data: Array<{
                 object: 'embedding';
                 embedding: Array<number>;
-                index: number;
+                index?: number;
                 truncatedFrom?: number;
             }>;
             model: string;
@@ -44447,7 +44447,7 @@ export type GetInteractionResponses = {
             data: Array<{
                 object: 'embedding';
                 embedding: Array<number>;
-                index: number;
+                index?: number;
                 truncatedFrom?: number;
             }>;
             model: string;
@@ -62844,7 +62844,7 @@ export type MistralEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -62954,7 +62954,7 @@ export type MistralEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -63766,7 +63766,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -63876,7 +63876,7 @@ export type ModelRouterEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -64583,7 +64583,7 @@ export type OllamaEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -64693,7 +64693,7 @@ export type OllamaEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -65407,7 +65407,7 @@ export type OpenAiEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -65517,7 +65517,7 @@ export type OpenAiEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -82126,7 +82126,7 @@ export type VllmEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -82236,7 +82236,7 @@ export type VllmEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -82712,7 +82712,7 @@ export type ZhipuaiEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -82822,7 +82822,7 @@ export type ZhipuaiEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {

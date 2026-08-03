@@ -1073,7 +1073,10 @@ export class OpenAIStreamAdapter
       };
     }
 
-    const choice = chunk.choices[0];
+    // `choices` can be entirely absent (not just empty) on some
+    // OpenAI-compatible upstreams' usage-only or error-shaped chunks —
+    // reading [0] off it unguarded is a crash.
+    const choice = chunk.choices?.[0];
     if (!choice) {
       // If we have usage, this is the final chunk (OpenAI sends usage in a chunk with empty choices)
       return {

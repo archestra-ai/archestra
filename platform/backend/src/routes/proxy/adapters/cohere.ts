@@ -29,6 +29,7 @@ import {
 } from "@/types";
 import type { ToolCompressionStats as CompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { upstreamHttpError } from "./upstream-http-error";
 
 // =============================================================================
 // TYPE ALIASES
@@ -893,8 +894,9 @@ function createCohereClient(
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(
+          throw upstreamHttpError(
             `Cohere API error: ${response.status} - ${errorText}`,
+            response.status,
           );
         }
 
@@ -915,8 +917,9 @@ function createCohereClient(
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(
+          throw upstreamHttpError(
             `Error from Cohere API : ${response.status} - ${errorText}`,
+            response.status,
           );
         }
 

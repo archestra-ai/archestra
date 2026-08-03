@@ -27,6 +27,7 @@ import {
 import type { Minimax } from "@/types/llm-providers";
 import type { ToolCompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { upstreamHttpError } from "./upstream-http-error";
 
 // =============================================================================
 // TYPE ALIASES
@@ -91,7 +92,7 @@ class MinimaxClient {
         errorMessage += ` - ${errorText}`;
       }
 
-      throw new Error(errorMessage);
+      throw upstreamHttpError(errorMessage, response.status);
     }
 
     return response.json() as Promise<MinimaxResponse>;
@@ -115,8 +116,9 @@ class MinimaxClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
+      throw upstreamHttpError(
         `MiniMax streaming error: ${response.status} - ${errorText}`,
+        response.status,
       );
     }
 

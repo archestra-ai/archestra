@@ -324,7 +324,9 @@ export const openrouterAdapterFactory: LLMProvider<
 };
 
 function assertOpenrouterResponseHasOutput(response: OpenrouterResponse): void {
-  const choice = response.choices[0];
+  // OpenRouter deviates from the OpenAI schema on some error/edge payloads
+  // and omits `choices` entirely — reading [0] off it unguarded is a crash.
+  const choice = response.choices?.[0];
   if (!choice || choice.finish_reason !== "stop") {
     return;
   }
@@ -346,7 +348,7 @@ function assertOpenrouterStreamChunkHasOutput(
   state: StreamAccumulatorState,
   chunk: OpenrouterStreamChunk,
 ): void {
-  if (chunk.choices[0]?.finish_reason !== "stop") {
+  if (chunk.choices?.[0]?.finish_reason !== "stop") {
     return;
   }
 

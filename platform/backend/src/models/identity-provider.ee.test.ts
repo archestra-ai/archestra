@@ -776,6 +776,28 @@ describe("IdentityProviderModel", () => {
       expect(providerIds).toContain("Google");
       expect(providerIds).toContain("GitHub");
     });
+
+    test("serves the process-local cache until a provider write invalidates it", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+      const provider = await makeIdentityProvider(org.id, {
+        providerId: "Okta",
+      });
+
+      // Prime the cache, then insert behind the model's back: the cached
+      // list must be served (that's the point of the cache)...
+      expect(await IdentityProviderModel.findAllPublic()).toHaveLength(1);
+      await makeIdentityProvider(org.id, { providerId: "Google" });
+      expect(await IdentityProviderModel.findAllPublic()).toHaveLength(1);
+
+      // ...while a write through the model must invalidate, so the login
+      // page reflects provider changes immediately on this pod.
+      await IdentityProviderModel.delete(provider.id, org.id);
+      const fresh = await IdentityProviderModel.findAllPublic();
+      expect(fresh.map((p) => p.providerId)).toEqual(["Google"]);
+    });
   });
 
   describe("getTrustedAccountLinkingProviderIds", () => {

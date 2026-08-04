@@ -49,21 +49,22 @@ FROM ${NODE_IMAGE} AS node-builder
 # CVE-2026-33671, sigstore CVE-2026-48815, and undici CVE-2026-12151 (bundle
 # ships 6.27.0, which previously required a manual bundle swap on 11.17.0).
 # npm 11.18.0 was published 2026-06-29 and has cleared the 7-day release-age practice.
-# Overwrite bundled brace-expansion to patch CVE-2026-14257 (uncontrolled resource
-# consumption): the bundle ships 5.0.7 via minimatch 10.2.5, and no npm release carries
-# the fixed 5.0.8 — 11.18.0 is the last 11.x, while 12.0.0/12.0.1 still bundle 5.0.7 and
-# require Node >=22 (this stage is node:20-alpine). Same-major swap, API compatible:
-# minimatch 10.2.5 asks for ^5.0.5, and 5.0.8 keeps 5.0.7's `balanced-match: ^4.0.2`,
-# already satisfied by the bundled balanced-match 4.0.4. `npm pack` must run BEFORE the
-# old copy is removed: npm reaches brace-expansion through minimatch/glob, so deleting it
-# first leaves npm unable to run the very command that fetches the replacement.
+# Overwrite bundled brace-expansion to patch CVE-2026-14257 and then CVE-2026-69152
+# (both uncontrolled resource consumption): the bundle ships 5.0.7 via minimatch 10.2.5,
+# and no npm release carries the fixed 5.0.9 — 11.18.0 is the last 11.x, while
+# 12.0.0/12.0.1 still bundle 5.0.7 and require Node >=22 (this stage is node:20-alpine).
+# Same-major swap, API compatible: minimatch 10.2.5 asks for ^5.0.5, and 5.0.9 keeps
+# 5.0.7's `balanced-match: ^4.0.2`, already satisfied by the bundled balanced-match 4.0.4,
+# and still declares `node: 20 || >=22`. `npm pack` must run BEFORE the old copy is
+# removed: npm reaches brace-expansion through minimatch/glob, so deleting it first leaves
+# npm unable to run the very command that fetches the replacement.
 RUN npm install -g npm@11.18.0 && \
     cd /usr/local/lib/node_modules/npm/node_modules && \
-    npm pack brace-expansion@5.0.8 && \
+    npm pack brace-expansion@5.0.9 && \
     rm -rf brace-expansion && \
-    tar -xzf brace-expansion-5.0.8.tgz && \
+    tar -xzf brace-expansion-5.0.9.tgz && \
     mv package brace-expansion && \
-    rm brace-expansion-5.0.8.tgz
+    rm brace-expansion-5.0.9.tgz
 
 WORKDIR /opt/node-deps
 

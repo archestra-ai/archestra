@@ -1,5 +1,5 @@
 import { BUILT_IN_AGENT_IDS, E2eTestId } from "@archestra/shared";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -453,6 +453,15 @@ const advisorAgent = {
   builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
 };
 
+// The Tools section carries its own Auto/Custom tabs, so the subagent ones have
+// to be reached through their section.
+const subagentModeTab = (name: "Auto" | "Custom") => {
+  const section = screen
+    .getByRole("heading", { name: "Subagents" })
+    .closest("div") as HTMLElement;
+  return within(section).getByRole("tab", { name });
+};
+
 describe("AgentDialog delegation state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -584,6 +593,73 @@ describe("AgentDialog delegation state", () => {
         screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
       ).not.toBeChecked();
     });
+  });
+
+  it("keeps the advisor on when the subagent mode switches from Auto to Custom", async () => {
+    const user = userEvent.setup();
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    });
+    // Custom mode's list holds no advisor, so reading it after the switch is
+    // what would drop a setting the administrator never touched.
+    useAgentDelegationsMock.mockReturnValue({ data: [], isFetched: true });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={autoAgent}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
+    });
+
+    await user.click(subagentModeTab("Custom"));
+
+    expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
+  });
+
+  it("keeps the advisor off when the subagent mode switches from Custom to Auto", async () => {
+    const user = userEvent.setup();
+    const customAgent = { ...baseAgent, accessAllSubagents: false };
+    useProfileMock.mockReturnValue({ data: customAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isFetched: true });
+    // Auto mode reaches everything it does not exclude, so an empty exclusion
+    // set would otherwise turn the advisor on the moment the mode changes.
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={customAgent}
+      />,
+    );
+
+    const toggle = await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
+    expect(toggle).not.toBeChecked();
+
+    await user.click(subagentModeTab("Auto"));
+
+    expect(
+      screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
+    ).not.toBeChecked();
   });
 
   it("skips the delegation and subagent-exclusion syncs when neither set changed on save", async () => {

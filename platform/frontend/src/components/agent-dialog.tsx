@@ -1115,25 +1115,29 @@ export function AgentDialog({
     (id) => id !== advisorAgentId,
   ).length;
 
-  const handleAdvisorEnabledChange = (enabled: boolean) => {
+  const writeAdvisorEnabled = (enabled: boolean, autoMode: boolean) => {
     if (!advisorAgentId) return;
-    if (accessAllSubagents) {
-      setDisabledSubagentIds((ids) =>
-        enabled
-          ? ids.filter((id) => id !== advisorAgentId)
-          : ids.includes(advisorAgentId)
-            ? ids
-            : [...ids, advisorAgentId],
-      );
-      return;
+    const withAdvisor = (ids: string[]) =>
+      ids.includes(advisorAgentId) ? ids : [...ids, advisorAgentId];
+    const withoutAdvisor = (ids: string[]) =>
+      ids.filter((id) => id !== advisorAgentId);
+    if (autoMode) {
+      setDisabledSubagentIds(enabled ? withoutAdvisor : withAdvisor);
+    } else {
+      setSelectedDelegationTargetIds(enabled ? withAdvisor : withoutAdvisor);
     }
-    setSelectedDelegationTargetIds((ids) =>
-      enabled
-        ? ids.includes(advisorAgentId)
-          ? ids
-          : [...ids, advisorAgentId]
-        : ids.filter((id) => id !== advisorAgentId),
-    );
+  };
+
+  const handleAdvisorEnabledChange = (enabled: boolean) =>
+    writeAdvisorEnabled(enabled, accessAllSubagents);
+
+  // Each mode stores the advisor in its own list, so switching modes would read
+  // an unrelated value and appear to flip the switch on its own. Carry the
+  // current setting into the incoming mode's list instead.
+  const handleSubagentModeChange = (value: string) => {
+    const autoMode = value === "auto";
+    setAccessAllSubagents(autoMode);
+    writeAdvisorEnabled(advisorEnabled, autoMode);
   };
 
   // LLM Configuration: computed values and bidirectional auto-linking
@@ -2382,9 +2386,7 @@ export function AgentDialog({
                     <div className="space-y-2">
                       <Tabs
                         value={accessAllSubagents ? "auto" : "custom"}
-                        onValueChange={(value) =>
-                          setAccessAllSubagents(value === "auto")
-                        }
+                        onValueChange={handleSubagentModeChange}
                       >
                         <TabsList className="grid w-full grid-cols-2">
                           <TabsTrigger value="auto">Auto</TabsTrigger>
@@ -2450,11 +2452,12 @@ export function AgentDialog({
                               Consult the advisor
                             </Label>
                             <p className="text-xs text-muted-foreground">
-                              Lets this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"} ask a
-                              stronger model for a second opinion at the
-                              decisions that matter. Each consultation is billed
-                              at the advisor model&apos;s own rates.{" "}
+                              Keeps this{" "}
+                              {agentTypeDisplayName[agentType] || "agent"} on a
+                              fast, cheap model while it escalates the few
+                              decisions that shape the outcome to a stronger one
+                              — better answers than the cheap model alone, for
+                              less than running the strong one throughout.{" "}
                               <Link
                                 href={`/agents?edit=${advisorAgentId}`}
                                 className="underline underline-offset-4"

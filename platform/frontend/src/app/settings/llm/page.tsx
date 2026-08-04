@@ -274,11 +274,13 @@ export default function LlmSettingsPage() {
         title="Advisor"
         description={
           <>
-            Let an agent ask a stronger model for a second opinion at the
-            decisions that matter, so the rest of its work can run on a cheaper
-            one. Pick the advisor&apos;s model on the Advisor agent, then add it
-            as a subagent to the agents that should be able to consult it. Each
-            consultation is billed at the advisor model&apos;s own rates.
+            Keep your agents on a fast, cheap model and let them escalate the
+            few decisions that shape the outcome to a stronger one — better
+            answers than the cheap model alone, for less than running the strong
+            one throughout. Pick the advisor&apos;s model on the Advisor agent,
+            then turn on &quot;Consult the advisor&quot; for the agents that
+            should reach it. Each consultation is billed at the advisor
+            model&apos;s own rates.
           </>
         }
         control={

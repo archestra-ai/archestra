@@ -14,6 +14,7 @@ import {
   type OpenaiResponsesContext,
 } from "./openai-responses-translator";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import { toResponsesUsage } from "./responses-usage";
 
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 
@@ -337,7 +338,13 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       this.toSse({
         type: "response.completed",
         sequence_number: this.nextSequenceNumber(),
-        response: this.buildResponsesResponse(),
+        // The builder omits usage entirely for an unobserved turn, which is
+        // fine for the non-streaming body but not here: a terminal frame
+        // without numeric usage is silently dropped by the Responses parser.
+        response: {
+          ...this.buildResponsesResponse(),
+          usage: toResponsesUsage(this.state.usage),
+        },
       }),
     ].join("");
   }

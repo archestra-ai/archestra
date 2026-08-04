@@ -1318,6 +1318,163 @@ describe("auth routes", () => {
       expect(lastForwardedOrigin()).toBeNull();
     });
   });
+
+  /**
+   * better-auth's router (better-call) answers with a *bodyless* `Response`
+   * whenever it cannot dispatch a request — an unknown path, a path that only
+   * exists under another method, a trailing-slash or double-slash mismatch —
+   * and whenever it turns an unhandled error into a 500.
+   *
+   * Relaying that through `reply.send(null)` does not forward "no body":
+   * Fastify serializes the JSON literal `null`, a four-byte `application/json`
+   * body. It is valid JSON but not an object, so an OAuth client decoding a
+   * token response reports a type error against its own schema instead of the
+   * HTTP failure that actually happened — the Codex CLI aborts an MCP gateway
+   * login with `invalid type: null, expected struct StandardTokenResponse at
+   * line 1 column 4`, naming neither the status nor the cause.
+   */
+  describe("bodyless better-auth responses", () => {
+    test("the token endpoint never answers with the JSON literal `null`", async () => {
+      // Exactly what better-call returns when no route matches the request.
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(null, { status: 404, statusText: "Not Found" }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        payload: {
+          grant_type: "authorization_code",
+          client_id: "some-client",
+          code: "auth-code",
+          code_verifier: "a-code-verifier",
+        },
+      });
+
+      // The regression itself: a 4-byte `null` body is what breaks the client.
+      expect(response.body).not.toBe("null");
+      expect(response.rawPayload).toHaveLength(response.body.length);
+
+      // RFC 6749 §5.2 — a token-endpoint failure is a JSON *object*.
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ error: "invalid_request" });
+      expect(response.headers["cache-control"]).toBe("no-store");
+    });
+
+    test("an unhandled better-auth error becomes an OAuth server_error", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(null, {
+          status: 500,
+          statusText: "Internal Server Error",
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        payload: {
+          grant_type: "authorization_code",
+          client_id: "some-client",
+          code: "auth-code",
+          code_verifier: "a-code-verifier",
+        },
+      });
+
+      expect(response.body).not.toBe("null");
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({ error: "server_error" });
+    });
+
+    test("a bodyless response is never reported as success", async () => {
+      // A token endpoint must not claim success without a token, so a bodyless
+      // 2xx is surfaced as a server error rather than relayed as one.
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(null, { status: 200 }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        payload: {
+          grant_type: "authorization_code",
+          client_id: "some-client",
+          code: "auth-code",
+          code_verifier: "a-code-verifier",
+        },
+      });
+
+      expect(response.body).not.toBe("null");
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toMatchObject({ error: "server_error" });
+    });
+
+    test("the /api/auth catch-all forwards no body as no body", async () => {
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(null, { status: 404, statusText: "Not Found" }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/definitely-not-a-route",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.body).not.toBe("null");
+      expect(response.body).toBe("");
+    });
+
+    test("a bodyless response does not claim to carry JSON", async () => {
+      // better-call turns an `APIError` thrown without a body — better-auth's
+      // admin plugin and authorization middleware both do this — into a
+      // bodyless response that still declares `content-type: application/json`.
+      // Relaying that header with an empty body hands the client a response
+      // that contradicts itself, so `.json()` throws a parse error.
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(null, {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/admin/has-permission",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.body).toBe("");
+      expect(response.headers["content-type"]).toBeUndefined();
+    });
+
+    test("a real better-auth body is still relayed verbatim", async () => {
+      const tokenError = JSON.stringify({
+        error: "invalid_grant",
+        error_description: "invalid code",
+      });
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(tokenError, {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        payload: {
+          grant_type: "authorization_code",
+          client_id: "some-client",
+          code: "auth-code",
+          code_verifier: "a-code-verifier",
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.body).toBe(tokenError);
+    });
+  });
 });
 
 async function createAuthTestApp(): Promise<FastifyInstanceWithZod> {

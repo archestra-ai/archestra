@@ -1,3 +1,4 @@
+import { BUILT_IN_AGENT_IDS, E2eTestId } from "@archestra/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
@@ -429,6 +430,13 @@ const targetAgent = {
   name: "Target Agent",
 };
 
+const advisorAgent = {
+  ...baseAgent,
+  id: "00000000-0000-4000-8000-000000000003",
+  name: "Advisor",
+  builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+};
+
 describe("AgentDialog delegation state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -445,6 +453,67 @@ describe("AgentDialog delegation state", () => {
       data: [targetAgent],
       isFetched: true,
     });
+  });
+
+  it("offers a shortcut that adds the advisor as a subagent", async () => {
+    const user = userEvent.setup();
+    // The advisor ships with the platform, so an admin has no reason to look
+    // for it among agents their organization wrote.
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isFetched: true });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    const shortcut = await screen.findByTestId(
+      E2eTestId.AddAdvisorSubagentButton,
+    );
+    await user.click(shortcut);
+
+    // Adding it satisfies the shortcut, so it stops being offered.
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId(E2eTestId.AddAdvisorSubagentButton),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("omits the advisor shortcut when the advisor is already a subagent", async () => {
+    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentDelegationsMock.mockReturnValue({
+      data: [advisorAgent],
+      isFetched: true,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={baseAgent}
+      />,
+    );
+
+    // Anchor on the section itself, so the absence below is a real absence
+    // rather than a section that never rendered.
+    await waitFor(() => {
+      expect(screen.getByText("Subagents")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId(E2eTestId.AddAdvisorSubagentButton),
+    ).not.toBeInTheDocument();
   });
 
   it("skips the delegation and subagent-exclusion syncs when neither set changed on save", async () => {

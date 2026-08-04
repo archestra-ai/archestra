@@ -400,6 +400,16 @@ function SubagentsEditor({
     selectedAgentIds.includes(a.id),
   );
 
+  // The advisor is the one subagent worth reaching for by name: it ships with
+  // the platform, so an admin has no reason to expect it in a list of agents
+  // their organization wrote. Shown only until it is added, and only where
+  // subagents are being granted rather than taken away.
+  const advisor = filteredAgents.find(
+    (a) => a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR,
+  );
+  const showAddAdvisor =
+    tone === "delegate" && advisor && !selectedAgentIds.includes(advisor.id);
+
   return (
     <div className="flex flex-wrap gap-2">
       {selectedAgents.map((agent) => (
@@ -426,6 +436,18 @@ function SubagentsEditor({
             : undefined
         }
       />
+      {showAddAdvisor && advisor && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 px-3 gap-1.5 text-xs border-dashed text-muted-foreground"
+          onClick={() => handleToggle(advisor.id)}
+          data-testid={E2eTestId.AddAdvisorSubagentButton}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>Add Advisor</span>
+        </Button>
+      )}
     </div>
   );
 }

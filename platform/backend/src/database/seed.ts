@@ -217,6 +217,27 @@ export async function syncBuiltInAgents(): Promise<void> {
         continue;
       }
 
+      // Everything a deploy may reconcile on an agent that already exists is
+      // gathered first and written once, so one deploy produces one version
+      // rather than one per field it touched.
+      const updates: Partial<typeof schema.agentsTable.$inferInsert> = {};
+
+      // Carry a renamed or reworded built-in to organizations that already
+      // hold the row. The insert above runs once per organization, so without
+      // this an environment seeded by an earlier release keeps that release's
+      // name and description forever.
+      //
+      // Reconciled unconditionally rather than only while still pristine,
+      // because neither field is editable on a built-in agent — the update
+      // route accepts only config, prompt, model, credential, scope and teams
+      // — so a stored value can only ever be what a deploy put there. There is
+      // no admin intent to preserve, and nothing to detect drift against.
+      const renamed = existing.name !== builtInAgent.name;
+      if (renamed || existing.description !== builtInAgent.description) {
+        updates.name = builtInAgent.name;
+        updates.description = builtInAgent.description;
+      }
+
       // Migrate configs still sitting exactly on the old shipped default;
       // any other value is a deliberate admin choice and is left alone
       // (mirrors the legacy-system-prompt rewrite below).
@@ -227,24 +248,10 @@ export async function syncBuiltInAgents(): Promise<void> {
         existing.builtInAgentConfig.maxRounds ===
           DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS
       ) {
-        await db
-          .update(schema.agentsTable)
-          .set({
-            builtInAgentConfig: {
-              ...existing.builtInAgentConfig,
-              maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
-            },
-          })
-          .where(eq(schema.agentsTable.id, existing.id));
-        await AgentVersionModel.forkIfChangedBestEffort(existing.id);
-        logger.info(
-          {
-            builtInAgentId: builtInAgent.builtInAgentId,
-            organizationId: organization.id,
-          },
-          "Updated dual LLM main agent legacy maxRounds default",
-        );
-        continue;
+        updates.builtInAgentConfig = {
+          ...existing.builtInAgentConfig,
+          maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
+        };
       }
 
       if (
@@ -253,21 +260,37 @@ export async function syncBuiltInAgents(): Promise<void> {
           systemPrompt: existing.systemPrompt,
         })
       ) {
+        updates.systemPrompt = builtInAgent.systemPrompt;
+      }
+
+      if (Object.keys(updates).length > 0) {
         await db
           .update(schema.agentsTable)
-          .set({ systemPrompt: builtInAgent.systemPrompt })
+          .set(updates)
           .where(eq(schema.agentsTable.id, existing.id));
-        // A deploy rewriting a built-in prompt is a config change like any
-        // other. Forking it here attributes it to the deploy; leaving it
-        // unforked would attach it to whichever user edits the agent next.
+
+        // A delegation tool is named for its target, so a rename has to reach
+        // the tool rows too. `AgentModel.update` does this on the normal edit
+        // path; this one writes the table directly and has to do it itself.
+        if (renamed) {
+          await ToolModel.syncDelegationToolNames(
+            existing.id,
+            builtInAgent.name,
+          );
+        }
+
+        // A deploy rewriting a built-in is a config change like any other.
+        // Forking it here attributes it to the deploy; leaving it unforked
+        // would attach it to whichever user edits the agent next.
         await AgentVersionModel.forkIfChangedBestEffort(existing.id);
 
         logger.info(
           {
             builtInAgentId: builtInAgent.builtInAgentId,
             organizationId: organization.id,
+            fields: Object.keys(updates),
           },
-          "Updated built-in agent legacy system prompt",
+          "Reconciled built-in agent to its shipped definition",
         );
         continue;
       }

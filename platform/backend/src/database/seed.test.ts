@@ -27,6 +27,7 @@ import {
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import AgentVersionModel from "@/models/agent-version";
+import ToolModel from "@/models/tool";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
   BUILT_IN_SKILLS,
@@ -98,6 +99,45 @@ describe("syncBuiltInAgents", () => {
     expect(await AgentToolModel.findToolIdsByAgent(advisor?.id ?? "")).toEqual(
       [],
     );
+  });
+
+  test("carries a renamed or reworded built-in to an org that already has it", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await syncBuiltInAgents();
+
+    const seeded = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.ADVISOR,
+      organization.id,
+    );
+    // What an environment seeded by an earlier release looks like. Neither
+    // field is editable on a built-in, so a stale value can only come from a
+    // deploy that predates the current text.
+    await db
+      .update(schema.agentsTable)
+      .set({ name: "Advisor Agent", description: "an older description" })
+      .where(eq(schema.agentsTable.id, seeded?.id ?? ""));
+    const staleDelegation = await ToolModel.findOrCreateDelegationTool(
+      seeded?.id ?? "",
+    );
+    expect(staleDelegation.name).toBe("agent__advisor_agent");
+
+    await syncBuiltInAgents();
+
+    const reconciled = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.ADVISOR,
+      organization.id,
+    );
+    expect(reconciled?.name).toBe(BUILT_IN_AGENT_NAMES.ADVISOR);
+    expect(reconciled?.description).toBe(ADVISOR_AGENT_DESCRIPTION);
+    // A delegation tool is named for its target, so callers would otherwise
+    // keep reaching a name the agent no longer answers to.
+    const [delegationTool] = await db
+      .select({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, staleDelegation.id));
+    expect(delegationTool.name).toBe("agent__advisor");
   });
 
   test("seeds the dual LLM main agent with the current maxRounds default", async ({

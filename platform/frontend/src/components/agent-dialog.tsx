@@ -379,8 +379,15 @@ function SubagentsEditor({
   showCreateAction = true,
   tone = "delegate",
 }: SubagentsEditorProps) {
-  // Filter out current agent from available agents
-  const filteredAgents = availableAgents.filter((a) => a.id !== currentAgentId);
+  // Filter out the current agent, and the advisor: its own switch below owns
+  // that decision, and listing it here would offer a second way to change the
+  // same thing — one that reads as the opposite in Auto mode, where this list
+  // is what an agent may *not* delegate to.
+  const filteredAgents = availableAgents.filter(
+    (a) =>
+      a.id !== currentAgentId &&
+      a.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR,
+  );
 
   const handleToggle = (agentId: string) => {
     if (selectedAgentIds.includes(agentId)) {
@@ -399,16 +406,6 @@ function SubagentsEditor({
   const selectedAgents = filteredAgents.filter((a) =>
     selectedAgentIds.includes(a.id),
   );
-
-  // The advisor is the one subagent worth reaching for by name: it ships with
-  // the platform, so an admin has no reason to expect it in a list of agents
-  // their organization wrote. Shown only until it is added, and only where
-  // subagents are being granted rather than taken away.
-  const advisor = filteredAgents.find(
-    (a) => a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR,
-  );
-  const showAddAdvisor =
-    tone === "delegate" && advisor && !selectedAgentIds.includes(advisor.id);
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -436,18 +433,6 @@ function SubagentsEditor({
             : undefined
         }
       />
-      {showAddAdvisor && advisor && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-3 gap-1.5 text-xs border-dashed text-muted-foreground"
-          onClick={() => handleToggle(advisor.id)}
-          data-testid={E2eTestId.AddAdvisorSubagentButton}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>Add Advisor</span>
-        </Button>
-      )}
     </div>
   );
 }
@@ -1091,6 +1076,65 @@ export function AgentDialog({
       );
     }
   }, [open, agentId, currentExcludedSubagentIds, subagentExclusionsFetched]);
+
+  const advisorAgentId = allInternalAgents.find(
+    (a) => a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR,
+  )?.id;
+
+  // Consulting the advisor is off until someone turns it on, and a new agent
+  // starts in Auto mode where every accessible agent is reachable. Seeding the
+  // disabled set is what makes the switch's "off" true rather than decorative.
+  const advisorSeededRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      advisorSeededRef.current = false;
+      return;
+    }
+    if (agentId || !advisorAgentId || advisorSeededRef.current) return;
+    advisorSeededRef.current = true;
+    setDisabledSubagentIds((ids) =>
+      ids.includes(advisorAgentId) ? ids : [...ids, advisorAgentId],
+    );
+  }, [open, agentId, advisorAgentId]);
+
+  // One switch over two representations: Auto mode reaches every agent unless
+  // excluded, Custom mode reaches only what is listed. The reader should not
+  // have to know which is in play to decide whether the advisor is on.
+  const advisorEnabled = advisorAgentId
+    ? accessAllSubagents
+      ? !disabledSubagentIds.includes(advisorAgentId)
+      : selectedDelegationTargetIds.includes(advisorAgentId)
+    : false;
+
+  // The advisor is kept out of both lists, so it must be kept out of their
+  // counts too — a count that includes something invisible reads as a bug.
+  const delegationTargetCount = selectedDelegationTargetIds.filter(
+    (id) => id !== advisorAgentId,
+  ).length;
+  const disabledSubagentCount = disabledSubagentIds.filter(
+    (id) => id !== advisorAgentId,
+  ).length;
+
+  const handleAdvisorEnabledChange = (enabled: boolean) => {
+    if (!advisorAgentId) return;
+    if (accessAllSubagents) {
+      setDisabledSubagentIds((ids) =>
+        enabled
+          ? ids.filter((id) => id !== advisorAgentId)
+          : ids.includes(advisorAgentId)
+            ? ids
+            : [...ids, advisorAgentId],
+      );
+      return;
+    }
+    setSelectedDelegationTargetIds((ids) =>
+      enabled
+        ? ids.includes(advisorAgentId)
+          ? ids
+          : [...ids, advisorAgentId]
+        : ids.filter((id) => id !== advisorAgentId),
+    );
+  };
 
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
@@ -2365,7 +2409,7 @@ export function AgentDialog({
                           </ul>
                           <div className="space-y-1.5">
                             <p className="text-sm text-muted-foreground">
-                              Disabled subagents ({disabledSubagentIds.length})
+                              Disabled subagents ({disabledSubagentCount})
                             </p>
                             <SubagentsEditor
                               availableAgents={allInternalAgents}
@@ -2386,13 +2430,38 @@ export function AgentDialog({
                             {agentTypeDisplayName[agentType] || "agent"}.
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Subagents ({selectedDelegationTargetIds.length})
+                            Subagents ({delegationTargetCount})
                           </p>
                           <SubagentsEditor
                             availableAgents={allInternalAgents}
                             selectedAgentIds={selectedDelegationTargetIds}
                             onSelectionChange={setSelectedDelegationTargetIds}
                             currentAgentId={agent?.id}
+                          />
+                        </div>
+                      )}
+                      {/* Outside the Auto/Custom split on purpose: whether this
+                        agent can consult the advisor is one decision, even
+                        though the two modes record it differently. */}
+                      {advisorAgentId && (
+                        <div className="flex items-center justify-between gap-4 border-t pt-4">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="consult-advisor">
+                              Consult the advisor
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Lets this{" "}
+                              {agentTypeDisplayName[agentType] || "agent"} ask a
+                              stronger model for a second opinion at the
+                              decisions that matter. Each consultation is billed
+                              at the advisor model&apos;s own rates.
+                            </p>
+                          </div>
+                          <Switch
+                            id="consult-advisor"
+                            checked={advisorEnabled}
+                            onCheckedChange={handleAdvisorEnabledChange}
+                            data-testid={E2eTestId.ConsultAdvisorSwitch}
                           />
                         </div>
                       )}

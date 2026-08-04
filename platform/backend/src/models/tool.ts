@@ -1787,7 +1787,7 @@ class ToolModel {
       );
       if (toolIds.length === 0) continue;
       const agentIds =
-      await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
+        await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }

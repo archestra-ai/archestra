@@ -349,7 +349,23 @@ vi.mock("@/components/ui/select", () => ({
 }));
 
 vi.mock("@/components/ui/switch", () => ({
-  Switch: () => null,
+  // A real checkbox rather than null: the advisor toggle's checked state is
+  // the behaviour under test, and a stub renders it unassertable.
+  Switch: ({
+    checked,
+    onCheckedChange,
+    ...props
+  }: {
+    checked?: boolean;
+    onCheckedChange?: (checked: boolean) => void;
+  } & React.InputHTMLAttributes<HTMLInputElement>) => (
+    <input
+      type="checkbox"
+      checked={checked ?? false}
+      onChange={(e) => onCheckedChange?.(e.target.checked)}
+      {...props}
+    />
+  ),
 }));
 
 vi.mock("@/components/ui/textarea", () => ({
@@ -455,11 +471,12 @@ describe("AgentDialog delegation state", () => {
     });
   });
 
-  it("offers a shortcut that adds the advisor as a subagent", async () => {
+  it("turns the advisor on in Custom mode by adding it as a subagent", async () => {
     const user = userEvent.setup();
-    // The advisor ships with the platform, so an admin has no reason to look
-    // for it among agents their organization wrote.
-    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+    useProfileMock.mockReturnValue({
+      data: { ...baseAgent, accessAllSubagents: false },
+      refetch: vi.fn(),
+    });
     useDelegationTargetAgentsMock.mockReturnValue({
       data: [targetAgent, advisorAgent],
     });
@@ -470,30 +487,28 @@ describe("AgentDialog delegation state", () => {
         open={true}
         onOpenChange={vi.fn()}
         agentType="agent"
-        agent={baseAgent}
+        agent={{ ...baseAgent, accessAllSubagents: false }}
       />,
     );
 
-    const shortcut = await screen.findByTestId(
-      E2eTestId.AddAdvisorSubagentButton,
-    );
-    await user.click(shortcut);
+    const toggle = await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
+    expect(toggle).not.toBeChecked();
 
-    // Adding it satisfies the shortcut, so it stops being offered.
+    await user.click(toggle);
+
     await waitFor(() => {
-      expect(
-        screen.queryByTestId(E2eTestId.AddAdvisorSubagentButton),
-      ).not.toBeInTheDocument();
+      expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
     });
   });
 
-  it("omits the advisor shortcut when the advisor is already a subagent", async () => {
-    useProfileMock.mockReturnValue({ data: baseAgent, refetch: vi.fn() });
+  it("keeps the advisor out of the subagent lists, so only its switch offers it", async () => {
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
     useDelegationTargetAgentsMock.mockReturnValue({
       data: [targetAgent, advisorAgent],
     });
-    useAgentDelegationsMock.mockReturnValue({
-      data: [advisorAgent],
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [advisorAgent.id] },
       isFetched: true,
     });
 
@@ -502,18 +517,73 @@ describe("AgentDialog delegation state", () => {
         open={true}
         onOpenChange={vi.fn()}
         agentType="agent"
-        agent={baseAgent}
+        agent={autoAgent}
       />,
     );
 
-    // Anchor on the section itself, so the absence below is a real absence
-    // rather than a section that never rendered.
+    // The switch is the single place the advisor is offered; listing it as a
+    // disabled subagent as well would mean two controls for one decision.
     await waitFor(() => {
-      expect(screen.getByText("Subagents")).toBeInTheDocument();
+      expect(
+        screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
+      ).toBeInTheDocument();
     });
-    expect(
-      screen.queryByTestId(E2eTestId.AddAdvisorSubagentButton),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(advisorAgent.name)).not.toBeInTheDocument();
+    expect(screen.getByText(/Disabled subagents \(0\)/)).toBeInTheDocument();
+  });
+
+  it("reads as on in Auto mode only while the advisor is not disabled", async () => {
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    // Auto mode reaches every accessible agent, so the advisor being absent
+    // from the disabled set is what "on" means there.
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={autoAgent}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
+    });
+  });
+
+  it("reads as off in Auto mode while the advisor sits in the disabled set", async () => {
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [advisorAgent.id] },
+      isFetched: true,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={autoAgent}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
+      ).not.toBeChecked();
+    });
   });
 
   it("skips the delegation and subagent-exclusion syncs when neither set changed on save", async () => {

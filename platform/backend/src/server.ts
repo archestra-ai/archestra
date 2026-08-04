@@ -83,6 +83,7 @@ import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
+import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -1490,6 +1491,10 @@ const startWebServer = async () => {
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
+
+    // If the previous container instance died abnormally (e.g. OOMKilled),
+    // it could not report its own death — surface it now. Fire-and-forget.
+    void reportAbnormalPreviousTermination();
 
     // Optional dedicated listener aliasing the MS Teams webhook on its own
     // port (see startPublicEndpointsServer).

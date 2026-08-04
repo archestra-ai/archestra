@@ -1,3 +1,4 @@
+import { ApiError } from "@archestra/shared";
 import type { SecretStorageType } from "@/types";
 
 /**
@@ -5,6 +6,17 @@ import type { SecretStorageType } from "@/types";
  * Returns only the Vault response details (status code and errors array)
  */
 export function extractVaultErrorMessage(error: unknown): string {
+  // An already-wrapped ApiError carries no Vault `.response`: its detail is
+  // the original error chained as `cause`, or failing that its own message.
+  // Without this, a wrapped error flattens to "Connection failed" at every
+  // boundary that re-extracts (e.g. ensureInitialized re-wrapping a login
+  // failure).
+  if (error instanceof ApiError) {
+    return error.cause !== undefined
+      ? extractVaultErrorMessage(error.cause)
+      : error.message;
+  }
+
   const vaultErr = error as {
     response?: { statusCode?: number; body?: { errors?: string[] } };
   };

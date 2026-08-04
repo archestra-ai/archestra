@@ -9,6 +9,7 @@ import {
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
+import InteractionDeltaManager from "@/models/interaction-delta-manager";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -476,6 +477,21 @@ describe("interaction routes", () => {
       response: anthropicResp,
     });
 
+    // Sessions endpoint derives its preview from the reconstructed request —
+    // the raw request body itself is never returned by the listing (T-1015:
+    // shipping full bodies OOM-killed the platform container). Runs FIRST, on
+    // a cold delta cache, so the preview provably comes from DB
+    // reconstruction rather than tip state warmed by the writes above.
+    InteractionDeltaManager.reset();
+    const sessions = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=10&offset=0&sessionId=route-delta-session",
+    });
+    expect(sessions.statusCode).toBe(200);
+    const sessionRow = sessions.json().data[0];
+    expect(sessionRow.lastUserMessagePreview).toBe("second message");
+    expect(sessionRow).not.toHaveProperty("lastInteractionRequest");
+
     // Detail endpoint reconstructs the full request and passes response schema.
     const detail = await app.inject({
       method: "GET",
@@ -494,16 +510,6 @@ describe("interaction routes", () => {
       .json()
       .data.find((i: { id: string }) => i.id === tip.id);
     expect(tipRow.request.messages).toEqual(fullMessages);
-
-    // Sessions endpoint reconstructs the last interaction request.
-    const sessions = await app.inject({
-      method: "GET",
-      url: "/api/interactions/sessions?limit=10&offset=0&sessionId=route-delta-session",
-    });
-    expect(sessions.statusCode).toBe(200);
-    expect(sessions.json().data[0].lastInteractionRequest.messages).toEqual(
-      fullMessages,
-    );
   });
 
   test("filters the sessions endpoint by client (external_agent_id)", async ({

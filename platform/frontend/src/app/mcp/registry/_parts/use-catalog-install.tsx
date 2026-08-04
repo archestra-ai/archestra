@@ -215,7 +215,12 @@ export function useCatalogInstall(opts?: {
           if (server) {
             if (server.localInstallationStatus === "success") {
               if (!restartingServerIds.has(serverId)) {
-                toast.success(`Successfully installed ${server.name}`);
+                const catalogName = catalogItems?.find(
+                  (item) => item.id === server.catalogId,
+                )?.name;
+                toast.success(
+                  `Successfully installed ${catalogName ?? server.name}`,
+                );
               }
               // Force immediate deployment status refresh via WebSocket
               websocketService.send({
@@ -268,6 +273,7 @@ export function useCatalogInstall(opts?: {
     restartingServerIds,
     queryClient,
     firstInstallationServerIds,
+    catalogItems,
   ]);
 
   // Resume polling for pending installations after page refresh

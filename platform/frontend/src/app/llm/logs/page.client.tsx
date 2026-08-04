@@ -131,7 +131,6 @@ export default function LlmProxyLogsPage({
   initialData,
 }: {
   initialData?: {
-    interactions: archestraApiTypes.GetInteractionsResponses["200"];
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
@@ -148,7 +147,6 @@ function SessionsTable({
   initialData,
 }: {
   initialData?: {
-    interactions: archestraApiTypes.GetInteractionsResponses["200"];
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {

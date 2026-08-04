@@ -1,7 +1,7 @@
 import { E2eTestId } from "@archestra/shared";
 import type { Page } from "@playwright/test";
 import { goToPage } from "../fixtures";
-import { waitForElementWithReload } from "../utils";
+import { openAgentRowMenu, waitForElementWithReload } from "../utils";
 import { expect, test } from "./api-fixtures";
 
 // One shared dialog (AgentVersionHistoryDialog) serves agents, MCP gateways,
@@ -50,8 +50,8 @@ test("browses, compares, and restores an agent version from the row menu", async
 
     await goToPage(page, "/agents");
 
-    // The row menu pattern from agents.spec.ts: names are CSS-truncated, so
-    // the full string lives on the title attribute, not in visible text.
+    // Names are CSS-truncated, so the full string lives on the title
+    // attribute, not in visible text.
     const nameCell = page
       .getByTestId(E2eTestId.AgentsTable)
       .getByTitle(AGENT_NAME, { exact: true });
@@ -60,11 +60,7 @@ test("browses, compares, and restores an agent version from the row menu", async
       intervals: [2000, 3000, 5000],
       checkEnabled: false,
     });
-    const row = page
-      .getByTestId(E2eTestId.AgentsTable)
-      .locator("tr")
-      .filter({ has: page.getByTitle(AGENT_NAME, { exact: true }) });
-    await row.getByRole("button", { name: /more actions/i }).click();
+    await openAgentRowMenu(page, AGENT_NAME);
     await page
       .getByTestId(`${E2eTestId.AgentVersionHistoryButton}-${AGENT_NAME}`)
       .click();
@@ -77,7 +73,7 @@ test("browses, compares, and restores an agent version from the row menu", async
       dialog.getByRole("heading", { name: "Version 2" }),
     ).toBeVisible();
     await expect(
-      dialog.getByRole("button", { name: /v2/ }).getByText("Current"),
+      dialog.getByRole("button", { name: /^v2\b/ }).getByText("Current"),
     ).toBeVisible();
 
     // Compare v2 against v1: the system prompt is what moved.
@@ -86,7 +82,7 @@ test("browses, compares, and restores an agent version from the row menu", async
 
     // Restore v1. It lands as a new head (v3) — the history is never
     // rewritten — and the preview jumps to the version just created.
-    await dialog.getByRole("button", { name: /v1/ }).click();
+    await dialog.getByRole("button", { name: /^v1\b/ }).click();
     await dialog.getByRole("button", { name: "Restore this version" }).click();
     await page.getByRole("button", { name: "Restore version 1" }).click();
 
@@ -94,7 +90,7 @@ test("browses, compares, and restores an agent version from the row menu", async
       dialog.getByRole("heading", { name: "Version 3" }),
     ).toBeVisible({ timeout: 15_000 });
     await expect(
-      dialog.getByRole("button", { name: /v3/ }).getByText("Current"),
+      dialog.getByRole("button", { name: /^v3\b/ }).getByText("Current"),
     ).toBeVisible();
   } finally {
     await deleteAgent(request, agent.id);
@@ -139,8 +135,8 @@ test("opens an MCP gateway's version history from its row button", async ({
 
     const dialog = versionHistoryDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /v2/ })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /v1/ })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /^v2\b/ })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /^v1\b/ })).toBeVisible();
   } finally {
     await deleteAgent(request, gateway.id);
   }
@@ -180,8 +176,8 @@ test("opens an LLM proxy's version history from its row button", async ({
 
     const dialog = versionHistoryDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /v2/ })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: /v1/ })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /^v2\b/ })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /^v1\b/ })).toBeVisible();
   } finally {
     await deleteAgent(request, proxy.id);
   }

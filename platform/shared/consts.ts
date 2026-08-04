@@ -1,3 +1,41 @@
+/**
+ * Loopback host every self-directed dial names — the frontend server reaching
+ * the backend in the same container, and the backend reaching its own LLM
+ * proxy and MCP gateway.
+ *
+ * It is an address literal, not `localhost`, on purpose. In production the API
+ * binds IPv4 only (`api.host = "0.0.0.0"` in the backend config), so it never
+ * has an IPv6 listener — while `localhost` resolves to `::1` FIRST:
+ * getaddrinfo applies RFC 6724 precedence no matter how /etc/hosts is ordered,
+ * and musl (the Alpine runtime image) compiles that table in with no
+ * /etc/gai.conf to retune it. Dialing the name therefore always targets a dead
+ * address first. Clients with Happy Eyeballs recover on the second attempt but
+ * pay for the refused one (~57ms per new connection, measured in the quickstart
+ * image) and log `ECONNREFUSED ::1:9000`; clients without it — busybox wget, or
+ * Node started with `--no-network-family-autoselection` — simply fail. That is
+ * the `::1` noise reported in issues #4917 and #6933.
+ *
+ * Name the address, not the name: it is unambiguous in every environment the
+ * platform runs in and no resolver can reorder it.
+ */
+export const LOOPBACK_HOST = "127.0.0.1";
+
+/**
+ * Where the backend API is reachable from the frontend server when
+ * `ARCHESTRA_INTERNAL_API_BASE_URL` is not set. Both processes always share a
+ * container — the unified image runs them under one supervisord, and the Helm
+ * chart exposes ports 3000 and 9000 on a single container — so the loopback
+ * literal is correct everywhere.
+ *
+ * That variable moves the runtime consumers (the frontend proxy, the generated
+ * API client, lib/config). It does NOT move the Next.js `rewrites()`
+ * destination, which this constant governs alone: with `output: "standalone"`
+ * the config is evaluated during `next build` and the resolved destination is
+ * frozen into `.next/routes-manifest.json`, where no runtime environment can
+ * reach it.
+ */
+export const DEFAULT_INTERNAL_API_BASE_URL = `http://${LOOPBACK_HOST}:9000`;
+
 /** Default app name used as fallback when organization.appName is not configured */
 export const DEFAULT_APP_NAME = "Archestra";
 export const DEFAULT_APP_FULL_NAME = "Archestra.AI";

@@ -1,3 +1,4 @@
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
@@ -32,7 +33,8 @@ export function proxy(req: NextRequest) {
 
       // Create the rewritten request with modified headers
       const backendUrl =
-        process.env.ARCHESTRA_INTERNAL_API_BASE_URL || "http://localhost:9000";
+        process.env.ARCHESTRA_INTERNAL_API_BASE_URL ||
+        DEFAULT_INTERNAL_API_BASE_URL;
       const backendRequestUrl = new URL(req.nextUrl.pathname, backendUrl);
       backendRequestUrl.search = req.nextUrl.search;
 

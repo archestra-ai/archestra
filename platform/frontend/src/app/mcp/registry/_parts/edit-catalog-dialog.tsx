@@ -2,11 +2,13 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { Check, Loader2, ShieldAlert, ShieldX } from "lucide-react";
 import { useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DialogFooter, DialogStickyFooter } from "@/components/ui/dialog";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   CATALOG_NAME_CONFLICT_CODE,
+  CATALOG_STALE_WRITE_CODE,
   getCatalogMutationErrorCode,
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE,
   useApproveCatalogItemImage,
@@ -161,6 +163,19 @@ export function EditCatalogContent({
                   ? error.message
                   : "An MCP server with this name already exists in this organization.",
             });
+          }
+          // Someone else moved the row. The form deliberately refuses to
+          // re-hydrate while dirty, so the token it is holding is spent and
+          // every further save from this dialog would 409 the same way.
+          // Clearing it makes the next Save an explicit overwrite — the user
+          // keeps their work and has a one-click way forward, having been told
+          // what they are about to overwrite (toast copy lives in the mutation
+          // hook, which already invalidated the cached item).
+          if (getCatalogMutationErrorCode(error) === CATALOG_STALE_WRITE_CODE) {
+            setExpectedRevision(null);
+            toast.error(
+              "Someone else changed this server while you were editing. Your changes are still here — save again to overwrite theirs.",
+            );
           }
         },
       },

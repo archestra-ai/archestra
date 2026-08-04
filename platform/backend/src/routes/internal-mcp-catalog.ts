@@ -735,15 +735,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // Optimistic-concurrency gate, and the ONLY staleness check on this
-      // route. It sits before any side effect on purpose: the handler below
-      // commits a rename cascade and creates external secrets long before it
-      // reaches the row write, so refusing later would leave installs renamed
-      // and secrets rotated on a save the caller was told was rejected. Refuse
-      // here, while nothing has happened yet, and from this point the request
-      // is committing. (`renameCascade` re-checks under its own write because
-      // it is the first side effect and rolls back atomically; nothing after
-      // it does.)
+      // Optimistic-concurrency gate. It sits before any side effect on
+      // purpose: the handler below commits a rename cascade and creates
+      // external secrets long before it reaches the row write, so this is the
+      // one place a stale save can be refused with nothing yet applied.
+      // It is not the only staleness check, though — the gate is a
+      // check-then-act and the window after it is not empty, so both
+      // `renameCascade` and the final row update re-check under their own
+      // writes. Those later refusals can leave earlier side effects applied;
+      // see the comment on the row update for why that trade is the right one.
       if (
         expectedRevision !== undefined &&
         originalCatalogItem.revision !== expectedRevision
@@ -874,6 +874,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // cascade (catalog → install names → tool slugs → limits) with zero
       // K8s interaction, since deployment identity is frozen. App catalogs
       // never get here (name is app-owned and stripped above).
+      //
+      // The cascade's own write advances the revision, so the token the client
+      // sent describes a row that no longer exists by the time the generic
+      // update below runs. Carry the post-cascade revision forward as that
+      // write's token instead.
+      let postRenameRevision: number | undefined;
       const newCatalogName = restBody.name;
       if (
         newCatalogName !== undefined &&
@@ -914,7 +920,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           restBody.deploymentSpecYaml !== undefined
             ? restBody.deploymentSpecYaml
             : originalCatalogItemForGate.deploymentSpecYaml;
-        await InternalMcpCatalogModel.renameCascade({
+        postRenameRevision = await InternalMcpCatalogModel.renameCascade({
           id,
           newName: newCatalogName,
           flagReinstallRequired:
@@ -1271,14 +1277,28 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         originalCatalogItem.serverType === "local" &&
         mcpServerRuntimeManager.isEnabled;
 
-      // Update the catalog item. No `expectedRevision` here: the gate at the
-      // top of the handler already refused a stale save, and re-checking now
-      // could only refuse a request that has committed its rename cascade and
-      // secret writes — reporting a conflict while leaving those applied.
+      // Compare-and-set the row write as well. The gate at the top of the
+      // handler refuses a stale save before any side effect, but it is a
+      // check-then-act: the startup adopt await, the name-conflict query and
+      // the secret-manager round trips all run between it and this write, so
+      // two saves built on the same revision can both clear the gate and the
+      // second would silently overwrite the first.
+      //
+      // This is a trade, not a free win. A refusal here fires after the rename
+      // cascade committed and after `updateSecret` rewrote the shared secret
+      // bag in place, so a save reported as rejected may have already rotated
+      // live credentials — the retry re-applies the retrying caller's values
+      // but does not restore what it replaced. That is accepted over the
+      // alternative: without this check the second save silently reverts every
+      // field the first one changed, with no signal to either admin.
       const catalogItem = await withCatalogTeamFkErrorMapped(() =>
-        InternalMcpCatalogModel.update(id, restBody),
+        InternalMcpCatalogModel.update(id, restBody, {
+          expectedRevision: postRenameRevision ?? expectedRevision,
+        }),
       );
 
+      // A stale token throws 409 from the model, which disambiguates it from a
+      // deleted row itself; null here means the item is genuinely gone.
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
       }

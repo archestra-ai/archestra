@@ -120,7 +120,11 @@ Every entry carries a `revision` that increments on each edit. Background work �
 
 A refused write returns `409` with `internal_code: "catalog_stale_write"`. Re-read the entry and retry with its new revision — retrying with the old one fails again.
 
+Archestra applies a rename before the rest of the save. If the entry moves on in between, the new name sticks. The `409` still comes back, so re-read and retry to apply the rest.
+
 Omit `expectedRevision` to keep last-writer-wins. The registry UI sends it for you when you edit an entry, save its deployment YAML, or reset that YAML to the default.
+
+A refused save in the edit form keeps your changes and warns you. Save again to overwrite the other admin's version. The YAML editor offers **Discard mine & reload** instead — that drops your text and loads theirs.
 
 ## Uninstalling and Restoring
 

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -198,6 +198,51 @@ describe("PUT /api/internal_mcp_catalog/:id — optimistic concurrency", () => {
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
     expect(row.name).toBe("cas-cascade-gate");
+  });
+
+  test("a save that goes stale AFTER the gate is still refused at the row write", async () => {
+    const catalog = await createCatalog({
+      name: "cas-window",
+      serverType: "local",
+      localConfig: { command: "node" },
+    });
+    const current = await revisionOf(catalog.id);
+
+    // The gate is a check-then-act: the startup adopt await, the name-conflict
+    // query and the secret-manager round trips all run between it and the row
+    // write, so two saves built on the same revision can both clear it. Land
+    // the competing write inside that window — without a compare-and-set on
+    // the row write this request returns 200 and silently reverts "theirs".
+    const realUpdate = InternalMcpCatalogModel.update.bind(
+      InternalMcpCatalogModel,
+    );
+    vi.spyOn(InternalMcpCatalogModel, "update").mockImplementationOnce(
+      async (id, values, opts) => {
+        await db
+          .update(schema.internalMcpCatalogTable)
+          .set({
+            description: "theirs",
+            revision: sql`${schema.internalMcpCatalogTable.revision} + 1`,
+          })
+          .where(eq(schema.internalMcpCatalogTable.id, id));
+        return realUpdate(id, values, opts);
+      },
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: { description: "mine", expectedRevision: current },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.internal_code).toBe("catalog_stale_write");
+
+    const [row] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    expect(row.description).toBe("theirs");
   });
 
   test("omitting expectedRevision keeps last-writer-wins", async () => {

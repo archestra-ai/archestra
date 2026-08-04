@@ -221,8 +221,13 @@ export function useUpdateInternalMcpCatalogItem() {
       if (code === CATALOG_STALE_WRITE_CODE) {
         // Someone else moved the row. Refresh the cached item so reopening the
         // dialog shows their version rather than the one this save was built
-        // on, then let the toast below carry the backend's explanation.
+        // on, then leave the wording to the caller: the backend's message names
+        // raw revision numbers, and the way out differs per dialog (the YAML
+        // editor offers a reload, the edit form an explicit overwrite). Only
+        // callers that send `expectedRevision` can ever see this code, and both
+        // of them surface it themselves.
         queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+        return;
       }
       toast.error(
         error instanceof Error

@@ -80,6 +80,11 @@ test("pulls new content when the source commit moved", async ({
   const v2 = await SkillVersionModel.findBySkillAndVersion(skill.id, 2);
   const files = await SkillVersionModel.findFiles(v2?.id ?? "");
   expect(files.map((f) => f.content)).toEqual(["# A v2"]);
+  // the fork records the commit it came from, so the history can link out to
+  // the exact upstream tree. The seeded v1 predates the pull and has none.
+  expect(v2?.sourceCommit).toBe(STUB_COMMIT_SHA);
+  const v1 = await SkillVersionModel.findBySkillAndVersion(skill.id, 1);
+  expect(v1?.sourceCommit).toBeNull();
 });
 
 test("stamps lastSyncedAt without forking when the commit is unchanged", async ({

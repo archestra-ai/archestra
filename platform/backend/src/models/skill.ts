@@ -279,6 +279,12 @@ class SkillModel {
       teamIds?: string[];
       /** Environments the skill is restricted to; empty/omitted = every environment. */
       environmentIds?: string[];
+      /**
+       * Git commit the initial bytes came from, stamped on version 1 as
+       * provenance. Passed only by the GitHub import; see `updateWithFiles`
+       * for why it is not read off `skill.sourceCommit`.
+       */
+      versionSourceCommit?: string;
     },
     tx?: Transaction,
   ): Promise<Skill | null> {
@@ -325,6 +331,7 @@ class SkillModel {
           files: versionFiles,
         }),
         files: versionFiles,
+        sourceCommit: params.versionSourceCommit,
       });
 
       return skill;
@@ -362,6 +369,15 @@ class SkillModel {
     /** Replaces the environment assignments; [] clears them (every environment). */
     environmentIds?: string[];
     expectedLatestVersion?: number;
+    /**
+     * Git commit the new bytes came from, stamped on the forked version as
+     * provenance (ignored when the payload is unchanged and no version forks).
+     * Only the GitHub sync passes one. It is deliberately explicit rather than
+     * read off `skill.sourceCommit`: built-in skills store a content hash in
+     * that column, so an implicit read would stamp fake SHAs on every
+     * built-in reset and seed-time refresh.
+     */
+    versionSourceCommit?: string;
   }): Promise<Skill | null> {
     return await withDbTransaction(async (tx) => {
       const [skill] = await tx
@@ -466,6 +482,7 @@ class SkillModel {
           content: skill.content,
           contentHash,
           files: versionFiles,
+          sourceCommit: params.versionSourceCommit,
         });
         const [bumped] = await tx
           .update(schema.skillsTable)

@@ -1521,6 +1521,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             files: item.files,
             teamIds,
+            // version 1 is exactly what the repo held at this commit.
+            versionSourceCommit: item.sourceCommit,
           }),
         );
         if (!skill) {

@@ -60,6 +60,8 @@ class SkillVersionModel {
       content: string;
       contentHash: string;
       files: VersionFileInput[];
+      /** Commit these bytes were pulled from; only GitHub import/sync sets it. */
+      sourceCommit?: string | null;
     },
   ): Promise<SkillVersion> {
     const [version] = await tx
@@ -69,6 +71,7 @@ class SkillVersionModel {
         version: params.version,
         content: params.content,
         contentHash: params.contentHash,
+        sourceCommit: params.sourceCommit ?? null,
       })
       .returning();
     if (!version) {
@@ -196,5 +199,6 @@ const skillVersionMetadataColumns = {
   skillId: schema.skillVersionsTable.skillId,
   version: schema.skillVersionsTable.version,
   contentHash: schema.skillVersionsTable.contentHash,
+  sourceCommit: schema.skillVersionsTable.sourceCommit,
   createdAt: schema.skillVersionsTable.createdAt,
 };

@@ -76354,6 +76354,7 @@ export type GetSkillVersionsResponses = {
             skillId: string | null;
             version: number;
             contentHash: string;
+            sourceCommit: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -76454,6 +76455,7 @@ export type GetSkillVersionResponses = {
         version: number;
         content: string;
         contentHash: string;
+        sourceCommit: string | null;
         createdAt: string;
         files: Array<{
             id: string;

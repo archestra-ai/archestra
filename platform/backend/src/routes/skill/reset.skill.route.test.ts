@@ -1,5 +1,5 @@
 import { syncBuiltInSkills } from "@/database/seed";
-import { SkillFileModel, SkillModel } from "@/models";
+import { SkillFileModel, SkillModel, SkillVersionModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -79,6 +79,35 @@ describe("POST /api/skills/:id/reset", () => {
 
     const files = await SkillFileModel.findBySkillId(id);
     expect(files).toHaveLength(BASE_SKILL.files.length);
+  });
+
+  test("leaves built-in versions without a source commit", async () => {
+    const id = await getBaseSkillId();
+    await SkillModel.updateWithFiles({
+      id,
+      skill: { content: "tampered" },
+      files: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/skills/${id}/reset`,
+    });
+    expect(response.statusCode).toBe(200);
+
+    // `skills.source_commit` holds a content hash for built-ins, not a git SHA.
+    // Versions must not inherit it: the history links a commit out to GitHub,
+    // and a hash there would render a link to a commit that does not exist.
+    const skill = await SkillModel.findById(id);
+    const versions = await Promise.all(
+      Array.from({ length: skill?.latestVersion ?? 0 }, (_, i) =>
+        SkillVersionModel.findBySkillAndVersion(id, i + 1),
+      ),
+    );
+    expect(versions).not.toHaveLength(0);
+    expect(versions.map((version) => version?.sourceCommit)).toEqual(
+      versions.map(() => null),
+    );
   });
 
   test("rejects resetting a non-built-in skill", async () => {

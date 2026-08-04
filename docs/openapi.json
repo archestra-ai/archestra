@@ -296243,6 +296243,10 @@
                           "contentHash": {
                             "type": "string"
                           },
+                          "sourceCommit": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -296253,6 +296257,7 @@
                           "skillId",
                           "version",
                           "contentHash",
+                          "sourceCommit",
                           "createdAt"
                         ],
                         "additionalProperties": false
@@ -296604,6 +296609,10 @@
                     "contentHash": {
                       "type": "string"
                     },
+                    "sourceCommit": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -296668,6 +296677,7 @@
                     "version",
                     "content",
                     "contentHash",
+                    "sourceCommit",
                     "createdAt",
                     "files"
                   ],

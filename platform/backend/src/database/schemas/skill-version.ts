@@ -36,6 +36,18 @@ const skillVersionsTable = pgTable(
     content: text("content").notNull(),
     /** sha256 of the canonical payload (body + files); used to suppress no-op forks. */
     contentHash: text("content_hash").notNull(),
+    /**
+     * Git commit the bytes came from, for versions forked by a GitHub import or
+     * a scheduled sync; null for everything else (authored edits, restores,
+     * built-in skills). Provenance only — nothing reads it to resolve content,
+     * and it is deliberately not set from `skills.source_commit`, which
+     * built-in skills fill with a content hash rather than a commit.
+     *
+     * The repo and skill path needed to build a link live on the skill's
+     * `source_ref`, so a version whose skill was deleted keeps a SHA that can
+     * no longer be resolved to a URL. Acceptable: the link is informational.
+     */
+    sourceCommit: text("source_commit"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

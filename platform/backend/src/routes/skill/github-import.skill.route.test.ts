@@ -1,6 +1,11 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
-import { GithubAppConfigModel, SkillFileModel, SkillModel } from "@/models";
+import {
+  GithubAppConfigModel,
+  SkillFileModel,
+  SkillModel,
+  SkillVersionModel,
+} from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { createGithubPat } from "@/services/github-pat";
 import { afterEach, describe, expect, test, useRouteTestApp } from "@/test";
@@ -66,6 +71,14 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
         { path: "assets/logo.png", encoding: "base64", kind: "asset" },
         { path: "scripts/run.py", encoding: "utf8", kind: "script" },
       ]);
+
+      // version 1 is exactly the repo's bytes at that commit, so it carries the
+      // commit as provenance for the history's source link.
+      const v1 = await SkillVersionModel.findBySkillAndVersion(
+        body.created[0].id,
+        1,
+      );
+      expect(v1?.sourceCommit).toBe(STUB_COMMIT_SHA);
     });
 
     test("import skips a skill whose name collides and creates the rest", async () => {

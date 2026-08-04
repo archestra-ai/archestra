@@ -65,8 +65,7 @@ export function makeSessionSummary(
     authMethods: [],
     authenticatedAppNames: [],
     userNames: [],
-    lastInteractionRequest: null,
-    lastInteractionType: null,
+    lastUserMessagePreview: null,
     conversationTitle: null,
     claudeCodeTitle: null,
     ...overrides,
@@ -163,11 +162,7 @@ export const llmLogsSessionsSeed = [
     sessionId: "api-session",
     sessionSource: null,
     source: "api",
-    lastInteractionType: "openai:chatCompletions",
-    lastInteractionRequest: {
-      model: "gpt-4o",
-      messages: [{ role: "user", content: "Plain API session message" }],
-    },
+    lastUserMessagePreview: "Plain API session message",
   }),
 ];
 

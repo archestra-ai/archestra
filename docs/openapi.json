@@ -164982,10 +164982,7 @@
                               "type": "string"
                             }
                           },
-                          "lastInteractionRequest": {
-                            "nullable": true
-                          },
-                          "lastInteractionType": {
+                          "lastUserMessagePreview": {
                             "nullable": true,
                             "type": "string"
                           },
@@ -165026,8 +165023,7 @@
                           "authMethods",
                           "authenticatedAppNames",
                           "userNames",
-                          "lastInteractionRequest",
-                          "lastInteractionType",
+                          "lastUserMessagePreview",
                           "conversationTitle",
                           "claudeCodeTitle"
                         ],

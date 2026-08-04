@@ -43636,8 +43636,7 @@ export type GetInteractionSessionsResponses = {
             authMethods: Array<'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown'>;
             authenticatedAppNames: Array<string>;
             userNames: Array<string>;
-            lastInteractionRequest: unknown;
-            lastInteractionType: string | null;
+            lastUserMessagePreview: string | null;
             conversationTitle: string | null;
             claudeCodeTitle: string | null;
         }>;

@@ -634,8 +634,13 @@ export const SessionSummarySchema = z.object({
   authMethods: z.array(InteractionAuthMethodSchema),
   authenticatedAppNames: z.array(z.string()),
   userNames: z.array(z.string()),
-  lastInteractionRequest: z.unknown().nullable(),
-  lastInteractionType: z.string().nullable(),
+  /**
+   * Short preview (≤200 chars) of the session's last user message, computed
+   * server-side from the reconstructed request. The raw request body is
+   * intentionally never returned by the listing — shipping full bodies
+   * OOM-killed the platform container (T-1015).
+   */
+  lastUserMessagePreview: z.string().nullable(),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
 });

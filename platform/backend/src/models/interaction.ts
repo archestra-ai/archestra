@@ -5,6 +5,7 @@ import type {
 } from "@archestra/shared";
 import {
   clientFilterToAgentIds,
+  DynamicInteraction,
   isClaudeSessionSource,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
 } from "@archestra/shared";
@@ -1355,8 +1356,7 @@ class InteractionModel {
         authMethods: parseInteractionAuthMethods(s.authMethods),
         authenticatedAppNames: s.authenticatedAppNames ?? [],
         userNames: s.userNames ?? [],
-        lastInteractionRequest: lastInteraction?.request ?? null,
-        lastInteractionType: lastInteraction?.type ?? null,
+        lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
       };
@@ -1383,7 +1383,7 @@ class InteractionModel {
   ): Promise<
     Map<
       string,
-      { request: unknown; type: string; claudeCodeTitle: string | null }
+      { lastUserMessagePreview: string | null; claudeCodeTitle: string | null }
     >
   > {
     if (sessionKeys.length === 0) {
@@ -1471,7 +1471,7 @@ class InteractionModel {
     // Group by session and find the "last main interaction" and "title interaction"
     const result = new Map<
       string,
-      { request: unknown; type: string; claudeCodeTitle: string | null }
+      { lastUserMessagePreview: string | null; claudeCodeTitle: string | null }
     >();
 
     // Group interactions by session key (sessionId or interaction id for single interactions)
@@ -1562,8 +1562,9 @@ class InteractionModel {
         }
 
         result.set(sessionKey, {
-          request: tipRequest,
-          type: lastMainInteraction?.type ?? "",
+          lastUserMessagePreview: lastMainInteraction
+            ? buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
+            : null,
           claudeCodeTitle: claudeCodeTitle ?? null,
         });
       }
@@ -1647,6 +1648,34 @@ async function withReconstructedRequests<
         }
       : row;
   });
+}
+
+/** Max length of the sessions listing's last-user-message preview. */
+const LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH = 200;
+
+/**
+ * Derive the short last-user-message preview shown by the sessions listing,
+ * using the same provider-aware parsing as the interaction detail view.
+ * Returns null when the request has no extractable user text or an
+ * unsupported provider shape — the listing renders its fallback instead.
+ */
+function buildLastUserMessagePreview(
+  request: unknown,
+  type: string,
+): string | null {
+  try {
+    const interaction = new DynamicInteraction({
+      request,
+      response: {},
+      type,
+    } as never);
+    const message = interaction.getLastUserMessage().trim();
+    return message
+      ? message.slice(0, LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseInteractionAuthMethods(

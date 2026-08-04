@@ -495,15 +495,17 @@ describe("interaction routes", () => {
       .data.find((i: { id: string }) => i.id === tip.id);
     expect(tipRow.request.messages).toEqual(fullMessages);
 
-    // Sessions endpoint reconstructs the last interaction request.
+    // Sessions endpoint derives its preview from the reconstructed request —
+    // the raw request body itself is never returned by the listing (T-1015:
+    // shipping full bodies OOM-killed the platform container).
     const sessions = await app.inject({
       method: "GET",
       url: "/api/interactions/sessions?limit=10&offset=0&sessionId=route-delta-session",
     });
     expect(sessions.statusCode).toBe(200);
-    expect(sessions.json().data[0].lastInteractionRequest.messages).toEqual(
-      fullMessages,
-    );
+    const sessionRow = sessions.json().data[0];
+    expect(sessionRow.lastUserMessagePreview).toBe("second message");
+    expect(sessionRow).not.toHaveProperty("lastInteractionRequest");
   });
 
   test("filters the sessions endpoint by client (external_agent_id)", async ({

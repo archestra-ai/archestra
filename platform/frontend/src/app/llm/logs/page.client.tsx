@@ -4,7 +4,6 @@ import {
   type archestraApiTypes,
   type ClientFilter,
   clientForExternalAgentIds,
-  DynamicInteraction,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
 } from "@archestra/shared";
@@ -98,22 +97,9 @@ function getSessionDisplayData(session: SessionData) {
   // not the session-id provenance.
   const clientSource = clientForExternalAgentIds(session.externalAgentIds);
 
-  let lastUserMessage = "";
-  if (session.lastInteractionRequest && session.lastInteractionType) {
-    try {
-      const mockInteraction = {
-        request: session.lastInteractionRequest,
-        response: {},
-        type: session.lastInteractionType,
-      };
-      const interaction = new DynamicInteraction(
-        mockInteraction as archestraApiTypes.GetInteractionResponses["200"],
-      );
-      lastUserMessage = interaction.getLastUserMessage();
-    } catch {
-      lastUserMessage = "";
-    }
-  }
+  // Server-computed preview — the sessions API never returns raw request
+  // bodies (shipping them OOM-killed the platform container, T-1015).
+  const lastUserMessage = session.lastUserMessagePreview ?? "";
 
   const displayText = claudeCodeTitle || lastUserMessage;
 

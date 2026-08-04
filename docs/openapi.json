@@ -42557,6 +42557,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeAdvisor",
+            "required": false,
+            "description": "Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to."
+          },
+          {
+            "schema": {
               "type": "string",
               "enum": [
                 "personal",

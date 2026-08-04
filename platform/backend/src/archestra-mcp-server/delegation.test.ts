@@ -1,5 +1,11 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
-import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
+import {
+  ADVISOR_AGENT_DESCRIPTION,
+  AGENT_TOOL_PREFIX,
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
+  slugify,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import {
@@ -409,6 +415,85 @@ describe("Auto-mode subagent delegation", () => {
 
     expect(tools.map((t) => t.name)).not.toContain(
       `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+    );
+  });
+
+  test("offers the advisor built-in, and no other built-in", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const advisor = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+    // Backs platform machinery rather than answering questions; delegating to
+    // it would mean driving an internal mechanism by hand.
+    const compaction = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+    });
+
+    const names = (
+      await getAgentTools({
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      })
+    ).map((t) => t.name);
+
+    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
+    expect(names).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(compaction.name)}`,
+    );
+  });
+
+  test("carries the advisor's guidance to the caller uncut", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const advisor = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+      description: ADVISOR_AGENT_DESCRIPTION,
+    });
+
+    const tool = (
+      await getAgentTools({
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      })
+    ).find((t) => t.name === `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
+
+    // The closing line is what stops a model consulting on every step, so it
+    // has to survive the description cap rather than be truncated away.
+    expect(tool?.description).toContain(
+      "not for syntax, lookups, or things you already know",
     );
   });
 

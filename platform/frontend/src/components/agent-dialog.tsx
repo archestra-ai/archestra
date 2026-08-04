@@ -149,8 +149,8 @@ type AgentVisibilityChoice = AgentScope | "user";
 
 import {
   useCreateProfile,
+  useDelegationTargetAgents,
   useDeleteProfile,
-  useInternalAgents,
   useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
@@ -712,7 +712,7 @@ export function AgentDialog({
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
-  const { data: allInternalAgents = [] } = useInternalAgents({
+  const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: shouldLoadInternalAgents && !!canReadAgents,
   });
   const createAgent = useCreateProfile();

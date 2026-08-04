@@ -12504,6 +12504,10 @@ export type GetAllAgentsData = {
          */
         excludeBuiltIn?: boolean;
         /**
+         * Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to.
+         */
+        includeAdvisor?: boolean;
+        /**
          * Filter by scope: personal, team, org, or built_in.
          */
         scope?: 'personal' | 'team' | 'org' | 'built_in';

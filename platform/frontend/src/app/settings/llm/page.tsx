@@ -2,6 +2,7 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DefaultUserLimitsSection } from "@/app/settings/llm/_parts/default-user-limits-section";
@@ -13,6 +14,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { Button } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -264,6 +266,23 @@ export default function LlmSettingsPage() {
           </div>
         )}
       </SettingsBlock>
+      <SettingsBlock
+        title="Advisor"
+        description={
+          <>
+            Let an agent ask a stronger model for a second opinion at the
+            decisions that matter, so the rest of its work can run on a cheaper
+            one. Pick the advisor&apos;s model on the Advisor agent, then add it
+            as a subagent to the agents that should be able to consult it. Each
+            consultation is billed at the advisor model&apos;s own rates.
+          </>
+        }
+        control={
+          <Button asChild variant="outline">
+            <Link href="/agents?scope=built_in">Configure advisor</Link>
+          </Button>
+        }
+      />
       <SettingsSaveBar
         hasChanges={hasChanges}
         isSaving={updateLlmSettingsMutation.isPending}

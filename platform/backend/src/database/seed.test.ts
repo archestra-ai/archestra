@@ -1,5 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
+  ADVISOR_AGENT_DESCRIPTION,
+  ADVISOR_SYSTEM_PROMPT,
   ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
@@ -23,6 +25,7 @@ import {
   SkillModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
 import AgentVersionModel from "@/models/agent-version";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
@@ -73,6 +76,28 @@ describe("syncBuiltInAgents", () => {
       firstOrg.id,
     );
     expect(titleAgent?.systemPrompt).toBe(CHAT_TITLE_GENERATION_SYSTEM_PROMPT);
+  });
+
+  test("seeds the advisor with the description callers are steered by", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    await syncBuiltInAgents();
+
+    const advisor = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.ADVISOR,
+      organization.id,
+    );
+
+    expect(advisor?.systemPrompt).toBe(ADVISOR_SYSTEM_PROMPT);
+    // Reaches the calling model as the delegation tool's description, so an
+    // empty or generic one leaves it with no idea when to consult.
+    expect(advisor?.description).toBe(ADVISOR_AGENT_DESCRIPTION);
+    // An advisor that can act is no longer only an advisor.
+    expect(await AgentToolModel.findToolIdsByAgent(advisor?.id ?? "")).toEqual(
+      [],
+    );
   });
 
   test("seeds the dual LLM main agent with the current maxRounds default", async ({

@@ -630,6 +630,13 @@ class AgentModel {
       agentType?: AgentType;
       agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
+      /**
+       * Keep the advisor in the results even while built-ins are excluded.
+       * It is the one built-in another agent is meant to reach, so the
+       * subagent picker needs it without also offering the platform
+       * machinery — dual-LLM, compaction, title generation.
+       */
+      includeAdvisor?: boolean;
       scope?: AgentScope;
       excludeOtherPersonalAgents?: boolean;
       status?: AgentRecordStatus;
@@ -666,7 +673,17 @@ class AgentModel {
 
     // Exclude built-in agents when explicitly requested or when user is not an admin
     if (options?.excludeBuiltIn || !isAgentAdmin) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+      whereConditions.push(
+        options?.includeAdvisor
+          ? (or(
+              eq(schema.agentsTable.builtIn, false),
+              eq(
+                sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+                BUILT_IN_AGENT_IDS.ADVISOR,
+              ),
+            ) as SQL)
+          : eq(schema.agentsTable.builtIn, false),
+      );
     }
 
     // Filter by scope if specified
@@ -1649,6 +1666,32 @@ class AgentModel {
       .where(
         and(
           eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+
+    return agents.map((agent) => agent.id);
+  }
+
+  /**
+   * Agents a toolset backfill may assign to. Everything in the organization
+   * except the advisor, which answers questions and must not act: a tool it
+   * holds is one a consultation can call, and the advisor's whole contract is
+   * that it returns a recommendation and edits nothing.
+   */
+  static async findToolAssignableIdsByOrganizationId(
+    organizationId: string,
+  ): Promise<string[]> {
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          ne(
+            sql`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
+            BUILT_IN_AGENT_IDS.ADVISOR,
+          ),
           notDeleted(schema.agentsTable),
         ),
       );

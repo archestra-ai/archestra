@@ -246,11 +246,13 @@ export class VaultClient {
       this.initialized = true;
     } catch (error) {
       logger.error({ error }, "VaultClient: initialization failed");
-      throw new ApiError(
+      const apiError = new ApiError(
         503,
         extractVaultErrorMessage(error),
         SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
       );
+      apiError.cause = error;
+      throw apiError;
     }
   }
 
@@ -455,11 +457,9 @@ export class VaultClient {
         { error, tokenPath, role: this.config.k8sRole },
         "VaultClient: Kubernetes authentication failed",
       );
-      throw new ApiError(
-        503,
-        extractVaultErrorMessage(error),
-        SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
-      );
+      // Throw raw (like loginWithAws): ensureInitialized owns the single
+      // ApiError wrap, so wrapping here would only bury the Vault detail.
+      throw error;
     }
   }
 

@@ -17,6 +17,7 @@ const mockVaultClient = vi.hoisted(() => ({
   write: vi.fn(),
   read: vi.fn(),
   delete: vi.fn(),
+  kubernetesLogin: vi.fn(),
 }));
 
 vi.mock("node-vault", () => {
@@ -1319,6 +1320,29 @@ describe("SecretsManager", async () => {
         "auth/aws/login",
         expect.anything(),
       );
+    });
+
+    test("surfaces the Vault detail when Kubernetes login itself fails", async () => {
+      // The login failure crosses two boundaries (loginWithKubernetes →
+      // ensureInitialized → the operation's error handler); none of them may
+      // flatten the Vault response to a generic "Connection failed".
+      mockVaultClient.kubernetesLogin.mockRejectedValueOnce(vault403);
+
+      const client = new VaultClient({
+        ...baseConfig,
+        authMethod: "kubernetes" as const,
+        k8sRole: "archestra-role",
+        // Any readable file works as the SA token for a mocked login.
+        k8sTokenPath: "./package.json",
+      });
+
+      await expect(
+        client.getSecretFromPath("secret/data/archestra/foo"),
+      ).rejects.toMatchObject({
+        statusCode: 503,
+        internalCode: SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+        message: "403: permission denied",
+      });
     });
 
     test("does not retry on 4xx with static token auth", async () => {

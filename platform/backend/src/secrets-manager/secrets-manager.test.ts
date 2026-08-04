@@ -17,6 +17,7 @@ const mockVaultClient = vi.hoisted(() => ({
   write: vi.fn(),
   read: vi.fn(),
   delete: vi.fn(),
+  list: vi.fn(),
   kubernetesLogin: vi.fn(),
 }));
 
@@ -1048,6 +1049,25 @@ describe("SecretsManager", async () => {
         await SecretModel.delete(created.id);
       });
     });
+
+    describe("checkConnectivity", () => {
+      test("chains the underlying error as cause on failure", async () => {
+        const vaultManager = new VaultSecretManager(vaultConfig);
+
+        mockVaultClient.list.mockRejectedValueOnce({
+          response: { statusCode: 503, body: { errors: ["Vault is sealed"] } },
+        });
+
+        await expect(vaultManager.checkConnectivity()).rejects.toMatchObject({
+          statusCode: 503,
+          internalCode: SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+          message: "503: Vault is sealed",
+          cause: expect.objectContaining({
+            response: expect.objectContaining({ statusCode: 503 }),
+          }),
+        });
+      });
+    });
   });
 
   describe("VaultSecretManager with KV v1", () => {
@@ -1332,7 +1352,9 @@ describe("SecretsManager", async () => {
         ...baseConfig,
         authMethod: "kubernetes" as const,
         k8sRole: "archestra-role",
-        // Any readable file works as the SA token for a mocked login.
+        // The SA token file is really read (fs.readFile runs before the
+        // mocked kubernetesLogin call), so it must exist — its content is
+        // then discarded by the mock. Any readable file works.
         k8sTokenPath: "./package.json",
       });
 

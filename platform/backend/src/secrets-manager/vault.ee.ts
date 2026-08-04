@@ -229,11 +229,13 @@ export default class VaultSecretManager
         { error, listBasePath, kvVersion: this.config.kvVersion },
         "VaultSecretManager.checkConnectivity: failed to list secrets",
       );
-      throw new ApiError(
+      const apiError = new ApiError(
         503,
         extractVaultErrorMessage(error),
         SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
       );
+      apiError.cause = error;
+      throw apiError;
     }
   }
 

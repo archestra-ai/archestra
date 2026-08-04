@@ -85,8 +85,13 @@ export function classifyErrorForTracking(
       fingerprint: [SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE],
       tags: {
         error_type: SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+        // Truncate explicitly: Vault error strings are unbounded, and
+        // exception sinks silently clip over-long tag values.
         ...(error.cause !== undefined && {
-          secrets_backend_error: extractVaultErrorMessage(error.cause),
+          secrets_backend_error: extractVaultErrorMessage(error.cause).slice(
+            0,
+            200,
+          ),
         }),
       },
     };

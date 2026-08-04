@@ -219,4 +219,18 @@ describe("classifyErrorForTracking", () => {
       secrets_backend_error: "403: permission denied",
     });
   });
+
+  test("truncates unbounded backend error strings in the tag", () => {
+    const error = new ApiError(
+      503,
+      "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+      SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+    );
+    error.cause = {
+      response: { statusCode: 500, body: { errors: ["x".repeat(1000)] } },
+    };
+    const decision = classifyErrorForTracking(error);
+    expect(decision.tags?.secrets_backend_error).toHaveLength(200);
+    expect(decision.tags?.secrets_backend_error).toMatch(/^500: x+$/);
+  });
 });

@@ -242,6 +242,47 @@ class AppModel {
     return await withLabelsOne(result);
   }
 
+  /**
+   * Active apps whose backing install is one of the user's PERSONAL MCP
+   * installs — the apps that would be left detached (their `mcp_server_id` FK
+   * only nulls) if those installs were purged without deleting the app first.
+   * `organizationId` limits the sweep to installs on that organization's
+   * catalogs; omitted, it spans every organization (user deletion).
+   */
+  static async findBackedByPersonalInstallsOfUser(params: {
+    userId: string;
+    organizationId?: string;
+  }): Promise<Pick<App, "id" | "mcpServerId">[]> {
+    const rows = await db
+      .select({
+        id: schema.appsTable.id,
+        mcpServerId: schema.appsTable.mcpServerId,
+      })
+      .from(schema.appsTable)
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.appsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.ownerId, params.userId),
+          eq(schema.mcpServersTable.scope, "personal"),
+          notDeleted(schema.appsTable),
+          params.organizationId
+            ? eq(
+                schema.internalMcpCatalogTable.organizationId,
+                params.organizationId,
+              )
+            : undefined,
+        ),
+      );
+    return rows;
+  }
+
   /** A single active app scoped to an org. */
   static async findByIdInOrg(
     id: string,

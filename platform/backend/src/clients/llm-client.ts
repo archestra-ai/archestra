@@ -39,9 +39,11 @@ import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
+  buildAzureDeploymentBaseUrl,
   createAzureFetchWithApiVersion,
   isAzureOpenAiFirstPartyModelName,
   normalizeAzureApiKey,
+  shouldUseAzureOpenAiApiVersion,
 } from "@/clients/azure-url";
 import {
   buildBedrockProvider,
@@ -764,13 +766,27 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       baseURL,
       headers,
       fetch: providedFetch,
+      direct,
     }) => {
-      // The AI SDK client can't set Azure's api-version as a default query param,
-      // so we wrap fetch and inject it on every request.
-      const fetchWithVersion = createAzureFetchWithApiVersion({
-        apiVersion: config.llm.azure.apiVersion,
-        fetch: providedFetch,
-      });
+      // Azure has no usable default endpoint; without this guard createOpenAI
+      // would fall back to api.openai.com and send the Azure api-key there.
+      if (!baseURL) {
+        throw new ApiError(400, "Azure AI Foundry base URL is required.");
+      }
+
+      // The AI SDK client can't set Azure's api-version as a default query
+      // param, so we wrap fetch and inject it on every request — except for
+      // Foundry v1 endpoints (`.../openai/v1`), which reject date-based
+      // api-version values with "API version not supported". On the proxy path
+      // baseURL is the local proxy (never a v1 URL), so injection is unchanged
+      // there and the proxy's azure adapter applies this same guard against
+      // the real target.
+      const fetchWithVersion = shouldUseAzureOpenAiApiVersion(baseURL)
+        ? createAzureFetchWithApiVersion({
+            apiVersion: config.llm.azure.apiVersion,
+            fetch: providedFetch,
+          })
+        : providedFetch;
       const normalizedApiKey = normalizeAzureApiKey(apiKey);
       const sdkApiKey =
         normalizedApiKey ??
@@ -781,11 +797,19 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         ? { ...headers, "api-key": normalizedApiKey }
         : headers;
 
-      // Azure has no usable default endpoint; without this guard createOpenAI
-      // would fall back to api.openai.com and send the Azure api-key there.
-      if (!baseURL) {
-        throw new ApiError(400, "Azure AI Foundry base URL is required.");
-      }
+      // On the direct path baseURL is the key's own Azure endpoint. Classic
+      // (non-v1) endpoints serve chat completions only under
+      // `/openai/deployments/<deployment>` — posting to `<base>/chat/completions`
+      // 404s — so route through the deployment-scoped URL, the same treatment
+      // the embedding client applies. V1 endpoints pass through unchanged. On
+      // the proxy path baseURL is the local proxy and the adapter builds the
+      // target URL itself.
+      const targetBaseURL = direct
+        ? (buildAzureDeploymentBaseUrl({
+            baseUrl: baseURL,
+            deploymentName: modelName,
+          }) ?? baseURL)
+        : baseURL;
 
       // OpenAI first-party deployments stay on strict @ai-sdk/openai: its name
       // heuristic converts max_tokens → max_completion_tokens for reasoning
@@ -798,7 +822,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       if (isAzureOpenAiFirstPartyModelName(modelName)) {
         return createOpenAI({
           apiKey: sdkApiKey,
-          baseURL,
+          baseURL: targetBaseURL,
           headers: requestHeaders,
           fetch: fetchWithVersion,
         }).chat(modelName);
@@ -807,7 +831,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       return createOpenAICompatible({
         name: "azure",
         apiKey: sdkApiKey,
-        baseURL,
+        baseURL: targetBaseURL,
         headers: requestHeaders,
         fetch: fetchWithVersion,
         // @ai-sdk/openai always sends stream_options.include_usage; the compatible

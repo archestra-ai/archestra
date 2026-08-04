@@ -27,11 +27,14 @@ type KnowledgeBasesPaginatedParams = Pick<
 
 /**
  * Check if knowledge base prerequisites are configured.
- * Returns a boolean (all configured) and details about which parts are ready.
+ *
+ * Only embedding is a prerequisite: reranking is optional and best-effort —
+ * the backend query path skips it when unconfigured — so it must not gate
+ * knowledge base creation or agent knowledge-source assignment.
  */
 export function useIsKnowledgeBaseConfigured(): boolean {
   const status = useKnowledgeBaseConfigStatus();
-  return status.embedding && status.reranker;
+  return status.embedding;
 }
 
 export function useKnowledgeBaseConfigStatus() {

@@ -18,6 +18,7 @@ import {
   EmbeddingConfigUnresolvableError,
   RerankerConfigUnresolvableError,
 } from "./errors";
+import { isNativeRerankModel } from "./native-rerank";
 
 export interface EmbeddingConfig {
   /**
@@ -38,11 +39,18 @@ export interface EmbeddingConfig {
   inputModalities: ModelInputModality[] | null;
 }
 
-interface RerankerConfig {
-  llmModel: LLMModel;
+/**
+ * Two reranker shapes: a chat LLM scored via structured output, or a dedicated
+ * rerank-API model (Cohere Rerank, directly or Azure-hosted) called through
+ * the provider's native rerank route.
+ */
+type RerankerConfig = {
   modelName: string;
   provider: SupportedProvider;
-}
+} & (
+  | { kind: "llm"; llmModel: LLMModel }
+  | { kind: "native-rerank"; apiKey: string | null; baseUrl: string | null }
+);
 
 /**
  * Resolve the embedding configuration for an organization.
@@ -112,7 +120,18 @@ export async function resolveRerankerConfig(
 
   const modelName = org.rerankerModel;
 
+  if (isNativeRerankModel({ provider: resolved.provider, model: modelName })) {
+    return {
+      kind: "native-rerank",
+      apiKey: resolved.apiKey,
+      baseUrl: resolved.baseUrl,
+      modelName,
+      provider: resolved.provider,
+    };
+  }
+
   return {
+    kind: "llm",
     llmModel: createDirectLLMModel({
       provider: resolved.provider,
       // createDirectLLMModel expects `string | undefined`; map keyless `null`.

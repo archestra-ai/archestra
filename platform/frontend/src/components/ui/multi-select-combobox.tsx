@@ -53,7 +53,12 @@ export function MultiSelectCombobox({
   // CommandList's own show-from-the-top-on-query-change reset never fires
   // here (cmdk's search state stays empty). Same rule, applied by hand: a
   // new query must not keep the old scroll offset.
+  const lastSearch = React.useRef(search);
   React.useEffect(() => {
+    if (lastSearch.current === search) {
+      return;
+    }
+    lastSearch.current = search;
     if (listRef.current) {
       listRef.current.scrollTop = 0;
     }

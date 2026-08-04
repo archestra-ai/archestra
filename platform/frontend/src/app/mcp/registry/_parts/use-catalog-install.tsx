@@ -478,21 +478,23 @@ export function useCatalogInstall(opts?: {
 
   // Add personal connection: skip dialog if no config needed, otherwise open dialog with personalOnly
   const addPersonalConnection = (catalogItem: CatalogItem) => {
-    if (canDirectInstall(catalogItem)) {
+    // Local installs deserve an explicit confirmation even when they have no
+    // prompted config: creating a hosted runtime is a larger action than
+    // saving a credential, and otherwise the button appears to do nothing.
+    if (catalogItem.serverType === "local") {
+      setInstallPersonalOnly(true);
+      installLocal(catalogItem, {
+        preserveInstallTarget: true,
+        scope: "personal",
+      });
+    } else if (canDirectInstall(catalogItem)) {
       handleDirectInstall(catalogItem);
     } else {
       setInstallPersonalOnly(true);
-      if (catalogItem.serverType === "local") {
-        installLocal(catalogItem, {
-          preserveInstallTarget: true,
-          scope: "personal",
-        });
-      } else {
-        installRemote(catalogItem, {
-          preserveInstallTarget: true,
-          scope: "personal",
-        });
-      }
+      installRemote(catalogItem, {
+        preserveInstallTarget: true,
+        scope: "personal",
+      });
     }
   };
 

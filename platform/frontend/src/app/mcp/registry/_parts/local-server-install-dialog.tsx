@@ -178,6 +178,13 @@ export function LocalServerInstallDialog({
       env.promptOnInstallation !== false &&
       (env as { mounted?: boolean }).mounted === true,
   );
+  const personalOnly =
+    personalOnlyProp ||
+    (catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false);
+  const hasPromptedConfiguration =
+    promptedEnvVars.length > 0 ||
+    Object.keys(promptableUserConfig).length > 0 ||
+    catalogItem?.localConfig?.serviceAccount !== undefined;
   const nonSecretEnvVars = promptedEnvVars.filter(
     (env) => env.type !== "secret",
   );
@@ -570,6 +577,13 @@ export function LocalServerInstallDialog({
         </Alert>
       )}
 
+      {!isReauth && personalOnly && !hasPromptedConfiguration && (
+        <p className="text-sm text-muted-foreground">
+          This server needs no credentials or configuration. Install creates a
+          private hosted instance available only to you.
+        </p>
+      )}
+
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
         catalogId={isReinstall || isReauth ? undefined : catalogItem?.id}
@@ -579,10 +593,7 @@ export function LocalServerInstallDialog({
         isReauth={isReauth}
         existingTeamId={existingTeamId}
         existingScope={existingScope}
-        personalOnly={
-          personalOnlyProp ||
-          (catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false)
-        }
+        personalOnly={personalOnly}
         orgOnly={orgOnly}
         preselectedTeamId={preselectedTeamId}
       />

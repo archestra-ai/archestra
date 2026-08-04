@@ -6,6 +6,7 @@ import {
   E2eTestId,
   formatSecretStorageType,
   getDocsUrl,
+  isPlaywrightCatalogItem,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import { format } from "date-fns";
@@ -140,6 +141,8 @@ interface ManageUsersContentProps {
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
   bodyTestId?: string;
+  /** Whether this catalog is currently being installed. */
+  isInstalling?: boolean;
 }
 
 export function ManageUsersContent({
@@ -154,6 +157,7 @@ export function ManageUsersContent({
   onOpenPodLogs,
   hideHeader = false,
   bodyTestId,
+  isInstalling = false,
 }: ManageUsersContentProps) {
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
   // servers (no catalogId filter) and keep those installed from this catalog.
@@ -379,7 +383,10 @@ export function ManageUsersContent({
     !!onAddOrgConnection &&
     !split.hasOrgConnection &&
     !!hasMcpServerAdminPermission;
-  const canAddServiceAccount = canAddTeam || canAddOrg;
+  const isLocalServer = catalogItem?.serverType === "local";
+  const isPersonalOnly =
+    catalogItem != null && isPlaywrightCatalogItem(catalogItem.id);
+  const canAddServiceAccount = !isPersonalOnly && (canAddTeam || canAddOrg);
 
   const rowProps: RowRenderProps = {
     isOAuthServer,
@@ -415,7 +422,7 @@ export function ManageUsersContent({
         className={hideHeader ? "space-y-6" : "space-y-6 pb-4"}
         data-testid={bodyTestId}
       >
-        {catalogItem && (
+        {catalogItem?.serverType === "remote" && (
           <AgentConnectionsSection
             item={catalogItem}
             connections={allServers}
@@ -424,9 +431,19 @@ export function ManageUsersContent({
 
         {(personalRows.length > 0 || canAddPersonal) && (
           <ConnectionsSection
-            title="Personal connections"
-            description="Private to its owner — only that person can use it."
-            emptyText="No personal connections yet."
+            title={
+              isLocalServer ? "Personal installations" : "Personal connections"
+            }
+            description={
+              isLocalServer
+                ? "A private hosted instance available only to its owner."
+                : "Private to its owner — only that person can use it."
+            }
+            emptyText={
+              isLocalServer
+                ? "No personal installations yet."
+                : "No personal connections yet."
+            }
             rows={personalRows}
             tableTestId={E2eTestId.ManageCredentialsDialogTable}
             action={
@@ -435,13 +452,18 @@ export function ManageUsersContent({
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
+                  disabled={isInstalling}
                   onClick={() => {
                     onClose();
                     onAddPersonalConnection?.();
                   }}
                 >
                   <Plus className="mr-1 h-3 w-3" />
-                  Connect my account
+                  {isInstalling
+                    ? "Installing..."
+                    : isLocalServer
+                      ? "Install for me"
+                      : "Connect my account"}
                 </Button>
               ) : null
             }
@@ -451,9 +473,17 @@ export function ManageUsersContent({
 
         {(serviceAccountRows.length > 0 || canAddServiceAccount) && (
           <ConnectionsSection
-            title="Service accounts"
-            description="Static credentials intentionally shared with a team or organization."
-            emptyText="No service accounts yet."
+            title={isLocalServer ? "Shared installations" : "Service accounts"}
+            description={
+              isLocalServer
+                ? "Hosted instances shared with a team or organization."
+                : "Static credentials intentionally shared with a team or organization."
+            }
+            emptyText={
+              isLocalServer
+                ? "No shared installations yet."
+                : "No service accounts yet."
+            }
             rows={serviceAccountRows}
             tableTestId={E2eTestId.ManageServiceAccountsTable}
             action={
@@ -462,13 +492,16 @@ export function ManageUsersContent({
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
+                  disabled={isInstalling}
                   data-testid={
                     E2eTestId.ManageCredentialsAddServiceAccountButton
                   }
                   onClick={() => setServiceAccountDialogOpen(true)}
                 >
                   <Plus className="mr-1 h-3 w-3" />
-                  Add service account
+                  {isLocalServer
+                    ? "Add shared installation"
+                    : "Add service account"}
                 </Button>
               ) : null
             }
@@ -482,6 +515,7 @@ export function ManageUsersContent({
         onOpenChange={setServiceAccountDialogOpen}
         availableTeams={canAddTeam ? split.availableTeamsForShared : []}
         canAddOrg={canAddOrg}
+        resourceKind={isLocalServer ? "installation" : "service-account"}
         onConfirm={(target) => {
           onClose();
           if (target.type === "org") {

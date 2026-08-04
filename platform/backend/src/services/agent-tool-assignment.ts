@@ -185,9 +185,6 @@ export async function validateAssignment(
       mcpServerId,
       tool,
       preFetchedServer,
-      preFetchedCatalogItem: tool.catalogId
-        ? preFetchedData?.catalogItemsMap?.get(tool.catalogId)
-        : undefined,
     });
     if (validationError) {
       return validationError;
@@ -477,7 +474,6 @@ async function validateAssignedMcpServer(params: {
     PrefetchedMcpServer,
     "id" | "ownerId" | "catalogId" | "serverType" | "teamId" | "scope"
   > | null;
-  preFetchedCatalogItem?: InternalMcpCatalog | null;
 }): Promise<ToolAssignmentError | null> {
   const { getOwnerContext, mcpServerId, tool, preFetchedServer } = params;
 
@@ -507,13 +503,6 @@ async function validateAssignedMcpServer(params: {
     };
   }
 
-  const catalogItem = tool.catalogId
-    ? (params.preFetchedCatalogItem ??
-      (await InternalMcpCatalogModel.findById(tool.catalogId, {
-        expandSecrets: false,
-      })))
-    : null;
-
   // Personal installations are always caller-bound, regardless of whether
   // they represent remote credentials or a hosted local runtime.
   if (mcpServer.scope === "personal") {
@@ -525,10 +514,6 @@ async function validateAssignedMcpServer(params: {
         type: "validation_error",
       },
     };
-  }
-
-  if (catalogItem?.serverType === "local") {
-    return null;
   }
 
   const isAllowed = await isMcpServerAssignableToTarget({

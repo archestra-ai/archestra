@@ -806,6 +806,54 @@ describe("personal connections are never statically assignable", () => {
     });
     expect(result?.error.message).toContain("dynamic credential resolution");
   });
+
+  test("validateAssignment rejects a team-local installation outside the agent author's teams", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const teamOwner = await makeUser();
+    await makeMember(author.id, org.id, { role: "member" });
+    await makeMember(teamOwner.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, teamOwner.id);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "local",
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: author.id,
+      scope: "personal",
+      teams: [],
+    });
+    const tool = await makeTool({ catalogId: catalog.id });
+    const teamInstallation = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "team",
+      teamId: team.id,
+      ownerId: teamOwner.id,
+      serverType: "local",
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+      mcpServerId: teamInstallation.id,
+    });
+
+    expect(result).toMatchObject({
+      code: "validation_error",
+      error: { type: "validation_error" },
+    });
+    expect(result?.error.message).toContain("not shared");
+  });
 });
 
 describe("isMcpServerAssignableToTarget", () => {

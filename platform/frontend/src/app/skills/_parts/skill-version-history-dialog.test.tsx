@@ -6,6 +6,7 @@ import {
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
 import {
+  useResetSkill,
   useRestoreSkillVersion,
   useSkill,
   useSkillVersion,
@@ -21,6 +22,7 @@ vi.mock("@/lib/skills/skill.query", () => ({
   useSkillVersions: vi.fn(),
   useSkillVersion: vi.fn(),
   useRestoreSkillVersion: vi.fn(),
+  useResetSkill: vi.fn(),
 }));
 
 // Monaco needs a real browser layout engine, so both editors stand in as plain
@@ -97,6 +99,11 @@ const file = (path: string, content: string) => ({
 });
 
 const mutateAsync = vi.fn();
+const resetAsync = vi.fn();
+
+/** Switch the pane from the whole version to the set of files that moved. */
+const openChanges = (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(screen.getByRole("button", { name: /^Changes/ }));
 
 function mockSkill(overrides: Record<string, unknown> = {}) {
   vi.mocked(useSkill).mockReturnValue({
@@ -197,6 +204,7 @@ describe("SkillVersionHistoryDialog", () => {
     // re-stubbed here rather than inheriting whatever the last test set. Null
     // is the "nothing was written" resolution; success cases override it.
     mutateAsync.mockResolvedValue(null);
+    resetAsync.mockResolvedValue({ id: "skill-1" });
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
@@ -204,6 +212,11 @@ describe("SkillVersionHistoryDialog", () => {
     vi.mocked(useMissingPermissions).mockReturnValue({});
     vi.mocked(useRestoreSkillVersion).mockReturnValue({
       mutateAsync,
+      isPending: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
+    } as any);
+    vi.mocked(useResetSkill).mockReturnValue({
+      mutateAsync: resetAsync,
       isPending: false,
       // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
     } as any);
@@ -241,11 +254,22 @@ describe("SkillVersionHistoryDialog", () => {
     ).toBeDisabled();
   });
 
-  it("diffs a selected version against its predecessor", async () => {
+  it("opens on the whole version, read as files rather than as a comparison", async () => {
     const user = userEvent.setup();
     renderDialog();
 
     await user.click(screen.getByRole("button", { name: /v3/ }));
+
+    expect(screen.getByTestId("editor")).toHaveTextContent("head body");
+    expect(screen.queryByTestId("diff")).not.toBeInTheDocument();
+  });
+
+  it("diffs a version against its predecessor under Changes", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+    await openChanges(user);
 
     expect(screen.getByTestId("diff-original")).toHaveTextContent("old body");
     expect(screen.getByTestId("diff-modified")).toHaveTextContent("head body");
@@ -310,7 +334,7 @@ describe("SkillVersionHistoryDialog", () => {
     expect(
       screen.getByRole("dialog", { name: /Restore version 2/ }),
     ).toHaveTextContent(
-      /The 1 resource file the skill has today that version 2 does not is removed/,
+      /The 1 file the skill has now that version 2 does not is removed/,
     );
   });
 
@@ -341,24 +365,6 @@ describe("SkillVersionHistoryDialog", () => {
     expect(
       screen.getByRole("dialog", { name: /Restore version 2/ }),
     ).not.toHaveTextContent(/is removed|are removed/);
-  });
-
-  it("says a restore leaves unversioned settings alone", async () => {
-    const user = userEvent.setup();
-    renderDialog();
-
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
-
-    // scoped to the confirmation: the preview pane says something similar
-    // about the manifest row, and this is a claim about the restore
-    expect(
-      screen.getByRole("dialog", { name: /Restore version 2/ }),
-    ).toHaveTextContent(
-      "the name, description, and other frontmatter fields are not versioned",
-    );
   });
 
   it("blocks restoring a GitHub-synced skill and says why", async () => {
@@ -393,7 +399,20 @@ describe("SkillVersionHistoryDialog", () => {
     );
   });
 
-  it("diffs a resource file when its row is chosen", async () => {
+  it("diffs a resource file when its row is chosen under Changes", async () => {
+    const user = userEvent.setup();
+    mockChangedScript();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+    await openChanges(user);
+    await user.click(screen.getByRole("button", { name: "extract.py" }));
+
+    expect(screen.getByTestId("diff-original")).toHaveTextContent("old script");
+    expect(screen.getByTestId("diff-modified")).toHaveTextContent("new script");
+  });
+
+  it("reads a changed file whole under All files", async () => {
     const user = userEvent.setup();
     mockChangedScript();
     renderDialog();
@@ -401,21 +420,120 @@ describe("SkillVersionHistoryDialog", () => {
     await user.click(screen.getByRole("button", { name: /v3/ }));
     await user.click(screen.getByRole("button", { name: "extract.py" }));
 
-    expect(screen.getByTestId("diff-original")).toHaveTextContent("old script");
-    expect(screen.getByTestId("diff-modified")).toHaveTextContent("new script");
+    // the file as this version stores it, not as a comparison — the reason the
+    // switcher decides the rendering and not just the listing
+    expect(screen.getByTestId("editor")).toHaveTextContent("new script");
+    expect(screen.queryByTestId("diff")).not.toBeInTheDocument();
   });
 
-  it("opens an unchanged file as itself rather than as an empty diff", async () => {
+  it("lists only what moved under Changes", async () => {
     const user = userEvent.setup();
     mockChangedScript();
     renderDialog();
 
     await user.click(screen.getByRole("button", { name: /v3/ }));
-    await user.click(screen.getByRole("button", { name: "keep.py" }));
+    await openChanges(user);
 
-    // a diff of identical bytes collapses to nothing, so the file is shown whole
-    expect(screen.getByTestId("editor")).toHaveTextContent("same");
-    expect(screen.queryByTestId("diff")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "extract.py" }),
+    ).toBeInTheDocument();
+    // an untouched file has no place in a list of changes, and neither would an
+    // untouched body — this version's did move, so SKILL.md stays
+    expect(
+      screen.queryByRole("button", { name: "keep.py" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "SKILL.md" }),
+    ).toBeInTheDocument();
+  });
+
+  it("drops an unchanged body from the change set", async () => {
+    const user = userEvent.setup();
+    mockVersionDetails({
+      3: versionDetail({
+        version: 3,
+        content: HEAD_BODY,
+        contentHash: "hash-head",
+        files: [file("scripts/extract.py", "new script")],
+      }),
+      2: versionDetail({
+        version: 2,
+        // same body, so only the script moved
+        content: HEAD_BODY,
+        contentHash: "hash-two",
+        files: [file("scripts/extract.py", "old script")],
+      }),
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+    await openChanges(user);
+
+    expect(
+      screen.queryByRole("button", { name: "SKILL.md" }),
+    ).not.toBeInTheDocument();
+    // the selection falls through to the first row that survived rather than
+    // leaving the pane on a file this list no longer holds
+    expect(screen.getByTestId("diff-modified")).toHaveTextContent("new script");
+  });
+
+  it("keeps the chosen view across versions", async () => {
+    const user = userEvent.setup();
+    mockVersionDetails({
+      3: versionDetail({
+        version: 3,
+        content: HEAD_BODY,
+        contentHash: "hash-head",
+      }),
+      2: versionDetail({
+        version: 2,
+        content: OLD_BODY,
+        contentHash: "hash-two",
+      }),
+      1: versionDetail({
+        version: 1,
+        content: "first body",
+        contentHash: "hash-one",
+      }),
+    });
+    renderDialog();
+
+    await openChanges(user);
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+
+    // whoever came to read diffs keeps reading diffs
+    expect(screen.getByTestId("diff-original")).toHaveTextContent("first body");
+  });
+
+  it("cannot compare the earliest version, and says why", async () => {
+    const user = userEvent.setup();
+    mockVersionDetails({
+      1: versionDetail({
+        version: 1,
+        content: OLD_BODY,
+        contentHash: "hash-one",
+      }),
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v1/ }));
+
+    // offering the comparison would promise one nothing can produce
+    const changes = screen.getByRole("button", { name: /^Changes/ });
+    expect(changes).toBeDisabled();
+    await user.hover(changes.parentElement as HTMLElement);
+    // radix renders the content and a screen-reader copy of it
+    expect(await screen.findAllByText(/earliest version/)).not.toHaveLength(0);
+  });
+
+  it("cannot compare against a baseline that failed to load", async () => {
+    const user = userEvent.setup();
+    mockFailedBaseline();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+
+    expect(screen.getByRole("button", { name: /^Changes/ })).toBeDisabled();
   });
 
   it("keeps the confirmation open when the restore does not go through", async () => {
@@ -461,7 +579,7 @@ describe("SkillVersionHistoryDialog", () => {
       screen.getByRole("button", { name: "extract.py" }).closest("li"),
     ).not.toHaveTextContent(/added|removed|changed/);
     expect(
-      screen.getByRole("button", { name: "Instructions" }).closest("li"),
+      screen.getByRole("button", { name: "SKILL.md" }).closest("li"),
     ).not.toHaveTextContent(/added|removed|changed/);
     expect(
       screen.getByText(/Version 2 could not be loaded/),
@@ -510,15 +628,37 @@ describe("SkillVersionHistoryDialog", () => {
     expect(refetch).toHaveBeenCalled();
   });
 
-  it("says the manifest row holds the body alone, not the editor's SKILL.md", async () => {
-    const user = userEvent.setup();
+  it("offers reset to default only for a skill the app ships", () => {
+    const { unmount } = renderDialog();
+
+    // a manual skill has no shipped version to go back to
+    expect(
+      screen.queryByRole("button", { name: /Reset to default/ }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    mockSkill({ sourceType: "built_in" });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v3/ }));
+    expect(
+      screen.getByRole("button", { name: /Reset to default/ }),
+    ).toBeInTheDocument();
+  });
 
-    // the editor's SKILL.md carries frontmatter this document does not, so the
-    // pane says so rather than letting the two read as the same file
-    expect(screen.getByText(/are not versioned/)).toBeInTheDocument();
+  it("resets a built-in skill to the shipped version once confirmed", async () => {
+    const user = userEvent.setup();
+    mockSkill({ sourceType: "built_in" });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /Reset to default/ }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Reset skill/ })).getByRole(
+        "button",
+        { name: "Reset to default" },
+      ),
+    );
+
+    expect(resetAsync).toHaveBeenCalledWith("skill-1");
   });
 
   it("lists a version once when a page boundary re-returns it", () => {
@@ -696,7 +836,7 @@ describe("SkillVersionHistoryDialog", () => {
     // there is one rule: no baseline, no badges — a 404 predecessor supports
     // "added" no better than a failed one does
     expect(
-      screen.getByRole("button", { name: "Instructions" }).closest("li"),
+      screen.getByRole("button", { name: "SKILL.md" }).closest("li"),
     ).not.toHaveTextContent(/added|removed|changed/);
     expect(
       screen.getByRole("button", { name: "extract.py" }).closest("li"),

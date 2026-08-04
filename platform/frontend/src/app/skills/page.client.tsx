@@ -15,7 +15,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  RotateCcw,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -60,7 +59,6 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useDeleteSkill,
-  useResetSkill,
   useRestoreSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
@@ -199,7 +197,6 @@ function SkillsList() {
   });
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
-  const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
   const [historySkillId, setHistorySkillId] = useState<string | null>(null);
   const [usageSkill, setUsageSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
@@ -428,7 +425,6 @@ function SkillsList() {
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const skill = row.original;
-        const isBuiltIn = skill.sourceType === "built_in";
         // A soft-deleted skill can only be restored; edit/chat/usage/delete all
         // act on active rows and would 404.
         const actions: TableRowAction[] = isDeletedView
@@ -465,16 +461,6 @@ function SkillsList() {
                 permissions: { skill: ["read"] },
                 onClick: () => setHistorySkillId(skill.id),
               },
-              ...(isBuiltIn
-                ? [
-                    {
-                      icon: <RotateCcw className="h-4 w-4" />,
-                      label: "Reset to default",
-                      permissions: { skill: ["update"] },
-                      onClick: () => setResettingSkill(skill),
-                    } satisfies TableRowAction,
-                  ]
-                : []),
               {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete",
@@ -635,14 +621,6 @@ function SkillsList() {
         />
       )}
 
-      {resettingSkill && (
-        <ResetSkillDialog
-          skill={resettingSkill}
-          open={!!resettingSkill}
-          onOpenChange={(open) => !open && setResettingSkill(null)}
-        />
-      )}
-
       {usageSkill && (
         <SkillUsageDialog
           skillId={usageSkill.id}
@@ -737,39 +715,6 @@ function DeleteSkillDialog({
       onConfirm={handleDelete}
       confirmLabel="Delete Skill"
       pendingLabel="Deleting..."
-    />
-  );
-}
-
-function ResetSkillDialog({
-  skill,
-  open,
-  onOpenChange,
-}: {
-  skill: SkillItem;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const resetSkill = useResetSkill();
-  const appName = useAppName();
-
-  const handleReset = useCallback(async () => {
-    const result = await resetSkill.mutateAsync(skill.id);
-    if (result) {
-      onOpenChange(false);
-    }
-  }, [skill.id, resetSkill, onOpenChange]);
-
-  return (
-    <DeleteConfirmDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Reset Skill"
-      description={`Reset "${skill.name}" to the version ${appName} ships? Any local edits to its instructions and resource files will be overwritten.`}
-      isPending={resetSkill.isPending}
-      onConfirm={handleReset}
-      confirmLabel="Reset to default"
-      pendingLabel="Resetting..."
     />
   );
 }

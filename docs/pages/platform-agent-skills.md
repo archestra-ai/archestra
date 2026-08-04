@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -119,7 +119,9 @@ Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skil
 
 Deleting a skill hides it from every list, activation, slash command, and share link. It also stops the skill's GitHub sync. The skill is not destroyed — it moves to a trash. Its name is free to reuse right away, so you can create a new skill with that name.
 
-Admins and team admins switch the status filter to **Deleted** to open the trash. The one action there is **Restore**, which returns the skill to active. A restore is refused when an active skill already holds the name — rename or delete that one, then restore again.
+Admins and team admins switch the status filter to **Deleted** to open the trash. **Restore** returns the skill to active. A restore is refused when an active skill already holds the name — rename or delete that one, then restore again.
+
+**Delete permanently** destroys the skill, its versions, and its resource files. It is refused while a sandbox still has the skill mounted. Deployments can also purge deleted skills automatically after a retention window; the trash then shows how long each skill has left. See [Soft-Delete Retention](./platform-deployment#soft-delete-retention).
 
 Deleting a built-in skill is a lasting opt-out — it stays gone across restarts. You can still restore it from the trash.
 

@@ -119,6 +119,8 @@ export const E2eTestId = {
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
   ChatContextUsageTrigger: "chat-context-usage-trigger",
   ChatContextUsagePanel: "chat-context-usage-panel",
+  ChatContextUsageTooltip: "chat-context-usage-tooltip",
+  ChatContextCompactButton: "chat-context-compact-button",
   ChatApiKeySelectorTrigger: "chat-api-key-selector-trigger",
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector

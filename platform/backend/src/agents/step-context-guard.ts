@@ -12,13 +12,13 @@
  * summarization is unavailable or fails, it falls back to deterministic
  * trimming so the step still fits.
  */
+import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import { trimMessagesToTokenLimit } from "@/routes/chat/context-trimming";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
 import {
-  CONTEXT_COMPACTION_AUTO_THRESHOLD,
   CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
   compactionSummaryText,
   composeCompactionPrompt,

@@ -88,4 +88,78 @@ test.describe("Context window visualizer", () => {
       timeout: 5_000,
     });
   });
+
+  test("explains context headroom on hover and offers manual compaction", async ({
+    page,
+    request,
+    makeApiRequest,
+    syncModels,
+  }) => {
+    const { apiKeyId, runtimeModel } =
+      await ensureWireMockAnthropicChatProvider({
+        request,
+        makeApiRequest,
+        syncModels,
+      });
+
+    await goToChat(page);
+    await expectChatReady(page);
+    await selectApiKeyById(page, apiKeyId);
+
+    const modelSelectorTrigger = page
+      .getByTestId(E2eTestId.ChatModelSelectorTrigger)
+      .or(page.getByRole("button", { name: /select model/i }))
+      .or(page.getByRole("button", { name: /claude|gpt|gemini/i }))
+      .first();
+    await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
+    await modelSelectorTrigger.click();
+    await expect(
+      page.getByRole("dialog", { name: "Select Model" }),
+    ).toBeVisible({ timeout: 5_000 });
+    await selectRuntimeModelFromDialog(page, runtimeModel);
+
+    const testMessageId = `context-compact-e2e-${Math.random().toString(36).slice(2, 10)}`;
+    await sendChatMessage(
+      page,
+      `Test message ${testMessageId} chat-ui-e2e-test: show context window.`,
+    );
+    await expect(
+      page.getByText("This is a mocked response for the chat UI e2e test."),
+    ).toBeVisible({ timeout: 90_000 });
+
+    const trigger = page.getByTestId(E2eTestId.ChatContextUsageTrigger);
+    await expect(trigger).toBeVisible({ timeout: 15_000 });
+
+    // Hovering the ring explains the number without opening anything: how full
+    // the window is, and how much room is left before auto-compaction fires.
+    await trigger.hover();
+    // Radix renders tooltip content twice — the visible popper plus a
+    // visually-hidden copy for screen readers — so this must not be strict.
+    const tooltip = page.getByTestId(E2eTestId.ChatContextUsageTooltip).first();
+    await expect(tooltip).toBeVisible({ timeout: 5_000 });
+    await expect(tooltip).toContainText(/% used/);
+    await expect(tooltip).toContainText(
+      /remaining until auto-compact|Auto-compact runs on your next message/,
+    );
+
+    // Clicking through, the same surface offers the action.
+    await trigger.click();
+    await expect(
+      page.getByRole("dialog", { name: "Context window" }),
+    ).toBeVisible({ timeout: 5_000 });
+
+    const compactButton = page.getByTestId(E2eTestId.ChatContextCompactButton);
+    await expect(compactButton).toBeVisible({ timeout: 5_000 });
+    await compactButton.click();
+
+    // Compaction is reported in the message stream, whether it summarized or
+    // decided there was nothing worth summarizing yet.
+    await expect(
+      page
+        .getByText(/Compacting conversation context/)
+        .or(page.getByText(/context compacted/i))
+        .or(page.getByText(/nothing to compact|not beneficial|already/i))
+        .first(),
+    ).toBeVisible({ timeout: 60_000 });
+  });
 });

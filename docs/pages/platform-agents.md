@@ -113,21 +113,15 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 
 Archestra snapshots an agent's configuration every time it changes — prompt, tools, hooks, knowledge, or settings. A save that changes nothing does not create a version. MCP gateways and LLM proxies keep the same history.
 
+Open **Version history** from the agent's row menu to browse them. Pick a version to read its configuration — whole, or as changes against the version before.
+
 The history is available through the API. `GET /api/agents/:id/versions` lists versions as metadata, newest first. `GET /api/agents/:id/versions/:version` returns one full configuration snapshot. Key material is never captured, so you can review what changed without exposing secrets.
 
 Each agent keeps its last 100 versions. The oldest listed version can therefore be greater than 1.
 
-### Browsing Versions
-
-Open **Version history** from the agent's row menu, then pick a version to read. Gateway and proxy rows open the same dialog through a history button.
-
-**All settings** shows the whole configuration as sections. **Changes** narrows to the sections that moved against the version before it — prompts and hook files open as diffs.
-
-The earliest version has no version before it, so **Changes** is unavailable there. The same applies when the version before it has been pruned.
-
 ### Restoring a Version
 
-**Restore this version** republishes an older configuration. It creates a new version rather than rewinding to the old one, so nothing in the history is rewritten. Restoring a version identical to the current configuration does nothing.
+**Restore this version** republishes an older configuration. It creates a new version rather than rewinding to the old one, so nothing in the history is rewritten.
 
 The confirmation lists what the restore would change about the agent as it is today. If someone else edits the agent while you preview, the restore is refused — nothing is overwritten.
 

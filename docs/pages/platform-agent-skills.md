@@ -129,23 +129,13 @@ A synced skill can lose its GitHub token while it sits in the trash. It still re
 
 Every edit that changes a skill's `SKILL.md` or resource files creates a new immutable version. An edit that changes nothing does not. Version numbers count up from 1, and the full history is kept.
 
+Open **Version history** from the skill's row menu to browse them. Pick a version to read its files — whole, or as diffs against the version before.
+
 `GET /api/skills/:id/versions` lists versions as metadata, newest first. `GET /api/skills/:id/versions/:version` returns one version's body and file snapshots. Sandboxes mount a pinned version, so a running skill never changes mid-conversation.
-
-### Browsing Versions
-
-Open **Version history** from the skill's row menu, then pick a version to read.
-
-**All files** lists every file the version holds and opens each one whole. Each file is marked as added, changed, or removed against the version before it. **Changes** narrows the list to the files that moved and opens each one as a diff.
-
-The earliest version has no version before it to compare against. Its files are listed without marks, and **Changes** is unavailable.
-
-The `SKILL.md` row holds the instructions. Frontmatter like the name and description is not versioned, so it never appears here.
-
-A binary file — an icon, for example — has no text to show. Its row opens empty.
 
 ### Restoring a Version
 
-**Restore this version** republishes an older version's content. It creates a new version rather than rewinding to the old one, so nothing in the history is rewritten. Restoring a version identical to the current one does nothing.
+**Restore this version** republishes an older version's content. It creates a new version rather than rewinding to the old one, so nothing in the history is rewritten.
 
 A restore replaces the skill's instructions and its resource files. Files the skill has today that the restored version does not are removed. The confirmation tells you how many, and a later restore brings them back.
 

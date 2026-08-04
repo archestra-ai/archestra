@@ -50,6 +50,10 @@ import { useGithubAppConfigs } from "@/lib/github-app-config.query";
 import { useGithubPats } from "@/lib/github-pat.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  composeManifest,
+  parseManifestFields,
+} from "@/lib/skills/manifest-compose";
+import {
   useCreateSkill,
   useSkill,
   useUpdateSkill,
@@ -58,7 +62,6 @@ import {
 import { formatBytes } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { composeManifest, parseManifestFields } from "./manifest-compose";
 import { SkillScopeSelector } from "./skill-scope-selector";
 
 interface ResourceFile {
@@ -250,6 +253,18 @@ export function SkillEditorDialog({
       teamIds: scope === "team" ? teamIds : [],
       userIds: scope === "personal" ? userIds : [],
       environmentIds,
+      // Anchor the save to the head this form was seeded from. `files` is a
+      // whole-set replacement built from that read, so without the anchor a
+      // save would bury anything written since — an `edit_skill` call, a sync
+      // pull, another user. The effect above reseeds the content and
+      // `latestVersion` together, so the two cannot drift apart.
+      //
+      // A synced skill is exempt: its save carries no files and the backend
+      // rejects any content change, so there is nothing to bury — anchoring it
+      // would only let the sync worker's own pulls reject a scope edit.
+      ...(isEdit && skill && !isSyncedSkill
+        ? { baseVersion: skill.latestVersion }
+        : {}),
     };
     const result = isEdit
       ? await updateSkill.mutateAsync({ id: skillId, body })

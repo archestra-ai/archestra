@@ -58,6 +58,7 @@ const uiTestMatch = [
   "**/mcp-install.spec.ts",
   "**/quickstart.spec.ts",
   "**/skill-share.spec.ts",
+  "**/skill-version-history.spec.ts",
   "**/static-credentials-management.spec.ts",
   "**/users-role-filter.spec.ts",
 ];

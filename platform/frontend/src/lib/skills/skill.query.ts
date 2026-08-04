@@ -1,8 +1,15 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
+import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
+  getApiErrorInternalCode,
   getApiErrorMessage,
   handleApiError,
   throwOnApiError,
@@ -13,6 +20,8 @@ const {
   getSkill,
   getSkillSourceRepos,
   getSkillUsageStatistics,
+  getSkillVersion,
+  getSkillVersions,
   createSkill,
   updateSkill,
   updateSkillGithubSync,
@@ -27,6 +36,16 @@ const {
 
 export type SkillCatalogResult =
   archestraApiTypes.SearchSkillCatalogResponses["200"]["results"][number];
+
+/** One row of a skill's version history (no SKILL.md body). */
+export type SkillVersionSummary =
+  archestraApiTypes.GetSkillVersionsResponses["200"]["data"][number];
+
+/** One immutable version with its SKILL.md body and resource files. */
+export type SkillVersionDetail =
+  archestraApiTypes.GetSkillVersionResponses["200"];
+
+const SKILL_VERSIONS_PAGE_SIZE = 20;
 
 type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
@@ -125,6 +144,70 @@ export function useSkill(id: string | null) {
   });
 }
 
+/** A skill's version history, newest first, one page at a time. */
+export function useSkillVersions(id: string | null) {
+  return useInfiniteQuery({
+    queryKey: ["skills", id, "versions"],
+    enabled: !!id,
+    // Deliberately not cached past staleness, unlike `useSkillVersion`. Each row
+    // is immutable but the *list* is append-only, and three writers outside this
+    // tab extend it: the GitHub sync worker, the MCP skill tools, and other
+    // users. Holding a page forever would leave the timeline missing the head
+    // that `useSkill` reports on the very next open.
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await getSkillVersions({
+        path: { id: id as string },
+        query: { limit: SKILL_VERSIONS_PAGE_SIZE, offset: pageParam },
+      });
+      // The history dialog renders its own failure state with a retry, so a
+      // toast here would say the same thing twice, the second time behind the
+      // dialog that already said it.
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage?.pagination.hasNext
+        ? allPages.reduce(
+            (loaded, page) => loaded + (page?.data.length ?? 0),
+            0,
+          )
+        : undefined,
+  });
+}
+
+/**
+ * One version's SKILL.md body and resource files. A missing version resolves to
+ * null rather than an error, so callers must tell a settled `null` apart from a
+ * still-loading query by the query's own status rather than by data truthiness.
+ */
+export function useSkillVersion(id: string | null, version: number | null) {
+  return useQuery({
+    // Deliberately outside the `["skills", ...]` prefix. A version's bytes are
+    // immutable, so no skill write can invalidate them — but every
+    // `invalidateQueries({ queryKey: ["skills"] })` in the app prefix-matches,
+    // and there are more of those than this file can police. Keying the
+    // snapshots apart makes the `staleTime` below hold unconditionally instead
+    // of depending on each call site remembering to exclude them.
+    queryKey: ["skill-version", id, version],
+    enabled: !!id && version !== null && version > 0,
+    // A version's bytes never change, and its snapshots carry every resource
+    // file in full (base64 for binaries). Re-fetching one on focus or on an
+    // unrelated skill edit would re-download all of that for nothing.
+    staleTime: Number.POSITIVE_INFINITY,
+    queryFn: async () => {
+      const { data, error } = await getSkillVersion({
+        path: { id: id as string, version: version as number },
+      });
+      // Silent for the same reason as the list: every caller of this hook
+      // renders the failure itself, either as the preview's retry or as the
+      // baseline banner, and both distinguish a failed read from a pruned one.
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
 // ===== Mutation hooks =====
 
 export function useCreateSkill() {
@@ -159,15 +242,24 @@ export function useUpdateSkill() {
     }) => {
       const { data, error } = await updateSkill({ path: { id }, body });
       if (error) {
+        // A 409 here is either the compare-and-set or a name collision, so the
+        // internal code decides — the status alone cannot. The generic handler
+        // would show the backend's version numbers, which say nothing to
+        // someone who was editing a form.
+        if (isSkillVersionConflict(error)) {
+          toast.error(
+            "This skill changed while you were editing it. Reopen it to pick up the latest version, then reapply your changes.",
+          );
+          return null;
+        }
         handleApiError(error);
         return null;
       }
       return data;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
-      queryClient.invalidateQueries({ queryKey: ["skills", variables.id] });
       toast.success("Skill updated");
     },
   });
@@ -211,6 +303,103 @@ export function useRestoreSkill() {
   });
 }
 
+/**
+ * Restore a skill to an earlier version by forking its payload forward: the
+ * restored bytes become a *new* head version, so nothing in the history is
+ * rewritten.
+ *
+ * There is no dedicated restore endpoint; this rides on the regular update
+ * route, so the resulting version is recorded as an ordinary edit with no
+ * "restored from" provenance. Concurrency is the route's own compare-and-set
+ * (`baseVersion`), not a client-side re-read.
+ */
+export function useRestoreSkillVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      skillId,
+      version,
+      baseVersion,
+    }: {
+      skillId: string;
+      version: number;
+      /** Head the preview was rendered against; a moved head 409s the write. */
+      baseVersion: number;
+    }) => {
+      // The frontmatter is read fresh rather than taken from the preview: it
+      // lives in columns, not in the snapshot, and a frontmatter-only edit does
+      // not move the head — so `baseVersion` cannot stand in for reading it now.
+      const [
+        { data: skill, error: skillError },
+        { data: snapshot, error: snapshotError },
+      ] = await Promise.all([
+        getSkill({ path: { id: skillId } }),
+        getSkillVersion({ path: { id: skillId, version } }),
+      ]);
+      const readError = skillError ?? snapshotError;
+      if (readError) {
+        handleApiError(readError);
+        return null;
+      }
+      if (!skill || !snapshot) return null;
+
+      const { data, error } = await updateSkill({
+        path: { id: skillId },
+        body: {
+          // A version snapshots the body alone — frontmatter lives in columns
+          // and is not versioned — while the API writes a whole SKILL.md. So
+          // the old body is republished under the skill's current frontmatter,
+          // which is exactly the edit the snapshot describes.
+          content: composeManifest({ ...skill, content: snapshot.content }),
+          // Always sent, even when empty: omitting `files` leaves the skill's
+          // current resource files untouched, which would pair an old body
+          // with newer files. `kind` is re-derived from the path server-side.
+          files: snapshot.files.map((file) => ({
+            path: file.path,
+            content: file.content,
+            encoding: file.encoding,
+          })),
+          baseVersion,
+        },
+      });
+      if (error) {
+        if (isSkillVersionConflict(error)) {
+          toast.error(
+            "This skill changed while you were previewing it. Review the latest version and try again.",
+          );
+          return null;
+        }
+        handleApiError(error);
+        return null;
+      }
+      // The backend suppresses a fork whose payload hashes equal to the head, so
+      // an unmoved `latestVersion` means the chosen version was already the
+      // current one and nothing was written. That still settles the request, so
+      // it resolves with the skill — only `null` means "ask again".
+      if (data && data.latestVersion === baseVersion) {
+        toast.info(
+          `Version ${version} is identical to the current version — nothing to restore.`,
+        );
+      }
+      return data;
+    },
+    // Reporting success on a suppressed fork would name a version that does not
+    // exist, so the toast follows the head actually moving.
+    onSuccess: (data, variables) => {
+      if (!data || data.latestVersion === variables.baseVersion) return;
+      toast.success(
+        `Restored version ${variables.version} — created version ${data.latestVersion}`,
+      );
+    },
+    // Every outcome refreshes, not just the write: a rejected compare-and-set
+    // means the head moved under the preview, and a suppressed fork still
+    // touched the skill row.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+    },
+  });
+}
+
 export function useResetSkill() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -225,7 +414,6 @@ export function useResetSkill() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
-      queryClient.invalidateQueries({ queryKey: ["skills", data.id] });
       toast.success("Skill reset to default");
     },
   });
@@ -340,4 +528,18 @@ export function useImportGithubSkills() {
       }
     },
   });
+}
+
+// ===== Internal =====
+
+/**
+ * The update route's compare-and-set rejected the write: the skill moved past
+ * the head the edit was composed from.
+ *
+ * Read off the internal code rather than the 409, which the route also uses for
+ * a name collision. The backend's message names version numbers, so every
+ * caller replaces it with copy about the read *it* made.
+ */
+function isSkillVersionConflict(error: unknown): boolean {
+  return getApiErrorInternalCode(error) === "skill_version_conflict";
 }

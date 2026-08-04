@@ -152,9 +152,11 @@ function mockVersionDetails(
     version: number | null,
   ) => {
     const entry = version === null ? null : details[version];
+    const settled = version !== null && version in details;
     return {
       data: entry ?? null,
-      isPending: !(version !== null && version in details),
+      isPending: !settled,
+      isSuccess: settled,
       isError: false,
       refetch: vi.fn(),
     };
@@ -290,6 +292,32 @@ describe("AgentVersionHistoryDialog", () => {
     expect(
       screen.queryByRole("button", { name: "Restore version 2" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("explains a pruned predecessor instead of claiming to load it", async () => {
+    const user = userEvent.setup();
+    // v1 has settled as null — the 404 retention answers for a pruned
+    // version — so v2 has no baseline and never will. The disabled Changes
+    // button must say that, not promise a load that cannot arrive.
+    mockVersionDetails({
+      3: versionDetail(3, "hash-head"),
+      2: versionDetail(2, "hash-two"),
+      1: null,
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+
+    const changesButton = screen.getByRole("button", { name: "Changes" });
+    expect(changesButton).toBeDisabled();
+    await user.hover(changesButton.parentElement as HTMLElement);
+    // radix renders the content and a screen-reader copy of it
+    expect(
+      await screen.findAllByText(
+        "Version 1 is no longer available, so there is nothing to compare against.",
+      ),
+    ).not.toHaveLength(0);
+    expect(screen.queryByText("Loading version 1...")).not.toBeInTheDocument();
   });
 
   it("blocks restoring a built-in agent", async () => {

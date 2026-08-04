@@ -137,6 +137,14 @@ function VersionHistory({
   );
   const predecessor = predecessorQuery.data ?? null;
   const baselineFailed = hasPredecessor && predecessorQuery.isError;
+  // A settled null is the hook's reading of a 404: retention pruned the
+  // baseline. Nothing is loading and nothing failed, so neither state above
+  // covers it — without this one, the switcher would claim to be loading a
+  // version that will never arrive.
+  const baselinePruned =
+    hasPredecessor &&
+    predecessorQuery.isSuccess &&
+    predecessorQuery.data === null;
 
   // What a restore would do to the agent *as it stands today* — a different
   // question from what this version changed, and the one the confirmation has
@@ -250,6 +258,7 @@ function VersionHistory({
               detail={detail ?? null}
               predecessor={predecessor}
               baselineFailed={baselineFailed}
+              baselinePruned={baselinePruned}
               onRetryBaseline={() => predecessorQuery.refetch()}
               isLoading={isDetailLoading}
               isUnavailable={isDetailUnavailable}
@@ -419,6 +428,7 @@ function VersionPreview({
   detail,
   predecessor,
   baselineFailed,
+  baselinePruned,
   onRetryBaseline,
   isLoading,
   isUnavailable,
@@ -432,6 +442,8 @@ function VersionPreview({
   predecessor: AgentVersionDetail | null;
   /** A baseline was expected and the read failed. */
   baselineFailed: boolean;
+  /** A baseline was expected but retention pruned it; there is none to load. */
+  baselinePruned: boolean;
   onRetryBaseline: () => void;
   isLoading: boolean;
   /** This version itself could not be read — distinct from it not existing. */
@@ -506,7 +518,11 @@ function VersionPreview({
           unavailableReason={
             predecessor
               ? null
-              : compareUnavailableReason(version, baselineFailed)
+              : compareUnavailableReason({
+                  version,
+                  baselineFailed,
+                  baselinePruned,
+                })
           }
         />
       </div>
@@ -590,15 +606,23 @@ function ViewModeSwitcher({
 }
 
 /** Why this version cannot be compared — each reading is a different fact. */
-function compareUnavailableReason(
-  version: number,
-  baselineFailed: boolean,
-): string {
+function compareUnavailableReason({
+  version,
+  baselineFailed,
+  baselinePruned,
+}: {
+  version: number;
+  baselineFailed: boolean;
+  baselinePruned: boolean;
+}): string {
   if (version <= 1) {
     return "This is the earliest version, so there is nothing to compare it against.";
   }
   if (baselineFailed) {
     return `Version ${version - 1} could not be loaded, so there is nothing to compare against.`;
+  }
+  if (baselinePruned) {
+    return `Version ${version - 1} is no longer available, so there is nothing to compare against.`;
   }
   return `Loading version ${version - 1}...`;
 }

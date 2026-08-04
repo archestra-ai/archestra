@@ -41,12 +41,11 @@ function generatePredefinedRolesSections(): string {
         "Platform Admin holds **all permissions except** `log:admin`, " +
         "`auditLog:admin`, and `member:impersonate` — so holders run the " +
         "platform (users, roles, settings, resources) while other members' " +
-        "LLM/MCP logs, the org-wide audit trail, impersonation, and other " +
-        "users' personal MCP connections stay out of reach. They keep " +
-        "`log:read` and " +
-        "`auditLog:read`, which show **their own** records only. Combined " +
-        "with the [no-privilege-escalation rule](#no-privilege-escalation), " +
-        "a Platform Admin cannot grant themselves or anyone else a role " +
+        "LLM/MCP logs, the org-wide audit trail, and impersonation stay out " +
+        "of reach. They keep `log:read` and `auditLog:read`, which show " +
+        "**their own** records only. Combined with the " +
+        "[no-privilege-escalation rule](#no-privilege-escalation), a " +
+        "Platform Admin cannot grant themselves or anyone else a role " +
         "carrying the withheld permissions.\n";
     } else {
       section += "| Resource | Actions |\n";

@@ -24,6 +24,7 @@ import {
 } from "@archestra/shared";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { verifyJwksSigningKey } from "@/auth/jwks-signing-key-guard";
 import config, {
   getProviderConfiguredBaseUrl,
   getProviderEnvApiKey,
@@ -1060,6 +1061,10 @@ export async function seedRequiredStartingData(): Promise<void> {
   // migrateSecretsToEncrypted encrypts any plaintext rows with the (possibly
   // wrong) current key.
   await verifySecretsEncryptionKey();
+  // Replace a JWKS signing key the current auth secret can no longer decrypt,
+  // which otherwise breaks every `openid`-scoped OAuth login with an opaque
+  // 500 until someone clears the table by hand.
+  await verifyJwksSigningKey();
   await migrateSecretsToEncrypted();
   await seedDefaultUserAndOrg();
   // Create default agents before seeding internal agents

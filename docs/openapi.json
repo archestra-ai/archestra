@@ -295007,6 +295007,12 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "baseVersion": {
+                    "description": "The skill's `latestVersion` when this edit was composed. Rejected with 409 if the skill has moved past it. Omit only when the payload owes nothing to a prior read of the skill.",
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [

@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -130,6 +130,14 @@ A synced skill can lose its GitHub token while it sits in the trash. It still re
 Every edit that changes a skill's `SKILL.md` or resource files creates a new immutable version. An edit that changes nothing does not. Version numbers count up from 1, and the full history is kept.
 
 `GET /api/skills/:id/versions` lists versions as metadata, newest first. `GET /api/skills/:id/versions/:version` returns one version's body and file snapshots. Sandboxes mount a pinned version, so a running skill never changes mid-conversation.
+
+### Concurrent Edits
+
+An edit can be anchored to the version it started from. If someone changes the skill's content first, the save is refused. Their edit is never overwritten.
+
+`PUT /api/skills/:id` takes `baseVersion` — the skill's `latestVersion` when you composed the edit. The request fails with 409 if the skill has moved past it. Omit `baseVersion` and the save is not guarded. The `edit_skill` tool takes the same field.
+
+Only content is versioned. A change to the name, scope, teams, or environments is not caught.
 
 ## Environments
 

@@ -47,6 +47,17 @@ export function MultiSelectCombobox({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const contentRef = React.useRef<HTMLDivElement>(null);
+  const listRef = React.useRef<HTMLDivElement>(null);
+
+  // The search input lives in the popover anchor, outside the Command, so
+  // CommandList's own show-from-the-top-on-query-change reset never fires
+  // here (cmdk's search state stays empty). Same rule, applied by hand: a
+  // new query must not keep the old scroll offset.
+  React.useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = 0;
+    }
+  }, [search]);
 
   const selectedOptions = options.filter((opt) => value.includes(opt.value));
 
@@ -170,7 +181,7 @@ export function MultiSelectCombobox({
         onInteractOutside={(e) => e.preventDefault()}
       >
         <Command shouldFilter={false}>
-          <CommandList>
+          <CommandList ref={listRef}>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup>
               {options

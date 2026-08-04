@@ -1,8 +1,8 @@
 "use client";
 
-import { Command as CommandPrimitive } from "cmdk";
+import { Command as CommandPrimitive, useCommandState } from "cmdk";
 import { SearchIcon } from "lucide-react";
-import type * as React from "react";
+import * as React from "react";
 import {
   Dialog,
   DialogContent,
@@ -97,11 +97,46 @@ function CommandInput({
 
 function CommandList({
   className,
+  ref,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.List>) {
+  const search = useCommandState((state) => state.search);
+  const listRef = React.useRef<HTMLDivElement | null>(null);
+  const lastSearch = React.useRef(search);
+
+  /**
+   * A new query is a new result list, so show it from the top. cmdk itself
+   * only ever scrolls this container toward the row it has marked selected —
+   * which it reads from the DOM one render behind, so typing either scrolls
+   * to where the *previous* top match landed in the re-ranked list or leaves
+   * the container parked at a stale offset. Either way the best matches
+   * render above the fold and the results read as irrelevant.
+   *
+   * Must stay a passive effect: cmdk performs its scroll in a layout effect,
+   * and this has to run after it to win. Skips the first render so a list
+   * that opens with a selection still reveals it.
+   */
+  React.useEffect(() => {
+    if (lastSearch.current === search) {
+      return;
+    }
+    lastSearch.current = search;
+    if (listRef.current) {
+      listRef.current.scrollTop = 0;
+    }
+  }, [search]);
+
   return (
     <CommandPrimitive.List
       data-slot="command-list"
+      ref={(node) => {
+        listRef.current = node;
+        if (typeof ref === "function") {
+          ref(node);
+        } else if (ref) {
+          ref.current = node;
+        }
+      }}
       className={cn(
         "max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto",
         className,

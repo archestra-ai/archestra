@@ -854,6 +854,105 @@ jobs:
 
           echo "All services are ready!"
 
+      # The API and the Next.js server both bind IPv4 only, but `localhost`
+      # resolves to ::1 first — getaddrinfo applies RFC 6724 precedence
+      # whatever the order in /etc/hosts, and musl has no /etc/gai.conf to
+      # retune it (the bundled Postgres is dual-stack; nothing else is). Any URL
+      # naming it starts every connection on an address with no listener:
+      # refused outright for a client without Happy Eyeballs, a wasted round
+      # trip for one with it. That is the `ECONNREFUSED ::1:9000` in issues
+      # #4917 and #6933. The host-side curls above cannot see this — they
+      # exercise Docker's port mapping, not in-container name resolution.
+      - name: Assert the container never dials a dead loopback address
+        run: |
+          # Context only — never the reason the step fails.
+          echo "--- container facts ---"
+          docker exec archestra-quickstart node -e '
+            const listening = (f) => require("fs").readFileSync(f, "utf8").trim().split("\n").slice(1)
+              .map((l) => l.trim().split(/\s+/)).filter((c) => c[3] === "0A")
+              .map((c) => c[1].split(":")).map(([a, p]) => parseInt(p, 16)).sort((a, b) => a - b);
+            console.log("  listening on v4:", listening("/proc/net/tcp").join(" "));
+            console.log("  listening on v6:", listening("/proc/net/tcp6").join(" "));
+            require("dns").lookup("localhost", { all: true }, (_, a) =>
+              console.log("  localhost resolves to:", JSON.stringify(a)));
+          ' || true
+
+          # Each assertion records its own result so one failure still reports
+          # the others, rather than aborting the step on the first.
+          rc=0
+
+          # 1. The runtime knob the SSR paths and the generated API client read.
+          echo "1/3 The image's internal API URL is an address, not a name..."
+          docker exec archestra-quickstart node -e '
+            const base = process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
+            if (!base) { console.error("FAILED: ARCHESTRA_INTERNAL_API_BASE_URL is unset in the image"); process.exit(1); }
+            const { hostname } = new URL(base);
+            console.log(`  ARCHESTRA_INTERNAL_API_BASE_URL=${base}`);
+            if (require("net").isIP(hostname) === 0) {
+              console.error(`FAILED: ${hostname} is a name; it resolves to ::1 first, where nothing listens`);
+              process.exit(1);
+            }
+          ' || rc=1
+
+          # 2. The frontend proxies /api, /v1 and /ws to the backend through
+          #    Next.js rewrites. With output: "standalone" those destinations are
+          #    resolved during `next build` and frozen into routes-manifest.json,
+          #    so no runtime environment can retarget them — the shipped manifest
+          #    IS the dial list, and it is what carried `http://localhost:9000`
+          #    into the proxy errors users reported.
+          echo "2/3 No baked proxy destination names localhost..."
+          docker exec archestra-quickstart node -e '
+            const m = require("/app/frontend/.next/routes-manifest.json").rewrites;
+            // Some destinations carry :params in the host (the Sentry tunnel),
+            // which is not a parseable URL and can never be a loopback dial.
+            const parsed = [...(m.beforeFiles ?? []), ...(m.afterFiles ?? []), ...(m.fallback ?? [])]
+              .map((r) => { try { return new URL(r.destination); } catch { return null; } })
+              .filter((u) => u && /^https?:$/.test(u.protocol));
+            const named = parsed.filter((u) => u.hostname === "localhost");
+            console.log(`  ${parsed.length} absolute destinations, ${named.length} naming localhost`);
+            if (named.length) {
+              console.error(`FAILED: these resolve to ::1 first, where nothing listens: ${JSON.stringify(named.map((u) => u.href))}`);
+              process.exit(1);
+            }
+          ' || rc=1
+
+          # 3. The same destinations, actually dialled — with the resolver pinned
+          #    to verbatim order and Happy Eyeballs off, so Node connects to the
+          #    FIRST address only. That is what a non-Node client in the container
+          #    does, and it is what turns an ambiguous name from "slow" into
+          #    "refused". Both flags are passed on argv, which beats NODE_OPTIONS,
+          #    and NODE_OPTIONS itself is overridden here with something an
+          #    operator plausibly sets: the fix must not live anywhere a user's
+          #    `docker run -e NODE_OPTIONS=...` could replace it.
+          echo "3/3 Every proxy destination answers on its first-resolved address..."
+          docker exec \
+            -e NODE_OPTIONS=--max-old-space-size=4096 \
+            archestra-quickstart \
+            node --dns-result-order=verbatim --no-network-family-autoselection -e '
+              const isLoopback = (h) => h === "localhost" || h === "[::1]" || h.startsWith("127.");
+              const m = require("/app/frontend/.next/routes-manifest.json").rewrites;
+              const origins = [...new Set([...(m.beforeFiles ?? []), ...(m.afterFiles ?? []), ...(m.fallback ?? [])]
+                .map((r) => { try { return new URL(r.destination); } catch { return null; } })
+                .filter((u) => u && /^https?:$/.test(u.protocol) && isLoopback(u.hostname))
+                .map((u) => u.origin))];
+              if (!origins.length) { console.error("FAILED: no loopback proxy destination found to test"); process.exit(1); }
+              Promise.all(origins.map((origin) =>
+                fetch(new URL("/health", origin))
+                  .then((r) => r.json())
+                  .then((j) => console.log(`  ${origin} -> ${JSON.stringify(j)}`))
+                  .catch((e) => {
+                    console.error(`FAILED: ${origin} unreachable on its first-resolved address: ${e.cause?.message ?? e.message}`);
+                    process.exitCode = 1;
+                  })
+              ));
+            ' || rc=1
+
+          if [ "$rc" -ne 0 ]; then
+            echo "The container dials an address it does not listen on — see issues #4917 / #6933."
+            exit 1
+          fi
+          echo "The container dials only addresses it actually listens on."
+
       # Assert the embedded Dagger Engine (skill sandbox / code runtime) actually
       # came up. The entrypoint deploys it and gates on readiness, but that gate
       # is non-fatal: on timeout it disables the runtime and the container still

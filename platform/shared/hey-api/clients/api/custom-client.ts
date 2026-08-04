@@ -1,3 +1,4 @@
+import { DEFAULT_INTERNAL_API_BASE_URL } from "../../../consts";
 import { createQuerySerializer } from "./client/utils.gen";
 import type { CreateClientConfig } from "./client.gen";
 
@@ -27,7 +28,8 @@ export const createClientConfig: CreateClientConfig = (config) => {
   const isServer = typeof window === "undefined";
 
   const backendUrl =
-    process.env.ARCHESTRA_INTERNAL_API_BASE_URL || "http://localhost:9000";
+    process.env.ARCHESTRA_INTERNAL_API_BASE_URL ||
+    DEFAULT_INTERNAL_API_BASE_URL;
 
   return {
     ...config,

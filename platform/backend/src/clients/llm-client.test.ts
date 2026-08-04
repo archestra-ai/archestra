@@ -131,11 +131,27 @@ vi.mock("ollama-ai-provider-v2", async (importOriginal) => {
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import type { ConfiguredParameters } from "@/types/model";
 import {
+  buildProxyBaseUrl,
   createDirectLLMModel,
   createLLMModel,
   createLLMModelForAgent,
   OLLAMA_THINK_EXPLICIT_HEADER,
 } from "./llm-client";
+
+describe("buildProxyBaseUrl", () => {
+  // The proxy this URL points at runs in this very process, and the API binds
+  // IPv4 only (config.api.host is "0.0.0.0" outside development). `localhost`
+  // resolves to ::1 first under RFC 6724 precedence, so naming it would send
+  // every chat turn's first proxy connection to an address with no listener —
+  // refused outright without Happy Eyeballs, and a wasted round trip with it.
+  // See issues #4917 / #6933 and LOOPBACK_HOST in shared/consts.ts.
+  it("addresses the loopback interface by IPv4 literal, never by name", () => {
+    const url = new URL(buildProxyBaseUrl("anthropic", "agent-1"));
+
+    expect(url.hostname).toBe("127.0.0.1");
+    expect(url.pathname).toBe("/v1/anthropic/agent-1");
+  });
+});
 
 describe("createDirectLLMModel", () => {
   it("creates a model for anthropic provider", () => {

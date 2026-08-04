@@ -93,31 +93,3 @@ export const perplexityResponsesAdapterFactory: LLMProvider<
     });
   },
 };
-
-/**
- * Token extractor for the fetch-based metrics wrapper.
- *
- * A Responses body reports `input_tokens`/`output_tokens`, not the
- * `prompt_tokens`/`completion_tokens` the chat-completions extractor reads, so
- * this cannot borrow `getUsageTokens` from adapters/openai — that one would
- * subtract from `undefined` and publish NaN.
- *
- * Cached tokens are reported inside the input total, so they are subtracted out
- * to leave the uncached input, matching how every other extractor here counts.
- */
-export function getUsageTokens(usage: {
-  input_tokens?: number;
-  output_tokens?: number;
-  input_tokens_details?: { cached_tokens?: number };
-  output_tokens_details?: { reasoning_tokens?: number };
-}) {
-  const cacheRead = usage.input_tokens_details?.cached_tokens ?? 0;
-
-  return {
-    input: Math.max(0, (usage.input_tokens ?? 0) - cacheRead),
-    output: usage.output_tokens ?? 0,
-    cacheRead,
-    cacheWrite: 0,
-    reasoning: usage.output_tokens_details?.reasoning_tokens ?? 0,
-  };
-}

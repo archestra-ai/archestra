@@ -137,6 +137,32 @@ interface A2AManagerConfig {
 }
 
 /**
+ * Out-of-band execution parameters passed through to `executeA2AMessage`.
+ *
+ * Named (rather than inlined on `sendMessage`) so callers that build it as an
+ * intermediate `const` can annotate it: TypeScript only applies
+ * excess-property checking to object literals assigned directly to a typed
+ * target, so an unannotated intermediate silently swallows a misspelled key.
+ * That is not hypothetical — chatops passed `route:` for a while and every
+ * ChatOps run was traced as `a2a` because nothing reads that key.
+ */
+export interface A2ASystemParams {
+  sessionId?: string;
+  source?: InteractionSource;
+  routeCategory?: RouteCategory;
+  chatOpsBindingId?: string;
+  chatOpsThreadId?: string;
+  /**
+   * Per-turn framing prepended to the executed user turn but NOT
+   * persisted with it. Callers with server-side sessions (chatops) put
+   * situational context here — "(Telegram conversation, thread id: …)",
+   * group framing — so the stored history stays clean instead of
+   * repeating the frame on every persisted turn.
+   */
+  ephemeralExecutionPrefix?: string;
+}
+
+/**
  * How a full-task-mode send executes its run.
  * - "blocking": awaited; the response carries the settled outcome.
  * - "detached": the task handle returns immediately and the run continues in
@@ -159,21 +185,7 @@ export class A2AManager {
     agentId: string;
     request: A2AProtocolSendMessageRequest;
     // systemParams are currently used for passing through to executeA2AMessage(...)
-    systemParams?: {
-      sessionId?: string;
-      source?: InteractionSource;
-      routeCategory?: RouteCategory;
-      chatOpsBindingId?: string;
-      chatOpsThreadId?: string;
-      /**
-       * Per-turn framing prepended to the executed user turn but NOT
-       * persisted with it. Callers with server-side sessions (chatops) put
-       * situational context here — "(Telegram conversation, thread id: …)",
-       * group framing — so the stored history stays clean instead of
-       * repeating the frame on every persisted turn.
-       */
-      ephemeralExecutionPrefix?: string;
-    };
+    systemParams?: A2ASystemParams;
     /**
      * Fired when loading the context's history triggered a persisted
      * cross-turn compaction (stateful mode only), before the agent executes.

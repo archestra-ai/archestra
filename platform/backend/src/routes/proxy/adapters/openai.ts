@@ -53,6 +53,7 @@ import {
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { createOpenAiCodexClient } from "./openai-codex-client";
+import { toOpenAiStreamUsage } from "./openai-sse-chunk";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
@@ -1237,13 +1238,9 @@ export class OpenAIStreamAdapter
     // without it, streaming clients (e.g. the chat route's AI SDK, for OpenRouter and other
     // OpenAI-compatible models) never see token counts. Shape mirrors the non-streaming
     // `toProviderResponse()` below — `prompt_tokens` is net of cache, with no `prompt_tokens_details`.
-    if (this.state.usage !== null) {
-      finalChunk.usage = {
-        prompt_tokens: this.state.usage.inputTokens,
-        completion_tokens: this.state.usage.outputTokens,
-        total_tokens:
-          this.state.usage.inputTokens + this.state.usage.outputTokens,
-      };
+    const usage = toOpenAiStreamUsage(this.state.usage);
+    if (usage) {
+      finalChunk.usage = usage;
     }
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }

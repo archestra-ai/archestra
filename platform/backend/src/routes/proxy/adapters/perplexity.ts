@@ -48,6 +48,7 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import { toOpenAiStreamUsage } from "./openai-sse-chunk";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
@@ -460,6 +461,14 @@ class PerplexityStreamAdapter
         },
       ],
     };
+    // We always ask upstream for usage (`stream_options: { include_usage: true }`),
+    // but the chunk carrying it is not forwarded, so the synthesized final chunk
+    // has to relay it or the client never sees token counts. Shape mirrors
+    // `toProviderResponse()` below.
+    const usage = toOpenAiStreamUsage(this.state.usage);
+    if (usage) {
+      finalChunk.usage = usage;
+    }
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 

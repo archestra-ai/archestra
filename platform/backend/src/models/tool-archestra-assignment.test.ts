@@ -496,7 +496,38 @@ describe("Archestra Tools Dynamic Assignment", () => {
     }
   });
 
-  test("backfillDefaultToolsToAgents repairs an agent that is missing a default tool, and leaves built-in system agents alone", async ({
+  test("a later boot leaves an admin's unassignment alone", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({ organizationId: org.id, name: "Chat" });
+    expect(await assignedToolNames(agent.id)).toContain(TOOL_ADVISOR_FULL_NAME);
+
+    // A Custom-mode agent's only off switch is deleting the assignment row.
+    // A boot that created no default tool has no reason to write one back.
+    const [advisorTool] = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.name, TOOL_ADVISOR_FULL_NAME));
+    await db
+      .delete(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, advisorTool.id),
+        ),
+      );
+
+    await ToolModel.backfillNewDefaultToolsToAgents([]);
+
+    expect(await assignedToolNames(agent.id)).not.toContain(
+      TOOL_ADVISOR_FULL_NAME,
+    );
+  });
+
+  test("the boot that creates a default tool assigns it to existing agents, but not to built-in system agents", async ({
     makeOrganization,
     makeAgent,
   }) => {
@@ -515,8 +546,8 @@ describe("Archestra Tools Dynamic Assignment", () => {
       })
       .returning();
 
-    // The state a two-stage rollout leaves behind: the tool row exists but the
-    // agent never received it, and no later seed reports it as newly created.
+    // The introduction state: the tool rows exist but predate every agent's
+    // assignments, and this seed run reports them as newly created.
     const seededIds = await defaultToolIds();
     for (const toolId of seededIds) {
       await db
@@ -527,7 +558,11 @@ describe("Archestra Tools Dynamic Assignment", () => {
       TOOL_ADVISOR_FULL_NAME,
     );
 
-    await ToolModel.backfillDefaultToolsToAgents();
+    await ToolModel.backfillNewDefaultToolsToAgents(
+      DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.map((n) =>
+        getArchestraToolFullName(n),
+      ),
+    );
 
     const repaired = await assignedToolNames(agent.id);
     for (const shortName of DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES) {
@@ -539,23 +574,26 @@ describe("Archestra Tools Dynamic Assignment", () => {
     );
   });
 
-  test("backfillDefaultToolsToAgents is idempotent across repeated boots", async ({
+  test("backfillNewDefaultToolsToAgents is idempotent when a boot re-reports the same tools", async ({
     makeOrganization,
     makeAgent,
   }) => {
     const org = await makeOrganization();
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
     const agent = await makeAgent({ organizationId: org.id, name: "Chat" });
+    const createdNames = DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.map((n) =>
+      getArchestraToolFullName(n),
+    );
 
-    await ToolModel.backfillDefaultToolsToAgents();
+    await ToolModel.backfillNewDefaultToolsToAgents(createdNames);
     const afterFirst = await assignedToolNames(agent.id);
-    await ToolModel.backfillDefaultToolsToAgents();
+    await ToolModel.backfillNewDefaultToolsToAgents(createdNames);
     const afterSecond = await assignedToolNames(agent.id);
 
     expect(afterSecond.sort()).toEqual(afterFirst.sort());
   });
 
-  test("backfillDefaultToolsToAgents removes no exclusion, whenever it was made", async ({
+  test("backfillNewDefaultToolsToAgents removes no exclusion, whenever it was made", async ({
     makeOrganization,
     makeAgent,
   }) => {
@@ -586,7 +624,11 @@ describe("Archestra Tools Dynamic Assignment", () => {
       )
       .onConflictDoNothing();
 
-    await ToolModel.backfillDefaultToolsToAgents();
+    await ToolModel.backfillNewDefaultToolsToAgents(
+      DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.map((n) =>
+        getArchestraToolFullName(n),
+      ),
+    );
 
     const kept = await db
       .select()

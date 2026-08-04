@@ -1872,24 +1872,33 @@ class ToolModel {
    * keeps an Auto-mode agent from having the tool pre-excluded the moment it
    * appears.
    *
-   * Deliberately NOT keyed on the names {@link seedArchestraTools} just
-   * created. A backfill that only fires on the run which creates the tool row
-   * is one-shot, so an agent that predates the row never receives the tool when
-   * the two ship in separate releases, behind a canary, or across a rolled-back
-   * deploy. Reconciling the full default set every boot covers those, and costs
-   * one query when there is nothing to do.
-   *
-   * Additive only, like the other backfills here. An exclusion row is the sole
-   * way to take a default tool off an Auto-mode agent, and nothing here can
-   * tell one an administrator made from one an older pre-fill left behind, so
-   * this removes none of them.
+   * Fires only for the default tools this seed run actually created, like its
+   * siblings. A missing `agent_tools` row carries no provenance — an agent
+   * that predates the tool and an agent an administrator took the tool off
+   * look identical — so a backfill that re-derives its work from current table
+   * state on every boot silently reverts the administrator. The boot that
+   * creates the tool is the one moment no administrator can have removed it
+   * yet. Accepted cost: a replica that creates the rows and dies before this
+   * runs leaves the tool unassigned until an operator assigns it.
    */
-  static async backfillDefaultToolsToAgents(): Promise<void> {
+  static async backfillNewDefaultToolsToAgents(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    const createdShortNames = new Set(
+      newlyCreatedToolNames
+        .map(extractArchestraBuiltInShortName)
+        .filter((name): name is string => name !== null),
+    );
+    const newDefaultShortNames = DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.filter(
+      (shortName) => createdShortNames.has(shortName),
+    );
+    if (newDefaultShortNames.length === 0) return;
+
     const organizationIds = await OrganizationModel.findAllIds();
     for (const organizationId of organizationIds) {
       const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
         organizationId,
-        [...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES],
+        newDefaultShortNames,
       );
       if (toolIds.length === 0) continue;
 

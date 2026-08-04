@@ -131,11 +131,27 @@ vi.mock("ollama-ai-provider-v2", async (importOriginal) => {
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import type { ConfiguredParameters } from "@/types/model";
 import {
+  buildProxyBaseUrl,
   createDirectLLMModel,
   createLLMModel,
   createLLMModelForAgent,
   OLLAMA_THINK_EXPLICIT_HEADER,
 } from "./llm-client";
+
+describe("buildProxyBaseUrl", () => {
+  // The proxy this URL points at runs in this very process, and the API binds
+  // IPv4 only (config.api.host is "0.0.0.0" outside development). `localhost`
+  // resolves to ::1 first under RFC 6724 precedence, so naming it would send
+  // every chat turn's first proxy connection to an address with no listener —
+  // refused outright without Happy Eyeballs, and a wasted round trip with it.
+  // See issues #4917 / #6933 and LOOPBACK_HOST in shared/consts.ts.
+  it("addresses the loopback interface by IPv4 literal, never by name", () => {
+    const url = new URL(buildProxyBaseUrl("anthropic", "agent-1"));
+
+    expect(url.hostname).toBe("127.0.0.1");
+    expect(url.pathname).toBe("/v1/anthropic/agent-1");
+  });
+});
 
 describe("createDirectLLMModel", () => {
   it("creates a model for anthropic provider", () => {
@@ -554,6 +570,82 @@ describe("createDirectLLMModel", () => {
     );
     expect(capturedCreateOpenAICompatibleOptions.apiKey).toBe("test-key");
     expect(capturedCreateOpenAICompatibleOptions.includeUsage).toBe(true);
+  });
+
+  describe("azure direct base URL handling", () => {
+    // Captures the URL the AI SDK actually requests. The stubbed 500 fails the
+    // call; the URL is captured before that, which is all these tests need.
+    const requestedUrlFor = async (params: {
+      modelName: string;
+      baseUrl: string;
+    }) => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValue(new Response("upstream stub", { status: 500 }));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const model = createDirectLLMModel({
+        provider: "azure",
+        apiKey: "test-key",
+        modelName: params.modelName,
+        baseUrl: params.baseUrl,
+      });
+      await generateText({
+        model,
+        prompt: "hi",
+        maxRetries: 0,
+      }).catch(() => {});
+
+      const input = mockFetch.mock.calls[0]?.[0];
+      if (!input) {
+        throw new Error("Expected a request to reach the fetch stub");
+      }
+      return new URL(typeof input === "string" ? input : input.url);
+    };
+
+    it("does not append api-version to Foundry v1 endpoints", async () => {
+      // The v1 endpoint rejects date-based api-version values with
+      // "API version not supported", which broke every direct-path call
+      // (KB reranker verification, title generation) against v1 base URLs.
+      const url = await requestedUrlFor({
+        modelName: "gpt-4.1",
+        baseUrl: "https://my-resource.cognitiveservices.azure.com/openai/v1",
+      });
+      expect(url.pathname).toBe("/openai/v1/chat/completions");
+      expect(url.searchParams.has("api-version")).toBe(false);
+    });
+
+    it("does not append api-version for open-model deployments on v1 endpoints", async () => {
+      // Same guard on the openai-compatible branch.
+      const url = await requestedUrlFor({
+        modelName: "DeepSeek-R1",
+        baseUrl: "https://my-resource.cognitiveservices.azure.com/openai/v1",
+      });
+      expect(url.pathname).toBe("/openai/v1/chat/completions");
+      expect(url.searchParams.has("api-version")).toBe(false);
+    });
+
+    it("routes classic endpoints through the deployment path with api-version", async () => {
+      // Classic resources only serve chat completions under
+      // /openai/deployments/<deployment>; posting to <base>/chat/completions
+      // 404s ("Resource not found").
+      const url = await requestedUrlFor({
+        modelName: "gpt-4.1",
+        baseUrl: "https://my-resource.openai.azure.com/openai",
+      });
+      expect(url.pathname).toBe("/openai/deployments/gpt-4.1/chat/completions");
+      expect(url.searchParams.has("api-version")).toBe(true);
+    });
+
+    it("keeps deployment-scoped base URLs as-is with api-version", async () => {
+      const url = await requestedUrlFor({
+        modelName: "gpt-4o",
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      });
+      expect(url.pathname).toBe("/openai/deployments/gpt-4o/chat/completions");
+      expect(url.searchParams.has("api-version")).toBe(true);
+    });
   });
 
   it("throws when azure has no base URL instead of falling back to api.openai.com", () => {

@@ -168,6 +168,66 @@ describe("getObservableFetch", () => {
     });
   });
 
+  // `openai`, `azure` and `perplexity` each serve two wire shapes, and the
+  // Responses one names its counts `input_tokens`/`output_tokens`. Read with
+  // the chat-completions extractor, `prompt_tokens` is undefined, the uncached
+  // subtraction yields NaN, and the reporter's falsy guard then drops the turn
+  // from the token metric altogether — silently, since nothing is ever wrong,
+  // only missing. So every provider that serves both shapes must sniff.
+  for (const provider of ["openai", "azure", "perplexity"] as const) {
+    test(`${provider}: counts tokens on a Responses-shaped body`, async () => {
+      const mockResponse = {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        clone: () => ({
+          json: async () => ({
+            usage: {
+              input_tokens: 4321,
+              input_tokens_details: { cached_tokens: 4000 },
+              output_tokens: 77,
+              output_tokens_details: { reasoning_tokens: 11 },
+              total_tokens: 4398,
+            },
+            model: "gpt-4o",
+          }),
+        }),
+      } as Response;
+
+      globalThis.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+      const observableFetch = getObservableFetch(provider, testAgent, "api");
+      await observableFetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+      });
+
+      const labels = {
+        provider,
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        source: "api",
+        model: "gpt-4o",
+      };
+      // Cached reads are a subset of input_tokens, so uncached input = 321.
+      expect(counterInc).toHaveBeenCalledWith({
+        labels: { ...labels, type: "input" },
+        value: 321,
+        exemplarLabels: expect.any(Object),
+      });
+      expect(counterInc).toHaveBeenCalledWith({
+        labels: { ...labels, type: "output" },
+        value: 77,
+        exemplarLabels: expect.any(Object),
+      });
+      expect(counterInc).toHaveBeenCalledWith({
+        labels: { ...labels, cache_type: "read" },
+        value: 4000,
+        exemplarLabels: expect.any(Object),
+      });
+    });
+  }
+
   test("records duration with 4xx status code", async () => {
     const mockResponse = {
       ok: false,

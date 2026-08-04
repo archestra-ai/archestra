@@ -5,7 +5,7 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0394_credential_connection_permissions.sql"),
+  path.join(__dirname, "0397_credential_connection_permissions.sql"),
   "utf-8",
 );
 
@@ -49,7 +49,7 @@ async function getRolePermission(
   return JSON.parse(role.permission as unknown as string);
 }
 
-describe("0394_credential_connection_permissions custom-role backfill", () => {
+describe("0397_credential_connection_permissions custom-role backfill", () => {
   test("roles holding mcpServerInstallation:admin gain use — capability preserved", async ({
     makeOrganization,
   }) => {

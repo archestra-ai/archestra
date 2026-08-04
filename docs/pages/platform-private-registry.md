@@ -69,6 +69,8 @@ Installations can be personal or team-scoped.
 
 A personal installation is visible only to its owner. Admins additionally see who owns each personal installation, and assigning one to an Agent or App — which then acts through that person's credentials — takes the dedicated `credentialConnection:use` permission. See [Access Control](/docs/platform-access-control) for which roles hold it.
 
+Personal installations are removed — credentials included — when their owner is deleted or leaves the organization. Team and organization installations survive their installer.
+
 When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time resolves deterministically from the caller identity and the available personal or team-scoped credentials. If no credential can be resolved, Archestra returns an error with an install link.
 
 See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for the resolution order and missing credential behavior.

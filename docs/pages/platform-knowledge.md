@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
-lastUpdated: 2026-07-28
+lastUpdated: 2026-08-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,7 +16,7 @@ A Knowledge Base is a set of connectors that index your data for retrieval. Conn
 
 ## Configuration
 
-Open **Settings > Knowledge**. Both an embedding and a reranking model must be set before Knowledge Bases can be used.
+Open **Settings > Knowledge**. An embedding model must be set before Knowledge Bases can be used. A reranking model is optional.
 
 ### Embedding Configuration
 
@@ -33,10 +33,12 @@ To change the embedding model, click **Drop** to clear the existing index — ev
 
 ![Reranking Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_reranking-configuration.webp)
 
-Pick the LLM that scores and reorders search results by relevance.
+Pick the model that scores and reorders search results by relevance. Reranking is optional — without it, search returns fused results unranked.
 
 - **Key** — any LLM provider key.
-- **Model** — any chat model from that provider.
+- **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
+
+A chat model also powers query expansion (rephrasings that improve recall). A Cohere Rerank model only scores results, so expansion is skipped with one configured.
 
 ## Creating a Knowledge Base
 
@@ -47,7 +49,7 @@ A Knowledge Base is a set of connectors. Create one from the **Knowledge** page 
 An agent — or an [MCP Gateway](/docs/platform-mcp-gateway) — reaches knowledge through the **Tools & Knowledge Sources** setting in its dialog, which has two modes:
 
 - **Auto** — the agent can search every Knowledge Base and connector the chatting user can access, within the agent's environment. Nothing is assigned; the reachable set follows each user's own visibility.
-- **Custom** — the agent searches only the Knowledge Bases and connectors you assign to it. Pick them under **Knowledge Sources**; the picker stays disabled until an embedding and reranking model are set (see [Configuration](#configuration)).
+- **Custom** — the agent searches only the Knowledge Bases and connectors you assign to it. Pick them under **Knowledge Sources**; the picker stays disabled until an embedding model is set (see [Configuration](#configuration)).
 
 Either mode is still filtered by the chatting user's own visibility, so an agent never surfaces a source the user could not read themselves. Once the agent has at least one reachable source, it gains a `query_knowledge_sources` tool that searches across them and returns the most relevant documents.
 

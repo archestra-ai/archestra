@@ -30,7 +30,7 @@ describe("getBackendBaseUrl", () => {
 
     const result = getBackendBaseUrl();
 
-    expect(result).toBe("http://localhost:9000");
+    expect(result).toBe("http://127.0.0.1:9000");
   });
 
   it("should return NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL when set", () => {
@@ -62,7 +62,7 @@ describe("getBackendBaseUrl", () => {
 
     const result = getBackendBaseUrl();
 
-    expect(result).toBe("http://localhost:9000");
+    expect(result).toBe("http://127.0.0.1:9000");
   });
 
   it("should handle URLs with ports", () => {
@@ -279,7 +279,7 @@ describe("getWebSocketUrl", () => {
 
       const result = getWebSocketUrl();
 
-      expect(result).toBe("ws://localhost:9000/ws");
+      expect(result).toBe("ws://127.0.0.1:9000/ws");
     });
 
     it("should convert http to ws", () => {
@@ -332,7 +332,7 @@ describe("getWebSocketUrl", () => {
 
       const result = getWebSocketUrl();
 
-      expect(result).toBe("ws://localhost:9000/ws");
+      expect(result).toBe("ws://127.0.0.1:9000/ws");
     });
   });
 });

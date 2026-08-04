@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  DEFAULT_INTERNAL_API_BASE_URL,
   MCP_CATALOG_API_BASE_URL,
   OAUTH_ISSUER_ROOT_ALIASES,
 } from "@archestra/shared";
@@ -46,6 +47,7 @@ const nextConfig: NextConfig = {
     resolveAlias: {
       "@archestra/shared/access-control": "../shared/access-control.ts",
       "@archestra/shared/api-error": "../shared/api-error.ts",
+      "@archestra/shared/consts": "../shared/consts.ts",
     },
   },
   logging: {
@@ -111,7 +113,8 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     const backendUrl =
-      process.env.ARCHESTRA_INTERNAL_API_BASE_URL || "http://localhost:9000";
+      process.env.ARCHESTRA_INTERNAL_API_BASE_URL ||
+      DEFAULT_INTERNAL_API_BASE_URL;
     return [
       {
         source: "/api/archestra-catalog/:path*",

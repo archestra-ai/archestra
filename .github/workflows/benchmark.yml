@@ -103,27 +103,6 @@ jobs:
             exit 1
           fi
 
-      - name: RBAC preflight (platform SA can exec into the Dagger pod)
-        env:
-          PLATFORM_SA: ${{ steps.resolve.outputs.platform_sa }}
-        run: |
-          set -euo pipefail
-          RC=0
-          VERDICT=$(kubectl auth can-i create pods/exec \
-            --as="system:serviceaccount:archestra:${PLATFORM_SA}" -n archestra 2>&1) || RC=$?
-          echo "can-i create pods/exec in archestra: ${VERDICT} (rc=${RC})"
-          DELETE_RC=0
-          DELETE_VERDICT=$(kubectl auth can-i delete pods \
-            --as="system:serviceaccount:archestra:${PLATFORM_SA}" -n archestra 2>&1) || DELETE_RC=$?
-          echo "can-i delete pods in archestra: ${DELETE_VERDICT} (rc=${DELETE_RC})"
-          # Fail closed: only an explicit allow proceeds. An API/impersonation error or a "no - <reason>"
-          # response must not slip through as if permitted.
-          if [ "${RC}" -ne 0 ] || [ "${VERDICT}" != "yes" ] || \
-             [ "${DELETE_RC}" -ne 0 ] || [ "${DELETE_VERDICT}" != "yes" ]; then
-            echo "::error::platform SA ${PLATFORM_SA} needs create pods/exec and delete pods in archestra"
-            exit 1
-          fi
-
       - name: Build and push bench runner image
         id: image
         env:
@@ -232,6 +211,9 @@ jobs:
             case "${PHASE}" in
               Failed)
                 echo "::error::pod ${POD} terminated Failed within the fast-fail window — harness broken"
+                kubectl get pod "${POD}" -n archestra \
+                  -o jsonpath='{.status.containerStatuses[?(@.name=="bench")].state.terminated.message}' || true
+                echo
                 kubectl logs "${POD}" -n archestra -c bench --tail=80 || true
                 exit 1 ;;
               Succeeded)

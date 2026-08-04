@@ -10,8 +10,10 @@ vi.mock("@/clients/llm-client", () => ({
   createDirectLLMModel: vi.fn().mockReturnValue({ id: "mock-model" }),
 }));
 
+import { HttpResponse, http } from "msw";
 import { LlmProviderApiKeyModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 import { knowledgeSettingsService } from "./knowledge-settings";
 
 describe("knowledgeSettingsService.validateRerankerConfig", () => {
@@ -107,5 +109,115 @@ describe("knowledgeSettingsService.validateRerankerConfig", () => {
     expect(result.error).toBe(
       "Failed to verify reranker model. Raw error: model does not exist",
     );
+  });
+
+  test("explains the mismatch when a rerank-API model is picked on a provider without a native rerank route", async ({
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "k" } });
+    const key = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: secret.id,
+      name: "Reranker Key",
+      provider: "gemini",
+      scope: "org",
+      userId: null,
+    });
+    // A rerank-API model has no chat-completions route, so the provider
+    // answers the probe with a bare 404.
+    mockGenerateObject.mockRejectedValue(new Error("Not Found"));
+
+    const result = await knowledgeSettingsService.validateRerankerConfig({
+      keyId: key.id,
+      model: "my-rerank-model",
+      organizationId: org.id,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("Raw error: Not Found");
+    expect(result.error).toContain("select a chat model instead");
+  });
+
+  describe("native rerank models", () => {
+    const server = useMswServer();
+
+    const makeAzureRerankKey = async (fixtures: {
+      makeOrganization: () => Promise<{ id: string }>;
+      makeSecret: (params: {
+        secret: Record<string, string>;
+      }) => Promise<{ id: string }>;
+    }) => {
+      const org = await fixtures.makeOrganization();
+      const secret = await fixtures.makeSecret({ secret: { apiKey: "k" } });
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        secretId: secret.id,
+        name: "Azure Foundry Key",
+        provider: "azure",
+        baseUrl: "https://my-resource.cognitiveservices.azure.com/openai/v1",
+        scope: "org",
+        userId: null,
+      });
+      return { org, key };
+    };
+
+    test("verifies through the provider's native rerank route, not chat completions", async ({
+      makeOrganization,
+      makeSecret,
+    }) => {
+      const { org, key } = await makeAzureRerankKey({
+        makeOrganization,
+        makeSecret,
+      });
+      server.use(
+        http.post(
+          "https://my-resource.cognitiveservices.azure.com/providers/cohere/v2/rerank",
+          () =>
+            HttpResponse.json({
+              results: [{ index: 0, relevance_score: 0.9 }],
+            }),
+        ),
+      );
+
+      const result = await knowledgeSettingsService.validateRerankerConfig({
+        keyId: key.id,
+        model: "Cohere-rerank-v4.0-fast",
+        organizationId: org.id,
+      });
+      expect(result).toEqual({ ok: true });
+      expect(mockGenerateObject).not.toHaveBeenCalled();
+    });
+
+    test("surfaces the rerank API's error without the chat-model hint", async ({
+      makeOrganization,
+      makeSecret,
+    }) => {
+      const { org, key } = await makeAzureRerankKey({
+        makeOrganization,
+        makeSecret,
+      });
+      server.use(
+        http.post(
+          "https://my-resource.cognitiveservices.azure.com/providers/cohere/v2/rerank",
+          () =>
+            HttpResponse.json(
+              { error: { message: "unauthorized" } },
+              { status: 401 },
+            ),
+        ),
+      );
+
+      const result = await knowledgeSettingsService.validateRerankerConfig({
+        keyId: key.id,
+        model: "Cohere-rerank-v4.0-fast",
+        organizationId: org.id,
+      });
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("unauthorized");
+      // The native route IS the right way to call this model; steering the
+      // user to a chat model here would be wrong.
+      expect(result.error).not.toContain("select a chat model");
+    });
   });
 });

@@ -2,6 +2,7 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
   ClientFilterSchema,
@@ -52,7 +53,7 @@ import {
 // browser (served via Next.js rewrites). MSW path-to-regexp does not accept
 // `*/...` host wildcards.
 const BACKEND_ORIGIN =
-  process.env.ARCHESTRA_INTERNAL_API_BASE_URL || "http://localhost:9000";
+  process.env.ARCHESTRA_INTERNAL_API_BASE_URL || DEFAULT_INTERNAL_API_BASE_URL;
 
 function paired(path: string): [string, string] {
   return [`${BACKEND_ORIGIN}${path}`, path];

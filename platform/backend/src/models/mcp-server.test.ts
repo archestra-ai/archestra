@@ -1,8 +1,10 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import db, { schema } from "@/database";
 import { describe, expect, mustExist, test } from "@/test";
+import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpServerModel from "./mcp-server";
 import McpServerUserModel from "./mcp-server-user";
+import SecretModel from "./secret";
 
 const uiMeta = (resourceUri: string) => ({ _meta: { ui: { resourceUri } } });
 
@@ -1185,6 +1187,85 @@ describe("McpServerModel", () => {
       });
       expect(renamed?.reinstallRequired).toBe(true);
       expect(renamed?.reinstallReason).toBe("restart");
+    });
+  });
+
+  describe("purgePersonalServersForUserInOrganization", () => {
+    test("purges only installs on the organization's catalogs, credentials included", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const orgA = await makeOrganization();
+      const orgB = await makeOrganization();
+      const catalogA = await makeInternalMcpCatalog({
+        organizationId: orgA.id,
+        serverType: "remote",
+      });
+      const catalogB = await makeInternalMcpCatalog({
+        organizationId: orgB.id,
+        serverType: "remote",
+      });
+      const secretA = await SecretModel.create({
+        name: "org-a-cred",
+        secret: { access_token: "at-a" },
+      });
+      const inOrgA = await makeMcpServer({
+        ownerId: user.id,
+        scope: "personal",
+        serverType: "remote",
+        catalogId: catalogA.id,
+        secretId: secretA.id,
+      });
+      const inOrgB = await makeMcpServer({
+        ownerId: user.id,
+        scope: "personal",
+        serverType: "remote",
+        catalogId: catalogB.id,
+      });
+
+      const purged =
+        await McpServerModel.purgePersonalServersForUserInOrganization(
+          user.id,
+          orgA.id,
+        );
+
+      expect(purged).toEqual([inOrgA.id]);
+      expect(await McpServerModel.findById(inOrgA.id)).toBeNull();
+      expect(await SecretModel.findById(secretA.id)).toBeNull();
+      expect(await McpServerModel.findById(inOrgB.id)).not.toBeNull();
+    });
+
+    test("leaves installs on catalogs without an organization alone", async ({
+      makeMcpServer,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      // No creation context — the catalog carries no organization_id, like
+      // legacy/system-seeded entries, so it cannot be attributed to the org.
+      const orgLessCatalog = await InternalMcpCatalogModel.create({
+        name: "org-less-catalog",
+        serverType: "remote",
+      });
+      const install = await makeMcpServer({
+        ownerId: user.id,
+        scope: "personal",
+        serverType: "remote",
+        catalogId: orgLessCatalog.id,
+      });
+
+      const purged =
+        await McpServerModel.purgePersonalServersForUserInOrganization(
+          user.id,
+          org.id,
+        );
+
+      expect(purged).toEqual([]);
+      expect(await McpServerModel.findById(install.id)).not.toBeNull();
     });
   });
 });

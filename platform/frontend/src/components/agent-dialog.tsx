@@ -2135,8 +2135,8 @@ export function AgentDialog({
                                 <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                               </Button>
                               <p className="text-xs text-muted-foreground">
-                                Configure embedding and reranking to use
-                                knowledge sources.
+                                Configure an embedding model to use knowledge
+                                sources.
                                 {canAccessKnowledgeSettings && (
                                   <>
                                     {" "}

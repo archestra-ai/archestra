@@ -12,8 +12,13 @@ import { geminiAdapterFactory } from "./gemini";
 import {
   type GeminiOpenaiContext,
   geminiResponseToOpenai,
+  geminiUsageViewToOpenai,
   mapGeminiFinishReason,
 } from "./gemini-openai-translator";
+import {
+  formatOpenAiChunkSse,
+  type OpenAiStreamUsage,
+} from "./openai-sse-chunk";
 
 type GeminiRequest = Gemini.Types.GenerateContentRequest & {
   _model?: string;
@@ -175,6 +180,7 @@ class GeminiOpenaiStreamAdapter
       finishReason: mapGeminiFinishReason(
         this.inner.toProviderResponse().candidates?.[0]?.finishReason,
       ),
+      usage: geminiUsageViewToOpenai(this.state.usage),
     })}data: [DONE]\n\n`;
   }
 
@@ -219,21 +225,17 @@ class GeminiOpenaiStreamAdapter
   private formatChunk(params: {
     delta: Record<string, unknown>;
     finishReason: string | null;
+    /** Only the final chunk passes this; delta chunks must stay usage-free. */
+    usage?: OpenAiStreamUsage;
   }): string {
-    return `data: ${JSON.stringify({
+    return formatOpenAiChunkSse({
       id: this.ctx.chatcmplId,
-      object: "chat.completion.chunk",
       created: this.ctx.createdUnix,
       model: this.ctx.requestedModel,
-      choices: [
-        {
-          index: 0,
-          delta: params.delta,
-          finish_reason: params.finishReason,
-          logprobs: null,
-        },
-      ],
-    })}\n\n`;
+      delta: params.delta,
+      finishReason: params.finishReason,
+      usage: params.usage,
+    });
   }
 }
 

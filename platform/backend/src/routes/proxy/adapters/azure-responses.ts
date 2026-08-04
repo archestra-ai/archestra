@@ -43,6 +43,7 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import { fromResponsesUsage, toResponsesUsage } from "./responses-usage";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type AzureResponsesRequest = Azure.Types.ResponsesRequest;
@@ -400,16 +401,7 @@ class AzureResponsesResponseAdapter
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.usage?.input_tokens ?? 0,
-      outputTokens: this.response.usage?.output_tokens ?? 0,
-      reasoningTokens:
-        (
-          this.response.usage?.output_tokens_details as
-            | { reasoning_tokens?: number }
-            | undefined
-        )?.reasoning_tokens ?? 0,
-    };
+    return fromResponsesUsage(this.response.usage);
   }
 
   getOriginalResponse(): AzureResponsesResponse {
@@ -482,16 +474,7 @@ class AzureResponsesStreamAdapter
       this.state.responseId = chunk.response.id;
       this.state.model = chunk.response.model;
       if (chunk.response.usage) {
-        this.state.usage = {
-          inputTokens: chunk.response.usage.input_tokens ?? 0,
-          outputTokens: chunk.response.usage.output_tokens ?? 0,
-          reasoningTokens:
-            (
-              chunk.response.usage.output_tokens_details as
-                | { reasoning_tokens?: number }
-                | undefined
-            )?.reasoning_tokens ?? 0,
-        };
+        this.state.usage = fromResponsesUsage(chunk.response.usage);
       }
     }
 
@@ -655,13 +638,9 @@ class AzureResponsesStreamAdapter
               ],
             },
           ],
-          usage: {
-            input_tokens: 0,
-            input_tokens_details: { cached_tokens: 0 },
-            output_tokens: 0,
-            output_tokens_details: { reasoning_tokens: 0 },
-            total_tokens: 0,
-          },
+          // Always numeric, and the tokens actually observed: this is the
+          // client's only usage report for a replaced turn.
+          usage: toResponsesUsage(this.state.usage),
         },
       }),
     ].join("");
@@ -738,16 +717,7 @@ class AzureResponsesStreamAdapter
       model: this.state.model,
       status: "completed",
       output: outputItems,
-      usage: this.state.usage
-        ? {
-            input_tokens: this.state.usage.inputTokens,
-            input_tokens_details: { cached_tokens: 0 },
-            output_tokens: this.state.usage.outputTokens,
-            output_tokens_details: { reasoning_tokens: 0 },
-            total_tokens:
-              this.state.usage.inputTokens + this.state.usage.outputTokens,
-          }
-        : undefined,
+      usage: this.state.usage ? toResponsesUsage(this.state.usage) : undefined,
     } as unknown as AzureResponsesResponse;
   }
 

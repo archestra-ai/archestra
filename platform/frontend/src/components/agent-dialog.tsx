@@ -2457,7 +2457,9 @@ export function AgentDialog({
                               fast, cheap model while it escalates the few
                               decisions that shape the outcome to a stronger one
                               — better answers than the cheap model alone, for
-                              less than running the strong one throughout.{" "}
+                              less than running the strong one throughout. Each
+                              consultation is billed at the advisor model&apos;s
+                              own rates.{" "}
                               <Link
                                 href={`/agents?edit=${advisorAgentId}`}
                                 className="underline underline-offset-4"

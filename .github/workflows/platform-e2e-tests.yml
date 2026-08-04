@@ -854,9 +854,10 @@ jobs:
 
           echo "All services are ready!"
 
-      # Everything in this image binds IPv4 only, but `localhost` resolves to
-      # ::1 first — getaddrinfo applies RFC 6724 precedence whatever the order
-      # in /etc/hosts, and musl has no /etc/gai.conf to retune it. So any URL
+      # The API and the Next.js server both bind IPv4 only, but `localhost`
+      # resolves to ::1 first — getaddrinfo applies RFC 6724 precedence
+      # whatever the order in /etc/hosts, and musl has no /etc/gai.conf to
+      # retune it (the bundled Postgres is dual-stack; nothing else is). Any URL
       # naming it starts every connection on an address with no listener:
       # refused outright for a client without Happy Eyeballs, a wasted round
       # trip for one with it. That is the `ECONNREFUSED ::1:9000` in issues

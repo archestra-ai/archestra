@@ -19,6 +19,7 @@ import {
   type StartupGuardContext,
 } from "@/services/startup-guard";
 import {
+  CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
 } from "@/services/startup-guard.clients";
@@ -165,42 +166,46 @@ function extractShellFunction(script: string, name: string): string {
 }
 
 /**
- * Run rendered guard functions for real against a throwaway CODEX_HOME, with a
- * fake `codex` on PATH that records its argv. Exercising the generated shell
- * beats asserting on its text: these defects were all "the code ran and did
- * nothing", which a string match cannot tell from success.
+ * Run rendered guard functions for real against a throwaway home directory,
+ * with a fake client binary on PATH that records its argv. Exercising the
+ * generated shell beats asserting on its text: the defects this pins were all
+ * "the code ran and did nothing", which a string match cannot tell from
+ * success.
+ *
+ * `files` are written relative to the temp home; `env` overlays the spawned
+ * bash's environment (HOME always points at the temp home, so verifiers that
+ * default to `$HOME/...` read the fixture, never this machine's real config).
+ * An `env` value may embed `{HOME}`, replaced with the temp home's absolute
+ * path — the only way a caller can point CODEX_HOME/CLAUDE_CONFIG_DIR at a
+ * directory that does not exist until the harness creates it.
  */
-async function runCodexGuardSnippet(params: {
+async function runGuardSnippet(params: {
+  client: StartupGuardClient;
   functions: string[];
   invoke: string;
-  configToml?: string;
-  authJson?: string;
-}): Promise<{ code: number; stdout: string; codexArgs: string[] }> {
-  const script = renderStartupGuardScript(CTX, CODEX_GUARD_CLIENT);
-  const dir = await mkdtemp(path.join(tmpdir(), "archestra-codex-"));
+  files?: Record<string, string>;
+  env?: Record<string, string>;
+}): Promise<{ code: number; stdout: string; cliArgs: string[] }> {
+  const script = renderStartupGuardScript(CTX, params.client);
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-run-"));
   try {
-    const home = path.join(dir, "codex-home");
+    const home = path.join(dir, "home");
     const bin = path.join(dir, "bin");
-    const argvLog = path.join(dir, "codex-argv.log");
+    const argvLog = path.join(dir, "cli-argv.log");
     await mkdir(home, { recursive: true });
     await mkdir(bin, { recursive: true });
-    if (params.configToml !== undefined) {
-      await writeFile(
-        path.join(home, "config.toml"),
-        params.configToml,
-        "utf8",
-      );
+    for (const [relpath, content] of Object.entries(params.files ?? {})) {
+      const target = path.join(home, relpath);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, content, "utf8");
     }
-    if (params.authJson !== undefined) {
-      await writeFile(path.join(home, "auth.json"), params.authJson, "utf8");
-    }
-    const fakeCodex = path.join(bin, "codex");
+    const fakeCli = path.join(bin, params.client.binary);
     await writeFile(
-      fakeCodex,
+      fakeCli,
       `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(argvLog)}\n`,
       "utf8",
     );
-    await chmod(fakeCodex, 0o755);
+    await chmod(fakeCli, 0o755);
 
     const harness = path.join(dir, "harness.sh");
     await writeFile(
@@ -218,11 +223,23 @@ async function runCodexGuardSnippet(params: {
       "utf8",
     );
 
+    const overlay = Object.fromEntries(
+      Object.entries(params.env ?? {}).map(([key, value]) => [
+        key,
+        value.replaceAll("{HOME}", home),
+      ]),
+    );
     const result = await execFileAsync("bash", [harness], {
       env: {
         ...process.env,
-        CODEX_HOME: home,
+        HOME: home,
+        // Config-relocation vars exported on the machine running the tests
+        // must not leak into the fixture home. Empty string falls through
+        // `${VAR:-default}` to the default, exactly like unset.
+        CLAUDE_CONFIG_DIR: "",
+        CODEX_HOME: "",
         PATH: `${bin}:${process.env.PATH ?? ""}`,
+        ...overlay,
       },
     }).then(
       (r) => ({ code: 0, stdout: r.stdout }),
@@ -232,16 +249,36 @@ async function runCodexGuardSnippet(params: {
       }),
     );
 
-    let codexArgs: string[] = [];
+    let cliArgs: string[] = [];
     try {
-      codexArgs = (await readFile(argvLog, "utf8")).split("\n").filter(Boolean);
+      cliArgs = (await readFile(argvLog, "utf8")).split("\n").filter(Boolean);
     } catch {
-      codexArgs = [];
+      cliArgs = [];
     }
-    return { ...result, codexArgs };
+    return { ...result, cliArgs };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+/** Codex flavor of {@link runGuardSnippet}: CODEX_HOME points at the temp home. */
+async function runCodexGuardSnippet(params: {
+  functions: string[];
+  invoke: string;
+  configToml?: string;
+  authJson?: string;
+}): Promise<{ code: number; stdout: string; codexArgs: string[] }> {
+  const files: Record<string, string> = {};
+  if (params.configToml !== undefined) files["config.toml"] = params.configToml;
+  if (params.authJson !== undefined) files["auth.json"] = params.authJson;
+  const { code, stdout, cliArgs } = await runGuardSnippet({
+    client: CODEX_GUARD_CLIENT,
+    functions: params.functions,
+    invoke: params.invoke,
+    files,
+    env: { CODEX_HOME: "{HOME}" },
+  });
+  return { code, stdout, codexArgs: cliArgs };
 }
 
 const GATEWAY_TABLE = [
@@ -406,5 +443,186 @@ describe("Copilot-specific disconnect", () => {
     expect(script).toContain('"$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"');
     // Copilot's non-interactive one-shot flag
     expect(script).toContain("-p|--prompt) INTERACTIVE=0");
+  });
+});
+
+describe("Claude Code disconnect reports what it could not remove", () => {
+  const GATEWAY_JSON = JSON.stringify({
+    mcpServers: {
+      prod_gateway: { type: "http", url: "https://archestra.example.com" },
+      "user-own-server": { type: "stdio", command: "/usr/bin/thing" },
+    },
+  });
+
+  test("a gateway the CLI failed to remove fails verification and names the fix", async () => {
+    const { code, stdout } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      files: { ".claude.json": GATEWAY_JSON },
+    });
+
+    // Before the fix the removal was fire-and-forget: `claude mcp remove` ran
+    // silenced with its result discarded, and the guard printed ✓ regardless.
+    expect(code).toBe(7);
+    expect(stdout).toContain("prod_gateway is still registered in");
+    expect(stdout).toContain(
+      "run `claude mcp remove --scope user prod_gateway` yourself",
+    );
+  });
+
+  test("the name appearing in an unrelated value is not a leftover", async () => {
+    // ~/.claude.json holds per-project state where a server name can occur in
+    // ordinary strings — this is why the check parses JSON instead of grepping.
+    const { code } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp\n",
+      files: {
+        ".claude.json": JSON.stringify({
+          mcpServers: {},
+          projects: {
+            "/home/user/repo": { history: ["please debug prod_gateway"] },
+          },
+        }),
+      },
+    });
+
+    expect(code).toBe(0);
+  });
+
+  test("verification reads the config CLAUDE_CONFIG_DIR points at", async () => {
+    // Seeded only under the relocated config dir; a verifier hardcoding
+    // ~/.claude.json would see no leftover and wrongly report success.
+    const { code } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      files: { "claude-cfg/.claude.json": GATEWAY_JSON },
+      env: { CLAUDE_CONFIG_DIR: "{HOME}/claude-cfg" },
+    });
+
+    expect(code).toBe(7);
+  });
+
+  test("a marketplace the CLI failed to remove fails verification; foreign ones never do", async () => {
+    const stillThere = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify skills || exit 7\nexit 0\n",
+      files: {
+        ".claude/plugins/known_marketplaces.json": JSON.stringify({
+          "claude-plugins-official": { source: "github" },
+          "acme-skills": { source: "https://archestra.example.com/repo.git" },
+        }),
+      },
+    });
+    expect(stillThere.code).toBe(7);
+    expect(stillThere.stdout).toContain(
+      "run `claude plugin marketplace remove acme-skills` yourself",
+    );
+
+    const foreignOnly = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify skills\n",
+      files: {
+        ".claude/plugins/known_marketplaces.json": JSON.stringify({
+          "claude-plugins-official": { source: "github" },
+        }),
+      },
+    });
+    expect(foreignOnly.code).toBe(0);
+  });
+
+  test("an unreadable config passes: presence must be proven, not presumed", async () => {
+    const { code } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp && disconnect_verify skills\n",
+      files: { ".claude.json": "{ this is not json" },
+    });
+
+    expect(code).toBe(0);
+  });
+});
+
+describe("Copilot CLI disconnect reports what it could not remove", () => {
+  test("a gateway the CLI failed to remove fails verification and names the fix", async () => {
+    const { code, stdout } = await runGuardSnippet({
+      client: COPILOT_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      files: {
+        ".copilot/mcp-config.json": JSON.stringify({
+          mcpServers: {
+            prod_gateway: { url: "https://archestra.example.com" },
+          },
+        }),
+      },
+    });
+
+    expect(code).toBe(7);
+    expect(stdout).toContain("run `copilot mcp remove prod_gateway` yourself");
+  });
+
+  test("a marketplace the CLI failed to remove fails verification", async () => {
+    const { code, stdout } = await runGuardSnippet({
+      client: COPILOT_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify skills || exit 7\nexit 0\n",
+      files: {
+        ".copilot/settings.json": JSON.stringify({
+          extraKnownMarketplaces: {
+            "acme-skills": { source: "https://archestra.example.com/repo.git" },
+          },
+        }),
+      },
+    });
+
+    expect(code).toBe(7);
+    expect(stdout).toContain(
+      "run `copilot plugin marketplace remove acme-skills` yourself",
+    );
+  });
+
+  test("verification passes once the entries are gone or the files are absent", async () => {
+    const clean = await runGuardSnippet({
+      client: COPILOT_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp && disconnect_verify skills\n",
+      files: {
+        ".copilot/mcp-config.json": JSON.stringify({ mcpServers: {} }),
+        ".copilot/settings.json": JSON.stringify({}),
+      },
+    });
+    expect(clean.code).toBe(0);
+
+    const absent = await runGuardSnippet({
+      client: COPILOT_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp && disconnect_verify skills\n",
+    });
+    expect(absent.code).toBe(0);
+  });
+});
+
+describe("windows disconnect verification (string pins — no PS runtime in CI)", () => {
+  test("claude: reads the JSON configs the CLI edits, honoring CLAUDE_CONFIG_DIR", () => {
+    const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    expect(script).toContain("function Test-ArchDisconnected");
+    expect(script).toContain("ConvertFrom-Json");
+    expect(script).toContain(
+      "$(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { $env:USERPROFILE }) '.claude.json'",
+    );
+    expect(script).toContain("plugins\\known_marketplaces.json");
+    expect(script).toContain("$archParsed.mcpServers");
+  });
+
+  test("copilot: reads mcp-config.json and settings.json", () => {
+    const script = renderStartupGuardPowerShell(CTX, COPILOT_GUARD_CLIENT);
+    expect(script).toContain(".copilot\\mcp-config.json");
+    expect(script).toContain(".copilot\\settings.json");
+    expect(script).toContain("$archParsed.extraKnownMarketplaces");
   });
 });

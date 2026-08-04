@@ -18,8 +18,10 @@ import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
  * disconnect commands the guard runs when a remote is unreachable.
  *
  * Cursor is deliberately absent: it is a GUI IDE with no wrappable terminal
- * launch command, so its connect is reversed from the Disconnect panel rather
- * than a startup guard.
+ * launch command, so no startup guard can host a disconnect for it. Its
+ * connect currently has no automated reversal at all — the Disconnect panel
+ * that once covered it was removed from the connect flow — so undoing a
+ * Cursor connect means editing `~/.cursor/mcp.json` by hand.
  */
 
 /** Single-quote a value for bash; safe for arbitrary content. */
@@ -48,6 +50,23 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
   mcpDisconnectCommands: `      command claude mcp remove --scope user "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
       command claude mcp remove --scope local "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true`,
   skillsDisconnectCommands: `      command claude plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true`,
+  // Connect registers the gateway at user scope, which lives in
+  // `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`) under `mcpServers`;
+  // marketplaces are indexed in `plugins/known_marketplaces.json` by name. A
+  // local-scope entry the user added themselves is deliberately not checked.
+  mcpDisconnectVerify: jsonMemberGoneVerify({
+    configPath: '"${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"',
+    member: "mcpServers",
+    nameVar: "$MCP_SERVER_NAME",
+    manualCommand: "claude mcp remove --scope user",
+  }),
+  skillsDisconnectVerify: jsonMemberGoneVerify({
+    configPath:
+      '"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/known_marketplaces.json"',
+    member: "",
+    nameVar: "$SKILLS_MARKETPLACE_NAME",
+    manualCommand: "claude plugin marketplace remove",
+  }),
   renderProxyDisconnect: claudeProxyDisconnect,
   windows: {
     mcpDisconnect: `      if ($archRealExe) {
@@ -57,6 +76,20 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
     skillsDisconnect: `      if ($archRealExe) {
         try { & $archRealExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { }
       }`,
+    mcpDisconnectVerify: windowsJsonMemberGoneVerify({
+      configPath:
+        "Join-Path $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { $env:USERPROFILE }) '.claude.json'",
+      member: "mcpServers",
+      nameVar: "$McpServerName",
+      manualCommand: "claude mcp remove --scope user",
+    }),
+    skillsDisconnectVerify: windowsJsonMemberGoneVerify({
+      configPath:
+        "Join-Path $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }) 'plugins\\known_marketplaces.json'",
+      member: "",
+      nameVar: "$SkillsMarketplaceName",
+      manualCommand: "claude plugin marketplace remove",
+    }),
     renderProxyDisconnect: claudeWindowsProxyDisconnect,
     proxyDisconnectNote: (ctx) =>
       ctx.proxy?.provider === "bedrock"
@@ -394,10 +427,37 @@ export const COPILOT_GUARD_CLIENT: StartupGuardClient = {
   nonInteractiveArgPatterns: ["-p", "--prompt"],
   mcpDisconnectCommands: `      command copilot mcp remove "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true`,
   skillsDisconnectCommands: `      command copilot plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true`,
+  // Copilot CLI keeps MCP servers in `~/.copilot/mcp-config.json` under
+  // `mcpServers` and registered marketplaces in `~/.copilot/settings.json`
+  // under `extraKnownMarketplaces` (both verified against a live install).
+  mcpDisconnectVerify: jsonMemberGoneVerify({
+    configPath: '"$HOME/.copilot/mcp-config.json"',
+    member: "mcpServers",
+    nameVar: "$MCP_SERVER_NAME",
+    manualCommand: "copilot mcp remove",
+  }),
+  skillsDisconnectVerify: jsonMemberGoneVerify({
+    configPath: '"$HOME/.copilot/settings.json"',
+    member: "extraKnownMarketplaces",
+    nameVar: "$SKILLS_MARKETPLACE_NAME",
+    manualCommand: "copilot plugin marketplace remove",
+  }),
   renderProxyDisconnect: copilotProxyDisconnect,
   windows: {
     mcpDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source mcp remove $McpServerName 2>$null | Out-Null } catch { } }`,
     skillsDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { } }`,
+    mcpDisconnectVerify: windowsJsonMemberGoneVerify({
+      configPath: "Join-Path $env:USERPROFILE '.copilot\\mcp-config.json'",
+      member: "mcpServers",
+      nameVar: "$McpServerName",
+      manualCommand: "copilot mcp remove",
+    }),
+    skillsDisconnectVerify: windowsJsonMemberGoneVerify({
+      configPath: "Join-Path $env:USERPROFILE '.copilot\\settings.json'",
+      member: "extraKnownMarketplaces",
+      nameVar: "$SkillsMarketplaceName",
+      manualCommand: "copilot plugin marketplace remove",
+    }),
     renderProxyDisconnect: copilotWindowsProxyDisconnect,
     proxyDisconnectNote: () =>
       "Removed the COPILOT_PROVIDER_* environment variables (User scope and this session). Open a new terminal for the change to fully take effect.",
@@ -449,4 +509,85 @@ proxy_disconnect_notes() {
   printf '%s  Removed any COPILOT_PROVIDER_* export lines from your shell profiles — open a new terminal so the change takes effect.%s\\n' "$C_DIM" "$C_RESET"
   return 0
 }`;
+}
+
+// ===================================================================
+// Shared disconnect-verification helpers
+// ===================================================================
+
+/**
+ * Bash proof that a named member is gone from a client's JSON config, for the
+ * engine's `disconnect_verify()`.
+ *
+ * The removal itself is delegated to the vendor CLI, whose exit status cannot
+ * answer "is it gone?" — a remove of an already-absent entry may exit 0 or 1
+ * depending on the CLI — and a missing binary makes the removal a silent
+ * no-op. Reading the config back is the only honest check, and it is also
+ * what catches the missing-binary case. Prints the manual command and returns
+ * 1 when the entry survived.
+ *
+ * The check needs python3 for a real JSON parse (a plain grep of a JSON file
+ * false-positives on names that appear in unrelated values); without python3
+ * it returns 0, keeping the previous assume-success behaviour rather than
+ * failing disconnects on machines that cannot verify. An unreadable or
+ * corrupt config also passes: presence is unprovable there, and the failure
+ * path must only fire on proof.
+ */
+function jsonMemberGoneVerify(params: {
+  /** Shell expression for the config path, e.g. `"$HOME/.copilot/mcp-config.json"`. */
+  configPath: string;
+  /** Top-level object holding the entries; empty string = the document root. */
+  member: string;
+  /** Shell variable carrying the entry name, e.g. `$MCP_SERVER_NAME`. */
+  nameVar: string;
+  /** Command the user can run by hand when verification fails. */
+  manualCommand: string;
+}): string {
+  const { configPath, member, nameVar, manualCommand } = params;
+  return `      command -v python3 >/dev/null 2>&1 || return 0
+      arch_cfg=${configPath}
+      [ -f "$arch_cfg" ] || return 0
+      if python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        cfg = json.load(f)
+except Exception:
+    sys.exit(0)
+parent = cfg.get(sys.argv[3]) if sys.argv[3] else cfg
+sys.exit(1 if isinstance(parent, dict) and sys.argv[2] in parent else 0)
+' "$arch_cfg" "${nameVar}" "${member}"; then return 0; fi
+      line_reset
+      printf '%s  %s is still registered in %s — run \`${manualCommand} %s\` yourself.%s\\n' "$C_WARN" "${nameVar}" "$arch_cfg" "${nameVar}" "$C_RESET"
+      return 1`;
+}
+
+/**
+ * PowerShell twin of {@link jsonMemberGoneVerify}, for the engine's
+ * `Test-ArchDisconnected`. ConvertFrom-Json is built in, so there is no
+ * python3-style dependency; the unreadable-config case still passes for the
+ * same reason.
+ */
+function windowsJsonMemberGoneVerify(params: {
+  /** PowerShell expression for the config path. */
+  configPath: string;
+  /** Top-level object holding the entries; empty string = the document root. */
+  member: string;
+  /** PowerShell variable carrying the entry name, e.g. `$McpServerName`. */
+  nameVar: string;
+  /** Command the user can run by hand when verification fails. */
+  manualCommand: string;
+}): string {
+  const { configPath, member, nameVar, manualCommand } = params;
+  const parent = member ? `$archParsed.${member}` : "$archParsed";
+  return `    $archCfg = ${configPath}
+    if (Test-Path $archCfg) {
+      $archParsed = $null
+      try { $archParsed = Get-Content -Path $archCfg -Raw | ConvertFrom-Json } catch { }
+      $archParent = if ($archParsed) { ${parent} } else { $null }
+      if ($archParent -and $archParent.PSObject.Properties[${nameVar}]) {
+        $Script:ArchDisconnectReason = ${nameVar} + ' is still registered in ' + $archCfg + ' — run \`${manualCommand} ' + ${nameVar} + '\` yourself.'
+        return $false
+      }
+    }`;
 }

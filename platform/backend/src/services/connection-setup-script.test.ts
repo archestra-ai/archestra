@@ -1318,7 +1318,56 @@ describe("idempotent re-runs", () => {
 
     const codex = renderSetupScript(fullContext("codex"));
     expect(codex).toContain(
-      '[ -f "$CONFIG.archestra-backup" ] || cp "$CONFIG" "$CONFIG.archestra-backup"',
+      'if [ -f "$CONFIG" ] && [ ! -f "$CONFIG.archestra-backup" ]; then',
+    );
+  });
+});
+
+describe("codex config backup is genuinely pre-Archestra", () => {
+  // The backup exists so a user (or the docs' restore instructions) can get
+  // back to the config they had before Archestra touched it. `codex mcp add`
+  // and `codex plugin marketplace add` edit the same config.toml the provider
+  // block goes into, so a backup taken inside the proxy section would already
+  // contain the gateway registered a moment earlier — and an mcp/skills-only
+  // connect would take no backup at all.
+  test("bash: the backup is taken before the first codex CLI call", () => {
+    const script = renderSetupScript(fullContext("codex"));
+    const backupAt = script.indexOf(".archestra-backup");
+    expect(backupAt).toBeGreaterThan(-1);
+    expect(backupAt).toBeLessThan(script.indexOf("codex mcp add"));
+    expect(backupAt).toBeLessThan(
+      script.indexOf("codex plugin marketplace add"),
+    );
+  });
+
+  test("bash: an mcp-only connect still takes the backup, honoring CODEX_HOME", async () => {
+    const script = renderSetupScript({
+      ...fullContext("codex"),
+      proxy: null,
+      skills: null,
+    });
+    await expectValidBash(script);
+    expect(script).toContain(
+      'CONFIG="${CODEX_HOME:-$HOME/.codex}/config.toml"',
+    );
+    expect(script).toContain(
+      'if [ -f "$CONFIG" ] && [ ! -f "$CONFIG.archestra-backup" ]; then',
+    );
+    expect(script.indexOf(".archestra-backup")).toBeLessThan(
+      script.indexOf("codex mcp add"),
+    );
+  });
+
+  test("windows: the backup is taken before the first codex CLI call, honoring CODEX_HOME", () => {
+    const script = renderSetupScript(fullContext("codex", "windows"));
+    const backupAt = script.indexOf(".archestra-backup");
+    expect(backupAt).toBeGreaterThan(-1);
+    expect(backupAt).toBeLessThan(script.indexOf("codex mcp add"));
+    expect(backupAt).toBeLessThan(
+      script.indexOf("codex plugin marketplace add"),
+    );
+    expect(script).toContain(
+      "$(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' })",
     );
   });
 });

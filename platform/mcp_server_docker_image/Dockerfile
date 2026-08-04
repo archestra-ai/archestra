@@ -49,21 +49,36 @@ FROM ${NODE_IMAGE} AS node-builder
 # CVE-2026-33671, sigstore CVE-2026-48815, and undici CVE-2026-12151 (bundle
 # ships 6.27.0, which previously required a manual bundle swap on 11.17.0).
 # npm 11.18.0 was published 2026-06-29 and has cleared the 7-day release-age practice.
-# Overwrite bundled brace-expansion to patch CVE-2026-14257 (uncontrolled resource
-# consumption): the bundle ships 5.0.7 via minimatch 10.2.5, and no npm release carries
-# the fixed 5.0.8 — 11.18.0 is the last 11.x, while 12.0.0/12.0.1 still bundle 5.0.7 and
-# require Node >=22 (this stage is node:20-alpine). Same-major swap, API compatible:
-# minimatch 10.2.5 asks for ^5.0.5, and 5.0.8 keeps 5.0.7's `balanced-match: ^4.0.2`,
-# already satisfied by the bundled balanced-match 4.0.4. `npm pack` must run BEFORE the
-# old copy is removed: npm reaches brace-expansion through minimatch/glob, so deleting it
-# first leaves npm unable to run the very command that fetches the replacement.
+# Two of npm's OWN bundled dependencies carry HIGH CVEs that no npm release fixes,
+# so both are swapped in place. 11.18.0 is the last 11.x, and 12.0.0/12.0.1 require
+# Node >=22 while this stage is node:20-alpine, so upgrading npm is not the way out.
+# Both swaps stay within the same major and satisfy the bundled consumer's range, and
+# this is also what the final stage ships — it copies this npm wholesale (see below).
+#
+#   brace-expansion  CVE-2026-14257, then CVE-2026-69152 (uncontrolled resource
+#     consumption). The bundle ships 5.0.7 via minimatch 10.2.5, which asks ^5.0.5;
+#     5.0.9 keeps 5.0.7's `balanced-match: ^4.0.2` (satisfied by the bundled 4.0.4)
+#     and declares `node: 20 || >=22`.
+#   ip-address  CVE-2026-69192 (improper input validation, affects <=10.3.0). The
+#     bundle ships 10.2.0 via socks 2.8.9, which asks ^10.1.1; 10.3.1 is in range and
+#     declares `node: >= 12`. The package.json override next to this file only governs
+#     the /opt/node-deps tree, so it cannot reach this copy.
+#
+# Each `npm pack` must run BEFORE its old copy is removed: npm reaches these packages
+# through minimatch/glob and socks respectively, so deleting first can leave npm unable
+# to run the very command that fetches the replacement.
 RUN npm install -g npm@11.18.0 && \
     cd /usr/local/lib/node_modules/npm/node_modules && \
-    npm pack brace-expansion@5.0.8 && \
+    npm pack brace-expansion@5.0.9 && \
     rm -rf brace-expansion && \
-    tar -xzf brace-expansion-5.0.8.tgz && \
+    tar -xzf brace-expansion-5.0.9.tgz && \
     mv package brace-expansion && \
-    rm brace-expansion-5.0.8.tgz
+    rm brace-expansion-5.0.9.tgz && \
+    npm pack ip-address@10.3.1 && \
+    rm -rf ip-address && \
+    tar -xzf ip-address-10.3.1.tgz && \
+    mv package ip-address && \
+    rm ip-address-10.3.1.tgz
 
 WORKDIR /opt/node-deps
 

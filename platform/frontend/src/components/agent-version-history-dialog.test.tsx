@@ -117,20 +117,17 @@ function mockAgent(overrides: Record<string, unknown> = {}) {
 }
 
 /** Head is v3; v2 and v1 are the history behind it. */
-function mockVersions() {
+function mockVersions(
+  rows: ReturnType<typeof versionRow>[] = [
+    versionRow(3, "hash-head"),
+    versionRow(2, "hash-two"),
+    versionRow(1, "hash-one"),
+  ],
+) {
   vi.mocked(useAgentVersions).mockReturnValue({
-    data: {
-      pages: [
-        {
-          data: [
-            versionRow(3, "hash-head"),
-            versionRow(2, "hash-two"),
-            versionRow(1, "hash-one"),
-          ],
-        },
-      ],
-    },
+    data: { pages: [{ data: rows }] },
     isPending: false,
+    isSuccess: true,
     isError: false,
     refetch: vi.fn(),
     hasNextPage: false,
@@ -318,6 +315,22 @@ describe("AgentVersionHistoryDialog", () => {
       ),
     ).not.toHaveLength(0);
     expect(screen.queryByText("Loading version 1...")).not.toBeInTheDocument();
+  });
+
+  it("shows an empty preview for a config that never recorded a version", () => {
+    // `latestVersion: 0` is the column default for an agent created before
+    // versioning shipped, not a head. Reading it as one pointed the detail
+    // query at version 0 — which the hook refuses to fetch — and left the
+    // pane on "Loading version..." forever.
+    mockAgent({ latestVersion: 0 });
+    mockVersions([]);
+    renderDialog();
+
+    expect(screen.queryByText("Loading version...")).not.toBeInTheDocument();
+    expect(screen.getByText(/Nothing to preview yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No versions yet\. The next configuration change/),
+    ).toBeInTheDocument();
   });
 
   it("blocks restoring a built-in agent", async () => {

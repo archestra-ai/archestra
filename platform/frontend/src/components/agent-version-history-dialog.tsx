@@ -116,7 +116,13 @@ function VersionHistory({
   // The freshly-fetched timeline outranks the profile: `useProfile` serves a
   // minutes-stale cache, and a lagging `latestVersion` would strip the true
   // newest row of its "Current" badge and offer to "restore" the actual head.
-  const headVersion = versions[0]?.version ?? agent?.latestVersion ?? null;
+  // A `latestVersion` of 0 is the column default for a config that has never
+  // recorded a version — not a head. Reading it as one would point the detail
+  // query at version 0, which it refuses to fetch, and the pane would report
+  // itself loading forever.
+  const headVersion =
+    versions[0]?.version ??
+    (agent && agent.latestVersion > 0 ? agent.latestVersion : null);
   const activeVersion = selectedVersion ?? headVersion;
   const isHead = activeVersion !== null && activeVersion === headVersion;
 
@@ -241,6 +247,13 @@ function VersionHistory({
             isAgentLoading || versionsQuery.isPending ? (
               <p className="p-6 text-sm text-muted-foreground">
                 Loading version...
+              </p>
+            ) : versionsQuery.isSuccess ? (
+              // The timeline settled empty, so there is genuinely no version
+              // to preview — the state next to it already explains why.
+              <p className="p-6 text-sm text-muted-foreground">
+                Nothing to preview yet. Once this {noun} records a version, its
+                configuration appears here.
               </p>
             ) : (
               <LoadFailure

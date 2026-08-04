@@ -588,10 +588,12 @@ disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on
 # Opened with [C] from the prompt under the rows. Every remote is already on
 # screen in a stable block, so the menu just re-decorates those rows in place
 # ([n] label) and reads number keys — no redraw, no layout jump. Pressing a
-# number disconnects that remote (reverse-of-connect, then remembered) and
-# lands its row on the purple check; Esc or Enter leaves and lets claude
-# start. Removing the last connected remote takes the guard with it. Rows
-# list every active remote regardless of reachability.
+# number disconnects that remote (reverse-of-connect, verified, then
+# remembered) and lands its row on the purple check — or on ✗ with its number
+# still live when the removal cannot be proven; Esc or Enter leaves and lets
+# claude start. Removing the last connected remote takes the guard with it,
+# but only when every removal was proven. Rows list every active remote
+# regardless of reachability.
 MENU_DONE=' '
 menu_at_row()    { printf '\\033[%dA\\r\\033[2K' "$((ACTIVE_TOTAL - $1 + 1))"; }
 menu_leave_row() { printf '\\033[%dB\\r' "$((ACTIVE_TOTAL - $1 + 1))"; }
@@ -616,9 +618,20 @@ menu_disconnect_row() { # $1 pos, $2 idx — animate the reversal on its own row
   done
   wait "$arch_dp" 2>/dev/null || true
   line_reset
+  # Same contract as disconnect_resource: only a removal we can prove lands
+  # the check and the skip-file entry. Verify output is suppressed because
+  # this line is repainted in place — the row itself carries the verdict,
+  # and an unproven removal keeps its number so it can be retried.
+  if ! disconnect_verify "\${GUARD_KINDS[$2]}" >/dev/null 2>&1; then
+    DISCONNECT_FAILED=1
+    printf '%s✗ Could not disconnect %s — [%s] to retry%s' "$C_ERR" "\${GUARD_LABELS[$2]}" "$1" "$C_RESET"
+    menu_leave_row "$1"
+    return 1
+  fi
   printf '%s✓%s Disconnected %s' "$C_ACCENT" "$C_RESET" "\${GUARD_LABELS[$2]}"
   menu_leave_row "$1"
   remember_disconnected "\${GUARD_KINDS[$2]}"
+  return 0
 }
 reconfigure_menu() {
   GUARD_DWELL=1
@@ -642,13 +655,13 @@ reconfigure_menu() {
         done
         [ -z "$menu_target" ] && continue
         case "$MENU_DONE" in *" $menu_target "*) continue ;; esac
-        menu_disconnect_row "$key" "$menu_target"
+        menu_disconnect_row "$key" "$menu_target" || continue
         MENU_DONE="$MENU_DONE$menu_target "
         menu_left=0
         for menu_idx in $ACTIVE_IDXS; do
           case "$MENU_DONE" in *" $menu_idx "*) ;; *) menu_left=$((menu_left + 1)) ;; esac
         done
-        if [ "$menu_left" -eq 0 ]; then
+        if [ "$menu_left" -eq 0 ] && [ "$DISCONNECT_FAILED" = "0" ]; then
           uninstall_guard
           break
         fi

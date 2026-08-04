@@ -402,11 +402,13 @@ function Disconnect-ArchRemotes($remotes) { # reverse connect, then skip on late
 # Opened with [C] from the prompt under the rows. Every remote is already on
 # screen in a stable block, so the menu just re-decorates those rows in place
 # ([n] label) and reads number keys — no redraw, no layout jump. Pressing a
-# number disconnects that remote (reverse-of-connect, then remembered) and
-# lands its row on the purple check; Esc or Enter leaves and lets claude
-# start. Removing the last connected remote takes the guard with it. Rows
-# list every active remote regardless of reachability. VT uses relative
-# cursor moves off the block; legacy consoles use absolute positioning.
+# number disconnects that remote (reverse-of-connect, verified, then
+# remembered) and lands its row on the purple check — or on ✗ with its number
+# still live when the removal cannot be proven; Esc or Enter leaves and lets
+# claude start. Removing the last connected remote takes the guard with it,
+# but only when every removal was proven. Rows list every active remote
+# regardless of reachability. VT uses relative cursor moves off the block;
+# legacy consoles use absolute positioning.
 function Move-ArchRowStart([int]$i, [int]$count, [int]$baseTop) {
   if ($UseVt) { Write-Host -NoNewline ("$Esc[" + ($count - $i) + "A\`r$Esc[2K") }
   else { try { [Console]::SetCursorPosition(0, $baseTop - $count + $i) } catch { }; Clear-ArchLine }
@@ -432,13 +434,24 @@ function Disconnect-ArchMenuRow([int]$i, [int]$count, [int]$baseTop) {
   Move-ArchRowStart $i $count $baseTop
   Show-ArchSpinStart ('Disconnecting ' + $r.Label) ''
   for ($p = 0; $p -lt 2; $p++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
-  Invoke-ArchDisconnectActions $r.Kind
+  $Script:ArchDisconnectReason = ''
+  $archOk = Invoke-ArchDisconnectActions $r.Kind
   for ($p = 0; $p -lt 2; $p++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
   Clear-ArchLine
+  if (-not $archOk) {
+    # Same contract as Disconnect-ArchRemote: only a removal we can prove
+    # lands the check and the skip-file entry. The row carries the verdict
+    # (the reason line has no room here) and keeps its number for a retry.
+    $Script:ArchDisconnectFailed = $true
+    Write-Arch ('✗ Could not disconnect ' + $r.Label + ' — [' + ($i + 1) + '] to retry') Red -NoNewline
+    Move-ArchRowEnd $i $count $baseTop
+    return $false
+  }
   Write-Arch '✓' Magenta -NoNewline
   Write-Host -NoNewline (' Disconnected ' + $r.Label)
   Move-ArchRowEnd $i $count $baseTop
   Add-ArchDisconnected $r.Kind
+  return $true
 }
 function Show-ArchMenuRowResult([int]$i, [int]$count, [int]$baseTop) {
   $r = $ActiveRemotes[$i]
@@ -482,9 +495,9 @@ function Invoke-ArchReconfigureMenu {
     if ([int]::TryParse([string]$k.KeyChar, [ref]$d) -and $d -ge 1 -and $d -le $count) {
       $r = $ActiveRemotes[$d - 1]
       if ($done.ContainsKey($r.Kind)) { continue }
-      Disconnect-ArchMenuRow ($d - 1) $count $baseTop
+      if (-not (Disconnect-ArchMenuRow ($d - 1) $count $baseTop)) { continue }
       $done[$r.Kind] = $true
-      if ($done.Count -ge $count) { Remove-ArchGuard; break }
+      if ($done.Count -ge $count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard; break }
     }
   }
   Clear-ArchMenuFooter $baseTop

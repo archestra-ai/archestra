@@ -434,6 +434,96 @@ describe("an unverified disconnect is not recorded as done", () => {
   });
 });
 
+// The menu's cursor/spinner choreography, neutralized: the contract under
+// test is verify → record, not the animation. remember_disconnected is
+// re-declared verbatim because the real one is a one-liner
+// extractShellFunction cannot slice.
+const MENU_ROW_PREAMBLE = [
+  "menu_at_row() { :; }",
+  "menu_leave_row() { :; }",
+  "spin_start() { :; }",
+  "spin_tick() { :; }",
+  'remember_disconnected() { printf "%s\\n" "$1" >> "$SKIP_FILE"; }',
+  "MIN_CHECK_FRAMES=0",
+  "FRAME_SLEEP=0",
+  "GUARD_KINDS=(mcp)",
+  'GUARD_LABELS=("MCP gateway")',
+  'SKIP_FILE="$HOME/guard-skip"',
+  "DISCONNECT_FAILED=0",
+].join("\n");
+
+describe("the reconfigure menu obeys the same verify-before-record contract", () => {
+  test("bash: a removal that cannot be proven paints ✗, records nothing, and stays retryable", async () => {
+    const { code, stdout } = await runCodexGuardSnippet({
+      functions: [
+        "menu_disconnect_row",
+        "disconnect_actions",
+        "disconnect_verify",
+      ],
+      invoke: [
+        MENU_ROW_PREAMBLE,
+        "menu_disconnect_row 1 0 && exit 9",
+        '[ "$DISCONNECT_FAILED" = "1" ] || exit 8',
+        '[ ! -f "$SKIP_FILE" ] || exit 7',
+        "exit 0",
+      ].join("\n"),
+      // The fake CLI removes nothing, so the gateway table survives it.
+      configToml: GATEWAY_TABLE,
+    });
+
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      "✗ Could not disconnect MCP gateway — [1] to retry",
+    );
+    expect(stdout).not.toContain("✓ Disconnected");
+    // The verify hint would corrupt the in-place row; it stays suppressed.
+    expect(stdout).not.toContain("is still in");
+  });
+
+  test("bash: a proven removal lands the check and the skip-file entry", async () => {
+    const { code, stdout } = await runCodexGuardSnippet({
+      functions: [
+        "menu_disconnect_row",
+        "disconnect_actions",
+        "disconnect_verify",
+      ],
+      invoke: [
+        MENU_ROW_PREAMBLE,
+        "menu_disconnect_row 1 0 || exit 9",
+        'grep -qx mcp "$SKIP_FILE" || exit 8',
+        '[ "$DISCONNECT_FAILED" = "0" ] || exit 7',
+        "exit 0",
+      ].join("\n"),
+      // Nothing of ours left behind, so the removal verifies.
+      configToml: FOREIGN_TABLES,
+    });
+
+    expect(code).toBe(0);
+    expect(stdout).toContain("✓ Disconnected MCP gateway");
+  });
+
+  test("bash: the menu's guard uninstall waits on every removal being proven", () => {
+    const script = renderStartupGuardScript(CTX, CODEX_GUARD_CLIENT);
+    expect(script).toContain(
+      'menu_disconnect_row "$key" "$menu_target" || continue',
+    );
+    expect(script).toContain(
+      'if [ "$menu_left" -eq 0 ] && [ "$DISCONNECT_FAILED" = "0" ]; then',
+    );
+  });
+
+  test("windows: same contract — verify, gate the record, gate the uninstall", () => {
+    const script = renderStartupGuardPowerShell(CTX, CODEX_GUARD_CLIENT);
+    expect(script).toContain("$archOk = Invoke-ArchDisconnectActions $r.Kind");
+    expect(script).toContain(
+      "if (-not (Disconnect-ArchMenuRow ($d - 1) $count $baseTop)) { continue }",
+    );
+    expect(script).toContain(
+      "if ($done.Count -ge $count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard; break }",
+    );
+  });
+});
+
 describe("Copilot-specific disconnect", () => {
   test("strips the COPILOT_PROVIDER_* export lines from the shell profiles", () => {
     const script = renderStartupGuardScript(CTX, COPILOT_GUARD_CLIENT);

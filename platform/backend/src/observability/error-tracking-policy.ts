@@ -3,6 +3,7 @@ import {
   getTransientDbErrorCode,
   isDbStatementTimeoutError,
 } from "@/database/retry";
+import { extractVaultErrorMessage } from "@/secrets-manager/utils";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import {
   collectErrorCodes,
@@ -72,6 +73,9 @@ export function classifyErrorForTracking(
 
   // A secrets-backend (e.g. Vault) outage fails every route that reads secrets,
   // fragmenting one incident into an issue per endpoint and upstream message.
+  // The user-facing message is deliberately generic, so surface the backend's
+  // actual response (status code + error strings, never secret material) from
+  // the chained cause — otherwise the captured issue is undiagnosable.
   if (
     error instanceof ApiError &&
     error.internalCode === SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE
@@ -79,7 +83,12 @@ export function classifyErrorForTracking(
     return {
       report: true,
       fingerprint: [SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE],
-      tags: { error_type: SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE },
+      tags: {
+        error_type: SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+        ...(error.cause !== undefined && {
+          secrets_backend_error: extractVaultErrorMessage(error.cause),
+        }),
+      },
     };
   }
 

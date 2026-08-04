@@ -54,20 +54,29 @@ export default class VaultSecretManager
     operationName: string,
     context: Record<string, unknown> = {},
   ): never {
+    const vaultError = extractVaultErrorMessage(error);
+    // The Vault detail goes into the message text (not only the structured
+    // fields) because retained log records keep just the message line —
+    // without it, a forwarded log trail only shows a generic failure.
     logger.error(
-      { error, vaultError: extractVaultErrorMessage(error), ...context },
-      `VaultSecretManager.${operationName}: failed`,
+      { error, vaultError, ...context },
+      `VaultSecretManager.${operationName}: failed (${vaultError})`,
     );
 
     if (error instanceof ApiError) {
       throw error;
     }
 
-    throw new ApiError(
+    // The user-facing message stays generic (Vault internals aren't for end
+    // users), but the original error rides along as `cause` so error tracking
+    // can report what the secrets backend actually returned.
+    const apiError = new ApiError(
       503,
       "An error occurred while accessing secrets. Please try again later or contact your administrator.",
       SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
     );
+    apiError.cause = error;
+    throw apiError;
   }
 
   async createSecret(

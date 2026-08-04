@@ -200,4 +200,23 @@ describe("classifyErrorForTracking", () => {
       SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
     ]);
   });
+
+  test("surfaces the secrets backend's own error from the chained cause", () => {
+    // The user-facing message is generic by design; the tag is what makes a
+    // captured secrets outage diagnosable without access to server logs.
+    const error = new ApiError(
+      503,
+      "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+      SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+    );
+    error.cause = {
+      response: { statusCode: 403, body: { errors: ["permission denied"] } },
+    };
+    const decision = classifyErrorForTracking(error);
+    expect(decision.report).toBe(true);
+    expect(decision.tags).toMatchObject({
+      error_type: SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+      secrets_backend_error: "403: permission denied",
+    });
+  });
 });

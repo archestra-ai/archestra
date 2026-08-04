@@ -19,12 +19,14 @@
         {
           "id": "openrouter/auto",
           "created": 1700000000,
-          "owned_by": "openrouter"
+          "owned_by": "openrouter",
+          "context_length": 2000000
         },
         {
           "id": "openrouter/openai/gpt-4o-mini",
           "created": 1700000000,
-          "owned_by": "openrouter"
+          "owned_by": "openrouter",
+          "context_length": 128000
         }
       ]
     }

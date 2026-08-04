@@ -1,9 +1,9 @@
 import { E2eTestId } from "@archestra/shared";
 import {
-  ensureWireMockAnthropicChatProvider,
   expectChatReady,
+  getRuntimeModelForProviderFromApi,
   goToChat,
-  selectApiKeyById,
+  selectApiKeyForProvider,
   selectRuntimeModelFromDialog,
   sendChatMessage,
 } from "../utils";
@@ -12,6 +12,14 @@ import { expect, test } from "./api-fixtures";
 // Run serially to avoid WireMock stub contention with the main chat suite.
 test.describe.configure({ mode: "serial", retries: 2 });
 
+// OpenRouter, not Anthropic: the ring needs a known context window, and
+// OpenRouter's WireMock model list reports `context_length` directly on the
+// fetched model (highest-priority capability source). Anthropic's real API
+// exposes no such field, so that capability can only ever come from the
+// models.dev enrichment pass — a live external fetch this suite does not
+// stub, which left the ring's gate permanently unmet in CI.
+const CONTEXT_WINDOW_TEST_PROVIDER = "openrouter";
+
 test.describe("Context window visualizer", () => {
   test.setTimeout(120_000);
 
@@ -19,21 +27,22 @@ test.describe("Context window visualizer", () => {
     page,
     request,
     makeApiRequest,
-    syncModels,
   }) => {
-    // Provision a WireMock-backed Anthropic key so the chat backend can stream
-    // a real breakdown event without hitting a live LLM.
-    const { apiKeyId, runtimeModel } =
-      await ensureWireMockAnthropicChatProvider({
-        request,
-        makeApiRequest,
-        syncModels,
-      });
+    const runtimeModel = await getRuntimeModelForProviderFromApi(
+      makeApiRequest,
+      request,
+      CONTEXT_WINDOW_TEST_PROVIDER,
+    );
+    test.skip(
+      !runtimeModel,
+      `${CONTEXT_WINDOW_TEST_PROVIDER} is not configured in this test environment`,
+    );
+    if (!runtimeModel) return;
 
     await goToChat(page);
     await expectChatReady(page);
 
-    await selectApiKeyById(page, apiKeyId);
+    await selectApiKeyForProvider(page, CONTEXT_WINDOW_TEST_PROVIDER);
 
     // Pick the WireMock model so the model-selector dropdown closes cleanly.
     const modelSelectorTrigger = page
@@ -79,8 +88,8 @@ test.describe("Context window visualizer", () => {
     await expect(panel).toBeVisible({ timeout: 5_000 });
 
     // At least one category gauge row must be present — the exact set depends on
-    // what the WireMock Anthropic model returns in the breakdown, but "Messages"
-    // is always populated after one conversation turn.
+    // what the WireMock model returns in the breakdown, but "Messages" is
+    // always populated after one conversation turn.
     await expect(panel.getByText("Messages")).toBeVisible({ timeout: 5_000 });
 
     // The estimate footnote is always rendered at the bottom of the panel.
@@ -93,18 +102,21 @@ test.describe("Context window visualizer", () => {
     page,
     request,
     makeApiRequest,
-    syncModels,
   }) => {
-    const { apiKeyId, runtimeModel } =
-      await ensureWireMockAnthropicChatProvider({
-        request,
-        makeApiRequest,
-        syncModels,
-      });
+    const runtimeModel = await getRuntimeModelForProviderFromApi(
+      makeApiRequest,
+      request,
+      CONTEXT_WINDOW_TEST_PROVIDER,
+    );
+    test.skip(
+      !runtimeModel,
+      `${CONTEXT_WINDOW_TEST_PROVIDER} is not configured in this test environment`,
+    );
+    if (!runtimeModel) return;
 
     await goToChat(page);
     await expectChatReady(page);
-    await selectApiKeyById(page, apiKeyId);
+    await selectApiKeyForProvider(page, CONTEXT_WINDOW_TEST_PROVIDER);
 
     const modelSelectorTrigger = page
       .getByTestId(E2eTestId.ChatModelSelectorTrigger)

@@ -58,9 +58,11 @@ export function SessionsCard() {
               </EmptyMedia>
               <EmptyTitle>Sign in again to manage your sessions</EmptyTitle>
               <EmptyDescription>
-                For your security, this list is only available shortly after you
-                sign in. Sign out and back in to see where your account is
-                signed in.
+                {/* 24 hours mirrors Better Auth's session.freshAge default,
+                    pinned by backend/src/auth/list-sessions-freshness.test.ts */}
+                For your security, this list is only available for the first 24
+                hours after you sign in. Sign out and back in to see where your
+                account is signed in.
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>

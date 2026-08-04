@@ -4,7 +4,8 @@ import { betterAuth } from "@/auth";
 import config from "@/config";
 import { describe, expect, test } from "@/test";
 
-const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
 
 async function sessionCookieHeaders(sessionToken: string) {
   if (!config.auth.secret) {
@@ -25,15 +26,24 @@ async function sessionCookieHeaders(sessionToken: string) {
  * refused even though it is still valid for everything else. Sessions live 7
  * days, so an account spends most of its life in that state — which is why the
  * Sessions card has a re-authentication state rather than just a list.
+ *
+ * The two tests straddle the 24h boundary because the card's copy promises
+ * that exact window; if a Better Auth upgrade moves the default, these fail
+ * and the copy in sessions-card.tsx must be updated with it.
  */
 describe("listSessions session freshness", () => {
+  test("resolves freshAge to the 24h window the Sessions card copy promises", async () => {
+    const ctx = await betterAuth.$context;
+    expect(ctx.sessionConfig.freshAge).toBe(24 * 60 * 60);
+  });
+
   test("refuses a session older than freshAge", async ({
     makeUser,
     makeSession,
   }) => {
     const user = await makeUser();
     const session = await makeSession(user.id, {
-      createdAt: new Date(Date.now() - 2 * DAY_MS),
+      createdAt: new Date(Date.now() - 25 * HOUR_MS),
       expiresAt: new Date(Date.now() + 5 * DAY_MS),
     });
 
@@ -53,7 +63,7 @@ describe("listSessions session freshness", () => {
   }) => {
     const user = await makeUser();
     const session = await makeSession(user.id, {
-      createdAt: new Date(),
+      createdAt: new Date(Date.now() - 23 * HOUR_MS),
       expiresAt: new Date(Date.now() + 7 * DAY_MS),
     });
 

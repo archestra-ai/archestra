@@ -33,9 +33,8 @@ interface TokenSelectProps {
 
 /**
  * Self-contained component for selecting credential source for MCP tool execution.
- * Shows shared organization/team credentials and personal local execution
- * targets. Personal remote connections are resolved only at call time and can
- * never be pinned to an assignment.
+ * Shows shared organization/team installations. Every personal installation
+ * resolves only at call time and can never be pinned to an assignment.
  *
  * Fetches all credentials for the specified catalogId (no agent filtering).
  */
@@ -64,14 +63,7 @@ export function TokenSelect({
   const teamCredentials = mcpServers.filter(
     (server) => server.scope === "team",
   );
-  const personalLocalInstallations = mcpServers.filter(
-    (server) => server.scope === "personal" && server.serverType === "local",
-  );
-  const staticTargets = [
-    ...organizationCredentials,
-    ...teamCredentials,
-    ...personalLocalInstallations,
-  ];
+  const staticTargets = [...organizationCredentials, ...teamCredentials];
 
   const isLoading = !groupedCredentials;
 
@@ -171,24 +163,6 @@ export function TokenSelect({
                     description={`Shared with team ${server.teamDetails?.name ?? "Unknown team"}`}
                   >
                     {server.teamDetails?.name ?? "Unknown team"}
-                  </SelectItem>
-                ))}
-              </>
-            )}
-            {personalLocalInstallations.length > 0 && (
-              <>
-                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
-                  Static - Local Installation
-                </div>
-                {personalLocalInstallations.map((server) => (
-                  <SelectItem
-                    key={server.id}
-                    value={server.id}
-                    className="cursor-pointer"
-                    data-testid={E2eTestId.StaticCredentialToUse}
-                    description="Runs this personal hosted installation"
-                  >
-                    {server.name}
                   </SelectItem>
                 ))}
               </>

@@ -514,13 +514,9 @@ async function validateAssignedMcpServer(params: {
       })))
     : null;
 
-  // A personal hosted/local install is an execution target, not a reusable
-  // upstream credential. Only remote personal connections carry the secret
-  // this invariant protects.
-  if (
-    mcpServer.scope === "personal" &&
-    (catalogItem?.serverType ?? mcpServer.serverType) === "remote"
-  ) {
+  // Personal installations are always caller-bound, regardless of whether
+  // they represent remote credentials or a hosted local runtime.
+  if (mcpServer.scope === "personal") {
     return {
       code: "validation_error",
       error: {
@@ -611,7 +607,7 @@ export async function isMcpServerAssignableToTarget(params: {
   };
 }): Promise<boolean> {
   const { mcpServer, target } = params;
-  if (mcpServer.scope === "personal" && mcpServer.serverType !== "local") {
+  if (mcpServer.scope === "personal") {
     return false;
   }
 
@@ -674,8 +670,7 @@ export async function filterMcpServersAssignableToTarget<
   // Personal connections always resolve from the caller at runtime. They are
   // never valid static choices, including for their owner or an Admin.
   const mcpServers = params.mcpServers.filter(
-    (mcpServer) =>
-      mcpServer.scope !== "personal" || mcpServer.serverType === "local",
+    (mcpServer) => mcpServer.scope !== "personal",
   );
   if (mcpServers.length === 0) {
     return [];
@@ -771,6 +766,10 @@ function isMcpServerAssignableToPrefetchedTarget(params: {
     target,
     targetTeamMemberOwnerIdSet,
   } = params;
+
+  if (mcpServer.scope === "personal") {
+    return false;
+  }
 
   if (mcpServer.scope === "org") {
     return true;

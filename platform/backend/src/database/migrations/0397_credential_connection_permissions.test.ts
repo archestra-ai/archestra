@@ -66,9 +66,15 @@ describe("0397_credential_connection_permissions custom-role cleanup", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId: organization.id,
       authorId: user.id,
-      serverType: "remote",
+      serverType: "local",
     });
     const connection = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      scope: "personal",
+      serverType: "local",
+    });
+    const remoteConnection = await makeMcpServer({
       catalogId: catalog.id,
       ownerId: user.id,
       scope: "personal",
@@ -93,7 +99,7 @@ describe("0397_credential_connection_permissions custom-role cleanup", () => {
     await db.insert(schema.appToolsTable).values({
       appId: app.id,
       toolId: tool.id,
-      mcpServerId: connection.id,
+      mcpServerId: remoteConnection.id,
       credentialResolutionMode: "static",
     });
     await db

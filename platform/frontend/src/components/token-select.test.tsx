@@ -131,6 +131,8 @@ describe("TokenSelect", () => {
           id: "user-credential",
           ownerEmail: "member@example.com",
           scope: "personal",
+          serverType: "local",
+          name: "personal-local-installation",
           teamDetails: null,
         },
       ],
@@ -163,6 +165,12 @@ describe("TokenSelect", () => {
       screen.queryByText("Static - User Credentials"),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("member@example.com")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("personal-local-installation"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Static - Local Installation"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows no static option when only personal connections exist", () => {

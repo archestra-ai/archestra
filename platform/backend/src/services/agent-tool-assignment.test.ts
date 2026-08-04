@@ -679,6 +679,20 @@ describe("personal connections are never statically assignable", () => {
     expect(assignable).toBe(false);
   });
 
+  test("rejects the target owner's personal local installation", async () => {
+    const assignable = await isMcpServerAssignableToTarget({
+      mcpServer: {
+        ownerId: "me",
+        serverType: "local",
+        teamId: null,
+        scope: "personal",
+      },
+      target: { ...orgTarget, scope: "personal" },
+    });
+
+    expect(assignable).toBe(false);
+  });
+
   test("org- and team-scoped servers are unaffected — they are shared resources, not someone's credentials", async () => {
     const orgScoped = await isMcpServerAssignableToTarget({
       mcpServer: { ownerId: "colleague", teamId: null, scope: "org" },
@@ -689,7 +703,12 @@ describe("personal connections are never statically assignable", () => {
   });
 
   test("the picker filter drops all personal connections", async () => {
-    const mine = { ownerId: "me", teamId: null, scope: "personal" as const };
+    const mine = {
+      ownerId: "me",
+      serverType: "local" as const,
+      teamId: null,
+      scope: "personal" as const,
+    };
     const theirs = {
       ownerId: "colleague",
       teamId: null,
@@ -736,6 +755,49 @@ describe("personal connections are never statically assignable", () => {
       agentId: agent.id,
       toolId: tool.id,
       mcpServerId: theirs.id,
+    });
+
+    expect(result).toMatchObject({
+      code: "validation_error",
+      error: { type: "validation_error" },
+    });
+    expect(result?.error.message).toContain("dynamic credential resolution");
+  });
+
+  test("validateAssignment rejects a personal local installation", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const me = await makeUser();
+    await makeMember(me.id, org.id, { role: "member" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "local",
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: me.id,
+      scope: "personal",
+      teams: [],
+    });
+    const tool = await makeTool({ catalogId: catalog.id });
+    const personalInstallation = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: me.id,
+      serverType: "local",
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+      mcpServerId: personalInstallation.id,
     });
 
     expect(result).toMatchObject({

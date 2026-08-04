@@ -107,8 +107,8 @@ describe("McpServerModel", () => {
     });
   });
 
-  describe("findAll credentialConnection:use visibility", () => {
-    test("a non-admin does not see another user's personal connection without the permission", async ({
+  describe("findAll personal connection visibility", () => {
+    test("a non-admin does not see another user's personal connection", async ({
       makeMcpServer,
       makeUser,
     }) => {
@@ -125,7 +125,7 @@ describe("McpServerModel", () => {
       expect(visible.find((s) => s.id === theirs.id)).toBeUndefined();
     });
 
-    test("credentialConnection:use reveals it — without granting the full install-admin bypass", async ({
+    test("installation admin does not see another user's personal connection", async ({
       makeMcpServer,
       makeUser,
     }) => {
@@ -136,22 +136,53 @@ describe("McpServerModel", () => {
         ownerId: colleague.id,
       });
       await McpServerUserModel.assignUserToMcpServer(theirs.id, colleague.id);
-      // A team install the caller has no membership in stays hidden, proving
-      // the new flag widens visibility ONLY for personal connections.
-      const foreignTeamServer = await makeMcpServer({ scope: "team" });
+      const visible = await McpServerModel.findAll(me.id, true);
+
+      expect(visible.find((s) => s.id === theirs.id)).toBeUndefined();
+    });
+
+    test("predefined admin sees another user's personal connection in their organization only", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const admin = await makeUser();
+      const colleague = await makeUser();
+      const otherOrgUser = await makeUser();
+      const organization = await makeOrganization();
+      const otherOrganization = await makeOrganization();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: organization.id,
+      });
+      const otherCatalog = await makeInternalMcpCatalog({
+        organizationId: otherOrganization.id,
+      });
+      const colleagueConnection = await makeMcpServer({
+        catalogId: catalog.id,
+        scope: "personal",
+        ownerId: colleague.id,
+      });
+      const otherOrgConnection = await makeMcpServer({
+        catalogId: otherCatalog.id,
+        scope: "personal",
+        ownerId: otherOrgUser.id,
+      });
 
       const visible = await McpServerModel.findAll(
-        me.id,
-        false,
-        undefined,
+        admin.id,
+        true,
+        organization.id,
         undefined,
         true,
       );
 
-      expect(visible.find((s) => s.id === theirs.id)).toBeDefined();
-      expect(
-        visible.find((s) => s.id === foreignTeamServer.id),
-      ).toBeUndefined();
+      expect(visible.map((server) => server.id)).toContain(
+        colleagueConnection.id,
+      );
+      expect(visible.map((server) => server.id)).not.toContain(
+        otherOrgConnection.id,
+      );
     });
 
     test("own personal connections are visible without the permission", async ({
@@ -198,6 +229,7 @@ describe("McpServerModel", () => {
     test("decorates servers with the org's auto-mode agents only when an organizationId is passed", async ({
       makeOrganization,
       makeAgent,
+      makeInternalMcpCatalog,
       makeMcpServer,
     }) => {
       const org = await makeOrganization();
@@ -212,7 +244,8 @@ describe("McpServerModel", () => {
         name: "Custom Agent",
         accessAllTools: false,
       });
-      const server = await makeMcpServer();
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      const server = await makeMcpServer({ catalogId: catalog.id });
 
       // findAll with the viewing org → the auto-mode agent is surfaced.
       const withOrg = await McpServerModel.findAll(undefined, true, org.id);
@@ -239,6 +272,7 @@ describe("McpServerModel", () => {
     test("attributes same-named personal agents to their owners", async ({
       makeOrganization,
       makeAgent,
+      makeInternalMcpCatalog,
       makeMcpServer,
       makeUser,
     }) => {
@@ -263,7 +297,8 @@ describe("McpServerModel", () => {
         accessAllTools: true,
         authorId: bob.id,
       });
-      const server = await makeMcpServer();
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      const server = await makeMcpServer({ catalogId: catalog.id });
 
       const servers = await McpServerModel.findAll(undefined, true, org.id);
       const found = mustExist(servers.find((s) => s.id === server.id));
@@ -298,6 +333,7 @@ describe("McpServerModel", () => {
     test("reports a null owner for an authorless agent", async ({
       makeOrganization,
       makeAgent,
+      makeInternalMcpCatalog,
       makeMcpServer,
     }) => {
       const org = await makeOrganization();
@@ -306,7 +342,8 @@ describe("McpServerModel", () => {
         name: "Shared Gateway",
         accessAllTools: true,
       });
-      const server = await makeMcpServer();
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      const server = await makeMcpServer({ catalogId: catalog.id });
 
       const servers = await McpServerModel.findAll(undefined, true, org.id);
       const found = mustExist(servers.find((s) => s.id === server.id));
@@ -450,7 +487,7 @@ describe("McpServerModel", () => {
       expect(nonMemberView.find((s) => s.id === server.id)).toBeUndefined();
     });
 
-    test("returns all servers to an admin regardless of scope", async ({
+    test("returns all servers to a predefined Admin regardless of scope", async ({
       makeInternalMcpCatalog,
       makeMember,
       makeOrganization,
@@ -491,7 +528,13 @@ describe("McpServerModel", () => {
         teamId: team.id,
       });
 
-      const adminView = await McpServerModel.findAll(admin.id, true);
+      const adminView = await McpServerModel.findAll(
+        admin.id,
+        true,
+        organization.id,
+        undefined,
+        true,
+      );
       const adminIds = adminView.map((s) => s.id);
       expect(adminIds).toContain(orgServer.id);
       expect(adminIds).toContain(personalServer.id);

@@ -26,7 +26,6 @@ export const actions = [
   "read-all",
   "share-org",
   "impersonate",
-  "use",
 ] as const;
 
 export const resources = [
@@ -45,7 +44,6 @@ export const resources = [
   "knowledgeSource",
   "knowledgeSourceAutoSync",
   "knowledgeSettings",
-  "credentialConnection",
   "environment",
   "githubAppConfig",
   "chat",
@@ -114,7 +112,6 @@ export const resourceLabels: Record<Resource, string> = {
   knowledgeSource: "Knowledge Sources",
   knowledgeSourceAutoSync: "Auto-Sync Permissions Connectors",
   knowledgeSettings: "Knowledge Settings",
-  credentialConnection: "Other Users' Credential Connections",
   environment: "Environments",
   githubAppConfig: "GitHub App Configurations",
   team: "Teams",
@@ -177,8 +174,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpSettings: "MCP settings (online catalog availability)",
   skillsSettings: "Skills settings (online catalog availability)",
   mcpServerInstallation: "Installed MCP servers and their runtime",
-  credentialConnection:
-    "Personal MCP connections belonging to OTHER users \u2014 the credentials they authenticated with. Your own connections are always visible and usable without this permission",
   environment: "Deployment environments (namespace) for catalog items",
   githubAppConfig:
     "GitHub credentials (App configs and stored personal access tokens) for authenticating skill imports, skill sync, and knowledge connectors",
@@ -238,7 +233,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "toolPolicy",
     "mcpRegistry",
     "mcpServerInstallation",
-    "credentialConnection",
     "mcpSettings",
     "environment",
   ],

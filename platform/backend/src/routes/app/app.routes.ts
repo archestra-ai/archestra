@@ -30,6 +30,7 @@ import {
 import type { VersionPayload } from "@/models/app-version";
 import {
   assignToolToApp,
+  resolveAssignmentActor,
   type ToolAssignmentError,
 } from "@/services/agent-tool-assignment";
 import {
@@ -1266,24 +1267,16 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      // Pinning an app tool to someone else's personal connection runs the app
-      // through their credentials — gated by `credentialConnection:use`.
-      const canUseOthersCreds = await userHasPermission(
-        user.id,
-        organizationId,
-        "credentialConnection",
-        "use",
-      );
       const result = await assignToolToApp({
         appId,
         organizationId,
         toolId,
         mcpServerId: body?.mcpServerId,
         credentialResolutionMode: body?.credentialResolutionMode,
-        actor: {
+        actor: await resolveAssignmentActor({
           userId: user.id,
-          canUseOthersCredentialConnections: canUseOthersCreds,
-        },
+          organizationId,
+        }),
       });
       if (isAssignmentError(result)) {
         throw new ApiError(

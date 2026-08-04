@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-08-01
+lastUpdated: 2026-08-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -67,7 +67,7 @@ Installations can be personal or team-scoped.
 - **Personal installations** are owned by one user and are useful when each person needs their own upstream account.
 - **Team installations** are shared with a team and are useful for shared service accounts or team-owned integrations.
 
-A personal installation is visible only to its owner. Admins additionally see who owns each personal installation, and assigning one to an Agent or App — which then acts through that person's credentials — takes the dedicated `credentialConnection:use` permission. See [Access Control](/docs/platform-access-control) for which roles hold it.
+A personal installation is visible only to its owner and predefined Admins. Only a predefined Admin can assign another user's personal installation to an Agent or App.
 
 Personal installations are removed — credentials included — when their owner is deleted or leaves the organization. Team and organization installations survive their installer.
 

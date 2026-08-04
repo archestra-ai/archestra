@@ -320,7 +320,7 @@ describe("mcp server inspect route", () => {
     ]);
   });
 
-  test("filters personal connections by organization membership for org assignment scope", async ({
+  test("does not expose member-owned personal connections for org assignment scope", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeMember,
@@ -339,11 +339,12 @@ describe("mcp server inspect route", () => {
       organizationId,
       serverType: "remote",
     });
-    const memberOwnedServer = await makeMcpServer({
+    await makeMcpServer({
       ownerId: memberOwner.id,
       catalogId: catalog.id,
     });
     const orgOwnedServer = await makeMcpServer({
+      scope: "org",
       catalogId: catalog.id,
     });
     await makeMcpServer({
@@ -362,7 +363,7 @@ describe("mcp server inspect route", () => {
         .json()
         .map((server: { id: string }) => server.id)
         .sort(),
-    ).toEqual([memberOwnedServer.id, orgOwnedServer.id].sort());
+    ).toEqual([orgOwnedServer.id]);
   });
 
   test("filters connections for personal assignment scope", async ({
@@ -399,6 +400,7 @@ describe("mcp server inspect route", () => {
       catalogId: catalog.id,
     });
     const authorTeamServer = await makeMcpServer({
+      scope: "team",
       ownerId: otherUser.id,
       catalogId: catalog.id,
       teamId: authorTeam.id,
@@ -409,6 +411,7 @@ describe("mcp server inspect route", () => {
       teamId: otherTeam.id,
     });
     const orgOwnedServer = await makeMcpServer({
+      scope: "org",
       catalogId: catalog.id,
     });
 

@@ -19,7 +19,6 @@ import {
   requireMcpCatalogModifyPermission,
   withCatalogTeamFkErrorMapped,
 } from "@/auth/mcp-catalog-permissions";
-import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import {
   generateDeploymentYamlTemplate,
@@ -38,6 +37,7 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { resolveAssignmentActor } from "@/services/agent-tool-assignment";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
 import {
   assertCanAssignEnvironment,
@@ -737,10 +737,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
-      // Pinning the connection agents authenticate as means every call-time
-      // resolution runs as that connection's owner. Pointing it at someone
-      // else's personal connection therefore needs `credentialConnection:use`,
-      // the same gate the agent and app tool-assignment routes apply.
       if (restBody.dynamicConnectionMcpServerId) {
         const pinned = await McpServerModel.findByIdInOrg(
           restBody.dynamicConnectionMcpServerId,
@@ -750,14 +746,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           pinned?.scope === "personal" &&
           !!pinned.ownerId &&
           pinned.ownerId !== request.user.id;
+        const actor = await resolveAssignmentActor({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+        });
         if (
           isOthersPersonalConnection &&
-          !(await userHasPermission(
-            request.user.id,
-            request.organizationId,
-            "credentialConnection",
-            "use",
-          ))
+          actor.type === "user" &&
+          !actor.isPredefinedAdmin
         ) {
           throw new ApiError(
             403,

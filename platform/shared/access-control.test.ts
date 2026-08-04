@@ -325,44 +325,15 @@ describe("own-vs-all log split (log/auditLog read vs admin)", () => {
   });
 });
 
-describe("credentialConnection (other users' personal MCP connections)", () => {
-  test("a single use action covers seeing and assigning", () => {
-    expect(allAvailableActions.credentialConnection).toEqual(["use"]);
-    expect(permissionDescriptions["credentialConnection:use"]).toBeTruthy();
-  });
-
-  test("editor and member get nothing — they see only their own connections", () => {
-    expect(editorPermissions.credentialConnection).toEqual([]);
-    expect(memberPermissions.credentialConnection).toEqual([]);
-  });
-
-  test("admin holds it", () => {
-    expect(predefinedPermissionsMap.admin.credentialConnection).toEqual([
-      "use",
-    ]);
-  });
-});
-
 describe("platform_admin predefined role", () => {
-  test("holds everything except log:admin, auditLog:admin, member:impersonate, and credentialConnection:use", () => {
+  test("holds everything except log:admin, auditLog:admin, and member:impersonate", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
-    // Still sees every connection via mcpServerInstallation:admin, but cannot
-    // act through a colleague's credentials.
-    expect(p.credentialConnection).toEqual([]);
     // …and is otherwise the full admin set (modulo the UI-behavior resource).
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (
-        [
-          "log",
-          "auditLog",
-          "member",
-          "simpleView",
-          "credentialConnection",
-        ].includes(resource)
-      ) {
+      if (["log", "auditLog", "member", "simpleView"].includes(resource)) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);

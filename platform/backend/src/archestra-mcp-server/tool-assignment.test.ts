@@ -211,7 +211,7 @@ describe("tool assignment tool execution", () => {
     ]);
   });
 
-  test("binding another user's personal connection without credentialConnection:use fails with a forbidden entry that survives output validation", async ({
+  test("binding another user's personal connection as a non-Admin fails with a forbidden entry that survives output validation", async ({
     makeAgent,
     makeMcpServer,
     makeMember,
@@ -220,9 +220,8 @@ describe("tool assignment tool execution", () => {
     makeUser,
   }) => {
     const org = await makeOrganization();
-    // Editors hold agent/tool management permissions but NOT
-    // `credentialConnection:use`, so the credential gate is the only thing
-    // blocking this assignment.
+    // Editors hold agent/tool management permissions, so the Admin-only
+    // credential gate is the only thing blocking this assignment.
     const editor = await makeUser();
     await makeMember(editor.id, org.id, { role: "editor" });
     const colleague = await makeUser();

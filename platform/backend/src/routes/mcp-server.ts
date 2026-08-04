@@ -28,7 +28,10 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { filterMcpServersAssignableToTarget } from "@/services/agent-tool-assignment";
+import {
+  filterMcpServersAssignableToTarget,
+  resolveAssignmentActor,
+} from "@/services/agent-tool-assignment";
 import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import {
@@ -118,17 +121,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(deleted);
       }
 
-      const [{ success: isMcpServerAdmin }, { success: canUseOthersCreds }] =
-        await Promise.all([
-          hasPermission({ mcpServerInstallation: ["admin"] }, headers),
-          hasPermission({ credentialConnection: ["use"] }, headers),
-        ]);
+      const [{ success: isMcpServerAdmin }, actor] = await Promise.all([
+        hasPermission({ mcpServerInstallation: ["admin"] }, headers),
+        resolveAssignmentActor({ userId: user.id, organizationId }),
+      ]);
       let allServers = await McpServerModel.findAll(
         user.id,
         isMcpServerAdmin,
         organizationId,
         undefined,
-        canUseOthersCreds,
+        actor.type === "user" && actor.isPredefinedAdmin,
       );
 
       // serverType:"app" backings are managed on the Apps surface, not listed as
@@ -149,17 +151,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds: assignmentTeamIds ?? [],
         };
 
-        // Thread the caller as assignment actor so the picker never offers a
-        // connection the write path would reject — matters for callers whose
-        // visibility exceeds their `use` grant (`mcpServerInstallation:admin`
-        // without `credentialConnection:use`).
         allServers = await filterMcpServersAssignableToTarget({
           mcpServers: allServers,
           target,
-          actor: {
-            userId: user.id,
-            canUseOthersCredentialConnections: canUseOthersCreds,
-          },
+          actor,
         });
       }
 

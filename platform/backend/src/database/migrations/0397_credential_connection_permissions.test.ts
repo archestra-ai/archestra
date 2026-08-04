@@ -49,8 +49,8 @@ async function getRolePermission(
   return JSON.parse(role.permission as unknown as string);
 }
 
-describe("0397_credential_connection_permissions custom-role backfill", () => {
-  test("roles holding mcpServerInstallation:admin gain use — capability preserved", async ({
+describe("0397_credential_connection_permissions custom-role cleanup", () => {
+  test("removes credentialConnection from custom roles", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -67,7 +67,7 @@ describe("0397_credential_connection_permissions custom-role backfill", () => {
     await runMigration();
 
     const permission = await getRolePermission("role-mcp-admin");
-    expect(permission.credentialConnection).toEqual(["use"]);
+    expect(permission.credentialConnection).toBeUndefined();
     expect(permission.mcpServerInstallation).toEqual([
       "read",
       "create",
@@ -76,7 +76,7 @@ describe("0397_credential_connection_permissions custom-role backfill", () => {
     expect(permission.agent).toEqual(["read"]);
   });
 
-  test("roles without mcpServerInstallation:admin gain nothing — they never saw others' connections", async ({
+  test("leaves roles without credentialConnection unchanged", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -94,9 +94,7 @@ describe("0397_credential_connection_permissions custom-role backfill", () => {
     ).toBeUndefined();
   });
 
-  test("is idempotent and leaves an already-granted role alone", async ({
-    makeOrganization,
-  }) => {
+  test("is idempotent", async ({ makeOrganization }) => {
     const org = await makeOrganization();
     await insertRole({
       organizationId: org.id,
@@ -111,9 +109,8 @@ describe("0397_credential_connection_permissions custom-role backfill", () => {
     await runMigration();
     await runMigration();
 
-    // Left exactly as configured — no duplicate appended on a re-run.
     expect(
       (await getRolePermission("role-already")).credentialConnection,
-    ).toEqual(["use"]);
+    ).toBeUndefined();
   });
 });

@@ -6,7 +6,6 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
-import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -18,6 +17,7 @@ import {
 import {
   type AssignmentActor,
   assignToolToAgent,
+  resolveAssignmentActor as resolveUserAssignmentActor,
 } from "@/services/agent-tool-assignment";
 import { isUniqueConstraintError } from "@/utils/db";
 import type { ArchestraContext } from "./types";
@@ -90,33 +90,23 @@ type ArchestraToolDefinitionInput<
 export const EmptyToolArgsSchema = z.strictObject({});
 
 /**
- * Build the {@link AssignmentActor} for an MCP-tool caller, so pinning another
- * user's personal MCP connection is gated by `credentialConnection:use` the
- * same way it is on the REST routes. Returns undefined when the call has no
- * user/org context (nothing to check against).
+ * Build the assignment actor for an MCP-tool caller. User-facing MCP tools
+ * fail closed when identity context is unavailable.
  */
 export async function resolveAssignmentActor(
   context: ArchestraContext,
-): Promise<AssignmentActor | undefined> {
+): Promise<AssignmentActor> {
   const { userId, organizationId } = context;
   if (!userId || !organizationId) {
-    return undefined;
+    throw new Error("user/organization context not available");
   }
-  return {
-    userId,
-    canUseOthersCredentialConnections: await userHasPermission(
-      userId,
-      organizationId,
-      "credentialConnection",
-      "use",
-    ),
-  };
+  return resolveUserAssignmentActor({ userId, organizationId });
 }
 
 export async function assignToolAssignments(
   agentId: string,
   assignments: ToolAssignmentInput[],
-  actor?: AssignmentActor,
+  actor: AssignmentActor,
 ): Promise<ToolAssignmentResult[]> {
   const results: ToolAssignmentResult[] = [];
   const preFetchedData = await buildAgentToolAssignmentPrefetch({

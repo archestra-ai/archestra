@@ -9,7 +9,6 @@ import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
-import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -17,7 +16,10 @@ import {
   AgentVersionModel,
   TeamModel,
 } from "@/models";
-import { assignToolToAgent } from "@/services/agent-tool-assignment";
+import {
+  assignToolToAgent,
+  resolveAssignmentActor,
+} from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
 import {
@@ -252,7 +254,7 @@ async function handleBulkAssignTool(params: {
         assignments.map((assignment) => getBulkAssignmentTargetId(assignment)),
       ),
     ];
-    const [targetAgents, checker, callerEnvironmentId, canUseOthersCreds] =
+    const [targetAgents, checker, callerEnvironmentId, actor] =
       await Promise.all([
         AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
         getAgentTypePermissionChecker({
@@ -260,14 +262,7 @@ async function handleBulkAssignTool(params: {
           organizationId,
         }),
         AgentModel.findEnvironmentId(contextAgent.id),
-        // Pinning another user's personal connection acts through their
-        // credentials — gated by `credentialConnection:use`.
-        userHasPermission(
-          userId,
-          organizationId,
-          "credentialConnection",
-          "use",
-        ),
+        resolveAssignmentActor({ userId, organizationId }),
       ]);
     // Environment isolation: writing an assignment is a configuration change,
     // so the TARGET must be in the calling agent's environment — otherwise an
@@ -310,10 +305,7 @@ async function handleBulkAssignTool(params: {
           toolId: assignment.toolId,
           resolveAtCallTime: assignment.resolveAtCallTime,
           mcpServerId: assignment.mcpServerId ?? undefined,
-          actor: {
-            userId,
-            canUseOthersCredentialConnections: canUseOthersCreds,
-          },
+          actor,
           // One version for the whole batch, forked below.
           deferVersionFork: true,
         });

@@ -165,14 +165,6 @@ export function ManageUsersContent({
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
-  // Seeing OTHER people's personal connections — and who owns them — takes
-  // `credentialConnection:use` or the install-admin bypass, mirroring the
-  // backend list filter. The endpoint already withholds them, so dropping them
-  // here is defense in depth (and keeps a stale cache from leaking them).
-  const { data: canUseOthersConnections } = useHasPermissions({
-    credentialConnection: ["use"],
-  });
-
   // Get user's teams and permissions for re-authentication checks
   const { data: userTeams } = useMyTeams();
   const { data: hasMcpServerCreatePermission } = useHasPermissions({
@@ -186,11 +178,7 @@ export function ManageUsersContent({
   });
 
   const allServers = allServersUnfiltered.filter(
-    (s) =>
-      s.catalogId === catalogId &&
-      (canUseOthersConnections ||
-        hasMcpServerAdminPermission ||
-        !isOthersPersonalConnection(s, currentUserId)),
+    (s) => s.catalogId === catalogId,
   );
 
   const [serviceAccountDialogOpen, setServiceAccountDialogOpen] =
@@ -805,20 +793,6 @@ function resolveServerScope(server: ServerEntry): "personal" | "team" | "org" {
   return server.scope ?? (server.teamId ? "team" : "personal");
 }
 
-// A personal connection somebody else authenticated with. Seeing one takes
-// `credentialConnection:use` or the install-admin bypass; binding one to an
-// agent or app — acting through their credentials — takes `use` specifically.
-// Your own connection needs neither.
-function isOthersPersonalConnection(
-  server: ServerEntry,
-  currentUserId: string | undefined,
-): boolean {
-  return (
-    resolveServerScope(server) === "personal" &&
-    server.ownerId !== currentUserId
-  );
-}
-
 // Multi-tenant catalogs alias one pod across N caller rows. Each row's
 // K8sDeployment instance tracks its own state independently, so the row that
 // didn't observe the pod first stays "pending" while the other goes "failed".
@@ -874,28 +848,11 @@ function AgentConnectionsSection({
   const updateMutation = useUpdateInternalMcpCatalogItem();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  // Pinning someone else's personal connection makes every call authenticate as
-  // them, which is exactly what `credentialConnection:use` governs.
-  const { data: canUseOthersConnections } = useHasPermissions({
-    credentialConnection: ["use"],
-  });
-  // Visibility mirrors the backend list filter: `use` or the install-admin
-  // bypass. Install-admins without `use` still see rows — the per-item
-  // `disabled` below is what keeps them from pinning one.
-  const { data: hasMcpServerAdminPermission } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
-  const canSeeOthersConnections =
-    canUseOthersConnections || hasMcpServerAdminPermission;
   const pinnedId = item.dynamicConnectionMcpServerId ?? null;
   const pinnedConnection = pinnedId
     ? connections.find((connection) => connection.id === pinnedId)
     : undefined;
-  // A pin we cannot resolve is either genuinely gone or simply not ours to see —
-  // never claim it was removed when the caller just lacks visibility.
   const pinUnresolved = Boolean(pinnedId) && !pinnedConnection;
-  const pinHidden = pinUnresolved && !canSeeOthersConnections;
-  const pinRemoved = pinUnresolved && !pinHidden;
 
   const [pendingPersonalDefault, setPendingPersonalDefault] = useState<{
     id: string;
@@ -919,13 +876,6 @@ function AgentConnectionsSection({
       return;
     }
     const connection = connections.find((c) => c.id === value);
-    if (
-      connection &&
-      isOthersPersonalConnection(connection, currentUserId) &&
-      !canUseOthersConnections
-    ) {
-      return;
-    }
     if (connection && resolveServerScope(connection) === "personal") {
       setPendingPersonalDefault({
         id: value,
@@ -959,15 +909,10 @@ function AgentConnectionsSection({
                 organization connection they can access. Applies in Auto mode
                 and to Custom tool assignments that resolve at call time.
               </>
-            ) : pinHidden ? (
+            ) : pinUnresolved ? (
               <>
-                Agents always connect as one account, and you do not have
-                permission to see which one.
-              </>
-            ) : pinRemoved ? (
-              <>
-                The selected connection was removed. Agents connect on behalf of
-                whoever is calling until you choose another one.
+                The selected connection is unavailable. Agents connect on behalf
+                of whoever is calling until you choose another one.
               </>
             ) : (
               <>
@@ -999,11 +944,7 @@ function AgentConnectionsSection({
           onValueChange={handleSelectDefault}
         >
           <SelectTrigger className="w-[320px]">
-            <SelectValue
-              placeholder={
-                pinHidden ? "Hidden connection" : "Connection removed"
-              }
-            />
+            <SelectValue placeholder="Connection unavailable" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem
@@ -1021,31 +962,18 @@ function AgentConnectionsSection({
                 <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
                   Always use one account
                 </div>
-                {connections.map((connection) => {
-                  const needsUsePermission =
-                    isOthersPersonalConnection(connection, currentUserId) &&
-                    !canUseOthersConnections;
-                  return (
-                    <SelectItem
-                      key={connection.id}
-                      value={connection.id}
-                      className={
-                        needsUsePermission ? undefined : "cursor-pointer"
-                      }
-                      disabled={needsUsePermission}
-                      description={
-                        needsUsePermission
-                          ? "You do not have permission to act through other users' connections"
-                          : undefined
-                      }
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
-                        <span>{connectionLabel(connection)}</span>
-                      </div>
-                    </SelectItem>
-                  );
-                })}
+                {connections.map((connection) => (
+                  <SelectItem
+                    key={connection.id}
+                    value={connection.id}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
+                      <span>{connectionLabel(connection)}</span>
+                    </div>
+                  </SelectItem>
+                ))}
               </>
             )}
           </SelectContent>

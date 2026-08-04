@@ -70,16 +70,31 @@ interface AgentToolAssignmentRequest {
 
 /**
  * The human performing an assignment, used to gate binding OTHER users'
- * personal MCP connections (`credentialConnection:use`).
+ * personal MCP connections.
  *
- * Omitted on system paths that act on nobody's behalf in particular — agent
- * import, app capability resolution, internal re-validation — which keep the
- * pre-permission behavior. Surfaces where a person picks a server (the agent
- * and app tool routes, and their MCP-tool equivalents) pass it.
+ * Human-facing surfaces always resolve this from organization membership.
+ * Trusted internal workflows must opt into the system actor explicitly;
+ * omission fails closed as an unidentified non-admin user.
  */
-export interface AssignmentActor {
-  userId: string | null;
-  canUseOthersCredentialConnections: boolean;
+export type AssignmentActor =
+  | { type: "system" }
+  | { type: "user"; userId: string; isPredefinedAdmin: boolean };
+
+export const systemAssignmentActor: AssignmentActor = { type: "system" };
+
+export async function resolveAssignmentActor(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<AssignmentActor> {
+  const membership = await MemberModel.getByUserId(
+    params.userId,
+    params.organizationId,
+  );
+  return {
+    type: "user",
+    userId: params.userId,
+    isPredefinedAdmin: membership?.role === "admin",
+  };
 }
 
 export async function assignToolToAgent(
@@ -189,7 +204,7 @@ export async function validateAssignment(
       mcpServerId,
       tool,
       preFetchedServer,
-      actor: params.actor,
+      actor: params.actor ?? unidentifiedAssignmentActor,
     });
     if (validationError) {
       return validationError;
@@ -388,7 +403,7 @@ export async function assignToolToApp(params: {
       mcpServerId: params.mcpServerId,
       tool,
       preFetchedServer: mcpServer,
-      actor: params.actor,
+      actor: params.actor ?? unidentifiedAssignmentActor,
     });
     if (validationError) {
       return validationError;
@@ -481,7 +496,7 @@ async function validateAssignedMcpServer(params: {
     PrefetchedMcpServer,
     "id" | "ownerId" | "catalogId" | "teamId" | "scope"
   > | null;
-  actor?: AssignmentActor;
+  actor: AssignmentActor;
 }): Promise<ToolAssignmentError | null> {
   const { getOwnerContext, mcpServerId, tool, preFetchedServer, actor } =
     params;
@@ -514,8 +529,13 @@ async function validateAssignedMcpServer(params: {
 
   // Report the credential gate as a permission failure, not a validation one —
   // the generic scope message ("owner must be a member of a team…") would
-  // mislead a caller who is blocked purely for lacking `credentialConnection:use`.
-  if (blocksOthersCredentialConnection({ mcpServer, actor })) {
+  // mislead a caller who is blocked purely because they are not Admin.
+  if (
+    blocksOthersCredentialConnection({
+      mcpServer,
+      actor: actor ?? unidentifiedAssignmentActor,
+    })
+  ) {
     return {
       code: "forbidden",
       error: {
@@ -592,16 +612,16 @@ async function isOrgAdmin(
 /**
  * Someone else's personal MCP connection carries THEIR credentials, so binding
  * it to an agent or app means acting as them. That needs
- * `credentialConnection:use`; your own connection never does.
+ * the predefined Admin role; your own connection never does.
  *
- * Returns true (no gate) when there is no actor — see {@link AssignmentActor}.
+ * System work must opt into bypassing this user boundary explicitly.
  */
 function blocksOthersCredentialConnection(params: {
   mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
-  actor?: AssignmentActor;
+  actor: AssignmentActor;
 }): boolean {
   const { mcpServer, actor } = params;
-  if (!actor || actor.canUseOthersCredentialConnections) {
+  if (actor.type === "system" || actor.isPredefinedAdmin) {
     return false;
   }
   // Only personal connections carry an individual's credentials; team- and
@@ -623,7 +643,8 @@ export async function isMcpServerAssignableToTarget(params: {
   };
   actor?: AssignmentActor;
 }): Promise<boolean> {
-  const { mcpServer, target, actor } = params;
+  const { mcpServer, target } = params;
+  const actor = params.actor ?? unidentifiedAssignmentActor;
 
   if (blocksOthersCredentialConnection({ mcpServer, actor })) {
     return false;
@@ -682,10 +703,10 @@ export async function filterMcpServersAssignableToTarget<
   };
   actor?: AssignmentActor;
 }): Promise<TMcpServer[]> {
-  const { target, actor } = params;
+  const { target } = params;
+  const actor = params.actor ?? unidentifiedAssignmentActor;
   // Drop other people's personal connections up front when the caller lacks
-  // `credentialConnection:use`, so the picker never offers a server the write
-  // path would reject.
+  // Admin access, so the picker never offers a server the write path rejects.
   const mcpServers = params.mcpServers.filter(
     (mcpServer) => !blocksOthersCredentialConnection({ mcpServer, actor }),
   );
@@ -815,3 +836,9 @@ function isMcpServerAssignableToPrefetchedTarget(params: {
 
   return targetTeamMemberOwnerIdSet.has(mcpServer.ownerId);
 }
+
+const unidentifiedAssignmentActor: AssignmentActor = {
+  type: "user",
+  userId: "",
+  isPredefinedAdmin: false,
+};

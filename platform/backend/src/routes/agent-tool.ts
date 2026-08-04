@@ -10,7 +10,6 @@ import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeAdminPermission,
   hasAnyAgentTypeReadPermission,
-  hasPermission,
   isAgentTypeAdmin,
   requireAgentModifyPermission,
   requireAgentTypePermission,
@@ -29,6 +28,7 @@ import {
 import {
   assignToolToAgent,
   type PrefetchedMcpServer,
+  resolveAssignmentActor,
   type ToolAssignmentError,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
@@ -155,21 +155,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
-      // Binding someone else's personal connection means acting through their
-      // credentials — gated by `credentialConnection:use`.
-      const { success: canUseOthersCreds } = await hasPermission(
-        { credentialConnection: ["use"] },
-        request.headers,
-      );
-
       const result = await assignToolToAgent({
         agentId,
         toolId,
         mcpServerId,
-        actor: {
+        actor: await resolveAssignmentActor({
           userId: request.user.id,
-          canUseOthersCredentialConnections: canUseOthersCreds,
-        },
+          organizationId: request.organizationId,
+        }),
         resolveAtCallTime,
         credentialResolutionMode:
           credentialResolutionMode ??
@@ -310,15 +303,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const validated: typeof assignments = [];
       const failed: { agentId: string; toolId: string; error: string }[] = [];
 
-      // Resolved once for the whole batch rather than per assignment.
-      const { success: canUseOthersCreds } = await hasPermission(
-        { credentialConnection: ["use"] },
-        request.headers,
-      );
-      const actor = {
+      const actor = await resolveAssignmentActor({
         userId: request.user.id,
-        canUseOthersCredentialConnections: canUseOthersCreds,
-      };
+        organizationId: request.organizationId,
+      });
 
       for (const assignment of assignments) {
         const normalizedAssignment =
@@ -592,7 +580,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(UpdateAgentToolSchema),
       },
     },
-    async ({ params: { id }, body, user, organizationId, headers }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       const { mcpServerId, credentialResolutionMode } = body;
 
       // Fetch the agent-tool relationship (needed for permission check and validation)
@@ -629,10 +617,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const { success: canUseOthersCreds } = await hasPermission(
-        { credentialConnection: ["use"] },
-        headers,
-      );
       const validationError = await validateAssignment({
         agentId: agentToolForValidation.agent.id,
         toolId: agentToolForValidation.tool.id,
@@ -640,10 +624,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         credentialResolutionMode:
           credentialResolutionMode ??
           agentToolForValidation.credentialResolutionMode,
-        actor: {
+        actor: await resolveAssignmentActor({
           userId: user.id,
-          canUseOthersCredentialConnections: canUseOthersCreds,
-        },
+          organizationId,
+        }),
       });
 
       if (validationError) {

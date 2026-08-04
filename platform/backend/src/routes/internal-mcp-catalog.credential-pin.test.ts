@@ -13,13 +13,12 @@ import internalMcpCatalogRoutes from "./internal-mcp-catalog";
  * Pinning a catalog item's "default credential"
  * (`dynamicConnectionMcpServerId`) decides which connection agents
  * authenticate as at call time. Pointing it at someone else's personal
- * connection makes every call run as that person, so it needs
- * `credentialConnection:use` — the same gate the agent and app tool-assignment
- * routes apply. Without this the UI was the only thing stopping it.
+ * connection makes every call run as that person, so only the predefined Admin
+ * role may do it. Without this the UI was the only thing stopping it.
  *
  * These use REAL permission resolution (no `@/auth` mock) so the role → action
- * mapping is exercised end to end: an admin holds `credentialConnection:use`,
- * a plain member does not.
+ * mapping is exercised end to end: an Admin may use another user's connection,
+ * while a plain member may not.
  */
 describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
   let app: FastifyInstance;
@@ -133,7 +132,7 @@ describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("an admin, who holds credentialConnection:use, can pin another user's connection", async ({
+  test("a predefined Admin can pin another user's connection", async ({
     makeUser,
     makeOrganization,
     makeMember,

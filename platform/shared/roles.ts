@@ -29,7 +29,7 @@ export const roleDescriptions: Record<PredefinedRoleName, string> = {
   admin:
     "Full access to all resources including user management, roles, and platform settings",
   platform_admin:
-    "Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, impersonating users, and acting through other users' MCP connections",
+    "Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, impersonating users, and accessing other users' personal MCP connections",
   editor:
     "Full access to core resources and settings, but cannot manage users, roles, or identity providers",
   member:

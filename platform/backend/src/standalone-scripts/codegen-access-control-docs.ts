@@ -35,15 +35,16 @@ function generatePredefinedRolesSections(): string {
     section += `${roleDescriptions[role]}\n\n`;
 
     if (role === ADMIN_ROLE_NAME) {
-      section += "The admin role has **all permissions** on every resource.\n";
+      section +=
+        "The admin role has **all permissions** on every resource. Only this predefined role can see or use another user's personal MCP connection.\n";
     } else if (role === PLATFORM_ADMIN_ROLE_NAME) {
       section +=
         "Platform Admin holds **all permissions except** `log:admin`, " +
-        "`auditLog:admin`, `member:impersonate`, and " +
-        "`credentialConnection:use` — so holders run the platform (users, " +
-        "roles, settings, resources) while other members' LLM/MCP logs, the " +
-        "org-wide audit trail, impersonation, and acting through other " +
-        "users' MCP connections stay out of reach. They keep `log:read` and " +
+        "`auditLog:admin`, and `member:impersonate` — so holders run the " +
+        "platform (users, roles, settings, resources) while other members' " +
+        "LLM/MCP logs, the org-wide audit trail, impersonation, and other " +
+        "users' personal MCP connections stay out of reach. They keep " +
+        "`log:read` and " +
         "`auditLog:read`, which show **their own** records only. Combined " +
         "with the [no-privilege-escalation rule](#no-privilege-escalation), " +
         "a Platform Admin cannot grant themselves or anyone else a role " +

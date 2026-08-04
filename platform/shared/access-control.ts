@@ -110,16 +110,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "manage-deleted",
     "admin",
   ],
-  /**
-   * Other people's personal MCP connections — the credentials they signed in
-   * with. Deliberately split from `mcpServerInstallation`: managing installs
-   * and reaching into a colleague's authenticated connection are different
-   * privileges. A single action on purpose: `use` covers both seeing the
-   * connections and binding one to an agent/app — see-without-use half-states
-   * proved incoherent (you can't act on what you can't discover, and vice
-   * versa), and `mcpServerInstallation:admin` already grants visibility.
-   */
-  credentialConnection: ["use"],
   environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
@@ -246,9 +236,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
     "deploy-to-restricted",
   ],
   mcpServerInstallation: ["read", "create", "update", "delete"],
-  // Editors see and use only their OWN personal connections (plus team/org
-  // ones). Reaching into a colleague's connection is an admin capability.
-  credentialConnection: [],
   environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
@@ -330,8 +317,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   toolPolicy: ["read"],
   mcpRegistry: ["read", "update"],
   mcpServerInstallation: ["read", "create", "delete"],
-  // Members see and use only their OWN personal connections.
-  credentialConnection: [],
   environment: ["read"],
   // minting installation tokens from a stored App credential is privileged;
   // default members get no access — editors and admins manage/use App configs
@@ -436,10 +421,6 @@ export const platformAdminPermissions: Record<Resource, Action[]> = {
   log: ["read"],
   auditLog: ["read"],
   member: allAvailableActions.member.filter((a) => a !== "impersonate"),
-  // Still sees every connection via `mcpServerInstallation:admin`, but cannot
-  // act through a colleague's credentials — consistent with the log/auditLog/
-  // impersonate exclusions above.
-  credentialConnection: [],
 };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -543,8 +524,6 @@ export const permissionDescriptions: Record<string, string> = {
     "View and restore soft-deleted (uninstalled) MCP servers",
   "mcpServerInstallation:admin":
     "Approve or manage all MCP server installations",
-  "credentialConnection:use":
-    "See other users' personal MCP connections and assign them to agents and apps, which then act through their credentials",
   "environment:read": "View and list deployment environments",
   "environment:create": "Create deployment environments",
   "environment:update":

@@ -9,6 +9,7 @@ import {
   assignToolToApp,
   filterMcpServersAssignableToTarget,
   isMcpServerAssignableToTarget,
+  systemAssignmentActor,
   validateAssignment,
 } from "./agent-tool-assignment";
 
@@ -48,6 +49,7 @@ describe("filterMcpServersAssignableToTarget", () => {
         authorId: null,
         teamIds: [],
       },
+      actor: systemAssignmentActor,
     });
 
     expect(filtered.map((server) => server.id)).toEqual([
@@ -116,6 +118,7 @@ describe("filterMcpServersAssignableToTarget", () => {
         authorId: requester.id,
         teamIds: [selectedTeam.id],
       },
+      actor: systemAssignmentActor,
     });
 
     expect(filtered.map((server) => server.id)).toEqual([
@@ -184,6 +187,7 @@ describe("filterMcpServersAssignableToTarget", () => {
         authorId: author.id,
         teamIds: [],
       },
+      actor: systemAssignmentActor,
     });
 
     expect(filtered.map((server) => server.id)).toEqual([
@@ -349,11 +353,13 @@ describe("assignToolToAgent", () => {
       agentId: agent.id,
       toolId: tool.id,
       mcpServerId: firstServer.id,
+      actor: systemAssignmentActor,
     });
     const updateResult = await assignToolToAgent({
       agentId: agent.id,
       toolId: tool.id,
       mcpServerId: secondServer.id,
+      actor: systemAssignmentActor,
     });
 
     expect(createResult).toBeNull();
@@ -493,12 +499,14 @@ describe("assignToolToApp", () => {
       organizationId: organization.id,
       toolId: tool.id,
       mcpServerId: firstServer.id,
+      actor: systemAssignmentActor,
     });
     const updated = await assignToolToApp({
       appId: app.id,
       organizationId: organization.id,
       toolId: tool.id,
       mcpServerId: secondServer.id,
+      actor: systemAssignmentActor,
     });
 
     expect(created).toBeNull();
@@ -573,6 +581,7 @@ describe("assignToolToApp", () => {
       organizationId: organization.id,
       toolId: tool.id,
       mcpServerId: strangersServer.id,
+      actor: systemAssignmentActor,
     });
     expect(rejected).toMatchObject({ code: "validation_error" });
 
@@ -581,6 +590,7 @@ describe("assignToolToApp", () => {
       organizationId: organization.id,
       toolId: tool.id,
       mcpServerId: authorsServer.id,
+      actor: systemAssignmentActor,
     });
     expect(allowed).toBeNull();
   });
@@ -670,7 +680,7 @@ describe("assignToolToApp", () => {
   });
 });
 
-describe("credentialConnection:use gating of other people's connections", () => {
+describe("predefined Admin gating of other people's connections", () => {
   const otherUsersConnection = {
     ownerId: "colleague",
     teamId: null,
@@ -697,7 +707,7 @@ describe("credentialConnection:use gating of other people's connections", () => 
     const assignable = await isMcpServerAssignableToTarget({
       mcpServer: { ...otherUsersConnection, ownerId: colleague.id },
       target: { ...orgTarget, organizationId: org.id },
-      actor: { userId: "me", canUseOthersCredentialConnections: false },
+      actor: { type: "user", userId: "me", isPredefinedAdmin: false },
     });
 
     expect(assignable).toBe(false);
@@ -715,7 +725,7 @@ describe("credentialConnection:use gating of other people's connections", () => 
     const assignable = await isMcpServerAssignableToTarget({
       mcpServer: { ...otherUsersConnection, ownerId: colleague.id },
       target: { ...orgTarget, organizationId: org.id },
-      actor: { userId: "me", canUseOthersCredentialConnections: true },
+      actor: { type: "user", userId: "me", isPredefinedAdmin: true },
     });
 
     expect(assignable).toBe(true);
@@ -725,7 +735,7 @@ describe("credentialConnection:use gating of other people's connections", () => 
     const assignable = await isMcpServerAssignableToTarget({
       mcpServer: { ownerId: "me", teamId: null, scope: "personal" },
       target: { ...orgTarget, scope: "personal" },
-      actor: { userId: "me", canUseOthersCredentialConnections: false },
+      actor: { type: "user", userId: "me", isPredefinedAdmin: false },
     });
 
     expect(assignable).toBe(true);
@@ -735,13 +745,13 @@ describe("credentialConnection:use gating of other people's connections", () => 
     const orgScoped = await isMcpServerAssignableToTarget({
       mcpServer: { ownerId: "colleague", teamId: null, scope: "org" },
       target: orgTarget,
-      actor: { userId: "me", canUseOthersCredentialConnections: false },
+      actor: { type: "user", userId: "me", isPredefinedAdmin: false },
     });
 
     expect(orgScoped).toBe(true);
   });
 
-  test("system paths that pass no actor keep the pre-permission behavior", async ({
+  test("an omitted actor fails closed", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -755,7 +765,7 @@ describe("credentialConnection:use gating of other people's connections", () => 
       target: { ...orgTarget, organizationId: org.id },
     });
 
-    expect(assignable).toBe(true);
+    expect(assignable).toBe(false);
   });
 
   test("the picker filter drops what the write path would reject", async ({
@@ -776,7 +786,7 @@ describe("credentialConnection:use gating of other people's connections", () => 
     const visible = await filterMcpServersAssignableToTarget({
       mcpServers: [mine, theirs],
       target: { ...orgTarget, organizationId: org.id, authorId: me.id },
-      actor: { userId: me.id, canUseOthersCredentialConnections: false },
+      actor: { type: "user", userId: me.id, isPredefinedAdmin: false },
     });
 
     expect(visible).toEqual([mine]);
@@ -812,11 +822,11 @@ describe("credentialConnection:use gating of other people's connections", () => 
       agentId: agent.id,
       toolId: tool.id,
       mcpServerId: theirs.id,
-      actor: { userId: me.id, canUseOthersCredentialConnections: false },
+      actor: { type: "user", userId: me.id, isPredefinedAdmin: false },
     });
 
     // The generic scope message would mislead here — the owner IS an org
-    // member; the caller is blocked purely for lacking `credentialConnection:use`.
+    // member; the caller is blocked purely because they are not Admin.
     expect(result).toMatchObject({
       code: "forbidden",
       error: { type: "permission_denied" },

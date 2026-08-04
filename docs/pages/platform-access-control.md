@@ -30,7 +30,7 @@ The following roles are built into Archestra and cannot be modified or deleted:
 
 Full access to all resources including user management, roles, and platform settings
 
-The admin role has **all permissions** on every resource. Only this predefined role can see or use another user's personal MCP connection.
+The admin role has **all permissions** on every resource.
 
 ### Platform Admin
 

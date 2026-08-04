@@ -425,7 +425,7 @@ export function ManageUsersContent({
         {(personalRows.length > 0 || canAddPersonal) && (
           <ConnectionsSection
             title="Personal connections"
-            description="Each person connects their own account."
+            description="Private to its owner — only that person can use it."
             emptyText="No personal connections yet."
             rows={personalRows}
             tableTestId={E2eTestId.ManageCredentialsDialogTable}
@@ -452,7 +452,7 @@ export function ManageUsersContent({
         {(serviceAccountRows.length > 0 || canAddServiceAccount) && (
           <ConnectionsSection
             title="Service accounts"
-            description="Shared team & organization keys."
+            description="Static credentials intentionally shared with a team or organization."
             emptyText="No service accounts yet."
             rows={serviceAccountRows}
             tableTestId={E2eTestId.ManageServiceAccountsTable}

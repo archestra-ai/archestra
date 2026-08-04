@@ -67,7 +67,9 @@ Installations can be personal or team-scoped.
 - **Personal installations** are owned by one user and are useful when each person needs their own upstream account.
 - **Team installations** are shared with a team and are useful for shared service accounts or team-owned integrations.
 
-A personal installation is visible only to its owner and predefined Admins. Admin visibility is for operational oversight and revocation; no role can pin or statically assign a personal installation to an Agent, App, or MCP Gateway.
+A personal installation is a hard usage boundary: its credential can only ever authenticate calls made by the person who added it. It cannot be assigned, pinned, or borrowed by another user — not even by an Admin. Predefined Admins can see limited connection metadata and revoke a connection for operational oversight, but cannot use its credential.
+
+If a static credential is intended to be shared, add it explicitly as a **team or organization service account**. This makes the shared intent and audience visible instead of turning a person's identity into an implicit service account.
 
 Personal installations are removed — credentials included — when their owner is deleted or leaves the organization. Team and organization installations survive their installer.
 

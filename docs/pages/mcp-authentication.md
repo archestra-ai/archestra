@@ -217,13 +217,15 @@ Credential resolution decides which installed MCP server credential should be us
 
 Static credentials are shared credentials configured on an installed MCP server connection. They can be API keys, PATs, service account tokens, OAuth tokens, OAuth client credentials, or other values required by the upstream server.
 
+> **Personal means private.** A personal connection can only ever authenticate tool calls made by the person who added it. It cannot be assigned, pinned, or borrowed by another user — not even by an Admin. To share a static credential, add it deliberately as a **team or organization service account** instead.
+
 When you pin a tool to a specific installed MCP server connection instead of using dynamic resolution, Archestra validates the connection against the target Agent or MCP Gateway scope:
 
 - **Team-installed connection**: can only be assigned to a **team-scoped** Agent or MCP Gateway that includes that same team
 - **Personal connection**: cannot be pinned; it is available only through resolve-at-call-time for its owner
 - **Resolve at call time**: skips static-owner checks because Archestra resolves credentials per caller at execution time
 
-This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. Personal connections always stay bound to their owner and are never offered as reusable static credentials, including to predefined Admins.
+This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. The installation scope records the intent: personal for one person's identity; team or organization for a credential intentionally shared as a service account.
 
 #### Resolve at Call Time
 

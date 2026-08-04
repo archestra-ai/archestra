@@ -35,8 +35,7 @@ function generatePredefinedRolesSections(): string {
     section += `${roleDescriptions[role]}\n\n`;
 
     if (role === ADMIN_ROLE_NAME) {
-      section +=
-        "The admin role has **all permissions** on every resource. Only this predefined role can see or use another user's personal MCP connection.\n";
+      section += "The admin role has **all permissions** on every resource.\n";
     } else if (role === PLATFORM_ADMIN_ROLE_NAME) {
       section +=
         "Platform Admin holds **all permissions except** `log:admin`, " +

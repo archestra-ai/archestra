@@ -185,14 +185,20 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           gatewayName: gatewayNameForAssignment,
         });
         const expectedAssignableCredentials = expectedCredentials;
-        const visibleStaticCredentials =
-          await getVisibleStaticCredentials(page);
-        for (const credential of expectedAssignableCredentials) {
-          await expect(visibleStaticCredentials).toContain(credential);
-        }
-        await expect(visibleStaticCredentials).toHaveLength(
-          expectedAssignableCredentials.length,
-        );
+        // Poll instead of a one-shot read: the dropdown renders from a
+        // TanStack Query result that can transiently miss a just-created
+        // credential until the mount-time refetch lands (observed in merge
+        // queue as "expected admin@example.com, received [Default Team]").
+        // The options re-render in place once fresh data arrives, so
+        // re-reading converges; a thrown read (options briefly unmounted
+        // mid-re-render) counts as "not yet" rather than aborting the poll.
+        await expect
+          .poll(
+            async () =>
+              (await getVisibleStaticCredentials(page).catch(() => [])).sort(),
+            { timeout: 30_000, intervals: [500, 1000, 2000, 4000] },
+          )
+          .toEqual([...expectedAssignableCredentials].sort());
         await selectCredentialOption(
           page,
           page.getByRole("option", {

@@ -212,7 +212,10 @@ async function openCatalogItemConnectDialog(
   catalogItemName: string,
   options?: { timeoutMs?: number },
 ): Promise<void> {
-  const timeoutMs = options?.timeoutMs ?? 30_000;
+  // 60s, not 30s: on standard GitHub-hosted runners the card can spend a
+  // while with its Install button legitimately absent (e.g. the viewer's own
+  // just-triggered install still settling) before it renders.
+  const timeoutMs = options?.timeoutMs ?? 60_000;
   const connectButton = page.getByTestId(
     `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
   );

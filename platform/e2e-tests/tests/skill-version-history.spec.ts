@@ -36,14 +36,19 @@ test.describe("Skill version history", () => {
       // The second version is what makes the timeline and the diff meaningful.
       await updateSkill(page, skillId, manifest(skillName, SECOND_BODY));
 
-      await goToPage(page, "/skills");
+      // Filtered by name rather than browsed to: the list sorts by usage count
+      // descending, so a skill created seconds ago has none and sorts last —
+      // off the first page entirely on a database with real skills in it.
+      await goToPage(page, `/skills?search=${skillName}`);
       await page.waitForLoadState("domcontentloaded");
 
       await page
         .getByRole("button", { name: `Version history ${skillName}` })
         .click();
 
-      const dialog = page.getByRole("dialog");
+      // Named, because the restore confirmation below is a dialog too and an
+      // unnamed lookup matches both while it animates out.
+      const dialog = page.getByRole("dialog", { name: /Version history/ });
       await expect(
         dialog.getByRole("heading", { name: "Version history" }),
       ).toBeVisible();
@@ -53,16 +58,35 @@ test.describe("Skill version history", () => {
         dialog.getByRole("heading", { name: "Version 2" }),
       ).toBeVisible();
 
+      // Read the diff here: version 2 is the only one with a predecessor to
+      // compare against. This is the only place the real Monaco diff renders —
+      // every unit test stubs it.
+      await dialog.getByRole("button", { name: /^Changes/ }).click();
+      // Monaco marks each editor `role="code"`; in a unified diff the second is
+      // the modified side, which carries both revisions — the removed line as an
+      // overlay above the added one. Asserted with `toContainText` rather than a
+      // text locator because Monaco splits every line into one span per token,
+      // so no single element holds a whole line to match against.
+      //
+      // Given longer than the default: this is the first Monaco paint of the
+      // run, and loading the editor bundle overruns the 10s expect timeout.
+      const unifiedDiff = dialog.getByRole("code").last();
+      await expect(unifiedDiff).toContainText("check the context", {
+        timeout: 30_000,
+      });
+      await expect(unifiedDiff).toContainText(FIRST_BODY);
+
       const olderVersion = dialog.getByRole("button", { name: /^v1/ });
       await expect(olderVersion).toBeVisible();
       await olderVersion.click();
       await expect(
         dialog.getByRole("heading", { name: "Version 1" }),
       ).toBeVisible();
-
-      // The only place the real Monaco diff renders — every unit test stubs it.
-      await dialog.getByRole("button", { name: /^Changes/ }).click();
-      await expect(dialog.getByText(FIRST_BODY)).toBeVisible();
+      // The earliest version has no baseline, so comparing is not offered at
+      // all rather than offered and empty.
+      await expect(
+        dialog.getByRole("button", { name: /^Changes/ }),
+      ).toBeDisabled();
 
       await dialog
         .getByRole("button", { name: "Restore this version" })

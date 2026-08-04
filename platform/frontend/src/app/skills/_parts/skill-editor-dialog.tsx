@@ -266,9 +266,14 @@ export function SkillEditorDialog({
         ? { baseVersion: skill.latestVersion }
         : {}),
     };
-    const result = isEdit
-      ? await updateSkill.mutateAsync({ id: skillId, body })
-      : await createSkill.mutateAsync(body);
+    // A handled failure resolves to null and a rejection is reported by the
+    // mutation's own `onError`; both leave the dialog open with the draft
+    // intact, so the author can retry without retyping. Caught here only so an
+    // unreachable API does not escape as an unhandled rejection.
+    const result = await (isEdit
+      ? updateSkill.mutateAsync({ id: skillId, body })
+      : createSkill.mutateAsync(body)
+    ).catch(() => null);
     if (result) {
       onOpenChange(false);
       onSaved?.();

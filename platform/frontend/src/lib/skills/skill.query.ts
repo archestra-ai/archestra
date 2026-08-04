@@ -227,6 +227,10 @@ export function useCreateSkill() {
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill created");
     },
+    // As on update: the `{ error }` branch above never sees a rejection, and the
+    // editor's `mutateAsync` is caught rather than left to reject, so nothing
+    // else would report a create that failed to leave the browser.
+    onError: (error) => handleApiError(error),
   });
 }
 
@@ -262,6 +266,10 @@ export function useUpdateSkill() {
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill updated");
     },
+    // A rejection never reaches the `{ error }` branch above, so a save that
+    // failed to leave the browser would otherwise be silent — and the editor
+    // awaits `mutateAsync`, where it would surface as an unhandled rejection.
+    onError: (error) => handleApiError(error),
   });
 }
 
@@ -391,6 +399,11 @@ export function useRestoreSkillVersion() {
         `Restored version ${variables.version} — created version ${data.latestVersion}`,
       );
     },
+    // The paths above report on an `{ error }` response. A *rejection* is a
+    // different failure — the request never reached the API — and reaches none
+    // of them, so without this an offline restore says nothing at all and the
+    // confirmation just sits there. Covers both reads and the write.
+    onError: (error) => handleApiError(error),
     // Every outcome refreshes, not just the write: a rejected compare-and-set
     // means the head moved under the preview, and a suppressed fork still
     // touched the skill row.

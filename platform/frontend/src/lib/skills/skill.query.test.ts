@@ -1,12 +1,13 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useRestoreSkillVersion,
   useSkillVersion,
+  useSkillVersions,
   useUpdateSkill,
 } from "@/lib/skills/skill.query";
 
@@ -306,6 +307,38 @@ describe("useRestoreSkillVersion", () => {
     expect(sdk.updateSkill).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
   });
+
+  /**
+   * The cases above fail with an `{ error }` response, which the mutation reads
+   * and reports. A rejection is the other kind of failure — the request never
+   * reached the API — and it reaches none of those branches. The dialog awaits
+   * this mutation and keeps its confirmation open on any failure, so if the
+   * mutation stays quiet the user is left clicking an inert button.
+   */
+  it("reports a write that never reached the API", async () => {
+    sdk.getSkill.mockResolvedValue(skillResponse(12));
+    sdk.getSkillVersion.mockResolvedValue(versionResponse());
+    sdk.updateSkill.mockRejectedValue(new Error("Failed to fetch"));
+
+    const { result } = setup();
+    result.current.mutate(restoreArgs);
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+
+    expect(toast.error).toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("reports a read that never reached the API", async () => {
+    sdk.getSkill.mockRejectedValue(new Error("Failed to fetch"));
+    sdk.getSkillVersion.mockResolvedValue(versionResponse());
+
+    const { result } = setup();
+    result.current.mutate(restoreArgs);
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+
+    expect(toast.error).toHaveBeenCalled();
+    expect(sdk.updateSkill).not.toHaveBeenCalled();
+  });
 });
 
 describe("useUpdateSkill", () => {
@@ -404,5 +437,116 @@ describe("useSkillVersion", () => {
     await queryClient.invalidateQueries({ queryKey: ["skills"] });
 
     expect(sdk.getSkillVersion).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The history is read by offset from a list that grows at the *head*, so a
+ * version created between two page loads shifts every row down and the next
+ * page re-returns rows the previous one already held. The dialog drops the
+ * second copy (covered in `skill-version-history-dialog.test.tsx`, "lists a
+ * version once when a page boundary re-returns it"); these tests cover the
+ * other half — that dropping it must not shorten the offset the *server* is
+ * counting against, or the row past the overlap is skipped and never seen.
+ */
+describe("useSkillVersions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** `versions` newest-first, so a page counts *down* from `startingAt`. */
+  function versionsPage({
+    startingAt,
+    count = 20,
+    hasNext = true,
+  }: {
+    startingAt: number;
+    count?: number;
+    hasNext?: boolean;
+  }) {
+    return {
+      data: {
+        data: Array.from({ length: count }, (_, index) => ({
+          id: `version-${startingAt - index}`,
+          skillId: "skill-1",
+          version: startingAt - index,
+          contentHash: `hash-${startingAt - index}`,
+          createdAt: "2026-08-01T10:00:00.000Z",
+        })),
+        pagination: {
+          currentPage: 1,
+          limit: 20,
+          total: 100,
+          totalPages: 5,
+          hasNext,
+          hasPrev: false,
+        },
+      },
+      error: undefined,
+    } as never;
+  }
+
+  function setupVersions() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    return renderHook(() => useSkillVersions("skill-1"), { wrapper });
+  }
+
+  it("asks for the next page at the offset the server counts from", async () => {
+    sdk.getSkillVersions.mockResolvedValue(versionsPage({ startingAt: 100 }));
+
+    const { result } = setupVersions();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(sdk.getSkillVersions).toHaveBeenNthCalledWith(1, {
+      path: { id: "skill-1" },
+      query: { limit: 20, offset: 0 },
+    });
+
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+
+    expect(sdk.getSkillVersions).toHaveBeenNthCalledWith(2, {
+      path: { id: "skill-1" },
+      query: { limit: 20, offset: 20 },
+    });
+  });
+
+  it("keeps counting rows the server sent, not rows the caller kept", async () => {
+    // A version lands between the two loads, so page 2 starts one row back and
+    // re-returns v81. Counting the 39 *distinct* rows would ask for offset 39
+    // and skip a version outright — the offset belongs to the server's list.
+    sdk.getSkillVersions
+      .mockResolvedValueOnce(versionsPage({ startingAt: 100 }))
+      .mockResolvedValueOnce(versionsPage({ startingAt: 81 }))
+      .mockResolvedValueOnce(versionsPage({ startingAt: 61 }));
+
+    const { result } = setupVersions();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+
+    expect(sdk.getSkillVersions).toHaveBeenNthCalledWith(3, {
+      path: { id: "skill-1" },
+      query: { limit: 20, offset: 40 },
+    });
+  });
+
+  it("stops paging once the server reports no next page", async () => {
+    sdk.getSkillVersions.mockResolvedValue(
+      versionsPage({ startingAt: 3, count: 3, hasNext: false }),
+    );
+
+    const { result } = setupVersions();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.hasNextPage).toBe(false);
   });
 });

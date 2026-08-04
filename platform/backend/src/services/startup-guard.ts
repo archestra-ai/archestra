@@ -152,6 +152,21 @@ export interface StartupGuardClient {
    */
   skillsDisconnectCommands: string;
   /**
+   * Optional proof that the `mcp)` removal actually took effect, run in the
+   * foreground after the silenced commands above.
+   *
+   * The removals delegate to the vendor CLI, whose exit status cannot answer
+   * "is it gone?": `codex mcp remove <missing>` exits 0 while
+   * `codex plugin marketplace remove <missing>` exits 1, so a zero exit proves
+   * nothing and a non-zero one may just mean "already absent". These snippets
+   * therefore check the client's config on disk instead. They must print their
+   * own reason and `return 1` when the entry survived; a client that omits
+   * them keeps the previous assume-success behaviour.
+   */
+  mcpDisconnectVerify?: string;
+  /** As `mcpDisconnectVerify`, for the `skills)` case. */
+  skillsDisconnectVerify?: string;
+  /**
    * The `disconnect_proxy()` and `proxy_disconnect_notes()` shell function
    * definitions, fully client-specific (settings.json strip / TOML block strip
    * / shell-profile export strip). Only emitted when a proxy is covered.
@@ -179,6 +194,16 @@ export interface StartupGuardWindowsClient {
    * and `$SkillsMarketplaceName`.
    */
   skillsDisconnect: string;
+  /**
+   * PowerShell body proving the `'mcp'` removal landed, for
+   * `Test-ArchDisconnected`. Must `return $false` (after setting
+   * `$Script:ArchDisconnectReason`) when the entry survived. See
+   * {@link StartupGuardClient.mcpDisconnectVerify} for why the vendor CLI's
+   * exit status cannot be used instead.
+   */
+  mcpDisconnectVerify?: string;
+  /** As `mcpDisconnectVerify`, for the `'skills'` case. */
+  skillsDisconnectVerify?: string;
   /**
    * Defines `function Disconnect-ArchProxy { … }` — the client-specific proxy
    * reversal (settings.json strip / config.toml block strip / env removal).
@@ -473,6 +498,31 @@ ${client.skillsDisconnectCommands}
   esac
 }
 
+# Proof that a removal landed. The vendor CLIs are delegated to with their
+# output silenced and their exit status is not a reliable signal, so the check
+# reads the client's config instead. Runs in the FOREGROUND (unlike
+# disconnect_actions) so a failing check can print why. Default: assume success,
+# which is every client that ships no verifier.
+disconnect_verify() { # $1 kind
+  case "$1" in${
+    ctx.mcp && client.mcpDisconnectVerify
+      ? `
+    mcp)
+${client.mcpDisconnectVerify}
+      ;;`
+      : ""
+  }${
+    ctx.skills && client.skillsDisconnectVerify
+      ? `
+    skills)
+${client.skillsDisconnectVerify}
+      ;;`
+      : ""
+  }
+  esac
+  return 0
+}
+
 # Reversing a connect step animates the same way the probes do: the commands
 # run in the background while the dots grow, then the row lands on a check.
 disconnect_resource() { # $1 kind, $2 label
@@ -487,6 +537,10 @@ disconnect_resource() { # $1 kind, $2 label
   done
   wait "$arch_dp" 2>/dev/null || true
   line_reset
+  if ! disconnect_verify "$1"; then
+    printf '%s✗ Could not disconnect %s%s\\n' "$C_ERR" "$2" "$C_RESET"
+    return 1
+  fi
   printf '%s✓%s Disconnected %s\\n' "$C_ACCENT" "$C_RESET" "$2"${
     ctx.proxy
       ? `
@@ -513,10 +567,20 @@ ${client.renderProxyDisconnect(ctx)}`
       : ""
   }
 
+# Set when any resource failed to disconnect, so the caller keeps the guard
+# installed instead of deleting the only thing that could retry.
+DISCONNECT_FAILED=0
+
 disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on later launches
   for i in "$@"; do
-    disconnect_resource "\${GUARD_KINDS[$i]}" "\${GUARD_LABELS[$i]}"
-    remember_disconnected "\${GUARD_KINDS[$i]}"
+    # Only a removal we could prove is recorded as done — remembering an
+    # unverified one would skip the resource on every later launch and strand
+    # the leftover permanently.
+    if disconnect_resource "\${GUARD_KINDS[$i]}" "\${GUARD_LABELS[$i]}"; then
+      remember_disconnected "\${GUARD_KINDS[$i]}"
+    else
+      DISCONNECT_FAILED=1
+    fi
   done
 }
 
@@ -654,7 +718,7 @@ prompt_down_all() {
     y|Y|'')
       GUARD_DWELL=1
       disconnect_and_forget $DOWN_IDXS
-      [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ] && uninstall_guard
+      [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ] && [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard
       ;;
     *)
       line_reset
@@ -798,7 +862,7 @@ if [ "$DISC_ALL" = "1" ]; then
   line_reset
   GUARD_DWELL=1
   disconnect_and_forget $ACTIVE_IDXS
-  uninstall_guard
+  [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard
   finish_guard
 fi
 if [ "$SKIP_ALL" = "1" ]; then

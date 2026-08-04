@@ -368,8 +368,12 @@ describe.each([
     binary: "codex",
     disableEnvVar: "ARCHESTRA_CODEX_GUARD",
     nonInteractive: "$a -eq 'exec'",
-    proxyConfig: ".codex\\config.toml",
-    proxyNote: "Removed the Archestra provider from ~/.codex/config.toml",
+    // Codex keeps its config wherever CODEX_HOME points, and the vendor CLI
+    // honours that — a hardcoded ~/.codex would edit a different file than the
+    // `codex mcp remove` beside it.
+    proxyConfig:
+      "$(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' })",
+    proxyNote: "Removed the Archestra provider from the Codex config.toml",
   },
   {
     name: "Copilot CLI",

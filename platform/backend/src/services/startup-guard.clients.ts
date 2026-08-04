@@ -1,4 +1,5 @@
 import {
+  ARCHESTRA_TOKEN_PREFIX,
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   COPILOT_PROVIDER_ENV_KEYS,
@@ -194,15 +195,69 @@ export const CODEX_GUARD_CLIENT: StartupGuardClient = {
   nonInteractiveArgPatterns: ["exec"],
   mcpDisconnectCommands: `      command codex mcp remove "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true`,
   skillsDisconnectCommands: `      command codex plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true`,
+  mcpDisconnectVerify: codexVerifyTableGone(
+    "mcp_servers",
+    "$MCP_SERVER_NAME",
+    "codex mcp remove",
+  ),
+  skillsDisconnectVerify: codexVerifyTableGone(
+    "marketplaces",
+    "$SKILLS_MARKETPLACE_NAME",
+    "codex plugin marketplace remove",
+  ),
   renderProxyDisconnect: codexProxyDisconnect,
   windows: {
     mcpDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source mcp remove $McpServerName 2>$null | Out-Null } catch { } }`,
     skillsDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { } }`,
+    mcpDisconnectVerify: codexWindowsVerifyTableGone(
+      "mcp_servers",
+      "$McpServerName",
+      "codex mcp remove",
+    ),
+    skillsDisconnectVerify: codexWindowsVerifyTableGone(
+      "marketplaces",
+      "$SkillsMarketplaceName",
+      "codex plugin marketplace remove",
+    ),
     renderProxyDisconnect: codexWindowsProxyDisconnect,
     proxyDisconnectNote: (ctx) =>
-      `Removed the ${ctx.appName} provider from ~/.codex/config.toml. If you signed Codex in with an ${ctx.appName} virtual key, run codex logout (then log back in) to restore your own credentials.`,
+      `Removed the ${ctx.appName} provider from the Codex config.toml. If Codex was signed in with an ${ctx.appName} virtual key it has been signed out — run codex login to sign back in with your own account.`,
   },
 };
+
+/**
+ * Codex keeps its config where `CODEX_HOME` points, defaulting to `~/.codex`.
+ * The vendor CLI honours that variable, so a guard that hardcoded `~/.codex`
+ * would verify a different file than the one `codex mcp remove` just edited and
+ * report a phantom failure.
+ */
+function codexConfigShellPath(): string {
+  return '"${CODEX_HOME:-$HOME/.codex}/config.toml"';
+}
+
+/**
+ * Prove a `[<section>.<name>]` table is gone from Codex's config, and say what
+ * to run by hand when it is not.
+ *
+ * The removal itself is delegated to the Codex CLI, which is the right owner —
+ * it deletes the parent table together with any nested `[<section>.<name>.*]`
+ * sub-tables (per-tool `approval_mode` entries), which a line-based stripper
+ * here would strand. What the guard must not do is *assume* the delegation
+ * happened: the binary may not resolve, so reading the file back is the only
+ * honest check.
+ */
+function codexVerifyTableGone(
+  section: string,
+  nameVar: string,
+  manualCommand: string,
+): string {
+  return `      arch_cfg=${codexConfigShellPath()}
+      [ -f "$arch_cfg" ] || return 0
+      grep -q "^\\[${section}\\.${nameVar}\\]" "$arch_cfg" 2>/dev/null || return 0
+      line_reset
+      printf '%s  [${section}.%s] is still in %s — run \`${manualCommand} %s\` yourself.%s\\n' "$C_WARN" "${nameVar}" "$arch_cfg" "${nameVar}" "$C_RESET"
+      return 1`;
+}
 
 /**
  * Codex's proxy disconnect on Windows: strip the `# >>> archestra:<proxyName> >>>`
@@ -210,46 +265,116 @@ export const CODEX_GUARD_CLIENT: StartupGuardClient = {
  * ~/.codex/config.toml — the exact reverse of the block the Windows connect
  * script writes. Pure PowerShell, mirroring the connect script's own strip loop.
  */
+/** PowerShell twin of {@link codexConfigShellPath}. */
+function codexHomePs(): string {
+  return "$(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' })";
+}
+
+/** PowerShell twin of {@link codexVerifyTableGone}. */
+function codexWindowsVerifyTableGone(
+  section: string,
+  nameVar: string,
+  manualCommand: string,
+): string {
+  return `    $archCfg = Join-Path ${codexHomePs()} 'config.toml'
+    if (Test-Path $archCfg) {
+      $archHeader = '[${section}.' + ${nameVar} + ']'
+      if (@(Get-Content -Path $archCfg) -contains $archHeader) {
+        $Script:ArchDisconnectReason = $archHeader + ' is still in ' + $archCfg + ' — run \`${manualCommand} ' + ${nameVar} + '\` yourself.'
+        return $false
+      }
+    }`;
+}
+
 function codexWindowsProxyDisconnect(ctx: StartupGuardContext): string {
   const marker = `archestra:${ctx.proxy?.proxyName ?? ""}`;
   return `function Disconnect-ArchProxy {
-  $path = Join-Path $env:USERPROFILE '.codex\\config.toml'
-  if (-not (Test-Path $path)) { return }
-  $start = ${psq(`# >>> ${marker} >>>`)}
-  $end = ${psq(`# <<< ${marker} <<<`)}
-  $kept = New-Object System.Collections.Generic.List[string]
-  $skip = $false
-  foreach ($ln in (Get-Content -Path $path)) {
-    if ($ln -eq $start) { $skip = $true; continue }
-    if ($ln -eq $end) { $skip = $false; continue }
-    if (-not $skip) { $kept.Add($ln) }
+  $path = Join-Path ${codexHomePs()} 'config.toml'
+  if (Test-Path $path) {
+    $start = ${psq(`# >>> ${marker} >>>`)}
+    $end = ${psq(`# <<< ${marker} <<<`)}
+    $kept = New-Object System.Collections.Generic.List[string]
+    $skip = $false
+    foreach ($ln in (Get-Content -Path $path)) {
+      if ($ln -eq $start) { $skip = $true; continue }
+      if ($ln -eq $end) { $skip = $false; continue }
+      if (-not $skip) { $kept.Add($ln) }
+    }
+    Set-Content -Path $path -Value $kept -Encoding utf8
   }
-  Set-Content -Path $path -Value $kept -Encoding utf8
+  Invoke-ArchCodexLogoutIfOurs
+}
+
+# Sign out ONLY when Codex is holding an ${ctx.appName} key. A user-owned key
+# (sk-…) or a ChatGPT session is left untouched: \`codex logout\` deletes the
+# whole credential file, so running it unconditionally would destroy an account
+# login the user established themselves.
+function Invoke-ArchCodexLogoutIfOurs {
+  $Script:ArchLoggedOut = $false
+  $authPath = Join-Path ${codexHomePs()} 'auth.json'
+  if (-not (Test-Path $authPath)) { return }
+  $raw = ''
+  try { $raw = Get-Content -Path $authPath -Raw } catch { return }
+  if ($raw -match '"auth_mode"\\s*:\\s*"chatgpt"') { return }
+  if ($raw -notmatch '"OPENAI_API_KEY"\\s*:\\s*"${ARCHESTRA_TOKEN_PREFIX}') { return }
+  $exe = Get-ArchRealExe
+  if (-not $exe) { return }
+  try { & $exe.Source logout 2>$null | Out-Null } catch { return }
+  $Script:ArchLoggedOut = $true
 }`;
 }
 
 /**
  * Codex's proxy disconnect: strip the `# >>> archestra:<proxyName> >>>` …
- * `# <<< archestra:<proxyName> <<<` block connect appended to
- * ~/.codex/config.toml (awk, no python3 dependency). The Codex login credential
- * is left intact — removing the provider block already stops routing through
- * Archestra — with a note pointing at `codex logout` when a virtual key was used.
+ * `# <<< archestra:<proxyName> <<<` block connect appended to Codex's
+ * config.toml (awk, no python3 dependency), then sign Codex out of the virtual
+ * key connect logged it in with.
+ *
+ * Both halves are required, and dropping only the first is worse than dropping
+ * neither. Connect writes the pair as `base_url` inside that block plus an
+ * `arch_…` key in Codex's own credential store (`codex login --with-api-key`).
+ * The block is inert until the user opts in with `codex -c model_provider=…`;
+ * the credential is global. Removing only the block therefore leaves every
+ * plain `codex` run sending an Archestra virtual key to api.openai.com, which
+ * answers `401 Incorrect API key provided: arch_…` — Codex ends up more broken
+ * than before it was ever connected, and the key leaks to a third party.
+ *
+ * `codex logout` deletes the whole credential file, so it is only safe when the
+ * credential in it is ours. The guard checks for our `arch_` prefix — a prefix
+ * test, so no secret is read — and skips a ChatGPT session (`auth_mode`), which
+ * Codex prefers over any stored key and which the user established themselves.
  */
 function codexProxyDisconnect(ctx: StartupGuardContext): string {
   const marker = `archestra:${ctx.proxy?.proxyName ?? ""}`;
   return `disconnect_proxy() {
-  CONFIG="$HOME/.codex/config.toml"
-  [ -f "$CONFIG" ] || return 0
-  awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
-    $0 == start {skip=1; next}
-    $0 == end {skip=0; next}
-    !skip {print}
-  ' "$CONFIG" > "$CONFIG.archestra-tmp" 2>/dev/null && mv "$CONFIG.archestra-tmp" "$CONFIG"
+  CONFIG=${codexConfigShellPath()}
+  if [ -f "$CONFIG" ]; then
+    awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
+      $0 == start {skip=1; next}
+      $0 == end {skip=0; next}
+      !skip {print}
+    ' "$CONFIG" > "$CONFIG.archestra-tmp" 2>/dev/null && mv "$CONFIG.archestra-tmp" "$CONFIG"
+  fi
+  codex_logout_if_ours
+}
+
+# Sign out ONLY when Codex is holding an ${ctx.appName} key. A user-owned
+# key (sk-…) or a ChatGPT session is left untouched: logout would delete it.
+codex_logout_if_ours() {
+  AUTH=${'"${CODEX_HOME:-$HOME/.codex}/auth.json"'}
+  [ -f "$AUTH" ] || return 0
+  grep -q '"auth_mode"[[:space:]]*:[[:space:]]*"chatgpt"' "$AUTH" 2>/dev/null && return 0
+  grep -q '"OPENAI_API_KEY"[[:space:]]*:[[:space:]]*"${ARCHESTRA_TOKEN_PREFIX}' "$AUTH" 2>/dev/null || return 0
+  command codex logout </dev/null >/dev/null 2>&1 || true
+  ARCH_LOGGED_OUT=1
 }
 
 proxy_disconnect_notes() {
   line_reset
-  printf '%s  Removed the ${ctx.appName} provider from ~/.codex/config.toml. If you signed Codex in with an ${ctx.appName} virtual key, run \`codex logout\` (then log back in) to restore your own credentials.%s\\n' "$C_DIM" "$C_RESET"
+  printf '%s  Removed the ${ctx.appName} provider from $CONFIG.%s\\n' "$C_DIM" "$C_RESET"
+  if [ "\${ARCH_LOGGED_OUT:-0}" = "1" ]; then
+    printf '%s  Signed Codex out of the ${ctx.appName} virtual key — run \`codex login\` to sign back in with your own account.%s\\n' "$C_DIM" "$C_RESET"
+  fi
   return 0
 }`;
 }

@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -15,6 +22,7 @@ import {
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
 } from "@/services/startup-guard.clients";
+import { renderStartupGuardPowerShell } from "@/services/startup-guard.windows";
 
 const execFileAsync = promisify(execFile);
 
@@ -128,14 +136,264 @@ describe.each([
 });
 
 describe("Codex-specific disconnect", () => {
-  test("strips the archestra provider block it wrote to ~/.codex/config.toml", () => {
+  test("strips the archestra provider block it wrote to Codex's config.toml", () => {
     const script = renderStartupGuardScript(CTX, CODEX_GUARD_CLIENT);
-    expect(script).toContain('CONFIG="$HOME/.codex/config.toml"');
+    expect(script).toContain(
+      'CONFIG="${CODEX_HOME:-$HOME/.codex}/config.toml"',
+    );
     // the awk-delimited block is keyed by the proxy slug connect used
     expect(script).toContain("# >>> archestra:acme_proxy >>>");
     expect(script).toContain("# <<< archestra:acme_proxy <<<");
     // `codex exec` is the non-interactive path the guard bows out on
     expect(script).toContain("exec) INTERACTIVE=0");
+  });
+});
+
+/**
+ * Pull one shell function out of the rendered guard so it can be run on its
+ * own. The generator emits every function at column 0 and closes it with a
+ * bare `}`, so the slice is unambiguous.
+ */
+function extractShellFunction(script: string, name: string): string {
+  const lines = script.split("\n");
+  // The opening line may carry a trailing `# $1 kind` comment.
+  const start = lines.findIndex((line) => line.startsWith(`${name}() {`));
+  if (start === -1) throw new Error(`no ${name}() in the rendered guard`);
+  const end = lines.indexOf("}", start);
+  if (end === -1) throw new Error(`${name}() is never closed`);
+  return lines.slice(start, end + 1).join("\n");
+}
+
+/**
+ * Run rendered guard functions for real against a throwaway CODEX_HOME, with a
+ * fake `codex` on PATH that records its argv. Exercising the generated shell
+ * beats asserting on its text: these defects were all "the code ran and did
+ * nothing", which a string match cannot tell from success.
+ */
+async function runCodexGuardSnippet(params: {
+  functions: string[];
+  invoke: string;
+  configToml?: string;
+  authJson?: string;
+}): Promise<{ code: number; stdout: string; codexArgs: string[] }> {
+  const script = renderStartupGuardScript(CTX, CODEX_GUARD_CLIENT);
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-codex-"));
+  try {
+    const home = path.join(dir, "codex-home");
+    const bin = path.join(dir, "bin");
+    const argvLog = path.join(dir, "codex-argv.log");
+    await mkdir(home, { recursive: true });
+    await mkdir(bin, { recursive: true });
+    if (params.configToml !== undefined) {
+      await writeFile(
+        path.join(home, "config.toml"),
+        params.configToml,
+        "utf8",
+      );
+    }
+    if (params.authJson !== undefined) {
+      await writeFile(path.join(home, "auth.json"), params.authJson, "utf8");
+    }
+    const fakeCodex = path.join(bin, "codex");
+    await writeFile(
+      fakeCodex,
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(argvLog)}\n`,
+      "utf8",
+    );
+    await chmod(fakeCodex, 0o755);
+
+    const harness = path.join(dir, "harness.sh");
+    await writeFile(
+      harness,
+      [
+        "#!/usr/bin/env bash",
+        // Presentation helpers the extracted functions call.
+        "line_reset() { :; }",
+        'C_WARN=""; C_RESET=""; C_DIM=""; C_ERR=""; C_ACCENT=""',
+        `MCP_SERVER_NAME=${JSON.stringify(CTX.mcp?.serverName)}`,
+        `SKILLS_MARKETPLACE_NAME=${JSON.stringify(CTX.skills?.marketplaceName)}`,
+        ...params.functions.map((name) => extractShellFunction(script, name)),
+        params.invoke,
+      ].join("\n"),
+      "utf8",
+    );
+
+    const result = await execFileAsync("bash", [harness], {
+      env: {
+        ...process.env,
+        CODEX_HOME: home,
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+      },
+    }).then(
+      (r) => ({ code: 0, stdout: r.stdout }),
+      (e: { code?: number; stdout?: string }) => ({
+        code: e.code ?? 1,
+        stdout: e.stdout ?? "",
+      }),
+    );
+
+    let codexArgs: string[] = [];
+    try {
+      codexArgs = (await readFile(argvLog, "utf8")).split("\n").filter(Boolean);
+    } catch {
+      codexArgs = [];
+    }
+    return { ...result, codexArgs };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+const GATEWAY_TABLE = [
+  "[mcp_servers.prod_gateway]",
+  'url = "https://archestra.example.com/v1/mcp/prod-gateway"',
+  "",
+  "[mcp_servers.prod_gateway.tools.demo__open]",
+  'approval_mode = "approve"',
+  "",
+].join("\n");
+
+const FOREIGN_TABLES = [
+  "[mcp_servers.node_repl]",
+  'command = "/opt/codex/node"',
+  "",
+  "[marketplaces.openai-bundled]",
+  'source_type = "local"',
+  "",
+].join("\n");
+
+describe("Codex disconnect reports what it could not remove", () => {
+  test("a gateway the CLI failed to remove fails verification and names the fix", async () => {
+    const { code, stdout } = await runCodexGuardSnippet({
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      configToml: `${FOREIGN_TABLES}${GATEWAY_TABLE}`,
+    });
+
+    // Before the fix disconnect_verify did not exist and the caller printed
+    // "✓ Disconnected" unconditionally.
+    expect(code).toBe(7);
+    expect(stdout).toContain("[mcp_servers.prod_gateway] is still in");
+    expect(stdout).toContain("run `codex mcp remove prod_gateway` yourself");
+  });
+
+  test("a marketplace the CLI failed to remove fails verification", async () => {
+    const { code, stdout } = await runCodexGuardSnippet({
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify skills || exit 7\nexit 0\n",
+      configToml: '[marketplaces.acme-skills]\nsource_type = "git"\n',
+    });
+
+    expect(code).toBe(7);
+    expect(stdout).toContain("[marketplaces.acme-skills] is still in");
+  });
+
+  test("verification passes once the entries are gone, ignoring foreign ones", async () => {
+    const { code } = await runCodexGuardSnippet({
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp && disconnect_verify skills\n",
+      // node_repl and openai-bundled are the user's own — they must not read
+      // as our leftovers.
+      configToml: FOREIGN_TABLES,
+    });
+
+    expect(code).toBe(0);
+  });
+
+  test("verification reads the config CODEX_HOME points at", async () => {
+    // Seeded only in CODEX_HOME; a guard hardcoding ~/.codex would see no
+    // leftover here and wrongly report success.
+    const { code } = await runCodexGuardSnippet({
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      configToml: GATEWAY_TABLE,
+    });
+
+    expect(code).toBe(7);
+  });
+});
+
+describe("Codex disconnect reverses the credential it installed", () => {
+  test("signs Codex out of an archestra virtual key", async () => {
+    const { codexArgs, stdout } = await runCodexGuardSnippet({
+      functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],
+      invoke: "codex_logout_if_ours\nproxy_disconnect_notes\n",
+      authJson: '{"OPENAI_API_KEY":"arch_deadbeef","auth_mode":"apikey"}',
+    });
+
+    // Without this the key outlives the base_url that made it routable, and
+    // every plain `codex` run 401s against api.openai.com.
+    expect(codexArgs).toContain("logout");
+    expect(stdout).toContain("Signed Codex out of the Archestra virtual key");
+  });
+
+  test("leaves a user-owned api key alone", async () => {
+    const { codexArgs, stdout } = await runCodexGuardSnippet({
+      functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],
+      invoke: "codex_logout_if_ours\nproxy_disconnect_notes\n",
+      authJson: '{"OPENAI_API_KEY":"sk-useROwnedKey","auth_mode":"apikey"}',
+    });
+
+    expect(codexArgs).not.toContain("logout");
+    expect(stdout).not.toContain("Signed Codex out");
+  });
+
+  test("leaves a ChatGPT session alone even beside our key", async () => {
+    // `codex logout` deletes auth.json wholesale, so it must never run while
+    // the user has an OAuth session Codex would prefer anyway.
+    const { codexArgs } = await runCodexGuardSnippet({
+      functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],
+      invoke: "codex_logout_if_ours\nproxy_disconnect_notes\n",
+      authJson:
+        '{"OPENAI_API_KEY":"arch_deadbeef","auth_mode":"chatgpt","tokens":{"access_token":"x"}}',
+    });
+
+    expect(codexArgs).not.toContain("logout");
+  });
+
+  test("does nothing when Codex holds no credential at all", async () => {
+    const { code, codexArgs } = await runCodexGuardSnippet({
+      functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],
+      invoke: "codex_logout_if_ours\nproxy_disconnect_notes\n",
+    });
+
+    expect(code).toBe(0);
+    expect(codexArgs).toEqual([]);
+  });
+});
+
+describe("an unverified disconnect is not recorded as done", () => {
+  test("bash: the skip file and the guard uninstall both wait on success", () => {
+    const script = renderStartupGuardScript(CTX, CODEX_GUARD_CLIENT);
+    // Recording an unproven removal would skip the resource on every later
+    // launch, and uninstalling the guard would delete the only thing that
+    // could retry.
+    expect(script).toContain(
+      'if disconnect_resource "${GUARD_KINDS[$i]}" "${GUARD_LABELS[$i]}"; then',
+    );
+    expect(script).toContain("DISCONNECT_FAILED=1");
+    expect(script).toContain(
+      '[ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ] && [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard',
+    );
+    expect(script).toContain(
+      '[ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard',
+    );
+  });
+
+  test("windows: the skip file and the guard uninstall both wait on success", () => {
+    const script = renderStartupGuardPowerShell(CTX, CODEX_GUARD_CLIENT);
+    expect(script).toContain("if (Disconnect-ArchRemote $r.Kind $r.Label) {");
+    expect(script).toContain("$Script:ArchDisconnectFailed = $true");
+    expect(script).toContain(
+      "if ($downRemotes.Count -ge $ActiveRemotes.Count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard }",
+    );
+    expect(script).toContain(
+      "if (-not $Script:ArchDisconnectFailed) { Remove-ArchGuard }",
+    );
+    // A missing binary cannot have removed anything.
+    expect(script).toContain("the codex executable could not be found on PATH");
+    // …and Windows reverses the credential too.
+    expect(script).toContain("Invoke-ArchCodexLogoutIfOurs");
   });
 });
 

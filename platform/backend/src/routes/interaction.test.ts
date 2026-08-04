@@ -473,6 +473,10 @@ describe("interaction routes", () => {
       type: "anthropic:messages",
       request: anthropicReq([m0]),
       response: anthropicResp,
+      // Explicit distinct timestamps: defaultNow() can tie within the same
+      // millisecond, and the last-interaction window ranks by created_at
+      // alone — a tie could select the head row and dodge tip reconstruction.
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
     });
     const tip = await InteractionModel.create({
       profileId: agent.id,
@@ -481,6 +485,7 @@ describe("interaction routes", () => {
       type: "anthropic:messages",
       request: anthropicReq(fullMessages),
       response: anthropicResp,
+      createdAt: new Date("2020-01-01T00:00:01.000Z"),
     });
 
     // Sessions endpoint derives its preview from the reconstructed request —

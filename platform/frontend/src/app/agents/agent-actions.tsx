@@ -3,6 +3,7 @@ import {
   Copy,
   Download,
   Eye,
+  History,
   MessageSquare,
   Pencil,
   Plug,
@@ -31,6 +32,7 @@ type AgentActionsProps = {
   onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
+  onHistory: (agentId: string) => void;
 };
 
 export function AgentActions({
@@ -44,6 +46,7 @@ export function AgentActions({
   onClone,
   onExport,
   onConvertToSkill,
+  onHistory,
 }: AgentActionsProps) {
   const isBuiltIn = Boolean(agent.builtIn);
   const isDeleted = Boolean(agent.deletedAt);
@@ -124,6 +127,13 @@ export function AgentActions({
           ? "Only internal agents can be exported"
           : undefined,
       onClick: () => onExport(agent),
+    },
+    {
+      icon: <History className="h-4 w-4" />,
+      label: "Version history",
+      permissions: { agent: ["read"] },
+      testId: `${E2eTestId.AgentVersionHistoryButton}-${agent.name}`,
+      onClick: () => onHistory(agent.id),
     },
     {
       icon: <Sparkles className="h-4 w-4" />,

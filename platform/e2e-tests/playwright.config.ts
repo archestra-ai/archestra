@@ -41,6 +41,7 @@ const testPatterns = {
 };
 
 const uiTestMatch = [
+  "**/agent-version-history.spec.ts",
   "**/agents.spec.ts",
   "**/apps.spec.ts",
   "**/audit-log.spec.ts",

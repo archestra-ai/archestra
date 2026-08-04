@@ -703,8 +703,8 @@ The following environment variables can be used to configure Archestra Platform.
 
 - **`ARCHESTRA_API_BASE_URL`** - Archestra API Base URL(s) for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway.
 
-  This URL is displayed in the UI connection instructions to help users configure their agents. It doesn\'t affect internal routing (Archestra frontend communicates with backend via `http://localhost:9000`).
-  - Default: Falls back to `http://localhost:9000`
+  This URL is displayed in the UI connection instructions to help users configure their agents. It doesn\'t affect internal routing (Archestra frontend communicates with backend via `http://127.0.0.1:9000`).
+  - Default: Falls back to `http://127.0.0.1:9000`
   - Supports multiple comma-separated URLs for different connection options (e.g., internal K8s URL and external ingress)
   - Single URL example: `https://api.archestra.com`
   - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`

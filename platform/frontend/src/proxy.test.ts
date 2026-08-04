@@ -113,7 +113,7 @@ describe("proxy", () => {
       expect(response.headers.get("x-middleware-next")).toBeNull();
       // Should rewrite to backend URL
       expect(response.headers.get("x-middleware-rewrite")).toContain(
-        "localhost:9000",
+        "127.0.0.1:9000",
       );
     });
 
@@ -128,7 +128,7 @@ describe("proxy", () => {
 
       expect(response.headers.get("x-middleware-next")).toBeNull();
       expect(response.headers.get("x-middleware-rewrite")).toContain(
-        "localhost:9000",
+        "127.0.0.1:9000",
       );
     });
 

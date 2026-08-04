@@ -17,6 +17,7 @@ import {
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
+  LOOPBACK_HOST,
   PROVIDER_BASE_URL_HEADER,
   perplexityAgentApiBaseUrl,
   providerRequiresPerUserCredential,
@@ -1163,8 +1164,14 @@ function takeMarkerHeader(
 }
 
 /**
- * Build the proxy base URL for a provider
+ * Build the proxy base URL for a provider.
+ *
+ * The proxy runs in this very process, so the dial stays on the loopback
+ * interface — addressed by {@link LOOPBACK_HOST} rather than `localhost`,
+ * which resolves to the `::1` address this IPv4-only server never listens on.
+ *
+ * @public — exported for testability
  */
-function buildProxyBaseUrl(provider: string, agentId: string): string {
-  return `http://localhost:${config.api.port}/v1/${provider}/${agentId}`;
+export function buildProxyBaseUrl(provider: string, agentId: string): string {
+  return `http://${LOOPBACK_HOST}:${config.api.port}/v1/${provider}/${agentId}`;
 }

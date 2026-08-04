@@ -28,7 +28,7 @@ describe("next config rewrites", () => {
       expect.arrayContaining([
         {
           source: "/.well-known/:path*",
-          destination: "http://localhost:9000/.well-known/:path*",
+          destination: "http://127.0.0.1:9000/.well-known/:path*",
         },
       ]),
     );

@@ -349,9 +349,10 @@ class SkillModel {
    * `expectedLatestVersion` anchors the edit to the head it was computed from:
    * the update is a compare-and-set that throws `ApiError(409)` (rolling back)
    * if the skill has already moved past it, so a stale snapshot cannot clobber
-   * a concurrent write. Every caller that read the skill before editing it
-   * passes one. Omit it only when the payload owes nothing to a prior read —
-   * `update_skill`, which composes a whole manifest from its arguments.
+   * a concurrent write. It is opt-in per caller: `edit_skill` always passes one
+   * (its schema requires `baseVersion`), the REST update route forwards one only
+   * when the client sends it, and `update_skill` never does — it composes a whole
+   * manifest from its arguments and owes nothing to a prior read.
    */
   static async updateWithFiles(params: {
     id: string;

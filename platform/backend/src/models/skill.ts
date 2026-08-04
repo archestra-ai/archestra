@@ -346,11 +346,12 @@ class SkillModel {
    * change can never be committed with a team set that leaves the skill
    * orphaned.
    *
-   * When `expectedLatestVersion` is set, the update is a compare-and-set: it
-   * throws `ApiError(409)` (rolling back) if the skill's head has already moved
-   * past that version, so an edit computed from a stale snapshot cannot clobber
-   * a concurrent update. Omit it to keep last-write-wins (the full-manifest
-   * `update_skill` path, whose payload is self-contained).
+   * `expectedLatestVersion` anchors the edit to the head it was computed from:
+   * the update is a compare-and-set that throws `ApiError(409)` (rolling back)
+   * if the skill has already moved past it, so a stale snapshot cannot clobber
+   * a concurrent write. Every caller that read the skill before editing it
+   * passes one. Omit it only when the payload owes nothing to a prior read —
+   * `update_skill`, which composes a whole manifest from its arguments.
    */
   static async updateWithFiles(params: {
     id: string;
@@ -382,9 +383,16 @@ class SkillModel {
         params.expectedLatestVersion !== undefined &&
         skill.latestVersion !== params.expectedLatestVersion
       ) {
+        // Carries an internal code because the update route raises other 409s
+        // (a name collision, a read-only GitHub-synced skill) and a client that
+        // has to offer a reload cannot tell them apart on the status alone.
+        // The message stays client-neutral: it reaches both the REST route and
+        // `edit_skill`, so the caller appends its own way back rather than
+        // being named here.
         throw new ApiError(
           409,
-          `Skill "${skill.name}" has moved to version ${skill.latestVersion}; the edit was based on version ${params.expectedLatestVersion}. Reload the skill with load_skill and retry.`,
+          `Skill "${skill.name}" has moved to version ${skill.latestVersion}; the edit was based on version ${params.expectedLatestVersion}.`,
+          "skill_version_conflict",
         );
       }
 

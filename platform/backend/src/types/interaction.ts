@@ -600,6 +600,9 @@ export const ToonSkipReasonCountsSchema = z.object({
   noToolResults: z.number(),
 });
 
+/** Max length of `lastUserMessagePreview` on session summaries. */
+export const LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH = 200;
+
 /**
  * Session summary schema for the sessions endpoint
  */
@@ -635,12 +638,20 @@ export const SessionSummarySchema = z.object({
   authenticatedAppNames: z.array(z.string()),
   userNames: z.array(z.string()),
   /**
-   * Short preview (≤200 chars) of the session's last user message, computed
-   * server-side from the reconstructed request. The raw request body is
-   * intentionally never returned by the listing — shipping full bodies
-   * OOM-killed the platform container (T-1015).
+   * Short preview of the session's last user message, computed server-side
+   * from the reconstructed request. The raw request body is intentionally
+   * never returned by the listing — shipping full bodies OOM-killed the
+   * platform container (T-1015). Fetch bodies per interaction via
+   * GET /api/interactions when needed.
    */
-  lastUserMessagePreview: z.string().nullable(),
+  lastUserMessagePreview: z
+    .string()
+    .max(LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH)
+    .nullable()
+    .describe(
+      "Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.",
+    ),
+  lastInteractionType: z.string().nullable(),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
 });

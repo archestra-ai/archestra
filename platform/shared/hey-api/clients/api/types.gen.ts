@@ -43636,7 +43636,11 @@ export type GetInteractionSessionsResponses = {
             authMethods: Array<'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown'>;
             authenticatedAppNames: Array<string>;
             userNames: Array<string>;
+            /**
+             * Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.
+             */
             lastUserMessagePreview: string | null;
+            lastInteractionType: string | null;
             conversationTitle: string | null;
             claudeCodeTitle: string | null;
         }>;

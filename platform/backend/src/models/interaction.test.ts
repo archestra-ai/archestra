@@ -3952,6 +3952,10 @@ describe("InteractionModel", () => {
       }
       const expectedLength = messages.length; // 1 + 21*2 = 43
 
+      // The writes above warmed the delta manager's caches; drop them so the
+      // preview provably comes from cold DB reconstruction.
+      InteractionDeltaManager.reset();
+
       const sessions = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,

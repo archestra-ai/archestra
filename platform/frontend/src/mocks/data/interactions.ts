@@ -66,6 +66,7 @@ export function makeSessionSummary(
     authenticatedAppNames: [],
     userNames: [],
     lastUserMessagePreview: null,
+    lastInteractionType: null,
     conversationTitle: null,
     claudeCodeTitle: null,
     ...overrides,
@@ -163,6 +164,7 @@ export const llmLogsSessionsSeed = [
     sessionSource: null,
     source: "api",
     lastUserMessagePreview: "Plain API session message",
+    lastInteractionType: "openai:chatCompletions",
   }),
 ];
 

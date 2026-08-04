@@ -19,9 +19,11 @@ vi.mock("@/services/error-tracking", () => ({
 // storage (kubelet-projected volume / container-local tmp).
 const readFileMock = vi.hoisted(() => vi.fn());
 const writeFileMock = vi.hoisted(() => vi.fn());
+const renameMock = vi.hoisted(() => vi.fn());
 vi.mock("node:fs/promises", () => ({
   readFile: readFileMock,
   writeFile: writeFileMock,
+  rename: renameMock,
 }));
 
 const readNamespacedPod = vi.hoisted(() => vi.fn());
@@ -84,6 +86,7 @@ describe("reportAbnormalPreviousTermination", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     writeFileMock.mockResolvedValue(undefined);
+    renameMock.mockResolvedValue(undefined);
   });
 
   test("reports an OOMKilled previous container as fatal and records a marker", async () => {
@@ -122,10 +125,12 @@ describe("reportAbnormalPreviousTermination", () => {
       exitCode: 137,
     });
 
+    // Write-then-rename keeps the marker file crash-safe.
     expect(writeFileMock).toHaveBeenCalledWith(
-      MARKER_PATH,
+      `${MARKER_PATH}.tmp`,
       JSON.stringify(["archestra-platform:containerd://abc"]),
     );
+    expect(renameMock).toHaveBeenCalledWith(`${MARKER_PATH}.tmp`, MARKER_PATH);
   });
 
   test("does not re-report a termination already recorded in the marker file", async () => {
@@ -161,7 +166,7 @@ describe("reportAbnormalPreviousTermination", () => {
 
     expect(captureExceptionSentry).toHaveBeenCalledTimes(1);
     expect(writeFileMock).toHaveBeenCalledWith(
-      MARKER_PATH,
+      `${MARKER_PATH}.tmp`,
       JSON.stringify([
         "archestra-platform:containerd://old",
         "archestra-platform:containerd://new",

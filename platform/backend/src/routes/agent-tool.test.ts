@@ -139,7 +139,7 @@ describe("validateAssignment", () => {
     expect(result?.error.message).toContain("MCP server installation");
   });
 
-  test("allows local server tool with mcpServerId", async ({
+  test("allows shared local server tool with mcpServerId", async ({
     makeAgent,
     makeTool,
     makeMcpServer,
@@ -150,7 +150,10 @@ describe("validateAssignment", () => {
     });
     const agent = await makeAgent();
     const tool = await makeTool({ catalogId: catalogItem.id });
-    const server = await makeMcpServer({ catalogId: catalogItem.id });
+    const server = await makeMcpServer({
+      catalogId: catalogItem.id,
+      scope: "org",
+    });
 
     const data = {
       existingAgentIds: new Set([agent.id]),

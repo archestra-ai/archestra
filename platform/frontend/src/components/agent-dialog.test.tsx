@@ -22,7 +22,7 @@ const {
   useAvailableLlmProviderApiKeysMock,
   useAgentDelegationsMock,
   useAgentSubagentExclusionsMock,
-  useInternalAgentsMock,
+  useDelegationTargetAgentsMock,
   useLlmModelsByProviderMock,
   useProfileMock,
   useSyncAgentDelegationsMock,
@@ -32,7 +32,9 @@ const {
   pendingSaveChanges: vi.fn(
     () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
   ),
-  useInternalAgentsMock: vi.fn((): { data: unknown[] } => ({ data: [] })),
+  useDelegationTargetAgentsMock: vi.fn((): { data: unknown[] } => ({
+    data: [],
+  })),
   useProfileMock: vi.fn(
     (): { data: unknown | null; refetch: ReturnType<typeof vi.fn> } => ({
       data: null,
@@ -84,7 +86,7 @@ vi.mock("@/lib/agent.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
-  useInternalAgents: useInternalAgentsMock,
+  useDelegationTargetAgents: useDelegationTargetAgentsMock,
   useProfile: useProfileMock,
   useUpdateProfile: useUpdateProfileMock,
 }));
@@ -438,7 +440,7 @@ describe("AgentDialog delegation state", () => {
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
     useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
-    useInternalAgentsMock.mockReturnValue({ data: [targetAgent] });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [targetAgent] });
     useAgentDelegationsMock.mockReturnValue({
       data: [targetAgent],
       isFetched: true,
@@ -575,7 +577,9 @@ describe.skip("AgentDialog", () => {
       />,
     );
 
-    expect(useInternalAgentsMock).toHaveBeenCalledWith({ enabled: false });
+    expect(useDelegationTargetAgentsMock).toHaveBeenCalledWith({
+      enabled: false,
+    });
     expect(useAvailableLlmProviderApiKeysMock).toHaveBeenCalledWith({
       includeKeyId: undefined,
       enabled: false,

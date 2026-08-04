@@ -141,6 +141,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.restored",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  // Version restore rewrites the agent's config to an earlier snapshot — an
+  // update in audit terms (`agent.restored` means undeleting). Explicit entry:
+  // a POST never inherits a parent config via walk-up.
+  "/api/agents/:id/versions/:version/restore": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
   "/api/agents/:agentId": {
     resourceType: "agent",
     resourceIdParam: "agentId",

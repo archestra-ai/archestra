@@ -2339,6 +2339,12 @@ class AgentModel {
        * additive pre-fill re-add built-ins the source had un-excluded.
        */
       skipExclusionPrefill?: boolean;
+      /**
+       * Skip this update's config version fork. Set by multi-step callers
+       * (version restore) that fork once for the whole operation — one user
+       * action should produce one version, not one per step.
+       */
+      deferVersionFork?: boolean;
     },
   ): Promise<Agent | null> {
     let updatedAgent:
@@ -2497,9 +2503,11 @@ class AgentModel {
     // this mutation's final state), and unconditionally: a relational-only
     // update skips the agents-row write yet still changes config. Best-effort:
     // a versioning failure must never fail the update itself.
-    const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
-    if (fork && updatedAgent) {
-      updatedAgent.latestVersion = fork.version;
+    if (!options?.deferVersionFork) {
+      const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
+      if (fork && updatedAgent) {
+        updatedAgent.latestVersion = fork.version;
+      }
     }
 
     const [

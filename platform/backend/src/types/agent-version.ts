@@ -1,6 +1,7 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { SelectAgentSchema } from "./agent";
 
 /**
  * Canonical, hashable payload of an agent version — the agent's *config only*.
@@ -90,3 +91,41 @@ export const AgentVersionMetadataSchema = SelectAgentVersionSchema.omit({
 });
 
 export type AgentVersionMetadata = z.infer<typeof AgentVersionMetadataSchema>;
+
+export const RestoreAgentVersionBodySchema = z.object({
+  /**
+   * The head version the client previewed the restore against. If the agent's
+   * head has moved past it by the time the restore runs, the request is
+   * rejected with 409 instead of silently overwriting the newer config.
+   */
+  expectedHeadVersion: z.number().int().positive().optional(),
+});
+
+/**
+ * A snapshot reference that could not be replayed — the referent was deleted,
+ * renamed out of reach, or the caller may no longer assign it. The restore
+ * proceeds without it (mirroring agent import's soft-warning contract); for
+ * singular references the agent's current value is kept.
+ */
+export const RestoreVersionWarningSchema = z.object({
+  type: z.enum([
+    "config",
+    "tool",
+    "model",
+    "llmApiKey",
+    "identityProvider",
+    "environment",
+    "knowledgeBase",
+    "connector",
+    "hook",
+  ]),
+  name: z.string(),
+  message: z.string(),
+});
+
+export type RestoreVersionWarning = z.infer<typeof RestoreVersionWarningSchema>;
+
+export const RestoreAgentVersionResponseSchema = z.object({
+  agent: SelectAgentSchema,
+  warnings: z.array(RestoreVersionWarningSchema),
+});

@@ -625,6 +625,11 @@ describe("AgentDialog delegation state", () => {
 
     await user.click(subagentModeTab("Custom"));
 
+    // The panel assertion is what proves the mode actually moved; the switch
+    // reading the same way afterwards is only meaningful once it has.
+    expect(
+      screen.getByText(/Only the subagents you assign below/),
+    ).toBeInTheDocument();
     expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
   });
 
@@ -657,6 +662,7 @@ describe("AgentDialog delegation state", () => {
 
     await user.click(subagentModeTab("Auto"));
 
+    expect(screen.getByText(/Disabled subagents \(0\)/)).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
     ).not.toBeChecked();

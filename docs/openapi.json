@@ -164982,8 +164982,11 @@
                               "type": "string"
                             }
                           },
-                          "lastInteractionRequest": {
-                            "nullable": true
+                          "lastUserMessagePreview": {
+                            "nullable": true,
+                            "description": "Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.",
+                            "type": "string",
+                            "maxLength": 200
                           },
                           "lastInteractionType": {
                             "nullable": true,
@@ -165026,7 +165029,7 @@
                           "authMethods",
                           "authenticatedAppNames",
                           "userNames",
-                          "lastInteractionRequest",
+                          "lastUserMessagePreview",
                           "lastInteractionType",
                           "conversationTitle",
                           "claudeCodeTitle"

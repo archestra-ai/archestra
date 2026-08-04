@@ -1286,6 +1286,53 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions last-user-message preview (T-1015)", () => {
+    test("returns a truncated preview and never the raw request", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      const longMessage = "m".repeat(500);
+      await InteractionModel.create({
+        profileId: agent.id,
+        sessionId: "preview-session",
+        request: {
+          model: "gpt-4",
+          messages: [
+            { role: "user", content: "earlier turn" },
+            { role: "assistant", content: "ack" },
+            { role: "user", content: longMessage },
+          ],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "preview-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      const session = sessions.data[0];
+      expect(session.lastUserMessagePreview).toBe(longMessage.slice(0, 200));
+      expect(session).not.toHaveProperty("lastInteractionRequest");
+    });
+  });
+
   describe("getSessions billing-mode split", () => {
     test("splits session cost into billed and subscription", async ({
       makeAdmin,
@@ -1865,8 +1912,8 @@ describe("InteractionModel", () => {
     });
   });
 
-  describe("getSessions lastInteraction and claudeCodeTitle", () => {
-    test("returns lastInteractionRequest and lastInteractionType for session with single interaction", async ({
+  describe("getSessions last-interaction preview and claudeCodeTitle", () => {
+    test("returns the last-user-message preview for a session with a single interaction", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -1918,9 +1965,8 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
-      expect(sessions.data[0].lastInteractionType).toBe(
-        "openai:chatCompletions",
+      expect(sessions.data[0].lastUserMessagePreview).toBe(
+        "This is a meaningful message with more than 20 characters",
       );
     });
 
@@ -1968,11 +2014,10 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
-      expect(sessions.data[0].lastInteractionType).toBe("openai:responses");
+      expect(sessions.data[0].lastUserMessagePreview).toBe("Hi from codex cli");
     });
 
-    test("skips prompt suggestion generator requests when finding lastInteractionRequest", async ({
+    test("skips prompt suggestion generator requests when deriving the preview", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -1982,7 +2027,7 @@ describe("InteractionModel", () => {
         scope: "org",
       });
 
-      // First: a real user request (should be the lastInteractionRequest)
+      // First: a real user request (should drive the preview)
       await InteractionModel.create({
         profileId: agent.id,
         sessionId: "session-with-prompt-suggestion",
@@ -2038,13 +2083,12 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      const lastRequest = sessions.data[0].lastInteractionRequest as {
-        messages: Array<{ content: string }>;
-      };
-      expect(lastRequest.messages[0].content).toContain("real user question");
+      expect(sessions.data[0].lastUserMessagePreview).toContain(
+        "real user question",
+      );
     });
 
-    test("skips title generation requests when finding lastInteractionRequest", async ({
+    test("skips title generation requests when deriving the preview", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -2078,7 +2122,7 @@ describe("InteractionModel", () => {
         type: "openai:chatCompletions",
       });
 
-      // Second: a title generation request (should be skipped for lastInteractionRequest)
+      // Second: a title generation request (should be skipped for the preview)
       await InteractionModel.create({
         profileId: agent.id,
         sessionId: "session-with-title-gen",
@@ -2120,10 +2164,9 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      const lastRequest = sessions.data[0].lastInteractionRequest as {
-        messages: Array<{ content: string }>;
-      };
-      expect(lastRequest.messages[0].content).toContain("real question");
+      expect(sessions.data[0].lastUserMessagePreview).toContain(
+        "real question",
+      );
     });
 
     test("extracts claudeCodeTitle from title generation response", async ({
@@ -2209,7 +2252,7 @@ describe("InteractionModel", () => {
         scope: "org",
       });
 
-      // Real request (should be returned as lastInteractionRequest)
+      // Real request (should drive the preview)
       await InteractionModel.create({
         profileId: agent.id,
         sessionId: "session-malformed-title",
@@ -2267,14 +2310,12 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      // Should have the main interaction but null for title
-      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      // Should have the main interaction's preview but null for title
+      expect(sessions.data[0].lastUserMessagePreview).not.toBeNull();
       expect(sessions.data[0].claudeCodeTitle).toBeNull();
     });
 
-    test("returns lastInteractionRequest even for short messages", async ({
-      makeAdmin,
-    }) => {
+    test("returns a preview even for short messages", async ({ makeAdmin }) => {
       const admin = await makeAdmin();
       const agent = await AgentModel.create({
         name: "Agent",
@@ -2308,10 +2349,10 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
+      expect(sessions.data[0].lastUserMessagePreview).toBe("hi");
     });
 
-    test("returns lastInteractionRequest for Gemini format (contents[].parts[].text)", async ({
+    test("returns a preview for Gemini format (contents[].parts[].text)", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -2358,13 +2399,10 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
-      expect(sessions.data[0].lastInteractionType).toBe(
-        "gemini:generateContent",
-      );
+      expect(sessions.data[0].lastUserMessagePreview).toBe("123");
     });
 
-    test("returns lastInteractionRequest for Gemini with image-only content (no text)", async ({
+    test("returns a descriptive preview for Gemini with image-only content (no text)", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -2417,13 +2455,10 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
-      expect(sessions.data[0].lastInteractionType).toBe(
-        "gemini:generateContent",
-      );
+      expect(sessions.data[0].lastUserMessagePreview).toBe("[image/png data]");
     });
 
-    test("returns lastInteractionRequest for Gemini with function response (tool result)", async ({
+    test("returns a descriptive preview for Gemini with function response (tool result)", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -2491,9 +2526,8 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      expect(sessions.data[0].lastInteractionRequest).not.toBeNull();
-      expect(sessions.data[0].lastInteractionType).toBe(
-        "gemini:generateContent",
+      expect(sessions.data[0].lastUserMessagePreview).toBe(
+        "[Function response: get_weather]",
       );
     });
 
@@ -2542,7 +2576,9 @@ describe("InteractionModel", () => {
       expect(ourSession).toBeDefined();
       expect(ourSession?.sessionId).toBeNull();
       expect(ourSession?.interactionId).toBe(interaction.id);
-      expect(ourSession?.lastInteractionRequest).not.toBeNull();
+      expect(ourSession?.lastUserMessagePreview).toBe(
+        "This is a standalone interaction without a session ID",
+      );
     });
   });
 
@@ -3875,7 +3911,7 @@ describe("InteractionModel", () => {
       expect(requestTypeOf(main.id)).toBe("main");
     });
 
-    test("getSessions reconstructs the last interaction request, even when the parent is outside the 20-row window", async ({
+    test("getSessions derives the preview from the fully reconstructed chain, even when ancestors are outside the 20-row window", async ({
       makeAdmin,
     }) => {
       const admin = await makeAdmin();
@@ -3891,14 +3927,22 @@ describe("InteractionModel", () => {
       // recent row (defaultNow() can tie within the same millisecond under load,
       // which would make the "last main interaction" selection flaky).
       const baseTime = new Date("2020-01-01T00:00:00.000Z").getTime();
-      const messages: unknown[] = [
-        { role: "user", content: "turn 0 — kick things off with enough text" },
-      ];
+      // Every user turn after the head is tool_result-only, so the preview's
+      // text can only come from the head row — which sits outside the 20-row
+      // window and materializes only through full chain reconstruction. A
+      // suffix-only (unreconstructed) request would yield a null preview.
+      const headText = "turn 0 — kick things off with enough text";
+      const messages: unknown[] = [{ role: "user", content: headText }];
       let tipId = "";
       for (let i = 0; i < 22; i++) {
         if (i > 0) {
           messages.push({ role: "assistant", content: `reply ${i}` });
-          messages.push({ role: "user", content: `turn ${i}` });
+          messages.push({
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: `tu_${i}`, content: "ok" },
+            ],
+          });
         }
         const row = await createClaude(agent.id, [...messages], {
           sessionId: "delta-sessions",
@@ -3908,6 +3952,10 @@ describe("InteractionModel", () => {
       }
       const expectedLength = messages.length; // 1 + 21*2 = 43
 
+      // The writes above warmed the delta manager's caches; drop them so the
+      // preview provably comes from cold DB reconstruction.
+      InteractionDeltaManager.reset();
+
       const sessions = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
@@ -3916,9 +3964,7 @@ describe("InteractionModel", () => {
       );
 
       expect(sessions.data).toHaveLength(1);
-      expect(messagesOf(sessions.data[0].lastInteractionRequest)).toHaveLength(
-        expectedLength,
-      );
+      expect(sessions.data[0].lastUserMessagePreview).toBe(headText);
       // The reconstructed tip is the most recent interaction.
       const tip = await InteractionModel.findById(tipId);
       expect(messagesOf(tip?.request)).toHaveLength(expectedLength);

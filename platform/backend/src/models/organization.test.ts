@@ -60,6 +60,28 @@ describe("OrganizationModel", () => {
       });
     });
 
+    test("serves the process-local cache until patch invalidates it", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      // Prime the cache, then change the row behind the model's back: the
+      // cached value must be served (that's the point of the cache)...
+      const before = await OrganizationModel.getAppearanceSettings();
+      await db
+        .update(schema.organizationsTable)
+        .set({ theme: "twitter" })
+        .where(eq(schema.organizationsTable.id, org.id));
+      const cached = await OrganizationModel.getAppearanceSettings();
+      expect(cached.theme).toBe(before.theme);
+
+      // ...while a write through patch (the appearance update path) must
+      // invalidate, so the next read reflects the new settings immediately.
+      await OrganizationModel.patch(org.id, { theme: "claude" });
+      const fresh = await OrganizationModel.getAppearanceSettings();
+      expect(fresh.theme).toBe("claude");
+    });
+
     test("should return custom theme when set", async ({
       makeOrganization,
     }) => {

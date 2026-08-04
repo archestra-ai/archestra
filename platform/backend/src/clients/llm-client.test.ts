@@ -556,6 +556,82 @@ describe("createDirectLLMModel", () => {
     expect(capturedCreateOpenAICompatibleOptions.includeUsage).toBe(true);
   });
 
+  describe("azure direct base URL handling", () => {
+    // Captures the URL the AI SDK actually requests. The stubbed 500 fails the
+    // call; the URL is captured before that, which is all these tests need.
+    const requestedUrlFor = async (params: {
+      modelName: string;
+      baseUrl: string;
+    }) => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValue(new Response("upstream stub", { status: 500 }));
+      vi.stubGlobal("fetch", mockFetch);
+
+      const model = createDirectLLMModel({
+        provider: "azure",
+        apiKey: "test-key",
+        modelName: params.modelName,
+        baseUrl: params.baseUrl,
+      });
+      await generateText({
+        model,
+        prompt: "hi",
+        maxRetries: 0,
+      }).catch(() => {});
+
+      const input = mockFetch.mock.calls[0]?.[0];
+      if (!input) {
+        throw new Error("Expected a request to reach the fetch stub");
+      }
+      return new URL(typeof input === "string" ? input : input.url);
+    };
+
+    it("does not append api-version to Foundry v1 endpoints", async () => {
+      // The v1 endpoint rejects date-based api-version values with
+      // "API version not supported", which broke every direct-path call
+      // (KB reranker verification, title generation) against v1 base URLs.
+      const url = await requestedUrlFor({
+        modelName: "gpt-4.1",
+        baseUrl: "https://my-resource.cognitiveservices.azure.com/openai/v1",
+      });
+      expect(url.pathname).toBe("/openai/v1/chat/completions");
+      expect(url.searchParams.has("api-version")).toBe(false);
+    });
+
+    it("does not append api-version for open-model deployments on v1 endpoints", async () => {
+      // Same guard on the openai-compatible branch.
+      const url = await requestedUrlFor({
+        modelName: "DeepSeek-R1",
+        baseUrl: "https://my-resource.cognitiveservices.azure.com/openai/v1",
+      });
+      expect(url.pathname).toBe("/openai/v1/chat/completions");
+      expect(url.searchParams.has("api-version")).toBe(false);
+    });
+
+    it("routes classic endpoints through the deployment path with api-version", async () => {
+      // Classic resources only serve chat completions under
+      // /openai/deployments/<deployment>; posting to <base>/chat/completions
+      // 404s ("Resource not found").
+      const url = await requestedUrlFor({
+        modelName: "gpt-4.1",
+        baseUrl: "https://my-resource.openai.azure.com/openai",
+      });
+      expect(url.pathname).toBe("/openai/deployments/gpt-4.1/chat/completions");
+      expect(url.searchParams.has("api-version")).toBe(true);
+    });
+
+    it("keeps deployment-scoped base URLs as-is with api-version", async () => {
+      const url = await requestedUrlFor({
+        modelName: "gpt-4o",
+        baseUrl:
+          "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      });
+      expect(url.pathname).toBe("/openai/deployments/gpt-4o/chat/completions");
+      expect(url.searchParams.has("api-version")).toBe(true);
+    });
+  });
+
   it("throws when azure has no base URL instead of falling back to api.openai.com", () => {
     // Covers the strict-SDK branch too: createOpenAI would otherwise default
     // to api.openai.com and send the Azure api-key there.

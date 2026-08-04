@@ -2763,8 +2763,22 @@
     {
       "idx": 394,
       "version": "7",
-      "when": 1785708730045,
-      "tag": "0394_odd_black_panther",
+      "when": 1785756813025,
+      "tag": "0394_purge_orphaned_personal_mcp_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 395,
+      "version": "7",
+      "when": 1785783742289,
+      "tag": "0395_purge_ex_member_personal_mcp_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 396,
+      "version": "7",
+      "when": 1785830956283,
+      "tag": "0396_odd_black_panther",
       "breakpoints": true
     }
   ]

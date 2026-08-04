@@ -1,7 +1,11 @@
 "use client";
 
 import { type ComponentProps, memo, useMemo } from "react";
-import { defaultRemarkPlugins, Streamdown } from "streamdown";
+import {
+  defaultRehypePlugins,
+  defaultRemarkPlugins,
+  Streamdown,
+} from "streamdown";
 import { cn } from "@/lib/utils";
 
 type ResponseProps = ComponentProps<typeof Streamdown> & {
@@ -47,6 +51,41 @@ const remarkCanonicalizeAppLinks = () => (tree: unknown) =>
 const REMARK_PLUGINS: ResponseProps["remarkPlugins"] = [
   ...Object.values(defaultRemarkPlugins),
   remarkCanonicalizeAppLinks,
+];
+
+// Scrollable code regions must be reachable and scrollable by keyboard
+// (WCAG 2.1.1). Streamdown spreads a fenced block's <pre> properties onto its
+// code-block wrapper div, so tagging the hast node makes the rendered scroll
+// container focusable and named; a bare <pre> receives the attributes directly.
+function tagPreAsFocusableRegion(node: unknown): void {
+  if (node === null || typeof node !== "object") return;
+  const element = node as {
+    type?: unknown;
+    tagName?: unknown;
+    properties?: Record<string, unknown>;
+    children?: unknown;
+  };
+  if (element.type === "element" && element.tagName === "pre") {
+    element.properties = {
+      ...element.properties,
+      tabIndex: 0,
+      role: "region",
+      ariaLabel: "Code block",
+    };
+  }
+  if (Array.isArray(element.children)) {
+    for (const child of element.children) tagPreAsFocusableRegion(child);
+  }
+}
+
+const rehypeFocusablePre = () => (tree: unknown) =>
+  tagPreAsFocusableRegion(tree);
+
+// Appended after the defaults so the sanitizing passes can't strip the
+// attributes we add.
+const REHYPE_PLUGINS: ResponseProps["rehypePlugins"] = [
+  ...Object.values(defaultRehypePlugins),
+  rehypeFocusablePre,
 ];
 
 /**
@@ -104,6 +143,12 @@ export const Response = memo(
           // Only style inline code, not code inside pre elements
           "[&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:text-foreground [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-0.5 [&_:not(pre)>code]:rounded",
           "[&_pre]:bg-muted [&_pre]:p-3 [&_pre]:rounded [&_pre]:my-2 [&_pre]:overflow-x-auto",
+          // The focusable element for fenced code is the code-block wrapper
+          // (see rehypeFocusablePre), so it must be the horizontal scroller —
+          // otherwise arrow keys can't scroll the focused region. The inner
+          // <pre> overflows visibly into it instead of clipping.
+          "[&_[data-streamdown='code-block-body']]:overflow-x-auto",
+          "[&_[data-streamdown='code-block-body']_pre]:overflow-x-visible",
           // Fix streamdown code blocks - remove padding from code elements inside them
           "[&_[data-streamdown='code-block']_code]:p-0 [&_[data-streamdown='code-block']_code]:bg-transparent",
           // Streamdown mats tables in an opaque bg-sidebar card (and ignores its
@@ -129,6 +174,7 @@ export const Response = memo(
           className,
         )}
         remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
         linkSafety={mergedLinkSafety}
         {...props}
       />

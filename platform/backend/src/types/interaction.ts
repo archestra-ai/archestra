@@ -104,7 +104,10 @@ const EmbeddingInteractionResponseSchema =
       z.object({
         object: z.literal("embedding"),
         embedding: z.array(z.number()),
-        index: z.number(),
+        // Optional for the same reason as the canonical embedding schema: a
+        // stored interaction from an OpenAI-compatible upstream that omitted
+        // `index` must not fail the whole interaction list on read-back.
+        index: z.number().optional(),
         truncatedFrom: z.number().optional(),
       }),
     ),

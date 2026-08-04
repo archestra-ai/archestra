@@ -12,11 +12,14 @@ import {
 import { cn } from "@/lib/utils";
 
 // Scope colors mirror AgentBadge so apps/MCP/proxies/skills share one language.
+// Light-mode text uses the 700/800 palette steps: the 600 steps fall below the
+// 4.5:1 contrast minimum (WCAG 1.4.3) on the tinted /10 fills. Dark mode's 400
+// steps already pass.
 export const scopeStyles = {
   personal:
-    "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400 dark:border-blue-400/30",
-  team: "bg-green-500/10 text-green-600 border-green-500/30 dark:text-green-400 dark:border-green-400/30",
-  org: "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400 dark:border-amber-400/30",
+    "bg-blue-500/10 text-blue-700 border-blue-500/30 dark:text-blue-400 dark:border-blue-400/30",
+  team: "bg-green-500/10 text-green-800 border-green-500/30 dark:text-green-400 dark:border-green-400/30",
+  org: "bg-amber-500/10 text-amber-800 border-amber-500/30 dark:text-amber-400 dark:border-amber-400/30",
 } as const;
 
 export function ResourceVisibilityBadge({

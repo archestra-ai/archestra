@@ -1115,29 +1115,40 @@ export function AgentDialog({
     (id) => id !== advisorAgentId,
   ).length;
 
-  const writeAdvisorEnabled = (enabled: boolean, autoMode: boolean) => {
-    if (!advisorAgentId) return;
-    const withAdvisor = (ids: string[]) =>
-      ids.includes(advisorAgentId) ? ids : [...ids, advisorAgentId];
-    const withoutAdvisor = (ids: string[]) =>
-      ids.filter((id) => id !== advisorAgentId);
-    if (autoMode) {
-      setDisabledSubagentIds(enabled ? withoutAdvisor : withAdvisor);
-    } else {
-      setSelectedDelegationTargetIds(enabled ? withAdvisor : withoutAdvisor);
+  const advisorListedWhen = (ids: string[], listed: boolean) => {
+    if (!advisorAgentId) return ids;
+    if (listed) {
+      return ids.includes(advisorAgentId) ? ids : [...ids, advisorAgentId];
     }
+    return ids.filter((id) => id !== advisorAgentId);
   };
 
-  const handleAdvisorEnabledChange = (enabled: boolean) =>
-    writeAdvisorEnabled(enabled, accessAllSubagents);
+  // Save writes both sets whatever the mode, and an Auto-mode agent driven by a
+  // system or token flow resolves its targets from the explicit set rather than
+  // the Auto surface. So the advisor has to match the switch in both sets, not
+  // just the one the current mode reads — a grant stranded in the other set is
+  // a live consultation nothing in the dialog can show or clear.
+  const delegationTargetIdsToSave = advisorListedWhen(
+    selectedDelegationTargetIds,
+    advisorEnabled,
+  );
+  const disabledSubagentIdsToSave = advisorListedWhen(
+    disabledSubagentIds,
+    !advisorEnabled,
+  );
 
-  // Each mode stores the advisor in its own list, so switching modes would read
-  // an unrelated value and appear to flip the switch on its own. Carry the
-  // current setting into the incoming mode's list instead.
+  const writeAdvisorEnabled = (enabled: boolean) => {
+    if (!advisorAgentId) return;
+    setDisabledSubagentIds((ids) => advisorListedWhen(ids, !enabled));
+    setSelectedDelegationTargetIds((ids) => advisorListedWhen(ids, enabled));
+  };
+
+  // Each mode reads the advisor from its own set, so a mode change would
+  // otherwise surface an unrelated value and appear to flip the switch on its
+  // own. Carry the current setting across instead.
   const handleSubagentModeChange = (value: string) => {
-    const autoMode = value === "auto";
-    setAccessAllSubagents(autoMode);
-    writeAdvisorEnabled(advisorEnabled, autoMode);
+    setAccessAllSubagents(value === "auto");
+    writeAdvisorEnabled(advisorEnabled);
   };
 
   // LLM Configuration: computed values and bidirectional auto-linking
@@ -1452,12 +1463,12 @@ export function AgentDialog({
         savedAgentId &&
         hasUnsavedChanges(
           [...currentDelegations.map((d) => d.id)].sort(),
-          [...selectedDelegationTargetIds].sort(),
+          [...delegationTargetIdsToSave].sort(),
         )
       ) {
         await syncDelegations.mutateAsync({
           agentId: savedAgentId,
-          targetAgentIds: selectedDelegationTargetIds,
+          targetAgentIds: delegationTargetIdsToSave,
         });
       }
 
@@ -1468,12 +1479,12 @@ export function AgentDialog({
         savedAgentId &&
         hasUnsavedChanges(
           [...(currentSubagentExclusions?.excludedSubagentIds ?? [])].sort(),
-          [...disabledSubagentIds].sort(),
+          [...disabledSubagentIdsToSave].sort(),
         )
       ) {
         await syncSubagentExclusions.mutateAsync({
           agentId: savedAgentId,
-          exclusions: { excludedSubagentIds: disabledSubagentIds },
+          exclusions: { excludedSubagentIds: disabledSubagentIdsToSave },
         });
       }
 
@@ -1512,10 +1523,10 @@ export function AgentDialog({
     isInternalAgent,
     builtInAgentName,
     showSecurity,
-    selectedDelegationTargetIds,
+    delegationTargetIdsToSave,
     currentDelegations,
     currentSubagentExclusions,
-    disabledSubagentIds,
+    disabledSubagentIdsToSave,
     updateAgent,
     createAgent,
     syncDelegations,
@@ -2472,7 +2483,7 @@ export function AgentDialog({
                           <Switch
                             id="consult-advisor"
                             checked={advisorEnabled}
-                            onCheckedChange={handleAdvisorEnabledChange}
+                            onCheckedChange={writeAdvisorEnabled}
                             data-testid={E2eTestId.ConsultAdvisorSwitch}
                           />
                         </div>

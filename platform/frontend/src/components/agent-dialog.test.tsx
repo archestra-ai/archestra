@@ -668,6 +668,70 @@ describe("AgentDialog delegation state", () => {
     ).not.toBeChecked();
   });
 
+  it("saves no advisor grant when the switch ends up off after a trip through Custom", async () => {
+    const user = userEvent.setup();
+    const syncDelegations = vi
+      .fn()
+      .mockResolvedValue({ added: [], removed: [] });
+    const syncExclusions = vi.fn().mockResolvedValue(undefined);
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isFetched: true });
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    });
+    useSyncAgentDelegationsMock.mockReturnValue({
+      mutateAsync: syncDelegations,
+      isPending: false,
+    });
+    useUpdateAgentSubagentExclusionsMock.mockReturnValue({
+      mutateAsync: syncExclusions,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(autoAgent),
+      isPending: false,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={autoAgent}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
+    });
+    await user.click(subagentModeTab("Custom"));
+    await user.click(subagentModeTab("Auto"));
+    await user.click(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch));
+    expect(
+      screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
+    ).not.toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    // Both sets are written on save regardless of mode, and system or token
+    // flows resolve targets from the delegation set even in Auto — so a grant
+    // surviving here is a consultation the switch says is off.
+    await waitFor(() => expect(syncExclusions).toHaveBeenCalled());
+    expect(syncExclusions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exclusions: { excludedSubagentIds: [advisorAgent.id] },
+      }),
+    );
+    for (const call of syncDelegations.mock.calls) {
+      expect(call[0].targetAgentIds).not.toContain(advisorAgent.id);
+    }
+  });
+
   it("skips the delegation and subagent-exclusion syncs when neither set changed on save", async () => {
     const user = userEvent.setup();
     const syncDelegations = vi

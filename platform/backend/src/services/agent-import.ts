@@ -11,7 +11,6 @@ import {
 } from "@/models";
 import {
   assignToolToAgent,
-  systemAssignmentActor,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
 import type { Agent } from "@/types";
@@ -233,7 +232,6 @@ async function resolveAndAssignTools(
       agentId,
       toolId: tool.id,
       credentialResolutionMode: ref.credentialResolutionMode,
-      actor: systemAssignmentActor,
     });
 
     if (validationError) {
@@ -250,7 +248,6 @@ async function resolveAndAssignTools(
         agentId,
         toolId: tool.id,
         credentialResolutionMode: ref.credentialResolutionMode,
-        actor: systemAssignmentActor,
         // An import is one action; it forks once after the whole tool set
         // lands rather than once per tool.
         deferVersionFork: true,

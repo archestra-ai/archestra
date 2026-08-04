@@ -33,6 +33,7 @@ export type PrefetchedMcpServer = {
   catalogId: string | null;
   teamId?: string | null;
   scope: ResourceVisibilityScope;
+  serverType?: "app" | "builtin" | "local" | "remote";
 };
 
 type AgentToolAssignmentPrefetchedData = {
@@ -64,37 +65,18 @@ interface AgentToolAssignmentRequest {
    * one version, not one per tool.
    */
   deferVersionFork?: boolean;
-  /** Who is performing this assignment. See {@link AssignmentActor}. */
-  actor?: AssignmentActor;
 }
 
-/**
- * The human performing an assignment, used to gate binding OTHER users'
- * personal MCP connections.
- *
- * Human-facing surfaces always resolve this from organization membership.
- * Trusted internal workflows must opt into the system actor explicitly;
- * omission fails closed as an unidentified non-admin user.
- */
-export type AssignmentActor =
-  | { type: "system" }
-  | { type: "user"; userId: string; isPredefinedAdmin: boolean };
-
-export const systemAssignmentActor: AssignmentActor = { type: "system" };
-
-export async function resolveAssignmentActor(params: {
+/** Whether the user holds the exact predefined Admin role. */
+export async function isPredefinedAdmin(params: {
   userId: string;
   organizationId: string;
-}): Promise<AssignmentActor> {
+}): Promise<boolean> {
   const membership = await MemberModel.getByUserId(
     params.userId,
     params.organizationId,
   );
-  return {
-    type: "user",
-    userId: params.userId,
-    isPredefinedAdmin: membership?.role === "admin",
-  };
+  return membership?.role === "admin";
 }
 
 export async function assignToolToAgent(
@@ -108,7 +90,6 @@ export async function assignToolToAgent(
     credentialResolutionMode,
     mcpServerId: params.mcpServerId,
     preFetchedData: params.preFetchedData,
-    actor: params.actor,
   });
 
   if (validationError) {
@@ -204,7 +185,9 @@ export async function validateAssignment(
       mcpServerId,
       tool,
       preFetchedServer,
-      actor: params.actor ?? unidentifiedAssignmentActor,
+      preFetchedCatalogItem: tool.catalogId
+        ? preFetchedData?.catalogItemsMap?.get(tool.catalogId)
+        : undefined,
     });
     if (validationError) {
       return validationError;
@@ -311,7 +294,6 @@ export async function assignToolToApp(params: {
   toolId: string;
   mcpServerId?: string | null;
   credentialResolutionMode?: CredentialResolutionMode;
-  actor?: AssignmentActor;
 }): Promise<ToolAssignmentError | "duplicate" | "updated" | null> {
   const credentialResolutionMode = normalizeCredentialResolutionMode(params);
 
@@ -403,7 +385,6 @@ export async function assignToolToApp(params: {
       mcpServerId: params.mcpServerId,
       tool,
       preFetchedServer: mcpServer,
-      actor: params.actor ?? unidentifiedAssignmentActor,
     });
     if (validationError) {
       return validationError;
@@ -494,12 +475,11 @@ async function validateAssignedMcpServer(params: {
   tool: Tool;
   preFetchedServer?: Pick<
     PrefetchedMcpServer,
-    "id" | "ownerId" | "catalogId" | "teamId" | "scope"
+    "id" | "ownerId" | "catalogId" | "serverType" | "teamId" | "scope"
   > | null;
-  actor: AssignmentActor;
+  preFetchedCatalogItem?: InternalMcpCatalog | null;
 }): Promise<ToolAssignmentError | null> {
-  const { getOwnerContext, mcpServerId, tool, preFetchedServer, actor } =
-    params;
+  const { getOwnerContext, mcpServerId, tool, preFetchedServer } = params;
 
   const mcpServer =
     preFetchedServer !== undefined
@@ -527,29 +507,37 @@ async function validateAssignedMcpServer(params: {
     };
   }
 
-  // Report the credential gate as a permission failure, not a validation one —
-  // the generic scope message ("owner must be a member of a team…") would
-  // mislead a caller who is blocked purely because they are not Admin.
+  const catalogItem = tool.catalogId
+    ? (params.preFetchedCatalogItem ??
+      (await InternalMcpCatalogModel.findById(tool.catalogId, {
+        expandSecrets: false,
+      })))
+    : null;
+
+  // A personal hosted/local install is an execution target, not a reusable
+  // upstream credential. Only remote personal connections carry the secret
+  // this invariant protects.
   if (
-    blocksOthersCredentialConnection({
-      mcpServer,
-      actor: actor ?? unidentifiedAssignmentActor,
-    })
+    mcpServer.scope === "personal" &&
+    (catalogItem?.serverType ?? mcpServer.serverType) === "remote"
   ) {
     return {
-      code: "forbidden",
+      code: "validation_error",
       error: {
         message:
-          "You do not have permission to act through other users' connections.",
-        type: "permission_denied",
+          "Personal connections cannot be assigned statically. Use dynamic credential resolution instead.",
+        type: "validation_error",
       },
     };
+  }
+
+  if (catalogItem?.serverType === "local") {
+    return null;
   }
 
   const isAllowed = await isMcpServerAssignableToTarget({
     mcpServer,
     target: await getOwnerContext(),
-    actor,
   });
 
   if (!isAllowed) {
@@ -609,44 +597,21 @@ async function isOrgAdmin(
   return membership?.role === "admin";
 }
 
-/**
- * Someone else's personal MCP connection carries THEIR credentials, so binding
- * it to an agent or app means acting as them. That needs
- * the predefined Admin role; your own connection never does.
- *
- * System work must opt into bypassing this user boundary explicitly.
- */
-function blocksOthersCredentialConnection(params: {
-  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
-  actor: AssignmentActor;
-}): boolean {
-  const { mcpServer, actor } = params;
-  if (actor.type === "system" || actor.isPredefinedAdmin) {
-    return false;
-  }
-  // Only personal connections carry an individual's credentials; team- and
-  // org-scoped installs are shared resources governed by their own rules.
-  if (mcpServer.scope !== "personal" || !mcpServer.ownerId) {
-    return false;
-  }
-  return mcpServer.ownerId !== actor.userId;
-}
-
 /** @public — exported for testability */
 export async function isMcpServerAssignableToTarget(params: {
-  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
+  mcpServer: Pick<
+    PrefetchedMcpServer,
+    "ownerId" | "serverType" | "teamId" | "scope"
+  >;
   target: {
     organizationId: string;
     scope: AgentScope;
     authorId: string | null;
     teamIds: string[];
   };
-  actor?: AssignmentActor;
 }): Promise<boolean> {
   const { mcpServer, target } = params;
-  const actor = params.actor ?? unidentifiedAssignmentActor;
-
-  if (blocksOthersCredentialConnection({ mcpServer, actor })) {
+  if (mcpServer.scope === "personal" && mcpServer.serverType !== "local") {
     return false;
   }
 
@@ -692,7 +657,10 @@ export async function isMcpServerAssignableToTarget(params: {
 }
 
 export async function filterMcpServersAssignableToTarget<
-  TMcpServer extends Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">,
+  TMcpServer extends Pick<
+    PrefetchedMcpServer,
+    "ownerId" | "serverType" | "teamId" | "scope"
+  >,
 >(params: {
   mcpServers: TMcpServer[];
   target: {
@@ -701,14 +669,13 @@ export async function filterMcpServersAssignableToTarget<
     authorId: string | null;
     teamIds: string[];
   };
-  actor?: AssignmentActor;
 }): Promise<TMcpServer[]> {
   const { target } = params;
-  const actor = params.actor ?? unidentifiedAssignmentActor;
-  // Drop other people's personal connections up front when the caller lacks
-  // Admin access, so the picker never offers a server the write path rejects.
+  // Personal connections always resolve from the caller at runtime. They are
+  // never valid static choices, including for their owner or an Admin.
   const mcpServers = params.mcpServers.filter(
-    (mcpServer) => !blocksOthersCredentialConnection({ mcpServer, actor }),
+    (mcpServer) =>
+      mcpServer.scope !== "personal" || mcpServer.serverType === "local",
   );
   if (mcpServers.length === 0) {
     return [];
@@ -836,9 +803,3 @@ function isMcpServerAssignableToPrefetchedTarget(params: {
 
   return targetTeamMemberOwnerIdSet.has(mcpServer.ownerId);
 }
-
-const unidentifiedAssignmentActor: AssignmentActor = {
-  type: "user",
-  userId: "",
-  isPredefinedAdmin: false,
-};

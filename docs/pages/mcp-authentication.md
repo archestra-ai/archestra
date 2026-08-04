@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-08-02
+lastUpdated: 2026-08-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -211,7 +211,7 @@ Auth credentials are stored in the secrets backend, which uses the database by d
 
 ### Credential Resolution
 
-Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity, following the server's **Default credential** setting. Resolve at call time is the default for new assignments; pinning a connection is an explicit choice.
+Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a shared team or organization service account, or ask Archestra to resolve a credential at execution time from the caller identity, following the server's **Default credential** setting. Resolve at call time is the default for new assignments.
 
 #### Static Credentials
 
@@ -220,10 +220,10 @@ Static credentials are shared credentials configured on an installed MCP server 
 When you pin a tool to a specific installed MCP server connection instead of using dynamic resolution, Archestra validates the connection against the target Agent or MCP Gateway scope:
 
 - **Team-installed connection**: can only be assigned to a **team-scoped** Agent or MCP Gateway that includes that same team
-- **Personal connection**: can only be assigned to a resource the connection owner could access directly
+- **Personal connection**: cannot be pinned; it is available only through resolve-at-call-time for its owner
 - **Resolve at call time**: skips static-owner checks because Archestra resolves credentials per caller at execution time
 
-This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. Personal connections still follow the connection owner's access boundary.
+This means a team-shared connection is governed by the team it is shared with, not by the individual who originally installed it. Personal connections always stay bound to their owner and are never offered as reusable static credentials, including to predefined Admins.
 
 #### Resolve at Call Time
 

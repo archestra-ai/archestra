@@ -63,7 +63,6 @@ import {
   type AgentToolsEditorRef,
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
-import type { SharedPersonalPin } from "@/components/agent-tools-editor.utils";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -72,7 +71,6 @@ import {
   formatPermissionRequirement,
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
-import { SharePersonalCredentialsDialog } from "@/components/share-personal-credentials-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -838,12 +836,6 @@ export function AgentDialog({
   const agentEnvironmentName =
     environments.find((env) => env.id === environmentId)?.name ?? null;
   const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
-  // Active tools pinned to a personal connection that would be shared with every
-  // caller once this agent is team/org scope. Reported live by the tools editor.
-  const [sharedPersonalPins, setSharedPersonalPins] = useState<
-    SharedPersonalPin[]
-  >([]);
-  const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
@@ -1029,10 +1021,6 @@ export function AgentDialog({
       setToolExposureMode(nextValues.toolExposureMode);
       setAccessAllTools(nextValues.accessAllTools);
       setAccessAllSubagents(nextValues.accessAllSubagents);
-      // Clear cross-agent leftovers; the tools editor re-reports this agent's
-      // pins once its credentials load.
-      setSharedPersonalPins([]);
-      setShowShareConfirm(false);
       setAutoConfigureOnToolDiscovery(nextValues.autoConfigureOnToolDiscovery);
       setDualLlmMaxRounds(nextValues.dualLlmMaxRounds);
       if (!agentData) {
@@ -1478,35 +1466,8 @@ export function AgentDialog({
       toast.error("Please select at least one team");
       return;
     }
-    // Scoping a personal agent up to team/org shares any personal static pins
-    // with every caller; confirm (defaulting to resolve-at-call-time) first.
-    // Gated to the actual personal→shared transition (an already-shared agent's
-    // pins were confirmed when set) and to Custom mode (Auto resolves per caller).
-    const isScopingUpFromPersonal =
-      agent?.scope === "personal" && scope !== "personal";
-    if (isScopingUpFromPersonal && !accessAllTools) {
-      // Fail closed while the pin set is still loading — an incomplete "no
-      // personal pins" must not silently ship a shared personal credential.
-      if (agentToolsEditorRef.current?.isCredentialClassificationLoading()) {
-        toast.error("Still loading connections — try saving again.");
-        return;
-      }
-      if (sharedPersonalPins.length > 0) {
-        setShowShareConfirm(true);
-        return;
-      }
-    }
     await performSave();
-  }, [
-    name,
-    isAdmin,
-    scope,
-    agent,
-    accessAllTools,
-    assignedTeamIds,
-    sharedPersonalPins,
-    performSave,
-  ]);
+  }, [name, isAdmin, scope, assignedTeamIds, performSave]);
 
   // Detect unsaved edits so any close path (Esc, backdrop, the X button, or the
   // Cancel button) prompts before discarding. Covers every form field held here
@@ -2060,59 +2021,11 @@ export function AgentDialog({
                             agentEnvironmentId={environmentId ?? null}
                             agentEnvironmentName={agentEnvironmentName}
                             onConflictsChange={setMcpEnvConflicts}
-                            onSharedPersonalPinsChange={setSharedPersonalPins}
                             openComboboxOnMount={openToolsCombobox}
                             includeAppCatalogs={shouldOfferAppCatalogs(
                               agentType,
                             )}
                           />
-                          {agent?.scope === "personal" &&
-                            scope !== "personal" &&
-                            !accessAllTools &&
-                            sharedPersonalPins.length > 0 && (
-                              <Alert variant="warning" className="mt-3">
-                                <AlertTriangle className="h-4 w-4" />
-                                <AlertTitle>
-                                  {sharedPersonalPins.length === 1
-                                    ? "1 connection"
-                                    : `${sharedPersonalPins.length} connections`}{" "}
-                                  will be shared with everyone
-                                </AlertTitle>
-                                <AlertDescription>
-                                  <p>
-                                    Every user of this agent will connect as the
-                                    owner shown, no matter who is calling:{" "}
-                                    <span className="font-medium text-foreground">
-                                      {sharedPersonalPins
-                                        .map(
-                                          (pin) =>
-                                            `${pin.mcpName} (${pin.isCurrentUser ? "you" : pin.ownerEmail})`,
-                                        )
-                                        .join(", ")}
-                                    </span>
-                                  </p>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="mt-2"
-                                    onClick={() =>
-                                      agentToolsEditorRef.current?.convertPersonalPinsToDynamic(
-                                        Array.from(
-                                          new Set(
-                                            sharedPersonalPins.map(
-                                              (pin) => pin.catalogId,
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    }
-                                  >
-                                    Resolve at call time
-                                  </Button>
-                                </AlertDescription>
-                              </Alert>
-                            )}
                         </div>
                         <div className="space-y-2">
                           <p className="text-sm text-muted-foreground">
@@ -2898,26 +2811,6 @@ export function AgentDialog({
         open={guard.confirmOpen}
         onKeepEditing={guard.keepEditing}
         onDiscard={guard.discardChanges}
-      />
-      <SharePersonalCredentialsDialog
-        open={showShareConfirm}
-        pins={sharedPersonalPins.map((pin) => ({
-          mcpName: pin.mcpName,
-          ownerEmail: pin.ownerEmail,
-          isCurrentUser: pin.isCurrentUser,
-        }))}
-        onResolveDynamic={() => {
-          setShowShareConfirm(false);
-          agentToolsEditorRef.current?.convertPersonalPinsToDynamic(
-            Array.from(new Set(sharedPersonalPins.map((pin) => pin.catalogId))),
-          );
-          void performSave();
-        }}
-        onShareAsIs={() => {
-          setShowShareConfirm(false);
-          void performSave();
-        }}
-        onCancel={() => setShowShareConfirm(false)}
       />
     </>
   );

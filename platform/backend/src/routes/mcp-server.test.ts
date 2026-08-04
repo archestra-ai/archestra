@@ -281,7 +281,7 @@ describe("mcp server inspect route", () => {
     ]);
   });
 
-  test("filters out personal connections whose owner is not in the selected assignment team", async ({
+  test("filters out all personal connections for team assignments", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTeam,
@@ -300,13 +300,15 @@ describe("mcp server inspect route", () => {
       organizationId,
       serverType: "remote",
     });
-    const ownPersonalServer = await makeMcpServer({
+    await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
     await makeMcpServer({
       ownerId: otherUser.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
 
     const response = await app.inject({
@@ -315,9 +317,7 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().map((server: { id: string }) => server.id)).toEqual([
-      ownPersonalServer.id,
-    ]);
+    expect(response.json()).toEqual([]);
   });
 
   test("does not expose member-owned personal connections for org assignment scope", async ({
@@ -391,13 +391,15 @@ describe("mcp server inspect route", () => {
       organizationId,
       serverType: "remote",
     });
-    const ownPersonalServer = await makeMcpServer({
+    await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
     await makeMcpServer({
       ownerId: otherUser.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
     const authorTeamServer = await makeMcpServer({
       scope: "team",
@@ -426,9 +428,7 @@ describe("mcp server inspect route", () => {
         .json()
         .map((server: { id: string }) => server.id)
         .sort(),
-    ).toEqual(
-      [ownPersonalServer.id, authorTeamServer.id, orgOwnedServer.id].sort(),
-    );
+    ).toEqual([authorTeamServer.id, orgOwnedServer.id].sort());
   });
 
   test("automatically retries protected remote MCP server installation with the current identity-provider access token", async ({

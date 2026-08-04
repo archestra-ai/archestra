@@ -28,7 +28,6 @@ import {
 import {
   assignToolToAgent,
   type PrefetchedMcpServer,
-  resolveAssignmentActor,
   type ToolAssignmentError,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
@@ -159,10 +158,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId,
         toolId,
         mcpServerId,
-        actor: await resolveAssignmentActor({
-          userId: request.user.id,
-          organizationId: request.organizationId,
-        }),
         resolveAtCallTime,
         credentialResolutionMode:
           credentialResolutionMode ??
@@ -303,11 +298,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const validated: typeof assignments = [];
       const failed: { agentId: string; toolId: string; error: string }[] = [];
 
-      const actor = await resolveAssignmentActor({
-        userId: request.user.id,
-        organizationId: request.organizationId,
-      });
-
       for (const assignment of assignments) {
         const normalizedAssignment =
           normalizeBulkAssignmentCredentialResolutionMode({
@@ -323,7 +313,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resolveAtCallTime: normalizedAssignment.resolveAtCallTime,
           credentialResolutionMode:
             normalizedAssignment.credentialResolutionMode,
-          actor,
         });
         if (validationError) {
           failed.push({
@@ -624,10 +613,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         credentialResolutionMode:
           credentialResolutionMode ??
           agentToolForValidation.credentialResolutionMode,
-        actor: await resolveAssignmentActor({
-          userId: user.id,
-          organizationId,
-        }),
       });
 
       if (validationError) {

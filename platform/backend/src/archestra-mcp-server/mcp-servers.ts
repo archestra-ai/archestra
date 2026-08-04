@@ -32,7 +32,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
-import { resolveAssignmentActor } from "@/services/agent-tool-assignment";
+import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
@@ -1404,14 +1404,14 @@ async function handleListMcpServerDeployments(
       return errorResult("user/organization context not available.");
     }
 
-    const [isAdmin, actor] = await Promise.all([
+    const [isAdmin, userIsPredefinedAdmin] = await Promise.all([
       userHasPermission(
         context.userId,
         organizationId,
         "mcpServerInstallation",
         "admin",
       ),
-      resolveAssignmentActor({ userId: context.userId, organizationId }),
+      isPredefinedAdmin({ userId: context.userId, organizationId }),
     ]);
     // Environment isolation: a deployment inherits its environment from its
     // catalog item, so only the agent's own environment is listed.
@@ -1421,7 +1421,7 @@ async function handleListMcpServerDeployments(
       isAdmin,
       organizationId,
       environmentId,
-      actor.type === "user" && actor.isPredefinedAdmin,
+      userIsPredefinedAdmin,
     );
 
     if (servers.length === 0) {

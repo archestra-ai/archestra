@@ -12,13 +12,11 @@ import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 /**
  * Pinning a catalog item's "default credential"
  * (`dynamicConnectionMcpServerId`) decides which connection agents
- * authenticate as at call time. Pointing it at someone else's personal
- * connection makes every call run as that person, so only the predefined Admin
- * role may do it. Without this the UI was the only thing stopping it.
+ * authenticate as at call time. Personal connections are always resolved from
+ * the caller and cannot be pinned by any role, including predefined Admin.
  *
  * These use REAL permission resolution (no `@/auth` mock) so the role → action
- * mapping is exercised end to end: an Admin may use another user's connection,
- * while a plain member may not.
+ * mapping is exercised end to end while the invariant remains role-independent.
  */
 describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
   let app: FastifyInstance;
@@ -88,8 +86,8 @@ describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
       payload: { dynamicConnectionMcpServerId: theirConnection.id },
     });
 
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toContain("other users' connections");
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("Personal connections");
 
     const unchanged = await InternalMcpCatalogModel.findById(catalog.id, {
       userId: member.id,
@@ -99,7 +97,7 @@ describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
     expect(unchanged?.dynamicConnectionMcpServerId).toBeNull();
   });
 
-  test("a member CAN pin their own personal connection", async ({
+  test("a member cannot pin their own personal connection", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -129,10 +127,10 @@ describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
       payload: { dynamicConnectionMcpServerId: myConnection.id },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(400);
   });
 
-  test("a predefined Admin can pin another user's connection", async ({
+  test("a predefined Admin cannot pin another user's connection", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -162,6 +160,38 @@ describe("PUT /api/internal_mcp_catalog/:id credential pin", () => {
       method: "PUT",
       url: `/api/internal_mcp_catalog/${catalog.id}`,
       payload: { dynamicConnectionMcpServerId: theirConnection.id },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("a member can pin an organization service account", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: "member" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: member.id,
+      scope: "personal",
+    });
+    const serviceAccount = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+      ownerId: member.id,
+      serverType: "remote",
+    });
+
+    app = await buildApp(member, org.id);
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: { dynamicConnectionMcpServerId: serviceAccount.id },
     });
 
     expect(response.statusCode).toBe(200);

@@ -22,7 +22,6 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { StaticCredentialConfirmDialog } from "@/components/static-credential-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -161,7 +160,6 @@ export function ManageUsersContent({
   const { data: allServersUnfiltered = [], isFetched: serversFetched } =
     useMcpServers();
   const { data: catalogItems } = useInternalMcpCatalog({});
-
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -846,20 +844,14 @@ function AgentConnectionsSection({
 }) {
   const { canModify } = useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
+  const serviceAccountConnections = connections.filter(
+    (connection) => resolveServerScope(connection) !== "personal",
+  );
   const pinnedId = item.dynamicConnectionMcpServerId ?? null;
   const pinnedConnection = pinnedId
-    ? connections.find((connection) => connection.id === pinnedId)
+    ? serviceAccountConnections.find((connection) => connection.id === pinnedId)
     : undefined;
   const pinUnresolved = Boolean(pinnedId) && !pinnedConnection;
-
-  const [pendingPersonalDefault, setPendingPersonalDefault] = useState<{
-    id: string;
-    mcpName: string;
-    ownerEmail: string;
-    isCurrentUser: boolean;
-  } | null>(null);
 
   const applyDefault = (value: string | null) =>
     updateMutation.mutate({
@@ -867,22 +859,9 @@ function AgentConnectionsSection({
       data: { dynamicConnectionMcpServerId: value },
     });
 
-  // Making a personal connection the default authenticates every call-time
-  // resolution as that one owner; confirm before applying. Org/team accounts
-  // and "on behalf of the user" are shared by design and apply immediately.
   const handleSelectDefault = (value: string) => {
     if (value === ON_BEHALF_OF_VALUE) {
       applyDefault(null);
-      return;
-    }
-    const connection = connections.find((c) => c.id === value);
-    if (connection && resolveServerScope(connection) === "personal") {
-      setPendingPersonalDefault({
-        id: value,
-        mcpName: connection.catalogName ?? item.name,
-        ownerEmail: connection.ownerEmail || "Deleted user",
-        isCurrentUser: !!currentUserId && connection.ownerId === currentUserId,
-      });
       return;
     }
     applyDefault(value);
@@ -893,114 +872,90 @@ function AgentConnectionsSection({
     if (scope === "org") return "Organization account";
     if (scope === "team")
       return `Team — ${connection.teamDetails?.name ?? "Unknown team"}`;
-    return connection.ownerEmail ?? "Unknown user";
+    return "Service account";
   };
 
   return (
-    <>
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <div className="max-w-xl space-y-1">
-          <h4 className="text-sm font-medium">Default credential</h4>
-          <p className="text-sm text-muted-foreground">
-            {!pinnedId ? (
-              <>
-                Agents connect on behalf of whoever is calling — each person
-                uses their own connection if they have one, otherwise a team or
-                organization connection they can access. Applies in Auto mode
-                and to Custom tool assignments that resolve at call time.
-              </>
-            ) : pinUnresolved ? (
-              <>
-                The selected connection is unavailable. Agents connect on behalf
-                of whoever is calling until you choose another one.
-              </>
-            ) : (
-              <>
-                Agents connect as{" "}
-                <span className="font-medium text-foreground">
-                  {pinnedConnection ? (
-                    <span>{connectionLabel(pinnedConnection)}</span>
-                  ) : null}
-                </span>
-                , no matter who is calling. Applies in Auto mode and to Custom
-                tool assignments that resolve at call time.
-              </>
-            )}{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(
-                DocsPage.McpAuthentication,
-                "resolve-at-call-time",
-              )}
-              className="underline"
-              showIcon={false}
-            >
-              Learn more
-            </ExternalDocsLink>
-          </p>
-        </div>
-        <Select
-          value={pinUnresolved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
-          disabled={!canModify || updateMutation.isPending}
-          onValueChange={handleSelectDefault}
-        >
-          <SelectTrigger className="w-[320px]">
-            <SelectValue placeholder="Connection unavailable" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              value={ON_BEHALF_OF_VALUE}
-              className="cursor-pointer"
-              description="Everyone connects their own account."
-            >
-              <div className="flex items-center gap-1.5">
-                <Zap className="h-3.5! w-3.5! text-amber-500" />
-                <span>On behalf of the user (Recommended)</span>
-              </div>
-            </SelectItem>
-            {connections.length > 0 && (
-              <>
-                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
-                  Always use one account
-                </div>
-                {connections.map((connection) => (
-                  <SelectItem
-                    key={connection.id}
-                    value={connection.id}
-                    className="cursor-pointer"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
-                      <span>{connectionLabel(connection)}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </>
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <div className="max-w-xl space-y-1">
+        <h4 className="text-sm font-medium">Default credential</h4>
+        <p className="text-sm text-muted-foreground">
+          {!pinnedId ? (
+            <>
+              Agents connect on behalf of whoever is calling — each person uses
+              their own connection if they have one, otherwise a team or
+              organization connection they can access. Applies in Auto mode and
+              to Custom tool assignments that resolve at call time.
+            </>
+          ) : pinUnresolved ? (
+            <>
+              The selected connection is unavailable. Agents connect on behalf
+              of whoever is calling until you choose another one.
+            </>
+          ) : (
+            <>
+              Agents connect as{" "}
+              <span className="font-medium text-foreground">
+                {pinnedConnection ? (
+                  <span>{connectionLabel(pinnedConnection)}</span>
+                ) : null}
+              </span>
+              , no matter who is calling. Applies in Auto mode and to Custom
+              tool assignments that resolve at call time.
+            </>
+          )}{" "}
+          <ExternalDocsLink
+            href={getDocsUrl(
+              DocsPage.McpAuthentication,
+              "resolve-at-call-time",
             )}
-          </SelectContent>
-        </Select>
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </p>
       </div>
-      <StaticCredentialConfirmDialog
-        open={pendingPersonalDefault !== null}
-        context="server"
-        pins={
-          pendingPersonalDefault
-            ? [
-                {
-                  mcpName: pendingPersonalDefault.mcpName,
-                  ownerEmail: pendingPersonalDefault.ownerEmail,
-                  isCurrentUser: pendingPersonalDefault.isCurrentUser,
-                },
-              ]
-            : []
-        }
-        onConfirm={() => {
-          if (pendingPersonalDefault) {
-            applyDefault(pendingPersonalDefault.id);
-          }
-          setPendingPersonalDefault(null);
-        }}
-        onCancel={() => setPendingPersonalDefault(null)}
-      />
-    </>
+      <Select
+        value={pinUnresolved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
+        disabled={!canModify || updateMutation.isPending}
+        onValueChange={handleSelectDefault}
+      >
+        <SelectTrigger className="w-[320px]">
+          <SelectValue placeholder="Connection unavailable" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem
+            value={ON_BEHALF_OF_VALUE}
+            className="cursor-pointer"
+            description="Everyone connects their own account."
+          >
+            <div className="flex items-center gap-1.5">
+              <Zap className="h-3.5! w-3.5! text-amber-500" />
+              <span>On behalf of the user (Recommended)</span>
+            </div>
+          </SelectItem>
+          {serviceAccountConnections.length > 0 && (
+            <>
+              <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                Always use one service account
+              </div>
+              {serviceAccountConnections.map((connection) => (
+                <SelectItem
+                  key={connection.id}
+                  value={connection.id}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
+                    <span>{connectionLabel(connection)}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

@@ -14,11 +14,7 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import {
-  type AssignmentActor,
-  assignToolToAgent,
-  resolveAssignmentActor as resolveUserAssignmentActor,
-} from "@/services/agent-tool-assignment";
+import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { isUniqueConstraintError } from "@/utils/db";
 import type { ArchestraContext } from "./types";
 
@@ -89,24 +85,9 @@ type ArchestraToolDefinitionInput<
 
 export const EmptyToolArgsSchema = z.strictObject({});
 
-/**
- * Build the assignment actor for an MCP-tool caller. User-facing MCP tools
- * fail closed when identity context is unavailable.
- */
-export async function resolveAssignmentActor(
-  context: ArchestraContext,
-): Promise<AssignmentActor> {
-  const { userId, organizationId } = context;
-  if (!userId || !organizationId) {
-    throw new Error("user/organization context not available");
-  }
-  return resolveUserAssignmentActor({ userId, organizationId });
-}
-
 export async function assignToolAssignments(
   agentId: string,
   assignments: ToolAssignmentInput[],
-  actor: AssignmentActor,
 ): Promise<ToolAssignmentResult[]> {
   const results: ToolAssignmentResult[] = [];
   const preFetchedData = await buildAgentToolAssignmentPrefetch({
@@ -122,7 +103,6 @@ export async function assignToolAssignments(
         resolveAtCallTime: assignment.resolveAtCallTime,
         mcpServerId: assignment.mcpServerId,
         preFetchedData,
-        actor,
       });
 
       if (result === null || result === "updated") {

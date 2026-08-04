@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
@@ -50,6 +50,93 @@ async function getRolePermission(
 }
 
 describe("0397_credential_connection_permissions custom-role cleanup", () => {
+  test("converts every personal static pin to dynamic resolution", async ({
+    makeAgent,
+    makeApp,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: organization.id,
+      authorId: user.id,
+      serverType: "remote",
+    });
+    const connection = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: user.id,
+      scope: "personal",
+      serverType: "remote",
+    });
+    const tool = await makeTool({ catalogId: catalog.id });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+    });
+    const app = await makeApp({
+      organizationId: organization.id,
+      authorId: user.id,
+    });
+
+    await db.insert(schema.agentToolsTable).values({
+      agentId: agent.id,
+      toolId: tool.id,
+      mcpServerId: connection.id,
+      credentialResolutionMode: "static",
+    });
+    await db.insert(schema.appToolsTable).values({
+      appId: app.id,
+      toolId: tool.id,
+      mcpServerId: connection.id,
+      credentialResolutionMode: "static",
+    });
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({ dynamicConnectionMcpServerId: connection.id })
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+
+    await runMigration();
+
+    const [agentAssignment] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    const [appAssignment] = await db
+      .select()
+      .from(schema.appToolsTable)
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, app.id),
+          eq(schema.appToolsTable.toolId, tool.id),
+        ),
+      );
+    const [updatedCatalog] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+
+    expect(agentAssignment).toMatchObject({
+      mcpServerId: null,
+      credentialResolutionMode: "dynamic",
+    });
+    expect(appAssignment).toMatchObject({
+      mcpServerId: null,
+      credentialResolutionMode: "dynamic",
+    });
+    expect(updatedCatalog.dynamicConnectionMcpServerId).toBeNull();
+  });
+
   test("removes credentialConnection from custom roles", async ({
     makeOrganization,
   }) => {

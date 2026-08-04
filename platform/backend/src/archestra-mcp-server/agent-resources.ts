@@ -34,7 +34,6 @@ import {
   deduplicateLabels,
   errorResult,
   formatAssignmentSummary,
-  resolveAssignmentActor,
   structuredSuccessResult,
   successResult,
   type ToolAssignmentInput,
@@ -341,11 +340,7 @@ export async function handleCreateResource<
 
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
-        ? await assignToolAssignments(
-            created.id,
-            args.toolAssignments ?? [],
-            await resolveAssignmentActor(context),
-          )
+        ? await assignToolAssignments(created.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
       targetAgentType === "agent" && (args.subAgentIds?.length ?? 0) > 0
@@ -613,11 +608,7 @@ export async function handleEditResource<
 
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0
-        ? await assignToolAssignments(
-            args.id,
-            args.toolAssignments ?? [],
-            await resolveAssignmentActor(context),
-          )
+        ? await assignToolAssignments(args.id, args.toolAssignments ?? [])
         : [];
     const subAgentResults =
       expectedType === "agent" && (args.subAgentIds?.length ?? 0) > 0

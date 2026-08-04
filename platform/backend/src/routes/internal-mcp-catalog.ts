@@ -37,7 +37,6 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { resolveAssignmentActor } from "@/services/agent-tool-assignment";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
 import {
   assertCanAssignEnvironment,
@@ -742,22 +741,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           restBody.dynamicConnectionMcpServerId,
           request.organizationId,
         );
-        const isOthersPersonalConnection =
-          pinned?.scope === "personal" &&
-          !!pinned.ownerId &&
-          pinned.ownerId !== request.user.id;
-        const actor = await resolveAssignmentActor({
-          userId: request.user.id,
-          organizationId: request.organizationId,
-        });
-        if (
-          isOthersPersonalConnection &&
-          actor.type === "user" &&
-          !actor.isPredefinedAdmin
-        ) {
+        if (pinned?.scope === "personal") {
           throw new ApiError(
-            403,
-            "You do not have permission to act through other users' connections.",
+            400,
+            "Personal connections cannot be set as the default credential. Use on-behalf-of-user resolution instead.",
           );
         }
       }

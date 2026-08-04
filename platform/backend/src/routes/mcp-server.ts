@@ -30,7 +30,7 @@ import {
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   filterMcpServersAssignableToTarget,
-  resolveAssignmentActor,
+  isPredefinedAdmin,
 } from "@/services/agent-tool-assignment";
 import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
@@ -121,16 +121,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(deleted);
       }
 
-      const [{ success: isMcpServerAdmin }, actor] = await Promise.all([
-        hasPermission({ mcpServerInstallation: ["admin"] }, headers),
-        resolveAssignmentActor({ userId: user.id, organizationId }),
-      ]);
+      const [{ success: isMcpServerAdmin }, userIsPredefinedAdmin] =
+        await Promise.all([
+          hasPermission({ mcpServerInstallation: ["admin"] }, headers),
+          isPredefinedAdmin({ userId: user.id, organizationId }),
+        ]);
       let allServers = await McpServerModel.findAll(
         user.id,
         isMcpServerAdmin,
         organizationId,
         undefined,
-        actor.type === "user" && actor.isPredefinedAdmin,
+        userIsPredefinedAdmin,
       );
 
       // serverType:"app" backings are managed on the Apps surface, not listed as
@@ -154,7 +155,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         allServers = await filterMcpServersAssignableToTarget({
           mcpServers: allServers,
           target,
-          actor,
         });
       }
 

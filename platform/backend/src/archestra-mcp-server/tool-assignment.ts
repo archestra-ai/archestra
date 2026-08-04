@@ -16,10 +16,7 @@ import {
   AgentVersionModel,
   TeamModel,
 } from "@/models";
-import {
-  assignToolToAgent,
-  resolveAssignmentActor,
-} from "@/services/agent-tool-assignment";
+import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
 import {
@@ -254,16 +251,14 @@ async function handleBulkAssignTool(params: {
         assignments.map((assignment) => getBulkAssignmentTargetId(assignment)),
       ),
     ];
-    const [targetAgents, checker, callerEnvironmentId, actor] =
-      await Promise.all([
-        AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
-        getAgentTypePermissionChecker({
-          userId,
-          organizationId,
-        }),
-        AgentModel.findEnvironmentId(contextAgent.id),
-        resolveAssignmentActor({ userId, organizationId }),
-      ]);
+    const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
+      AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
+      getAgentTypePermissionChecker({
+        userId,
+        organizationId,
+      }),
+      AgentModel.findEnvironmentId(contextAgent.id),
+    ]);
     // Environment isolation: writing an assignment is a configuration change,
     // so the TARGET must be in the calling agent's environment — otherwise an
     // agent in one environment reconfigures another. The tool end is
@@ -305,7 +300,6 @@ async function handleBulkAssignTool(params: {
           toolId: assignment.toolId,
           resolveAtCallTime: assignment.resolveAtCallTime,
           mcpServerId: assignment.mcpServerId ?? undefined,
-          actor,
           // One version for the whole batch, forked below.
           deferVersionFork: true,
         });

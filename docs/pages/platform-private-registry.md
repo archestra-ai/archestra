@@ -67,11 +67,11 @@ Installations can be personal or team-scoped.
 - **Personal installations** are owned by one user and are useful when each person needs their own upstream account.
 - **Team installations** are shared with a team and are useful for shared service accounts or team-owned integrations.
 
-A personal installation is visible only to its owner and predefined Admins. Only a predefined Admin can assign another user's personal installation to an Agent or App.
+A personal installation is visible only to its owner and predefined Admins. Admin visibility is for operational oversight and revocation; no role can pin or statically assign a personal installation to an Agent, App, or MCP Gateway.
 
 Personal installations are removed — credentials included — when their owner is deleted or leaves the organization. Team and organization installations survive their installer.
 
-When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time resolves deterministically from the caller identity and the available personal or team-scoped credentials. If no credential can be resolved, Archestra returns an error with an install link.
+When assigning tools to an Agent or MCP Gateway, you can pin a team or organization service account, or use **Resolve at call time**. Personal installations are available only through resolve-at-call-time, which resolves deterministically from the caller identity and never exposes a person's credential as a reusable static option. If no credential can be resolved, Archestra returns an error with an install link.
 
 See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for the resolution order and missing credential behavior.
 

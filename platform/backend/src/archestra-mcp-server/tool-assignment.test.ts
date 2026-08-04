@@ -211,7 +211,7 @@ describe("tool assignment tool execution", () => {
     ]);
   });
 
-  test("binding another user's personal connection as a non-Admin fails with a forbidden entry that survives output validation", async ({
+  test("binding a personal connection fails with a validation entry", async ({
     makeAgent,
     makeMcpServer,
     makeMember,
@@ -220,8 +220,8 @@ describe("tool assignment tool execution", () => {
     makeUser,
   }) => {
     const org = await makeOrganization();
-    // Editors hold agent/tool management permissions, so the Admin-only
-    // credential gate is the only thing blocking this assignment.
+    // Editors hold agent/tool management permissions, so credential scope is
+    // the only thing blocking this assignment.
     const editor = await makeUser();
     await makeMember(editor.id, org.id, { role: "editor" });
     const colleague = await makeUser();
@@ -239,6 +239,7 @@ describe("tool assignment tool execution", () => {
     const theirConnection = await makeMcpServer({
       scope: "personal",
       ownerId: colleague.id,
+      serverType: "remote",
     });
 
     const result = await executeArchestraTool(
@@ -259,19 +260,18 @@ describe("tool assignment tool execution", () => {
       },
     );
 
-    // isError false = the structured failure passed the output schema; before
-    // "forbidden" joined the errorCode enum this tripped output validation.
+    // isError false means the structured failure passed output validation.
     expect(result.isError).toBe(false);
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.failed).toMatchObject([
       {
         agentId: agent.id,
         toolId: tool.id,
-        errorCode: "forbidden",
-        errorType: "permission_denied",
+        errorCode: "validation_error",
+        errorType: "validation_error",
       },
     ]);
-    expect(parsed.failed[0].error).toContain("permission");
+    expect(parsed.failed[0].error).toContain("dynamic credential resolution");
   });
 });
 

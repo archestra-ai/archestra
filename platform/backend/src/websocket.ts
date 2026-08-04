@@ -19,7 +19,7 @@ import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import { McpServerModel, UserModel } from "@/models";
 import { reportMcpDeploymentStatuses } from "@/observability/metrics/mcp";
-import { resolveAssignmentActor } from "@/services/agent-tool-assignment";
+import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 
 interface McpLogsSubscription {
   serverId: string;
@@ -653,7 +653,7 @@ class WebSocketService {
     // Get accessible servers for this user.
     // NOTE: This list is captured once at subscription time. If servers are added/removed
     // after subscribing, the client won't see them until they re-subscribe (e.g. page refresh).
-    const actor = await resolveAssignmentActor({
+    const userIsPredefinedAdmin = await isPredefinedAdmin({
       userId: clientContext.userId,
       organizationId: clientContext.organizationId,
     });
@@ -662,7 +662,7 @@ class WebSocketService {
       clientContext.userIsMcpServerAdmin,
       clientContext.organizationId,
       undefined,
-      actor.type === "user" && actor.isPredefinedAdmin,
+      userIsPredefinedAdmin,
     );
 
     // Filter to local servers only (remote servers don't have K8s deployments)

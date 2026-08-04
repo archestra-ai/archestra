@@ -30,7 +30,6 @@ import {
 import type { VersionPayload } from "@/models/app-version";
 import {
   assignToolToApp,
-  resolveAssignmentActor,
   type ToolAssignmentError,
 } from "@/services/agent-tool-assignment";
 import {
@@ -1273,10 +1272,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolId,
         mcpServerId: body?.mcpServerId,
         credentialResolutionMode: body?.credentialResolutionMode,
-        actor: await resolveAssignmentActor({
-          userId: user.id,
-          organizationId,
-        }),
       });
       if (isAssignmentError(result)) {
         throw new ApiError(

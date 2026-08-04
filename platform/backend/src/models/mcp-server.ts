@@ -354,9 +354,13 @@ class McpServerModel {
     ];
 
     if (organizationId) {
-      conditions.push(
+      const catalogBelongsToOrganization = or(
+        isNull(schema.internalMcpCatalogTable.organizationId),
         eq(schema.internalMcpCatalogTable.organizationId, organizationId),
       );
+      if (catalogBelongsToOrganization) {
+        conditions.push(catalogBelongsToOrganization);
+      }
     }
 
     if (environmentId !== undefined) {

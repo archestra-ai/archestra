@@ -1,4 +1,5 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, mustExist, test } from "@/test";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
@@ -388,6 +389,36 @@ describe("McpServerModel", () => {
   });
 
   describe("findAll with scope filter", () => {
+    test("returns the owner's personal installation from a global catalog when organization-scoped", async ({
+      makeInternalMcpCatalog,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const organization = await makeOrganization();
+      const owner = await makeUser();
+      const catalog = await makeInternalMcpCatalog();
+      await db
+        .update(schema.internalMcpCatalogTable)
+        .set({ organizationId: null })
+        .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+      const server = await McpServerModel.create({
+        name: catalog.name,
+        serverType: "local",
+        catalogId: catalog.id,
+        ownerId: owner.id,
+        userId: owner.id,
+        scope: "personal",
+      });
+
+      const visible = await McpServerModel.findAll(
+        owner.id,
+        false,
+        organization.id,
+      );
+
+      expect(visible.map((candidate) => candidate.id)).toContain(server.id);
+    });
+
     test("returns an org-scoped server to any member of the organization", async ({
       makeInternalMcpCatalog,
       makeMember,

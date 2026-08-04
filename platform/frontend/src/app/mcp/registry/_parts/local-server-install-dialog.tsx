@@ -287,6 +287,10 @@ export function LocalServerInstallDialog({
   const handleInstall = async () => {
     if (!catalogItem) return;
 
+    // personalOnly is a security/product invariant, not merely selector UI.
+    // Enforce it again at the payload boundary so async dialog state cannot
+    // submit a stale team/org scope (notably for the Playwright preview).
+    const submittedScope = personalOnly ? "personal" : scope;
     const finalEnvironmentValues: Record<string, string> = {};
     const finalUserConfigValues: Record<string, string> = {};
 
@@ -350,8 +354,8 @@ export function LocalServerInstallDialog({
       catalogId: catalogItem.id,
       environmentValues: finalEnvironmentValues,
       userConfigValues: finalUserConfigValues,
-      scope,
-      teamId: selectedTeamId,
+      scope: submittedScope,
+      teamId: submittedScope === "team" ? selectedTeamId : null,
       isByosVault:
         useVaultSecrets &&
         (secretEnvVars.length > 0 ||

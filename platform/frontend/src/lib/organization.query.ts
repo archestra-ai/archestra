@@ -53,8 +53,8 @@ export const organizationKeys = {
   invitations: () => [...organizationKeys.all, "invitations"] as const,
   invitation: (id: string) => [...organizationKeys.invitations(), id] as const,
   activeOrg: () => [...organizationKeys.all, "active"] as const,
-  activeMemberRole: () =>
-    [...organizationKeys.activeOrg(), "member-role"] as const,
+  activeMemberRole: (organizationId: string | undefined) =>
+    [...organizationKeys.activeOrg(), "member-role", organizationId] as const,
   details: () => [...organizationKeys.all, "details"] as const,
   onboardingStatus: () =>
     [...organizationKeys.all, "onboarding-status"] as const,
@@ -88,16 +88,29 @@ export function useActiveOrganization() {
 }
 
 /**
- * Fetch active member role
+ * Fetch the caller's role in their active organization. Resolves to null when
+ * the endpoint reports no role; stays disabled (data undefined) while the
+ * session is unresolved or names no active organization.
+ *
+ * The endpoint resolves the organization from the session itself, so this
+ * gates on the session's activeOrganizationId rather than on
+ * useActiveOrganization() — waiting for the full-organization fetch would put
+ * an extra request in front of the role for no reason.
  */
-export function useActiveMemberRole(organizationId?: string) {
+export function useActiveMemberRole() {
+  const { data: session, isPending: isSessionPending } = useSession();
+  const activeOrganizationId =
+    session?.session?.activeOrganizationId ?? undefined;
+
   return useQuery({
-    queryKey: organizationKeys.activeMemberRole(),
+    // The organization id in the key stops one organization's cached role
+    // from being served for another after a switch of the active org.
+    queryKey: organizationKeys.activeMemberRole(activeOrganizationId),
     queryFn: async () => {
       const { data } = await authClient.organization.getActiveMemberRole();
-      return data?.role;
+      return data?.role ?? null;
     },
-    enabled: !!organizationId,
+    enabled: !isSessionPending && !!activeOrganizationId,
   });
 }
 

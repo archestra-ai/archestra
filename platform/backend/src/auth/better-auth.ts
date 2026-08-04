@@ -75,6 +75,36 @@ const {
   },
 } = config;
 
+/**
+ * Options for the JWT plugin, which owns the JWKS keypair that signs OIDC
+ * id_tokens.
+ *
+ * Extracted so the startup JWKS guard can mint a replacement key with exactly
+ * the same key-pair configuration as the plugin itself — a guard that minted a
+ * key under different options would hand better-auth a keypair it never agreed
+ * to sign with. See `auth/jwks-signing-key-guard.ts`.
+ *
+ * @public — shared with the JWKS startup guard
+ */
+export const JWT_PLUGIN_OPTIONS = {
+  jwt: {
+    // Pydantic's AnyHttpUrl (used by MCP/Open WebUI OAuthMetadata model)
+    // normalizes URLs by appending a trailing slash when the path is empty.
+    // The JWT iss claim must match the normalized issuer from the well-known
+    // metadata to pass authlib's claim validation.
+    issuer: `${frontendBaseUrl}/`,
+  },
+  jwks: {
+    keyPairConfig: { alg: "RS256", modulusLength: 2048 },
+  },
+  // Without this, the plugin's /get-session after-hook mints a JWT — a
+  // jwks table read plus an RS256 signature — on EVERY authenticated
+  // request (the auth middleware calls getSession per request) just to
+  // set a `set-auth-jwt` response header nothing consumes. The /token
+  // and /jwks endpoints (used by the OAuth/OIDC flows) are unaffected.
+  disableSettingJwtHeader: true,
+} as const satisfies Parameters<typeof jwt>[0];
+
 const ac = createAccessControl(allAvailableActions);
 
 const adminRole = ac.newRole(allAvailableActions);
@@ -225,24 +255,7 @@ export const auth = betterAuth({
       issuer: APP_NAME,
     }),
     ...(ssoConfig ? [sso(ssoConfig)] : []),
-    jwt({
-      jwt: {
-        // Pydantic's AnyHttpUrl (used by MCP/Open WebUI OAuthMetadata model)
-        // normalizes URLs by appending a trailing slash when the path is empty.
-        // The JWT iss claim must match the normalized issuer from the well-known
-        // metadata to pass authlib's claim validation.
-        issuer: `${frontendBaseUrl}/`,
-      },
-      jwks: {
-        keyPairConfig: { alg: "RS256", modulusLength: 2048 },
-      },
-      // Without this, the plugin's /get-session after-hook mints a JWT — a
-      // jwks table read plus an RS256 signature — on EVERY authenticated
-      // request (the auth middleware calls getSession per request) just to
-      // set a `set-auth-jwt` response header nothing consumes. The /token
-      // and /jwks endpoints (used by the OAuth/OIDC flows) are unaffected.
-      disableSettingJwtHeader: true,
-    }),
+    jwt(JWT_PLUGIN_OPTIONS),
     oauthProvider({
       loginPage: OAUTH_PAGES.login,
       consentPage: OAUTH_PAGES.consent,

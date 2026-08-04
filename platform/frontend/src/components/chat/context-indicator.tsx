@@ -1,109 +1,73 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useMemo } from "react";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  usageStrokeColor,
+  usageTextColor,
+} from "@/lib/chat/context-window-status";
 import { cn } from "@/lib/utils";
 
-interface ContextIndicatorProps {
-  /** Current prompt-token estimate or provider count. */
-  tokensUsed: number;
-  /** Maximum context window size for the model. */
-  maxTokens: number | null;
-  /** Input tokens served from the prompt cache on the latest response, a subset of tokensUsed. */
-  cachedTokens?: number;
-  /** Optional className for the container */
-  className?: string;
-  /** Size of the indicator. */
-  size?: "sm" | "md";
-  /**
-   * Hide the built-in hover tooltip. Set when the indicator is a trigger for a
-   * richer surface (e.g. the Context Window dialog) that already explains it.
-   * The ring will also use `cursor-pointer` instead of `cursor-default` in that
-   * case so it signals its clickability without text.
-   */
-  hideTooltip?: boolean;
-}
-
-function formatTokenCount(count: number): string {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
-  return count.toString();
-}
-
-function getUsageColor(percentage: number): string {
-  if (percentage >= 90) return "text-red-500";
-  if (percentage >= 75) return "text-orange-500";
-  if (percentage >= 50) return "text-yellow-500";
-  return "text-emerald-500";
-}
-
-function getStrokeColor(percentage: number): string {
-  if (percentage >= 90) return "stroke-red-500";
-  if (percentage >= 75) return "stroke-orange-500";
-  if (percentage >= 50) return "stroke-yellow-500";
-  return "stroke-emerald-500";
-}
+// ============================================================================
+// Progress ring — the shared circular gauge
+// ============================================================================
 
 /**
- * Circular progress indicator showing context window usage.
- * Used as the trigger for the Context Window dialog in the chat toolbar.
+ * Geometry per size. Kept explicit rather than derived so the composer's ring
+ * stays pixel-identical; `xs` is sized for an inline glyph slot beside
+ * `text-xs` copy, as in the context window panel's notes.
  */
-export function ContextIndicator({
-  tokensUsed,
-  maxTokens,
-  cachedTokens,
-  className,
+const RING_GEOMETRY = {
+  xs: { box: "size-4", viewBox: 16, radius: 6, stroke: 2 },
+  sm: { box: "size-5", viewBox: 20, radius: 8, stroke: 2 },
+  md: { box: "size-6", viewBox: 24, radius: 10, stroke: 2.5 },
+} as const;
+
+export type ProgressRingSize = keyof typeof RING_GEOMETRY;
+
+/**
+ * A circular progress gauge. Used for the composer's context indicator and,
+ * at `xs`, wherever a note needs to show the same value it is talking about
+ * rather than a decorative icon.
+ */
+export function ProgressRing({
+  percent,
   size = "sm",
-  hideTooltip = false,
-}: ContextIndicatorProps) {
-  const cacheHitPercent =
-    cachedTokens && cachedTokens > 0 && tokensUsed > 0
-      ? Math.round((Math.min(cachedTokens, tokensUsed) / tokensUsed) * 100)
-      : null;
-  const { percentage, circumference, strokeDashoffset } = useMemo(() => {
-    if (!maxTokens || maxTokens === 0) {
-      return { percentage: 0, circumference: 0, strokeDashoffset: 0 };
-    }
+  className,
+  arcClassName,
+  trackClassName = "stroke-muted",
+  children,
+}: {
+  /** Fill, 0–100. Clamped. */
+  percent: number;
+  size?: ProgressRingSize;
+  className?: string;
+  /** Stroke color class for the filled arc. */
+  arcClassName?: string;
+  /** Stroke color class for the unfilled track. Override on tinted surfaces,
+   *  where the default disappears into the background. */
+  trackClassName?: string;
+  children?: ReactNode;
+}) {
+  const { box, viewBox, radius, stroke } = RING_GEOMETRY[size];
+  const center = viewBox / 2;
+  const circumference = 2 * Math.PI * radius;
+  const filled = Math.min(Math.max(percent, 0), 100);
+  const strokeDashoffset = circumference - (filled / 100) * circumference;
 
-    const pct = Math.min((tokensUsed / maxTokens) * 100, 100);
-    const radius = size === "sm" ? 8 : 10;
-    const circ = 2 * Math.PI * radius;
-    const offset = circ - (pct / 100) * circ;
-
-    return { percentage: pct, circumference: circ, strokeDashoffset: offset };
-  }, [tokensUsed, maxTokens, size]);
-
-  if (!maxTokens) {
-    return null;
-  }
-
-  const dimensions = size === "sm" ? "size-5" : "size-6";
-  const svgSize = size === "sm" ? 20 : 24;
-  const radius = size === "sm" ? 8 : 10;
-  const strokeWidth = size === "sm" ? 2 : 2.5;
-  const center = svgSize / 2;
-
-  const ring = (
+  return (
     <div
       className={cn(
-        "relative inline-flex items-center justify-center",
-        // When the tooltip is hidden the ring is a dialog trigger — show pointer
-        // cursor so sighted users know it's clickable.
-        hideTooltip ? "cursor-pointer" : "cursor-default",
-        dimensions,
+        "relative inline-flex shrink-0 items-center justify-center",
+        box,
         className,
       )}
     >
       <svg
         className="absolute inset-0 -rotate-90"
-        width={svgSize}
-        height={svgSize}
-        viewBox={`0 0 ${svgSize} ${svgSize}`}
+        width={viewBox}
+        height={viewBox}
+        viewBox={`0 0 ${viewBox} ${viewBox}`}
         aria-hidden="true"
       >
         {/* Track */}
@@ -112,8 +76,8 @@ export function ContextIndicator({
           cy={center}
           r={radius}
           fill="none"
-          strokeWidth={strokeWidth}
-          className="stroke-muted"
+          strokeWidth={stroke}
+          className={trackClassName}
         />
         {/* Progress arc */}
         <circle
@@ -121,53 +85,71 @@ export function ContextIndicator({
           cy={center}
           r={radius}
           fill="none"
-          strokeWidth={strokeWidth}
+          strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
-          className={cn(
-            "transition-all duration-300",
-            getStrokeColor(percentage),
-          )}
+          className={cn("transition-all duration-300", arcClassName)}
         />
       </svg>
+      {children}
+    </div>
+  );
+}
+
+// ============================================================================
+// Context indicator — the composer's token-aware ring
+// ============================================================================
+
+interface ContextIndicatorProps {
+  /** Current prompt-token estimate or provider count. */
+  tokensUsed: number;
+  /** Maximum context window size for the model. */
+  maxTokens: number | null;
+  /** Optional className for the container */
+  className?: string;
+  /** Size of the indicator. */
+  size?: "sm" | "md";
+}
+
+/**
+ * Circular progress ring showing context-window usage. Purely presentational:
+ * the surfaces that host it own the hover copy and the click behaviour (in
+ * chat, `ContextWindowDialog` supplies both).
+ */
+export function ContextIndicator({
+  tokensUsed,
+  maxTokens,
+  className,
+  size = "sm",
+}: ContextIndicatorProps) {
+  const percentage = useMemo(() => {
+    if (!maxTokens || maxTokens === 0) return 0;
+    return Math.min((tokensUsed / maxTokens) * 100, 100);
+  }, [tokensUsed, maxTokens]);
+
+  if (!maxTokens) {
+    return null;
+  }
+
+  return (
+    <ProgressRing
+      percent={percentage}
+      size={size}
+      className={className}
+      arcClassName={usageStrokeColor(percentage)}
+    >
       {/* Percentage label inside ring — only for md size */}
       {size === "md" && (
         <span
           className={cn(
             "text-[8px] font-medium tabular-nums",
-            getUsageColor(percentage),
+            usageTextColor(percentage),
           )}
         >
           {Math.round(percentage)}
         </span>
       )}
-    </div>
-  );
-
-  if (hideTooltip) {
-    return ring;
-  }
-
-  return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>{ring}</TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          <div className="flex flex-col gap-0.5">
-            <span className="font-medium">Context usage</span>
-            <span className="tabular-nums text-muted-foreground">
-              {formatTokenCount(tokensUsed)} / {formatTokenCount(maxTokens)}{" "}
-              tokens ({Math.round(percentage)}%)
-            </span>
-            {cacheHitPercent !== null && cacheHitPercent > 0 && (
-              <span className="text-muted-foreground">
-                {cacheHitPercent}% served from cache
-              </span>
-            )}
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    </ProgressRing>
   );
 }

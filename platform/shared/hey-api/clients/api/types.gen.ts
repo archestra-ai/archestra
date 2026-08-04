@@ -43636,7 +43636,10 @@ export type GetInteractionSessionsResponses = {
             authMethods: Array<'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown'>;
             authenticatedAppNames: Array<string>;
             userNames: Array<string>;
-            lastInteractionRequest: unknown;
+            /**
+             * Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.
+             */
+            lastUserMessagePreview: string | null;
             lastInteractionType: string | null;
             conversationTitle: string | null;
             claudeCodeTitle: string | null;
@@ -76030,6 +76033,10 @@ export type UpdateSkillData = {
          * Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.
          */
         allowedTools?: Array<string>;
+        /**
+         * The skill's `latestVersion` when this edit was composed. Rejected with 409 if the skill has moved past it. Omit only when the payload owes nothing to a prior read of the skill.
+         */
+        baseVersion?: number;
     };
     path: {
         id: string;

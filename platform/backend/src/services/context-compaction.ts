@@ -19,9 +19,6 @@ import {
   generateTaggedText,
 } from "@/utils/generate-tagged-text";
 
-// Compact once the estimated context reaches this share of the model's window.
-export const CONTEXT_COMPACTION_AUTO_THRESHOLD = 0.8;
-
 export const CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS = 8_192;
 
 // Ceiling for the serialized transcript handed to the summarizer; flows keep

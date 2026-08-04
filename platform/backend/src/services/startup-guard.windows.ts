@@ -283,7 +283,16 @@ function Show-ArchDown($r) {
 
 function Get-ArchRealExe {
   # The profile wraps \`${client.binary}\` in a function, so resolve the real executable.
-  Get-Command -Name ${client.binary} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  # -CommandType Application matches PATHEXT executables only, which misses a
+  # .ps1/.cmd shim — and every delegated removal is a no-op when this returns
+  # nothing, so widen the search before giving up.
+  $found = Get-Command -Name ${client.binary} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $found) {
+    $found = Get-Command -Name ${client.binary} -ErrorAction SilentlyContinue |
+      Where-Object { $_.CommandType -in @('Application', 'ExternalScript') } |
+      Select-Object -First 1
+  }
+  $found
 }
 
 # The reverse-of-connect commands for one remote, silenced. Shared by the
@@ -291,6 +300,12 @@ function Get-ArchRealExe {
 # per-kind bodies come straight from the client descriptor's \`windows\` half.
 function Invoke-ArchDisconnectActions([string]$Kind) {
   $archRealExe = Get-ArchRealExe
+  if (-not $archRealExe -and $Kind -ne 'proxy') {
+    # Nothing to delegate to: the removal cannot have happened. Say so rather
+    # than falling through the switch and reporting a success we never did.
+    $Script:ArchDisconnectReason = 'the ${client.binary} executable could not be found on PATH'
+    return $false
+  }
   switch ($Kind) {${
     ctx.mcp
       ? `
@@ -312,6 +327,29 @@ ${client.windows.skillsDisconnect}
       : ""
   }
   }
+  return (Test-ArchDisconnected $Kind)
+}
+
+# Proof that a removal landed. The vendor CLI is invoked with its output
+# silenced and its exit status is not a reliable signal — \`mcp remove\` of a
+# missing server exits 0 — so the check reads the config back instead. Clients
+# that ship no verifier keep the previous assume-success behaviour.
+function Test-ArchDisconnected([string]$Kind) {${
+    ctx.mcp && client.windows.mcpDisconnectVerify
+      ? `
+  if ($Kind -eq 'mcp') {
+${client.windows.mcpDisconnectVerify}
+  }`
+      : ""
+  }${
+    ctx.skills && client.windows.skillsDisconnectVerify
+      ? `
+  if ($Kind -eq 'skills') {
+${client.windows.skillsDisconnectVerify}
+  }`
+      : ""
+  }
+  return $true
 }
 
 # Reversing a connect step animates the same way the probes do: the dots
@@ -319,9 +357,18 @@ ${client.windows.skillsDisconnect}
 function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
   Show-ArchSpinStart ('Disconnecting ' + $Label) ''
   for ($pad = 0; $pad -lt 2; $pad++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
-  Invoke-ArchDisconnectActions $Kind
+  $Script:ArchDisconnectReason = ''
+  $archOk = Invoke-ArchDisconnectActions $Kind
   for ($pad = 0; $pad -lt 2; $pad++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
   Clear-ArchLine
+  if (-not $archOk) {
+    Write-Arch '✗' Red -NoNewline
+    Write-Host (' Could not disconnect ' + $Label)
+    if ($Script:ArchDisconnectReason) {
+      Write-Arch ('  ' + $Script:ArchDisconnectReason) DarkYellow
+    }
+    return $false
+  }
   Write-Arch '✓' Magenta -NoNewline
   Write-Host (' Disconnected ' + $Label)${
     ctx.proxy && client.windows.proxyDisconnectNote(ctx)
@@ -332,14 +379,22 @@ function Disconnect-ArchRemote([string]$Kind, [string]$Label) {
   }`
       : ""
   }
+  return $true
 }
 
 ${ctx.proxy ? client.windows.renderProxyDisconnect(ctx) : ""}
 
 function Disconnect-ArchRemotes($remotes) { # reverse connect, then skip on later launches
+  $Script:ArchDisconnectFailed = $false
   foreach ($r in $remotes) {
-    Disconnect-ArchRemote $r.Kind $r.Label
-    Add-ArchDisconnected $r.Kind
+    # Only a removal we could prove is recorded as done — remembering an
+    # unverified one would skip the resource on every later launch and strand
+    # the leftover permanently.
+    if (Disconnect-ArchRemote $r.Kind $r.Label) {
+      Add-ArchDisconnected $r.Kind
+    } else {
+      $Script:ArchDisconnectFailed = $true
+    }
   }
 }
 
@@ -347,11 +402,13 @@ function Disconnect-ArchRemotes($remotes) { # reverse connect, then skip on late
 # Opened with [C] from the prompt under the rows. Every remote is already on
 # screen in a stable block, so the menu just re-decorates those rows in place
 # ([n] label) and reads number keys — no redraw, no layout jump. Pressing a
-# number disconnects that remote (reverse-of-connect, then remembered) and
-# lands its row on the purple check; Esc or Enter leaves and lets claude
-# start. Removing the last connected remote takes the guard with it. Rows
-# list every active remote regardless of reachability. VT uses relative
-# cursor moves off the block; legacy consoles use absolute positioning.
+# number disconnects that remote (reverse-of-connect, verified, then
+# remembered) and lands its row on the purple check — or on ✗ with its number
+# still live when the removal cannot be proven; Esc or Enter leaves and lets
+# claude start. Removing the last connected remote takes the guard with it,
+# but only when every removal was proven. Rows list every active remote
+# regardless of reachability. VT uses relative cursor moves off the block;
+# legacy consoles use absolute positioning.
 function Move-ArchRowStart([int]$i, [int]$count, [int]$baseTop) {
   if ($UseVt) { Write-Host -NoNewline ("$Esc[" + ($count - $i) + "A\`r$Esc[2K") }
   else { try { [Console]::SetCursorPosition(0, $baseTop - $count + $i) } catch { }; Clear-ArchLine }
@@ -377,13 +434,24 @@ function Disconnect-ArchMenuRow([int]$i, [int]$count, [int]$baseTop) {
   Move-ArchRowStart $i $count $baseTop
   Show-ArchSpinStart ('Disconnecting ' + $r.Label) ''
   for ($p = 0; $p -lt 2; $p++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
-  Invoke-ArchDisconnectActions $r.Kind
+  $Script:ArchDisconnectReason = ''
+  $archOk = Invoke-ArchDisconnectActions $r.Kind
   for ($p = 0; $p -lt 2; $p++) { Start-Sleep -Milliseconds $FrameSleepMs; Show-ArchSpinTick }
   Clear-ArchLine
+  if (-not $archOk) {
+    # Same contract as Disconnect-ArchRemote: only a removal we can prove
+    # lands the check and the skip-file entry. The row carries the verdict
+    # (the reason line has no room here) and keeps its number for a retry.
+    $Script:ArchDisconnectFailed = $true
+    Write-Arch ('✗ Could not disconnect ' + $r.Label + ' — [' + ($i + 1) + '] to retry') Red -NoNewline
+    Move-ArchRowEnd $i $count $baseTop
+    return $false
+  }
   Write-Arch '✓' Magenta -NoNewline
   Write-Host -NoNewline (' Disconnected ' + $r.Label)
   Move-ArchRowEnd $i $count $baseTop
   Add-ArchDisconnected $r.Kind
+  return $true
 }
 function Show-ArchMenuRowResult([int]$i, [int]$count, [int]$baseTop) {
   $r = $ActiveRemotes[$i]
@@ -427,9 +495,9 @@ function Invoke-ArchReconfigureMenu {
     if ([int]::TryParse([string]$k.KeyChar, [ref]$d) -and $d -ge 1 -and $d -le $count) {
       $r = $ActiveRemotes[$d - 1]
       if ($done.ContainsKey($r.Kind)) { continue }
-      Disconnect-ArchMenuRow ($d - 1) $count $baseTop
+      if (-not (Disconnect-ArchMenuRow ($d - 1) $count $baseTop)) { continue }
       $done[$r.Kind] = $true
-      if ($done.Count -ge $count) { Remove-ArchGuard; break }
+      if ($done.Count -ge $count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard; break }
     }
   }
   Clear-ArchMenuFooter $baseTop
@@ -522,7 +590,7 @@ function Show-ArchDownSummaryPrompt($downRemotes) {
   if ($choice -eq 'y') {
     $Script:Dwell = $true
     Disconnect-ArchRemotes $downRemotes
-    if ($downRemotes.Count -ge $ActiveRemotes.Count) { Remove-ArchGuard }
+    if ($downRemotes.Count -ge $ActiveRemotes.Count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard }
     return
   }
   Clear-ArchLine
@@ -667,7 +735,7 @@ if ($Script:DiscAll) {
   Clear-ArchLine
   $Script:Dwell = $true
   Disconnect-ArchRemotes $ActiveRemotes
-  Remove-ArchGuard
+  if (-not $Script:ArchDisconnectFailed) { Remove-ArchGuard }
   Exit-ArchGuard
 }
 if ($Script:SkipAll) {

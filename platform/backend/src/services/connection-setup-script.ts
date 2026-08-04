@@ -768,6 +768,19 @@ function codexSections(ctx: SetupScriptContext): string[] {
 
   startupGuardUnshadowSection(ctx, CODEX_GUARD_CLIENT, sections);
 
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    // Codex owns config.toml wherever CODEX_HOME points (default ~/.codex),
+    // and every action below edits that file — the mcp/skills registrations
+    // through the codex CLI just as much as the provider block this script
+    // appends itself. The one-time backup must therefore be taken before the
+    // FIRST of them, or "pristine pre-Archestra config" would already contain
+    // the gateway the CLI registered a moment earlier.
+    sections.push(`CONFIG="\${CODEX_HOME:-$HOME/.codex}/config.toml"
+if [ -f "$CONFIG" ] && [ ! -f "$CONFIG.archestra-backup" ]; then
+  cp "$CONFIG" "$CONFIG.archestra-backup"
+fi`);
+  }
+
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
@@ -787,12 +800,10 @@ requires_openai_auth = true
 ${codexAttributionHeaderLines(ctx.proxy)}
 # <<< ${marker} <<<`;
 
-    sections.push(`say ${sh(`Adding the "${ctx.proxy.proxyName}" provider to ~/.codex/config.toml`)}
-mkdir -p "$HOME/.codex"
-CONFIG="$HOME/.codex/config.toml"
+    sections.push(`say ${sh(`Adding the "${ctx.proxy.proxyName}" provider to Codex's config.toml`)}
+CONFIG="\${CODEX_HOME:-$HOME/.codex}/config.toml"
+mkdir -p "$(dirname "$CONFIG")"
 if [ -f "$CONFIG" ]; then
-  # Back up once so re-runs preserve the pristine pre-Archestra config.
-  [ -f "$CONFIG.archestra-backup" ] || cp "$CONFIG" "$CONFIG.archestra-backup"
   # drop any previous archestra-managed block for this provider (idempotent)
   awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
     $0 == start {skip=1; next}

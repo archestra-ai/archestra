@@ -567,6 +567,19 @@ function codexSections(ctx: SetupScriptContext): string[] {
 
   windowsStartupGuardUnshadowSection(ctx, CODEX_GUARD_CLIENT, sections);
 
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    // Codex owns config.toml wherever CODEX_HOME points (default ~/.codex),
+    // and every action below edits that file — the mcp/skills registrations
+    // through the codex CLI just as much as the provider block this script
+    // appends itself. The one-time backup must therefore be taken before the
+    // FIRST of them, or "pristine pre-Archestra config" would already contain
+    // the gateway the CLI registered a moment earlier.
+    sections.push(`$arch_config = Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }) 'config.toml'
+if ((Test-Path $arch_config) -and -not (Test-Path ($arch_config + '.archestra-backup'))) {
+  Copy-Item -Path $arch_config -Destination ($arch_config + '.archestra-backup')
+}`);
+  }
+
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
@@ -586,12 +599,10 @@ requires_openai_auth = true
 ${codexAttributionHeaderLines(ctx.proxy)}
 # <<< ${marker} <<<`;
 
-    sections.push(`Say ${psq(`Adding the "${ctx.proxy.proxyName}" provider to ~/.codex/config.toml`)}
-$arch_config = Join-Path $env:USERPROFILE '.codex\\config.toml'
+    sections.push(`Say ${psq(`Adding the "${ctx.proxy.proxyName}" provider to Codex's config.toml`)}
+$arch_config = Join-Path $(if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }) 'config.toml'
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $arch_config) | Out-Null
 if (Test-Path $arch_config) {
-  # Back up once so re-runs preserve the pristine pre-Archestra config.
-  if (-not (Test-Path ($arch_config + '.archestra-backup'))) { Copy-Item -Path $arch_config -Destination ($arch_config + '.archestra-backup') }
   # Drop any previous archestra-managed block for this provider (idempotent).
   $arch_start = ${psq(`# >>> ${marker} >>>`)}
   $arch_end = ${psq(`# <<< ${marker} <<<`)}

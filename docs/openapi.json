@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.25"
+    "version": "1.3.26"
   },
   "components": {
     "schemas": {
@@ -164982,8 +164982,11 @@
                               "type": "string"
                             }
                           },
-                          "lastInteractionRequest": {
-                            "nullable": true
+                          "lastUserMessagePreview": {
+                            "nullable": true,
+                            "description": "Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.",
+                            "type": "string",
+                            "maxLength": 200
                           },
                           "lastInteractionType": {
                             "nullable": true,
@@ -165026,7 +165029,7 @@
                           "authMethods",
                           "authenticatedAppNames",
                           "userNames",
-                          "lastInteractionRequest",
+                          "lastUserMessagePreview",
                           "lastInteractionType",
                           "conversationTitle",
                           "claudeCodeTitle"
@@ -295004,6 +295007,12 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "baseVersion": {
+                    "description": "The skill's `latestVersion` when this edit was composed. Rejected with 409 if the skill has moved past it. Omit only when the payload owes nothing to a prior read of the skill.",
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [

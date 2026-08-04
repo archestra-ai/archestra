@@ -54,6 +54,20 @@ export const TOOL_UI_RESULT_INSTRUCTION =
   "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
 
 /**
+ * Response-shaping rule for app building, emitted whenever the agent can reach
+ * the app-authoring tools (assigned directly, or discoverable in
+ * search_and_run_only mode). The model's habit of writing a transition sentence
+ * before each tool call turns an app build into a stream of internals-flavored
+ * status bubbles; a system-prompt rule is the only reliable counterweight — the
+ * Build App skill restates it, but skill text arrives as a tool result and
+ * loses to the habit on its own.
+ *
+ * @public — canonical instruction text, asserted by the assembler tests.
+ */
+export const APP_BUILD_CONDUCT_INSTRUCTION =
+  'While you are building or changing an app, your responses contain tool calls ONLY — no text. This applies from the user\'s build request onward, including your very first response and any skill loading or tool discovery before the first app tool call. Not an acknowledgment of the request, not a plan, not status lines between calls, not commentary on what a search returned. If you are about to write "I\'ll build…", "Let me…", or "Now I\'ll…" ahead of a tool call: stop, and make the call with no text at all. The user sees every word you emit as a chat message and watches the app itself render as you work, so the whole build reads as: (optionally) your clarifying questions, then silence, then the finished app. Exactly three kinds of message may contain text: (1) clarifying questions about what to build; (2) a blocker, stated as the action the user can take in product terms — never internal tool or SDK names, and no account of the searches or checks you ran; (3) the final delivery.';
+
+/**
  * The sentence that accompanies every {@link quoteUntrusted} span, telling the
  * model what the quotes mean. Kept as one constant so each block that carries
  * user-authored text says the same thing.
@@ -158,6 +172,14 @@ export async function buildAgentSystemPrompt(params: {
   const toolResultInstructions =
     Object.keys(mcpTools).length > 0 ? TOOL_UI_RESULT_INSTRUCTION : null;
 
+  // In search_and_run_only mode scaffold_app is dispatchable without being
+  // listed, so the mode alone qualifies; otherwise key off the assigned tools.
+  const appBuildConductInstruction =
+    agent.toolExposureMode === "search_and_run_only" ||
+    archestraMcpBranding.getToolName(TOOL_SCAFFOLD_APP_SHORT_NAME) in mcpTools
+      ? APP_BUILD_CONDUCT_INSTRUCTION
+      : null;
+
   // eagerly list the agent's skills in the prompt (like Claude Code /
   // opencode), but only when the agent can actually load them.
   const skillCatalogPrompt =
@@ -194,6 +216,7 @@ export async function buildAgentSystemPrompt(params: {
       fileHandlingInstruction,
       TOOL_DENIAL_INSTRUCTION,
       toolResultInstructions,
+      appBuildConductInstruction,
       hookSessionContext,
     ]
       .filter(Boolean)
@@ -552,5 +575,5 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
 
   return `${base}
 
-When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`, and find the follow-up app tools with \`${searchToolsName}\`.`;
+When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`, and find the follow-up app tools with \`${searchToolsName}\`. Open with the tool call itself — no lead-in sentence first.`;
 }

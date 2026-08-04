@@ -5,7 +5,7 @@ import { APP_PLATFORM_CSP_RESOURCE_DOMAINS } from "@/services/apps/app-ui-policy
 // drift. Names what the inline SDK summary omits so the model knows when to
 // load the full Build App skill.
 export const BUILD_APP_SKILL_POINTER =
-  'For tool-calling apps (the assign→preview→diagnostics build loop), the CDN allowlist, or platform theming, load the "Build App" skill (in your available skills) for the full authoring playbook.';
+  'For tool-calling apps (the assign→preview→diagnostics build loop), the CDN allowlist, or platform theming, load the "Build App" skill (in your available skills) for the full authoring playbook — its references/apps-sdk.md file carries the full SDK contract.';
 
 // The recurring "no render has happened yet, and that is fine" directive shared
 // by validate_app / get_app_diagnostics result text, so the guidance stays
@@ -49,4 +49,4 @@ export const ARCHESTRA_APP_SDK_SUMMARY = `window.archestra is injected at render
 - File tools, called through archestra.tools.call by their full built-in names (archestra__save_file, archestra__read_file, archestra__read_file_raw, archestra__search_files, archestra__edit_file, archestra__delete_file, archestra__upload_file, archestra__download_file) — a persistent file store private to each viewer of this app (its own namespace: never the chat's or a project's files, and never another viewer's). archestra__read_file_raw resolves to {contentBase64, mimeType, sizeBytes} — the exact bytes for parsing, any type including binary; archestra__read_file is the model-shaped paged text window. Use the store for documents the app produces or the viewer keeps; use archestra.storage for structured app state.
 - archestra.llm.complete(prompt, {system, jsonMode}) — one host LLM completion over data the app already has (not a data source).
 - archestra.ui.openLink(url) — the ONLY way to open an external link (the sandbox blocks popups, so <a target="_blank"> silently does nothing); archestra.ui.requestDisplayMode(mode) also reaches the host; archestra.context is the running app's {appId, version}.
-All external data must come through assigned MCP tools (the sandbox blocks network access). This is the condensed SDK surface — for tool-calling apps (the assign→preview_app_tool→get_app_diagnostics build loop), the CSP/CDN allowlist, or theming against the platform stylesheet, load the Build App skill for the full contract.`;
+All external data must come through assigned MCP tools (the sandbox blocks network access). This is the condensed SDK surface — for tool-calling apps (the assign→preview_app_tool→get_app_diagnostics build loop), the CSP/CDN allowlist, or theming against the platform stylesheet, load the Build App skill for the full contract (its references/apps-sdk.md file). These identifiers are build internals: when talking to the user, describe the app and any gap in their product terms (the feature, the server to connect) — never SDK calls, tool names, or assignment mechanics.`;

@@ -606,7 +606,20 @@ describe("syncBuiltInSkills", () => {
       sourceRef: buildAppRef,
     });
     expect(seeded).not.toBeNull();
-    expect(seeded?.content).toContain("window.archestra");
+
+    // SKILL.md carries the flow and chat-conduct rules; the SDK contract is
+    // bundled as a reference file instead of embedded in the body, so loading
+    // the skill front-loads how to build and talk, not the API surface.
+    expect(seeded?.content).toContain("references/apps-sdk.md");
+    expect(seeded?.content).not.toContain("connect-src");
+
+    const files = await SkillFileModel.findBySkillId(seeded?.id ?? "");
+    const sdkReference = files.find(
+      (file) => file.path === "references/apps-sdk.md",
+    );
+    expect(sdkReference?.kind).toBe("reference");
+    expect(sdkReference?.content).toContain("window.archestra");
+    expect(sdkReference?.content).toContain("connect-src");
   });
 });
 

@@ -461,7 +461,7 @@ describe("Auto-mode subagent delegation", () => {
     );
   });
 
-  test("carries the advisor's guidance to the caller uncut", async ({
+  test("describes the advisor to the caller with its own guidance", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -490,11 +490,13 @@ describe("Auto-mode subagent delegation", () => {
       })
     ).find((t) => t.name === `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
 
-    // The closing line is what stops a model consulting on every step, so it
-    // has to survive the description cap rather than be truncated away.
+    // What the calling model reads is the shipped guidance, not the one-line
+    // summary an administrator sees on the agent — and the closing line, which
+    // is what stops a model consulting on every step, has to reach it whole.
     expect(tool?.description).toContain(
       "not for syntax, lookups, or things you already know",
     );
+    expect(tool?.description).not.toContain(ADVISOR_AGENT_DESCRIPTION);
   });
 
   test("does not expand for system/token flows (no real user)", async ({

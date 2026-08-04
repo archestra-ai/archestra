@@ -2454,7 +2454,14 @@ export function AgentDialog({
                               {agentTypeDisplayName[agentType] || "agent"} ask a
                               stronger model for a second opinion at the
                               decisions that matter. Each consultation is billed
-                              at the advisor model&apos;s own rates.
+                              at the advisor model&apos;s own rates.{" "}
+                              <Link
+                                href={`/agents?edit=${advisorAgentId}`}
+                                className="underline underline-offset-4"
+                              >
+                                Edit the Advisor agent
+                              </Link>
+                              .
                             </p>
                           </div>
                           <Switch

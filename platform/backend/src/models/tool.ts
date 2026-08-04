@@ -58,6 +58,7 @@ import {
   toolInEnvironmentPredicate,
 } from "@/services/environments/environment-isolation";
 import type {
+  Agent,
   AssignedTool,
   ExtendedTool,
   InsertTool,
@@ -3420,6 +3421,7 @@ class ToolModel {
         description: string | null;
         systemPrompt: string | null;
         environmentId: string | null;
+        builtInAgentConfig: Agent["builtInAgentConfig"];
       };
     }>
   > {
@@ -3432,6 +3434,7 @@ class ToolModel {
           description: schema.agentsTable.description,
           systemPrompt: schema.agentsTable.systemPrompt,
           environmentId: schema.agentsTable.environmentId,
+          builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
         },
       })
       .from(schema.agentToolsTable)

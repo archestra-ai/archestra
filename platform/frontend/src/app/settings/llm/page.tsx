@@ -1,6 +1,10 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  ADVISOR_AGENT_NAME,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -279,7 +283,11 @@ export default function LlmSettingsPage() {
         }
         control={
           <Button asChild variant="outline">
-            <Link href="/agents?scope=built_in">Configure advisor</Link>
+            <Link
+              href={`/agents?name=${encodeURIComponent(ADVISOR_AGENT_NAME)}`}
+            >
+              Configure advisor
+            </Link>
           </Button>
         }
       />

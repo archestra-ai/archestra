@@ -302,13 +302,22 @@ export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.ADVISOR]: ADVISOR_SYSTEM_PROMPT,
 };
 
-/**
- * Reaches the calling model as the delegation tool's description, and is the
- * only thing telling it *when* consulting is worth the cost. A target that
- * merely names itself gets consulted every turn or never.
- */
+/** The advisor's display name, used to deep-link an administrator to it. */
+export const ADVISOR_AGENT_NAME = BUILT_IN_AGENT_NAMES.ADVISOR;
+
+/** Shown to an administrator on the Advisor agent. */
 // white-label-ok: shipped default text; branded by brandBuiltInText where it is seeded
-export const ADVISOR_AGENT_DESCRIPTION = `Ask a stronger model for a second opinion before you commit to something.
+export const ADVISOR_AGENT_DESCRIPTION = `Ask a stronger model for a second opinion — before committing to an approach, when something is not converging, or before calling work done. It cannot see your conversation, files, or tools: put the decision, the options, what you tried, and the constraints in your message. It advises and changes nothing. Not for syntax or lookups.`;
+
+/**
+ * What the *calling model* reads as the advisor delegation tool's description.
+ * Separate from the administrator-facing text above because the two audiences
+ * want different things: a person scanning a form needs a sentence, while a
+ * model deciding whether to spend a consultation needs the cases that make one
+ * worth it — and, just as much, the ones that do not.
+ */
+// white-label-ok: shipped default text; branded by brandBuiltInText where it is used
+export const ADVISOR_DELEGATION_GUIDANCE = `Ask a stronger model for a second opinion before you commit to something.
 
 Consult it:
 - before committing to an approach, when more than one is viable and the wrong one is expensive to undo

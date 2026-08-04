@@ -1800,7 +1800,9 @@ class AgentModel {
      * boundaries (null is the Default environment), mirroring tool isolation.
      */
     environmentId: string | null;
-  }): Promise<Pick<Agent, "id" | "name" | "description">[]> {
+  }): Promise<
+    Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
+  > {
     const { userId, isAdmin, excludeAgentId, environmentId } = params;
 
     const baseConditions = [
@@ -1825,6 +1827,7 @@ class AgentModel {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
           description: schema.agentsTable.description,
+          builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -1836,6 +1839,7 @@ class AgentModel {
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         description: schema.agentsTable.description,
+        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
       })
       .from(schema.agentsTable)
       .leftJoin(

@@ -41,9 +41,12 @@ const ADVISOR_MAX_OUTPUT_TOKENS = 4096;
  * its own — without this a stalled provider stalls the whole conversation.
  * Archestra's own tools run in-process, so the bound that competes with this
  * one is the caller's: an MCP client on the SDK default gives up at 60s, and
- * only a shorter bound here lets "continue without it" reach it first.
+ * only a shorter bound here lets "continue without it" reach it first. Kept
+ * close under that ceiling — a reasoning advisor spends most of the budget
+ * thinking, and cutting deeper turns answers that would have finished into
+ * aborted calls that are still billed.
  */
-const ADVISOR_TIMEOUT_MS = 45_000;
+const ADVISOR_TIMEOUT_MS = 50_000;
 
 const AdvisorSchema = z.strictObject({
   question: z

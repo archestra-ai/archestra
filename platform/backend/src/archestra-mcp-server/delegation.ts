@@ -426,6 +426,14 @@ function noDelegationConfiguredError(targetAgentSlug: string): CallToolResult {
   );
 }
 
+/**
+ * How much of a target's description reaches the calling model. Long enough to
+ * carry guidance on when delegating is worth it — a description that stops
+ * mid-sentence teaches the model less than none at all — and short enough that
+ * a caller with many targets does not spend its context on the menu.
+ */
+const DELEGATION_DESCRIPTION_MAX_LENGTH = 1_200;
+
 function buildDelegationToolDescriptor(params: {
   name: string;
   targetAgent: { id: string; name: string; description?: string | null };
@@ -433,7 +441,7 @@ function buildDelegationToolDescriptor(params: {
 }): Tool {
   const { name, targetAgent, inputSchema } = params;
   const description = targetAgent.description
-    ? `Delegate task to agent: ${targetAgent.name}. ${targetAgent.description.substring(0, 400)}`
+    ? `Delegate task to agent: ${targetAgent.name}. ${targetAgent.description.substring(0, DELEGATION_DESCRIPTION_MAX_LENGTH)}`
     : `Delegate task to agent: ${targetAgent.name}`;
 
   return {

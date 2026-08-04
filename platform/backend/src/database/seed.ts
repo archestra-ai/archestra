@@ -1,5 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
+  ADVISOR_AGENT_DESCRIPTION,
+  ADVISOR_SYSTEM_PROMPT,
   APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
@@ -161,6 +163,21 @@ export async function syncBuiltInAgents(): Promise<void> {
       ),
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
+      } as const,
+    },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.ADVISOR,
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      // Reaches the calling model as the delegation tool's description, so it
+      // has to steer when to consult rather than just name the agent.
+      description: archestraMcpBranding.brandBuiltInText(
+        ADVISOR_AGENT_DESCRIPTION,
+      ),
+      systemPrompt: archestraMcpBranding.brandBuiltInText(
+        ADVISOR_SYSTEM_PROMPT,
+      ),
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.ADVISOR,
       } as const,
     },
   ];

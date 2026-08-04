@@ -256,6 +256,10 @@ function getBuiltInAgentConfigForSave(params: {
       return {
         name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
       };
+    case BUILT_IN_AGENT_IDS.ADVISOR:
+      return {
+        name: BUILT_IN_AGENT_IDS.ADVISOR,
+      };
     default: {
       // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
       const _exhaustive: never = params.builtInAgentName;

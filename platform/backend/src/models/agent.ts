@@ -1,5 +1,6 @@
 import {
   type ArchestraToolShortName,
+  BUILT_IN_AGENT_IDS,
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
   type PaginationQuery,
@@ -1736,11 +1737,16 @@ class AgentModel {
 
   /**
    * Internal agents eligible as Auto-mode delegation targets for a caller:
-   * agentType "agent", not built-in, not soft-deleted, that the caller user can
-   * access (org, own personal, or a team the user belongs to), minus the caller
-   * agent itself. This is the delegation analog of
+   * agentType "agent", not soft-deleted, that the caller user can access (org,
+   * own personal, or a team the user belongs to), minus the caller agent
+   * itself. This is the delegation analog of
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
+   *
+   * Built-in agents are excluded with one exception: the advisor exists to be
+   * consulted, so it is the only built-in offered as a delegation target. The
+   * rest back platform machinery — dual-LLM, compaction, title generation —
+   * and delegating to them means driving an internal mechanism by hand.
    */
   static async findAccessibleDelegationTargets(params: {
     userId: string;
@@ -1756,7 +1762,13 @@ class AgentModel {
 
     const baseConditions = [
       eq(schema.agentsTable.agentType, "agent"),
-      eq(schema.agentsTable.builtIn, false),
+      or(
+        eq(schema.agentsTable.builtIn, false),
+        eq(
+          sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+          BUILT_IN_AGENT_IDS.ADVISOR,
+        ),
+      ),
       ne(schema.agentsTable.id, excludeAgentId),
       environmentId === null
         ? isNull(schema.agentsTable.environmentId)

@@ -69,7 +69,7 @@ overrides:
   axios: '>=1.18.0'
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
-  undici: 7.28.0
+  undici: '>=7.29.0 <8'
   '@xmldom/xmldom': '>=0.9.10'
   mammoth>@xmldom/xmldom: 0.8.13
   samlify>@xmldom/xmldom: 0.8.13
@@ -80,7 +80,7 @@ overrides:
   find-my-way: 9.7.0
   postcss: '>=8.5.18'
   uuid@^11: '>=11.1.1'
-  ip-address: '>=10.1.1'
+  ip-address: '>=10.3.1'
   brace-expansion: 5.0.9
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
@@ -509,8 +509,8 @@ importers:
         specifier: ^1.0.22
         version: 1.0.22
       undici:
-        specifier: 7.28.0
-        version: 7.28.0
+        specifier: '>=7.29.0 <8'
+        version: 7.29.0
       ws:
         specifier: '>=8.21.0'
         version: 8.21.0
@@ -8196,8 +8196,8 @@ packages:
     resolution: {integrity: sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==}
     engines: {node: '>=12'}
 
-  ip-address@10.2.0:
-    resolution: {integrity: sha512-/+S6j4E9AHvW9SWMSEY9Xfy66O5PWvVEJ08O0y5JGyEKQpojb0K0GKpz/v5HJ/G0vi3D2sjGK78119oXZeE0qA==}
+  ip-address@10.3.1:
+    resolution: {integrity: sha512-1e9d3kb97NHJTIJDZW9rKqW2h6+dFa50Dy0fpPSMQp2ADje5gvKsXmdiK6dwY5t76TaTt5+P5N1Y/LoToIxP6g==}
     engines: {node: '>= 12'}
 
   ipaddr.js@1.9.1:
@@ -10373,8 +10373,8 @@ packages:
   undici-types@7.25.0:
     resolution: {integrity: sha512-AXNgS1Byr27fTI+2bsPEkV9CxkT8H6xNyRI68b3TatlZo3RkzlqQBLL+w7SmGPVpokjHbcuNVQUWE7FRTg+LRA==}
 
-  undici@7.28.0:
-    resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
+  undici@7.29.0:
+    resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
     engines: {node: '>=20.18.1'}
 
   unicode-emoji-json@0.8.0:
@@ -12423,7 +12423,7 @@ snapshots:
       fast-querystring: 1.1.2
       fastify-plugin: 5.1.0
       toad-cache: 3.7.0
-      undici: 7.28.0
+      undici: 7.29.0
 
   '@fastify/swagger@9.7.0':
     dependencies:
@@ -15716,7 +15716,7 @@ snapshots:
     dependencies:
       progress: 2.0.3
       proxy-from-env: 1.1.0
-      undici: 7.28.0
+      undici: 7.29.0
       which: 2.0.2
     optionalDependencies:
       '@sentry/cli-darwin': 3.3.3
@@ -17528,7 +17528,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 7.28.0
+      undici: 7.29.0
       whatwg-mimetype: 4.0.0
 
   chokidar@3.6.0:
@@ -18260,7 +18260,7 @@ snapshots:
   express-rate-limit@8.3.1(express@5.2.0):
     dependencies:
       express: 5.2.0
-      ip-address: 10.2.0
+      ip-address: 10.3.1
 
   express@5.2.0:
     dependencies:
@@ -18964,7 +18964,7 @@ snapshots:
 
   internmap@2.0.3: {}
 
-  ip-address@10.2.0: {}
+  ip-address@10.3.1: {}
 
   ipaddr.js@1.9.1: {}
 
@@ -19101,7 +19101,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.1
-      undici: 7.28.0
+      undici: 7.29.0
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -21108,7 +21108,7 @@ snapshots:
 
   socks@2.8.7:
     dependencies:
-      ip-address: 10.2.0
+      ip-address: 10.3.1
       smart-buffer: 4.2.0
 
   sonic-boom@4.2.0:
@@ -21554,7 +21554,7 @@ snapshots:
 
   undici-types@7.25.0: {}
 
-  undici@7.28.0: {}
+  undici@7.29.0: {}
 
   unicode-emoji-json@0.8.0: {}
 

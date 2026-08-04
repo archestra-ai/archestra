@@ -96,10 +96,14 @@ overrides:
   axios: '>=1.18.0'
   minimatch: '>=10.2.3'
   rollup: '>=4.59.0'
-  # CVE-2026-9697 (HIGH, improper certificate validation) fixed in 7.28.0.
-  # Pinned exact (not a `>=` floor) because undici is temporarily excluded from
-  # minimumReleaseAge below, so a floor could otherwise pull an unvetted release.
-  undici: 7.28.0
+  # CVE-2026-9697 (HIGH, improper certificate validation) fixed in 7.28.0, then
+  # CVE-2026-13697 (HIGH, affects >=7.0.0) fixed in 7.29.0. 7.29.0 was published
+  # 2026-07-24 and is past the 7-day window, so the release-age exclusion this
+  # pin needed is gone and a floor is safe again — minimumReleaseAge holds the
+  # line against an unvetted newer release on its own. Bounded to <8 so the
+  # floor can't carry the backend's upstream dispatcher onto undici 8.x, which
+  # is a major-version change and not this pin's business.
+  undici: '>=7.29.0 <8'
   '@xmldom/xmldom': '>=0.9.10'
   mammoth>@xmldom/xmldom: 0.8.13
   samlify>@xmldom/xmldom: 0.8.13
@@ -117,7 +121,9 @@ overrides:
   # floor, so the floor has to clear the higher of the two fixes.
   postcss: '>=8.5.18'
   uuid@^11: '>=11.1.1'
-  ip-address: '>=10.1.1'
+  # CVE-2026-69192 (HIGH) affects <=10.3.0, fixed in 10.3.1 — the previous
+  # >=10.1.1 floor resolved 10.2.0, inside the vulnerable range.
+  ip-address: '>=10.3.1'
   # CVE-2026-13149 (HIGH, uncontrolled resource consumption) fixed in 5.0.7, then
   # CVE-2026-14257 (HIGH, same class) fixed in 5.0.8, then CVE-2026-69152 (HIGH,
   # same class again) fixed in 5.0.9. Pinned exact (not a `>=` floor) because
@@ -184,10 +190,6 @@ minimumReleaseAgeExclude:
   # 2026-06-12 and clear the 7-day window on 2026-06-19. Remove on/after that date
   # — the lockfile stays pinned at the fixed versions regardless.
   - form-data
-  # TEMPORARY: undici 7.28.0 (fix CVE-2026-9697, HIGH) was published 2026-06-15
-  # and clears the 7-day window on 2026-06-22. Remove on/after that date — the
-  # lockfile stays pinned at 7.28.0 regardless.
-  - undici
   # TEMPORARY: find-my-way 9.7.0 (fix CVE-2026-47219, HIGH) was published
   # 2026-07-21 and clears the 7-day window on 2026-07-28. Remove on/after that
   # date — the lockfile stays pinned at 9.7.0 regardless.

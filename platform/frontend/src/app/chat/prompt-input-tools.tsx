@@ -6,12 +6,7 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import {
-  GhostIcon,
-  MoreVerticalIcon,
-  PaperclipIcon,
-  XIcon,
-} from "lucide-react";
+import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { memo, useCallback } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -23,6 +18,7 @@ import { AppRecordingControls } from "@/components/app-session-recording/app-rec
 import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
+import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import { ModelSelector } from "@/components/chat/model-selector";
@@ -525,7 +521,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 onIncognitoChange?.(!incognito);
               }}
             >
-              <GhostIcon className="size-4" />
+              <IncognitoIcon className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4} className="max-w-64">

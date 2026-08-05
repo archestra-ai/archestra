@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { Badge } from "@/components/ui/badge";
 import {
   CommandDialog,
@@ -438,6 +439,16 @@ export function ConversationSearchPalette({
       >
         <div className="flex items-start gap-2 w-full min-w-0">
           <IconComponent className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {conv.incognito && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IncognitoIcon className="mt-0.5 h-3.5 w-3.5" />
+                </TooltipTrigger>
+                <TooltipContent side="top">Incognito chat</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {conv.share && (
             <TooltipProvider>
               <Tooltip>

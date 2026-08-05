@@ -8,7 +8,6 @@ import {
   AppWindow,
   Folder,
   FolderPlus,
-  Ghost,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -24,6 +23,7 @@ import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { isScheduledRunConversation } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
+import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { TruncatedText } from "@/components/truncated-text";
@@ -416,7 +416,7 @@ export function ChatSidebarSection({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Ghost className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <IncognitoIcon className="h-3.5 w-3.5" />
                       </TooltipTrigger>
                       <TooltipContent side="top">Incognito chat</TooltipContent>
                     </Tooltip>

@@ -201,7 +201,7 @@ describe("redactIncognitoInteraction", () => {
       source: "chat",
       authMethod: "internal",
       billingMode: "metered",
-      type: "anthropic",
+      type: "anthropic:messages",
       model: "claude-sonnet-4-5",
       baselineModel: "claude-sonnet-4-5",
       inputTokens: 120,

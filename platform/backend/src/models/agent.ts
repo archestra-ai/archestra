@@ -2339,6 +2339,16 @@ class AgentModel {
        * additive pre-fill re-add built-ins the source had un-excluded.
        */
       skipExclusionPrefill?: boolean;
+      /**
+       * Skip this update's config version fork. Set by callers that replay
+       * several writes as one user action and fork once at the end (see
+       * `restoreAgentVersion`) — one action should produce one version.
+       *
+       * The returned agent's `latestVersion` is then whatever the head was
+       * BEFORE the caller's own closing fork, so a caller that surfaces it
+       * must re-read the agent afterwards.
+       */
+      deferVersionFork?: boolean;
     },
   ): Promise<Agent | null> {
     let updatedAgent:
@@ -2497,9 +2507,11 @@ class AgentModel {
     // this mutation's final state), and unconditionally: a relational-only
     // update skips the agents-row write yet still changes config. Best-effort:
     // a versioning failure must never fail the update itself.
-    const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
-    if (fork && updatedAgent) {
-      updatedAgent.latestVersion = fork.version;
+    if (!options?.deferVersionFork) {
+      const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
+      if (fork && updatedAgent) {
+        updatedAgent.latestVersion = fork.version;
+      }
     }
 
     const [
@@ -3366,6 +3378,8 @@ class AgentModel {
       connectorIds,
       delegations,
       excludedSubagentIds,
+      excludedToolIds,
+      hookRows,
       suggestedPrompts,
       modelRows,
       keyRows,
@@ -3377,6 +3391,18 @@ class AgentModel {
       AgentConnectorAssignmentModel.getConnectorIds(id),
       AgentToolModel.getDelegationTargets(id),
       AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
+      AgentExcludedToolModel.findToolIdsByAgent(id),
+      // Hook IDENTITY only, never `content`: a hook edit must produce a
+      // non-empty diff, but script bodies would ride along on every unrelated
+      // agent audit record.
+      db
+        .select({
+          event: schema.hookFilesTable.event,
+          fileName: schema.hookFilesTable.fileName,
+          enabled: schema.hookFilesTable.enabled,
+        })
+        .from(schema.hookFilesTable)
+        .where(eq(schema.hookFilesTable.agentId, id)),
       AgentSuggestedPromptModel.getForAgent(id),
       // Resolve the live modelId FK to its human-readable identity so a model
       // change surfaces as a real diff — the legacy llmModel text column is
@@ -3450,6 +3476,10 @@ class AgentModel {
       labels: labels.sort(),
       delegationTargets,
       excludedSubagentIds: [...excludedSubagentIds].sort(),
+      excludedToolIds: [...excludedToolIds].sort(),
+      hooks: hookRows
+        .map((h) => `${h.event}/${h.fileName}${h.enabled ? "" : " (disabled)"}`)
+        .sort(),
       suggestedPrompts,
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),

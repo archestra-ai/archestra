@@ -141,6 +141,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.restored",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  // Restoring a config version rewrites the agent's whole config surface.
+  // Registered explicitly because the walk-up to "/api/agents/:id" resolves
+  // with viaWalkUp set, and the hook discards every walk-up POST — without
+  // this entry the restore produces no audit record at all.
+  "/api/agents/:id/versions/:version/restore": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
   "/api/agents/:agentId": {
     resourceType: "agent",
     resourceIdParam: "agentId",

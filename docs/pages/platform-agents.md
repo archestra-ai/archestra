@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -116,6 +116,10 @@ Archestra snapshots an agent's configuration every time it changes — prompt, t
 The history is available through the API. `GET /api/agents/:id/versions` lists versions as metadata, newest first. `GET /api/agents/:id/versions/:version` returns one full configuration snapshot. Key material is never captured, so you can review what changed without exposing secrets.
 
 Each agent keeps its last 100 versions. The oldest listed version can therefore be greater than 1.
+
+`POST /api/agents/:id/versions/:version/restore` returns an agent to an earlier configuration. A restore forks forward — the old configuration becomes a new version. Nothing in the history is overwritten. References the version points to that no longer exist — a deleted tool, for example — come back in the response's `skipped` field. The rest of the configuration still lands.
+
+Send the agent's current `latestVersion` as `baseVersion` to anchor the restore. A 409 then tells you someone else changed the agent first. Built-in agents cannot be restored.
 
 ## System Prompt Templating
 

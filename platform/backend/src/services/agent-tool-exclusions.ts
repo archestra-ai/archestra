@@ -89,6 +89,8 @@ class AgentToolExclusionsService {
     agentId: string;
     organizationId: string;
     excludedToolIds: string[];
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
   }): Promise<AgentToolExclusions> {
     const { agentId, organizationId } = params;
     const excludedToolIds = [...new Set(params.excludedToolIds)];
@@ -124,7 +126,9 @@ class AgentToolExclusionsService {
 
     // After the replace transaction commits and its row lock is released, so the
     // fork's own FOR UPDATE can't self-deadlock against it.
-    await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    if (!params.deferVersionFork) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
 
     logger.info(
       { agentId, excludedToolCount: excludedToolIds.length },

@@ -1,5 +1,5 @@
 import { and, asc, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type {
   HookEvent,
   HookFile,
@@ -96,6 +96,46 @@ class HookFileModel {
       await AgentVersionModel.forkIfChangedBestEffort(row.agentId);
     }
     return row ?? null;
+  }
+
+  /**
+   * Replace the agent's entire hook set in one transaction. Rows are keyed by
+   * `(agent_id, event, file_name)` and carry no FK referents, so a
+   * delete-then-insert is safe and keeps the whole-set semantics the snapshot
+   * replay needs (a hook absent from the payload must disappear).
+   */
+  static async replaceForAgent(params: {
+    agentId: string;
+    organizationId: string;
+    hooks: Omit<InsertHookFile, "agentId" | "organizationId">[];
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
+  }): Promise<void> {
+    const rows = params.hooks.map((hook) =>
+      InsertHookFileSchema.parse({
+        ...hook,
+        agentId: params.agentId,
+        organizationId: params.organizationId,
+      }),
+    );
+
+    await withDbTransaction(async (tx) => {
+      await tx
+        .delete(schema.hookFilesTable)
+        .where(
+          and(
+            eq(schema.hookFilesTable.agentId, params.agentId),
+            eq(schema.hookFilesTable.organizationId, params.organizationId),
+          ),
+        );
+      if (rows.length > 0) {
+        await tx.insert(schema.hookFilesTable).values(rows);
+      }
+    });
+
+    if (!params.deferVersionFork) {
+      await AgentVersionModel.forkIfChangedBestEffort(params.agentId);
+    }
   }
 
   static async delete(id: string, organizationId: string): Promise<boolean> {

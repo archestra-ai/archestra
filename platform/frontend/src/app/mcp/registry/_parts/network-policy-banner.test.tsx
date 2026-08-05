@@ -51,8 +51,8 @@ describe("network policy banners", () => {
     expect(
       screen.queryByText("Network policy enforcement test failed"),
     ).not.toBeInTheDocument();
-    // The regression this split exists for: an unmeasured cluster used to be
-    // treated as a measured failure and had its egress editor locked.
+    // Unmeasured is not a measured failure, so the editor stays usable: most
+    // clusters that skip the probe do enforce.
     expect(egressSelect()).toBeEnabled();
   });
 

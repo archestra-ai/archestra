@@ -633,7 +633,7 @@ describe("enforcement decision matrix", () => {
    * Runs every row through the real decision logic and grades the answer against
    * ground truth. The summaries below depend on this rather than on the expected
    * `provider` beside each row, so they fail when the logic changes instead of
-   * staying true to a table that no longer describes it.
+   * agreeing with a table that has drifted away from it.
    *
    * `enforcementStatus` is the claim being graded: it alone decides whether the
    * editor is frozen or merely annotated. "unknown" asserts nothing, so it can
@@ -724,12 +724,12 @@ describe("enforcement decision matrix", () => {
     expect(networkPolicy.message).not.toContain("Calico");
   });
 
-  test("an unmeasured Calico cluster no longer claims enforcement it lacks", async () => {
+  test("an unmeasured Calico cluster does not claim enforcement it lacks", async () => {
     const graded = await gradeMatrix();
 
-    // The regression this whole mechanism exists for. Serving the Calico CRDs
-    // with node enforcement off used to read as "enforcement detected": banner
-    // hidden, egress controls live, every rule silently dropped.
+    // The failure this whole mechanism exists to prevent: Calico CRDs served
+    // with node enforcement off must not read as enforced, or the banner is
+    // hidden over egress rules the cluster accepts and drops.
     expect(
       graded.find(
         (row) => row.id === "gke-calico-addon-not-enforcing-probe-absent",

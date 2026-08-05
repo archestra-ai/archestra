@@ -106,7 +106,7 @@ export async function getK8sCapabilitiesFromApi(
           : "kubernetes";
 
   // Keyed off the CRDs themselves rather than off disagreement with the
-  // inference: Calico no longer feeds that inference, so comparing against it
+  // inference: Calico is not part of that inference, so comparing against it
   // would stay silent on exactly the cluster this warning is for, and would fire
   // on every healthy Calico cluster saying no CRD advertises what plainly does.
   const advertisesAPolicyDialect = calicoNetworkPolicy || supportsFqdn;

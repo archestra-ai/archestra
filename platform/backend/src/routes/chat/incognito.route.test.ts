@@ -20,10 +20,10 @@ import { sql } from "drizzle-orm";
 import config from "@/config";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 import { runContentEncryptionBackfill } from "@/content-encryption/backfill.ee";
-// biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 import {
   _resetContentKeys,
   isContentEnvelope,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 } from "@/content-encryption/index.ee";
 import db from "@/database";
 import MessageModel from "@/models/message";
@@ -65,9 +65,8 @@ describe("incognito conversation routes", () => {
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       (request as typeof request & { user: User }).user = currentUser;
-      (
-        request as typeof request & { organizationId: string }
-      ).organizationId = organizationId;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
     });
 
     const { default: chatRoutes } = await import("./routes");
@@ -158,7 +157,11 @@ describe("incognito conversation routes", () => {
       const id = await createIncognitoConversation();
 
       const body = (
-        await app.inject({ method: "GET", url: `/api/chat/conversations/${id}`, headers: dekHeader() })
+        await app.inject({
+          method: "GET",
+          url: `/api/chat/conversations/${id}`,
+          headers: dekHeader(),
+        })
       ).json();
       expect(body.incognito).toBe(true);
       expect(body.title).toBe("Incognito chat");
@@ -345,9 +348,7 @@ describe("incognito conversation routes", () => {
       config.contentEncryption.secret = "server-secret-01234567890123456789";
       _resetContentKeys();
       try {
-        await db.execute(
-          sql`DROP INDEX IF EXISTS "messages_content_trgm_idx"`,
-        );
+        await db.execute(sql`DROP INDEX IF EXISTS "messages_content_trgm_idx"`);
         await db.execute(
           sql`DROP INDEX IF EXISTS "mcp_tool_calls_tool_result_trgm_idx"`,
         );

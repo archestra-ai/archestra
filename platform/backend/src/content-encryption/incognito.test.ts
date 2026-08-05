@@ -7,7 +7,6 @@ import {
 } from "node:crypto";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
-import { isContentEnvelope } from "./index.ee";
 import {
   decryptIncognitoMessageRow,
   encryptIncognitoMessageContent,
@@ -17,7 +16,10 @@ import {
   parseIncognitoDekHeader,
   verifyIncognitoChatConfig,
   wrapIncognitoDek,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 } from "./incognito.ee";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
+import { isContentEnvelope } from "./index.ee";
 
 const { publicKey, privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -137,7 +139,11 @@ describe("incognito chat crypto", () => {
 
   test("message content roundtrips; AAD rejects cross-conversation transplant", () => {
     const dek = randomBytes(32);
-    const content = { id: "m1", role: "user", parts: [{ type: "text", text: "secret" }] };
+    const content = {
+      id: "m1",
+      role: "user",
+      parts: [{ type: "text", text: "secret" }],
+    };
 
     const stored = encryptIncognitoMessageContent(content, {
       dek,

@@ -17,6 +17,7 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import type { ChatMessage } from "@/types";
 import {
   buildContextCompactionStreamData,
+  type ContextCompactionResult,
   type ContextCompactionStreamData,
   compactMessagesForChat,
 } from "./context-compaction";
@@ -88,6 +89,12 @@ export async function buildModelMessages(params: {
   abortSignal?: AbortSignal;
   emit: (event: CompactionStreamEvent) => void;
   /**
+   * Skip auto-compaction entirely (no summary generated or persisted). Set for
+   * incognito conversations: a compaction summary is derived conversation
+   * content and would be stored in plaintext.
+   */
+  disableCompaction?: boolean;
+  /**
    * False for an Anthropic-compatible third-party endpoint (custom base URL,
    * non-Claude model) that rejects Anthropic-only request-body features.
    * Defaults to true (genuine Anthropic / other providers unaffected).
@@ -109,26 +116,36 @@ export async function buildModelMessages(params: {
     inputModalities,
     conversationId,
     emit,
+    disableCompaction = false,
     anthropicNativeEndpoint = true,
     ...compaction
   } = params;
 
   let compactionStarted = false;
-  const compactionResult = await compactMessagesForChat({
-    ...compaction,
-    conversationId,
-    provider,
-    selectedModel,
-    trigger: "auto",
-    onCompactionStart: () => {
-      compactionStarted = true;
-      emit({
-        type: "data-context-compaction-start",
-        data: { trigger: "auto" },
-        transient: true,
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Incognito conversations skip auto-compaction outright: a summary is
+  // derived conversation content, and generating one would both send the
+  // history to the summarizer and persist the result in plaintext.
+  // SPDX-SnippetEnd
+  const compactionResult: ContextCompactionResult = disableCompaction
+    ? { messages: compaction.messages, status: "skipped", compaction: null }
+    : await compactMessagesForChat({
+        ...compaction,
+        conversationId,
+        provider,
+        selectedModel,
+        trigger: "auto",
+        onCompactionStart: () => {
+          compactionStarted = true;
+          emit({
+            type: "data-context-compaction-start",
+            data: { trigger: "auto" },
+            transient: true,
+          });
+        },
       });
-    },
-  });
 
   if (
     compactionStarted ||

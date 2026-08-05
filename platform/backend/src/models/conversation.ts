@@ -477,6 +477,30 @@ class ConversationModel {
       .where(and(notDeletedConversation, eq(schema.conversationsTable.id, id)));
     return row ?? null;
   }
+
+  /**
+   * True only when `id` names a non-deleted incognito conversation owned by
+   * `userId`. Used by the LLM proxy to decide whether a chat-loopback session
+   * must have its interaction/telemetry content redacted; the owner check keeps
+   * a spoofed session id from suppressing someone else's audit trail.
+   */
+  static async isIncognitoOwnedBy(params: {
+    id: string;
+    userId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ incognito: schema.conversationsTable.incognito })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+        ),
+      )
+      .limit(1);
+    return row?.incognito ?? false;
+  }
   // SPDX-SnippetEnd
 
   /**

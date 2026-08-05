@@ -24,6 +24,11 @@ import {
   type ConversationFileItem,
   deleteTargetFor,
 } from "@/lib/chat/conversation-files";
+import {
+  INCOGNITO_KEY_HEADER,
+  incognitoRequestHeaders,
+  storeIncognitoKey,
+} from "@/lib/chat/incognito";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { handleApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
@@ -133,8 +138,14 @@ export function useConversation(conversationId?: string) {
     queryFn: () => {
       if (!conversationId) return null;
       // 400/404 are handled gracefully by the UI, so suppress their toast.
+      // For an incognito conversation the stored key rides along; without it
+      // the server answers 200 with `contentLocked: true` and no messages.
       return callApi(
-        () => getChatConversation({ path: { id: conversationId } }),
+        () =>
+          getChatConversation({
+            path: { id: conversationId },
+            headers: incognitoRequestHeaders(conversationId),
+          }),
         null,
         {
           silentStatuses: [400, 404],
@@ -353,7 +364,16 @@ export function useCreateConversation() {
       chatApiKeyId,
       title,
       projectId,
-    }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) =>
+      incognito,
+      incognitoKey,
+    }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]> & {
+      /**
+       * Browser-generated conversation DEK (base64url of 32 random bytes).
+       * Required when `incognito` is set: the server fingerprints and
+       * escrow-wraps it but never stores it.
+       */
+      incognitoKey?: string;
+    }) =>
       callApi(
         () =>
           createChatConversation({
@@ -363,12 +383,22 @@ export function useCreateConversation() {
               chatApiKeyId: chatApiKeyId ?? undefined,
               title,
               projectId: projectId ?? undefined,
+              incognito: incognito || undefined,
             },
+            headers: incognitoKey
+              ? { [INCOGNITO_KEY_HEADER]: incognitoKey }
+              : undefined,
           }),
         null,
       ),
-    onSuccess: (newConversation) => {
+    onSuccess: (newConversation, variables) => {
       if (!newConversation) return;
+      // Persist the DEK under the fresh conversation id FIRST — before any
+      // cache writes trigger navigation or the first stream request, both of
+      // which must find the key in localStorage.
+      if (variables.incognito && variables.incognitoKey) {
+        storeIncognitoKey(newConversation.id, variables.incognitoKey);
+      }
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       // Immediately populate the individual conversation cache to avoid loading state
       queryClient.setQueryData(
@@ -646,6 +676,8 @@ export function useDeleteConversation() {
         localStorage.removeItem(keys.rightPanelOpen);
         localStorage.removeItem(keys.rightPanelTab);
         localStorage.removeItem(keys.draft);
+        // An incognito chat's encryption key dies with the conversation.
+        localStorage.removeItem(keys.incognitoKey);
         // Also drop any docked-review context (localStorage + in-memory map) so
         // a deleted review chat leaves nothing behind.
         clearReviewContext(deletedId);

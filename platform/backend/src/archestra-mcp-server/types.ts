@@ -107,4 +107,10 @@ export interface ArchestraContext {
    * handled the approval gate.
    */
   approvalRequiredPoliciesHandled?: boolean;
+  /**
+   * Incognito conversation: any real tool dispatch made on behalf of this call
+   * (e.g. `run_tool` reaching mcpClient) must persist a content-redacted
+   * mcp_tool_calls row.
+   */
+  suppressContentLogging?: boolean;
 }

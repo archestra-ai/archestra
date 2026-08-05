@@ -62,6 +62,7 @@ import {
   isPlaceholderTitle,
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
+import { incognitoRequestHeaders } from "@/lib/chat/incognito";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
@@ -588,14 +589,28 @@ function ChatSessionHook({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       credentials: "include",
-      headers: {
+      // Resolved per request (function form) so an incognito conversation's
+      // browser-held key — stored just before the session mounts — always
+      // rides on the stream POST.
+      headers: () => ({
         [EXTERNAL_AGENT_ID_HEADER]: getChatExternalAgentId(appName),
-      },
-      prepareReconnectToStreamRequest: ({ id, headers, credentials }) => ({
-        api: `/api/chat/conversations/${id}/active-run`,
-        headers,
-        credentials,
+        ...incognitoRequestHeaders(conversationId),
       }),
+      prepareReconnectToStreamRequest: ({ id, headers, credentials }) => {
+        // Merge the incognito key explicitly: the reconnect GET touches the
+        // conversation's content too and must carry the same header.
+        const merged = new Headers(headers);
+        for (const [name, value] of Object.entries(
+          incognitoRequestHeaders(id) ?? {},
+        )) {
+          merged.set(name, value);
+        }
+        return {
+          api: `/api/chat/conversations/${id}/active-run`,
+          headers: merged,
+          credentials,
+        };
+      },
     }),
 
     experimental_throttle: 100,

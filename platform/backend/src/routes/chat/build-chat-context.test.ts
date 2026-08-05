@@ -49,6 +49,7 @@ describe("buildChatContext enabled-tool selection", () => {
       subagentToolStream: {} as never,
       taskBridge: {} as never,
       abortSignal: new AbortController().signal,
+      suppressContentLogging: false,
     });
 
   test("no custom selection fetches tools with enabledToolIds undefined", async ({

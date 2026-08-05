@@ -27404,11 +27404,13 @@ export type GetChatConversationsResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -27475,6 +27477,7 @@ export type CreateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         projectId?: string | null;
+        incognito?: boolean;
     };
     path?: never;
     query?: never;
@@ -27569,11 +27572,13 @@ export type CreateChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -27728,11 +27733,13 @@ export type GetDeletedChatConversationsResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -27974,11 +27981,13 @@ export type GetChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -28142,11 +28151,13 @@ export type UpdateChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -28743,11 +28754,13 @@ export type ForkChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -28993,11 +29006,13 @@ export type RestoreChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -29254,11 +29269,13 @@ export type CompactChatConversationResponses = {
             projectId: string | null;
             origin: 'user' | 'schedule_trigger' | 'app_open';
             titleIsPlaceholder: boolean;
+            incognito: boolean;
             pinnedAt: string | null;
             lastMessageAt: string;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
+            contentLocked?: boolean;
             agent: {
                 id: string;
                 name: string;
@@ -29689,11 +29706,13 @@ export type GetSharedConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -29853,11 +29872,13 @@ export type ForkSharedConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -30019,11 +30040,13 @@ export type GenerateChatConversationTitleResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -30185,11 +30208,13 @@ export type UpdateChatMessageResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;
@@ -32427,6 +32452,7 @@ export type GetConfigResponses = {
             mcpSandboxDomain: string | null;
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
+            chatIncognitoEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
@@ -73685,11 +73711,13 @@ export type CreateScheduleTriggerRunConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
+        incognito: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        contentLocked?: boolean;
         agent: {
             id: string;
             name: string;

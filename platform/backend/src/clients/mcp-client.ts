@@ -274,6 +274,43 @@ type CachedServerState = {
   credentialFingerprint: string | null;
 };
 
+/** Options for {@link McpClient.executeToolCallForOwner}. */
+interface ExecuteToolCallForOwnerOptions {
+  conversationId?: string;
+  identityProviderRedirectPath?: string;
+  elicitationHandler?: McpElicitationHandler;
+  /**
+   * Cancels the in-flight upstream request (callTool / listTools /
+   * readResource) when the caller's chat run is stopped. Without it a slow
+   * tool call runs to completion after Stop; see executeToolCall's catch,
+   * which rethrows an aborted call instead of retrying it.
+   */
+  abortSignal?: AbortSignal;
+  /**
+   * Overrides the default upstream tool-call timeout. Set by the gateway
+   * for task-eligible calls, whose bound is the task TTL rather than the
+   * synchronous patience window.
+   */
+  upstreamTimeoutMs?: number;
+  /**
+   * Pre-resolved catalog tool row for dynamic tool access: lets run_tool
+   * execute a tool the agent was never assigned. This governs tool ACCESS
+   * only. Whose credential/connection the call uses is still decided by
+   * the MCP server's connection policy (on-behalf-of the caller, or a
+   * pinned service account) — identical to an assigned tool. An
+   * unassigned tool has no assignment row, so it resolves its connection
+   * at call time (it can't carry a static pin). Access authorization
+   * happens at the dispatch layer (archestra-mcp-server/dynamic-tools.ts)
+   * before this is set; the gateway path never sets it.
+   */
+  availableTool?: CatalogTool;
+  /**
+   * Incognito chat conversation: the persisted mcp_tool_calls row keeps the
+   * tool name but stores redacted arguments and result content.
+   */
+  suppressContentLogging?: boolean;
+}
+
 class McpClient {
   private static readonly TOOL_NAME_CACHE_MAX_ENTRIES = 1_000;
   private static readonly SECRETS_CACHE_MAX_ENTRIES = 1_000;
@@ -311,6 +348,16 @@ class McpClient {
   // calls (e.g. browser stream ticks) detect a stale session simultaneously.
   // Only the first caller performs cleanup + retry; others wait and reuse.
   private sessionRecoveryLocks = new Map<string, Promise<void>>();
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Tool-call ids whose persisted log row must be content-redacted (incognito
+  // chat conversations). Registered for the duration of the owning
+  // executeToolCallForOwner call so every persistToolCall along that call's
+  // paths (success, error, cancellation, retries) sees the flag without
+  // threading it through every helper.
+  private suppressedContentToolCallIds = new Set<string>();
+  // SPDX-SnippetEnd
   // Per-secretId lock to prevent concurrent OAuth refresh attempts from
   // thrashing rotating refresh tokens when multiple tool calls arrive at once.
   private oauthRefreshLocks = new Map<
@@ -401,36 +448,43 @@ class McpClient {
     toolCall: CommonToolCall,
     owner: ToolOwner,
     tokenAuth?: TokenAuthContext,
-    options?: {
-      conversationId?: string;
-      identityProviderRedirectPath?: string;
-      elicitationHandler?: McpElicitationHandler;
-      /**
-       * Cancels the in-flight upstream request (callTool / listTools /
-       * readResource) when the caller's chat run is stopped. Without it a slow
-       * tool call runs to completion after Stop; see executeToolCall's catch,
-       * which rethrows an aborted call instead of retrying it.
-       */
-      abortSignal?: AbortSignal;
-      /**
-       * Overrides the default upstream tool-call timeout. Set by the gateway
-       * for task-eligible calls, whose bound is the task TTL rather than the
-       * synchronous patience window.
-       */
-      upstreamTimeoutMs?: number;
-      /**
-       * Pre-resolved catalog tool row for dynamic tool access: lets run_tool
-       * execute a tool the agent was never assigned. This governs tool ACCESS
-       * only. Whose credential/connection the call uses is still decided by
-       * the MCP server's connection policy (on-behalf-of the caller, or a
-       * pinned service account) — identical to an assigned tool. An
-       * unassigned tool has no assignment row, so it resolves its connection
-       * at call time (it can't carry a static pin). Access authorization
-       * happens at the dispatch layer (archestra-mcp-server/dynamic-tools.ts)
-       * before this is set; the gateway path never sets it.
-       */
-      availableTool?: CatalogTool;
-    },
+    options?: ExecuteToolCallForOwnerOptions,
+  ): Promise<CommonToolResult> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Incognito chat calls register their tool-call id so persistToolCall —
+    // reached through many helpers on the success, error, retry, and
+    // cancellation paths — stores a content-redacted row. The id is minted
+    // per call (validateAndGetTool may rewrite the name, never the id), so
+    // registration cannot bleed across concurrent calls.
+    if (options?.suppressContentLogging) {
+      this.suppressedContentToolCallIds.add(toolCall.id);
+      try {
+        return await this.executeToolCallForOwnerImpl(
+          toolCall,
+          owner,
+          tokenAuth,
+          options,
+        );
+      } finally {
+        this.suppressedContentToolCallIds.delete(toolCall.id);
+      }
+    }
+    // SPDX-SnippetEnd
+    return this.executeToolCallForOwnerImpl(
+      toolCall,
+      owner,
+      tokenAuth,
+      options,
+    );
+  }
+
+  private async executeToolCallForOwnerImpl(
+    toolCall: CommonToolCall,
+    owner: ToolOwner,
+    tokenAuth?: TokenAuthContext,
+    options?: ExecuteToolCallForOwnerOptions,
   ): Promise<CommonToolResult> {
     // Derive auth info for logging. Until a credential resolves, the call is
     // one the platform is serving itself (it may never reach a server — an app
@@ -3238,6 +3292,25 @@ class McpClient {
       return;
     }
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Incognito chat calls persist a content-redacted row: the tool name (and
+    // owner/user metadata) stay for the audit surface, the arguments and the
+    // result do not.
+    const suppressContent = this.suppressedContentToolCallIds.has(toolCall.id);
+    const storedToolCall: CommonToolCall = suppressContent
+      ? {
+          id: toolCall.id,
+          name: toolCall.name,
+          arguments: { __redacted: "incognito" },
+        }
+      : toolCall;
+    const storedToolResult: unknown = suppressContent
+      ? { __redacted: "incognito" }
+      : toolResult;
+    // SPDX-SnippetEnd
+
     try {
       const savedToolCall = await McpToolCallModel.create({
         ownerType: owner.type,
@@ -3245,8 +3318,8 @@ class McpClient {
         appId: owner.type === "app" ? owner.id : null,
         mcpServerName,
         method: "tools/call",
-        toolCall,
-        toolResult,
+        toolCall: storedToolCall,
+        toolResult: storedToolResult,
         userId: authInfo?.userId ?? null,
         authMethod: authInfo?.authMethod ?? null,
       });
@@ -3261,7 +3334,9 @@ class McpClient {
         toolName: toolCall.name,
       };
 
-      if (toolResult.isError) {
+      if (suppressContent) {
+        logData.resultContent = "[redacted: incognito]";
+      } else if (toolResult.isError) {
         // Tool errors routinely echo request/response payloads — cap them
         // the same way as the success-path content preview.
         logData.error = toolResult.error?.slice(0, 100);

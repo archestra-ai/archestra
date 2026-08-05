@@ -41,6 +41,11 @@ export async function buildChatContext(params: {
   subagentToolStream: SubagentToolStreamBridge;
   taskBridge: ChatTaskBridge;
   abortSignal: AbortSignal;
+  /**
+   * Incognito conversation: tool-call logs, execution-claim results, and span
+   * content are redacted, and long calls never detach into durable tasks.
+   */
+  suppressContentLogging: boolean;
 }): Promise<{
   mcpTools: Record<string, Tool>;
   toolUiResourceUris: Record<string, string>;
@@ -65,6 +70,7 @@ export async function buildChatContext(params: {
     subagentToolStream,
     taskBridge,
     abortSignal,
+    suppressContentLogging,
   } = params;
 
   const [enabledToolIds, hasCustomSelection] = await Promise.all([
@@ -100,6 +106,7 @@ export async function buildChatContext(params: {
       subagentToolStream,
       taskBridge,
       repeatTracker,
+      suppressContentLogging,
     }),
     getChatMcpToolUiResourceUris(agentId),
   ]);

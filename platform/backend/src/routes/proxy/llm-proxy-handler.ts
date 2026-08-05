@@ -70,6 +70,7 @@ import {
   DUAL_LLM_KEEPALIVE_SSE_COMMENT,
   type DualLlmAnalysis,
   type GatewayAgent,
+  type InsertInteraction,
   type InteractionAuthMethod,
   type InteractionRequest,
   type InteractionResponse,
@@ -105,6 +106,11 @@ import {
 } from "./llm-proxy-helpers";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
+import {
+  isIncognitoChatSession,
+  redactIncognitoInteraction,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; incognito chat content suppression is enterprise-only
+} from "./utils/incognito-session.ee";
 
 const {
   observability: {
@@ -130,6 +136,11 @@ export interface LLMProxyContext<TRequest> {
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
+  /**
+   * Incognito chat session: persisted interaction content is redacted and span
+   * content capture is suppressed (usage/cost metadata untouched).
+   */
+  suppressContent: boolean;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
@@ -641,6 +652,21 @@ export async function handleLLMProxy<
         ? "internal"
         : "provider_key";
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Incognito chat sessions: interaction rows keep all usage/cost/session
+  // metadata but their content-bearing fields are redacted, and span content
+  // capture is suppressed. Resolved once up front (server-derived, fail
+  // closed) so the catch below and both stream handlers agree on it.
+  const suppressContent = await isIncognitoChatSession({
+    source,
+    requestIp: request.ip,
+    sessionId,
+    userId,
+  });
+  // SPDX-SnippetEnd
 
   // Check usage limits
   try {
@@ -1169,6 +1195,7 @@ export async function handleLLMProxy<
       toonSkipReason,
       dualLlmAnalyses,
       unsafeContextBoundary,
+      suppressContent,
       externalAgentId,
       authMethod,
       billingMode,
@@ -1217,7 +1244,7 @@ export async function handleLLMProxy<
         { profileId: resolvedAgent.id, errorMessage },
         "Persisting error interaction record",
       );
-      await InteractionModel.create({
+      const record: InsertInteraction = {
         profileId: resolvedAgent.id,
         externalAgentId,
         executionId,
@@ -1240,7 +1267,10 @@ export async function handleLLMProxy<
         ),
         inputTokens: 0,
         outputTokens: 0,
-      });
+      };
+      await InteractionModel.create(
+        suppressContent ? redactIncognitoInteraction(record) : record,
+      );
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1290,6 +1320,7 @@ async function handleStreaming<
     toonSkipReason,
     dualLlmAnalyses,
     unsafeContextBoundary,
+    suppressContent,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1329,7 +1360,7 @@ async function handleStreaming<
     usagelessInteractionRecorded = true;
 
     try {
-      await InteractionModel.create({
+      const record: InsertInteraction = {
         profileId: agent.id,
         externalAgentId,
         executionId,
@@ -1350,7 +1381,10 @@ async function handleStreaming<
         baselineModel,
         inputTokens: 0,
         outputTokens: 0,
-      });
+      };
+      await InteractionModel.create(
+        suppressContent ? redactIncognitoInteraction(record) : record,
+      );
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -1385,6 +1419,7 @@ async function handleStreaming<
       promptMessages: provider
         .createRequestAdapter(originalRequest)
         .getProviderMessages(),
+      suppressContent,
       parentContext,
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
@@ -1534,8 +1569,8 @@ async function handleStreaming<
           ]);
         }
 
-        // Capture streamed completion content
-        if (captureContent && state.text) {
+        // Capture streamed completion content (suppressed for incognito chats)
+        if (captureContent && !suppressContent && state.text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
             [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
           });
@@ -1735,33 +1770,34 @@ async function handleStreaming<
       });
 
       try {
+        const record = buildInteractionRecord({
+          agent,
+          externalAgentId,
+          authMethod,
+          billingMode,
+          authenticatedApp,
+          executionId,
+          userId,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          sessionId,
+          sessionSource,
+          source,
+          providerType: provider.interactionType,
+          request: originalRequest,
+          processedRequest: request,
+          response: streamAdapter.toProviderResponse(),
+          actualModel,
+          baselineModel,
+          usage,
+          costs,
+          toonStats,
+          toonSkipReason,
+          dualLlmAnalyses,
+          unsafeContextBoundary,
+        });
         await InteractionModel.create(
-          buildInteractionRecord({
-            agent,
-            externalAgentId,
-            authMethod,
-            billingMode,
-            authenticatedApp,
-            executionId,
-            userId,
-            virtualKeyId,
-            passthroughVirtualKeyId,
-            sessionId,
-            sessionSource,
-            source,
-            providerType: provider.interactionType,
-            request: originalRequest,
-            processedRequest: request,
-            response: streamAdapter.toProviderResponse(),
-            actualModel,
-            baselineModel,
-            usage,
-            costs,
-            toonStats,
-            toonSkipReason,
-            dualLlmAnalyses,
-            unsafeContextBoundary,
-          }),
+          suppressContent ? redactIncognitoInteraction(record) : record,
         );
       } catch (interactionError) {
         logger.error(
@@ -1808,6 +1844,7 @@ async function handleNonStreaming<
     toonSkipReason,
     dualLlmAnalyses,
     unsafeContextBoundary,
+    suppressContent,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1853,6 +1890,7 @@ async function handleNonStreaming<
     promptMessages: provider
       .createRequestAdapter(originalRequest)
       .getProviderMessages(),
+    suppressContent,
     parentContext,
     user: toSpanUserInfo(resolvedUser),
     callback: async (llmSpan) => {
@@ -1958,8 +1996,8 @@ async function handleNonStreaming<
         adapter.getFinishReasons(),
       );
 
-      // Capture completion content
-      if (captureContent) {
+      // Capture completion content (suppressed for incognito chats)
+      if (captureContent && !suppressContent) {
         const text = adapter.getText?.();
         if (text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
@@ -2052,33 +2090,36 @@ async function handleNonStreaming<
         );
       });
 
+      const refusalRecord = buildInteractionRecord({
+        agent,
+        externalAgentId,
+        authMethod,
+        billingMode,
+        authenticatedApp,
+        executionId,
+        userId,
+        virtualKeyId,
+        passthroughVirtualKeyId,
+        sessionId,
+        sessionSource,
+        source,
+        providerType: provider.interactionType,
+        request: originalRequest,
+        processedRequest: request,
+        response: refusalResponse,
+        actualModel,
+        baselineModel,
+        usage,
+        costs,
+        toonStats,
+        toonSkipReason,
+        dualLlmAnalyses,
+        unsafeContextBoundary,
+      });
       await InteractionModel.create(
-        buildInteractionRecord({
-          agent,
-          externalAgentId,
-          authMethod,
-          billingMode,
-          authenticatedApp,
-          executionId,
-          userId,
-          virtualKeyId,
-          passthroughVirtualKeyId,
-          sessionId,
-          sessionSource,
-          source,
-          providerType: provider.interactionType,
-          request: originalRequest,
-          processedRequest: request,
-          response: refusalResponse,
-          actualModel,
-          baselineModel,
-          usage,
-          costs,
-          toonStats,
-          toonSkipReason,
-          dualLlmAnalyses,
-          unsafeContextBoundary,
-        }),
+        suppressContent
+          ? redactIncognitoInteraction(refusalRecord)
+          : refusalRecord,
       );
 
       return reply.send(refusalResponse);
@@ -2126,37 +2167,38 @@ async function handleNonStreaming<
   });
 
   try {
+    const record = buildInteractionRecord({
+      agent,
+      externalAgentId,
+      authMethod,
+      billingMode,
+      authenticatedApp,
+      executionId,
+      userId,
+      virtualKeyId,
+      passthroughVirtualKeyId,
+      sessionId,
+      sessionSource,
+      source,
+      providerType: provider.interactionType,
+      request: originalRequest,
+      processedRequest: request,
+      // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
+      // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
+      response:
+        responseAdapter.getLoggedResponse?.() ??
+        responseAdapter.getOriginalResponse(),
+      actualModel,
+      baselineModel,
+      usage,
+      costs,
+      toonStats,
+      toonSkipReason,
+      dualLlmAnalyses,
+      unsafeContextBoundary,
+    });
     await InteractionModel.create(
-      buildInteractionRecord({
-        agent,
-        externalAgentId,
-        authMethod,
-        billingMode,
-        authenticatedApp,
-        executionId,
-        userId,
-        virtualKeyId,
-        passthroughVirtualKeyId,
-        sessionId,
-        sessionSource,
-        source,
-        providerType: provider.interactionType,
-        request: originalRequest,
-        processedRequest: request,
-        // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
-        // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
-        response:
-          responseAdapter.getLoggedResponse?.() ??
-          responseAdapter.getOriginalResponse(),
-        actualModel,
-        baselineModel,
-        usage,
-        costs,
-        toonStats,
-        toonSkipReason,
-        dualLlmAnalyses,
-        unsafeContextBoundary,
-      }),
+      suppressContent ? redactIncognitoInteraction(record) : record,
     );
   } catch (interactionError) {
     logger.error(

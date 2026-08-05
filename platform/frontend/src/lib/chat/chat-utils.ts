@@ -40,6 +40,7 @@ export function conversationStorageKeys(conversationId: string) {
     draft: `archestra_chat_draft_${conversationId}`,
     messageQueue: `archestra_chat_queue_${conversationId}`,
     reviewContext: `archestra-chat-review-context-${conversationId}`,
+    incognitoKey: `archestra_incognito_key_${conversationId}`,
   };
 }
 

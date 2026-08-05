@@ -156,6 +156,10 @@ import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
+  generateIncognitoKey,
+  isActionAvailableForConversation,
+} from "@/lib/chat/incognito";
+import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,
 } from "@/lib/chat/pending-chat-handoff-files";
@@ -456,6 +460,11 @@ export function ChatPageContent({
     routeConversationId,
   });
 
+  // Whether the NEXT chat created from the new-chat composer is incognito.
+  // Only meaningful pre-conversation; reset after a successful create so a
+  // later new chat never inherits it silently.
+  const [isIncognitoDraft, setIsIncognitoDraft] = useState(false);
+
   // Persist the user's (model, key) pick as their member default for the
   // existing-conversation handlers below (the initial handlers persist via the
   // hook). No-ops on an incomplete pair.
@@ -675,7 +684,9 @@ export function ChatPageContent({
   const canManageShare =
     !!conversationId &&
     !!conversation &&
-    conversation.userId === session?.user.id;
+    conversation.userId === session?.user.id &&
+    // Incognito conversations cannot be shared (the backend rejects it).
+    isActionAvailableForConversation(conversation, "share");
   useConversationShare(canManageShare ? conversationId : undefined);
 
   // Turning this chat into a project is owner-only (same as sharing) and
@@ -2287,30 +2298,42 @@ export function ChatPageContent({
         return false;
       }
 
-      createConversationMutation.mutate(input, {
-        onSuccess: (newConversation) => {
-          if (newConversation) {
-            // A recording started from scratch (before this chat had an id)
-            // becomes this conversation's recording now that its id exists, so
-            // the timer and buffered capture carry across the transition.
-            appSessionRecorder.adoptConversation(newConversation.id);
-            // A review deep link (/chat/new -> /chat with reviewSrc) adopts the
-            // submission under the fresh id here, so the replay panel survives
-            // the navigation to /chat/<id> (which drops the URL params).
-            const pendingReview = pendingReviewContextRef.current;
-            if (pendingReview) {
-              setReviewContext(newConversation.id, pendingReview);
+      // Incognito: the conversation DEK is generated here, in the browser,
+      // BEFORE the create request. It rides along as a header; the mutation's
+      // onSuccess stores it under the fresh conversation id before any
+      // navigation or stream start reads it.
+      const incognitoKey = isIncognitoDraft ? generateIncognitoKey() : null;
+
+      createConversationMutation.mutate(
+        incognitoKey ? { ...input, incognito: true, incognitoKey } : input,
+        {
+          onSuccess: (newConversation) => {
+            if (newConversation) {
+              setIsIncognitoDraft(false);
+              // A recording started from scratch (before this chat had an id)
+              // becomes this conversation's recording now that its id exists,
+              // so the timer and buffered capture carry across the transition.
+              appSessionRecorder.adoptConversation(newConversation.id);
+              // A review deep link (/chat/new -> /chat with reviewSrc) adopts
+              // the submission under the fresh id here, so the replay panel
+              // survives the navigation to /chat/<id> (which drops the URL
+              // params).
+              const pendingReview = pendingReviewContextRef.current;
+              if (pendingReview) {
+                setReviewContext(newConversation.id, pendingReview);
+              }
+              void onSuccess?.(newConversation);
             }
-            void onSuccess?.(newConversation);
-          }
+          },
         },
-      });
+      );
       return true;
     },
     [
       initialAgentId,
       initialModel,
       initialApiKeyId,
+      isIncognitoDraft,
       createConversationMutation,
       searchParams,
       appSessionRecorder.adoptConversation,
@@ -2822,6 +2845,33 @@ export function ChatPageContent({
     );
   }
 
+  // Incognito tombstone: the conversation exists and the viewer may see it,
+  // but this browser holds no (valid) encryption key, so the server returned
+  // the locked view. Deliberately its own branch — this is not a 404, the
+  // chat is real but undecryptable here.
+  if (conversationId && conversation?.contentLocked) {
+    return (
+      <div className="flex h-full w-full items-center justify-center p-8">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>This chat can&apos;t be unlocked</CardTitle>
+            <CardDescription>
+              This is an incognito chat. Its encryption key existed only in the
+              browser that created it and wasn&apos;t found here — clearing
+              browser data or switching browsers removes the key. The platform
+              cannot decrypt the messages.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/chat">Start a new chat</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // A chat opened via a handoff (project composer, app, SSO, a2a, deep link)
   // lands on /chat carrying a `user_prompt` (or a stashed-attachments marker),
   // auto-creates a conversation, then navigates to /chat/<id>. Rendering the
@@ -3052,21 +3102,28 @@ export function ChatPageContent({
                               </div>
                             </div>
                           </div>
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
-                            <Button
-                              onClick={() => {
-                                if (shouldPromptForForkAgentSelection) {
-                                  setIsForkDialogOpen(true);
-                                  return;
-                                }
+                          {/* Forking is rejected for incognito chats, so the
+                              affordance is hidden rather than left to fail. */}
+                          {isActionAvailableForConversation(
+                            conversation,
+                            "fork",
+                          ) && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
+                              <Button
+                                onClick={() => {
+                                  if (shouldPromptForForkAgentSelection) {
+                                    setIsForkDialogOpen(true);
+                                    return;
+                                  }
 
-                                void handleForkConversation();
-                              }}
-                            >
-                              <Plus className="h-4 w-4" />
-                              Start New Chat from here
-                            </Button>
-                          </div>
+                                  void handleForkConversation();
+                                }}
+                              >
+                                <Plus className="h-4 w-4" />
+                                Start New Chat from here
+                              </Button>
+                            </div>
+                          )}
                         </div>
                         <div className="text-center">
                           <Version inline />
@@ -3152,7 +3209,14 @@ export function ChatPageContent({
                                 conversationPerUserConnect.provider
                               }
                               isContextCompacting={isContextCompacting}
-                              onCompactConversation={handleCompactConversation}
+                              onCompactConversation={
+                                isActionAvailableForConversation(
+                                  conversation,
+                                  "compaction",
+                                )
+                                  ? handleCompactConversation
+                                  : undefined
+                              }
                               isPlaywrightSetupVisible={
                                 isPlaywrightSetupVisible
                               }
@@ -3340,6 +3404,8 @@ export function ChatPageContent({
                                   }
                                   selectorAgentId={initialAgentId}
                                   onAgentChange={handleInitialAgentChange}
+                                  incognito={isIncognitoDraft}
+                                  onIncognitoChange={setIsIncognitoDraft}
                                   modelSource={initialModelSource}
                                   onResetModelOverride={
                                     handleResetModelOverride

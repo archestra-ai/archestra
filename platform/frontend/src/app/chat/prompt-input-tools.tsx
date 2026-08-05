@@ -6,7 +6,12 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
+import {
+  GhostIcon,
+  MoreVerticalIcon,
+  PaperclipIcon,
+  XIcon,
+} from "lucide-react";
 import { memo, useCallback } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -36,7 +41,9 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { useFeature } from "@/lib/config/config.query";
 import { providerToLogoProvider } from "@/lib/provider-logos";
+import { cn } from "@/lib/utils";
 
 export interface ChatPromptInputToolsProps {
   selectedModel: string;
@@ -53,6 +60,21 @@ export interface ChatPromptInputToolsProps {
   onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
+  /**
+   * Hide the attachment button entirely (incognito conversations: the backend
+   * rejects attachments, so no affordance — not even a disabled one — shows).
+   */
+  attachmentsHidden?: boolean;
+  /**
+   * Whether the next chat will be created incognito. New-chat composer only —
+   * the toggle renders only while there is no conversation yet.
+   */
+  incognito?: boolean;
+  /**
+   * Provided only by the new-chat composer; together with the
+   * `chatIncognitoEnabled` feature flag it enables the incognito toggle.
+   */
+  onIncognitoChange?: (incognito: boolean) => void;
   /** Whether the agent has a code sandbox available (allows any file type) */
   sandboxAvailable?: boolean;
   /** Whether models are still loading - passed to API key selector */
@@ -134,6 +156,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onApiKeyChange,
   onProviderChange,
   allowFileUploads = false,
+  attachmentsHidden = false,
+  incognito = false,
+  onIncognitoChange,
   sandboxAvailable = false,
   isModelsLoading = false,
   tokensUsed = 0,
@@ -200,6 +225,13 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const { data: canUpdateAgentSettings } = useHasPermissions({
     agentSettings: ["update"],
   });
+
+  // Incognito toggle: only on the new-chat composer (no conversation yet —
+  // the same gate InitialAgentSelector uses via its callback prop) and only
+  // when the instance has incognito chats enabled.
+  const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
+  const showIncognitoToggle =
+    incognitoEnabled && !conversationId && !!onIncognitoChange;
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
@@ -411,8 +443,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </Popover>
         ))}
 
-      {/* File attachment button - always visible */}
-      {showFileUploadButton ? (
+      {/* File attachment button - always visible, except on incognito
+          conversations where the affordance is hidden entirely (the backend
+          rejects attachments there). */}
+      {attachmentsHidden ? null : showFileUploadButton ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -460,6 +494,43 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             ) : (
               <span>File uploads are disabled by your administrator</span>
             )}
+          </TooltipContent>
+        </Tooltip>
+      )}
+
+      {/* Incognito toggle — placed with the always-visible controls (next to
+          the attachment button) so it renders in both the wide and the
+          collapsed (narrow) toolbar without duplication. */}
+      {showIncognitoToggle && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={incognito}
+              aria-label="Incognito chat"
+              className={cn(
+                "h-8 px-2",
+                incognito &&
+                  "bg-accent text-accent-foreground hover:bg-accent/80",
+              )}
+              onClick={() => {
+                // Files staged before the toggle would ride the first message
+                // of a chat that rejects attachments — drop them now (the
+                // attach button hides while the toggle is on).
+                if (!incognito) {
+                  attachments.clear();
+                }
+                onIncognitoChange?.(!incognito);
+              }}
+            >
+              <GhostIcon className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={4} className="max-w-64">
+            Incognito chat: encrypted with a key that stays in this browser. The
+            platform cannot read it. Not usable from other devices.
           </TooltipContent>
         </Tooltip>
       )}

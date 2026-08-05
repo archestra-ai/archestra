@@ -251,10 +251,24 @@ function buildStreamErrorPayload(params: {
   mappedError: ChatErrorResponse;
   conversationId: string;
   slimChatErrorUi: boolean;
+  /**
+   * Incognito conversation: the persisted chat-error row keeps only the code
+   * and retryability with a generic message — provider error text routinely
+   * echoes prompt/model content. The payload streamed to the client is
+   * unaffected (it is not persisted).
+   */
+  redactPersistedError: boolean;
   /** Log label distinguishing the pre-stream and mid-stream error paths. */
   stage: "before stream starts" | "via stream";
 }): string {
-  const { error, mappedError, conversationId, slimChatErrorUi, stage } = params;
+  const {
+    error,
+    mappedError,
+    conversationId,
+    slimChatErrorUi,
+    redactPersistedError,
+    stage,
+  } = params;
   const traceContext = getActiveTraceContext();
   const correlationLogFields = getCorrelationLogFields(traceContext);
   const fullError = { ...mappedError, ...traceContext };
@@ -279,7 +293,9 @@ function buildStreamErrorPayload(params: {
 
   persistConversationChatError({
     conversationId,
-    error: errorForFrontend,
+    error: redactPersistedError
+      ? redactChatErrorForIncognito(errorForFrontend)
+      : errorForFrontend,
   });
 
   logger.info(
@@ -701,6 +717,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 mappedError,
                 conversationId,
                 slimChatErrorUi: sandboxSlimChatErrorUi,
+                redactPersistedError: conversation.incognito,
                 stage: "via stream",
               }),
           });
@@ -853,6 +870,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               subagentToolStream,
               taskBridge: chatTaskBridge,
               abortSignal: chatAbortController.signal,
+              // Incognito: tool-call logs / claim results / span content are
+              // redacted, and long calls never detach into durable tasks.
+              suppressContentLogging: conversation.incognito,
             }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
@@ -1010,6 +1030,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   mappedError: mapProviderError(error, provider),
                   conversationId,
                   slimChatErrorUi,
+                  redactPersistedError: conversation.incognito,
                   stage: "before stream starts",
                 });
               },
@@ -1149,6 +1170,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     systemPrompt,
                     abortSignal: chatAbortController.signal,
                     emit: (event) => writer.write(event),
+                    // Incognito: never generate/persist a compaction summary.
+                    disableCompaction: conversation.incognito,
                     anthropicNativeEndpoint,
                   });
 
@@ -1623,6 +1646,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           : mapProviderError(error, provider),
                       conversationId,
                       slimChatErrorUi,
+                      redactPersistedError: conversation.incognito,
                       stage: "via stream",
                     });
                     returnedChatErrorPayloads.add(serializedChatError);
@@ -1791,6 +1815,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               mappedError,
                               conversationId,
                               slimChatErrorUi,
+                              redactPersistedError: conversation.incognito,
                               stage: "via stream",
                             }),
                           };
@@ -2701,6 +2726,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Incognito: the artifact column stores conversation-derived content in
+      // plaintext, so the write is silently dropped (the feature no-ops).
+      if (body.artifact !== undefined) {
+        const incognitoInfo = await ConversationModel.getIncognitoKeyInfo(id);
+        if (incognitoInfo?.incognito) {
+          body.artifact = undefined;
+        }
+      }
+      // SPDX-SnippetEnd
+
       // Coerce pinnedAt ISO string to Date for database storage
       const pinnedAtDate =
         body.pinnedAt != null ? new Date(body.pinnedAt) : body.pinnedAt;
@@ -2709,12 +2747,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pinnedAt: pinnedAtDate,
       };
 
-      const conversation = await ConversationModel.update(
-        id,
-        user.id,
-        organizationId,
-        updateData,
+      // A no-op update (e.g. an artifact write dropped for an incognito
+      // conversation) must not reach drizzle's `.set()` with zero defined
+      // values; answer with the current conversation instead.
+      const hasFieldsToSet = Object.values(updateData).some(
+        (value) => value !== undefined,
       );
+      const conversation = hasFieldsToSet
+        ? await ConversationModel.update(
+            id,
+            user.id,
+            organizationId,
+            updateData,
+          )
+        : await ConversationModel.findById({
+            id,
+            userId: user.id,
+            organizationId,
+          });
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
@@ -4257,6 +4307,36 @@ function getSerializableChatError(error: ChatErrorResponse): ChatErrorResponse {
     return getMinimalFrontendError(error);
   }
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * The persisted form of a chat error for an incognito conversation: keep the
+ * structured code, retryability, and trace correlation ids, but drop the
+ * free-text `message` and the provider's `originalError` — both routinely echo
+ * prompt/model content (provider 4xx bodies quote the request).
+ */
+function redactChatErrorForIncognito(
+  error: ChatErrorResponse,
+): ChatErrorResponse {
+  return {
+    code: error.code,
+    message: "Error details are redacted for incognito conversations.",
+    isRetryable: error.isRetryable,
+    ...(error.sessionId ? { sessionId: error.sessionId } : {}),
+    ...(error.traceId ? { traceId: error.traceId } : {}),
+    ...(error.spanId ? { spanId: error.spanId } : {}),
+    ...(error.usageLimitExceeded !== undefined
+      ? { usageLimitExceeded: error.usageLimitExceeded }
+      : {}),
+    ...(error.usageLimitEntityType
+      ? { usageLimitEntityType: error.usageLimitEntityType }
+      : {}),
+    ...(error.authAction ? { authAction: error.authAction } : {}),
+  };
+}
+// SPDX-SnippetEnd
 
 function getMessagesNotYetPersisted(params: {
   existingMessages: Array<{ id: string; content: unknown }>;

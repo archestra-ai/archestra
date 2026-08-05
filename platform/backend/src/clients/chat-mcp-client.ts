@@ -829,6 +829,7 @@ export async function getChatMcpTools({
   subagentToolStream,
   taskBridge,
   repeatTracker,
+  suppressContentLogging,
 }: {
   agentName: string;
   agentId: string;
@@ -885,6 +886,13 @@ export async function getChatMcpTools({
    * fresh internal tracker.
    */
   repeatTracker?: ToolCallRepeatTracker;
+  /**
+   * Incognito conversation: tool-call logs, execution-claim results, and span
+   * content are redacted, and long calls never detach into durable tasks.
+   * Stable per scope key (the incognito flag is immutable per conversation),
+   * so the cached tool context can safely retain it.
+   */
+  suppressContentLogging?: boolean;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -1029,6 +1037,7 @@ export async function getChatMcpTools({
       taskBridge,
       mcpGwToken,
       considerContextUntrusted,
+      suppressContentLogging,
       teams,
       userTeams,
       // One tracker per run: the caller's instance when it owns a stop policy,
@@ -1073,12 +1082,22 @@ export async function getChatMcpTools({
           getSkillDelegationTools({ agentId, organizationId, userId }),
         ]);
 
-        // Convert delegation tools to AI SDK Tool format
-        for (const agentTool of [...agentToolsList, ...skillToolsList]) {
-          aiTools[agentTool.name] = buildAgentDelegationTool({
-            agentTool,
-            ctx: toolContext,
-          });
+        // Convert delegation tools to AI SDK Tool format.
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Incognito conversations exclude delegation entirely: a child-agent
+        // run builds its own tool set and would log its tool calls with
+        // content, outside the parent's suppression scope. Disable rather
+        // than leak.
+        if (!toolContext.suppressContentLogging) {
+          // SPDX-SnippetEnd
+          for (const agentTool of [...agentToolsList, ...skillToolsList]) {
+            aiTools[agentTool.name] = buildAgentDelegationTool({
+              agentTool,
+              ctx: toolContext,
+            });
+          }
         }
 
         logger.info(

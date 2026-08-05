@@ -56,6 +56,7 @@ import {
   chatDraftStorageKey,
   migrateLegacyNewChatDraft,
 } from "@/lib/chat/chat-utils";
+import { isActionAvailableForConversation } from "@/lib/chat/incognito";
 import { useFeature } from "@/lib/config/config.query";
 import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
 import { useOrganization } from "@/lib/organization.query";
@@ -245,6 +246,8 @@ const PromptInputContent = ({
   agentModelDisplayName,
   subscriptionProvider,
   sandboxAvailable,
+  incognito = false,
+  onIncognitoChange,
   prefillText,
   onPrefillApplied,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
@@ -281,12 +284,24 @@ const PromptInputContent = ({
     string | null
   >(null);
 
+  // /debug needs the conversation below; fetched early so the incognito gate
+  // can read it too.
+  const { data: conversation } = useConversation(conversationId);
+
+  // Incognito is "active" for the composer both while chatting in an
+  // incognito conversation and while the new-chat toggle is on — either way
+  // the backend will reject attachments and sandbox `!` commands, so their
+  // affordances are hidden (not disabled).
+  const incognitoActive =
+    !isActionAvailableForConversation(conversation, "attachments") ||
+    (incognito && !conversationId);
+
   // Any file type can be attached regardless of model modalities or sandbox:
   // a file the model can't read is still stored and surfaced in the
   // conversation's Files panel (and staged into the sandbox when one is
-  // available), so uploads are gated only by the org-level toggle and the OS
-  // picker is unrestricted.
-  const showFileUploadButton = allowFileUploads;
+  // available), so uploads are gated only by the org-level toggle (and the
+  // incognito block) and the OS picker is unrestricted.
+  const showFileUploadButton = allowFileUploads && !incognitoActive;
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
@@ -315,7 +330,6 @@ const PromptInputContent = ({
   // conversation only. Mirrors the server gate (agent-type admin) loosely — the
   // toggle endpoint enforces it for real.
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
-  const { data: conversation } = useConversation(conversationId);
   const toggleHooksDebug = useToggleHooksDebug();
   const agentHooksEnabled = useFeature("agentHooksEnabled") ?? false;
   const hooksDebugEnabled = conversation?.hooksDebugEnabled ?? false;
@@ -414,8 +428,11 @@ const PromptInputContent = ({
   // Subtle affordance for the `!` convention: shown while the typed text
   // starts with `!` on a sandbox-equipped agent, i.e. whenever submitting
   // could run it as a sandbox command instead of sending it to the model.
+  // Hidden for incognito chats, where the backend rejects sandbox commands.
   const isSandboxCommandHintVisible =
-    sandboxAvailable && controller.textInput.value.trimStart().startsWith("!");
+    sandboxAvailable &&
+    !incognitoActive &&
+    controller.textInput.value.trimStart().startsWith("!");
 
   // The picker stays open while the user is still typing the command token;
   // once a space is entered they have moved on to the prompt body.
@@ -577,9 +594,13 @@ const PromptInputContent = ({
       // a `!`-prefixed message runs directly in the conversation's sandbox —
       // disjoint from the `/`-commands above and the skill commands below,
       // since those require a `/` prefix. The text is sent exactly as typed;
-      // only a metadata marker rides along.
+      // only a metadata marker rides along. Incognito chats never mark the
+      // message (the backend rejects sandbox commands there), so a leading
+      // `!` goes to the model as ordinary text.
       const isSandboxCommand =
-        sandboxAvailable && parseSandboxCommand(trimmed) !== null;
+        sandboxAvailable &&
+        !incognitoActive &&
+        parseSandboxCommand(trimmed) !== null;
 
       // a skill command activates the skill; any text after the token is an
       // optional prompt — a bare skill command sends with an empty prompt
@@ -620,6 +641,7 @@ const PromptInputContent = ({
     [
       canDebug,
       dispatchSubmit,
+      incognitoActive,
       onCompactConversation,
       runCompactCommand,
       runDebugCommand,
@@ -930,6 +952,9 @@ const PromptInputContent = ({
             onApiKeyChange={onApiKeyChange}
             onProviderChange={onProviderChange}
             allowFileUploads={allowFileUploads}
+            attachmentsHidden={incognitoActive}
+            incognito={incognito}
+            onIncognitoChange={onIncognitoChange}
             sandboxAvailable={sandboxAvailable}
             isModelsLoading={isModelsLoading}
             tokensUsed={tokensUsed}
@@ -1043,6 +1068,8 @@ const ArchestraPromptInput = ({
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
+  incognito,
+  onIncognitoChange,
   prefillText,
   onPrefillApplied,
 }: ArchestraPromptInputProps) => {
@@ -1149,6 +1176,8 @@ const ArchestraPromptInput = ({
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}
+          incognito={incognito}
+          onIncognitoChange={onIncognitoChange}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
         />

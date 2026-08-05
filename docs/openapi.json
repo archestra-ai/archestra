@@ -97844,6 +97844,9 @@
                       "titleIsPlaceholder": {
                         "type": "boolean"
                       },
+                      "incognito": {
+                        "type": "boolean"
+                      },
                       "pinnedAt": {
                         "nullable": true,
                         "type": "string",
@@ -97865,6 +97868,9 @@
                         "nullable": true,
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "contentLocked": {
+                        "type": "boolean"
                       },
                       "agent": {
                         "nullable": true,
@@ -98202,6 +98208,7 @@
                       "projectId",
                       "origin",
                       "titleIsPlaceholder",
+                      "incognito",
                       "pinnedAt",
                       "lastMessageAt",
                       "createdAt",
@@ -98494,6 +98501,9 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "incognito": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -98635,6 +98645,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -98656,6 +98669,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -98993,6 +99009,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -99387,6 +99404,9 @@
                       "titleIsPlaceholder": {
                         "type": "boolean"
                       },
+                      "incognito": {
+                        "type": "boolean"
+                      },
                       "pinnedAt": {
                         "nullable": true,
                         "type": "string",
@@ -99408,6 +99428,9 @@
                         "nullable": true,
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "contentLocked": {
+                        "type": "boolean"
                       },
                       "agent": {
                         "nullable": true,
@@ -99745,6 +99768,7 @@
                       "projectId",
                       "origin",
                       "titleIsPlaceholder",
+                      "incognito",
                       "pinnedAt",
                       "lastMessageAt",
                       "createdAt",
@@ -100150,6 +100174,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -100171,6 +100198,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -100508,6 +100538,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -100953,6 +100984,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -100974,6 +101008,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -101311,6 +101348,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -103492,6 +103530,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -103513,6 +103554,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -103850,6 +103894,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -104543,6 +104588,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -104564,6 +104612,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -104901,6 +104952,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -105659,6 +105711,9 @@
                         "titleIsPlaceholder": {
                           "type": "boolean"
                         },
+                        "incognito": {
+                          "type": "boolean"
+                        },
                         "pinnedAt": {
                           "nullable": true,
                           "type": "string",
@@ -105680,6 +105735,9 @@
                           "nullable": true,
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "contentLocked": {
+                          "type": "boolean"
                         },
                         "agent": {
                           "nullable": true,
@@ -106017,6 +106075,7 @@
                         "projectId",
                         "origin",
                         "titleIsPlaceholder",
+                        "incognito",
                         "pinnedAt",
                         "lastMessageAt",
                         "createdAt",
@@ -107377,6 +107436,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -107398,6 +107460,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -107738,6 +107803,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -108163,6 +108229,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -108184,6 +108253,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -108521,6 +108593,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -108941,6 +109014,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -108962,6 +109038,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -109299,6 +109378,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -109733,6 +109813,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -109754,6 +109837,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -110091,6 +110177,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -117631,6 +117718,9 @@
                         "chatSecretScanEnabled": {
                           "type": "boolean"
                         },
+                        "chatIncognitoEnabled": {
+                          "type": "boolean"
+                        },
                         "agentHooksEnabled": {
                           "type": "boolean"
                         },
@@ -117692,6 +117782,7 @@
                         "mcpSandboxDomain",
                         "maintenanceMode",
                         "chatSecretScanEnabled",
+                        "chatIncognitoEnabled",
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
@@ -286551,6 +286642,9 @@
                     "titleIsPlaceholder": {
                       "type": "boolean"
                     },
+                    "incognito": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -286572,6 +286666,9 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "contentLocked": {
+                      "type": "boolean"
                     },
                     "agent": {
                       "nullable": true,
@@ -286909,6 +287006,7 @@
                     "projectId",
                     "origin",
                     "titleIsPlaceholder",
+                    "incognito",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",

@@ -128,6 +128,12 @@ export interface ChatToolContext {
   mcpGwToken: McpGatewayToken;
   considerContextUntrusted: boolean;
   /**
+   * Incognito conversation: MCP tool-call log rows and execution-claim results
+   * are stored redacted, span content capture is suppressed, and long calls
+   * are forced inline (never detached into durable MCP task rows).
+   */
+  suppressContentLogging?: boolean;
+  /**
    * Per-run guard against the model re-issuing the identical tool call forever.
    * One instance per getChatMcpTools call (shared by every tool wrapper), so it
    * carries no cross-run state.
@@ -245,7 +251,12 @@ export function buildMcpGatewayTool(params: {
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
-                taskBridge: ctx.taskBridge,
+                // Incognito: never detach into a durable task — task rows
+                // persist tool results in plaintext. Forcing inline execution
+                // keeps the result inside the encrypted conversation only.
+                taskBridge: ctx.suppressContentLogging
+                  ? undefined
+                  : ctx.taskBridge,
                 // Lets a task minted inside run_tool attach its card to the
                 // run_tool call the user sees, not the synthetic inner id.
                 currentToolCallId: options.toolCallId,
@@ -257,6 +268,9 @@ export function buildMcpGatewayTool(params: {
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
                 approvalRequiredPoliciesHandled: true,
+                // Incognito: a run_tool dispatch persists via mcpClient, so
+                // its stored row must be content-redacted too.
+                suppressContentLogging: ctx.suppressContentLogging,
                 tokenAuth: buildTokenAuthContext({
                   mcpGwToken: ctx.mcpGwToken,
                   organizationId: ctx.organizationId,
@@ -344,6 +358,7 @@ export function buildMcpGatewayTool(params: {
               taskBridge: ctx.taskBridge,
               toolCallId: options.toolCallId,
               isUiProvidingTool,
+              suppressContentLogging: ctx.suppressContentLogging,
             });
           }
 
@@ -964,6 +979,17 @@ async function executeWithToolSpan<R>(params: {
   const { serverName } = parseFullToolName(toolName);
   const startTime = Date.now();
 
+  // Incognito: claim rows must never carry real tool output/error text — the
+  // recorded outcome (used to answer replays) is stored as the redaction
+  // marker instead. Replays of a suppressed call therefore answer with the
+  // marker, which is the accepted cost of never persisting the content.
+  const claimResultForStorage = (result: string | { content: string }) =>
+    ctx.suppressContentLogging
+      ? ChatToolExecutionClaimModel.toStoredResult(
+          JSON.stringify({ __redacted: "incognito" }),
+        )
+      : ChatToolExecutionClaimModel.toStoredResult(result);
+
   return startActiveMcpSpan({
     toolName,
     mcpServerName: serverName ?? "unknown",
@@ -972,6 +998,7 @@ async function executeWithToolSpan<R>(params: {
     userTeams: ctx.userTeams,
     sessionId: ctx.sessionId,
     toolArgs: spanToolArgs,
+    suppressContent: ctx.suppressContentLogging,
     user: ctx.user,
     callback: async (span) => {
       try {
@@ -981,7 +1008,7 @@ async function executeWithToolSpan<R>(params: {
           await recordClaimOutcome({
             ...claimGate.claimKey,
             state: "completed",
-            result: ChatToolExecutionClaimModel.toStoredResult(
+            result: claimResultForStorage(
               result as string | { content: string },
             ),
           });
@@ -996,7 +1023,7 @@ async function executeWithToolSpan<R>(params: {
           await recordClaimOutcome({
             ...claimGate.claimKey,
             state: "failed",
-            result: ChatToolExecutionClaimModel.toStoredResult(
+            result: claimResultForStorage(
               error instanceof Error ? error.message : String(error),
             ),
           });
@@ -1061,6 +1088,11 @@ interface ToolExecutionContext {
    * availableTool resolution so ordinary assigned tools skip its DB lookups.
    */
   isUiProvidingTool?: boolean;
+  /**
+   * Incognito conversation: the persisted MCP tool-call row is redacted and
+   * the call is forced inline (no durable task detachment).
+   */
+  suppressContentLogging?: boolean;
 }
 
 /**
@@ -1095,6 +1127,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     taskBridge,
     toolCallId,
     isUiProvidingTool,
+    suppressContentLogging,
   } = ctx;
   throwIfAborted(abortSignal);
   const startTime = Date.now();
@@ -1195,13 +1228,17 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         ...(elicitation
           ? { elicitationHandler: elicitation.createHandler({ toolName }) }
           : {}),
+        // Incognito: the persisted mcp_tool_calls row is stored redacted.
+        ...(suppressContentLogging ? { suppressContentLogging: true } : {}),
       },
     );
 
   let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
   try {
+    // Incognito forces inline execution: a detached task persists the tool
+    // result on a durable task row in plaintext, so it is never minted.
     result =
-      taskBridge && toolCallId
+      taskBridge && toolCallId && !suppressContentLogging
         ? await taskBridge.runMaybeTask({
             agentId,
             userId,

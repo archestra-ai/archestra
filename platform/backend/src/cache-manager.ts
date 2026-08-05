@@ -92,6 +92,8 @@ export const CacheKey = {
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
   TelegramLinkCode: "chatops-telegram-link",
+  /** Positive "this chat session is incognito" lookups for LLM proxy redaction */
+  IncognitoChatSession: "incognito-chat-session",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

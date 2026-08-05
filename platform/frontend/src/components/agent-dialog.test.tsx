@@ -668,6 +668,54 @@ describe("AgentDialog delegation state", () => {
     ).not.toBeChecked();
   });
 
+  it("drops a grant to another environment's advisor on save", async () => {
+    const user = userEvent.setup();
+    const syncDelegations = vi
+      .fn()
+      .mockResolvedValue({ added: [], removed: [] });
+    const otherEnvAdvisor = {
+      ...advisorAgent,
+      id: "00000000-0000-4000-8000-000000000004",
+      environmentId: "00000000-0000-4000-8000-0000000000ff",
+    };
+    const customAgent = { ...baseAgent, accessAllSubagents: false };
+    useProfileMock.mockReturnValue({ data: customAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent, otherEnvAdvisor],
+    });
+    // Left by an earlier configuration, when this agent sat in that
+    // environment: undispatchable now, and invisible in the dialog.
+    useAgentDelegationsMock.mockReturnValue({
+      data: [targetAgent, otherEnvAdvisor],
+      isFetched: true,
+    });
+    useSyncAgentDelegationsMock.mockReturnValue({
+      mutateAsync: syncDelegations,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(customAgent),
+      isPending: false,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={customAgent}
+      />,
+    );
+
+    await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(syncDelegations).toHaveBeenCalled());
+    const { targetAgentIds } = syncDelegations.mock.calls[0][0];
+    expect(targetAgentIds).not.toContain(otherEnvAdvisor.id);
+    expect(targetAgentIds).toContain(targetAgent.id);
+  });
+
   it("saves no advisor grant when the switch ends up off after a trip through Custom", async () => {
     const user = userEvent.setup();
     const syncDelegations = vi

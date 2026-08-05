@@ -1140,12 +1140,25 @@ export function AgentDialog({
   // the Auto surface. So the advisor has to match the switch in both sets, not
   // just the one the current mode reads — a grant stranded in the other set is
   // a live consultation nothing in the dialog can show or clear.
+  // Another environment's advisor can only have been left by an earlier
+  // configuration: it is undispatchable from here, invisible in the dialog, and
+  // would come alive the moment this agent moved to that environment.
+  const foreignAdvisorIds = allInternalAgents
+    .filter(
+      (a) =>
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
+        a.id !== advisorAgentId,
+    )
+    .map((a) => a.id);
+  const withoutForeignAdvisors = (ids: string[]) =>
+    ids.filter((id) => !foreignAdvisorIds.includes(id));
+
   const delegationTargetIdsToSave = advisorListedWhen(
-    selectedDelegationTargetIds,
+    withoutForeignAdvisors(selectedDelegationTargetIds),
     advisorEnabled,
   );
   const disabledSubagentIdsToSave = advisorListedWhen(
-    disabledSubagentIds,
+    withoutForeignAdvisors(disabledSubagentIds),
     !advisorEnabled,
   );
 

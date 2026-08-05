@@ -2471,8 +2471,12 @@ export function AgentDialog({
                               less than running the strong one throughout. Each
                               consultation is billed at the advisor model&apos;s
                               own rates.{" "}
+                              {/* New tab: this dialog holds unsaved edits that
+                                navigating away would discard. */}
                               <Link
                                 href={`/agents?edit=${advisorAgentId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="underline underline-offset-4"
                               >
                                 Edit the Advisor agent

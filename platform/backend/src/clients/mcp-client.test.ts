@@ -6275,6 +6275,171 @@ describe("McpClient", () => {
         );
       });
 
+      // Regression: a connection whose only credential is a custom userConfig
+      // field mapped to the `Authorization` header (common for hand-configured
+      // remote servers) does not populate the canonical access_token secret
+      // fields. The external-IdP fallback used to read that as "no stored
+      // authorization" and overwrite the working header with the caller's JWT,
+      // so every JWKS-authenticated gateway call failed upstream auth while
+      // the same connection kept working for session-authenticated callers.
+      test("JWKS auth with a custom-field Authorization credential uses the stored header, not the JWT (remote server)", async () => {
+        const customAuthCatalog = await InternalMcpCatalogModel.create({
+          name: "custom-auth-field-server",
+          serverType: "remote",
+          serverUrl: "https://custom-auth-field.example.com/mcp",
+          userConfig: {
+            api_token: {
+              type: "string",
+              title: "Authorization",
+              description: 'Sent as Authorization with a "Bearer " prefix',
+              required: true,
+              sensitive: true,
+              headerName: "Authorization",
+              valuePrefix: "Bearer ",
+            },
+          },
+        });
+
+        const customAuthSecret = await secretManager().createSecret(
+          { api_token: "stored-custom-field-key" },
+          "custom-auth-field-secret",
+        );
+
+        const customAuthServer = await McpServerModel.create({
+          name: "custom-auth-field-server",
+          secretId: customAuthSecret.id,
+          catalogId: customAuthCatalog.id,
+          serverType: "remote",
+          scope: "org",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "custom-auth-field-server__query",
+          description: "Query with a custom auth field",
+          parameters: {},
+          catalogId: customAuthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: customAuthServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "upstream ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_custom_auth_field",
+            name: "custom-auth-field-server__query",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "ext-token",
+            teamId: null,
+            isOrganizationToken: false,
+            isExternalIdp: true,
+            rawToken: "caller-jwt-must-not-be-sent",
+            userId: "ext-user-custom-field",
+          },
+        );
+
+        expect(result.isError).toBe(false);
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const lastCall = vi
+          .mocked(StreamableHTTPClientTransport)
+          .mock.calls.at(-1);
+        const headers = lastCall?.[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer stored-custom-field-key",
+        );
+        // The call ran under the org connection's stored credential, so the
+        // executed-as identity names the connection — not IdP passthrough.
+        expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+          kind: "org",
+        });
+      });
+
+      // The canonical token fields also cover non-Authorization header names;
+      // an external-IdP caller's JWT must not ride along as an extra
+      // Authorization header next to such a credential.
+      test("JWKS auth does not add the JWT alongside a canonical credential bound to a non-Authorization header", async () => {
+        const apiKeyCatalog = await InternalMcpCatalogModel.create({
+          name: "api-key-header-server",
+          serverType: "remote",
+          serverUrl: "https://api-key-header.example.com/mcp",
+          userConfig: {
+            access_token: {
+              type: "string",
+              title: "Access Token",
+              description: "API key",
+              required: true,
+              sensitive: true,
+              headerName: "x-api-key",
+            },
+          },
+        });
+
+        const apiKeySecret = await secretManager().createSecret(
+          { access_token: "api-key-secret-value" },
+          "api-key-header-secret",
+        );
+
+        const apiKeyServer = await McpServerModel.create({
+          name: "api-key-header-server",
+          secretId: apiKeySecret.id,
+          catalogId: apiKeyCatalog.id,
+          serverType: "remote",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "api-key-header-server__list_items",
+          description: "List items with API key auth",
+          parameters: {},
+          catalogId: apiKeyCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: apiKeyServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "api key response" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_api_key_jwks",
+            name: "api-key-header-server__list_items",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "ext-token",
+            teamId: null,
+            isOrganizationToken: false,
+            isExternalIdp: true,
+            rawToken: "caller-jwt-must-not-ride-along",
+            userId: "ext-user-api-key",
+          },
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const lastCall = vi
+          .mocked(StreamableHTTPClientTransport)
+          .mock.calls.at(-1);
+        const headers = lastCall?.[1]?.requestInit?.headers as Headers;
+        expect(headers.get("x-api-key")).toBe("api-key-secret-value");
+        expect(headers.get("authorization")).toBeNull();
+      });
+
       test("uses a custom header name for static bearer credentials", async () => {
         const customHeaderCatalog = await InternalMcpCatalogModel.create({
           name: "custom-header-server",

@@ -913,6 +913,7 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN;
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
+  const isAdvisorBuiltIn = builtInAgentName === BUILT_IN_AGENT_IDS.ADVISOR;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "mcp_gateway" ||
@@ -1777,7 +1778,13 @@ export function AgentDialog({
                         value={environmentId ?? null}
                         onChange={handleEnvironmentChange}
                         resource={getResourceForAgentType(agentType)}
-                        helpText={environmentHelpText}
+                        helpText={
+                          isAdvisorBuiltIn
+                            ? "Each environment has its own advisor, reachable only by the agents in that environment. Set a model on each one you want consulted."
+                            : environmentHelpText
+                        }
+                        // Moving it would strand every agent that consults it.
+                        disabled={isAdvisorBuiltIn}
                       />
                     )}
 

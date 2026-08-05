@@ -1,6 +1,12 @@
+import { BUILT_IN_AGENT_NAMES } from "@archestra/shared";
 import { describe, expect, vi } from "vitest";
+import { syncBuiltInAgents } from "@/database/seed";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
-import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
+import {
+  AgentModel,
+  InternalMcpCatalogModel,
+  OrganizationModel,
+} from "@/models";
 import {
   assertCanAssignEnvironment,
   assertValuesMatchEnvironmentRegex,
@@ -22,6 +28,60 @@ describe("EnvironmentService", () => {
     await expect(
       createEnvironment({ organizationId: org.id, data: { name: "Prod" } }),
     ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("createEnvironment gives the new environment its own advisor", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    const created = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Staging" },
+    });
+
+    // Delegation never crosses environments, so an agent in Staging can only
+    // reach an advisor that lives in Staging.
+    const advisor = await AgentModel.getAdvisorForEnvironment({
+      organizationId: org.id,
+      environmentId: created.id,
+    });
+    expect(advisor).not.toBeNull();
+    expect(advisor?.name).toBe(BUILT_IN_AGENT_NAMES.ADVISOR);
+  });
+
+  test("deleteEnvironment retires that environment's advisor with it", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    // Establishes the Default environment's advisor, so the survival assertion
+    // below distinguishes a scoped delete from a blanket one.
+    await syncBuiltInAgents();
+    const created = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Staging" },
+    });
+    const advisor = await AgentModel.getAdvisorForEnvironment({
+      organizationId: org.id,
+      environmentId: created.id,
+    });
+    expect(advisor).not.toBeNull();
+
+    await deleteEnvironment({ id: created.id, organizationId: org.id });
+
+    expect(
+      await AgentModel.getAdvisorForEnvironment({
+        organizationId: org.id,
+        environmentId: created.id,
+      }),
+    ).toBeNull();
+    // The Default environment's advisor is a different row and must survive.
+    expect(
+      await AgentModel.getAdvisorForEnvironment({
+        organizationId: org.id,
+        environmentId: null,
+      }),
+    ).not.toBeNull();
   });
 
   test("listEnvironments reports the default (no-environment) assigned count, excluding built-ins and env-assigned items", async ({

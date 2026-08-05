@@ -15,6 +15,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -640,7 +641,7 @@ function McpGateways({
                   );
                   if (ok) setPermanentlyDeletingGateway(null);
                 }}
-                confirmLabel="Delete permanently"
+                confirmLabel={PERMANENT_DELETE_LABEL}
               />
             )}
 

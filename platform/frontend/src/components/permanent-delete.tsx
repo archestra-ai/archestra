@@ -22,6 +22,13 @@ import { useIsGlobalAdmin } from "@/lib/organization.query";
  */
 
 /**
+ * The action's name, everywhere it appears: this component's two shapes, and
+ * the `confirmLabel` of the dialog each of them opens. Shared so the button a
+ * user clicks and the button that confirms it cannot drift apart.
+ */
+export const PERMANENT_DELETE_LABEL = "Delete permanently";
+
+/**
  * Row action for a trash view rendered with `TableRowActions`. Callers resolve
  * the role once in their component body (`useIsGlobalAdmin`) and pass the whole
  * result as `admin`, rather than calling a hook inside a table cell renderer.
@@ -124,8 +131,6 @@ function adminGateReason({
   if (isGlobalAdmin) return undefined;
   return isLoading ? PERMANENT_DELETE_CHECKING : PERMANENT_DELETE_ADMIN_ONLY;
 }
-
-const PERMANENT_DELETE_LABEL = "Delete permanently";
 
 const PERMANENT_DELETE_ADMIN_ONLY =
   "Only an Admin or Platform Admin can permanently delete";

@@ -11,6 +11,7 @@ const mockUpdateMutateAsync = vi.fn();
 const mockPinMutate = vi.fn();
 const mockRestoreMutate = vi.fn();
 const mockPermanentlyDeleteMutateAsync = vi.fn();
+const mockUseProjects = vi.fn();
 
 let mockProjects: ProjectFixture[] = [];
 
@@ -228,7 +229,14 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
-  useProjects: () => ({ data: mockProjects, isPending: false }),
+  // Records its filters: which slice the page asks for is the whole difference
+  // between the trash and the active list, so a mock that dropped them would
+  // stay green if the page stopped passing `status: "deleted"` and listed live
+  // projects with Restore and Delete permanently on them.
+  useProjects: (filters?: { status?: string }) => {
+    mockUseProjects(filters);
+    return { data: mockProjects, isPending: false };
+  },
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteProject: () => ({
     mutateAsync: mockDeleteMutateAsync,
@@ -463,6 +471,11 @@ describe("ProjectsPageClient", () => {
 
     render(<ProjectsPageClient />);
 
+    // The deleted slice is a different request, not a client-side filter of
+    // the active list — without this the rows below would be live projects.
+    expect(mockUseProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "deleted" }),
+    );
     expect(screen.getByText("Trashed project")).toBeInTheDocument();
     expect(screen.queryByText("Edit details")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Pin")).not.toBeInTheDocument();
@@ -492,8 +505,24 @@ describe("ProjectsPageClient", () => {
 
     render(<ProjectsPageClient />);
 
+    expect(mockUseProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "deleted" }),
+    );
     expect(screen.getByText("No deleted projects")).toBeInTheDocument();
     expect(screen.queryByText("No projects yet")).not.toBeInTheDocument();
+  });
+
+  it("asks for the active slice everywhere but the trash", () => {
+    mockProjects = [makeProject({ id: "plain", name: "Plain project" })];
+
+    render(<ProjectsPageClient />);
+
+    // The counterpart to the trash assertions: `status` left unset is what
+    // makes the default view the live list rather than the deleted one.
+    expect(mockUseProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ status: undefined }),
+    );
+    expect(screen.getByText("Plain project")).toBeInTheDocument();
   });
 
   it("shows unpin in pinned project card menus", () => {

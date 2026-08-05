@@ -24,6 +24,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -593,7 +594,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   );
                   if (ok) setPermanentlyDeletingAgent(null);
                 }}
-                confirmLabel="Delete permanently"
+                confirmLabel={PERMANENT_DELETE_LABEL}
               />
             )}
 

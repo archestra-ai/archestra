@@ -22,6 +22,7 @@ import {
 } from "@/components/list-view-toggle";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -117,8 +118,14 @@ function ProjectsList() {
   const [permanentlyDeletingProject, setPermanentlyDeletingProject] =
     useState<ProjectListItem | null>(null);
   // Pinned-first grouping applies in every scope: oversight projects simply
-  // aren't pinnable, so they fall into the unpinned section on their own.
-  const projects = useMemo(() => sortProjectsPinnedFirst(data ?? []), [data]);
+  // aren't pinnable, so they fall into the unpinned section on their own. Not
+  // in the trash, though — a deleted project keeps its `pinnedAt`, and the
+  // trash table has no Pinned section and no pin indicator, so sorting there
+  // would float a row to the top with nothing on screen explaining why.
+  const projects = useMemo(
+    () => (isDeletedView ? (data ?? []) : sortProjectsPinnedFirst(data ?? [])),
+    [data, isDeletedView],
+  );
   const pinnedProjects = projects.filter((project) => project.pinnedAt);
   const unpinnedProjects = projects.filter((project) => !project.pinnedAt);
   const deleteProject = useDeleteProject();
@@ -219,7 +226,7 @@ function ProjectsList() {
             });
             if (ok) setPermanentlyDeletingProject(null);
           }}
-          confirmLabel="Delete permanently"
+          confirmLabel={PERMANENT_DELETE_LABEL}
         />
       )}
       <div className="space-y-6">

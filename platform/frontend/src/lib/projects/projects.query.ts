@@ -16,6 +16,7 @@ import {
 import { scheduleTriggerKeys } from "@/lib/schedule-trigger.query";
 import {
   getApiErrorMessage,
+  getApiErrorType,
   handleApiError,
   throwOnApiError,
 } from "@/lib/utils";
@@ -343,8 +344,20 @@ export function useRestoreProject() {
         body: null,
       });
       if (error) {
-        // A 409 — the name was taken while it was deleted — carries its own
-        // message, which the toast surfaces as-is.
+        // The only 409 this route answers is the name collision: deleting
+        // frees the display name, so the owner may hold an active project
+        // under it by now. The API's own message ends by telling the caller to
+        // pass `name` — an instruction with no UI behind it until restore
+        // grows a rename field, so the remedy that does exist is named here
+        // instead. Everything else keeps the server's wording.
+        if (getApiErrorType(error) === "api_conflict_error") {
+          toast.error(
+            "Its owner already has an active project under this name. " +
+              "Rename that project, then restore this one.",
+            { duration: 12000 },
+          );
+          return null;
+        }
         handleApiError(error);
         return null;
       }

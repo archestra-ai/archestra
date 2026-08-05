@@ -24,7 +24,10 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
-import { permanentDeleteRowAction } from "@/components/permanent-delete";
+import {
+  PERMANENT_DELETE_LABEL,
+  permanentDeleteRowAction,
+} from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -760,8 +763,7 @@ function PermanentlyDeleteSkillDialog({
       description={`This destroys "${skill.name}" along with every version and resource file, its grants and environment assignments, and any public share link for it. Nothing recovers it.`}
       isPending={permanentlyDeleteSkill.isPending}
       onConfirm={handleDelete}
-      confirmLabel="Delete permanently"
-      pendingLabel="Deleting..."
+      confirmLabel={PERMANENT_DELETE_LABEL}
     />
   );
 }

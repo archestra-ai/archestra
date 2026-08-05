@@ -183,35 +183,76 @@ function toolItem(tool: Snapshot["tools"][number]): ListInput {
  * rewrites the prompts on a pure reorder. Pairing on the title alone would
  * read that reorder as no change at all, in a version minted precisely
  * because something changed.
+ *
+ * Position is a prompt's rank among the prompts *both* versions carry, not
+ * its raw array index — an insertion or removal shifts every later prompt's
+ * index without moving any of them relative to each other, and indexing on
+ * the raw position would badge every one of them "changed" with nothing to
+ * show for it (same title, same body). Ranking within the shared subset
+ * keeps that silent; only a prompt that actually moved relative to its
+ * fellow survivors reads as changed.
  */
 function suggestedPromptsSection(
   current: Snapshot,
   previous: Snapshot | null,
 ): AgentListSection {
+  const currentPrompts = keyedSuggestedPrompts(current.suggestedPrompts);
+  const previousPrompts = previous
+    ? keyedSuggestedPrompts(previous.suggestedPrompts)
+    : null;
+  const currentKeys = new Set(currentPrompts.map(([key]) => key));
+  const previousKeys = previousPrompts
+    ? new Set(previousPrompts.map(([key]) => key))
+    : null;
+
   return listSection({
     id: "suggested-prompts",
     label: "Suggested prompts",
-    current: suggestedPromptItems(current.suggestedPrompts),
-    previous: previous
-      ? suggestedPromptItems(previous.suggestedPrompts)
+    current: suggestedPromptItems(currentPrompts, previousKeys),
+    previous: previousPrompts
+      ? suggestedPromptItems(previousPrompts, currentKeys)
       : undefined,
   });
 }
 
-function suggestedPromptItems(
+/** Pairs each prompt with its dedup-safe key, in list order. */
+function keyedSuggestedPrompts(
   prompts: Snapshot["suggestedPrompts"],
-): ListInput[] {
+): [string, Snapshot["suggestedPrompts"][number]][] {
   const seen = new Map<string, number>();
-  return prompts.map((prompt, index) => {
+  return prompts.map((prompt) => {
     const occurrence = seen.get(prompt.summaryTitle) ?? 0;
     seen.set(prompt.summaryTitle, occurrence + 1);
-    return {
-      key: `${prompt.summaryTitle}#${occurrence}`,
-      label: prompt.summaryTitle,
-      detail: prompt.prompt,
-      identity: `position:${index}`,
-    };
+    return [`${prompt.summaryTitle}#${occurrence}`, prompt];
   });
+}
+
+function suggestedPromptItems(
+  keyed: [string, Snapshot["suggestedPrompts"][number]][],
+  otherSideKeys: Set<string> | null,
+): ListInput[] {
+  // Rank restricted to prompts the other side also carries: an added or
+  // removed prompt is paired by `listSection` before `identity` is ever
+  // read (as "added"/"removed"), so it costs nothing to leave out of the
+  // ranking — and leaving it out is what keeps a survivor's rank from
+  // shifting just because something else was inserted or removed nearby.
+  let rank = 0;
+  const rankByKey = new Map<string, number>();
+  for (const [key] of keyed) {
+    if (!otherSideKeys || otherSideKeys.has(key)) {
+      rankByKey.set(key, rank);
+      rank += 1;
+    }
+  }
+  return keyed.map(([key, prompt]) => ({
+    key,
+    label: prompt.summaryTitle,
+    detail: prompt.prompt,
+    identity:
+      rankByKey.get(key) !== undefined
+        ? `position:${rankByKey.get(key)}`
+        : undefined,
+  }));
 }
 
 /** Assigned knowledge: knowledge bases and connectors. */

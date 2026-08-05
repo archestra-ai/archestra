@@ -450,6 +450,49 @@ describe("compareAgentSnapshots", () => {
     );
   });
 
+  // Position is ranked among the prompts both versions carry, not the raw
+  // array index — an insertion (or removal) shifts every later prompt's
+  // index without moving any of them relative to each other. Indexing on the
+  // raw position would badge every one of those untouched prompts "changed"
+  // with nothing to show for it: same title, same body, no diff to render.
+  it("does not let an inserted prompt cascade a false change onto the ones after it", () => {
+    const ideas = { summaryTitle: "Ideas", prompt: "Give me release ideas" };
+    const bugs = { summaryTitle: "Bugs", prompt: "Triage the bug queue" };
+    const onboarding = { summaryTitle: "Onboarding", prompt: "Say hello" };
+    const sections = compareAgentSnapshots(
+      makeSnapshot({ suggestedPrompts: [onboarding, ideas, bugs] }),
+      makeSnapshot({ suggestedPrompts: [ideas, bugs] }),
+    );
+    const prompts = section(sections, "suggested-prompts") as AgentListSection;
+    expect(prompts.addedCount).toBe(1);
+    expect(prompts.changedCount).toBe(0);
+    expect(prompts.items.filter((item) => item.label !== "Onboarding")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Ideas", change: "unchanged" }),
+        expect.objectContaining({ label: "Bugs", change: "unchanged" }),
+      ]),
+    );
+  });
+
+  it("does not let a removed prompt cascade a false change onto the ones after it", () => {
+    const ideas = { summaryTitle: "Ideas", prompt: "Give me release ideas" };
+    const bugs = { summaryTitle: "Bugs", prompt: "Triage the bug queue" };
+    const onboarding = { summaryTitle: "Onboarding", prompt: "Say hello" };
+    const sections = compareAgentSnapshots(
+      makeSnapshot({ suggestedPrompts: [ideas, bugs] }),
+      makeSnapshot({ suggestedPrompts: [onboarding, ideas, bugs] }),
+    );
+    const prompts = section(sections, "suggested-prompts") as AgentListSection;
+    expect(prompts.removedCount).toBe(1);
+    expect(prompts.changedCount).toBe(0);
+    expect(prompts.items.filter((item) => item.label !== "Onboarding")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Ideas", change: "unchanged" }),
+        expect.objectContaining({ label: "Bugs", change: "unchanged" }),
+      ]),
+    );
+  });
+
   // The same id-not-name rule the scalars follow: a restore reads these rows
   // by id and writes nothing when only the name moved, so badging the row
   // "changed" would mark a row whose visible detail lines are identical.

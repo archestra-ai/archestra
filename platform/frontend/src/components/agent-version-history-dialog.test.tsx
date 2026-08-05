@@ -340,18 +340,14 @@ describe("AgentVersionHistoryDialog", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("treats a version a restore just created as the head before the timeline lists it", () => {
+  it("treats a version a restore just created as the head before the timeline lists it", async () => {
+    const user = userEvent.setup();
     // Settling invalidates the timeline, but until that refetch lands the row
     // at the top is the superseded head: it would keep the Current badge while
     // the footer offered to restore what the agent already is — a click that
     // 409s or comes back "identical". A restore only ever appends, so the
     // version it minted is the head until something reports a higher one.
-    vi.mocked(useRestoreAgentVersion).mockReturnValue({
-      mutateAsync,
-      isPending: false,
-      data: { id: "agent-1", latestVersion: 4 },
-      // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
-    } as any);
+    mutateAsync.mockResolvedValue({ id: "agent-1", latestVersion: 4 });
     mockVersionDetails({
       4: versionDetail(4, "hash-four"),
       3: versionDetail(3, "hash-head"),
@@ -359,7 +355,15 @@ describe("AgentVersionHistoryDialog", () => {
     });
     renderDialog();
 
-    const supersededRow = screen.getByRole("button", { name: /v3/ });
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 2" }));
+
+    // The timeline mock is static — it still lists v3 as the newest row,
+    // exactly the "before the refetch lands" window this guards.
+    const supersededRow = await screen.findByRole("button", { name: /v3/ });
     expect(
       within(supersededRow).queryByText("Current"),
     ).not.toBeInTheDocument();
@@ -369,6 +373,56 @@ describe("AgentVersionHistoryDialog", () => {
     expect(
       screen.getByRole("button", { name: "Restore this version" }),
     ).toBeDisabled();
+  });
+
+  it("keeps the first restore's head after a second restore in the same session settles", async () => {
+    const user = userEvent.setup();
+    // A shared mutation instance's `data` reflects only its *latest* call, so
+    // reading `restoredHead` off it directly would forget the first restore
+    // the moment a second one settles — including a second restore that
+    // itself fails (a deleted referent, a conflict): the badge the first
+    // restore earned would be lost to an unrelated later failure.
+    mutateAsync.mockImplementation(
+      async (input: { agentId: string; version: number }) => {
+        const result =
+          input.version === 2 ? { id: "agent-1", latestVersion: 4 } : null;
+        vi.mocked(useRestoreAgentVersion).mockReturnValue({
+          mutateAsync,
+          isPending: false,
+          data: result,
+          // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
+        } as any);
+        return result;
+      },
+    );
+    mockVersionDetails({
+      4: versionDetail(4, "hash-four"),
+      3: versionDetail(3, "hash-head"),
+      2: versionDetail(2, "hash-two"),
+      1: versionDetail(1, "hash-one"),
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 2" }));
+    await screen.findByRole("heading", { name: "Version 4" });
+
+    // A second restore, of a version the server refuses — a handled failure,
+    // resolving to null rather than throwing.
+    await user.click(screen.getByRole("button", { name: /v1/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 1" }));
+
+    // Still the "before the refetch lands" window for both restores: if the
+    // head fell back to the stale timeline read once the mutation settled on
+    // the second call's null, this row would wear the badge again.
+    const staleHeadRow = await screen.findByRole("button", { name: /v3/ });
+    expect(within(staleHeadRow).queryByText("Current")).not.toBeInTheDocument();
   });
 
   it("explains a pruned predecessor instead of claiming to load it", async () => {

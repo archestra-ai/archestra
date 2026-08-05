@@ -130,6 +130,15 @@ function VersionHistory({
   const [viewMode, setViewMode] = useState<VersionViewMode>("all");
   const [confirmingRestore, setConfirmingRestore] = useState(false);
   const restoreVersion = useRestoreAgentVersion();
+  // Set on a successful restore, not read off `restoreVersion.data`: that
+  // mutation instance is shared for the dialog's whole session, and
+  // react-query clears its `data` back to `undefined` the moment a *second*
+  // `mutateAsync` call starts — before that call's own result lands. Reading
+  // it directly would drop `restoredHead` back to null for the duration of
+  // that second call, regressing `headVersion` to a still-stale
+  // `reportedHead` and un-badging the version the first restore just made
+  // current. Local state has no such reset.
+  const [restoredHead, setRestoredHead] = useState<number | null>(null);
 
   // Pages are read by offset from a list that grows at the head, so a version
   // created between two page loads shifts every row down and the next page
@@ -161,7 +170,6 @@ function VersionHistory({
   // offer to restore what the agent already is. A restore only ever appends,
   // so the version it just minted is a head until something reports a higher
   // one — which the refetch, and anyone else's concurrent edit, then does.
-  const restoredHead = restoreVersion.data?.latestVersion ?? null;
   const headVersion =
     reportedHead === null
       ? restoredHead
@@ -246,6 +254,10 @@ function VersionHistory({
     // head that actually moved, which is what the toast asks them to do.
     setConfirmingRestore(false);
     if (!result) return;
+    // A restore only ever appends, so this can only move the high-water mark
+    // up — safe to set unconditionally rather than maxing against the state
+    // setter's own previous value.
+    setRestoredHead(result.latestVersion);
     // A restore lands as the new head, so the previewed version is no longer
     // what the agent looks like — jump the selection to the version just made.
     setSelectedVersion(result.latestVersion);

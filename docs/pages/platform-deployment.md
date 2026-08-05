@@ -884,6 +884,9 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: not set (incognito chats unavailable).
   - Requires an enterprise license; startup fails when set without one, or when the key is not a valid RSA public key.
   - See [Incognito Chats](/docs/platform-content-encryption#incognito-chats) for setup and the recovery procedure.
+- **`ARCHESTRA_MCP_CREDENTIAL_ESCROW_PUBLIC_KEY`** - Enables browser-key MCP credentials (enterprise): personal static credentials on remote MCP servers protected by a key held only in the owner's browser. RSA public key (PEM or base64-of-PEM, >= 2048 bits) used to escrow browser keys for break-glass recovery.
+  - Default: not set (unavailable). Requires an enterprise license; startup fails when set without one or with an invalid key.
+  - See [Browser-Held MCP Credential Keys](/docs/platform-content-encryption#browser-held-mcp-credential-keys).
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.

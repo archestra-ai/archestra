@@ -74,3 +74,19 @@ Escrow key rotation affects new chats only: each conversation stores its key wra
 ### Break-Glass Recovery
 
 Each incognito conversation row stores `incognito_escrow`: a JSON blob with the chat key wrapped as RSA-OAEP (SHA-256). To recover a chat, the holder of the escrow private key decrypts `wrappedDek`, then decrypts each `messages.content` envelope with AES-256-GCM using the AAD `messages.content|incognito:<conversation id>`. Recovery happens outside the platform, with database access — plan who holds the private key and under what procedure before enabling the feature.
+
+## Browser-Held MCP Credential Keys
+
+> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
+
+A personal API key or token for a remote MCP server can be protected by a key that lives only in the owner's browser. The credential is stored encrypted under that key; the server decrypts it in memory for each tool call the owner makes from their browser and never stores the key or caches the plaintext.
+
+Without the owner's browser, the connection is locked. Scheduled tasks, messaging channels, API clients such as Claude Code, and other users get a clear "protected by a browser-held key" message — the platform never falls back to a different credential.
+
+To enable, set `ARCHESTRA_MCP_CREDENTIAL_ESCROW_PUBLIC_KEY` to an RSA public key (PEM, at least 2048 bits) — the same keypair procedure as incognito chats works here; a separate keypair keeps the two recovery domains independent. Each protected credential stores the browser key wrapped to this escrow key for break-glass recovery.
+
+The choice appears when adding a personal credential to a remote server. One browser key protects all of a user's protected credentials in that browser: losing browser data, or a compromise of that one key, affects all of them — recovery is re-entering each credential. OAuth-based connections and local (self-hosted runtime) servers cannot be protected this way: OAuth tokens rotate server-side, and local servers receive credentials at pod start.
+
+### Break-Glass Recovery
+
+Each protected `mcp_server` row stores `browser_key_escrow` (RSA-OAEP SHA-256, same blob format as incognito chats). Decrypt `wrappedDek` with the escrow private key, then decrypt each credential envelope with AES-256-GCM using the AAD `secret.secret|browser-cred:<mcp server id>`.

@@ -1,7 +1,8 @@
 "use client";
 
 import type { ResourceVisibilityScope } from "@archestra/shared";
-import { Globe, User, UserRoundCheck, Users } from "lucide-react";
+import { UserRoundCheck } from "lucide-react";
+import { SCOPE_META, scopeStyles } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -11,17 +12,6 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-// Scope colors mirror AgentBadge so apps/MCP/proxies/skills share one language.
-// Light-mode text uses the 700/800 palette steps: the 600 steps fall below the
-// 4.5:1 contrast minimum (WCAG 1.4.3) on the tinted /10 fills. Dark mode's 400
-// steps already pass.
-export const scopeStyles = {
-  personal:
-    "bg-blue-500/10 text-blue-700 border-blue-500/30 dark:text-blue-400 dark:border-blue-400/30",
-  team: "bg-green-500/10 text-green-800 border-green-500/30 dark:text-green-400 dark:border-green-400/30",
-  org: "bg-amber-500/10 text-amber-800 border-amber-500/30 dark:text-amber-400 dark:border-amber-400/30",
-} as const;
-
 export function ResourceVisibilityBadge({
   scope,
   teams,
@@ -29,7 +19,7 @@ export function ResourceVisibilityBadge({
   authorId,
   authorName,
   currentUserId,
-  showSelfAsMe = false,
+  showSelfAsMe,
 }: {
   scope: ResourceVisibilityScope | undefined;
   teams: TeamInfo[] | undefined;
@@ -44,18 +34,32 @@ export function ResourceVisibilityBadge({
   authorName: string | null | undefined;
   currentUserId: string | undefined;
   /**
-   * Controls how a personal resource owned by the current user is labelled. By
-   * default that badge is hidden. Set this to render a "Me" badge instead: when
-   * the same column also lists team- and organization-scoped resources, a blank
-   * cell on the user's own row is confusing, so labelling it "Me" keeps every
-   * row consistently attributed.
+   * How to label a personal resource the current user owns. Required, with no
+   * default, because either answer is silently invisible if you guess wrong and
+   * the wrong one renders an empty cell — which is exactly how two shipped bugs
+   * got in. Deciding is one line; noticing a blank cell in review is not.
+   *
+   * Pass `true` when one column mixes personal, team and organization rows: a
+   * blank cell on the viewer's own row among labelled ones reads as missing
+   * data, so "Me" keeps every row attributed.
+   *
+   * Pass `false` when the surface already segregates owners — a grid split
+   * under "Personal" and "Shared" headings, or a list scoped to one user —
+   * where a "Me" pill on every row is noise.
    */
-  showSelfAsMe?: boolean;
+  showSelfAsMe: boolean;
 }) {
+  // An unknown scope says nothing rather than guessing. Falling through to the
+  // team branch would label a resource "Team" on no evidence, which is worse
+  // than an empty cell: a wrong badge is believed, a missing one is queried.
+  if (!scope) {
+    return null;
+  }
+
   if (scope === "org") {
     return (
       <Badge variant="outline" className={cn(scopeStyles.org, "gap-1 text-xs")}>
-        <Globe className="h-3 w-3" />
+        <OrgIcon className="h-3 w-3" />
         Organization
       </Badge>
     );
@@ -85,10 +89,8 @@ export function ResourceVisibilityBadge({
             "inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs",
           )}
         >
-          <User className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            {truncateBadgeText(displayName ?? "", MAX_BADGE_TEXT_LENGTH)}
-          </span>
+          <PersonalIcon className="h-3 w-3 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{displayName}</span>
         </Badge>
       );
     }
@@ -111,10 +113,7 @@ export function ResourceVisibilityBadge({
             >
               <UserRoundCheck className="h-3 w-3 shrink-0" />
               <span className="min-w-0 truncate">
-                {truncateBadgeText(
-                  displayName ?? sharedWith[0].name,
-                  MAX_BADGE_TEXT_LENGTH,
-                )}
+                {displayName ?? sharedWith[0].name}
               </span>
               <span className="shrink-0 opacity-70">+{sharedWith.length}</span>
             </Badge>
@@ -131,7 +130,7 @@ export function ResourceVisibilityBadge({
         variant="outline"
         className={cn(scopeStyles.team, "gap-1 text-xs")}
       >
-        <Users className="h-3 w-3" />
+        <TeamIcon className="h-3 w-3" />
         Team
       </Badge>
     );
@@ -142,19 +141,22 @@ export function ResourceVisibilityBadge({
       pills={teams.map((team) => ({
         key: `team:${team.id}`,
         name: team.name,
-        icon: Users,
+        icon: TeamIcon,
       }))}
       style={scopeStyles.team}
     />
   );
 }
 
+const OrgIcon = SCOPE_META.org.icon;
+const PersonalIcon = SCOPE_META.personal.icon;
+const TeamIcon = SCOPE_META.team.icon;
+
 type TeamInfo = { id: string; name: string };
 type UserInfo = { id: string; name: string };
-type Pill = { key: string; name: string; icon: typeof User };
+type Pill = { key: string; name: string; icon: typeof TeamIcon };
 
 const MAX_PILLS_TO_SHOW = 3;
-const MAX_BADGE_TEXT_LENGTH = 15;
 
 /** A row of name pills, overflowing into a "+N more" tooltip. */
 function PillRow({ pills, style }: { pills: Pill[]; style: string }) {
@@ -173,9 +175,7 @@ function PillRow({ pills, style }: { pills: Pill[]; style: string }) {
           )}
         >
           <Icon className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            {truncateBadgeText(name, MAX_BADGE_TEXT_LENGTH)}
-          </span>
+          <span className="min-w-0 flex-1 truncate">{name}</span>
         </Badge>
       ))}
       {remaining.length > 0 && (
@@ -200,10 +200,4 @@ function PillRow({ pills, style }: { pills: Pill[]; style: string }) {
       )}
     </div>
   );
-}
-
-function truncateBadgeText(value: string, maxLength: number): string {
-  return value.length > maxLength
-    ? `${value.slice(0, maxLength - 3)}...`
-    : value;
 }

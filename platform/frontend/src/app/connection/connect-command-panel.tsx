@@ -25,6 +25,7 @@ import { CreditWarningNotice } from "@/components/connection/credit-warning-noti
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { ProviderIcon } from "@/components/provider-icon";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -37,7 +38,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WizardStep } from "@/components/wizard-step";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
   type CreateConnectionSetupBody,
@@ -161,6 +162,9 @@ export function ConnectCommandPanel({
 }: ConnectCommandPanelProps) {
   const { eligible: skillsEligible, skills: allSkills } =
     useConnectSkills(llmProxyId);
+  // The skill picker labels each row's owner, so it needs the viewer's id.
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   // Skill selection: `null` means "all skills" (the default, and it keeps
   // including skills created later). Once the user touches any checkbox it
   // becomes an explicit snapshot of chosen ids — so an opt-out (empty set)
@@ -687,7 +691,16 @@ export function ConnectCommandPanel({
                   toggleSkill(skill.id, checked === true)
                 }
               />
-              {skill.name}
+              <span>{skill.name}</span>
+              <ResourceVisibilityBadge
+                scope={skill.scope}
+                teams={skill.teams}
+                users={skill.users}
+                authorId={skill.authorId}
+                authorName={skill.authorName}
+                currentUserId={currentUserId}
+                showSelfAsMe
+              />
             </label>
           </li>
         ))}

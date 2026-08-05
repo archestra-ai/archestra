@@ -176,6 +176,7 @@ const DELTA_ENCODING_COLUMNS = {
   requestSharedPrefix: true,
   processedRequestSharedPrefix: true,
   requestLastMessageIdx: true,
+  requestLastMessageHash: true,
 } as const;
 
 const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit(

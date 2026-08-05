@@ -16,6 +16,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -40,6 +41,7 @@ import {
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
+  usePermanentlyDeleteProfile,
   useProfile,
   useProfilesPaginated,
   useRestoreProfile,
@@ -216,7 +218,10 @@ function McpGateways({
   const [cloningGateway, setCloningGateway] = useState<GatewayData | null>(
     null,
   );
+  const [permanentlyDeletingGateway, setPermanentlyDeletingGateway] =
+    useState<GatewayData | null>(null);
   const restoreGateway = useRestoreProfile();
+  const permanentlyDeleteGateway = usePermanentlyDeleteProfile("MCP Gateway");
 
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
@@ -437,6 +442,7 @@ function McpGateways({
                 },
               });
             }}
+            onPermanentlyDelete={setPermanentlyDeletingGateway}
             onClone={setCloningGateway}
             onHistory={(id, historyCanModify) =>
               setHistory({ id, canModify: historyCanModify })
@@ -634,6 +640,25 @@ function McpGateways({
                 agentId={deletingGatewayId}
                 open={!!deletingGatewayId}
                 onOpenChange={(open) => !open && setDeletingGatewayId(null)}
+              />
+            )}
+
+            {permanentlyDeletingGateway && (
+              <DeleteConfirmDialog
+                open={!!permanentlyDeletingGateway}
+                onOpenChange={(open) =>
+                  !open && setPermanentlyDeletingGateway(null)
+                }
+                title="Delete MCP Gateway permanently"
+                description={`This destroys "${permanentlyDeletingGateway.name}" and everything it owns. Its MCP tool-call history is kept, no longer pointing at the gateway. Nothing recovers the gateway itself.`}
+                isPending={permanentlyDeleteGateway.isPending}
+                onConfirm={async () => {
+                  const ok = await permanentlyDeleteGateway.mutateAsync(
+                    permanentlyDeletingGateway.id,
+                  );
+                  if (ok) setPermanentlyDeletingGateway(null);
+                }}
+                confirmLabel={PERMANENT_DELETE_LABEL}
               />
             )}
 

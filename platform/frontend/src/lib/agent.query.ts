@@ -22,6 +22,7 @@ const {
   getDefaultLlmProxy,
   getAgent,
   importAgent,
+  permanentlyDeleteAgent,
   restoreAgent,
   updateAgent,
   getLabelKeys,
@@ -397,6 +398,35 @@ export function useRestoreProfile() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.setQueryData(["agents", data.id], data);
+    },
+  });
+}
+
+/**
+ * Permanently destroy a soft-deleted agent. Irreversible: the row and
+ * everything it owns go, while its LLM interaction history survives detached.
+ *
+ * One endpoint serves every agent type, so callers pass the label their
+ * surface uses ("MCP Gateway", "LLM Proxy") to keep the toast in the language
+ * of the page the user is on.
+ */
+export function usePermanentlyDeleteProfile(entityLabel = "Agent") {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await permanentlyDeleteAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, id) => {
+      if (!data) return;
+      toast.success(`${entityLabel} permanently deleted`);
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // The detail query for a now-nonexistent id would 404 on its next fetch.
+      queryClient.removeQueries({ queryKey: ["agents", id] });
     },
   });
 }

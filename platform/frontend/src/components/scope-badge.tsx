@@ -18,6 +18,15 @@ const SCOPE_META: Record<
   org: { label: "Organization", icon: Globe },
 };
 
+/**
+ * The human label for a scope, read from the same table the pill uses, so
+ * surfaces that spell the scope out in text ("Organization", not the raw `org`
+ * enum) cannot drift from what the pill says.
+ */
+export function scopeLabel(scope: ResourceVisibilityScope): string {
+  return SCOPE_META[scope].label;
+}
+
 // Icon-only scope pill (personal/team/org) with the label in the tooltip +
 // aria-label. Shared across the apps and projects cards so scope reads the same
 // everywhere. A team scope folds its team names into the label ("Team: London
@@ -46,7 +55,7 @@ export function ScopeBadge({
     return null;
   }
 
-  const { label: scopeLabel, icon: scopeIcon } = SCOPE_META[scope];
+  const { icon: scopeIcon } = SCOPE_META[scope];
   const Icon = sharedWithUsers ? UserRoundCheck : scopeIcon;
 
   const names = teamNames?.filter(Boolean) ?? [];
@@ -54,7 +63,7 @@ export function ScopeBadge({
     ? `Shared with: ${sharedWith.join(", ")}`
     : scope === "team" && names.length > 0
       ? `Team: ${names.join(", ")}`
-      : scopeLabel;
+      : scopeLabel(scope);
 
   return (
     <Tooltip>

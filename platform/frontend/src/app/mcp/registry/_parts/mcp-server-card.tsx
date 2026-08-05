@@ -27,6 +27,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
   Avatar,
   AvatarFallback,
@@ -565,11 +566,18 @@ export function McpServerCard({
   }
   const extraCount = connectionAvatars.length - MAX_AVATARS;
 
-  const showAuthorAvatar =
-    item.scope === "personal" && Boolean(item.authorName);
+  // Who can reach this catalog item. Personal items of the viewer's own say
+  // nothing new — the grid already groups them under a "Personal" heading, and
+  // the badge renders null for that case anyway, so the gate mirrors it to keep
+  // the row (and its separator) from reserving space for an empty badge.
+  const showScopeBadge =
+    item.scope !== "personal" ||
+    Boolean(item.authorId && item.authorId !== currentUserId);
 
-  const hasCompactInfoContent =
-    showAuthorAvatar ||
+  // Whether anything follows the badge in the row. Shared by the row's "is there
+  // anything at all to show" gate and the badge's trailing divider so the two
+  // can't drift and leave a divider hanging at the end of the row.
+  const hasCompactInfoAfterScopeBadge =
     toolsCount > 0 ||
     totalAgentCount > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
@@ -578,26 +586,20 @@ export function McpServerCard({
         hasOrgConnection ||
         Boolean(oauthReauthIndicator)));
 
+  const hasCompactInfoContent = showScopeBadge || hasCompactInfoAfterScopeBadge;
+
   const compactInfoRow = hasCompactInfoContent ? (
     <div className="flex items-center gap-3 text-sm text-muted-foreground">
-      {showAuthorAvatar && (
+      {showScopeBadge && (
         <>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Avatar className="size-6 border-2 border-background">
-                  <AvatarFallback className="text-[10px]">
-                    {item.authorName?.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-              </TooltipTrigger>
-              <TooltipContent>Author: {item.authorName}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          {(toolsCount > 0 ||
-            (variant === "local" && deploymentServerIds.length > 0) ||
-            (!isBuiltinVariant &&
-              (connectionAvatars.length > 0 || hasOrgConnection))) && (
+          <ResourceVisibilityBadge
+            scope={item.scope}
+            teams={item.teams}
+            authorId={item.authorId}
+            authorName={item.authorName}
+            currentUserId={currentUserId}
+          />
+          {hasCompactInfoAfterScopeBadge && (
             <div className="h-4 w-px bg-border" />
           )}
         </>

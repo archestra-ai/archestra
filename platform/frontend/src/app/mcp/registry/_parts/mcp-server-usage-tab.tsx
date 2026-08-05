@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot } from "lucide-react";
+import { scopeLabel } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -74,9 +75,15 @@ export function McpServerUsageTab({
                     {/*
                       Personal agents are seeded per member and share a name, so
                       the owner is what tells them apart. Org- and team-scoped
-                      agents belong to everyone, hence the scope label instead.
+                      agents belong to everyone, hence the scope label instead —
+                      spelled out the way every scope pill spells it, so this
+                      column never shows the raw `org` enum.
                     */}
-                    {owner ?? <span className="capitalize">{agent.scope}</span>}
+                    {owner ? (
+                      <span>{owner}</span>
+                    ) : (
+                      <span>{scopeLabel(agent.scope)}</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {agent.access === "assigned" ? (

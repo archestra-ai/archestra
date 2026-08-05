@@ -205868,6 +205868,14 @@
                             "api-discovery"
                           ]
                         },
+                        "enforcementStatus": {
+                          "type": "string",
+                          "enum": [
+                            "verified-enforced",
+                            "verified-not-enforced",
+                            "unknown"
+                          ]
+                        },
                         "probe": {
                           "type": "string",
                           "enum": [
@@ -205892,6 +205900,7 @@
                         "supportsHttpMethods",
                         "message",
                         "enforcementSource",
+                        "enforcementStatus",
                         "probe",
                         "probedAt"
                       ],

@@ -52481,6 +52481,7 @@ export type GetK8sCapabilitiesResponses = {
             supportsHttpMethods: boolean;
             message: string | null;
             enforcementSource: 'probe' | 'api-discovery';
+            enforcementStatus: 'verified-enforced' | 'verified-not-enforced' | 'unknown';
             probe: 'enforced' | 'not-enforced' | 'inconclusive' | 'absent';
             probedAt: string | null;
         };

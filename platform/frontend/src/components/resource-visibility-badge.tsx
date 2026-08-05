@@ -90,9 +90,7 @@ export function ResourceVisibilityBadge({
           )}
         >
           <PersonalIcon className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            {truncateBadgeText(displayName ?? "", MAX_BADGE_TEXT_LENGTH)}
-          </span>
+          <span className="min-w-0 flex-1 truncate">{displayName}</span>
         </Badge>
       );
     }
@@ -115,10 +113,7 @@ export function ResourceVisibilityBadge({
             >
               <UserRoundCheck className="h-3 w-3 shrink-0" />
               <span className="min-w-0 truncate">
-                {truncateBadgeText(
-                  displayName ?? sharedWith[0].name,
-                  MAX_BADGE_TEXT_LENGTH,
-                )}
+                {displayName ?? sharedWith[0].name}
               </span>
               <span className="shrink-0 opacity-70">+{sharedWith.length}</span>
             </Badge>
@@ -162,7 +157,6 @@ type UserInfo = { id: string; name: string };
 type Pill = { key: string; name: string; icon: typeof TeamIcon };
 
 const MAX_PILLS_TO_SHOW = 3;
-const MAX_BADGE_TEXT_LENGTH = 15;
 
 /** A row of name pills, overflowing into a "+N more" tooltip. */
 function PillRow({ pills, style }: { pills: Pill[]; style: string }) {
@@ -181,9 +175,7 @@ function PillRow({ pills, style }: { pills: Pill[]; style: string }) {
           )}
         >
           <Icon className="h-3 w-3 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            {truncateBadgeText(name, MAX_BADGE_TEXT_LENGTH)}
-          </span>
+          <span className="min-w-0 flex-1 truncate">{name}</span>
         </Badge>
       ))}
       {remaining.length > 0 && (
@@ -208,10 +200,4 @@ function PillRow({ pills, style }: { pills: Pill[]; style: string }) {
       )}
     </div>
   );
-}
-
-function truncateBadgeText(value: string, maxLength: number): string {
-  return value.length > maxLength
-    ? `${value.slice(0, maxLength - 3)}...`
-    : value;
 }

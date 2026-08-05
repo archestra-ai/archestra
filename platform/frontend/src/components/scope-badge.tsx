@@ -58,7 +58,11 @@ export function ScopeBadge({
           variant="outline"
           aria-label={label}
           className={cn(
-            scopeStyles[sharedWithUsers ? "team" : scope],
+            // A shared personal resource stays personal-coloured — the grants
+            // change who can reach it, not its scope class. The distinct icon
+            // and tooltip carry the "shared" part, exactly as
+            // resource-visibility-badge renders the same case.
+            scopeStyles[scope],
             "px-1.5",
           )}
         >

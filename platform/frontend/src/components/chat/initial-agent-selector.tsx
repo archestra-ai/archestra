@@ -819,15 +819,14 @@ function AgentSettingsView({
       </div>
 
       <div className="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
-        {agent.scope === "org" ||
-          (agent.scope === "team" && (
-            <Alert variant="info" className="border-0 py-2 text-xs">
-              <Info className="size-3.5" />
-              <AlertDescription className="text-xs">
-                You are editing a shared agent
-              </AlertDescription>
-            </Alert>
-          ))}
+        {(agent.scope === "org" || agent.scope === "team") && (
+          <Alert variant="info" className="border-0 py-2 text-xs">
+            <Info className="size-3.5" />
+            <AlertDescription className="text-xs">
+              You are editing a shared agent
+            </AlertDescription>
+          </Alert>
+        )}
         <SystemPromptEditor
           value={instructions}
           onChange={setInstructions}

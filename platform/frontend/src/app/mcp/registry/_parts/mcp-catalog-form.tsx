@@ -107,6 +107,8 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+import { McpConfigImportDialog } from "./mcp-config-import-dialog";
+import type { McpConfigImportCandidate } from "./mcp-config-import-parser";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -332,6 +334,22 @@ export function McpCatalogForm({
   const selectedIdentityProviderId = form.watch(
     "enterpriseManagedConfig.identityProviderId",
   );
+
+  const handleConfigImport = (candidate: McpConfigImportCandidate) => {
+    const currentValues = form.getValues();
+    const importedValues = candidate.values;
+    form.reset(
+      {
+        ...currentValues,
+        ...importedValues,
+        localConfig: importedValues.localConfig ?? currentValues.localConfig,
+        oauthConfig: importedValues.oauthConfig
+          ? { ...currentValues.oauthConfig, ...importedValues.oauthConfig }
+          : currentValues.oauthConfig,
+      },
+      { keepDefaultValues: true },
+    );
+  };
 
   const handleAuthMethodChange = (
     nextAuthMethod: McpCatalogFormValues["authMethod"],
@@ -1225,7 +1243,13 @@ export function McpCatalogForm({
               )}
               {mode === "create" && (
                 <div className="space-y-2">
-                  <Label>Server Type</Label>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label>Server Type</Label>
+                    <McpConfigImportDialog
+                      onImport={handleConfigImport}
+                      localServersEnabled={Boolean(isLocalMcpEnabled)}
+                    />
+                  </div>
                   <div className="flex rounded-lg border border-border overflow-hidden">
                     <button
                       type="button"
@@ -1427,12 +1451,12 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
+                          Arguments (one per line or JSON array)
                           <ReinstallHint show={isArgumentsDirty} />
                         </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`/path/to/server.js\n--verbose\n\nor ["/path/to/server.js", "--verbose"]`}
                             className="font-mono min-h-20"
                             {...field}
                           />

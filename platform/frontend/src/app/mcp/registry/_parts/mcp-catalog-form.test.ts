@@ -285,6 +285,27 @@ describe("formSchema", () => {
       expect(formSchema.parse(data)).toEqual(data);
     });
 
+    it("should reject JSON arguments that are not a string array", () => {
+      const data = {
+        ...baseValidData,
+        serverType: "local" as const,
+        serverUrl: "",
+        localConfig: {
+          command: "node",
+          arguments: '["server.js", 42]',
+          environment: [],
+          dockerImage: "",
+          transportType: "stdio" as const,
+          httpPort: "",
+          httpPath: "/mcp",
+        },
+      };
+
+      expect(() => formSchema.parse(data)).toThrow(
+        "JSON arguments must be an array of strings",
+      );
+    });
+
     it("should reject enterprise-managed credentials for local stdio servers", () => {
       const data = {
         ...baseValidData,

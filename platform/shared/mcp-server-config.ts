@@ -1,5 +1,37 @@
 import { z } from "zod";
 
+export function parseMcpArguments(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if (!trimmed.startsWith("[")) {
+    return value
+      .split("\n")
+      .map((argument) => argument.trim())
+      .filter(Boolean);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(
+      "Arguments must be one per line or a valid JSON string array",
+    );
+  }
+
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every((argument) => typeof argument === "string")
+  ) {
+    throw new Error("JSON arguments must be an array of strings");
+  }
+
+  return parsed;
+}
+
 export const OAuthConfigSchema = z
   .object({
     name: z.string(),
@@ -139,7 +171,19 @@ export const LocalConfigSchema = z
 
 export const LocalConfigFormSchema = z.object({
   command: z.string().optional(),
-  arguments: z.string(),
+  arguments: z.string().superRefine((value, ctx) => {
+    try {
+      parseMcpArguments(value);
+    } catch (error) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Arguments must be one per line or a valid JSON string array",
+      });
+    }
+  }),
   environment: z.array(EnvironmentVariableSchema),
   envFrom: z.array(EnvFromSchema).optional(),
   dockerImage: z.string().optional(),

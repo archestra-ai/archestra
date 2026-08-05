@@ -7,6 +7,45 @@ import {
 } from "./mcp-catalog-form.utils";
 
 describe("transformFormToApiData", () => {
+  it("accepts command arguments as a JSON string array", () => {
+    const data = transformFormToApiData({
+      name: "JSON Arguments MCP",
+      serverType: "local",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      additionalHeaders: [],
+      localConfig: {
+        command: "node",
+        arguments: '["server.js", "--label", "value with spaces", ""]',
+        environment: [],
+      },
+    } as McpCatalogFormValues);
+
+    expect(data.localConfig?.arguments).toEqual([
+      "server.js",
+      "--label",
+      "value with spaces",
+      "",
+    ]);
+  });
+
+  it("keeps the existing one-argument-per-line format", () => {
+    const data = transformFormToApiData({
+      name: "Line Arguments MCP",
+      serverType: "local",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      additionalHeaders: [],
+      localConfig: {
+        command: "node",
+        arguments: " server.js \n --verbose \n",
+        environment: [],
+      },
+    } as McpCatalogFormValues);
+
+    expect(data.localConfig?.arguments).toEqual(["server.js", "--verbose"]);
+  });
+
   it("maps custom auth and additional headers into userConfig", () => {
     const values: McpCatalogFormValues = {
       name: "Header MCP",

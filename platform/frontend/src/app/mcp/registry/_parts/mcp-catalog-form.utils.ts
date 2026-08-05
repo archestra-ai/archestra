@@ -4,6 +4,7 @@ import {
   type archestraCatalogTypes,
   type ImagePullSecretConfig,
   isVaultReference,
+  parseMcpArguments,
   parseVaultReference,
 } from "@archestra/shared";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
@@ -34,13 +35,7 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    const argumentsArray = parseMcpArguments(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,

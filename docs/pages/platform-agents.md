@@ -117,7 +117,9 @@ The history is available through the API. `GET /api/agents/:id/versions` lists v
 
 Each agent keeps its last 100 versions. The oldest listed version can therefore be greater than 1.
 
-`POST /api/agents/:id/versions/:version/restore` returns an agent to an earlier configuration. A restore forks forward — the old configuration becomes a new version. Nothing in the history is overwritten. References the version points to that no longer exist — a deleted tool, for example — come back in the response's `skipped` field. The rest of the configuration still lands.
+`POST /api/agents/:id/versions/:version/restore` returns an agent to an earlier configuration. The restore forks forward: the old configuration becomes a new version. Nothing in the history is overwritten.
+
+A restore is all-or-nothing. If the version points at something that no longer exists — a deleted tool, for example — the request fails with a 400. The agent is left exactly as it was. Recreate the missing piece, or restore a later version instead.
 
 Send the agent's current `latestVersion` as `baseVersion` to anchor the restore. A 409 then tells you someone else changed the agent first. Built-in agents cannot be restored.
 

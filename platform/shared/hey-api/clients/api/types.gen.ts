@@ -14213,118 +14213,115 @@ export type RestoreAgentVersionResponses = {
      * Default Response
      */
     200: {
-        agent: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        slug: string | null;
+        isDefault: boolean;
+        isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
+        considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        description: string | null;
+        icon: string | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
+        modelId: string | null;
+        identityProviderId: string | null;
+        environmentId: string | null;
+        passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
+        accessAllSubagents: boolean;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | {
+            name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
+        } | {
+            name: 'app-runtime-llm-agent';
+        } | null;
+        builtIn: boolean | null;
+        latestVersion: number;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        tools: Array<{
             id: string;
-            organizationId: string;
-            authorId: string | null;
-            scope: 'personal' | 'team' | 'org';
+            agentId: string | null;
+            catalogId: string | null;
+            delegateToAgentId: string | null;
             name: string;
-            slug: string | null;
-            isDefault: boolean;
-            isPersonalGateway: boolean;
-            isPersonalProxy: boolean;
-            considerContextUntrusted: boolean;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            systemPrompt: string | null;
+            rawName: string | null;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
             description: string | null;
-            icon: string | null;
-            incomingEmailEnabled: boolean;
-            incomingEmailSecurityMode: 'private' | 'internal' | 'public';
-            incomingEmailAllowedDomain: string | null;
-            llmApiKeyId: string | null;
-            llmModel: string | null;
-            modelId: string | null;
-            identityProviderId: string | null;
-            environmentId: string | null;
-            passthroughHeaders: Array<string> | null;
-            toolExposureMode: 'full' | 'search_and_run_only';
-            accessAllTools: boolean;
-            accessAllSubagents: boolean;
-            builtInAgentConfig: {
-                name: 'policy-configuration-subagent';
-                autoConfigureOnToolDiscovery: boolean;
-            } | {
-                name: 'dual-llm-main-agent';
-                maxRounds: number;
-            } | {
-                name: 'dual-llm-quarantine-agent';
-            } | {
-                name: 'context-compaction-subagent';
-            } | {
-                name: 'chat-title-generation-subagent';
-            } | {
-                name: 'app-runtime-llm-agent';
-            } | null;
-            builtIn: boolean | null;
-            latestVersion: number;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
-            tools: Array<{
-                id: string;
-                agentId: string | null;
-                catalogId: string | null;
-                delegateToAgentId: string | null;
-                name: string;
-                rawName: string | null;
-                /**
-                 *
-                 * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
-                 *
-                 * The parameters the functions accepts, described as a JSON Schema object. See the
-                 * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
-                 * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
-                 * documentation about the format.
-                 *
-                 * Omitting parameters defines a function with an empty parameter list.
-                 *
-                 */
-                parameters?: {
-                    [key: string]: unknown;
-                };
-                description: string | null;
-                meta: string | number | boolean | null | {
-                    [key: string]: unknown;
-                } | Array<unknown> | null;
-                clonedPendingDiscovery: boolean;
-                policiesAutoConfiguredAt: string | null;
-                policiesAutoConfiguringStartedAt: string | null;
-                policiesAutoConfiguredReasoning: string | null;
-                policiesAutoConfiguredModel: string | null;
-                createdAt: string;
-                updatedAt: string;
-                deletedAt: string | null;
-            }>;
-            teams: Array<{
-                id: string;
-                name: string;
-            }>;
-            users?: Array<{
-                id: string;
-                name: string;
-                email: string;
-            }>;
-            labels: Array<{
-                key: string;
-                value: string;
-                keyId?: string;
-                valueId?: string;
-            }>;
-            authorName?: string | null;
-            authorEmail?: string | null;
-            knowledgeBaseIds: Array<string>;
-            connectorIds: Array<string>;
-            suggestedPrompts: Array<{
-                summaryTitle: string;
-                prompt: string;
-            }>;
-            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
-            resolvedLlmModelName?: string | null;
-            llmProviderRequiresPerUserCredential?: boolean;
-            sandboxAvailable?: boolean;
-            lastUsedAt?: string | null;
-        };
-        skipped: Array<string>;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+        authorName?: string | null;
+        authorEmail?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmModelName?: string | null;
+        llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 

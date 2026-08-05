@@ -10,7 +10,6 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
-  Building2,
   CheckCircle2,
   Loader2,
   Pencil,
@@ -18,7 +17,6 @@ import {
   Server,
   Trash2,
   User,
-  Users,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -39,6 +37,11 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
+import {
+  SCOPE_META,
+  scopeLabel,
+  scopeStyles,
+} from "@/components/scope-vocabulary";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -60,7 +63,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -73,6 +76,7 @@ import {
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
+import { cn } from "@/lib/utils";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import { isEditApiKeyFormValid } from "./edit-key-form.utils";
@@ -95,12 +99,6 @@ type ModelProviderRow =
       credential: LlmProviderApiKeyResponse | null;
       defaultValues: Partial<LlmProviderApiKeyFormValues>;
     };
-
-const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
-  personal: <User className="h-3 w-3" />,
-  team: <Users className="h-3 w-3" />,
-  org: <Building2 className="h-3 w-3" />,
-};
 
 const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
@@ -176,6 +174,10 @@ export default function ApiKeysPage() {
     enabled: apiKeyQueriesEnabled,
   });
   const { data: organization } = useOrganization();
+  // Read defensively: suites that render this page mock the auth query module
+  // wholesale, and the Access column should fall back to the scope label
+  // rather than crash the table (same convention as `user-share-field.tsx`).
+  const currentUserId = useSession()?.data?.user?.id;
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
@@ -481,33 +483,44 @@ export default function ApiKeysPage() {
         header: "Access",
         size: 210,
         minSize: 170,
-        cell: ({ row }) =>
-          row.original.kind === "subscription" ? (
-            <Badge variant="outline" className="max-w-full gap-1">
-              <User className="h-3 w-3" />
-              <span className="truncate">Personal account</span>
-            </Badge>
-          ) : (
-            <Badge
-              variant={row.original.isSystem ? "secondary" : "outline"}
-              className="max-w-full gap-1"
-            >
-              {row.original.isSystem ? (
+        cell: ({ row }) => {
+          const credential = row.original;
+          if (credential.kind === "subscription") {
+            return (
+              <Badge variant="outline" className="max-w-full gap-1">
+                <User className="h-3 w-3" />
+                <span className="truncate">Personal account</span>
+              </Badge>
+            );
+          }
+          if (credential.isSystem) {
+            return (
+              <Badge variant="secondary" className="max-w-full gap-1">
                 <Server className="h-3 w-3" />
-              ) : (
-                SCOPE_ICONS[row.original.scope as ResourceVisibilityScope]
-              )}
+                <span className="truncate">System</span>
+              </Badge>
+            );
+          }
+          const { scope } = credential;
+          const ScopeIcon = SCOPE_META[scope].icon;
+          return (
+            <Badge
+              variant="outline"
+              className={cn(scopeStyles[scope], "max-w-full gap-1")}
+            >
+              <ScopeIcon className="h-3 w-3" />
               <span className="truncate">
-                {row.original.isSystem
-                  ? "System"
-                  : row.original.scope === "team"
-                    ? row.original.teamName
-                    : row.original.scope === "personal"
-                      ? "Personal"
-                      : "Organization"}
+                {accessLabel({
+                  scope,
+                  userId: credential.userId,
+                  userName: credential.userName,
+                  teamName: credential.teamName,
+                  currentUserId,
+                })}
               </span>
             </Badge>
-          ),
+          );
+        },
       },
       {
         accessorKey: "secretStorageType",
@@ -648,6 +661,7 @@ export default function ApiKeysPage() {
       getKeyUsage,
       azureOpenAiEntraIdEnabled,
       anthropicWifEnabled,
+      currentUserId,
     ],
   );
 
@@ -810,6 +824,42 @@ export default function ApiKeysPage() {
       </div>
     </PageLayout>
   );
+}
+
+/**
+ * What the Access badge says for a stored credential.
+ *
+ * A personal key names its owner instead of repeating the scope word. The list
+ * endpoint only ever returns the caller's own personal keys (admins included),
+ * so in practice that row reads "Me", matching how the rest of the app labels
+ * the current user; the `userName` branch — the name the endpoint already
+ * joins onto every row — is what a key owned by somebody else would say if
+ * that visibility ever widens. A team key names its team, and the scope label
+ * is the fallback whenever no name came back.
+ */
+function accessLabel({
+  scope,
+  userId,
+  userName,
+  teamName,
+  currentUserId,
+}: {
+  scope: ResourceVisibilityScope;
+  userId: string | null;
+  userName?: string | null;
+  teamName?: string | null;
+  currentUserId?: string;
+}): string {
+  if (scope === "personal") {
+    if (currentUserId && userId === currentUserId) {
+      return "Me";
+    }
+    return userName || scopeLabel(scope);
+  }
+  if (scope === "team") {
+    return teamName || scopeLabel(scope);
+  }
+  return scopeLabel(scope);
 }
 
 function DeleteApiKeyDescription({

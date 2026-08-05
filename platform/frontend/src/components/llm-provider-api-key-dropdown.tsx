@@ -9,18 +9,12 @@ import {
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
-import {
-  Building2,
-  CheckIcon,
-  ChevronDown,
-  Key,
-  User,
-  Users,
-} from "lucide-react";
+import { CheckIcon, ChevronDown, Key } from "lucide-react";
 import Image from "next/image";
 import { useMemo } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,12 +66,6 @@ interface LlmProviderApiKeyDropdownProps {
   organizationDefaultSelected?: boolean;
   onSelectOrganizationDefault?: () => void;
 }
-
-const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
-  personal: <User className="h-3 w-3" />,
-  team: <Users className="h-3 w-3" />,
-  org: <Building2 className="h-3 w-3" />,
-};
 
 export function LlmProviderApiKeyDropdown({
   availableKeys,
@@ -316,7 +304,7 @@ export function LlmProviderApiKeyDropdown({
                     className="cursor-pointer"
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      {key.scope ? SCOPE_ICONS[key.scope] : null}
+                      {key.scope ? <ScopeIcon scope={key.scope} /> : null}
                       <span className="truncate">{key.name}</span>
                       {key.scope === "team" && key.teamName ? (
                         <Badge
@@ -389,6 +377,23 @@ function ProviderIcon({ provider }: { provider: SupportedProvider }) {
       height={14}
       className="shrink-0 rounded dark:invert"
     />
+  );
+}
+
+/**
+ * The scope glyph next to a key's name. It is the only thing distinguishing a
+ * personal key from an organization one here, and there is no room for text in
+ * this popover, so it carries the scope label as its accessible name (and as a
+ * hover title) rather than being a mute 12px decoration.
+ */
+function ScopeIcon({ scope }: { scope: ResourceVisibilityScope }) {
+  const Icon = SCOPE_META[scope].icon;
+  const label = scopeLabel(scope);
+
+  return (
+    <span role="img" aria-label={label} title={label} className="inline-flex">
+      <Icon className="h-3 w-3" />
+    </span>
   );
 }
 

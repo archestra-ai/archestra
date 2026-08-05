@@ -1,6 +1,10 @@
 import type { ResourceVisibilityScope } from "@archestra/shared";
-import { Globe, User, UserRoundCheck, Users } from "lucide-react";
-import { scopeStyles } from "@/components/resource-visibility-badge";
+import { UserRoundCheck } from "lucide-react";
+import {
+  SCOPE_META,
+  scopeLabel,
+  scopeStyles,
+} from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -8,24 +12,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-const SCOPE_META: Record<
-  ResourceVisibilityScope,
-  { label: string; icon: typeof User }
-> = {
-  personal: { label: "Personal", icon: User },
-  team: { label: "Team", icon: Users },
-  org: { label: "Organization", icon: Globe },
-};
-
-/**
- * The human label for a scope, read from the same table the pill uses, so
- * surfaces that spell the scope out in text ("Organization", not the raw `org`
- * enum) cannot drift from what the pill says.
- */
-export function scopeLabel(scope: ResourceVisibilityScope): string {
-  return SCOPE_META[scope].label;
-}
 
 // Icon-only scope pill (personal/team/org) with the label in the tooltip +
 // aria-label. Shared across the apps and projects cards so scope reads the same

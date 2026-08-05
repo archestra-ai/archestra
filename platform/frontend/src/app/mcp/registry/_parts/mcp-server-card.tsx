@@ -567,9 +567,10 @@ export function McpServerCard({
   const extraCount = connectionAvatars.length - MAX_AVATARS;
 
   // Who can reach this catalog item. Personal items of the viewer's own say
-  // nothing new — the grid already groups them under a "Personal" heading, and
-  // the badge renders null for that case anyway, so the gate mirrors it to keep
-  // the row (and its separator) from reserving space for an empty badge.
+  // nothing new — the grid already groups them under a "Personal" heading, so
+  // the badge is asked not to label them "Me" (`showSelfAsMe={false}`) and
+  // renders null for that case; the gate mirrors it to keep the row (and its
+  // separator) from reserving space for an empty badge.
   const showScopeBadge =
     item.scope !== "personal" ||
     Boolean(item.authorId && item.authorId !== currentUserId);
@@ -598,6 +599,7 @@ export function McpServerCard({
             authorId={item.authorId}
             authorName={item.authorName}
             currentUserId={currentUserId}
+            showSelfAsMe={false}
           />
           {hasCompactInfoAfterScopeBadge && (
             <div className="h-4 w-px bg-border" />

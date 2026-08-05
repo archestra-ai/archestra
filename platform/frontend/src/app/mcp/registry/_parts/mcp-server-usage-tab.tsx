@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot } from "lucide-react";
-import { scopeLabel } from "@/components/scope-badge";
+import { scopeLabel } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,

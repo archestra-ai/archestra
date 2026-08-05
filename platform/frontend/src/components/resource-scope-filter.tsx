@@ -12,7 +12,7 @@ import {
   serializeLabels,
 } from "@/components/label-select";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
-import { scopeStyles } from "@/components/resource-visibility-badge";
+import { scopeStyles } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {

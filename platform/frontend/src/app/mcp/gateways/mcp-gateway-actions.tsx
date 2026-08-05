@@ -1,5 +1,6 @@
 import { E2eTestId } from "@archestra/shared";
 import { Copy, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
+import { PermanentDeleteButton } from "@/components/permanent-delete";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
 import type { useProfilesPaginated } from "@/lib/agent.query";
@@ -18,6 +19,7 @@ type McpGatewayActionsProps = {
   onEdit: (agent: Gateway) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
+  onPermanentlyDelete: (agent: Gateway) => void;
   onClone: (agent: Gateway) => void;
 };
 
@@ -28,6 +30,7 @@ export function McpGatewayActions({
   onEdit,
   onDelete,
   onRestore,
+  onPermanentlyDelete,
   onClone,
 }: McpGatewayActionsProps) {
   if (agent.deletedAt) {
@@ -46,6 +49,7 @@ export function McpGatewayActions({
         >
           <RotateCcw className="h-4 w-4" />
         </PermissionButton>
+        <PermanentDeleteButton onClick={() => onPermanentlyDelete(agent)} />
       </ButtonGroup>
     );
   }

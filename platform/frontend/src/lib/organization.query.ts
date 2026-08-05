@@ -1,7 +1,9 @@
 import {
+  ADMIN_ROLE_NAME,
   type AnyRoleName,
   archestraApiSdk,
   type archestraApiTypes,
+  PLATFORM_ADMIN_ROLE_NAME,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
@@ -112,6 +114,26 @@ export function useActiveMemberRole() {
     },
     enabled: !isSessionPending && !!activeOrganizationId,
   });
+}
+
+/**
+ * Whether the caller holds a built-in admin ROLE (Admin or Platform Admin) in
+ * their active organization — the frontend mirror of the backend's
+ * `isGlobalAdmin`.
+ *
+ * Deliberately a role check and not a permission check: the actions gated on
+ * this (permanent delete) are refused to every custom role, however broad, so
+ * `useHasPermissions({ x: ["admin"] })` would show them to users the API
+ * answers 404 to. Resolves to `false` while the role is still loading, so a
+ * destructive action never flashes enabled before the answer arrives.
+ */
+export function useIsGlobalAdmin() {
+  const { data: role, isPending } = useActiveMemberRole();
+  return {
+    isGlobalAdmin:
+      role === ADMIN_ROLE_NAME || role === PLATFORM_ADMIN_ROLE_NAME,
+    isPending,
+  };
 }
 
 /**

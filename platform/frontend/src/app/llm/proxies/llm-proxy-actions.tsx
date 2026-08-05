@@ -1,5 +1,6 @@
 import { E2eTestId } from "@archestra/shared";
 import { Copy, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
+import { PermanentDeleteButton } from "@/components/permanent-delete";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
 import type { useProfilesPaginated } from "@/lib/agent.query";
@@ -16,6 +17,7 @@ type LlmProxyActionsProps = {
   onEdit: (agent: Proxy) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
+  onPermanentlyDelete: (agent: Proxy) => void;
   onClone: (agent: Proxy) => void;
 };
 
@@ -26,6 +28,7 @@ export function LlmProxyActions({
   onEdit,
   onDelete,
   onRestore,
+  onPermanentlyDelete,
   onClone,
 }: LlmProxyActionsProps) {
   if (agent.deletedAt) {
@@ -44,6 +47,7 @@ export function LlmProxyActions({
         >
           <RotateCcw className="h-4 w-4" />
         </PermissionButton>
+        <PermanentDeleteButton onClick={() => onPermanentlyDelete(agent)} />
       </ButtonGroup>
     );
   }

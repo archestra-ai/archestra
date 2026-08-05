@@ -10,11 +10,13 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
 import type { useProfilesPaginated } from "@/lib/agent.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 
 type Agent = NonNullable<
   ReturnType<typeof useProfilesPaginated>["data"]
@@ -28,6 +30,7 @@ type AgentActionsProps = {
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
+  onPermanentlyDelete: (agent: Agent) => void;
   onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
@@ -41,10 +44,12 @@ export function AgentActions({
   onView,
   onDelete,
   onRestore,
+  onPermanentlyDelete,
   onClone,
   onExport,
   onConvertToSkill,
 }: AgentActionsProps) {
+  const { isGlobalAdmin } = useIsGlobalAdmin();
   const isBuiltIn = Boolean(agent.builtIn);
   const isDeleted = Boolean(agent.deletedAt);
 
@@ -60,6 +65,10 @@ export function AgentActions({
             disabled: !canModify,
             onClick: () => onRestore(agent.id),
           },
+          permanentDeleteRowAction({
+            isGlobalAdmin,
+            onClick: () => onPermanentlyDelete(agent),
+          }),
         ]}
       />
     );

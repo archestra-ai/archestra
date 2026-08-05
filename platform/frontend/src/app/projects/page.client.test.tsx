@@ -2,12 +2,15 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 const mockRouterPush = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockUpdateMutateAsync = vi.fn();
 const mockPinMutate = vi.fn();
+const mockRestoreMutate = vi.fn();
+const mockPermanentlyDeleteMutateAsync = vi.fn();
 
 let mockProjects: ProjectFixture[] = [];
 
@@ -30,6 +33,7 @@ type ProjectFixture = {
   visibility: "organization" | "team" | null;
   pinnedAt: string | null;
   createdAt: string;
+  deletedAt: string | null;
 };
 
 vi.mock("next/navigation");
@@ -54,6 +58,7 @@ vi.mock("@/components/search-input", () => ({
 
 vi.mock("@/components/resource-scope-filter", () => ({
   ResourceScopeFilter: () => <div>scope filter</div>,
+  ResourceDeletedStatusFilter: () => <div>status filter</div>,
   useScopeFilterParams: () => ({
     scope: undefined,
     teamIds: undefined,
@@ -220,6 +225,8 @@ vi.mock("@/components/api-key-load-error", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 
+vi.mock("@/lib/organization.query");
+
 vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects, isPending: false }),
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -232,6 +239,11 @@ vi.mock("@/lib/projects/projects.query", () => ({
     isPending: false,
   }),
   usePinProject: () => ({ mutate: mockPinMutate }),
+  useRestoreProject: () => ({ mutate: mockRestoreMutate, isPending: false }),
+  usePermanentlyDeleteProject: () => ({
+    mutateAsync: mockPermanentlyDeleteMutateAsync,
+    isPending: false,
+  }),
   // The edit dialog fetches the project detail by id; return a minimal one.
   useProject: () => ({
     data: {
@@ -271,6 +283,10 @@ describe("ProjectsPageClient", () => {
     vi.mocked(useTeams).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useTeams>);
+    vi.mocked(useIsGlobalAdmin).mockReturnValue({
+      isGlobalAdmin: true,
+      isPending: false,
+    });
     mockProjects = [];
     mockApiKeyState = {
       hasAnyApiKey: true,
@@ -428,6 +444,54 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Plain project")).toBeInTheDocument();
   });
 
+  it("offers restore and permanent delete in the trash view", () => {
+    // ?status=deleted is the trash. A deleted project has no card view and no
+    // route to navigate to, so it renders as a table of Restore + Delete
+    // permanently and nothing else.
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockProjects = [
+      makeProject({
+        id: "trashed",
+        name: "Trashed project",
+        deletedAt: "2026-01-02T00:00:00.000Z",
+      }),
+    ];
+
+    render(<ProjectsPageClient />);
+
+    expect(screen.getByText("Trashed project")).toBeInTheDocument();
+    expect(screen.queryByText("Edit details")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Pin")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Restore Trashed project"));
+    expect(mockRestoreMutate).toHaveBeenCalledWith({ id: "trashed" });
+
+    fireEvent.click(
+      screen.getByLabelText("Delete permanently Trashed project"),
+    );
+    expect(screen.getByText("Delete project permanently")).toBeInTheDocument();
+  });
+
+  it("says the trash is empty rather than showing the no-projects prompt", () => {
+    // "No projects yet" would read as an empty deployment; an empty trash is
+    // a different, unalarming fact.
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockProjects = [];
+
+    render(<ProjectsPageClient />);
+
+    expect(screen.getByText("No deleted projects")).toBeInTheDocument();
+    expect(screen.queryByText("No projects yet")).not.toBeInTheDocument();
+  });
+
   it("shows unpin in pinned project card menus", () => {
     mockProjects = [
       makeProject({
@@ -459,6 +523,7 @@ function makeProject(overrides: Partial<ProjectFixture>): ProjectFixture {
     visibility: null,
     pinnedAt: null,
     createdAt: "2026-01-01T00:00:00.000Z",
+    deletedAt: null,
     ...overrides,
   };
 }

@@ -16,6 +16,7 @@ export const useAppearanceSettings = vi.fn();
 export const useInvitation = vi.fn();
 export const useActiveOrganization = vi.fn();
 export const useActiveMemberRole = vi.fn();
+export const useIsGlobalAdmin = vi.fn();
 export const useAcceptInvitation = vi.fn();
 export const useInvitationsList = vi.fn();
 export const useCancelInvitation = vi.fn();

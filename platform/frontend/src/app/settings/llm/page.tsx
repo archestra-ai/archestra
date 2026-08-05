@@ -274,13 +274,13 @@ export default function LlmSettingsPage() {
         title="Advisor"
         description={
           <>
-            Keep your agents on a fast, cheap model and let them escalate the
-            few decisions that shape the outcome to a stronger one — better
-            answers than the cheap model alone, for less than running the strong
-            one throughout. Pick the advisor&apos;s model on the Advisor agent,
-            then turn on &quot;Consult the advisor&quot; for the agents that
-            should reach it. Each consultation is billed at the advisor
-            model&apos;s own rates.
+            Pair your agents&apos; cheaper model with a stronger advisor model
+            they consult at key moments in a task. The advisor is called at
+            decision points rather than on every turn, so this usually costs
+            less than running the stronger model throughout, though each call is
+            billed at the advisor model&apos;s rates. Pick the advisor&apos;s
+            model on the Advisor agent, then turn on &quot;Consult the
+            advisor&quot; for the agents that should reach it.
           </>
         }
         control={

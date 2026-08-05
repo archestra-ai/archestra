@@ -2528,14 +2528,12 @@ export function AgentDialog({
                               Consult the advisor
                             </Label>
                             <p className="text-xs text-muted-foreground">
-                              Keeps this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"} on a
-                              fast, cheap model while it escalates the few
-                              decisions that shape the outcome to a stronger one
-                              — better answers than the cheap model alone, for
-                              less than running the strong one throughout. Each
-                              consultation is billed at the advisor model&apos;s
-                              own rates.{" "}
+                              Pairs this{" "}
+                              {agentTypeDisplayName[agentType] || "agent"} with
+                              a stronger model it consults at key moments. Those
+                              calls are billed at the advisor model&apos;s
+                              rates, and usually cost less than running the
+                              stronger model throughout.{" "}
                               {/* New tab: this dialog holds unsaved edits that
                                 navigating away would discard. */}
                               <Link

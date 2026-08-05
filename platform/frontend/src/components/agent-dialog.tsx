@@ -930,7 +930,10 @@ export function AgentDialog({
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
     isPolicyConfigBuiltIn ||
-    isDualLlmMainBuiltIn;
+    isDualLlmMainBuiltIn ||
+    // The advisor is the one built-in that exists per environment, so which one
+    // you are editing is not otherwise visible on the form.
+    isAdvisorBuiltIn;
   const showToolsAndSubagents =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||

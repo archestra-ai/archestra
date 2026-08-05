@@ -206,7 +206,12 @@ vi.mock("@/components/visibility-selector", () => ({
 }));
 
 vi.mock("@/components/environment-selector", () => ({
-  EnvironmentSelector: () => <div />,
+  EnvironmentSelector: ({ disabled }: { disabled?: boolean }) => (
+    <div
+      data-testid="environment-selector"
+      data-disabled={disabled ? "true" : "false"}
+    />
+  ),
 }));
 
 vi.mock("@/components/ui/alert", () => ({
@@ -508,6 +513,34 @@ describe("AgentDialog delegation state", () => {
     await waitFor(() => {
       expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
     });
+  });
+
+  it("shows the advisor which environment it belongs to, without offering to move it", async () => {
+    // The advisor is the one built-in with a row per environment, and the rest
+    // of the built-in form is hidden — so without this the dialog gives no clue
+    // which of several identically named advisors is open.
+    const advisorBuiltIn = {
+      ...baseAgent,
+      id: advisorAgent.id,
+      name: "Advisor",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    };
+    useProfileMock.mockReturnValue({ data: advisorBuiltIn, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [advisorAgent] });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={advisorBuiltIn}
+      />,
+    );
+
+    const selector = await screen.findByTestId("environment-selector");
+    // Moving it would strand every agent that consults it.
+    expect(selector).toHaveAttribute("data-disabled", "true");
   });
 
   it("keeps the advisor out of the subagent lists, so only its switch offers it", async () => {

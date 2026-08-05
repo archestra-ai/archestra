@@ -363,21 +363,22 @@ async function planScalars(params: {
   }
 
   // Gated by the caller's CURRENT deploy-to-restricted permission, exactly like
-  // setting it through the update route.
+  // setting it through the update route. `null` is gated too: it does not mean
+  // "no environment" but the implicit default one, which an org can mark
+  // restricted — so leaving it ungated would make a restore a way to move an
+  // agent into a restricted default the update route refuses.
   if (snapshot.environmentId !== (current.environmentId ?? null)) {
-    if (snapshot.environmentId !== null) {
-      const canDeployToRestricted = await userHasPermission(
-        userId,
-        organizationId,
-        getResourceForAgentType(current.agentType),
-        "deploy-to-restricted",
-      );
-      await assertCanAssignEnvironment({
-        environmentId: snapshot.environmentId,
-        organizationId,
-        canDeployToRestricted,
-      });
-    }
+    const canDeployToRestricted = await userHasPermission(
+      userId,
+      organizationId,
+      getResourceForAgentType(current.agentType),
+      "deploy-to-restricted",
+    );
+    await assertCanAssignEnvironment({
+      environmentId: snapshot.environmentId,
+      organizationId,
+      canDeployToRestricted,
+    });
     scalars.environmentId = snapshot.environmentId;
   }
 

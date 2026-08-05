@@ -718,8 +718,13 @@ export const ModelSelector = memo(function ModelSelector({
     );
   }
 
+  // The clear control is a sibling of the trigger, not a child: the trigger is
+  // itself a <button>, and a nested one is invalid HTML that breaks hydration
+  // and cannot be reached by keyboard on its own.
+  const showClear = Boolean(onClear && selectedModel);
+
   return (
-    <div>
+    <div className="relative inline-flex min-w-0 items-center">
       <ModelSelectorRoot open={open} onOpenChange={handleOpenChange}>
         <ModelSelectorTrigger asChild>
           {variant === "outline" ? (
@@ -727,7 +732,10 @@ export const ModelSelector = memo(function ModelSelector({
               variant="outline"
               size="sm"
               disabled={disabled}
-              className="h-8 px-3 gap-1.5 text-xs max-w-[280px] min-w-0"
+              className={cn(
+                "h-8 px-3 gap-1.5 text-xs max-w-[280px] min-w-0",
+                showClear && "pr-7",
+              )}
               data-testid={E2eTestId.ChatModelSelectorTrigger}
             >
               {selectedModelLogo && (
@@ -745,24 +753,11 @@ export const ModelSelector = memo(function ModelSelector({
                   Best available model
                 </span>
               )}
-              {onClear && selectedModel && (
-                <button
-                  type="button"
-                  aria-label="Clear model"
-                  className="ml-1 shrink-0 rounded-sm opacity-50 hover:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClear();
-                  }}
-                >
-                  <XIcon className="size-3" />
-                </button>
-              )}
             </Button>
           ) : (
             <PromptInputButton
               disabled={disabled}
-              className="max-w-[280px] min-w-0"
+              className={cn("max-w-[280px] min-w-0", showClear && "pr-7")}
               data-testid={E2eTestId.ChatModelSelectorTrigger}
             >
               {selectedModelLogo && (
@@ -774,19 +769,6 @@ export const ModelSelector = memo(function ModelSelector({
               <ModelSelectorName className="truncate flex-1 text-left">
                 {selectedModelDisplayName || "Select model"}
               </ModelSelectorName>
-              {onClear && selectedModel && (
-                <button
-                  type="button"
-                  aria-label="Clear model"
-                  className="ml-1 shrink-0 rounded-sm opacity-50 hover:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClear();
-                  }}
-                >
-                  <XIcon className="size-3" />
-                </button>
-              )}
             </PromptInputButton>
           )}
         </ModelSelectorTrigger>
@@ -813,6 +795,17 @@ export const ModelSelector = memo(function ModelSelector({
           </ModelSelectorContent>
         )}
       </ModelSelectorRoot>
+      {showClear && (
+        <button
+          type="button"
+          aria-label="Clear model"
+          disabled={disabled}
+          className="absolute right-2 top-1/2 -translate-y-1/2 shrink-0 rounded-sm opacity-50 hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
+          onClick={onClear}
+        >
+          <XIcon className="size-3" />
+        </button>
+      )}
     </div>
   );
 });

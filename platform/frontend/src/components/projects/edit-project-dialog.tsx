@@ -110,7 +110,7 @@ function EditProjectDialogForm({
   const visibilityOptions: Array<VisibilityOption<ProjectVisibility>> = [
     {
       value: "none",
-      label: "Only me",
+      label: "Personal",
       description: "No one else can see this project.",
       icon: Lock,
       disabled: shareLocked,

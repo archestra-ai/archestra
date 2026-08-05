@@ -2,7 +2,7 @@ import type { McpExecutedAs } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { scopeStyles } from "@/components/resource-visibility-badge";
+import { scopeStyles } from "@/components/scope-vocabulary";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { ExecutedAsBadge } from "./executed-as-badge";
 

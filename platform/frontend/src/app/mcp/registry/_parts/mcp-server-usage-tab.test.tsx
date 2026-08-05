@@ -56,6 +56,21 @@ describe("McpServerUsageTab", () => {
     expect(screen.getByText("bob@example.com")).toBeInTheDocument();
   });
 
+  it("spells out the scope of an ownerless agent instead of the raw enum", () => {
+    render(
+      <McpServerUsageTab
+        serversForCatalog={[
+          server([agent({ id: "1", name: "Org Agent", scope: "org" })]),
+        ]}
+      />,
+    );
+
+    const row = screen.getByText("Org Agent").closest("tr") as HTMLElement;
+
+    expect(within(row).getByText("Organization")).toBeInTheDocument();
+    expect(within(row).queryByText("org")).not.toBeInTheDocument();
+  });
+
   it("labels how each agent reaches the server", () => {
     render(
       <McpServerUsageTab

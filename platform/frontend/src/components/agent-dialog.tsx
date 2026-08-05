@@ -2525,7 +2525,7 @@ export function AgentDialog({
                         <div className="flex items-center justify-between gap-4 border-t pt-4">
                           <div className="space-y-0.5">
                             <Label htmlFor="consult-advisor">
-                              Escalate hard decisions to the advisor
+                              Enable Advisor
                             </Label>
                             <p className="text-xs text-muted-foreground">
                               Pairs this{" "}

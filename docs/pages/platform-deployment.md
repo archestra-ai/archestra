@@ -880,6 +880,10 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
   - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
   - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
+- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`** - Enables incognito chats (enterprise): conversations encrypted under a browser-held per-conversation key the server never stores. The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery; the private half stays offline with the customer's security team.
+  - Default: not set (incognito chats unavailable).
+  - Requires an enterprise license; startup fails when set without one, or when the key is not a valid RSA public key.
+  - See [Incognito Chats](/docs/platform-content-encryption#incognito-chats) for setup and the recovery procedure.
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.

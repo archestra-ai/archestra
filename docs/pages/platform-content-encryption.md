@@ -42,3 +42,35 @@ Plan disk headroom before enabling. Plaintext JSONB payloads compress inside Pos
 ## Startup Verification
 
 On every startup Archestra verifies the configured key against previously encrypted content and aborts on a mismatch or a missing key. Unlike stored secrets, there is deliberately no accept-new-key override: chat history cannot be re-entered. Disabling encryption after enabling it is not currently supported.
+
+## Incognito Chats
+
+> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
+
+An incognito chat is encrypted under a key that exists only in the browser that created it. The browser generates the key, keeps it in local storage, and sends it with each request. The server uses it in memory to serve the chat and never stores it — no key the platform holds can decrypt the messages.
+
+This is not end-to-end encryption. The server sees content while serving requests: it forwards messages to the LLM provider and runs your security policies on them. The guarantee is at rest — a database dump, a backup, or an operator with the content encryption secret cannot read an incognito chat.
+
+To enable, set `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY` to an RSA public key (PEM, at least 2048 bits). Each chat's key is wrapped to this escrow key and stored with the conversation, so a security team holding the private key offline can recover a chat — recovery is a deliberate break-glass procedure, not something the platform can do alone. Generate a keypair with:
+
+```bash
+openssl genrsa -out incognito-escrow.pem 4096
+openssl rsa -in incognito-escrow.pem -pubout -out incognito-escrow.pub
+```
+
+Keep `incognito-escrow.pem` offline with your security team. Configure only the public half.
+
+Users start an incognito chat from the composer toggle. If the browser's copy of the key is lost — cleared site data, a different browser or device — the chat opens to a notice that its contents can't be read. The conversation row and its title remain visible.
+
+What incognito changes while a chat is active:
+
+- Messages are stored encrypted under the chat's own key; LLM request logs and MCP tool call logs keep usage and cost metadata but their content fields are redacted.
+- The title is fixed to "Incognito chat" — no LLM title generation. A manual rename is stored in plaintext.
+- Attachments, sandbox commands, sharing, forking, projects, and context compaction are unavailable.
+- Reconnecting to an in-progress response after a page reload is unavailable; the response still completes and is saved.
+
+Escrow key rotation affects new chats only: each conversation stores its key wrapped to the escrow key configured at creation time.
+
+### Break-Glass Recovery
+
+Each incognito conversation row stores `incognito_escrow`: a JSON blob with the chat key wrapped as RSA-OAEP (SHA-256). To recover a chat, the holder of the escrow private key decrypts `wrappedDek`, then decrypts each `messages.content` envelope with AES-256-GCM using the AAD `messages.content|incognito:<conversation id>`. Recovery happens outside the platform, with database access — plan who holds the private key and under what procedure before enabling the feature.

@@ -11,6 +11,7 @@ import {
   McpServerModel,
   MemberModel,
   MessageModel,
+  OrganizationModel,
 } from "@/models";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
 import {
@@ -280,11 +281,34 @@ async function resolveDefaultChatAgentId(params: {
   organizationId: string;
 }): Promise<string> {
   const { userId, organizationId } = params;
+
+  // The org default outranks the member's personal default, mirroring the /chat
+  // page chain (resolveInitialAgentSelection). It only wins when it would appear
+  // in that page's picker for this caller: an internal (non-built-in) chat agent
+  // the caller can access — findById with a userId runs the access check and
+  // excludes soft-deleted rows. Anything else falls through.
+  const organization = await OrganizationModel.getById(organizationId);
+  if (organization?.defaultAgentId) {
+    const orgDefault = await AgentModel.findById(
+      organization.defaultAgentId,
+      userId,
+      false,
+    );
+    if (
+      orgDefault &&
+      orgDefault.organizationId === organizationId &&
+      orgDefault.agentType === "agent" &&
+      !orgDefault.builtIn
+    ) {
+      return orgDefault.id;
+    }
+  }
+
   const existing = await MemberModel.getDefaultAgentId(userId, organizationId);
   if (existing) return existing;
 
-  // No default yet (e.g. the member's first chat): bootstrap their personal chat
-  // agent, mirroring how the chat page resolves a default agent.
+  // No default anywhere (e.g. the member's first chat): bootstrap their
+  // personal chat agent.
   await AgentModel.ensurePersonalChatAgent({ userId, organizationId });
   const created = await MemberModel.getDefaultAgentId(userId, organizationId);
   if (!created) {

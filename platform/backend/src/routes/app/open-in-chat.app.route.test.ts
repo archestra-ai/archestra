@@ -1,9 +1,11 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import {
+  AgentModel,
   AppModel,
   ConversationModel,
   MemberModel,
   MessageModel,
+  OrganizationModel,
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -14,6 +16,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
+  let memberDefaultAgentId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
     const organization = await makeOrganization();
@@ -22,7 +25,8 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
 
     // The seeded conversation binds to the caller's default chat agent.
-    const agent = await makeAgent({ organizationId });
+    const agent = await makeAgent({ organizationId, agentType: "agent" });
+    memberDefaultAgentId = agent.id;
     await MemberModel.setDefaultAgent(user.id, organizationId, agent.id);
 
     app = createFastifyInstance();
@@ -174,6 +178,168 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(messages).toHaveLength(2);
     const greeting = expectSeededGreeting(messages[1], "Tracker");
     expect(greeting).not.toContain("Track team spend.");
+  });
+
+  async function openInChat(appId: string): Promise<string> {
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/apps/${appId}/open-in-chat`,
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json().conversationId;
+  }
+
+  test("binds the seeded conversation to the org default agent when one is configured", async ({
+    makeAgent,
+  }) => {
+    // The org default outranks the member's personal default, mirroring /chat.
+    const orgDefault = await makeAgent({ organizationId, agentType: "agent" });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: orgDefault.id,
+    });
+
+    const appId = await createApp("OrgDefault");
+    const conversationId = await openInChat(appId);
+
+    expect(await ConversationModel.getAgentId(conversationId)).toBe(
+      orgDefault.id,
+    );
+  });
+
+  test("binds to the caller's member default agent when no org default is configured", async () => {
+    const appId = await createApp("MemberDefault");
+    const conversationId = await openInChat(appId);
+
+    expect(await ConversationModel.getAgentId(conversationId)).toBe(
+      memberDefaultAgentId,
+    );
+  });
+
+  test("bootstraps a personal chat agent for a caller with no defaults anywhere", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // Fresh member: no org default, no member default. The onRequest hook reads
+    // the outer `user` at request time, so reassigning switches the caller.
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    const appId = await createApp("Bootstrap");
+    const conversationId = await openInChat(appId);
+
+    const agentId = await ConversationModel.getAgentId(conversationId);
+    expect(agentId).toBe(
+      await MemberModel.getDefaultAgentId(user.id, organizationId),
+    );
+    const agent = await AgentModel.findById(agentId as string);
+    expect(agent?.name).toBe("My Assistant");
+    expect(agent?.scope).toBe("personal");
+  });
+
+  test("falls back to the member default when the org default agent is soft-deleted", async ({
+    makeAgent,
+  }) => {
+    const orgDefault = await makeAgent({ organizationId, agentType: "agent" });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: orgDefault.id,
+    });
+    await AgentModel.delete(orgDefault.id);
+
+    const appId = await createApp("DeletedDefault");
+    const conversationId = await openInChat(appId);
+
+    expect(await ConversationModel.getAgentId(conversationId)).toBe(
+      memberDefaultAgentId,
+    );
+  });
+
+  test("falls back to the member default when the org default is not a chat agent", async ({
+    makeAgent,
+  }) => {
+    // Only internal chat agents appear in the /chat picker; a gateway pointed
+    // at by the org default must not capture app-opened conversations.
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: gateway.id,
+    });
+
+    const appId = await createApp("GatewayDefault");
+    const conversationId = await openInChat(appId);
+
+    expect(await ConversationModel.getAgentId(conversationId)).toBe(
+      memberDefaultAgentId,
+    );
+  });
+
+  test("falls back to the member default when the org default agent is built-in", async ({
+    makeAgent,
+  }) => {
+    // `builtIn` is a generated column: true iff builtInAgentConfig is set.
+    const builtIn = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      builtInAgentConfig: { name: "chat-title-generation-subagent" },
+    });
+    expect(builtIn.builtIn).toBe(true);
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: builtIn.id,
+    });
+
+    const appId = await createApp("BuiltInDefault");
+    const conversationId = await openInChat(appId);
+
+    expect(await ConversationModel.getAgentId(conversationId)).toBe(
+      memberDefaultAgentId,
+    );
+  });
+
+  test("falls back to the member default when the org default agent belongs to another organization", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    // An org-scoped agent passes the access check for any caller, so the
+    // same-org guard is the only thing keeping a cross-org default out.
+    const otherOrg = await makeOrganization();
+    const foreignAgent = await makeAgent({
+      organizationId: otherOrg.id,
+      agentType: "agent",
+    });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: foreignAgent.id,
+    });
+
+    const appId = await createApp("CrossOrgDefault");
+    const conversationId = await openInChat(appId);
+
+    expect(await ConversationModel.getAgentId(conversationId)).toBe(
+      memberDefaultAgentId,
+    );
+  });
+
+  test("falls back to the member default when the org default agent is another user's personal agent", async ({
+    makeUser,
+    makeAgent,
+  }) => {
+    const other = await makeUser();
+    const foreignPersonal = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      scope: "personal",
+      authorId: other.id,
+    });
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: foreignPersonal.id,
+    });
+
+    const appId = await createApp("ForeignDefault");
+    const conversationId = await openInChat(appId);
+
+    expect(await ConversationModel.getAgentId(conversationId)).toBe(
+      memberDefaultAgentId,
+    );
   });
 
   test("404s for an app the caller cannot view", async () => {

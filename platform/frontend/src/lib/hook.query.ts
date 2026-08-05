@@ -16,7 +16,12 @@ export type CreateHookInput = archestraApiTypes.CreateHookData["body"];
 export type UpdateHookInput = archestraApiTypes.UpdateHookData["body"] &
   archestraApiTypes.UpdateHookData["path"];
 
-const hookKeys = {
+/**
+ * Exported so writes that rewrite an agent's hooks from outside this file — a
+ * version restore, for one — invalidate the same key this file reads under,
+ * rather than a literal that drifts the moment the shape here changes.
+ */
+export const hookKeys = {
   all: ["hooks"] as const,
   list: (agentId: string) => [...hookKeys.all, "list", agentId] as const,
 };

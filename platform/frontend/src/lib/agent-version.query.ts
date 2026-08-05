@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { hookKeys } from "@/lib/hook.query";
 import {
   getApiErrorInternalCode,
   handleApiError,
@@ -109,6 +110,11 @@ export function useAgentVersion(id: string | null, version: number | null) {
  * (`baseVersion`), not a client-side re-read. The restore is all-or-nothing —
  * a version referencing something since deleted fails it outright — so every
  * outcome here is either the restored agent or a toast.
+ *
+ * A handled failure resolves to `null` rather than rejecting, as
+ * `useImportGithubSkills` does: the mutation settles as a success carrying no
+ * data, so `isError` and `onError` never fire and callers branch on the
+ * resolved value. Only a transport failure rejects.
  */
 export function useRestoreAgentVersion() {
   const queryClient = useQueryClient();
@@ -152,11 +158,35 @@ export function useRestoreAgentVersion() {
       }
     },
     // Every outcome refreshes, not just the write: a rejected compare-and-set
-    // means the head moved under the preview. The `["agents"]` prefix covers
-    // the profile, the lists, and the version timeline; the immutable
-    // `["agent-version", ...]` snapshots are keyed apart and stay cached.
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    // means the head moved under the preview.
+    //
+    // A restore rewrites more than the agent row — its hooks, its tool
+    // assignments, and its knowledge links move with it. Only the row and the
+    // exclusions live under `["agents"]`; the rest are the keys
+    // `useAssignToolsToAgent` invalidates when the editor writes the very same
+    // rows, and leaving them is how a restored agent keeps running on its old
+    // tool set. The immutable `["agent-version", ...]` snapshots are keyed
+    // apart and stay cached.
+    onSettled: (_data, _error, variables) => {
+      for (const queryKey of [
+        // Profile, paginated lists, tool/subagent exclusions, version timeline.
+        ["agents"],
+        [...hookKeys.list(variables.agentId)],
+        // Prefix — also covers `["tools", "unassigned"]`.
+        ["tools"],
+        ["tools-with-assignments"],
+        ["agent-tools"],
+        // Assignment counts read off server and catalog cards.
+        ["mcp-servers"],
+        ["mcp-catalog"],
+        ["knowledge-bases"],
+        ["connectors"],
+        // Prefix — covers the per-agent MCP tool list, which chat holds for
+        // five minutes and would otherwise serve from before the restore.
+        ["chat", "agents"],
+      ]) {
+        queryClient.invalidateQueries({ queryKey });
+      }
     },
   });
 }

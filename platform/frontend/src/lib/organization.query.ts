@@ -127,19 +127,26 @@ export function useActiveMemberRole() {
  * answers 404 to. Resolves to `false` while the role is still loading, so a
  * destructive action never flashes enabled before the answer arrives.
  *
- * `isLoading`, not `isPending`: the underlying query is disabled until the
+ * `isLoading`, not `isPending`, for the role query: it is disabled until the
  * session names an active organization, and a disabled query stays `pending`
  * forever. `isLoading` is `isPending && isFetching`, so "no organization to
  * resolve a role against" reads as a settled "not an admin" — which is what
  * the API answers such a caller anyway — rather than a request still in
  * flight.
+ *
+ * The session's own pending state has to be folded in for the same reason it
+ * disables the role query: while it is in flight the role query has not
+ * started, so its `isLoading` is false and an admin cold-loading a trash page
+ * would be told they lack the role. Unlike the role query, `useSession` is
+ * never disabled, so `isPending` is the right signal there.
  */
 export function useIsGlobalAdmin() {
+  const { isPending: isSessionPending } = useSession();
   const { data: role, isLoading } = useActiveMemberRole();
   return {
     isGlobalAdmin:
       role === ADMIN_ROLE_NAME || role === PLATFORM_ADMIN_ROLE_NAME,
-    isLoading,
+    isLoading: isSessionPending || isLoading,
   };
 }
 

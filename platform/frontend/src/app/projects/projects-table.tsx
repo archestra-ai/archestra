@@ -237,7 +237,11 @@ export function DeletedProjectsTable({
               {
                 icon: <ArchiveRestore className="h-4 w-4" />,
                 label: "Restore",
-                permissions: { project: ["delete"] },
+                // The route gates restore on `project:admin`, not
+                // `project:delete` — the same bar that serves this slice at
+                // all. A lower one here would disable Restore for exactly the
+                // oversight role the trash is built for.
+                permissions: { project: ["admin"] },
                 onClick: () => onRestore(row.original),
               },
               permanentDeleteRowAction({

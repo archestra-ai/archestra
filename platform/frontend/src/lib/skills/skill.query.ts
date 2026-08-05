@@ -330,9 +330,13 @@ export function usePermanentlyDeleteSkill() {
       }
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, id) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
+      // Drop the detail, versions and usage-statistics queries for an id that
+      // no longer resolves, rather than letting a stale history or edit URL
+      // remount them and refetch into a 404.
+      queryClient.removeQueries({ queryKey: ["skills", id] });
       toast.success("Skill permanently deleted");
     },
   });

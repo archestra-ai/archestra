@@ -974,18 +974,20 @@ export function NetworkPolicyFields({
           label="Egress"
           description={
             <>
-              Controls outbound internet access. Off blocks all egress,
-              Allowlist (
+              Controls outbound internet access. Block all (
+              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
+                off
+              </code>{" "}
+              in the API) denies all egress, Allowlist (
               <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
                 restricted
-              </code>{" "}
-              in the API) permits only the CIDR/domain rules below, and Denylist
-              (
+              </code>
+              ) permits only the CIDR/domain rules below, and Allow all (
               <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
                 unrestricted
               </code>
-              ) allows all egress — workloads hosted in your cluster still get a
-              fixed floor of blocked reserved ranges.
+              ) permits everything — workloads hosted in your cluster still get
+              a fixed floor of blocked reserved ranges.
             </>
           }
         />
@@ -1111,9 +1113,9 @@ function FieldLabel({
 }
 
 const EGRESS_MODE_LABELS: Record<EgressMode, string> = {
-  off: "Off",
+  off: "Block all",
   restricted: "Allowlist",
-  unrestricted: "Denylist",
+  unrestricted: "Allow all",
 };
 
 function formatEgressMode(mode: EgressMode) {

@@ -266,10 +266,15 @@ describe("SkillVersionHistoryDialog", () => {
     });
     renderDialog();
 
-    const link = screen.getByRole("link", { name: /6500e36/ });
+    const link = screen.getByRole("link", { name: "Open version in GitHub" });
     expect(link).toHaveAttribute(
       "href",
       "https://github.com/eph5xx/tiebreaker/tree/6500e3659dd2a3ceeb745b03eb6ab2d169d4e1e7/skills/tiebreaker",
+    );
+    // the commit is not spelled out in the header, so the title carries it.
+    expect(link).toHaveAttribute(
+      "title",
+      "Open this version's source on GitHub (6500e3659dd2a3ceeb745b03eb6ab2d169d4e1e7)",
     );
   });
 
@@ -278,8 +283,11 @@ describe("SkillVersionHistoryDialog", () => {
     // authored edit has no upstream tree to point at.
     renderDialog();
 
-    expect(screen.queryByRole("link", { name: /hash-he/ })).toBeNull();
-    // the content hash is still there; it is simply not a link to anywhere.
+    expect(
+      screen.queryByRole("link", { name: "Open version in GitHub" }),
+    ).toBeNull();
+    // the timeline still identifies each version by its content hash, which is
+    // a different thing entirely from where the bytes came from.
     expect(screen.getAllByText("hash-he").length).toBeGreaterThan(0);
   });
 

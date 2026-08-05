@@ -525,26 +525,22 @@ function VersionPreview({
         <span className="text-xs text-muted-foreground">
           {formatRelativeTimeFromNow(detail.createdAt)}
         </span>
-        <div className="ml-auto flex items-baseline gap-3">
-          {/* Provenance, shown only for versions a GitHub pull produced. Sits
-              beside the content hash, which is a different identity entirely —
-              the icon and the link affordance are what tell the two apart. */}
-          {sourceUrl && detail.sourceCommit ? (
-            <a
-              href={sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1 font-mono text-xs text-muted-foreground underline underline-offset-4 hover:text-primary"
-              title={`Open this version's source on GitHub (${detail.sourceCommit})`}
-            >
-              <Github className="size-3 shrink-0" />
-              <span>{detail.sourceCommit.slice(0, 7)}</span>
-            </a>
-          ) : null}
-          <span className="font-mono text-xs text-muted-foreground">
-            {detail.contentHash.slice(0, 7)}
-          </span>
-        </div>
+        {/* Provenance, shown only for versions a GitHub pull produced. The
+            commit is named rather than spelled out: the timeline already
+            carries a short hash per row, and a second one here read as the
+            same fact repeated. The full SHA stays in the title. */}
+        {sourceUrl && detail.sourceCommit ? (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-4 hover:text-primary"
+            title={`Open this version's source on GitHub (${detail.sourceCommit})`}
+          >
+            <Github className="size-3 shrink-0" />
+            <span>Open version in GitHub</span>
+          </a>
+        ) : null}
       </header>
       {baselineFailed ? (
         <LoadFailure

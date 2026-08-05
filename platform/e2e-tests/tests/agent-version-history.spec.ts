@@ -9,6 +9,12 @@ import { expect, test } from "./api-fixtures";
 // through the agents page, and the gateway/proxy tests pin only their own
 // entry-point wiring. Versions are minted server-side on create (v1) and on
 // every config change, so one API update gives a two-version history.
+//
+// Chromium only, unlike the `agents.spec.ts` these share a page with: what is
+// under test here is a Monaco diff inside a dialog, and the engine-specific
+// risk the `@firefox`/`@webkit` tags exist to cover is carried by that spec's
+// coverage of the same page. Running three ~2-minute Monaco flows on every
+// engine buys repetition rather than reach.
 
 /** The dialog opened for one entity's history. */
 function versionHistoryDialog(page: Page) {
@@ -24,6 +30,11 @@ test("browses, compares, and restores an agent version from the row menu", async
   test.setTimeout(120_000);
 
   const AGENT_NAME = `Version History E2E ${Date.now()}`;
+  // Both revisions carry a prompt, so the compare step has text on each side
+  // of the diff to assert — a diff against an unset prompt would render only
+  // the added half and prove nothing about the comparison.
+  const FIRST_PROMPT = "You are the first revision.";
+  const SECOND_PROMPT = "You are the second revision.";
   // Not the createAgent fixture: it omits agentType, and the column default is
   // mcp_gateway — such a row never appears on the /agents page.
   const agentResponse = await makeApiRequest({
@@ -35,6 +46,7 @@ test("browses, compares, and restores an agent version from the row menu", async
       teams: [],
       scope: "personal",
       agentType: "agent",
+      systemPrompt: FIRST_PROMPT,
     },
   });
   const agent = await agentResponse.json();
@@ -45,7 +57,7 @@ test("browses, compares, and restores an agent version from the row menu", async
       request,
       method: "put",
       urlSuffix: `/api/agents/${agent.id}`,
-      data: { systemPrompt: "You are the second revision." },
+      data: { systemPrompt: SECOND_PROMPT },
     });
 
     await goToPage(page, "/agents");
@@ -76,9 +88,15 @@ test("browses, compares, and restores an agent version from the row menu", async
       dialog.getByRole("button", { name: /^v2\b/ }).getByText("Current"),
     ).toBeVisible();
 
-    // Compare v2 against v1: the system prompt is what moved.
-    await dialog.getByRole("button", { name: /^Changes/ }).click();
-    await expect(dialog.getByText("System prompt")).toBeVisible();
+    // Compare v2 against v1: the system prompt is what moved. Asserted on the
+    // unified diff rather than the section header, which renders in the "All
+    // settings" view too — an assertion on it passes whether or not the click
+    // switched anything. Only the diff carries both revisions at once, and
+    // e2e is the only place real Monaco renders it.
+    await dialog.getByRole("button", { name: /^Changes \(/ }).click();
+    const unifiedDiff = dialog.getByRole("code").last();
+    await expect(unifiedDiff).toContainText(FIRST_PROMPT, { timeout: 15_000 });
+    await expect(unifiedDiff).toContainText(SECOND_PROMPT);
 
     // Restore v1. It lands as a new head (v3) — the history is never
     // rewritten — and the preview jumps to the version just created.

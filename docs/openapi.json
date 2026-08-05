@@ -49980,6 +49980,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "advisor-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },

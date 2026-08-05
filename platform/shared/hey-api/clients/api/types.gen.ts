@@ -14277,6 +14277,8 @@ export type RestoreAgentVersionResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;

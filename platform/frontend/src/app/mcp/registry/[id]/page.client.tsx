@@ -270,8 +270,8 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   );
   // Diagnostics need at least one install to read from.
   const diagnosticTabs = allInstalls.length > 0 ? diagnosticPanels : [];
-  // Credentials get their own tab for every non-builtin server (built-ins need
-  // none), mirroring the old settings dialog's Connections nav item.
+  // Remote servers manage credentials; local servers manage hosted
+  // installations. Built-ins need neither.
   const showConnectionsTab = variant !== "builtin";
 
   // Every tab beyond the always-present Overview dashboard. Usage is always
@@ -319,7 +319,12 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     ...(showConnectionsTab
       ? [
           {
-            label: <TabLabel title="Credentials" count={connectionsCount} />,
+            label: (
+              <TabLabel
+                title={variant === "local" ? "Installations" : "Credentials"}
+                count={connectionsCount}
+              />
+            ),
             href: tabHref("credentials"),
             testId: E2eTestId.McpServerSettingsConnectionsNavButton,
           },
@@ -630,7 +635,9 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
         {effectiveTab === "credentials" && showConnectionsTab && (
           <Card>
             <CardHeader>
-              <h2 className="text-base font-semibold">Credentials</h2>
+              <h2 className="text-base font-semibold">
+                {variant === "local" ? "Installations" : "Credentials"}
+              </h2>
             </CardHeader>
             <CardContent>
               <ManageUsersContent
@@ -648,6 +655,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
                 deploymentStatuses={deploymentStatuses}
                 hideHeader
                 bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
+                isInstalling={install.installingItemId === item.id}
                 onOpenPodLogs={variant === "local" ? openPodLogs : undefined}
               />
             </CardContent>

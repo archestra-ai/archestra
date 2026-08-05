@@ -7,7 +7,6 @@ import {
 import { testMcpServerCommand } from "@archestra/shared/test-mcp-server";
 import type { Page } from "@playwright/test";
 import {
-  ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,
   VAULT_ADDR,
   VAULT_KV_VERSION,
@@ -199,13 +198,18 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
     });
 
     await ensureVaultSecretExists();
-    await ensureDefaultTeamVaultFolder(cookieHeaders);
+    const defaultTeamId = await ensureDefaultTeamVaultFolder(cookieHeaders);
 
+    // Install as a default-team service account: personal connections are
+    // caller-bound and can no longer be pinned onto a gateway, and static
+    // pinning below is exactly what this test exercises.
     const installResponse = await archestraApiSdk.installMcpServer({
       headers: { Cookie: cookieHeaders },
       body: {
         name: newCatalogItem.name,
         catalogId: newCatalogItem.id,
+        scope: "team",
+        teamId: defaultTeamId,
         environmentValues: {
           ARCHESTRA_TEST: `${VAULT_TEAM_FOLDER_PATH}/${secretName}#${secretKey}`,
         },
@@ -230,11 +234,11 @@ test.describe("Test self-hosted MCP server with Readonly Vault", () => {
       gatewayName: makeRandomString(10, "shared-gw"),
     });
 
-    // The current prompt-on-install flow creates a personal connection.
+    // Pin the default-team service account created by the API install above.
     await assignCatalogCredentialToGateway({
       page: adminPage,
       catalogItemName: newCatalogItem.name,
-      credentialName: ADMIN_EMAIL,
+      credentialName: DEFAULT_TEAM_NAME,
       gatewayName: sharedGateway.name,
     });
 
@@ -499,6 +503,8 @@ async function ensureDefaultTeamVaultFolder(cookieHeaders: string) {
       `Failed to configure default team vault folder: ${JSON.stringify(upsertResponse.error)}`,
     );
   }
+
+  return defaultTeamId;
 }
 
 async function ensureVaultSecretExists() {

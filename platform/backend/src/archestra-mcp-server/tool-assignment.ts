@@ -78,7 +78,7 @@ const BulkAgentAssignmentResultSchema = z
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
     errorCode: z
-      .enum(["not_found", "validation_error"])
+      .enum(["not_found", "validation_error", "forbidden"])
       .optional()
       .describe("Structured assignment error code."),
     errorType: z
@@ -94,7 +94,7 @@ const BulkMcpGatewayAssignmentResultSchema = z
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
     errorCode: z
-      .enum(["not_found", "validation_error"])
+      .enum(["not_found", "validation_error", "forbidden"])
       .optional()
       .describe("Structured assignment error code."),
     errorType: z

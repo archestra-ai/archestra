@@ -158,13 +158,6 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           `Failed to get visible MCP servers for ${user}: ${JSON.stringify(visibleServersResponse.error)}`,
         );
       }
-      const expectedCredentials =
-        visibleServersResponse.data
-          ?.filter((server) => server.catalogId === newCatalogItem.id)
-          .map(
-            (server) =>
-              server.teamDetails?.name ?? server.ownerEmail ?? "Deleted user",
-          ) ?? [];
       await openManageCredentialsDialog(page, catalogItemName);
       const connectionsButton = page.getByTestId(
         E2eTestId.McpServerSettingsConnectionsNavButton,
@@ -184,14 +177,27 @@ test.describe("Custom Self-hosted MCP Server - installation and static credentia
           catalogItemName,
           gatewayName: gatewayNameForAssignment,
         });
-        const expectedAssignableCredentials = expectedCredentials;
+        // Personal connections are caller-bound: they resolve only at call
+        // time for their owner and never appear as static pin options — the
+        // dropdown offers team/org service accounts exclusively.
+        const expectedAssignableCredentials =
+          visibleServersResponse.data
+            ?.filter(
+              (server) =>
+                server.catalogId === newCatalogItem.id &&
+                server.scope !== "personal",
+            )
+            .map(
+              (server) =>
+                server.teamDetails?.name ?? server.ownerEmail ?? "Deleted user",
+            ) ?? [];
+        expect(expectedAssignableCredentials.length).toBeGreaterThan(0);
         // Poll instead of a one-shot read: the dropdown renders from a
         // TanStack Query result that can transiently miss a just-created
-        // credential until the mount-time refetch lands (observed in merge
-        // queue as "expected admin@example.com, received [Default Team]").
-        // The options re-render in place once fresh data arrives, so
-        // re-reading converges; a thrown read (options briefly unmounted
-        // mid-re-render) counts as "not yet" rather than aborting the poll.
+        // credential until the mount-time refetch lands. The options
+        // re-render in place once fresh data arrives, so re-reading
+        // converges; a thrown read (options briefly unmounted mid-re-render)
+        // counts as "not yet" rather than aborting the poll.
         await expect
           .poll(
             async () =>
@@ -407,33 +413,53 @@ test("Verify tool calling using different static credentials", async ({
   });
   await settleRegistryAfterInstall(editorPage);
 
-  // Assign tool to profiles using admin static credential
+  // Personal connections are caller-bound and can no longer be pinned as
+  // static credentials (the installs above stay usable only via
+  // resolve-at-call-time for their owners). Static pinning is exercised with
+  // team service accounts instead: one per gateway, with distinct env values
+  // so the tool result proves which credential served the call.
+  await addSharedLocalConnection({
+    page: adminPage,
+    catalogItemName: CATALOG_ITEM_NAME,
+    teamName: DEFAULT_TEAM_NAME,
+    envValues: { ARCHESTRA_TEST: "Default-team-credential" },
+  });
+  await settleRegistryAfterInstall(adminPage);
+  await addSharedLocalConnection({
+    page: editorPage,
+    catalogItemName: CATALOG_ITEM_NAME,
+    teamName: ENGINEERING_TEAM_NAME,
+    envValues: { ARCHESTRA_TEST: "Engineering-team-credential" },
+  });
+  await settleRegistryAfterInstall(editorPage);
+
+  // Assign tool to profiles pinning the default-team service account
   await assignCatalogCredentialToGateway({
     page: adminPage,
     catalogItemName: CATALOG_ITEM_NAME,
-    credentialName: "admin@example.com",
+    credentialName: DEFAULT_TEAM_NAME,
     gatewayName: sharedGateway.name,
   });
-  // Verify tool call result using admin static credential
+  // Verify tool call result using the default-team service account
   await verifyToolCallResultViaApi({
     request,
-    expectedResult: "Admin-personal-credential",
+    expectedResult: "Default-team-credential",
     tokenToUse: "org-token",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
     profileId: sharedGateway.id,
   });
 
-  // Assign tool to profiles using editor static credential
+  // Assign tool to profiles pinning the engineering-team service account
   await assignCatalogCredentialToGateway({
     page: editorPage,
     catalogItemName: CATALOG_ITEM_NAME,
-    credentialName: "editor@example.com",
+    credentialName: ENGINEERING_TEAM_NAME,
     gatewayName: teamGateway.name,
   });
-  // Verify tool call result using editor static credential
+  // Verify tool call result using the engineering-team service account
   await verifyToolCallResultViaApi({
     request,
-    expectedResult: "Editor-personal-credential",
+    expectedResult: "Engineering-team-credential",
     tokenToUse: "org-token",
     toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
     profileId: teamGateway.id,

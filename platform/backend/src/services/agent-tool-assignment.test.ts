@@ -1,7 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
-import MemberModel from "@/models/member";
 import TeamModel from "@/models/team";
 import { describe, expect, test } from "@/test";
 import {
@@ -13,19 +12,13 @@ import {
 } from "./agent-tool-assignment";
 
 describe("filterMcpServersAssignableToTarget", () => {
-  test("uses one organization membership lookup for org-scoped target filtering", async ({
-    makeMember,
+  test("drops every personal connection without membership lookups", async ({
     makeOrganization,
     makeUser,
   }) => {
     const organization = await makeOrganization();
     const memberOwner = await makeUser();
     const outsideOwner = await makeUser();
-    await makeMember(memberOwner.id, organization.id, { role: "member" });
-
-    const getByUserIdSpy = vi.spyOn(MemberModel, "getByUserId");
-    const findUserIdsSpy = vi.spyOn(MemberModel, "findUserIdsInOrganization");
-
     const filtered = await filterMcpServersAssignableToTarget({
       mcpServers: [
         {
@@ -40,7 +33,7 @@ describe("filterMcpServersAssignableToTarget", () => {
           teamId: null,
           scope: "personal",
         },
-        { id: "org-owned", ownerId: null, teamId: null, scope: "personal" },
+        { id: "org-owned", ownerId: null, teamId: null, scope: "org" },
       ],
       target: {
         organizationId: organization.id,
@@ -50,18 +43,10 @@ describe("filterMcpServersAssignableToTarget", () => {
       },
     });
 
-    expect(filtered.map((server) => server.id)).toEqual([
-      "member-owned",
-      "org-owned",
-    ]);
-    expect(findUserIdsSpy).toHaveBeenCalledTimes(1);
-    expect(getByUserIdSpy).not.toHaveBeenCalled();
-
-    getByUserIdSpy.mockRestore();
-    findUserIdsSpy.mockRestore();
+    expect(filtered.map((server) => server.id)).toEqual(["org-owned"]);
   });
 
-  test("uses one team membership lookup for team-scoped personal server filtering", async ({
+  test("filters team credentials by the target teams", async ({
     makeOrganization,
     makeTeam,
     makeTeamMember,
@@ -81,7 +66,6 @@ describe("filterMcpServersAssignableToTarget", () => {
     await makeTeamMember(otherTeam.id, otherOwner.id);
 
     const isUserInAnyTeamSpy = vi.spyOn(TeamModel, "isUserInAnyTeam");
-    const findUserIdsSpy = vi.spyOn(TeamModel, "findUserIdsInAnyTeam");
 
     const filtered = await filterMcpServersAssignableToTarget({
       mcpServers: [
@@ -118,15 +102,10 @@ describe("filterMcpServersAssignableToTarget", () => {
       },
     });
 
-    expect(filtered.map((server) => server.id)).toEqual([
-      "selected-owner",
-      "selected-team",
-    ]);
-    expect(findUserIdsSpy).toHaveBeenCalledTimes(1);
+    expect(filtered.map((server) => server.id)).toEqual(["selected-team"]);
     expect(isUserInAnyTeamSpy).not.toHaveBeenCalled();
 
     isUserInAnyTeamSpy.mockRestore();
-    findUserIdsSpy.mockRestore();
   });
 
   test("uses the author's team IDs once for personal target filtering", async ({
@@ -186,11 +165,7 @@ describe("filterMcpServersAssignableToTarget", () => {
       },
     });
 
-    expect(filtered.map((server) => server.id)).toEqual([
-      "own-personal",
-      "author-team",
-      "org-owned",
-    ]);
+    expect(filtered.map((server) => server.id)).toEqual(["author-team"]);
     expect(getUserTeamIdsSpy).toHaveBeenCalledTimes(1);
     expect(isUserInAnyTeamSpy).not.toHaveBeenCalled();
 
@@ -339,10 +314,12 @@ describe("assignToolToAgent", () => {
     const firstServer = await makeMcpServer({
       ownerId: owner.id,
       catalogId: catalog.id,
+      scope: "org",
     });
     const secondServer = await makeMcpServer({
       ownerId: owner.id,
       catalogId: catalog.id,
+      scope: "org",
     });
 
     const createResult = await assignToolToAgent({
@@ -482,10 +459,12 @@ describe("assignToolToApp", () => {
     const firstServer = await makeMcpServer({
       ownerId: author.id,
       catalogId: catalog.id,
+      scope: "org",
     });
     const secondServer = await makeMcpServer({
       ownerId: author.id,
       catalogId: catalog.id,
+      scope: "org",
     });
 
     const created = await assignToolToApp({
@@ -531,7 +510,7 @@ describe("assignToolToApp", () => {
     expect(result).toMatchObject({ code: "not_found" });
   });
 
-  test("rejects a server a personal app has no claim to, but allows the author's own", async ({
+  test("rejects every personal connection for a personal app", async ({
     makeApp,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -582,7 +561,7 @@ describe("assignToolToApp", () => {
       toolId: tool.id,
       mcpServerId: authorsServer.id,
     });
-    expect(allowed).toBeNull();
+    expect(allowed).toMatchObject({ code: "validation_error" });
   });
 
   test("rejects a tool from another organization as not_found", async ({
@@ -667,6 +646,213 @@ describe("assignToolToApp", () => {
       mcpServerId: foreignServer.id,
     });
     expect(result).toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("personal connections are never statically assignable", () => {
+  const orgTarget = {
+    organizationId: "org-1",
+    scope: "org" as const,
+    authorId: "me",
+    teamIds: [],
+  };
+
+  test("rejects another user's personal connection", async () => {
+    const assignable = await isMcpServerAssignableToTarget({
+      mcpServer: {
+        ownerId: "colleague",
+        teamId: null,
+        scope: "personal",
+      },
+      target: orgTarget,
+    });
+
+    expect(assignable).toBe(false);
+  });
+
+  test("rejects the target owner's own personal connection", async () => {
+    const assignable = await isMcpServerAssignableToTarget({
+      mcpServer: { ownerId: "me", teamId: null, scope: "personal" },
+      target: { ...orgTarget, scope: "personal" },
+    });
+
+    expect(assignable).toBe(false);
+  });
+
+  test("rejects the target owner's personal local installation", async () => {
+    const assignable = await isMcpServerAssignableToTarget({
+      mcpServer: {
+        ownerId: "me",
+        serverType: "local",
+        teamId: null,
+        scope: "personal",
+      },
+      target: { ...orgTarget, scope: "personal" },
+    });
+
+    expect(assignable).toBe(false);
+  });
+
+  test("org- and team-scoped servers are unaffected — they are shared resources, not someone's credentials", async () => {
+    const orgScoped = await isMcpServerAssignableToTarget({
+      mcpServer: { ownerId: "colleague", teamId: null, scope: "org" },
+      target: orgTarget,
+    });
+
+    expect(orgScoped).toBe(true);
+  });
+
+  test("the picker filter drops all personal connections", async () => {
+    const mine = {
+      ownerId: "me",
+      serverType: "local" as const,
+      teamId: null,
+      scope: "personal" as const,
+    };
+    const theirs = {
+      ownerId: "colleague",
+      teamId: null,
+      scope: "personal" as const,
+    };
+    const shared = { ownerId: null, teamId: null, scope: "org" as const };
+
+    const visible = await filterMcpServersAssignableToTarget({
+      mcpServers: [mine, theirs, shared],
+      target: orgTarget,
+    });
+
+    expect(visible).toEqual([shared]);
+  });
+
+  test("validateAssignment directs every caller to dynamic resolution", async ({
+    makeAgent,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const me = await makeUser();
+    const colleague = await makeUser();
+    await makeMember(me.id, org.id, { role: "member" });
+    await makeMember(colleague.id, org.id, { role: "member" });
+
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: me.id,
+      scope: "org",
+      teams: [],
+    });
+    const tool = await makeTool({});
+    const theirs = await makeMcpServer({
+      scope: "personal",
+      ownerId: colleague.id,
+      serverType: "remote",
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+      mcpServerId: theirs.id,
+    });
+
+    expect(result).toMatchObject({
+      code: "validation_error",
+      error: { type: "validation_error" },
+    });
+    expect(result?.error.message).toContain("dynamic credential resolution");
+  });
+
+  test("validateAssignment rejects a personal local installation", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const me = await makeUser();
+    await makeMember(me.id, org.id, { role: "member" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "local",
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: me.id,
+      scope: "personal",
+      teams: [],
+    });
+    const tool = await makeTool({ catalogId: catalog.id });
+    const personalInstallation = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "personal",
+      ownerId: me.id,
+      serverType: "local",
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+      mcpServerId: personalInstallation.id,
+    });
+
+    expect(result).toMatchObject({
+      code: "validation_error",
+      error: { type: "validation_error" },
+    });
+    expect(result?.error.message).toContain("dynamic credential resolution");
+  });
+
+  test("validateAssignment rejects a team-local installation outside the agent author's teams", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const teamOwner = await makeUser();
+    await makeMember(author.id, org.id, { role: "member" });
+    await makeMember(teamOwner.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, teamOwner.id);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "local",
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: author.id,
+      scope: "personal",
+      teams: [],
+    });
+    const tool = await makeTool({ catalogId: catalog.id });
+    const teamInstallation = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "team",
+      teamId: team.id,
+      ownerId: teamOwner.id,
+      serverType: "local",
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+      mcpServerId: teamInstallation.id,
+    });
+
+    expect(result).toMatchObject({
+      code: "validation_error",
+      error: { type: "validation_error" },
+    });
+    expect(result?.error.message).toContain("not shared");
   });
 });
 

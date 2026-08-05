@@ -2780,6 +2780,13 @@
       "when": 1785800057394,
       "tag": "0396_purge_membershipless_personal_mcp_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 397,
+      "version": "7",
+      "when": 1785841780161,
+      "tag": "0397_credential_connection_permissions",
+      "breakpoints": true
     }
   ]
 }

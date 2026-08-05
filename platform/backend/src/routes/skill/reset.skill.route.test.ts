@@ -96,8 +96,7 @@ describe("POST /api/skills/:id/reset", () => {
     expect(response.statusCode).toBe(200);
 
     // `skills.source_commit` holds a content hash for built-ins, not a git SHA.
-    // Versions must not inherit it: the history links a commit out to GitHub,
-    // and a hash there would render a link to a commit that does not exist.
+    // Inheriting it would link the history out to a commit that does not exist.
     const skill = await SkillModel.findById(id);
     const versions = await Promise.all(
       Array.from({ length: skill?.latestVersion ?? 0 }, (_, i) =>

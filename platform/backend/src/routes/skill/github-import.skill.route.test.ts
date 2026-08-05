@@ -72,8 +72,7 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
         { path: "scripts/run.py", encoding: "utf8", kind: "script" },
       ]);
 
-      // version 1 is exactly the repo's bytes at that commit, so it carries the
-      // commit as provenance for the history's source link.
+      // version 1 is exactly the repo's bytes at that commit.
       const v1 = await SkillVersionModel.findBySkillAndVersion(
         body.created[0].id,
         1,

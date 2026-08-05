@@ -280,9 +280,8 @@ class SkillModel {
       /** Environments the skill is restricted to; empty/omitted = every environment. */
       environmentIds?: string[];
       /**
-       * Git commit the initial bytes came from, stamped on version 1 as
-       * provenance. Passed only by the GitHub import; see `updateWithFiles`
-       * for why it is not read off `skill.sourceCommit`.
+       * Git commit the initial bytes came from, stamped on version 1. Passed
+       * only by the GitHub import; see `skill_versions.source_commit`.
        */
       versionSourceCommit?: string;
     },
@@ -370,12 +369,9 @@ class SkillModel {
     environmentIds?: string[];
     expectedLatestVersion?: number;
     /**
-     * Git commit the new bytes came from, stamped on the forked version as
-     * provenance (ignored when the payload is unchanged and no version forks).
-     * Only the GitHub sync passes one. It is deliberately explicit rather than
-     * read off `skill.sourceCommit`: built-in skills store a content hash in
-     * that column, so an implicit read would stamp fake SHAs on every
-     * built-in reset and seed-time refresh.
+     * Git commit the new bytes came from, stamped on the forked version and
+     * dropped when the payload is unchanged and nothing forks. Passed only by
+     * the GitHub sync; see `skill_versions.source_commit`.
      */
     versionSourceCommit?: string;
   }): Promise<Skill | null> {

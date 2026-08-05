@@ -101,8 +101,7 @@ async function syncSkill(skill: Skill): Promise<void> {
         sourceCommit: imported.sourceCommit,
       },
       files: imported.files,
-      // the fork this update produces came wholly from upstream, so it carries
-      // the commit as provenance (surfaced as a source link in the UI).
+      // the fork came wholly from upstream, so it carries the commit.
       versionSourceCommit: imported.sourceCommit,
     });
   } catch (error) {

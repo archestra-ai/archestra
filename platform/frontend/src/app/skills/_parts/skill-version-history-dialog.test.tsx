@@ -286,9 +286,13 @@ describe("SkillVersionHistoryDialog", () => {
     expect(
       screen.queryByRole("link", { name: "Open version in GitHub" }),
     ).toBeNull();
-    // the timeline still identifies each version by its content hash, which is
-    // a different thing entirely from where the bytes came from.
-    expect(screen.getAllByText("hash-he").length).toBeGreaterThan(0);
+    // The content hash identifies a version among its neighbours, so it belongs
+    // to the timeline row and nowhere else — the preview header does not repeat
+    // it. Exactly one occurrence pins both halves of that.
+    expect(screen.getAllByText("hash-he")).toHaveLength(1);
+    expect(
+      within(screen.getByRole("button", { name: /v3/ })).getByText("hash-he"),
+    ).toBeInTheDocument();
   });
 
   it("cannot restore the version the skill is already on", () => {

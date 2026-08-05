@@ -1,10 +1,9 @@
 /**
- * Reading a skill's `sourceRef` — the packed provenance string the backend
- * writes for imported skills, shaped `owner/repo@ref:path` (built-in skills
- * carry `builtin:<id>` instead, which is an identity token, not a repo).
+ * Reading a skill's `sourceRef`: `owner/repo@ref:path` for an imported skill,
+ * `builtin:<id>` for a built-in one.
  */
 
-/** Extract `owner/repo` from a `source_ref` shaped like `owner/repo@ref:path`. */
+/** The `owner/repo` a skill was imported from; null for a built-in. */
 export function parseRepoFromSourceRef(
   sourceRef: string | null,
 ): string | null {
@@ -13,13 +12,11 @@ export function parseRepoFromSourceRef(
 }
 
 /**
- * GitHub URL for a skill's directory as it stood at one commit, for a version
- * that recorded the commit it was pulled from.
+ * GitHub URL for a skill's directory as it stood at one commit.
  *
- * The repo and path come from the skill's *current* `sourceRef` because only
- * the commit is versioned, so a directory renamed upstream since resolves
- * against its new path. GitHub 404s that rather than showing the wrong files,
- * which is the right failure for an informational link.
+ * Only the commit is versioned, so the repo and path come from the skill's
+ * *current* `sourceRef`: a directory renamed upstream since resolves against
+ * its new path and 404s, which beats showing the wrong files.
  */
 export function githubSourceUrlAtCommit(params: {
   sourceRef: string | null;
@@ -47,9 +44,8 @@ interface ParsedSourceRef {
 
 function parseSourceRef(sourceRef: string | null): ParsedSourceRef | null {
   if (!sourceRef) return null;
-  // Built-in skills carry an internal `builtin:<id>` ref (e.g.
-  // `builtin:archestra-platform-operations`); it is an identity token, not a
-  // source repo, and would leak the unbranded "archestra" id into the UI.
+  // An identity token, not a repo — rendering it would leak the unbranded
+  // "archestra" id into the UI.
   if (sourceRef.startsWith("builtin:")) return null;
 
   const atIdx = sourceRef.indexOf("@");
@@ -59,8 +55,7 @@ function parseSourceRef(sourceRef: string | null): ParsedSourceRef | null {
   if (!owner || !repo || rest.length > 0) return null;
 
   // The ref may itself contain slashes (`release/2.0`) but never a colon, so
-  // the first colon after the `@` starts the skill path. Matches the backend's
-  // parseSourceRef in the GitHub sync handler.
+  // the first colon after the `@` starts the skill path.
   const colonIdx = atIdx === -1 ? -1 : sourceRef.indexOf(":", atIdx);
   return {
     owner,

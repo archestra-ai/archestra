@@ -525,10 +525,8 @@ function VersionPreview({
         <span className="text-xs text-muted-foreground">
           {formatRelativeTimeFromNow(detail.createdAt)}
         </span>
-        {/* Provenance, shown only for versions a GitHub pull produced. The
-            commit is named rather than spelled out: the timeline already
-            carries a short hash per row, and a second one here read as the
-            same fact repeated. The full SHA stays in the title. */}
+        {/* Only versions a GitHub pull produced. The link is named rather than
+            spelled out as a SHA, which stays in the title. */}
         {sourceUrl && detail.sourceCommit ? (
           <a
             href={sourceUrl}

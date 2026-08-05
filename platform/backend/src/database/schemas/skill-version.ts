@@ -39,13 +39,12 @@ const skillVersionsTable = pgTable(
     /**
      * Git commit the bytes came from, for versions forked by a GitHub import or
      * a scheduled sync; null for everything else (authored edits, restores,
-     * built-in skills). Provenance only — nothing reads it to resolve content,
-     * and it is deliberately not set from `skills.source_commit`, which
-     * built-in skills fill with a content hash rather than a commit.
+     * built-in skills). Provenance only — nothing reads it to resolve content.
      *
-     * The repo and skill path needed to build a link live on the skill's
-     * `source_ref`, so a version whose skill was deleted keeps a SHA that can
-     * no longer be resolved to a URL. Acceptable: the link is informational.
+     * Callers pass it explicitly rather than it being copied from
+     * `skills.source_commit`: built-in skills fill that column with a content
+     * hash, so an implicit read would stamp SHAs resolving to nothing on every
+     * built-in reset and seed-time refresh.
      */
     sourceCommit: text("source_commit"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

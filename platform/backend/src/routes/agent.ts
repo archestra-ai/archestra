@@ -266,6 +266,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Exclude built-in agents from the results. Defaults to false.",
             ),
+          includeAdvisor: z
+            .preprocess((val) => val === "true" || val === true, z.boolean())
+            .optional()
+            .describe(
+              "Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to.",
+            ),
           scope: AgentScopeFilterSchema.optional().describe(
             "Filter by scope: personal, team, org, or built_in.",
           ),
@@ -294,6 +300,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType,
           agentTypes,
           excludeBuiltIn,
+          includeAdvisor,
           scope,
           excludeOtherPersonalAgents,
           status,
@@ -332,6 +339,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
           excludeBuiltIn,
+          includeAdvisor,
           scope:
             scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
           excludeOtherPersonalAgents: isAdmin

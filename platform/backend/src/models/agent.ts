@@ -1,5 +1,6 @@
 import {
   type ArchestraToolShortName,
+  BUILT_IN_AGENT_IDS,
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
   type PaginationQuery,
@@ -72,6 +73,12 @@ import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
+
+/** The columns a boot-time sync reconciles against a shipped built-in definition. */
+type BuiltInAgentSyncRow = Pick<
+  typeof schema.agentsTable.$inferSelect,
+  "id" | "name" | "description" | "systemPrompt" | "builtInAgentConfig"
+>;
 
 class AgentModel {
   /**
@@ -629,6 +636,13 @@ class AgentModel {
       agentType?: AgentType;
       agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
+      /**
+       * Keep the advisor in the results even while built-ins are excluded.
+       * It is the one built-in another agent is meant to reach, so the
+       * subagent picker needs it without also offering the platform
+       * machinery — dual-LLM, compaction, title generation.
+       */
+      includeAdvisor?: boolean;
       scope?: AgentScope;
       excludeOtherPersonalAgents?: boolean;
       status?: AgentRecordStatus;
@@ -665,7 +679,17 @@ class AgentModel {
 
     // Exclude built-in agents when explicitly requested or when user is not an admin
     if (options?.excludeBuiltIn || !isAgentAdmin) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+      whereConditions.push(
+        options?.includeAdvisor
+          ? (or(
+              eq(schema.agentsTable.builtIn, false),
+              eq(
+                sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+                BUILT_IN_AGENT_IDS.ADVISOR,
+              ),
+            ) as SQL)
+          : eq(schema.agentsTable.builtIn, false),
+      );
     }
 
     // Filter by scope if specified
@@ -1655,6 +1679,32 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
+  /**
+   * Agents a toolset backfill may assign to. Everything in the organization
+   * except the advisor, which answers questions and must not act: a tool it
+   * holds is one a consultation can call, and the advisor's whole contract is
+   * that it returns a recommendation and edits nothing.
+   */
+  static async findToolAssignableIdsByOrganizationId(
+    organizationId: string,
+  ): Promise<string[]> {
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          ne(
+            sql`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
+            BUILT_IN_AGENT_IDS.ADVISOR,
+          ),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+
+    return agents.map((agent) => agent.id);
+  }
+
   static async findAllIds(): Promise<string[]> {
     const agents = await db
       .select({ id: schema.agentsTable.id })
@@ -1736,11 +1786,16 @@ class AgentModel {
 
   /**
    * Internal agents eligible as Auto-mode delegation targets for a caller:
-   * agentType "agent", not built-in, not soft-deleted, that the caller user can
-   * access (org, own personal, or a team the user belongs to), minus the caller
-   * agent itself. This is the delegation analog of
+   * agentType "agent", not soft-deleted, that the caller user can access (org,
+   * own personal, or a team the user belongs to), minus the caller agent
+   * itself. This is the delegation analog of
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
+   *
+   * Built-in agents are excluded with one exception: the advisor exists to be
+   * consulted, so it is the only built-in offered as a delegation target. The
+   * rest back platform machinery — dual-LLM, compaction, title generation —
+   * and delegating to them means driving an internal mechanism by hand.
    */
   static async findAccessibleDelegationTargets(params: {
     userId: string;
@@ -1751,12 +1806,20 @@ class AgentModel {
      * boundaries (null is the Default environment), mirroring tool isolation.
      */
     environmentId: string | null;
-  }): Promise<Pick<Agent, "id" | "name" | "description">[]> {
+  }): Promise<
+    Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
+  > {
     const { userId, isAdmin, excludeAgentId, environmentId } = params;
 
     const baseConditions = [
       eq(schema.agentsTable.agentType, "agent"),
-      eq(schema.agentsTable.builtIn, false),
+      or(
+        eq(schema.agentsTable.builtIn, false),
+        eq(
+          sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+          BUILT_IN_AGENT_IDS.ADVISOR,
+        ),
+      ),
       ne(schema.agentsTable.id, excludeAgentId),
       environmentId === null
         ? isNull(schema.agentsTable.environmentId)
@@ -1770,6 +1833,7 @@ class AgentModel {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
           description: schema.agentsTable.description,
+          builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -1781,6 +1845,7 @@ class AgentModel {
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         description: schema.agentsTable.description,
+        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
       })
       .from(schema.agentsTable)
       .leftJoin(
@@ -2541,6 +2606,42 @@ class AgentModel {
       connectorIds: currentConnectorIds,
       suggestedPrompts: currentSuggestedPrompts.get(id) ?? [],
     };
+  }
+
+  /**
+   * The advisor is the one built-in that exists per environment rather than
+   * once per organization: delegation never crosses environments, so an agent
+   * can only reach the advisor sitting in its own. `null` is the Default
+   * environment, and is a distinct row from every named one.
+   */
+  static async getAdvisorForEnvironment(params: {
+    organizationId: string;
+    environmentId: string | null;
+  }): Promise<BuiltInAgentSyncRow | null> {
+    const { organizationId, environmentId } = params;
+
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        description: schema.agentsTable.description,
+        systemPrompt: schema.agentsTable.systemPrompt,
+        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.ADVISOR}`,
+          eq(schema.agentsTable.organizationId, organizationId),
+          environmentId === null
+            ? isNull(schema.agentsTable.environmentId)
+            : eq(schema.agentsTable.environmentId, environmentId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
   }
 
   /**

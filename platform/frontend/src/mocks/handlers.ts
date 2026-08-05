@@ -178,6 +178,7 @@ export const handlers: HttpHandler[] = [
       supportsHttpMethods: false,
       message: null,
       enforcementSource: "probe",
+      enforcementStatus: "verified-enforced",
       probe: "enforced",
       probedAt: "2026-01-01T00:00:00.000Z",
     },

@@ -8,7 +8,7 @@ import {
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
@@ -34,6 +34,7 @@ import {
 } from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -46,10 +47,13 @@ import {
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
 import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
@@ -163,6 +167,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
+
+  const { data: environmentList } = useEnvironments();
+  const environments = useMemo(
+    () => environmentList?.environments ?? [],
+    [environmentList],
+  );
+  const defaultEnvironment = useDefaultEnvironment();
+  // Every agent sits in the default environment until someone defines another,
+  // so the column would be a wall of one repeated value.
+  const showEnvironmentColumn = environments.length > 0;
 
   // Users can always create personal agents, no team requirement needed
 
@@ -327,6 +341,29 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         />
       ),
     },
+    ...(showEnvironmentColumn
+      ? [
+          {
+            id: "environment",
+            header: "Environment",
+            enableSorting: false,
+            size: 160,
+            cell: ({ row }) => {
+              const label =
+                resolveCatalogEnvironmentLabel({
+                  environmentId: row.original.environmentId ?? null,
+                  environments,
+                  defaultEnvironmentName: defaultEnvironment.name,
+                }) ?? defaultEnvironment.name;
+              return (
+                <Badge variant="outline" className="text-muted-foreground">
+                  <span className="max-w-32 truncate">{label}</span>
+                </Badge>
+              );
+            },
+          } satisfies ColumnDef<AgentData>,
+        ]
+      : []),
     {
       id: "actions",
       header: "Actions",

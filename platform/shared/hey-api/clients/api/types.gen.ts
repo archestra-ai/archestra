@@ -12154,6 +12154,8 @@ export type GetAgentsResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'advisor-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -12275,6 +12277,8 @@ export type CreateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
@@ -12407,6 +12411,8 @@ export type CreateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -12497,6 +12503,10 @@ export type GetAllAgentsData = {
          * Exclude built-in agents from the results. Defaults to false.
          */
         excludeBuiltIn?: boolean;
+        /**
+         * Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to.
+         */
+        includeAdvisor?: boolean;
         /**
          * Filter by scope: personal, team, org, or built_in.
          */
@@ -12623,6 +12633,8 @@ export type GetAllAgentsResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -12814,6 +12826,8 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -13005,6 +13019,8 @@ export type GetDefaultLlmProxyResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -13275,6 +13291,8 @@ export type ImportAgentResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'advisor-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -13559,6 +13577,8 @@ export type GetAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -13671,6 +13691,8 @@ export type UpdateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
@@ -13805,6 +13827,8 @@ export type UpdateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -14455,6 +14479,8 @@ export type CloneAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -15171,6 +15197,8 @@ export type RestoreAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -52677,6 +52705,7 @@ export type GetK8sCapabilitiesResponses = {
             supportsHttpMethods: boolean;
             message: string | null;
             enforcementSource: 'probe' | 'api-discovery';
+            enforcementStatus: 'verified-enforced' | 'verified-not-enforced' | 'unknown';
             probe: 'enforced' | 'not-enforced' | 'inconclusive' | 'absent';
             probedAt: string | null;
         };

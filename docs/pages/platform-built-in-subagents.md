@@ -3,14 +3,24 @@ title: Built-in Subagents
 category: Agents
 order: 10
 description: The system subagents Archestra seeds into every organization, and what each one does
-lastUpdated: 2026-07-05
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra seeds a set of built-in subagents into every organization. Each one handles a specific internal job — proposing tool policies, quarantining untrusted output, summarizing long chats, and so on. They run automatically; you rarely invoke them directly.
+Archestra seeds a set of built-in subagents into every organization. Each one handles a specific internal job — proposing tool policies, quarantining untrusted output, summarizing long chats, and so on. Most run automatically; you rarely invoke them directly. The Advisor is the exception: you turn it on per agent.
 
 An admin can open a built-in subagent in its settings and change its **system prompt** and **model** (requires `agent:admin`), and reset either back to the shipped default. Built-in subagents cannot be deleted or exported. When one has no model set, it falls back to the organization's default model.
+
+## Advisor
+
+The Advisor is a stronger model an agent consults at the decisions that shape a task: which approach to take, an error that keeps coming back, whether the work is really done. Everything else stays on the agent's own model.
+
+Turn it on per agent or MCP gateway with **Enable Advisor**, under **Subagents**. It works the same in Auto and Custom mode. Pick the Advisor's model in its own settings — a stronger model than the callers use is the point.
+
+The Advisor cannot see the conversation, the files, or the tools. It reads only the message the calling model writes, then returns advice. It changes nothing.
+
+Each environment has its own Advisor, created and removed with the environment. An agent reaches only the Advisor in its own environment, so consultations count against that environment's [cost limits](/docs/platform-costs-and-limits). Each consultation is a separate interaction, billed at the Advisor's model rates. The agent consults at decision points rather than on every turn, so a cheap agent model paired with a strong Advisor usually costs less than running the strong model throughout.
 
 ## Policy Configuration Subagent
 

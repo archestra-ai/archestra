@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.26"
+    "version": "1.3.27"
   },
   "components": {
     "schemas": {
@@ -40659,6 +40659,21 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
+                                      "advisor-agent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -41529,6 +41544,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "advisor-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -41849,6 +41878,21 @@
                               "type": "string",
                               "enum": [
                                 "app-runtime-llm-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "advisor-agent"
                               ]
                             }
                           },
@@ -42513,6 +42557,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeAdvisor",
+            "required": false,
+            "description": "Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to."
+          },
+          {
+            "schema": {
               "type": "string",
               "enum": [
                 "personal",
@@ -42775,6 +42828,21 @@
                                 "type": "string",
                                 "enum": [
                                   "app-runtime-llm-agent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "advisor-agent"
                                 ]
                               }
                             },
@@ -43626,6 +43694,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "advisor-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -44463,6 +44546,21 @@
                               "type": "string",
                               "enum": [
                                 "app-runtime-llm-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "advisor-agent"
                               ]
                             }
                           },
@@ -45658,6 +45756,21 @@
                                 "name"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "enum": [
+                                    "advisor-agent"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           ]
                         },
@@ -46549,6 +46662,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "advisor-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -47371,6 +47499,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "advisor-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -47695,6 +47837,21 @@
                               "type": "string",
                               "enum": [
                                 "app-runtime-llm-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "advisor-agent"
                               ]
                             }
                           },
@@ -50707,6 +50864,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "advisor-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -53324,6 +53496,21 @@
                               "type": "string",
                               "enum": [
                                 "app-runtime-llm-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "advisor-agent"
                               ]
                             }
                           },
@@ -206751,6 +206938,14 @@
                             "api-discovery"
                           ]
                         },
+                        "enforcementStatus": {
+                          "type": "string",
+                          "enum": [
+                            "verified-enforced",
+                            "verified-not-enforced",
+                            "unknown"
+                          ]
+                        },
                         "probe": {
                           "type": "string",
                           "enum": [
@@ -206775,6 +206970,7 @@
                         "supportsHttpMethods",
                         "message",
                         "enforcementSource",
+                        "enforcementStatus",
                         "probe",
                         "probedAt"
                       ],

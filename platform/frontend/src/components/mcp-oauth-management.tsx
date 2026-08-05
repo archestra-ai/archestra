@@ -15,9 +15,10 @@ import {
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
   useCreateMcpOauthClient,
@@ -46,6 +47,8 @@ export function McpOauthManagement({
   resourceId: string;
   resourceKind: "agent" | "gateway";
 }) {
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const { data: canRead } = useHasPermissions({ mcpOauthClient: ["read"] });
   const { data: canCreate } = useHasPermissions({ mcpOauthClient: ["create"] });
   const { data: canUpdate } = useHasPermissions({ mcpOauthClient: ["update"] });
@@ -97,6 +100,7 @@ export function McpOauthManagement({
               <tr className="border-b bg-muted/40 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
                 <th className="px-3 py-1.5">Name</th>
                 <th className="px-3 py-1.5">Client ID</th>
+                <th className="px-3 py-1.5">Accessible to</th>
                 <th className="w-24 px-2 py-1.5" />
               </tr>
             </thead>
@@ -124,6 +128,16 @@ export function McpOauthManagement({
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
                     </span>
+                  </td>
+                  <td className="max-w-[180px] px-3 py-1.5">
+                    <ResourceVisibilityBadge
+                      scope={client.scope}
+                      teams={client.teams}
+                      authorId={client.authorId}
+                      authorName={client.authorName}
+                      currentUserId={currentUserId}
+                      showSelfAsMe
+                    />
                   </td>
                   <td className="px-2 py-1.5">
                     <div className="flex">

@@ -497,13 +497,12 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               }}
             />
 
-            {historyProxyId && (
-              <AgentVersionHistoryDialog
-                agentId={historyProxyId}
-                open={!!historyProxyId}
-                onOpenChange={(open) => !open && setHistoryProxyId(null)}
-              />
-            )}
+            <AgentVersionHistoryDialog
+              agentId={historyProxyId}
+              onOpenChange={(open) => {
+                if (!open) setHistoryProxyId(null);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

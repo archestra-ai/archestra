@@ -641,13 +641,12 @@ function McpGateways({
               }}
             />
 
-            {historyGatewayId && (
-              <AgentVersionHistoryDialog
-                agentId={historyGatewayId}
-                open={!!historyGatewayId}
-                onOpenChange={(open) => !open && setHistoryGatewayId(null)}
-              />
-            )}
+            <AgentVersionHistoryDialog
+              agentId={historyGatewayId}
+              onOpenChange={(open) => {
+                if (!open) setHistoryGatewayId(null);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

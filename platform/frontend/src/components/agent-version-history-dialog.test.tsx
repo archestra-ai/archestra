@@ -187,11 +187,7 @@ function mockHeldOverDetails(
 
 function renderDialog() {
   return render(
-    <AgentVersionHistoryDialog
-      agentId="agent-1"
-      open
-      onOpenChange={() => {}}
-    />,
+    <AgentVersionHistoryDialog agentId="agent-1" onOpenChange={() => {}} />,
   );
 }
 
@@ -405,6 +401,36 @@ describe("AgentVersionHistoryDialog", () => {
     expect(screen.getByText(/still being worked out/)).toBeVisible();
     expect(screen.queryByText(/Nothing changes/)).not.toBeInTheDocument();
     expect(screen.queryByText(/This changes:/)).not.toBeInTheDocument();
+    // Saying the effects are unknown and then accepting the write anyway is
+    // the same mistake one step later.
+    expect(
+      screen.getByRole("button", { name: "Restore version 2" }),
+    ).toBeDisabled();
+  });
+
+  it("drops the deleted-referent caveat from a restore that changes nothing", async () => {
+    const user = userEvent.setup();
+    // A version identical to the head references what the agent references
+    // today, so warning that a deleted referent could refuse the restore
+    // contradicts the "Nothing changes" it follows.
+    mockVersionDetails({
+      3: versionDetail(3, "hash-head"),
+      2: {
+        ...versionDetail(2, "hash-head"),
+        snapshot: snapshot({ systemPrompt: "prompt v3" }),
+      },
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+
+    expect(screen.getByText(/Nothing changes/)).toBeVisible();
+    expect(
+      screen.queryByText(/the restore is refused/),
+    ).not.toBeInTheDocument();
   });
 
   it("explains why a pruned version cannot be restored", async () => {

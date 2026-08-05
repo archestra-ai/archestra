@@ -14,6 +14,7 @@ import {
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DiffEditor } from "@/components/diff-editor";
 import { Editor } from "@/components/editor";
+import { LazyMount } from "@/components/lazy-mount";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,31 +86,42 @@ const RESTORE_PERMISSIONS_BY_AGENT_TYPE: Record<string, Permissions> = {
  * replays the snapshot server-side and forks it forward as a new head
  * version, so the history is never rewritten.
  */
-export function AgentVersionHistoryDialog(props: {
+export function AgentVersionHistoryDialog({
+  agentId,
+  onOpenChange,
+}: {
+  /** The agent whose history to read; null closes the dialog. */
   agentId: string | null;
-  open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   // Remounting per agent drops the previewed version, which belongs to the
   // agent it was chosen for.
-  return <VersionHistory key={props.agentId} {...props} />;
+  return (
+    <VersionHistory
+      key={agentId}
+      agentId={agentId}
+      onOpenChange={onOpenChange}
+    />
+  );
 }
 
 function VersionHistory({
   agentId,
-  open,
   onOpenChange,
 }: {
   agentId: string | null;
-  open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  // Whether the dialog is open is the same fact as whether it has an agent to
+  // read, so it is derived rather than tracked — and a null id disables every
+  // query below on its own.
+  const open = agentId !== null;
   const {
     data: agent,
     isPending: isAgentLoading,
     refetch: refetchAgent,
-  } = useProfile(open ? (agentId ?? undefined) : undefined);
-  const versionsQuery = useAgentVersions(open ? agentId : null);
+  } = useProfile(agentId ?? undefined);
+  const versionsQuery = useAgentVersions(agentId);
 
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   // Survives version selection: whoever came to read diffs keeps reading diffs.
@@ -148,7 +160,7 @@ function VersionHistory({
     isFetching: isDetailFetching,
     isError: isDetailUnavailable,
     refetch: refetchDetail,
-  } = useAgentVersion(open ? agentId : null, activeVersion);
+  } = useAgentVersion(agentId, activeVersion);
   // Which version the pane is actually showing. A selection keeps the previous
   // snapshot on screen until the next one lands, so the clicked version and
   // the rendered one disagree for the length of that read — and every claim
@@ -165,10 +177,7 @@ function VersionHistory({
       ? previewedVersion - 1
       : null;
   const hasPredecessor = baselineVersion !== null;
-  const predecessorQuery = useAgentVersion(
-    open ? agentId : null,
-    baselineVersion,
-  );
+  const predecessorQuery = useAgentVersion(agentId, baselineVersion);
   // The baseline read carries the same lag as the one above, so a snapshot is
   // this version's baseline only when it is numerically its predecessor —
   // otherwise the pane would diff two unrelated versions until the two reads
@@ -193,7 +202,7 @@ function VersionHistory({
   // question from what this version changed, and the one the confirmation has
   // to answer. The head snapshot is fetched for that comparison; it is cached
   // and immutable, so viewing the head itself costs nothing extra.
-  const headQuery = useAgentVersion(open ? agentId : null, headVersion);
+  const headQuery = useAgentVersion(agentId, headVersion);
   const head = headQuery.data?.version === headVersion ? headQuery.data : null;
   const restoreComparison = useMemo((): RestoreComparison => {
     if (!detail) return { status: "unavailable" };
@@ -359,6 +368,11 @@ function VersionHistory({
             comparison: restoreComparison,
           })}
           isPending={restoreVersion.isPending}
+          // The description tells an unread comparison apart from a no-op, and
+          // the button has to honour the same distinction: confirming while
+          // the effects are still unknown is how a whole-configuration rewrite
+          // gets accepted sight unseen.
+          confirmDisabled={restoreComparison.status !== "ready"}
           onConfirm={handleRestore}
           // A restore only ever appends to the history, so it does not get the
           // red a delete confirmation uses.
@@ -903,13 +917,9 @@ function ListPane({
           (item) => item.change !== null && item.change !== "unchanged",
         )
       : section.items.filter((item) => item.change !== "removed");
-  if (items.length === 0) {
-    return (
-      <p className="p-4 text-sm text-muted-foreground">
-        {mode === "changes" ? "Nothing changed here." : "None."}
-      </p>
-    );
-  }
+  // No empty state: both filters above are the ones that decided this section
+  // had a row to render at all — `sectionIsHeld` for the whole version,
+  // `changedSections` for the change set — so neither can come back empty.
   return (
     <ul className="divide-y">
       {items.map((item) => (
@@ -1008,30 +1018,37 @@ function TextPane({
           ))}
         </dl>
       ) : null}
+      {/* An agent's hooks each get a section, and every one of them would
+          otherwise build a Monaco editor the moment the pane opens, whether or
+          not the reader ever scrolls that far. */}
       {asDiff ? (
-        <DiffEditor
-          height={editorHeight}
-          language={section.language}
-          original={section.previous ?? ""}
-          modified={section.current ?? ""}
-          options={{
-            // A unified diff fits this dialog's narrow preview pane.
-            renderSideBySide: false,
-            // Long, mostly-unchanged bodies collapse to the edited regions.
-            hideUnchangedRegions: { enabled: true },
-          }}
-        />
+        <LazyMount height={editorHeight}>
+          <DiffEditor
+            height={editorHeight}
+            language={section.language}
+            original={section.previous ?? ""}
+            modified={section.current ?? ""}
+            options={{
+              // A unified diff fits this dialog's narrow preview pane.
+              renderSideBySide: false,
+              // Long, mostly-unchanged bodies collapse to the edited regions.
+              hideUnchangedRegions: { enabled: true },
+            }}
+          />
+        </LazyMount>
       ) : section.current !== null ? (
-        <Editor
-          height={editorHeight}
-          language={section.language}
-          value={section.current}
-          options={{
-            readOnly: true,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-          }}
-        />
+        <LazyMount height={editorHeight}>
+          <Editor
+            height={editorHeight}
+            language={section.language}
+            value={section.current}
+            options={{
+              readOnly: true,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+            }}
+          />
+        </LazyMount>
       ) : (
         <p className="p-4 text-sm text-muted-foreground">Not set.</p>
       )}
@@ -1074,6 +1091,14 @@ function restoreEffects({
   // Snapshots reference tools, models, and keys by id, and a restore is
   // all-or-nothing: one referent deleted since this version refuses the whole
   // thing rather than quietly restoring a partial configuration.
+  //
+  // A version identical to the current configuration references exactly what
+  // the agent references today, so nothing it names can have been deleted —
+  // and warning about a refusal right after promising no change reads as a
+  // contradiction rather than a caveat.
+  const isNoOp =
+    comparison.status === "ready" && comparison.changes.length === 0;
+  if (isNoOp) return `${base}${summary}`;
   const caveat = ` If this version references anything deleted since — a tool, a model, a key — the restore is refused and the ${noun} is left as it is.`;
   return `${base}${summary}${caveat}`;
 }

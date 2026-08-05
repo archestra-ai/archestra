@@ -600,13 +600,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               }}
             />
 
-            {historyAgentId && (
-              <AgentVersionHistoryDialog
-                agentId={historyAgentId}
-                open={!!historyAgentId}
-                onOpenChange={(open) => !open && setHistoryAgentId(null)}
-              />
-            )}
+            <AgentVersionHistoryDialog
+              agentId={historyAgentId}
+              onOpenChange={(open) => {
+                if (!open) setHistoryAgentId(null);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

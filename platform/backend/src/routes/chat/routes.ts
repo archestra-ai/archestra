@@ -79,7 +79,7 @@ import {
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
-import { withDbTransaction } from "@/database";
+import db, { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { dualLlmProgressBus } from "@/guardrails/dual-llm-progress-bus";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
@@ -112,6 +112,7 @@ import {
   ScheduleTriggerRunModel,
   TeamModel,
 } from "@/models";
+import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { startActiveChatSpan } from "@/observability/tracing";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
@@ -130,6 +131,7 @@ import { fileStore } from "@/skills-sandbox/file-store";
 import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { renderSystemPrompt } from "@/templating";
+import type { ConversationContentKey } from "@/types";
 import {
   ApiError,
   type ChatMessage,
@@ -176,6 +178,13 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import {
+  INCOGNITO_STATIC_TITLE,
+  requireIncognitoKey,
+  resolveIncognitoAccess,
+  resolveIncognitoCreation,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; incognito helpers reject when the feature is off
+} from "./incognito.ee";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
@@ -368,6 +377,38 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "The agent associated with this conversation has been deleted",
         );
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Incognito: the browser-held key is required up front (fingerprint
+      // checked, wrong key 409s before any side effect) and captured ONCE
+      // into this request's closure — every persistence call below receives
+      // it explicitly, including the detached onFinish/onError callbacks that
+      // outlive the client connection.
+      const incognitoKey: ConversationContentKey | null = conversation.incognito
+        ? requireIncognitoKey({
+            request,
+            conversation: (await ConversationModel.getIncognitoKeyInfo(
+              conversationId,
+            )) ?? {
+              id: conversationId,
+              incognito: true,
+              incognitoDekFingerprint: null,
+            },
+          })
+        : null;
+      if (conversation.incognito) {
+        if (messagesHaveNewInlineAttachments(messages as ChatMessage[])) {
+          // Attachment bytes and previews are stored in plaintext
+          // (conversation_attachments, sandbox staging) — not offered.
+          throw new ApiError(
+            400,
+            "Attachments are not available in incognito conversations",
+          );
+        }
+      }
+      // SPDX-SnippetEnd
 
       // Gate uploaded attachments before any bytes are persisted: anything
       // within the attachment storage cap is accepted — a file the model can't
@@ -592,6 +633,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // transcript that ends at a stored `!` message re-executes it — the
         // same "sending a turn runs it" semantics regenerate relies on.
         const sandboxCommand = detectSandboxCommand(messages as ChatMessage[]);
+        if (sandboxCommand && conversation.incognito) {
+          // Sandbox command turns persist command I/O into the sandbox replay
+          // log in plaintext — not offered in incognito conversations.
+          throw new ApiError(
+            400,
+            "Sandbox commands are not available in incognito conversations",
+          );
+        }
         if (sandboxCommand) {
           // Persist the user message before execution (mirrors the LLM path's
           // early persist): the command lands in the sandbox replay log the
@@ -630,12 +679,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   conversationId,
                   requestMessages: messages,
                   finalMessages: messagesToPersist,
+                  conversationKey: incognitoKey,
                 });
               } else {
                 await persistNewMessages(
                   conversationId,
                   messagesToPersist,
                   "onFinish",
+                  incognitoKey,
                 );
               }
             },
@@ -657,12 +708,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         // Extract and ingest documents to agent's knowledge base (fire and forget)
         // This runs asynchronously to avoid blocking the chat response
-        extractAndIngestDocuments(messages, agentId).catch((error) => {
-          logger.warn(
-            { error: error instanceof Error ? error.message : String(error) },
-            "[Chat] Background document ingestion failed",
-          );
-        });
+        if (conversation.incognito) {
+          // KB ingestion would copy conversation documents into the agent's
+          // knowledge base in plaintext.
+        } else {
+          extractAndIngestDocuments(messages, agentId).catch((error) => {
+            logger.warn(
+              { error: error instanceof Error ? error.message : String(error) },
+              "[Chat] Background document ingestion failed",
+            );
+          });
+        }
 
         const externalAgentId = agentId;
         const chatMcpElicitation = createChatMcpElicitationBridge({
@@ -896,6 +952,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 conversationId,
                 messages,
                 "earlyUserMsg",
+                incognitoKey,
               );
             } catch (error) {
               logger.warn(
@@ -932,6 +989,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         conversationId,
                         messages,
                         "onStreamError",
+                        incognitoKey,
                       );
                     } catch (persistError) {
                       logger.error(
@@ -1481,6 +1539,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               conversationId,
                               messages,
                               "onExecuteError",
+                              incognitoKey,
                             );
                           } catch (persistError) {
                             logger.error(
@@ -1592,6 +1651,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             conversationId,
                             messages,
                             "onError",
+                            incognitoKey,
                           );
                         } catch (persistError) {
                           // Log persistence error but don't prevent the error response
@@ -1644,12 +1704,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             conversationId,
                             requestMessages: messages,
                             finalMessages: messagesToPersist,
+                            conversationKey: incognitoKey,
                           });
                         } else {
                           await persistNewMessages(
                             conversationId,
                             messagesToPersist,
                             "onFinish",
+                            incognitoKey,
                           );
                         }
                         messagesPersisted = true;
@@ -1774,6 +1836,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             return await sendGatedUiMessageStreamResponse({
+              // Incognito: replay events carry raw stream chunks in
+              // plaintext, so payload persistence is suppressed (reconnect
+              // replay is lost; the run still completes server-side with the
+              // key held in this request's closure).
+              suppressEventPayloads: conversation.incognito,
               reply,
               stream: uiMessageStream as ReadableStream<UIMessageChunk>,
               runId: activeRun.id,
@@ -2047,7 +2114,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        user,
+        organizationId,
+      } = request;
       const conversation = await findReadableConversationById({
         conversationId: id,
         userId: user.id,
@@ -2057,6 +2129,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Incognito: the model returned no message content (it cannot — the key
+      // only exists on this request). Decrypt here with the presented key, or
+      // return the locked shape for the tombstone. A wrong key is a 409.
+      if (conversation.incognito) {
+        const keyInfo = await ConversationModel.getIncognitoKeyInfo(id);
+        const access = resolveIncognitoAccess({
+          request,
+          conversation: keyInfo ?? {
+            id,
+            incognito: true,
+            incognitoDekFingerprint: null,
+          },
+        });
+        if (access.state === "unlocked") {
+          const rows = await MessageModel.findByConversation(id, access.key);
+          conversation.messages = toConversationApiMessages(
+            rows,
+          ) as typeof conversation.messages;
+        } else {
+          conversation.messages = [];
+          conversation.contentLocked = true;
+          return reply.send(conversation);
+        }
+      }
+      // SPDX-SnippetEnd
 
       // Hook-run debug parts are persisted on every turn but only surfaced to
       // admins while this conversation has debug mode on. Strip them otherwise
@@ -2289,6 +2390,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!sourceConversation) {
         throw new ApiError(404, "Conversation not found");
       }
+      if (sourceConversation.incognito) {
+        throw new ApiError(400, "Incognito conversations cannot be forked");
+      }
 
       const forked = await forkConversation({
         sourceConversation,
@@ -2373,6 +2477,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: true,
           chatApiKeyId: true,
           projectId: true,
+          incognito: true,
         })
           .required({ agentId: true })
           .partial({
@@ -2380,18 +2485,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             modelId: true,
             chatApiKeyId: true,
             projectId: true,
+            incognito: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (
-      {
-        body: { agentId, title, modelId, chatApiKeyId, projectId },
+    async (request, reply) => {
+      const {
+        body: { agentId, title, modelId, chatApiKeyId, projectId, incognito },
         user,
         organizationId,
-      },
-      reply,
-    ) => {
+      } = request;
+      // Incognito chats never belong to a project (project sharing would leak
+      // the conversation's existence and future features could leak content).
+      if (incognito && projectId) {
+        throw new ApiError(
+          400,
+          "Incognito conversations cannot be created in a project",
+        );
+      }
+
       // A chat born in a project belongs to it; the caller must be able to
       // read the project. "No access" reads as 404, like the project routes.
       if (projectId) {
@@ -2456,13 +2569,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Creating conversation with model",
       );
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Incognito: the id is generated up front because the key fingerprint
+      // is bound to it; the browser's key is fingerprinted + escrow-wrapped,
+      // never stored raw. The title is static — generation would send content
+      // to an LLM and store a derived plaintext title.
+      const incognitoConversationId = incognito ? randomUUID() : null;
+      const incognitoFields = incognitoConversationId
+        ? resolveIncognitoCreation({
+            request,
+            conversationId: incognitoConversationId,
+          })
+        : null;
+      // SPDX-SnippetEnd
+
       // Create conversation with agent
       return reply.send(
         await ConversationModel.create({
+          ...(incognitoFields && incognitoConversationId
+            ? {
+                id: incognitoConversationId,
+                ...incognitoFields,
+                title: title || INCOGNITO_STATIC_TITLE,
+              }
+            : { title }),
           userId: user.id,
           organizationId,
           agentId,
-          title,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
           projectId: projectId ?? null,
@@ -2797,6 +2932,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
+      if (conversation.incognito) {
+        // Compaction would persist an LLM-derived summary of the content in
+        // plaintext (conversation_compactions carries no per-conversation key).
+        throw new ApiError(
+          400,
+          "Compaction is not available for incognito conversations",
+        );
+      }
+
       if (!conversation.agentId || !conversation.agent) {
         throw new ApiError(
           400,
@@ -2925,6 +3069,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
+      }
+      if (conversation.incognito) {
+        // A share grants read access the recipients could never use (they
+        // don't hold the key) and would leak the conversation's existence.
+        throw new ApiError(400, "Incognito conversations cannot be shared");
       }
 
       const teamIds = Array.from(new Set(body.teamIds ?? []));
@@ -3109,6 +3258,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
+      }
+
+      if (conversation.incognito) {
+        // Title generation sends message content to an LLM and stores a
+        // plaintext derived title; incognito chats keep their static title.
+        return reply.send(conversation);
       }
 
       // Skip if title is already set (unless regenerating). A placeholder title
@@ -3296,15 +3451,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
-    async (
-      {
+    async (request, reply) => {
+      const {
         params: { id },
         body: { conversationId, partIndex, text, deleteSubsequentMessages },
         user,
         organizationId,
-      },
-      reply,
-    ) => {
+      } = request;
       // Verify the user has access to the conversation FIRST — the message
       // lookup is scoped to it. Content ids (AI SDK nanoids, used until page
       // reload) are client-supplied and non-unique across conversations, and
@@ -3319,9 +3472,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Message not found or access denied");
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const editKey = conversation.incognito
+        ? requireIncognitoKey({
+            request,
+            conversation: (await ConversationModel.getIncognitoKeyInfo(
+              conversationId,
+            )) ?? {
+              id: conversationId,
+              incognito: true,
+              incognitoDekFingerprint: null,
+            },
+          })
+        : null;
+      // SPDX-SnippetEnd
+
       const message = await MessageModel.findByAnyIdInConversation(
         id,
         conversationId,
+        editKey,
       );
 
       if (!message) {
@@ -3338,6 +3509,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           text,
           deleteSubsequentMessages ?? false,
           tx,
+          editKey,
         );
         await invalidateConversationCompactions(message.conversationId, tx);
       });
@@ -3381,15 +3553,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (
-      {
+    async (request, reply) => {
+      const {
         params: { id },
         body: { conversationId, feedback },
         user,
         organizationId,
-      },
-      reply,
-    ) => {
+      } = request;
       // Verify the user owns the conversation before resolving the message.
       // isOwnedBy, not findById: this endpoint only needs the ownership check,
       // and findById drags every message body along with it.
@@ -3403,11 +3573,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Message not found or access denied");
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Incognito rows can only be resolved-by-content-id (and returned)
+      // after decryption with the browser-held key.
+      const feedbackKeyInfo =
+        await ConversationModel.getIncognitoKeyInfo(conversationId);
+      const feedbackKey = feedbackKeyInfo?.incognito
+        ? requireIncognitoKey({ request, conversation: feedbackKeyInfo })
+        : null;
+      // SPDX-SnippetEnd
+
       // Resolve by DB UUID or AI SDK nanoid content ID, scoped to the
       // conversation — content IDs are client-supplied and not globally unique
       const message = await MessageModel.findByAnyIdInConversation(
         id,
         conversationId,
+        feedbackKey,
       );
 
       if (!message) {
@@ -3424,6 +3607,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const updatedMessage = await MessageModel.updateFeedback(
         message.id,
         feedback,
+        feedbackKey,
       );
 
       // The row can vanish between lookup and update (e.g. a concurrent
@@ -3860,9 +4044,15 @@ async function persistRegeneratedTurn(params: {
   conversationId: string;
   requestMessages: unknown[];
   finalMessages: unknown[];
+  /** Incognito conversations: the request-scoped browser-held key. */
+  conversationKey?: ConversationContentKey | null;
 }): Promise<void> {
-  const { conversationId, requestMessages, finalMessages } = params;
-  const existing = await MessageModel.findByConversation(conversationId);
+  const { conversationId, requestMessages, finalMessages, conversationKey } =
+    params;
+  const existing = await MessageModel.findByConversation(
+    conversationId,
+    conversationKey,
+  );
 
   // The user message being regenerated is the last one the client sent.
   // Everything stored below it is the stale turn to replace.
@@ -3891,7 +4081,7 @@ async function persistRegeneratedTurn(params: {
 
   await withDbTransaction(async (tx) => {
     await MessageModel.deleteByIds(staleIds, tx);
-    await MessageModel.bulkCreate(newRows, tx);
+    await MessageModel.bulkCreate(newRows, tx, conversationKey);
   });
 
   logger.info(
@@ -3919,11 +4109,14 @@ async function persistNewMessages(
   conversationId: string,
   messages: unknown[],
   context: string,
+  conversationKey?: ConversationContentKey | null,
 ): Promise<number> {
   try {
     // Fetch existing messages to classify incoming ones as new or changed
-    const existingMessages =
-      await MessageModel.findByConversation(conversationId);
+    const existingMessages = await MessageModel.findByConversation(
+      conversationId,
+      conversationKey,
+    );
     const uiMessages = messages as ChatMessage[];
     const newMessages = getMessagesNotYetPersisted({
       existingMessages,
@@ -3988,7 +4181,7 @@ async function persistNewMessages(
             createdAt: new Date(now + index),
           }));
 
-          await MessageModel.bulkCreate(messageData);
+          await MessageModel.bulkCreate(messageData, db, conversationKey);
           persistedCount += messagesToStore.length;
 
           logger.info(
@@ -4004,6 +4197,7 @@ async function persistNewMessages(
       await MessageModel.updateContent(
         changedMessage.id,
         changedMessage.content,
+        conversationKey,
       );
     }
 

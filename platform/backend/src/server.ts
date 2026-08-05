@@ -62,6 +62,8 @@ import config, {
 } from "@/config";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-op when the feature is off
+import { verifyIncognitoChatConfig } from "@/content-encryption/incognito.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
@@ -1247,6 +1249,7 @@ const startWebServer = async () => {
     // Fail-closed content-key verification, before any write could encrypt
     // (or silently plaintext) interaction/message content.
     await verifyContentEncryptionKey();
+    verifyIncognitoChatConfig();
     // SPDX-SnippetEnd
 
     await seedRequiredStartingData();
@@ -1694,6 +1697,7 @@ const startWorker = async () => {
     // Workers write messages and interactions (scheduled runs, triggers), so
     // the content-key guard must hold here too.
     await verifyContentEncryptionKey();
+    verifyIncognitoChatConfig();
     // SPDX-SnippetEnd
     cacheManager.start();
     await enterpriseTier.start();

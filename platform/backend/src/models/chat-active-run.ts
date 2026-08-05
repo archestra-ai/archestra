@@ -37,6 +37,19 @@ class ActiveChatRunModel {
     touchRun?: boolean;
   }): Promise<AppendEventsResult> {
     if (params.payloads.length === 0) {
+      // A due liveness touch must still land even with nothing to append —
+      // suppressed-payload (incognito) runs flush empty batches, and without
+      // the touch a long silent stream would be reaped as stale.
+      if (params.touchRun) {
+        const [touched] = await db
+          .update(schema.chatActiveRunsTable)
+          .set({ updatedAt: new Date() })
+          .where(eq(schema.chatActiveRunsTable.id, params.runId))
+          .returning({ id: schema.chatActiveRunsTable.id });
+        if (!touched) {
+          return "run_missing";
+        }
+      }
       return "appended";
     }
 

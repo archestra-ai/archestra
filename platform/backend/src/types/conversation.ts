@@ -31,6 +31,30 @@ export const ConversationOriginSchema = z.enum([
 ]);
 export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 
+/**
+ * Versioned escrow blob stored on incognito conversations: the conversation
+ * key wrapped to the operator's RSA escrow public key (enterprise
+ * break-glass recovery — see content-encryption/incognito.ee.ts).
+ */
+export const IncognitoEscrowBlobSchema = z.object({
+  v: z.literal(1),
+  alg: z.literal("RSA-OAEP-256"),
+  escrowKeyFingerprint: z.string(),
+  wrappedDek: z.string(),
+});
+export type IncognitoEscrowBlob = z.infer<typeof IncognitoEscrowBlobSchema>;
+
+/**
+ * Per-conversation content key for incognito conversations: the browser-held
+ * DEK presented on the current request plus the conversation it belongs to
+ * (the AAD binds ciphertext to the conversation). Threaded explicitly through
+ * every message read/write — never stored, never global.
+ */
+export type ConversationContentKey = {
+  dek: Buffer;
+  conversationId: string;
+};
+
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
@@ -51,8 +75,20 @@ export const SelectConversationSchema = createSelectSchema(
   // shared/project viewer. Keep it out of the response shape entirely — the
   // client only needs the derived `unread` flag — so it is stripped from every
   // response, while the model still reads the raw column to compute `unread`.
-  .omit({ lastReadAt: true })
+  // The incognito escrow blob and key fingerprint are server-side bookkeeping
+  // (break-glass recovery / wrong-key rejection) — clients only need the flag.
+  .omit({
+    lastReadAt: true,
+    incognitoDekFingerprint: true,
+    incognitoEscrow: true,
+  })
   .extend({
+    /**
+     * Incognito conversations only: true when the response omits message
+     * content because no (valid) conversation key accompanied the request —
+     * the client renders the key-lost tombstone instead of a thread.
+     */
+    contentLocked: z.boolean().optional(),
     // Agent is nullable when the associated profile has been deleted
     agent: z
       .object({

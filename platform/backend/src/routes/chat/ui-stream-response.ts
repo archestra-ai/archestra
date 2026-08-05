@@ -17,6 +17,8 @@ export async function sendGatedUiMessageStreamResponse(params: {
   runId: string;
   conversationId: string;
   abortController: AbortController;
+  /** Incognito: suppress replay payload persistence (plaintext chunks). */
+  suppressEventPayloads?: boolean;
   getTerminalStatus: () => Promise<{
     status: "completed" | "failed" | "cancelled";
     error?: string | null;
@@ -32,6 +34,7 @@ export async function sendGatedUiMessageStreamResponse(params: {
     stream: persistenceStream,
     abortController,
     getTerminalStatus,
+    suppressEventPayloads: params.suppressEventPayloads ?? false,
   });
 
   const response = createUIMessageStreamResponse({

@@ -177,6 +177,13 @@ export class ActiveChatRunService {
       error?: string | null;
     }>;
     abortController?: AbortController;
+    /**
+     * Incognito conversations (enterprise): replay event payloads are raw
+     * stream chunks — plaintext content — so their persistence is suppressed.
+     * The run row still tracks liveness (flushes touch it), but reconnect
+     * replay is unavailable.
+     */
+    suppressEventPayloads?: boolean;
   }): { terminalReady: Promise<void> } {
     // Resolves once the drain has attempted the terminal write on every path
     // below (or found the run gone). The route awaits this before closing the
@@ -194,6 +201,7 @@ export class ActiveChatRunService {
       // the reader so the pending read resolves and the loop reaches its catch.
       const writer = new ActiveChatRunEventBatcher({
         runId: params.runId,
+        suppressPayloads: params.suppressEventPayloads ?? false,
         onFlush: () => this.notifyEvent(params.runId),
         onAsyncFailure: () => {
           if (!params.abortController?.signal.aborted) {
@@ -484,15 +492,18 @@ class ActiveChatRunEventBatcher {
   private lastRunTouchAt = 0;
   private asyncFailure: unknown = null;
   private readonly runId: string;
+  private readonly suppressPayloads: boolean;
   private readonly onFlush: () => Promise<void>;
   private readonly onAsyncFailure: (error: unknown) => void;
 
   constructor(params: {
     runId: string;
+    suppressPayloads: boolean;
     onFlush: () => Promise<void>;
     onAsyncFailure: (error: unknown) => void;
   }) {
     this.runId = params.runId;
+    this.suppressPayloads = params.suppressPayloads;
     this.onFlush = params.onFlush;
     this.onAsyncFailure = params.onAsyncFailure;
   }
@@ -539,7 +550,16 @@ class ActiveChatRunEventBatcher {
       return;
     }
 
-    const payloads = compactReplayPayloads(this.pending);
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Suppressed (incognito) runs persist no payloads; the appendEvents call
+    // below still runs when a liveness touch is due, so a long silent stream
+    // is not reaped as stale.
+    // SPDX-SnippetEnd
+    const payloads = this.suppressPayloads
+      ? []
+      : compactReplayPayloads(this.pending);
     const seq = this.nextSeq;
     const touchRun = this.shouldTouchRun();
     this.pending = [];

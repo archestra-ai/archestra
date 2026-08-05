@@ -2705,6 +2705,22 @@ const config = {
       process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
       undefined,
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Incognito chats (enterprise): per-conversation encryption under a
+   * browser-held key. The value is the PEM (or base64-of-PEM) RSA public key
+   * conversation keys are escrowed to for break-glass recovery; the private
+   * half stays offline with the customer's security team. Setting it without
+   * an enterprise license fails startup (see verifyIncognitoChatConfig).
+   */
+  chatIncognito: {
+    escrowPublicKey:
+      process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
+      undefined,
+  },
+  // SPDX-SnippetEnd
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
     enableTestMcpServer: process.env.ENABLE_TEST_MCP_SERVER === "true",

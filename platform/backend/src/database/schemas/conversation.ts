@@ -8,7 +8,10 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ConversationOrigin } from "@/types/conversation";
+import type {
+  ConversationOrigin,
+  IncognitoEscrowBlob,
+} from "@/types/conversation";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
@@ -91,6 +94,20 @@ const conversationsTable = softDeletablePgTable(
     titleIsPlaceholder: boolean("title_is_placeholder")
       .notNull()
       .default(false),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    /**
+     * Incognito conversations (enterprise): message content is encrypted
+     * under a browser-held per-conversation key the server never persists.
+     * `incognitoDekFingerprint` rejects wrong keys up front;
+     * `incognitoEscrow` is the versioned RSA-wrapped copy of the key for the
+     * security team's break-glass recovery (see content-encryption/incognito.ee.ts).
+     */
+    incognito: boolean("incognito").notNull().default(false),
+    incognitoDekFingerprint: text("incognito_dek_fingerprint"),
+    incognitoEscrow: jsonb("incognito_escrow").$type<IncognitoEscrowBlob>(),
+    // SPDX-SnippetEnd
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
     lastMessageAt: timestamp("last_message_at", { mode: "date" })
       .notNull()

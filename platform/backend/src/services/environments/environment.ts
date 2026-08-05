@@ -1,6 +1,7 @@
+import { syncAdvisorForEnvironment } from "@/database/seed";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import logger from "@/logging";
-import { EnvironmentModel, OrganizationModel } from "@/models";
+import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
 import {
   ApiError,
   type CreateEnvironment,
@@ -78,6 +79,22 @@ export async function createEnvironment(params: {
     validationRegex: data.validationRegex ?? null,
     trustedImageRegistries: data.trustedImageRegistries ?? null,
   });
+  // Delegation never crosses environments, so a new environment needs its own
+  // advisor row or every agent in it sees the "Consult the advisor" switch and
+  // reaches nothing. Best-effort: the environment is already created, and the
+  // boot-time sync seeds any advisor missed here.
+  try {
+    await syncAdvisorForEnvironment({
+      organizationId,
+      environmentId: created.id,
+    });
+  } catch (error) {
+    logger.error(
+      { err: error, environmentId: created.id, organizationId },
+      "Failed to seed the advisor agent for a new environment",
+    );
+  }
+
   reconcileEnvironmentEngine(created);
   return created;
 }
@@ -267,9 +284,20 @@ export async function deleteEnvironment(params: {
     );
   }
 
+  // The environment's own advisor goes with it; leaving it behind would keep a
+  // configurable agent pointing at an environment that no longer exists.
+  const advisor = await AgentModel.getAdvisorForEnvironment({
+    organizationId,
+    environmentId: id,
+  });
+
   const deleted = await EnvironmentModel.delete(id, organizationId);
   if (!deleted) {
     throw new ApiError(404, "Environment not found");
+  }
+
+  if (advisor) {
+    await AgentModel.delete(advisor.id);
   }
 
   teardownEnvironmentEngine(environment);

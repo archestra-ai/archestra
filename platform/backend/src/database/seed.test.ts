@@ -12,7 +12,7 @@ import {
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@archestra/shared";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
@@ -99,6 +99,78 @@ describe("syncBuiltInAgents", () => {
     expect(await AgentToolModel.findToolIdsByAgent(advisor?.id ?? "")).toEqual(
       [],
     );
+  });
+
+  test("gives every environment its own advisor, and no other built-in one", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const [staging] = await db
+      .insert(schema.environmentsTable)
+      .values({ organizationId: organization.id, name: "Staging" })
+      .returning();
+
+    await syncBuiltInAgents();
+
+    // An agent in Staging can only delegate to a target in Staging, so an
+    // advisor only in the Default environment would be unreachable there.
+    const stagingAdvisor = await AgentModel.getAdvisorForEnvironment({
+      organizationId: organization.id,
+      environmentId: staging.id,
+    });
+    const defaultAdvisor = await AgentModel.getAdvisorForEnvironment({
+      organizationId: organization.id,
+      environmentId: null,
+    });
+
+    expect(stagingAdvisor).not.toBeNull();
+    expect(defaultAdvisor).not.toBeNull();
+    expect(stagingAdvisor?.id).not.toBe(defaultAdvisor?.id);
+    expect(stagingAdvisor?.description).toBe(ADVISOR_AGENT_DESCRIPTION);
+
+    // Every other built-in is invoked by the platform, not delegated to, so it
+    // stays org-wide — one row, in the Default environment.
+    const titleAgents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organization.id),
+          eq(
+            sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+            BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+          ),
+        ),
+      );
+    expect(titleAgents).toHaveLength(1);
+  });
+
+  test("seeds an advisor into an environment created after the first boot", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await syncBuiltInAgents();
+
+    const [added] = await db
+      .insert(schema.environmentsTable)
+      .values({ organizationId: organization.id, name: "Added later" })
+      .returning();
+
+    expect(
+      await AgentModel.getAdvisorForEnvironment({
+        organizationId: organization.id,
+        environmentId: added.id,
+      }),
+    ).toBeNull();
+
+    await syncBuiltInAgents();
+
+    expect(
+      await AgentModel.getAdvisorForEnvironment({
+        organizationId: organization.id,
+        environmentId: added.id,
+      }),
+    ).not.toBeNull();
   });
 
   test("carries a renamed or reworded built-in to an org that already has it", async ({

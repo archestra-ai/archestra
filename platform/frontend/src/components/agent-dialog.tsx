@@ -1078,8 +1078,12 @@ export function AgentDialog({
     }
   }, [open, agentId, currentExcludedSubagentIds, subagentExclusionsFetched]);
 
+  // One advisor per environment, because delegation never crosses environments:
+  // the switch has to target the one this agent could actually reach.
   const advisorAgentId = allInternalAgents.find(
-    (a) => a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR,
+    (a) =>
+      a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
+      (a.environmentId ?? null) === (environmentId ?? null),
   )?.id;
 
   // Consulting the advisor is off until someone turns it on, and a new agent
@@ -1116,13 +1120,20 @@ export function AgentDialog({
     (id) => id !== advisorAgentId,
   ).length;
 
-  const advisorListedWhen = (ids: string[], listed: boolean) => {
-    if (!advisorAgentId) return ids;
+  const listedWhen = (
+    ids: string[],
+    agentId: string | undefined,
+    listed: boolean,
+  ) => {
+    if (!agentId) return ids;
     if (listed) {
-      return ids.includes(advisorAgentId) ? ids : [...ids, advisorAgentId];
+      return ids.includes(agentId) ? ids : [...ids, agentId];
     }
-    return ids.filter((id) => id !== advisorAgentId);
+    return ids.filter((id) => id !== agentId);
   };
+
+  const advisorListedWhen = (ids: string[], listed: boolean) =>
+    listedWhen(ids, advisorAgentId, listed);
 
   // Save writes both sets whatever the mode, and an Auto-mode agent driven by a
   // system or token flow resolves its targets from the explicit set rather than
@@ -1150,6 +1161,36 @@ export function AgentDialog({
   const handleSubagentModeChange = (value: string) => {
     setAccessAllSubagents(value === "auto");
     writeAdvisorEnabled(advisorEnabled);
+  };
+
+  // Each environment has its own advisor, so moving the agent has to move the
+  // setting onto that environment's row and retire the old one from both sets
+  // — a grant left pointing at another environment's advisor can never be
+  // dispatched, and nothing in the dialog would show it.
+  const handleEnvironmentChange = (nextEnvironmentId: string | null) => {
+    const enabled = advisorEnabled;
+    const previousAdvisorId = advisorAgentId;
+    const nextAdvisorId = allInternalAgents.find(
+      (a) =>
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
+        (a.environmentId ?? null) === nextEnvironmentId,
+    )?.id;
+
+    setEnvironmentId(nextEnvironmentId);
+    setDisabledSubagentIds((ids) =>
+      listedWhen(
+        listedWhen(ids, previousAdvisorId, false),
+        nextAdvisorId,
+        !enabled,
+      ),
+    );
+    setSelectedDelegationTargetIds((ids) =>
+      listedWhen(
+        listedWhen(ids, previousAdvisorId, false),
+        nextAdvisorId,
+        enabled,
+      ),
+    );
   };
 
   // LLM Configuration: computed values and bidirectional auto-linking
@@ -1721,7 +1762,7 @@ export function AgentDialog({
                       agentType === "mcp_gateway") && (
                       <EnvironmentSelector
                         value={environmentId ?? null}
-                        onChange={setEnvironmentId}
+                        onChange={handleEnvironmentChange}
                         resource={getResourceForAgentType(agentType)}
                         helpText={environmentHelpText}
                       />

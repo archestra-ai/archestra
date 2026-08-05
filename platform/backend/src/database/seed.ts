@@ -38,6 +38,7 @@ import {
   AgentModel,
   AgentVersionModel,
   AppModel,
+  EnvironmentModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
   McpHttpSessionModel,
@@ -61,7 +62,7 @@ import {
   builtInSkillSourceRef,
   builtInSkillVersion,
 } from "@/skills/built-in-skills";
-import type { Organization } from "@/types";
+import type { BuiltInAgentConfig, Organization } from "@/types";
 import {
   encryptSecretValue,
   ensureEncryptionKeyAvailable,
@@ -165,145 +166,209 @@ export async function syncBuiltInAgents(): Promise<void> {
         name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
       } as const,
     },
-    {
-      builtInAgentId: BUILT_IN_AGENT_IDS.ADVISOR,
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      // Reaches the calling model as the delegation tool's description, so it
-      // has to steer when to consult rather than just name the agent.
-      description: archestraMcpBranding.brandBuiltInText(
-        ADVISOR_AGENT_DESCRIPTION,
-      ),
-      systemPrompt: archestraMcpBranding.brandBuiltInText(
-        ADVISOR_SYSTEM_PROMPT,
-      ),
-      builtInAgentConfig: {
-        name: BUILT_IN_AGENT_IDS.ADVISOR,
-      } as const,
-    },
+    advisorAgentDefinition(),
   ];
 
   for (const organization of organizations) {
     for (const builtInAgent of builtInAgents) {
-      const existing = await AgentModel.getBuiltInAgent(
-        builtInAgent.builtInAgentId,
-        organization.id,
-      );
+      // The advisor is reachable only through delegation, which never crosses
+      // environments — so it needs a row in each one, not just the Default.
+      // Every other built-in is invoked by the platform itself and stays
+      // org-wide.
+      const environmentIds =
+        builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.ADVISOR
+          ? [
+              null,
+              ...(
+                await EnvironmentModel.listForOrganization(organization.id)
+              ).map((environment) => environment.id),
+            ]
+          : [null];
 
-      if (!existing) {
-        const [inserted] = await db
-          .insert(schema.agentsTable)
-          .values({
-            organizationId: organization.id,
-            name: builtInAgent.name,
-            agentType: "agent",
-            scope: "org",
-            description: builtInAgent.description,
-            systemPrompt: builtInAgent.systemPrompt,
-            builtInAgentConfig: builtInAgent.builtInAgentConfig,
-          })
-          .returning({ id: schema.agentsTable.id });
-        // This path writes agentsTable directly rather than through
-        // AgentModel, so it forks explicitly — otherwise every built-in agent
-        // would sit at latest_version 0 and the first user edit would fold the
-        // platform's seeded config into that user's version 1.
-        await AgentVersionModel.forkIfChangedBestEffort(inserted.id);
-        logger.info(
-          {
-            builtInAgentId: builtInAgent.builtInAgentId,
-            organizationId: organization.id,
-          },
-          "Seeded built-in agent",
-        );
-        continue;
-      }
-
-      // Everything a deploy may reconcile on an agent that already exists is
-      // gathered first and written once, so one deploy produces one version
-      // rather than one per field it touched.
-      const updates: Partial<typeof schema.agentsTable.$inferInsert> = {};
-
-      // Carry a renamed or reworded built-in to organizations that already
-      // hold the row. The insert above runs once per organization, so without
-      // this an environment seeded by an earlier release keeps that release's
-      // name and description forever.
-      //
-      // Reconciled unconditionally rather than only while still pristine,
-      // because neither field is editable on a built-in agent — the update
-      // route accepts only config, prompt, model, credential, scope and teams
-      // — so a stored value can only ever be what a deploy put there. There is
-      // no admin intent to preserve, and nothing to detect drift against.
-      const renamed = existing.name !== builtInAgent.name;
-      if (renamed || existing.description !== builtInAgent.description) {
-        updates.name = builtInAgent.name;
-        updates.description = builtInAgent.description;
-      }
-
-      // Migrate configs still sitting exactly on the old shipped default;
-      // any other value is a deliberate admin choice and is left alone
-      // (mirrors the legacy-system-prompt rewrite below).
-      if (
-        builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN &&
-        existing.builtInAgentConfig?.name ===
-          BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN &&
-        existing.builtInAgentConfig.maxRounds ===
-          DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS
-      ) {
-        updates.builtInAgentConfig = {
-          ...existing.builtInAgentConfig,
-          maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
-        };
-      }
-
-      if (
-        shouldSyncBuiltInAgentSystemPrompt({
-          builtInAgentId: builtInAgent.builtInAgentId,
-          systemPrompt: existing.systemPrompt,
-        })
-      ) {
-        updates.systemPrompt = builtInAgent.systemPrompt;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await db
-          .update(schema.agentsTable)
-          .set(updates)
-          .where(eq(schema.agentsTable.id, existing.id));
-
-        // A delegation tool is named for its target, so a rename has to reach
-        // the tool rows too. `AgentModel.update` does this on the normal edit
-        // path; this one writes the table directly and has to do it itself.
-        if (renamed) {
-          await ToolModel.syncDelegationToolNames(
-            existing.id,
-            builtInAgent.name,
-          );
-        }
-
-        // A deploy rewriting a built-in is a config change like any other.
-        // Forking it here attributes it to the deploy; leaving it unforked
-        // would attach it to whichever user edits the agent next.
-        await AgentVersionModel.forkIfChangedBestEffort(existing.id);
-
-        logger.info(
-          {
-            builtInAgentId: builtInAgent.builtInAgentId,
-            organizationId: organization.id,
-            fields: Object.keys(updates),
-          },
-          "Reconciled built-in agent to its shipped definition",
-        );
-        continue;
-      }
-
-      logger.info(
-        {
-          builtInAgentId: builtInAgent.builtInAgentId,
+      for (const environmentId of environmentIds) {
+        await syncBuiltInAgentRow({
           organizationId: organization.id,
-        },
-        "Built-in agent already exists, skipping seed",
-      );
+          builtInAgent,
+          environmentId,
+        });
+      }
     }
   }
+}
+
+type BuiltInAgentDefinition = {
+  builtInAgentId: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  builtInAgentConfig: BuiltInAgentConfig;
+};
+
+/** Built at call time so the org's branding is applied as it stands then. */
+function advisorAgentDefinition(): BuiltInAgentDefinition {
+  return {
+    builtInAgentId: BUILT_IN_AGENT_IDS.ADVISOR,
+    name: BUILT_IN_AGENT_NAMES.ADVISOR,
+    description: archestraMcpBranding.brandBuiltInText(
+      ADVISOR_AGENT_DESCRIPTION,
+    ),
+    systemPrompt: archestraMcpBranding.brandBuiltInText(ADVISOR_SYSTEM_PROMPT),
+    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+  };
+}
+
+/**
+ * Gives an environment its own advisor. Delegation never crosses environments,
+ * so an agent in an environment without this row sees the "Consult the
+ * advisor" switch and reaches nothing when it calls.
+ *
+ * @public — called by the environment service on create
+ */
+export async function syncAdvisorForEnvironment(params: {
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  await syncBuiltInAgentRow({
+    organizationId: params.organizationId,
+    builtInAgent: advisorAgentDefinition(),
+    environmentId: params.environmentId,
+  });
+}
+
+/**
+ * Reconciles one built-in agent row — a `(organization, definition,
+ * environment)` triple — against its shipped definition. Inserts when missing,
+ * otherwise carries forward the fields a deploy owns.
+ */
+async function syncBuiltInAgentRow(params: {
+  organizationId: string;
+  builtInAgent: BuiltInAgentDefinition;
+  environmentId: string | null;
+}): Promise<void> {
+  const { organizationId, builtInAgent, environmentId } = params;
+  // The advisor has a row per environment, so the org-wide lookup would
+  // return an arbitrary one of them.
+  const existing =
+    builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.ADVISOR
+      ? await AgentModel.getAdvisorForEnvironment({
+          organizationId,
+          environmentId,
+        })
+      : await AgentModel.getBuiltInAgent(
+          builtInAgent.builtInAgentId,
+          organizationId,
+        );
+
+  if (!existing) {
+    const [inserted] = await db
+      .insert(schema.agentsTable)
+      .values({
+        organizationId,
+        name: builtInAgent.name,
+        agentType: "agent",
+        scope: "org",
+        description: builtInAgent.description,
+        systemPrompt: builtInAgent.systemPrompt,
+        builtInAgentConfig: builtInAgent.builtInAgentConfig,
+        environmentId,
+      })
+      .returning({ id: schema.agentsTable.id });
+    // This path writes agentsTable directly rather than through
+    // AgentModel, so it forks explicitly — otherwise every built-in agent
+    // would sit at latest_version 0 and the first user edit would fold the
+    // platform's seeded config into that user's version 1.
+    await AgentVersionModel.forkIfChangedBestEffort(inserted.id);
+    logger.info(
+      {
+        builtInAgentId: builtInAgent.builtInAgentId,
+        organizationId,
+        environmentId,
+      },
+      "Seeded built-in agent",
+    );
+    return;
+  }
+
+  // Everything a deploy may reconcile on an agent that already exists is
+  // gathered first and written once, so one deploy produces one version
+  // rather than one per field it touched.
+  const updates: Partial<typeof schema.agentsTable.$inferInsert> = {};
+
+  // Carry a renamed or reworded built-in to organizations that already
+  // hold the row. The insert above runs once per organization, so without
+  // this an environment seeded by an earlier release keeps that release's
+  // name and description forever.
+  //
+  // Reconciled unconditionally rather than only while still pristine,
+  // because neither field is editable on a built-in agent — the update
+  // route accepts only config, prompt, model, credential, scope and teams
+  // — so a stored value can only ever be what a deploy put there. There is
+  // no admin intent to preserve, and nothing to detect drift against.
+  const renamed = existing.name !== builtInAgent.name;
+  if (renamed || existing.description !== builtInAgent.description) {
+    updates.name = builtInAgent.name;
+    updates.description = builtInAgent.description;
+  }
+
+  // Migrate configs still sitting exactly on the old shipped default;
+  // any other value is a deliberate admin choice and is left alone
+  // (mirrors the legacy-system-prompt rewrite below).
+  if (
+    builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN &&
+    existing.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN &&
+    existing.builtInAgentConfig.maxRounds === DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS
+  ) {
+    updates.builtInAgentConfig = {
+      ...existing.builtInAgentConfig,
+      maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
+    };
+  }
+
+  if (
+    shouldSyncBuiltInAgentSystemPrompt({
+      builtInAgentId: builtInAgent.builtInAgentId,
+      systemPrompt: existing.systemPrompt,
+    })
+  ) {
+    updates.systemPrompt = builtInAgent.systemPrompt;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await db
+      .update(schema.agentsTable)
+      .set(updates)
+      .where(eq(schema.agentsTable.id, existing.id));
+
+    // A delegation tool is named for its target, so a rename has to reach
+    // the tool rows too. `AgentModel.update` does this on the normal edit
+    // path; this one writes the table directly and has to do it itself.
+    if (renamed) {
+      await ToolModel.syncDelegationToolNames(existing.id, builtInAgent.name);
+    }
+
+    // A deploy rewriting a built-in is a config change like any other.
+    // Forking it here attributes it to the deploy; leaving it unforked
+    // would attach it to whichever user edits the agent next.
+    await AgentVersionModel.forkIfChangedBestEffort(existing.id);
+
+    logger.info(
+      {
+        builtInAgentId: builtInAgent.builtInAgentId,
+        organizationId,
+        fields: Object.keys(updates),
+      },
+      "Reconciled built-in agent to its shipped definition",
+    );
+    return;
+  }
+
+  logger.info(
+    {
+      builtInAgentId: builtInAgent.builtInAgentId,
+      organizationId,
+    },
+    "Built-in agent already exists, skipping seed",
+  );
 }
 
 /**

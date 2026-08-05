@@ -2529,11 +2529,11 @@ export function AgentDialog({
                             </Label>
                             <p className="text-xs text-muted-foreground">
                               Pairs this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"}
-                              &apos;s model with a stronger model it consults at
-                              key moments. Those calls are billed at the advisor
-                              model&apos;s rates, and usually cost less than
-                              running the stronger model throughout.{" "}
+                              {agentTypeDisplayName[agentType] || "agent"} with
+                              a stronger model it consults at key moments. Those
+                              calls are billed at the advisor model&apos;s
+                              rates, and usually cost less than running the
+                              stronger model throughout.{" "}
                               {/* New tab: this dialog holds unsaved edits that
                                 navigating away would discard. */}
                               <Link

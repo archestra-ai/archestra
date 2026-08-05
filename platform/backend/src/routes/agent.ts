@@ -63,7 +63,6 @@ import {
 import {
   AgentVersionMetadataSchema,
   RestoreAgentVersionBodySchema,
-  RestoreAgentVersionResponseSchema,
   SelectAgentVersionSchema,
 } from "@/types/agent-version";
 import { isForeignKeyConstraintError } from "@/utils/db";
@@ -658,13 +657,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Restore an agent's config to an earlier version by replaying its " +
           "snapshot forward as a new head version — history is never " +
-          "rewritten. Snapshot references that no longer resolve (deleted " +
-          "tools, keys, knowledge sources, ...) are reported in `skipped` " +
-          "rather than failing the restore. The replay is not atomic: it " +
-          "spans several write paths, so a partial failure leaves a mixed " +
-          "config that the next config write captures. Retrying is safe — " +
-          "the source version is immutable, and the pre-restore config is " +
-          "itself forked as a version before anything is written.",
+          "rewritten. All-or-nothing: the restore is validated in full before " +
+          "anything is written, and a version referencing something that no " +
+          "longer exists or is out of the caller's reach (a deleted tool, key " +
+          "or knowledge source) is rejected with 400 rather than partially " +
+          "applied. Only differences from the agent's live config are written, " +
+          "so restoring the current configuration is a no-op. Retrying is " +
+          "safe: the source version is immutable, and the pre-restore config " +
+          "is forked as a version before anything is written.",
         tags: ["Agents"],
         params: z.object({
           id: UuidIdSchema,
@@ -675,7 +675,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Nullish so a bare POST without a payload keeps working (an empty
         // body arrives as null)
         body: RestoreAgentVersionBodySchema.nullish(),
-        response: constructResponseSchema(RestoreAgentVersionResponseSchema),
+        response: constructResponseSchema(SelectAgentSchema),
       },
     },
     async ({ params: { id, version }, body, user, organizationId }, reply) => {

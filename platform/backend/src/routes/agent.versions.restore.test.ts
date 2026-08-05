@@ -74,8 +74,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const response = await restore(agent.id, 1);
     expect(response.statusCode).toBe(200);
 
-    const { agent: restored, skipped } = response.json();
-    expect(skipped).toEqual([]);
+    const restored = response.json();
     expect(restored.description).toBe("original");
     expect(restored.systemPrompt).toBe("be helpful");
 
@@ -100,7 +99,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
 
     // The replay defers its forks, so a response built from the deferred
     // update would carry a stale head and 409 the next anchored restore.
-    const head = first.json().agent.latestVersion;
+    const head = first.json().latestVersion;
     const stored = await AgentModel.findById(agent.id, user.id, true);
     expect(head).toBe(stored?.latestVersion);
 
@@ -118,7 +117,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
 
     const response = await restore(agent.id, 1);
     expect(response.statusCode).toBe(200);
-    expect(response.json().agent.name).toBe(`Original ${suffix}`);
+    expect(response.json().name).toBe(`Original ${suffix}`);
   });
 
   test("restores the tool assignment set in both directions", async ({
@@ -137,39 +136,49 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
 
     const response = await restore(agent.id, versionWithOneTool as number);
     expect(response.statusCode).toBe(200);
-    expect(response.json().skipped).toEqual([]);
 
     const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
     // The tool the snapshot lacks is unassigned, not merely left in place.
     expect(toolIds).toEqual([kept.id]);
   });
 
-  test("records a tool deleted since capture in skipped, without failing", async ({
+  test("400s when the version references a tool deleted since capture", async ({
     makeAgent,
     makeTool,
   }) => {
     const doomed = await makeTool({ name: "doomed_tool" });
 
-    const agent = await makeAgent({ organizationId, accessAllTools: false });
+    const agent = await makeAgent({
+      organizationId,
+      accessAllTools: false,
+      description: "before",
+    });
     await AgentToolModel.create(agent.id, doomed.id);
     const withTool = (await AgentVersionModel.forkIfChanged(agent.id))?.version;
 
     await AgentToolModel.delete({ agentId: agent.id, toolId: doomed.id });
     await ToolModel.delete(doomed.id);
+    await AgentModel.update(agent.id, { description: "after" });
 
     const response = await restore(agent.id, withTool as number);
-    expect(response.statusCode).toBe(200);
-    expect(response.json().skipped).toEqual(['Tool "doomed_tool"']);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("doomed_tool");
+
+    // Nothing was written: the whole restore is refused, not partly applied.
+    // The scalar would have been restored had the tool not blocked it.
+    const agentRow = await AgentModel.findById(agent.id, user.id, true);
+    expect(agentRow?.description).toBe("after");
+    expect(await AgentToolModel.findToolIdsByAgent(agent.id)).toEqual([]);
   });
 
-  test("skips a tool whose MCP server is no longer installed", async ({
+  test("400s when a tool the version adds is no longer assignable", async ({
     makeAgent,
     makeTool,
     makeInternalMcpCatalog,
   }) => {
     // A local-catalog tool needs an installed MCP server to be assignable. The
-    // replay re-runs that validation against the current state of the tool and
-    // its catalog rather than trusting the snapshot, so a version captured
+    // preflight re-runs that validation against the current state of the tool
+    // and its catalog rather than trusting the snapshot, so a version captured
     // while the server was installed cannot re-grant the tool after it is gone.
     // (The check is agent-scoped, not caller-scoped — nothing about the
     // restoring user changes here.)
@@ -186,12 +195,12 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     await AgentToolModel.delete({ agentId: agent.id, toolId: tool.id });
 
     const response = await restore(agent.id, withTool as number);
-    expect(response.statusCode).toBe(200);
-    expect(response.json().skipped).toEqual(['Tool "local_server_tool"']);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("local_server_tool");
     expect(await AgentToolModel.findToolIdsByAgent(agent.id)).toEqual([]);
   });
 
-  test("keeps a live assignment the replay cannot re-apply", async ({
+  test("an assignment already matching the snapshot is never revalidated", async ({
     makeAgent,
     makeTool,
     makeInternalMcpCatalog,
@@ -199,9 +208,13 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     // The same unassignable tool as above, except the agent still HAS it: a
     // static assignment outlives the installation it pinned (`mcp_server_id` is
     // ON DELETE SET NULL), so a working tool can fail the assign validator
-    // while sitting in both the live config and the snapshot. Unassigning it
-    // would make a restore strip tool access the target version explicitly
-    // carried — and would do it even when restoring the current version.
+    // while sitting in both the live config and the snapshot.
+    //
+    // This is why the plan diffs instead of replaying: reaching this end state
+    // needs no handler call at all, so nothing validates it. Validating the
+    // whole snapshot instead would make an agent's entire history unrestorable
+    // the moment one MCP server is reinstalled — including its own current
+    // configuration.
     const catalog = await makeInternalMcpCatalog();
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -214,15 +227,12 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
 
     const response = await restore(agent.id, withTool as number);
     expect(response.statusCode).toBe(200);
-    // Reported, because the credential binding is not the one the version
-    // recorded — but reporting is not revoking.
-    expect(response.json().skipped).toEqual(['Tool "still_assigned_tool"']);
     expect(await AgentToolModel.findToolIdsByAgent(agent.id)).toEqual([
       tool.id,
     ]);
   });
 
-  test("keeps the live LLM pair when only the version's API key is gone", async ({
+  test("400s when the version's API key is gone", async ({
     makeAgent,
     makeLlmProviderApiKey,
     makeSecret,
@@ -254,15 +264,15 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
       .where(eq(schema.llmProviderApiKeysTable.id, oldKey.id));
 
     const response = await restore(agent.id, 1);
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("API key");
 
-    // A model/key pair is written whole or not at all — a half pair would be
-    // rejected everywhere else in the system.
-    const { agent: restored, skipped } = response.json();
-    expect(skipped).toHaveLength(1);
-    expect(skipped[0]).toContain("API key");
-    expect(restored.llmApiKeyId).toBe(liveKey.id);
-    expect(restored.modelId).toBe(model[0].id);
+    // The live pair is untouched. Restoring half a pair is not an option — the
+    // update route rejects it — so a missing key makes the version unrestorable
+    // rather than silently downgrading the agent's LLM config.
+    const agentRow = await AgentModel.findById(agent.id, user.id, true);
+    expect(agentRow?.llmApiKeyId).toBe(liveKey.id);
+    expect(agentRow?.modelId).toBe(model[0].id);
   });
 
   test("replaces the whole hook set", async ({ makeAgent }) => {
@@ -324,7 +334,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
 
     const response = await restore(agent.id, 1);
     expect(response.statusCode).toBe(200);
-    expect(response.json().agent.description).toBe("original");
+    expect(response.json().description).toBe("original");
   });
 
   test("404s a version dropped by retention or never written", async ({
@@ -538,44 +548,70 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
 
     const response = await restore(agent.id, allToolsNoExclusions as number);
     expect(response.statusCode).toBe(200);
-    expect(response.json().agent.accessAllTools).toBe(true);
+    expect(response.json().accessAllTools).toBe(true);
 
-    // The restore flips accessAllTools off→on, which makes AgentModel.update
-    // re-run the additive built-in pre-fill. The exclusion replay runs AFTER
-    // that update precisely so the snapshot's set wins; reorder the two and
-    // this agent silently comes back with every built-in excluded.
+    // The restore flips accessAllTools off→on, which would make
+    // AgentModel.update re-run the additive built-in pre-fill. The restore
+    // passes skipExclusionPrefill because the snapshot's exclusion set is
+    // authoritative — and because the plan diffed exclusions BEFORE the update
+    // ran, a pre-fill here would be invisible to it: the sets matched, so no
+    // exclusion write is scheduled to undo it. Drop that flag and this agent
+    // silently comes back with every built-in excluded.
     expect(await AgentExcludedToolModel.findToolIdsByAgent(agent.id)).toEqual(
       [],
     );
   });
 
-  test("drops an exclusion whose tool was deleted, without reporting it", async ({
+  test("restoring the current configuration writes nothing", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, description: "settled" });
+    const head = (await AgentVersionModel.forkIfChanged(agent.id))?.version;
+
+    const response = await restore(agent.id, head as number);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().description).toBe("settled");
+
+    // Every surface diffs clean, so nothing is written and the content hash is
+    // unchanged — a restore that changes nothing must not mint a version.
+    const versions = await AgentVersionModel.listForAgent({
+      agentId: agent.id,
+      organizationId,
+      pagination: { limit: 50, offset: 0 },
+    });
+    expect(versions.data.map((v) => v.version)).toEqual([head]);
+  });
+
+  test("an unchanged exclusion set holding a deleted tool does not block", async ({
     makeAgent,
     makeTool,
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({ organizationId });
     const doomed = await makeTool({ catalogId: catalog.id });
-    const agent = await makeAgent({ organizationId });
+    const agent = await makeAgent({ organizationId, description: "before" });
     await AgentExcludedToolModel.replaceForAgent(agent.id, [doomed.id]);
     const withExclusion = (await AgentVersionModel.forkIfChanged(agent.id))
       ?.version;
 
     // How a catalog-backed tool actually goes away: deleting its catalog
     // soft-deletes the tool rows, which every ToolModel read treats as gone.
+    // The junction row survives, so live and snapshot still agree.
     await ToolModel.softDeleteByCatalog(catalog.id, new Date());
+    await AgentModel.update(agent.id, { description: "after" });
 
     const response = await restore(agent.id, withExclusion as number);
+    // `validateToolIds` would reject that id outright, but the set is
+    // unchanged, so the restore never writes it and never validates it. The
+    // deleted tool is not a reason to refuse a restore that does not touch it.
     expect(response.statusCode).toBe(200);
-    // An exclusion of a deleted tool is inert, so losing it changes nothing
-    // about the restored behavior and must not add noise to `skipped`.
-    expect(response.json().skipped).toEqual([]);
-    expect(await AgentExcludedToolModel.findToolIdsByAgent(agent.id)).toEqual(
-      [],
-    );
+    expect(response.json().description).toBe("before");
+    expect(await AgentExcludedToolModel.findToolIdsByAgent(agent.id)).toEqual([
+      doomed.id,
+    ]);
   });
 
-  test("reports a credential mode the current schema no longer knows", async ({
+  test("400s on a credential mode the current schema no longer knows", async ({
     makeAgent,
     makeTool,
   }) => {
@@ -620,16 +656,14 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
       );
 
     const response = await restore(agent.id, withTool as number);
-    expect(response.statusCode).toBe(200);
-
-    // The tool still lands — dropping it would strip the agent's whole tool set
-    // the day the enum is renamed — but under the `static` default rather than
-    // the mode the version recorded, so the downgrade has to be visible.
+    // The mode differs from the live row, so restoring it requires a write —
+    // and the assign handler cannot accept a mode the schema no longer knows.
+    // Landing the tool under the `static` default instead would silently give
+    // it a different credential binding than the version recorded.
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("legacy_static");
     expect(await AgentToolModel.findToolIdsByAgent(agent.id)).toEqual([
       tool.id,
-    ]);
-    expect(response.json().skipped).toEqual([
-      'Credential mode "legacy_static" for tool "renamed_mode_tool"',
     ]);
   });
 

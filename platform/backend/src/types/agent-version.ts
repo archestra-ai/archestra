@@ -1,7 +1,6 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
-import { SelectAgentSchema } from "./agent";
 
 /**
  * Canonical, hashable payload of an agent version — the agent's *config only*.
@@ -101,24 +100,4 @@ export const RestoreAgentVersionBodySchema = z.object({
    * agent write surface. Named to match `PUT /api/skills/:id`.
    */
   baseVersion: z.number().int().positive().optional(),
-});
-
-export const RestoreAgentVersionResponseSchema = z.object({
-  agent: SelectAgentSchema,
-  /**
-   * Human-readable names of snapshot references the replay could not apply,
-   * for two distinct reasons:
-   * - the referent was deleted, or no longer passes the validation its write
-   *   path applies (a tool whose catalog now needs an installed server);
-   * - for knowledge bases, connectors, and the environment binding ONLY, the
-   *   reference is outside the restoring caller's reach. Tool assignments are
-   *   deliberately not caller-scoped — see `replayTools`.
-   *
-   * Each entry names its own kind (`Tool "github_search"`) so a flat list stays
-   * unambiguous across reference kinds. The restore proceeds without them, and
-   * an entry here never means something was taken away: singular references
-   * keep the agent's current value, and a tool the replay cannot re-assign
-   * keeps whatever assignment it already had.
-   */
-  skipped: z.array(z.string()),
 });

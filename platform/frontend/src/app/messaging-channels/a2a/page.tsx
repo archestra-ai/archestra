@@ -4,6 +4,7 @@ import { Bot } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
+import { AgentBadge } from "@/components/agent-badge";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -59,6 +60,7 @@ export default function A2APage() {
                 <div className="flex items-center gap-2 min-w-0">
                   <Bot className="h-4 w-4 shrink-0" />
                   <span className="truncate">{selectedAgent.name}</span>
+                  <AgentBadge type={selectedAgent.scope} className="ml-auto" />
                 </div>
               )}
             </SelectValue>
@@ -69,6 +71,7 @@ export default function A2APage() {
                 <div className="flex items-center gap-2 min-w-0">
                   <Bot className="h-4 w-4 shrink-0" />
                   <span className="truncate">{agent.name}</span>
+                  <AgentBadge type={agent.scope} className="ml-auto" />
                 </div>
               </SelectItem>
             ))}

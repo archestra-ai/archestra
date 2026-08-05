@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   type ListViewMode,
   ListViewToggle,
@@ -21,10 +22,12 @@ import {
 } from "@/components/list-view-toggle";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
+  ResourceDeletedStatusFilter,
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
@@ -47,13 +50,15 @@ import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useCreateProject,
   useDeleteProject,
+  usePermanentlyDeleteProject,
   usePinProject,
   useProject,
   useProjects,
+  useRestoreProject,
 } from "@/lib/projects/projects.query";
 import { ProjectActionsMenu } from "./project-actions-menu";
 import { ProjectDeleteConfirmDialog } from "./project-delete-confirm-dialog";
-import { ProjectsTable } from "./projects-table";
+import { DeletedProjectsTable, ProjectsTable } from "./projects-table";
 
 export default function ProjectsPageClient() {
   return (
@@ -73,6 +78,9 @@ function ProjectsList() {
   const { scope, teamIds, authorIds, excludeAuthorIds, hasActiveScopeFilters } =
     useScopeFilterParams();
   const search = searchParams.get("search") ?? undefined;
+  // The trash. The backend serves this slice to project admins only (empty for
+  // everyone else), and the status filter that reaches it is gated the same way.
+  const isDeletedView = searchParams.get("status") === "deleted";
   const {
     data,
     isPending,
@@ -84,6 +92,7 @@ function ProjectsList() {
     teamIds,
     authorIds,
     excludeAuthorIds,
+    status: isDeletedView ? "deleted" : undefined,
     toastOnError: false,
   });
   const {
@@ -106,15 +115,26 @@ function ProjectsList() {
   });
   const [deletingProject, setDeletingProject] =
     useState<ProjectListItem | null>(null);
+  const [permanentlyDeletingProject, setPermanentlyDeletingProject] =
+    useState<ProjectListItem | null>(null);
   // Pinned-first grouping applies in every scope: oversight projects simply
-  // aren't pinnable, so they fall into the unpinned section on their own.
-  const projects = useMemo(() => sortProjectsPinnedFirst(data ?? []), [data]);
+  // aren't pinnable, so they fall into the unpinned section on their own. Not
+  // in the trash, though — a deleted project keeps its `pinnedAt`, and the
+  // trash table has no Pinned section and no pin indicator, so sorting there
+  // would float a row to the top with nothing on screen explaining why.
+  const projects = useMemo(
+    () => (isDeletedView ? (data ?? []) : sortProjectsPinnedFirst(data ?? [])),
+    [data, isDeletedView],
+  );
   const pinnedProjects = projects.filter((project) => project.pinnedAt);
   const unpinnedProjects = projects.filter((project) => !project.pinnedAt);
   const deleteProject = useDeleteProject();
+  const restoreProject = useRestoreProject();
+  const permanentlyDeleteProject = usePermanentlyDeleteProject();
   const pinProjectMutation = usePinProject();
   const togglePin = (project: ProjectListItem) =>
     pinProjectMutation.mutate({ id: project.id, pinned: !project.pinnedAt });
+  // Only consulted on the active slice; the trash has its own empty state.
   const hasActiveFilter = hasActiveScopeFilters || !!search;
 
   // The first keys fetch failed with no cached list (e.g. offline cold start).
@@ -191,19 +211,63 @@ function ProjectsList() {
           }}
         />
       )}
+      {permanentlyDeletingProject && (
+        <DeleteConfirmDialog
+          open={!!permanentlyDeletingProject}
+          onOpenChange={(open) => {
+            if (!open) setPermanentlyDeletingProject(null);
+          }}
+          title="Delete project permanently"
+          description={`This destroys "${permanentlyDeletingProject.name}" along with its files and scheduled tasks. Its chats were kept as ordinary conversations when it was deleted and stay. Nothing recovers the project itself.`}
+          isPending={permanentlyDeleteProject.isPending}
+          onConfirm={async () => {
+            const ok = await permanentlyDeleteProject.mutateAsync({
+              id: permanentlyDeletingProject.id,
+            });
+            if (ok) setPermanentlyDeletingProject(null);
+          }}
+          confirmLabel={PERMANENT_DELETE_LABEL}
+        />
+      )}
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
-          <SearchInput placeholder="Search projects" paramName="search" />
-          <ResourceScopeFilter
-            ownerLabelPlural="projects"
-            allLabel="All projects"
-            adminPermission={{ project: ["admin"] }}
+          {/* Hidden in the trash: the backend serves that slice whole, ignoring
+              search and scope, so live controls would read as broken filters. */}
+          {!isDeletedView && (
+            <>
+              <SearchInput placeholder="Search projects" paramName="search" />
+              <ResourceScopeFilter
+                ownerLabelPlural="projects"
+                allLabel="All projects"
+                adminPermission={{ project: ["admin"] }}
+              />
+            </>
+          )}
+          {/* Gated on `project:admin`, matching the slice the backend serves:
+              anyone else switching to Deleted would get an empty table. */}
+          <ResourceDeletedStatusFilter
+            deletePermission={{ project: ["admin"] }}
           />
-          <span className="ml-auto">
-            <ListViewToggle value={viewMode} onChange={setViewMode} />
-          </span>
+          {!isDeletedView && (
+            <span className="ml-auto">
+              <ListViewToggle value={viewMode} onChange={setViewMode} />
+            </span>
+          )}
         </div>
-        {projects.length === 0 ? (
+        {isDeletedView ? (
+          projects.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
+              <FolderKanban className="h-8 w-8 opacity-50" />
+              <p>{isPending ? "Loading…" : "No deleted projects"}</p>
+            </div>
+          ) : (
+            <DeletedProjectsTable
+              projects={projects}
+              onRestore={(project) => restoreProject.mutate({ id: project.id })}
+              onPermanentlyDelete={setPermanentlyDeletingProject}
+            />
+          )
+        ) : projects.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
             <FolderKanban className="h-8 w-8 opacity-50" />
             <p>

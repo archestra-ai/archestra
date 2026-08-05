@@ -121,7 +121,7 @@ Deleting a skill hides it from every list, activation, slash command, and share 
 
 Admins and team admins switch the status filter to **Deleted** to open the trash. **Restore** returns the skill to active. A restore is refused when an active skill already holds the name — rename or delete that one, then restore again.
 
-Global admins can also delete a skill from the trash for good, through the API. This destroys the skill, every version, and every file it holds. Nothing brings it back. A skill mounted in a code sandbox is refused until that sandbox is gone.
+Global admins can also delete a skill from the trash for good, with **Delete permanently**. This destroys the skill, every version, and every file it holds. Nothing brings it back. A skill mounted in a code sandbox is refused until that sandbox is gone.
 
 Deleting a built-in skill is a lasting opt-out — it stays gone across restarts. You can still restore it from the trash. Built-in skills cannot be deleted for good, since the trash record is what keeps them from coming back.
 

@@ -24,6 +24,10 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import {
+  PERMANENT_DELETE_LABEL,
+  permanentDeleteRowAction,
+} from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -57,8 +61,10 @@ import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   useDeleteSkill,
+  usePermanentlyDeleteSkill,
   useRestoreSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
@@ -141,6 +147,7 @@ function SkillsList() {
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
   const restoreSkill = useRestoreSkill();
+  const admin = useIsGlobalAdmin();
 
   const setSourceRepoFilter = useCallback(
     (value: string) => {
@@ -198,6 +205,8 @@ function SkillsList() {
   });
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
+  const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
+    useState<SkillItem | null>(null);
   const [historySkillId, setHistorySkillId] = useState<string | null>(null);
   const [usageSkill, setUsageSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
@@ -437,6 +446,17 @@ function SkillsList() {
                 permissions: { skill: ["delete"] },
                 onClick: () => restoreSkill.mutate(skill.id),
               },
+              permanentDeleteRowAction({
+                admin,
+                onClick: () => setPermanentlyDeletingSkill(skill),
+                // A built-in's deleted row IS the opt-out: it is what stops the
+                // startup seeder recreating the skill, so the API refuses to
+                // destroy it and deleting it already removed it for good.
+                disabledReason:
+                  skill.sourceType === "built_in"
+                    ? "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart"
+                    : undefined,
+              }),
             ]
           : [
               {
@@ -615,6 +635,14 @@ function SkillsList() {
         />
       )}
 
+      {permanentlyDeletingSkill && (
+        <PermanentlyDeleteSkillDialog
+          skill={permanentlyDeletingSkill}
+          open={!!permanentlyDeletingSkill}
+          onOpenChange={(open) => !open && setPermanentlyDeletingSkill(null)}
+        />
+      )}
+
       {historySkillId && (
         <SkillVersionHistoryDialog
           skillId={historySkillId}
@@ -705,6 +733,37 @@ function DeleteSkillDialog({
       onConfirm={handleDelete}
       confirmLabel="Delete Skill"
       pendingLabel="Deleting..."
+    />
+  );
+}
+
+function PermanentlyDeleteSkillDialog({
+  skill,
+  open,
+  onOpenChange,
+}: {
+  skill: SkillItem;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const permanentlyDeleteSkill = usePermanentlyDeleteSkill();
+
+  const handleDelete = useCallback(async () => {
+    const result = await permanentlyDeleteSkill.mutateAsync(skill.id);
+    if (result) {
+      onOpenChange(false);
+    }
+  }, [skill.id, permanentlyDeleteSkill, onOpenChange]);
+
+  return (
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete skill permanently"
+      description={`This destroys "${skill.name}" along with every version and resource file, its grants and environment assignments, and any public share link for it. Nothing recovers it.`}
+      isPending={permanentlyDeleteSkill.isPending}
+      onConfirm={handleDelete}
+      confirmLabel={PERMANENT_DELETE_LABEL}
     />
   );
 }

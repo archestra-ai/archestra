@@ -24,6 +24,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -42,6 +43,7 @@ import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
   useExportAgent,
+  usePermanentlyDeleteProfile,
   useProfile,
   useProfilesPaginated,
   useRestoreProfile,
@@ -210,11 +212,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     entityFromUrl: viewAgentFromUrl ?? null,
   });
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+  const [permanentlyDeletingAgent, setPermanentlyDeletingAgent] =
+    useState<AgentData | null>(null);
 
   const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
+  const permanentlyDeleteAgent = usePermanentlyDeleteProfile();
 
   const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
     null,
@@ -400,6 +405,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 },
               });
             }}
+            onPermanentlyDelete={setPermanentlyDeletingAgent}
             onClone={setCloningAgent}
             onConvertToSkill={setConvertingAgent}
             onExport={(agentData) => {
@@ -570,6 +576,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 agentId={deletingAgentId}
                 open={!!deletingAgentId}
                 onOpenChange={(open) => !open && setDeletingAgentId(null)}
+              />
+            )}
+
+            {permanentlyDeletingAgent && (
+              <DeleteConfirmDialog
+                open={!!permanentlyDeletingAgent}
+                onOpenChange={(open) =>
+                  !open && setPermanentlyDeletingAgent(null)
+                }
+                title="Delete agent permanently"
+                description={`This destroys "${permanentlyDeletingAgent.name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`}
+                isPending={permanentlyDeleteAgent.isPending}
+                onConfirm={async () => {
+                  const ok = await permanentlyDeleteAgent.mutateAsync(
+                    permanentlyDeletingAgent.id,
+                  );
+                  if (ok) setPermanentlyDeletingAgent(null);
+                }}
+                confirmLabel={PERMANENT_DELETE_LABEL}
               />
             )}
 

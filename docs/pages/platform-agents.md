@@ -113,7 +113,7 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 
 Deleting an agent hides it everywhere and stops its scheduled runs. The agent is not destroyed — it moves to a trash. Switch the status filter to **Deleted** to see what is there, and **Restore** to bring one back.
 
-Global admins can also delete an agent from the trash for good, through the API. This destroys its configuration, version history, hooks, and scheduled tasks. Nothing brings it back.
+Global admins can also delete an agent from the trash for good, with **Delete permanently**. This destroys its configuration, version history, hooks, and scheduled tasks. Nothing brings it back.
 
 What the agent produced stays. Its chats and its LLM usage records survive the deletion and simply stop pointing at it, so your history and cost reporting stay intact.
 

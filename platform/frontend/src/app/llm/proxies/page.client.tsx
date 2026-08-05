@@ -15,6 +15,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import {
   ActiveFilterBadges,
@@ -37,6 +38,7 @@ import {
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
+  usePermanentlyDeleteProfile,
   useProfile,
   useProfilesPaginated,
   useRestoreProfile,
@@ -181,7 +183,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   });
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
   const [cloningProxy, setCloningProxy] = useState<ProxyData | null>(null);
+  const [permanentlyDeletingProxy, setPermanentlyDeletingProxy] =
+    useState<ProxyData | null>(null);
   const restoreProxy = useRestoreProfile();
+  const permanentlyDeleteProxy = usePermanentlyDeleteProfile("LLM Proxy");
 
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
@@ -328,6 +333,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 },
               });
             }}
+            onPermanentlyDelete={setPermanentlyDeletingProxy}
             onClone={setCloningProxy}
           />
         );
@@ -476,6 +482,25 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 agentId={deletingProxyId}
                 open={!!deletingProxyId}
                 onOpenChange={(open) => !open && setDeletingProxyId(null)}
+              />
+            )}
+
+            {permanentlyDeletingProxy && (
+              <DeleteConfirmDialog
+                open={!!permanentlyDeletingProxy}
+                onOpenChange={(open) =>
+                  !open && setPermanentlyDeletingProxy(null)
+                }
+                title="Delete LLM Proxy permanently"
+                description={`This destroys "${permanentlyDeletingProxy.name}" and everything it owns. Its LLM interaction history is kept for cost reporting, no longer pointing at the proxy. Nothing recovers the proxy itself.`}
+                isPending={permanentlyDeleteProxy.isPending}
+                onConfirm={async () => {
+                  const ok = await permanentlyDeleteProxy.mutateAsync(
+                    permanentlyDeletingProxy.id,
+                  );
+                  if (ok) setPermanentlyDeletingProxy(null);
+                }}
+                confirmLabel={PERMANENT_DELETE_LABEL}
               />
             )}
 

@@ -7,11 +7,12 @@ import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   organizationKeys,
   useActiveMemberRole,
+  useIsGlobalAdmin,
 } from "@/lib/organization.query";
 
 vi.mock("@/lib/clients/auth/auth-client");
 
-function renderActiveMemberRole() {
+function renderWithClient<T>(hook: () => T) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -19,10 +20,11 @@ function renderActiveMemberRole() {
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
 
-  return {
-    ...renderHook(() => useActiveMemberRole(), { wrapper }),
-    queryClient,
-  };
+  return { ...renderHook(hook, { wrapper }), queryClient };
+}
+
+function renderActiveMemberRole() {
+  return renderWithClient(() => useActiveMemberRole());
 }
 
 function sessionWith(activeOrganizationId: string | null) {
@@ -132,5 +134,67 @@ describe("useActiveMemberRole", () => {
     });
     expect(result.current.isPending).toBe(true);
     expect(authClient.organization.getActiveMemberRole).not.toHaveBeenCalled();
+  });
+});
+
+describe("useIsGlobalAdmin", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(authClient.organization.getActiveMemberRole).mockResolvedValue({
+      data: { role: "admin" },
+      error: null,
+    });
+  });
+
+  it("reports loading — not 'not an admin' — while the session is still resolving", async () => {
+    let resolveSession: (value: unknown) => void = () => {};
+    vi.mocked(authClient.getSession).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSession = resolve;
+      }),
+    );
+
+    const { result } = renderWithClient(() => useIsGlobalAdmin());
+
+    // The role query is disabled until the session names an organization, so
+    // its own isLoading is false here. Reading that as a settled answer would
+    // tell a real admin they lack the role for as long as the session takes.
+    expect(result.current.isGlobalAdmin).toBe(false);
+    expect(result.current.isLoading).toBe(true);
+
+    resolveSession(sessionWith("org-1"));
+
+    await waitFor(() => {
+      expect(result.current.isGlobalAdmin).toBe(true);
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it("settles on 'not an admin' for a session with no active organization", async () => {
+    vi.mocked(authClient.getSession).mockResolvedValue(sessionWith(null));
+
+    const { result } = renderWithClient(() => useIsGlobalAdmin());
+
+    // Nothing further can resolve a role, and the API answers such a caller
+    // the same way, so this is an answer rather than a request in flight.
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+    expect(result.current.isGlobalAdmin).toBe(false);
+  });
+
+  it("is not an admin for a custom role, however broad", async () => {
+    vi.mocked(authClient.getSession).mockResolvedValue(sessionWith("org-1"));
+    vi.mocked(authClient.organization.getActiveMemberRole).mockResolvedValue({
+      data: { role: "project-auditor" },
+      error: null,
+    });
+
+    const { result } = renderWithClient(() => useIsGlobalAdmin());
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+    expect(result.current.isGlobalAdmin).toBe(false);
   });
 });

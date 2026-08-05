@@ -1,5 +1,5 @@
 import { E2eTestId } from "@archestra/shared";
-import { Copy, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
+import { Copy, History, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
 import type { useProfilesPaginated } from "@/lib/agent.query";
@@ -19,6 +19,7 @@ type McpGatewayActionsProps = {
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
   onClone: (agent: Gateway) => void;
+  onHistory: (agentId: string) => void;
 };
 
 export function McpGatewayActions({
@@ -29,6 +30,7 @@ export function McpGatewayActions({
   onDelete,
   onRestore,
   onClone,
+  onHistory,
 }: McpGatewayActionsProps) {
   if (agent.deletedAt) {
     return (
@@ -91,6 +93,19 @@ export function McpGatewayActions({
         }}
       >
         <Copy className="h-4 w-4" />
+      </PermissionButton>
+      <PermissionButton
+        permissions={{ mcpGateway: ["read"] }}
+        aria-label="Version history"
+        variant="outline"
+        size="icon-sm"
+        data-testid={`${E2eTestId.AgentVersionHistoryButton}-${agent.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onHistory(agent.id);
+        }}
+      >
+        <History className="h-4 w-4" />
       </PermissionButton>
       <PermissionButton
         permissions={{ mcpGateway: ["delete"] }}

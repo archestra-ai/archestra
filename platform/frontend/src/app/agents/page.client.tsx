@@ -15,6 +15,7 @@ import { A2AConnectionInstructions } from "@/components/a2a-connection-instructi
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   ConnectDialog,
@@ -216,6 +217,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
 
+  const [historyAgentId, setHistoryAgentId] = useState<string | null>(null);
   const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
     null,
   );
@@ -402,6 +404,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             }}
             onClone={setCloningAgent}
             onConvertToSkill={setConvertingAgent}
+            onHistory={setHistoryAgentId}
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
                 onSuccess: (data) => {
@@ -596,6 +599,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 editDialog.open(cloned as AgentData);
               }}
             />
+
+            {historyAgentId && (
+              <AgentVersionHistoryDialog
+                agentId={historyAgentId}
+                open={!!historyAgentId}
+                onOpenChange={(open) => !open && setHistoryAgentId(null)}
+              />
+            )}
           </div>
         </div>
       </PageLayout>

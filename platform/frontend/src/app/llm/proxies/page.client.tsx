@@ -10,6 +10,7 @@ import { LlmProxyConnectInstructionsDialog } from "@/components/agent-connect-in
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -181,6 +182,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   });
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
   const [cloningProxy, setCloningProxy] = useState<ProxyData | null>(null);
+  const [historyProxyId, setHistoryProxyId] = useState<string | null>(null);
   const restoreProxy = useRestoreProfile();
 
   const handleSortingChange = useCallback(
@@ -281,6 +283,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     {
       id: "team",
       header: "Accessible to",
+      size: 140,
       enableSorting: false,
       cell: ({ row }) => (
         <ResourceVisibilityBadge
@@ -297,6 +300,9 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     {
       id: "actions",
       header: "Actions",
+      // Pixel-sized so the five icon buttons never clip: the actions column
+      // keeps its px width while the sized columns scale down to fit.
+      size: 200,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
@@ -329,6 +335,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               });
             }}
             onClone={setCloningProxy}
+            onHistory={setHistoryProxyId}
           />
         );
       },
@@ -489,6 +496,14 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 editDialog.open(cloned as ProxyData);
               }}
             />
+
+            {historyProxyId && (
+              <AgentVersionHistoryDialog
+                agentId={historyProxyId}
+                open={!!historyProxyId}
+                onOpenChange={(open) => !open && setHistoryProxyId(null)}
+              />
+            )}
           </div>
         </div>
       </PageLayout>

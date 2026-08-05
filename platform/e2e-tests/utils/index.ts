@@ -1,3 +1,4 @@
+export * from "./agents-table";
 export * from "./auth";
 export * from "./chat-ui";
 export * from "./dialogs";

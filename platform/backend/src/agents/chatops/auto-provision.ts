@@ -151,13 +151,16 @@ export async function ensureProvisionedUser(params: {
 
 /**
  * Whether the signup welcome (the "finish signing up" message + link) should be
- * sent to newly auto-provisioned users. Skipped when the operator disabled it
- * via ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false (deployments whose chatops
- * users don't get web app access) or when SSO is configured (users just sign in
- * via their IdP).
+ * sent to newly auto-provisioned users. Skipped when:
+ * - the operator disabled it via ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false
+ *   (deployments whose chatops users don't get web app access)
+ * - invitations are disabled (ARCHESTRA_AUTH_DISABLE_INVITATIONS=true) — the
+ *   welcome's signup link completes an invitation, so it's a dead end there
+ * - SSO is configured (users just sign in via their IdP)
  */
 export async function shouldSendSignupWelcome(): Promise<boolean> {
   if (!config.chatops.signupWelcomeEnabled) return false;
+  if (config.auth.disableInvitations) return false;
   return !(await isSsoConfigured());
 }
 

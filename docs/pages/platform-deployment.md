@@ -1449,7 +1449,7 @@ These environment variables configure the ChatOps feature, which allows users to
 - **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Opt-out switch for the signup welcome sent to auto-provisioned chatops users.
   - Default: `true`
   - `false` skips the "finish signing up" message and link. Use it when your chatops users don't get web app access. Users are still auto-provisioned.
-  - The welcome is also skipped automatically when an SSO identity provider is configured.
+  - The welcome is also skipped automatically when `ARCHESTRA_AUTH_DISABLE_INVITATIONS` is `true` — its signup link completes an invitation — or when an SSO identity provider is configured.
 
 #### Microsoft Teams
 

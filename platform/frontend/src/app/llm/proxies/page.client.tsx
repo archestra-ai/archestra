@@ -182,7 +182,12 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   });
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
   const [cloningProxy, setCloningProxy] = useState<ProxyData | null>(null);
-  const [historyProxyId, setHistoryProxyId] = useState<string | null>(null);
+  // The row's scope check travels with the id: it is computed per row, and the
+  // dialog's restore is an update that has to answer to it.
+  const [history, setHistory] = useState<{
+    id: string;
+    canModify: boolean;
+  } | null>(null);
   const restoreProxy = useRestoreProfile();
 
   const handleSortingChange = useCallback(
@@ -335,7 +340,9 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               });
             }}
             onClone={setCloningProxy}
-            onHistory={setHistoryProxyId}
+            onHistory={(id, historyCanModify) =>
+              setHistory({ id, canModify: historyCanModify })
+            }
           />
         );
       },
@@ -498,9 +505,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             />
 
             <AgentVersionHistoryDialog
-              agentId={historyProxyId}
+              agentId={history?.id ?? null}
+              canModify={!!history?.canModify}
               onOpenChange={(open) => {
-                if (!open) setHistoryProxyId(null);
+                if (!open) setHistory(null);
               }}
             />
           </div>

@@ -78,10 +78,19 @@ const RESTORE_PERMISSIONS_BY_AGENT_TYPE: Record<string, Permissions> = {
  */
 export function AgentVersionHistoryDialog({
   agentId,
+  canModify,
   onOpenChange,
 }: {
   /** The agent whose history to read; null closes the dialog. */
   agentId: string | null;
+  /**
+   * Whether the reader may modify *this* entity — the scope check the page's
+   * own row buttons apply on top of RBAC: an org admin, a team admin of the
+   * team it is scoped to, or the owner of a personal one. Restoring is an
+   * update, so the button here has to answer to it as Edit and Delete do,
+   * rather than offering a write the server will refuse.
+   */
+  canModify: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   // Remounting per agent drops the previewed version, which belongs to the
@@ -90,6 +99,7 @@ export function AgentVersionHistoryDialog({
     <VersionHistory
       key={agentId}
       agentId={agentId}
+      canModify={canModify}
       onOpenChange={onOpenChange}
     />
   );
@@ -97,9 +107,11 @@ export function AgentVersionHistoryDialog({
 
 function VersionHistory({
   agentId,
+  canModify,
   onOpenChange,
 }: {
   agentId: string | null;
+  canModify: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   // Whether the dialog is open is the same fact as whether it has an agent to
@@ -117,6 +129,7 @@ function VersionHistory({
   // Survives version selection: whoever came to read diffs keeps reading diffs.
   const [viewMode, setViewMode] = useState<VersionViewMode>("all");
   const [confirmingRestore, setConfirmingRestore] = useState(false);
+  const restoreVersion = useRestoreAgentVersion();
 
   // Pages are read by offset from a list that grows at the head, so a version
   // created between two page loads shifts every row down and the next page
@@ -139,9 +152,22 @@ function VersionHistory({
   // recorded a version — not a head. Reading it as one would point the detail
   // query at version 0, which it refuses to fetch, and the pane would report
   // itself loading forever.
-  const headVersion =
+  const reportedHead =
     versions[0]?.version ??
     (agent && agent.latestVersion > 0 ? agent.latestVersion : null);
+  // A restore lands a new head before the timeline invalidation it triggers
+  // comes back, and for that window every read above is one version behind:
+  // the superseded head would keep its "Current" badge and the footer would
+  // offer to restore what the agent already is. A restore only ever appends,
+  // so the version it just minted is a head until something reports a higher
+  // one — which the refetch, and anyone else's concurrent edit, then does.
+  const restoredHead = restoreVersion.data?.latestVersion ?? null;
+  const headVersion =
+    reportedHead === null
+      ? restoredHead
+      : restoredHead === null
+        ? reportedHead
+        : Math.max(reportedHead, restoredHead);
   const activeVersion = selectedVersion ?? headVersion;
 
   const {
@@ -190,7 +216,7 @@ function VersionHistory({
 
   const noun = NOUN_BY_AGENT_TYPE[agent?.agentType ?? "agent"] ?? "agent";
   const isBuiltIn = Boolean(agent?.builtIn);
-  const canRestore = !!detail && !!agent && !isHead && !isBuiltIn;
+  const canRestore = !!detail && !!agent && !isHead && !isBuiltIn && canModify;
   // The preview pane tells these four apart; the disabled button has to give
   // the same reading rather than greying out with nothing to say.
   const detailState: DetailState = detail
@@ -201,12 +227,9 @@ function VersionHistory({
         ? "unavailable"
         : "pruned";
 
-  const restoreVersion = useRestoreAgentVersion();
   const handleRestore = async () => {
     if (!agentId || !detail || headVersion === null) return;
-    // A handled failure resolves to null and a transport failure rejects; both
-    // keep the confirmation open, so the toast explaining why still has the
-    // dialog it refers to on screen.
+    // A handled failure resolves to null and a transport failure rejects.
     const result = await restoreVersion
       .mutateAsync({
         agentId,
@@ -214,8 +237,15 @@ function VersionHistory({
         baseVersion: headVersion,
       })
       .catch(() => null);
-    if (!result) return;
+    // Closed on every outcome, and the toast explaining a failure outlives the
+    // confirmation it was raised from. That matters most for the conflict:
+    // `onSettled` refetches the timeline, so a confirmation left open would
+    // let the very same button succeed on a second click, against a head
+    // silently swapped underneath it — compare-and-set degraded to "click
+    // twice". Closing sends the reader back to a preview rendered against the
+    // head that actually moved, which is what the toast asks them to do.
     setConfirmingRestore(false);
+    if (!result) return;
     // A restore lands as the new head, so the previewed version is no longer
     // what the agent looks like — jump the selection to the version just made.
     setSelectedVersion(result.latestVersion);
@@ -253,6 +283,7 @@ function VersionHistory({
               version: activeVersion,
               isHead,
               isBuiltIn,
+              canModify,
               detailState,
               noun,
             })}
@@ -842,17 +873,19 @@ function FieldsPane({
             {mode === "changes" ? (
               <>
                 <span className="text-destructive line-through">
-                  {field.previous ?? "Not set"}
+                  {fieldValueText(field.previous)}
                 </span>
                 <span className="mx-2 text-muted-foreground">→</span>
                 <span className="text-emerald-600 dark:text-emerald-400">
-                  {field.current ?? "Not set"}
+                  {fieldValueText(field.current)}
                 </span>
               </>
-            ) : field.current !== null ? (
+            ) : field.current ? (
               <span>{field.current}</span>
             ) : (
-              <span className="text-muted-foreground">Not set</span>
+              <span className="text-muted-foreground">
+                {fieldValueText(field.current)}
+              </span>
             )}
           </dd>
         </div>
@@ -939,6 +972,12 @@ function TextPane({
       ? section.fields.filter((field) => field.change === "changed")
       : section.fields;
   const asDiff = mode === "changes";
+  // Unset and cleared-to-empty are two values a version can hold, and moving
+  // between them is an edit the snapshot hashes and a restore writes — but
+  // both feed Monaco the same empty document.
+  const bodyMovedBetweenUnsetAndEmpty =
+    (section.current === null) !== (section.previous === null) &&
+    (section.current ?? "") === (section.previous ?? "");
   // Stacked in one scroll pane, an editor has no parent height to fill — it is
   // sized to its content instead, capped so one long prompt does not swallow
   // the page (past the cap the editor scrolls internally).
@@ -960,17 +999,19 @@ function TextPane({
                 {mode === "changes" ? (
                   <>
                     <span className="text-destructive line-through">
-                      {field.previous ?? "Not set"}
+                      {fieldValueText(field.previous)}
                     </span>
                     <span className="mx-2 text-muted-foreground">→</span>
                     <span className="text-emerald-600 dark:text-emerald-400">
-                      {field.current ?? "Not set"}
+                      {fieldValueText(field.current)}
                     </span>
                   </>
-                ) : field.current !== null ? (
+                ) : field.current ? (
                   <span>{field.current}</span>
                 ) : (
-                  <span className="text-muted-foreground">Not set</span>
+                  <span className="text-muted-foreground">
+                    {fieldValueText(field.current)}
+                  </span>
                 )}
               </dd>
             </div>
@@ -980,7 +1021,16 @@ function TextPane({
       {/* An agent's hooks each get a section, and every one of them would
           otherwise build a Monaco editor the moment the pane opens, whether or
           not the reader ever scrolls that far. */}
-      {asDiff ? (
+      {asDiff && bodyMovedBetweenUnsetAndEmpty ? (
+        // Both sides render as the empty document, so a diff would show a
+        // reader nothing at all in a section listed as changed. Say what moved
+        // instead.
+        <p className="p-4 text-sm text-muted-foreground">
+          {section.current === null
+            ? "Not set in this version; empty in the previous one."
+            : "Empty in this version; not set in the previous one."}
+        </p>
+      ) : asDiff ? (
         <LazyMount height={editorHeight}>
           <DiffEditor
             height={editorHeight}
@@ -995,7 +1045,7 @@ function TextPane({
             }}
           />
         </LazyMount>
-      ) : section.current !== null ? (
+      ) : section.current ? (
         <LazyMount height={editorHeight}>
           <Editor
             height={editorHeight}
@@ -1009,10 +1059,27 @@ function TextPane({
           />
         </LazyMount>
       ) : (
-        <p className="p-4 text-sm text-muted-foreground">Not set.</p>
+        // An empty body is a value this version holds, not the absence of one,
+        // and it gets a line rather than an editor with nothing in it.
+        <p className="p-4 text-sm text-muted-foreground">
+          {section.current === null ? "Not set." : "Empty."}
+        </p>
       )}
     </div>
   );
+}
+
+/**
+ * A scalar as the pane reads it. Never set and cleared to the empty string are
+ * two different values — the snapshot hashes them apart, which is why an edit
+ * between them records a version, and a restore writes the difference — so
+ * rendering both the same way would present that version as having changed
+ * nothing.
+ */
+function fieldValueText(value: string | null): string {
+  if (value === null) return "Not set";
+  if (value === "") return "Empty";
+  return value;
 }
 
 /**
@@ -1065,16 +1132,21 @@ function restoreTooltip({
   version,
   isHead,
   isBuiltIn,
+  canModify,
   detailState,
   noun,
 }: {
   version: number | null;
   isHead: boolean;
   isBuiltIn: boolean;
+  canModify: boolean;
   detailState: DetailState;
   noun: string;
 }): string | undefined {
-  if (isBuiltIn) return `Built-in ${noun}s cannot be modified.`;
+  // Singular: the nouns are display names, and `${noun}s` pluralizes "LLM
+  // proxy" to "LLM proxys".
+  if (isBuiltIn) return `This built-in ${noun} cannot be modified.`;
+  if (!canModify) return `You do not have permission to modify this ${noun}.`;
   if (isHead) return `This is the ${noun}'s current configuration.`;
   if (detailState === "ready" || version === null) return undefined;
   switch (detailState) {

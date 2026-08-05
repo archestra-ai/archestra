@@ -207,7 +207,12 @@ function McpGateways({
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
-  const [historyGatewayId, setHistoryGatewayId] = useState<string | null>(null);
+  // The row's scope check travels with the id: it is computed per row, and the
+  // dialog's restore is an update that has to answer to it.
+  const [history, setHistory] = useState<{
+    id: string;
+    canModify: boolean;
+  } | null>(null);
   const [cloningGateway, setCloningGateway] = useState<GatewayData | null>(
     null,
   );
@@ -433,7 +438,9 @@ function McpGateways({
               });
             }}
             onClone={setCloningGateway}
-            onHistory={setHistoryGatewayId}
+            onHistory={(id, historyCanModify) =>
+              setHistory({ id, canModify: historyCanModify })
+            }
           />
         );
       },
@@ -642,9 +649,10 @@ function McpGateways({
             />
 
             <AgentVersionHistoryDialog
-              agentId={historyGatewayId}
+              agentId={history?.id ?? null}
+              canModify={!!history?.canModify}
               onOpenChange={(open) => {
-                if (!open) setHistoryGatewayId(null);
+                if (!open) setHistory(null);
               }}
             />
           </div>

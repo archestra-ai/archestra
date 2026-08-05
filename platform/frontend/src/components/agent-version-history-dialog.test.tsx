@@ -185,9 +185,13 @@ function mockHeldOverDetails(
   }) as never);
 }
 
-function renderDialog() {
+function renderDialog({ canModify = true }: { canModify?: boolean } = {}) {
   return render(
-    <AgentVersionHistoryDialog agentId="agent-1" onOpenChange={() => {}} />,
+    <AgentVersionHistoryDialog
+      agentId="agent-1"
+      canModify={canModify}
+      onOpenChange={() => {}}
+    />,
   );
 }
 
@@ -265,11 +269,13 @@ describe("AgentVersionHistoryDialog", () => {
     });
   });
 
-  it("keeps the confirmation open when the restore does not go through", async () => {
+  it("closes the confirmation when the restore does not go through", async () => {
     const user = userEvent.setup();
-    // A handled failure resolves to null — a moved head, or the 400 refusing a
-    // version that points at something deleted — and its toast needs the
-    // dialog it refers to still on screen.
+    // A handled failure resolves to null. The conflict is the one that matters:
+    // settling refetches the timeline, so a confirmation left open would let
+    // the same button succeed on a second click against a head that moved
+    // underneath it — compare-and-set reduced to clicking twice. The retry has
+    // to start from a preview rendered against the head that actually won.
     mutateAsync.mockResolvedValue(null);
     renderDialog();
 
@@ -280,8 +286,32 @@ describe("AgentVersionHistoryDialog", () => {
     await user.click(screen.getByRole("button", { name: "Restore version 2" }));
 
     expect(
-      screen.getByRole("button", { name: "Restore version 2" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Restore version 2" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("refuses a restore the reader has no scope to make", async () => {
+    const user = userEvent.setup();
+    // RBAC is not the whole check: the pages also gate their mutating row
+    // buttons on being an admin, a team admin of the team it is scoped to, or
+    // the owner of a personal one. Without it a member with the update
+    // permission but no scope over this entity gets an enabled button and a
+    // server refusal that reads as "not found".
+    renderDialog({ canModify: false });
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+
+    const restoreButton = screen.getByRole("button", {
+      name: "Restore this version",
+    });
+    expect(restoreButton).toBeDisabled();
+    await user.hover(restoreButton.parentElement as HTMLElement);
+    // radix renders the content and a screen-reader copy of it
+    expect(
+      await screen.findAllByText(
+        "You do not have permission to modify this agent.",
+      ),
+    ).not.toHaveLength(0);
   });
 
   it("jumps the selection to the version a restore just created", async () => {
@@ -308,6 +338,37 @@ describe("AgentVersionHistoryDialog", () => {
     expect(
       screen.queryByRole("button", { name: "Restore version 2" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("treats a version a restore just created as the head before the timeline lists it", () => {
+    // Settling invalidates the timeline, but until that refetch lands the row
+    // at the top is the superseded head: it would keep the Current badge while
+    // the footer offered to restore what the agent already is — a click that
+    // 409s or comes back "identical". A restore only ever appends, so the
+    // version it minted is the head until something reports a higher one.
+    vi.mocked(useRestoreAgentVersion).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+      data: { id: "agent-1", latestVersion: 4 },
+      // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
+    } as any);
+    mockVersionDetails({
+      4: versionDetail(4, "hash-four"),
+      3: versionDetail(3, "hash-head"),
+      2: versionDetail(2, "hash-two"),
+    });
+    renderDialog();
+
+    const supersededRow = screen.getByRole("button", { name: /v3/ });
+    expect(
+      within(supersededRow).queryByText("Current"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Version 4" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Restore this version" }),
+    ).toBeDisabled();
   });
 
   it("explains a pruned predecessor instead of claiming to load it", async () => {

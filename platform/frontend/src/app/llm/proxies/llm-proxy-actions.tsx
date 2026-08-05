@@ -17,7 +17,12 @@ type LlmProxyActionsProps = {
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
   onClone: (agent: Proxy) => void;
-  onHistory: (agentId: string) => void;
+  /**
+   * Carries `canModify` with the id: the history dialog offers a restore,
+   * which is an update, so it needs the same scope check the row's own
+   * mutating buttons apply rather than RBAC alone.
+   */
+  onHistory: (agentId: string, canModify: boolean) => void;
 };
 
 export function LlmProxyActions({
@@ -100,7 +105,7 @@ export function LlmProxyActions({
         data-testid={`${E2eTestId.AgentVersionHistoryButton}-${agent.name}`}
         onClick={(e) => {
           e.stopPropagation();
-          onHistory(agent.id);
+          onHistory(agent.id, canModify);
         }}
       >
         <History className="h-4 w-4" />

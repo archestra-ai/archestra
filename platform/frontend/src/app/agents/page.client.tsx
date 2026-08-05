@@ -217,7 +217,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
 
-  const [historyAgentId, setHistoryAgentId] = useState<string | null>(null);
+  // The row's scope check travels with the id: it is computed per row, and the
+  // dialog's restore is an update that has to answer to it.
+  const [history, setHistory] = useState<{
+    id: string;
+    canModify: boolean;
+  } | null>(null);
   const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
     null,
   );
@@ -404,7 +409,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             }}
             onClone={setCloningAgent}
             onConvertToSkill={setConvertingAgent}
-            onHistory={setHistoryAgentId}
+            onHistory={(id, historyCanModify) =>
+              setHistory({ id, canModify: historyCanModify })
+            }
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
                 onSuccess: (data) => {
@@ -601,9 +608,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             />
 
             <AgentVersionHistoryDialog
-              agentId={historyAgentId}
+              agentId={history?.id ?? null}
+              canModify={!!history?.canModify}
               onOpenChange={(open) => {
-                if (!open) setHistoryAgentId(null);
+                if (!open) setHistory(null);
               }}
             />
           </div>

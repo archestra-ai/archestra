@@ -161,7 +161,10 @@ export async function assignCatalogCredentialToGateway(params: {
   const credentialOption = params.page.getByRole("option", {
     name: params.credentialName,
   });
-  await expect(credentialOption).toBeVisible({ timeout: 10_000 });
+  // 30s, not 10s: the option list renders from a query result that can
+  // transiently miss a just-created credential until the mount-time refetch
+  // lands; the options re-render in place once fresh data arrives.
+  await expect(credentialOption).toBeVisible({ timeout: 30_000 });
   await selectCredentialOption(params.page, credentialOption);
   await saveOpenProfileDialog(params.page);
 }

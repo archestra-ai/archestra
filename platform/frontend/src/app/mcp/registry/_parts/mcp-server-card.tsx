@@ -65,6 +65,7 @@ import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catal
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
+import { isCardShowingInstallInProgress } from "./card-install-state";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { clearCatalogEditParam } from "./catalog-edit-link";
 import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
@@ -375,13 +376,15 @@ export function McpServerCard({
     />
   ) : null;
 
-  const isInstalling = Boolean(
-    !isDeploymentFailed &&
-      (installingItemId === item.id ||
-        (variant === "local" &&
-          (installationStatus === "pending" ||
-            (installationStatus === "discovering-tools" && installedServer)))),
-  );
+  const isInstalling = isCardShowingInstallInProgress({
+    deploymentFailed: isDeploymentFailed,
+    viewerTriggeredInstall: installingItemId === item.id,
+    variant,
+    installationStatus,
+    hasInstalledServer: !!installedServer,
+    installationOwnedByViewer:
+      !!currentUserId && installedServer?.ownerId === currentUserId,
+  });
 
   const isCurrentUserAuthenticated =
     currentUserId && installedServer?.users

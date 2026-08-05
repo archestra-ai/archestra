@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-07-30
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -59,7 +59,7 @@ An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and 
 - [Agent Skills](/docs/platform-agent-skills#environments) restricted to Production, or restricted to no environment at all
 - [subagent delegation targets](/docs/platform-agents#delegation) in Production
 
-Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. [MCP Apps](/docs/platform-apps) differ too: an app accepts Default-environment tools alongside its own environment's, so Default acts as a shared baseline for apps. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
+Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. [MCP Apps](/docs/platform-apps) differ too: an app accepts Default-environment tools alongside its own environment's, so Default acts as a shared baseline for apps. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available. The [Advisor](/docs/platform-built-in-subagents#advisor) is not exempt — each environment gets its own, so an agent consults the one beside it.
 
 An agent creates in its own environment. When an agent adds an MCP server to the registry, or builds an [app](/docs/platform-apps), that resource lands in the agent's environment — so the agent can still see it afterwards. You can name a different environment explicitly when adding a server.
 

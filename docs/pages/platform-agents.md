@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -93,6 +93,8 @@ An agent can delegate work to other agents — its **subagents**. Like **Tools &
 In **Custom** mode the agent delegates only to the subagents you assign. In **Auto** mode it can delegate to any agent the calling user can access — new agents included automatically — minus a disabled list. Disable specific agents under **Disabled subagents** on the **Auto** tab (or via `GET`/`PUT /api/agents/:id/subagent-exclusions`). Each user's own access still applies, so **Auto** never means any agent can call any agent — a caller only reaches agents it could already see. Both modes stay within the agent's [environment](/docs/platform-environments): only same-environment agents are eligible.
 
 Auto delegation resolves per calling user. It applies in chat and other flows that carry a signed-in user; automated runs without one — a scheduled trigger, for example — fall back to the explicitly assigned targets.
+
+The [Advisor](/docs/platform-built-in-subagents#advisor) has its own switch under **Subagents**, outside the Auto and Custom split. It is the one built-in subagent an agent can delegate to.
 
 When an agent delegates work to another agent, Archestra tracks the full call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state, so downstream tool policy enforcement does not reset mid-run.
 

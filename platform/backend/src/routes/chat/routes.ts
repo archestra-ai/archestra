@@ -1660,7 +1660,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     (async () => {
                       logger.error(
                         {
-                          error,
+                          // Incognito: errors routinely echo prompt/tool
+                          // content — keep the app log content-free.
+                          error: conversation.incognito
+                            ? "[redacted: incognito conversation]"
+                            : error,
                           conversationId,
                           agentId,
                           ...getCorrelationLogFields(getActiveTraceContext()),

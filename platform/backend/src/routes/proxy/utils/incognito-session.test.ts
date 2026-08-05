@@ -102,6 +102,18 @@ describe("isIncognitoChatSession", () => {
     ).resolves.toBe(false);
   });
 
+  test("false for every chatops:* source — chat prefix must not over-match", async () => {
+    for (const source of [
+      "chatops:slack",
+      "chatops:ms-teams",
+      "chatops:telegram",
+    ] as const) {
+      await expect(
+        isIncognitoChatSession({ ...chatParams(), source }),
+      ).resolves.toBe(false);
+    }
+  });
+
   test("false when the request did not arrive over loopback", async () => {
     await expect(
       isIncognitoChatSession({ ...chatParams(), requestIp: "203.0.113.7" }),

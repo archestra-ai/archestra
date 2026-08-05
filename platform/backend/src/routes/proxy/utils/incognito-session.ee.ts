@@ -48,11 +48,11 @@ export async function isIncognitoChatSession(params: {
   userId: string | undefined;
 }): Promise<boolean> {
   const { source, requestIp, sessionId, userId } = params;
-  // chat:* covers the chat backend's internal subrequests too (e.g.
-  // chat:tool_call_repair) — a repair prompt carries the same conversation
-  // content as the turn it repairs.
+  // "chat" plus chat:* subrequests (e.g. chat:tool_call_repair — a repair
+  // prompt carries the same conversation content as the turn it repairs).
+  // NOT chatops:* — those are unrelated messaging-channel sessions.
   if (
-    !source?.startsWith("chat") ||
+    (source !== "chat" && !source?.startsWith("chat:")) ||
     !sessionId ||
     !userId ||
     !isLoopbackAddress(requestIp)

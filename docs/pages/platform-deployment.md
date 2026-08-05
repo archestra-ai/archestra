@@ -1446,10 +1446,11 @@ These environment variables configure the Incoming Email feature, which allows e
 
 These environment variables configure the ChatOps feature, which allows users to interact with agents through messaging platforms like Microsoft Teams. See [Agents - ChatOps: Microsoft Teams](/docs/platform-agents#chatops-microsoft-teams) for setup instructions.
 
-- **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Opt-out switch for the signup welcome sent to auto-provisioned chatops users.
+- **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Opt-out switch for the welcome message sent to auto-provisioned chatops users.
   - Default: `true`
-  - `false` skips the "finish signing up" message and link. Use it when your chatops users don't get web app access. Users are still auto-provisioned.
-  - The welcome is also skipped automatically when `ARCHESTRA_AUTH_DISABLE_INVITATIONS` is `true` — its signup link completes an invitation — or when an SSO identity provider is configured.
+  - `false` skips the welcome entirely. Use it when your chatops users don't get web app access. Users are still auto-provisioned.
+  - When an SSO identity provider is configured, the welcome carries a sign-in link instead of the finish-signup link.
+  - Without SSO, the welcome is skipped automatically when the finish-signup flow is unavailable — `ARCHESTRA_AUTH_DISABLE_INVITATIONS` or `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH` set to `true`.
 
 #### Microsoft Teams
 

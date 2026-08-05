@@ -44,7 +44,7 @@ import { shrinkImageForModel } from "@/utils/image-conversion";
 import {
   buildWelcomeMessage,
   ensureProvisionedUser,
-  shouldSendSignupWelcome,
+  resolveSignupWelcomeMode,
 } from "./auto-provision";
 import {
   applyChannelGate,
@@ -1128,12 +1128,14 @@ class SlackProvider implements ChatOpsProvider {
       };
     }
 
-    // Send welcome DM (fire-and-forget) — skip when disabled or SSO is enabled
-    if (
-      provisioned.invitationId !== null &&
-      (await shouldSendSignupWelcome())
-    ) {
+    // Send welcome DM (fire-and-forget) for newly provisioned users
+    const welcomeMode =
+      provisioned.invitationId !== null
+        ? await resolveSignupWelcomeMode()
+        : "none";
+    if (provisioned.invitationId !== null && welcomeMode !== "none") {
       const welcome = await buildWelcomeMessage({
+        mode: welcomeMode,
         invitationId: provisioned.invitationId,
         email: senderEmail,
         name: displayName,

@@ -149,19 +149,26 @@ export async function ensureProvisionedUser(params: {
   return { user, invitationId };
 }
 
+type SignupWelcomeMode = "signup" | "login" | "none";
+
 /**
- * Whether the signup welcome (the "finish signing up" message + link) should be
- * sent to newly auto-provisioned users. Skipped when:
- * - the operator disabled it via ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false
- *   (deployments whose chatops users don't get web app access)
- * - invitations are disabled (ARCHESTRA_AUTH_DISABLE_INVITATIONS=true) — the
- *   welcome's signup link completes an invitation, so it's a dead end there
- * - SSO is configured (users just sign in via their IdP)
+ * How (and whether) to welcome a newly auto-provisioned user:
+ * - "none"   — ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false (deployments
+ *   whose chatops users don't get web app access), or there is no working way
+ *   into the web app to point at: the finish-signup flow needs both
+ *   invitations and basic sign-in enabled, and no SSO provider exists.
+ * - "login"  — an SSO identity provider is configured: no invitation to
+ *   complete, the welcome just links to the sign-in page.
+ * - "signup" — default: the welcome links to the finish-signup page for the
+ *   user's invitation.
  */
-export async function shouldSendSignupWelcome(): Promise<boolean> {
-  if (!config.chatops.signupWelcomeEnabled) return false;
-  if (config.auth.disableInvitations) return false;
-  return !(await isSsoConfigured());
+export async function resolveSignupWelcomeMode(): Promise<SignupWelcomeMode> {
+  if (!config.chatops.signupWelcomeEnabled) return "none";
+  if (await isSsoConfigured()) return "login";
+  if (config.auth.disableInvitations || config.auth.disableBasicAuth) {
+    return "none";
+  }
+  return "signup";
 }
 
 interface WelcomeMessage {
@@ -174,13 +181,22 @@ interface WelcomeMessage {
  * Build the welcome message sent to auto-provisioned users via DM.
  */
 export async function buildWelcomeMessage(params: {
+  mode: Exclude<SignupWelcomeMode, "none">;
   invitationId: string;
   email: string;
   name: string;
 }): Promise<WelcomeMessage> {
-  const { invitationId, email, name } = params;
+  const { mode, invitationId, email, name } = params;
   const baseUrl = config.frontendBaseUrl;
   const appName = await OrganizationModel.getAppName();
+
+  if (mode === "login") {
+    return {
+      text: `Hey there 👋 We created a ${appName} user for you (${email}). Sign in to access the ${appName} web app.`,
+      actionUrl: `${baseUrl}/auth/sign-in`,
+      actionLabel: "Sign In",
+    };
+  }
 
   return {
     text: `Hey there 👋 We created a ${appName} user for you (${email}). Finish signing up to access the ${appName} web app.`,

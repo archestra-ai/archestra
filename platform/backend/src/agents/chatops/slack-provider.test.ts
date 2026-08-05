@@ -3522,6 +3522,7 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
   beforeEach(() => {
     config.chatops.signupWelcomeEnabled = true;
     config.auth.disableInvitations = false;
+    config.auth.disableBasicAuth = false;
   });
 
   test("first slash command provisions the user and DMs the signup link — once", async () => {
@@ -3594,8 +3595,10 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
-  test("configured SSO suppresses the DM — users sign in via their IdP", async () => {
+  test("configured SSO switches the DM to a sign-in link — no invitation to complete", async () => {
     await makeOrg();
+    // Typical SSO-enforced deployment: IdP is the only way in
+    config.auth.disableBasicAuth = true;
     const idpId = crypto.randomUUID();
     await db.insert(schema.identityProvidersTable).values({
       id: idpId,
@@ -3605,8 +3608,7 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
     });
     try {
       const email = `slash-sso-${crypto.randomUUID()}@example.com`;
-      const { provider, postMessage, conversationsOpen } =
-        createSlashSetup(email);
+      const { provider, postMessage } = createSlashSetup(email);
 
       const response = await provider.handleSlashCommand(
         slashBody(`U_SSO_${crypto.randomUUID().substring(0, 8)}`),
@@ -3614,12 +3616,32 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
 
       expect(response?.response_type).toBe("ephemeral");
       expect(await UserModel.findByEmail(email)).toBeTruthy();
-      expect(conversationsOpen).not.toHaveBeenCalled();
-      expect(postMessage).not.toHaveBeenCalled();
+
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1));
+      const dm = JSON.stringify(postMessage.mock.calls[0][0]);
+      expect(dm).toContain("/auth/sign-in");
+      expect(dm).not.toContain("sign-up-with-invitation");
     } finally {
       await db
         .delete(schema.identityProvidersTable)
         .where(eq(schema.identityProvidersTable.id, idpId));
     }
+  });
+
+  test("basic sign-in disabled without SSO suppresses the DM — signup can't set a password", async () => {
+    await makeOrg();
+    config.auth.disableBasicAuth = true;
+    const email = `slash-nobasic-${crypto.randomUUID()}@example.com`;
+    const { provider, postMessage, conversationsOpen } =
+      createSlashSetup(email);
+
+    const response = await provider.handleSlashCommand(
+      slashBody(`U_NOBASIC_${crypto.randomUUID().substring(0, 8)}`),
+    );
+
+    expect(response?.response_type).toBe("ephemeral");
+    expect(await UserModel.findByEmail(email)).toBeTruthy();
+    expect(conversationsOpen).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
   });
 });

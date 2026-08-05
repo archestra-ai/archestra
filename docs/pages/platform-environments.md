@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-07-30
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -69,9 +69,9 @@ This applies to both explicitly assigned resources and the implicit **Auto** acc
 
 ## Network egress policies
 
-An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent [code sandboxes](/docs/platform-code-sandbox) for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. Policies can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent [code sandboxes](/docs/platform-code-sandbox) for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Off** (`off`) blocks all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Denylist** (`unrestricted`) allows all egress — cluster-hosted workloads still get a fixed floor of blocked reserved ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
-When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
+When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in Denylist policy (`unrestricted`).
 
 How a policy applies depends on the workload. A **self-hosted MCP server** (or agent code sandbox) runs as a pod in your cluster, so the policy is enforced continuously at the network layer — a workload that needs broad outbound access (for example one that visits arbitrary sites) fails under a restrictive policy unless its destinations are allowlisted.
 

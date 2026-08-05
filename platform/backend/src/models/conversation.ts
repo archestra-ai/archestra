@@ -453,9 +453,6 @@ class ConversationModel {
     };
   }
 
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   /**
    * Incognito key bookkeeping for a conversation the caller has already
    * authorized: the flag plus the stored key fingerprint (the fingerprint is
@@ -501,7 +498,6 @@ class ConversationModel {
       .limit(1);
     return row?.incognito ?? false;
   }
-  // SPDX-SnippetEnd
 
   /**
    * Cheap ownership check for mutating-route gates (e.g. deleting a chat's

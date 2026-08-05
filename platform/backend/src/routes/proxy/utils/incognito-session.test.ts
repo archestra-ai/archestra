@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Contract under test — the LLM-proxy side of incognito chats:
  * - isIncognitoChatSession is true ONLY for the in-app chat's own loopback
@@ -26,8 +25,7 @@ import {
   INCOGNITO_REDACTED_MARKER,
   isIncognitoChatSession,
   redactIncognitoInteraction,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
-} from "./incognito-session.ee";
+} from "./incognito-session";
 
 // Map-backed fake with real cache semantics (auto-reset between tests), so
 // the positive-result caching contract is exercised for real.

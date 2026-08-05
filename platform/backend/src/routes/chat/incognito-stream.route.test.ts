@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Contract under test — the streaming half of incognito conversations
  * (POST /api/chat):
@@ -9,7 +8,7 @@
  *   encryption envelope, never plaintext
  * - the same key decrypts the transcript back through the GET route
  */
-import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
@@ -22,9 +21,6 @@ import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const ESCROW_PEM = publicKey.export({ type: "spki", format: "pem" }) as string;
 
 const KEY_HEADER = "x-archestra-incognito-key";
 
@@ -123,8 +119,10 @@ describe("POST /api/chat (incognito)", () => {
   let executionPromise: Promise<void> | undefined;
 
   beforeEach(async ({ makeAgent, makeMember, makeOrganization, makeUser }) => {
-    config.enterpriseFeatures.core = true;
-    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
+    // Free-feature posture: no enterprise license, no escrow key — incognito
+    // streaming must work without either.
+    config.enterpriseFeatures.core = false;
+    config.chatIncognito.escrowPublicKey = undefined;
     // Force server-side content encryption at rest OFF (a local .env may set
     // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): the envelope these tests assert on
     // must be the browser-DEK one — with a server key active, a broken DEK

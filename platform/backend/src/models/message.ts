@@ -2,8 +2,7 @@ import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import {
   decryptIncognitoMessageRow,
   encryptIncognitoMessageContent,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; only invoked when a conversation key is passed
-} from "@/content-encryption/incognito.ee";
+} from "@/content-encryption/incognito";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
 import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
 import {
@@ -216,9 +215,6 @@ class MessageModel {
       if (byDbId) return decryptRow(byDbId, conversationKey);
     }
 
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // Under content encryption (at-rest or per-conversation), content->>'id'
     // cannot see into envelopes; scan the conversation's (bounded) messages
     // in JS instead — decryption also passes plaintext rows through, so
@@ -234,7 +230,6 @@ class MessageModel {
       }
       return null;
     }
-    // SPDX-SnippetEnd
 
     // Content IDs carry no uniqueness guarantee even within one conversation
     // (client-supplied), so pick the newest match deterministically instead of

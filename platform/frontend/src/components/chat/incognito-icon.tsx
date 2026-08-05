@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { cn } from "@/lib/utils";
 
 /**

@@ -109,8 +109,7 @@ import type { SessionSource } from "./utils/headers/session-id";
 import {
   isIncognitoChatSession,
   redactIncognitoInteraction,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; incognito chat content suppression is enterprise-only
-} from "./utils/incognito-session.ee";
+} from "./utils/incognito-session";
 
 const {
   observability: {
@@ -653,9 +652,6 @@ export async function handleLLMProxy<
         : "provider_key";
   }
 
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   // Incognito chat sessions: interaction rows keep all usage/cost/session
   // metadata but their content-bearing fields are redacted, and span content
   // capture is suppressed. Resolved once up front (server-derived, fail
@@ -669,7 +665,6 @@ export async function handleLLMProxy<
     sessionId,
     userId,
   });
-  // SPDX-SnippetEnd
 
   // Check usage limits
   try {

@@ -348,16 +348,12 @@ class McpClient {
   // calls (e.g. browser stream ticks) detect a stale session simultaneously.
   // Only the first caller performs cleanup + retry; others wait and reuse.
   private sessionRecoveryLocks = new Map<string, Promise<void>>();
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   // Tool-call ids whose persisted log row must be content-redacted (incognito
   // chat conversations). Registered for the duration of the owning
   // executeToolCallForOwner call so every persistToolCall along that call's
   // paths (success, error, cancellation, retries) sees the flag without
   // threading it through every helper.
   private suppressedContentToolCallIds = new Set<string>();
-  // SPDX-SnippetEnd
   // Per-secretId lock to prevent concurrent OAuth refresh attempts from
   // thrashing rotating refresh tokens when multiple tool calls arrive at once.
   private oauthRefreshLocks = new Map<
@@ -450,9 +446,6 @@ class McpClient {
     tokenAuth?: TokenAuthContext,
     options?: ExecuteToolCallForOwnerOptions,
   ): Promise<CommonToolResult> {
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // Incognito chat calls register their tool-call id so persistToolCall —
     // reached through many helpers on the success, error, retry, and
     // cancellation paths — stores a content-redacted row. The id is minted
@@ -471,7 +464,6 @@ class McpClient {
         this.suppressedContentToolCallIds.delete(toolCall.id);
       }
     }
-    // SPDX-SnippetEnd
     return this.executeToolCallForOwnerImpl(
       toolCall,
       owner,
@@ -3292,9 +3284,6 @@ class McpClient {
       return;
     }
 
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // Incognito chat calls persist a content-redacted row: the tool name (and
     // owner/user metadata) stay for the audit surface, the arguments and the
     // result do not.
@@ -3309,7 +3298,6 @@ class McpClient {
     const storedToolResult: unknown = suppressContent
       ? { __redacted: "incognito" }
       : toolResult;
-    // SPDX-SnippetEnd
 
     try {
       const savedToolCall = await McpToolCallModel.create({

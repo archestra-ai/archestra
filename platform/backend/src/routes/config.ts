@@ -7,10 +7,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
-import {
-  isIncognitoChatEnabled,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; returns false when the feature is off
-} from "@/content-encryption/incognito.ee";
+import { isIncognitoChatEnabled } from "@/content-encryption/incognito";
 import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";

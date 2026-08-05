@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { FastifyRequest } from "fastify";
 import {
   INCOGNITO_KEY_HEADER,
@@ -6,8 +5,12 @@ import {
   incognitoDekMatches,
   isIncognitoChatEnabled,
   parseIncognitoDekHeader,
-  wrapIncognitoDek,
-} from "@/content-encryption/incognito.ee";
+} from "@/content-encryption/incognito";
+import {
+  isIncognitoEscrowConfigured,
+  produceIncognitoEscrow,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; escrow is enterprise-only and skipped when unconfigured
+} from "@/content-encryption/incognito-escrow.ee";
 import {
   ApiError,
   type ConversationContentKey,
@@ -27,22 +30,25 @@ export const INCOGNITO_KEY_MISMATCH_TYPE = "incognito_key_mismatch";
 /**
  * Validate an incognito creation request and produce the row fields: the
  * caller must present the freshly generated DEK so it can be fingerprinted
- * and escrow-wrapped. Never returns the DEK for storage.
+ * (and, when enterprise escrow is configured, escrow-wrapped — including the
+ * Vault-sink write, which is why this is async and needs the pre-generated
+ * conversation id). Never returns the DEK for storage. `incognitoEscrow` is
+ * null when no escrow key is configured: the free feature stores no
+ * recoverable copy of the key.
  */
-export function resolveIncognitoCreation(params: {
+export async function resolveIncognitoCreation(params: {
   request: FastifyRequest;
   conversationId: string;
-}): {
+}): Promise<{
   incognito: true;
   incognitoDekFingerprint: string;
-  incognitoEscrow: IncognitoEscrowBlob;
-} {
+  incognitoEscrow: IncognitoEscrowBlob | null;
+}> {
   if (!isIncognitoChatEnabled()) {
     throw new ApiError(
       403,
-      "Incognito chats are not enabled on this instance. They require an " +
-        "enterprise license and a configured " +
-        "ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY.",
+      "Incognito chats are disabled on this instance " +
+        "(ARCHESTRA_CHAT_INCOGNITO_ENABLED=false).",
     );
   }
   const dek = readDekHeader(params.request);
@@ -58,7 +64,12 @@ export function resolveIncognitoCreation(params: {
       params.conversationId,
       dek,
     ),
-    incognitoEscrow: wrapIncognitoDek(dek),
+    incognitoEscrow: isIncognitoEscrowConfigured()
+      ? await produceIncognitoEscrow({
+          dek,
+          conversationId: params.conversationId,
+        })
+      : null,
   };
 }
 

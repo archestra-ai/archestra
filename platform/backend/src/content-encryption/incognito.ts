@@ -1,20 +1,15 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import {
-  createHash,
-  createPublicKey,
-  constants as cryptoConstants,
-  type KeyObject,
-  publicEncrypt,
-  timingSafeEqual,
-} from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import config from "@/config";
-import type { IncognitoEscrowBlob } from "@/types/conversation";
-import { decryptStringWithKey, encryptStringWithKey } from "@/utils/crypto";
-import { isContentEnvelope } from "./index.ee";
+import {
+  decryptStringWithKey,
+  encryptStringWithKey,
+  isContentEnvelope,
+} from "@/utils/crypto";
 
 /**
  * Incognito chats: per-conversation content encryption under a browser-held
- * DEK (enterprise feature).
+ * DEK. Free feature, enabled by default; disable with
+ * ARCHESTRA_CHAT_INCOGNITO_ENABLED=false.
  *
  * The browser generates a random 32-byte DEK, keeps it in browser storage,
  * and presents it on every request for that conversation via the
@@ -23,11 +18,10 @@ import { isContentEnvelope } from "./index.ee";
  * layer uses, but under the conversation DEK with a conversation-bound AAD,
  * and the raw DEK is never persisted.
  *
- * Enterprise auditability: at creation the DEK is wrapped to an
- * operator-configured RSA public key (ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY)
- * whose private half is held offline by the customer's security team. The
- * wrapped blob is stored on the conversation row; recovering content is an
- * explicit break-glass procedure, not something the platform can do alone.
+ * Enterprise add-on (content-encryption/incognito-escrow.ee.ts): the DEK can
+ * additionally be wrapped to an operator-configured RSA escrow public key at
+ * creation for break-glass recovery. Without escrow configured, no recoverable
+ * copy of the key exists anywhere — only the DEK fingerprint is stored.
  *
  * This is NOT end-to-end encryption: the server sees the DEK and plaintext
  * while serving requests (it must — it forwards content to the LLM provider
@@ -43,29 +37,9 @@ import { isContentEnvelope } from "./index.ee";
 /** Request header carrying the base64url-encoded 32-byte conversation DEK. */
 export const INCOGNITO_KEY_HEADER = "x-archestra-incognito-key";
 
-/** True when incognito chats can be offered: EE license + valid escrow key. */
+/** True when incognito chats are offered (on unless explicitly disabled). */
 export function isIncognitoChatEnabled(): boolean {
-  return Boolean(config.enterpriseFeatures.core && escrowKeyOrNull());
-}
-
-/**
- * Boot-time validation, mirroring the content-encryption guard's posture:
- * an operator who configured the escrow key must never silently run with it
- * ignored (bad PEM, too-small key, or missing license).
- */
-export function verifyIncognitoChatConfig(): void {
-  const pem = config.chatIncognito.escrowPublicKey;
-  if (!pem) return;
-
-  if (!config.enterpriseFeatures.core) {
-    throw new Error(
-      "Incognito chats (ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY) require " +
-        "an enterprise license. Unset the variable or contact " +
-        "sales@archestra.ai.",
-    );
-  }
-  // Throws with the parse/size problem named.
-  loadEscrowKey(pem);
+  return config.chatIncognito.enabled;
 }
 
 /**
@@ -124,35 +98,6 @@ export function incognitoDekMatches(params: {
 }
 
 /**
- * Wrap a DEK to the escrow public key. RSA-OAEP with an EXPLICIT sha256 —
- * Node's default OAEP hash is SHA-1. The blob is versioned so the offline
- * recovery procedure is unambiguous.
- */
-export function wrapIncognitoDek(dek: Buffer): IncognitoEscrowBlob {
-  const key = escrowKeyOrNull();
-  if (!key) {
-    throw new Error(
-      "incognito escrow public key is not configured — this is a bug in the " +
-        "enablement gating",
-    );
-  }
-  const wrapped = publicEncrypt(
-    {
-      key,
-      padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING,
-      oaepHash: "sha256",
-    },
-    dek,
-  );
-  return {
-    v: 1,
-    alg: "RSA-OAEP-256",
-    escrowKeyFingerprint: escrowKeyFingerprint(key),
-    wrappedDek: wrapped.toString("base64"),
-  };
-}
-
-/**
  * Encrypt a message content value under the conversation DEK. The AAD binds
  * the ciphertext to both the column and the conversation, so ciphertext
  * cannot be transplanted between conversations sharing a leaked DEK.
@@ -194,53 +139,7 @@ export function decryptIncognitoMessageRow<T extends object>(
 // === Internal ===
 
 const DEK_LENGTH_BYTES = 32;
-const MIN_ESCROW_MODULUS_BITS = 2048;
-
-let cachedEscrowKey: KeyObject | null = null;
-let cachedEscrowKeyPem: string | null = null;
 
 function incognitoMessageAad(conversationId: string): string {
   return `messages.content|incognito:${conversationId}`;
-}
-
-function escrowKeyOrNull(): KeyObject | null {
-  const pem = config.chatIncognito.escrowPublicKey;
-  if (!pem) return null;
-  if (cachedEscrowKey && cachedEscrowKeyPem === pem) return cachedEscrowKey;
-  try {
-    cachedEscrowKey = loadEscrowKey(pem);
-    cachedEscrowKeyPem = pem;
-    return cachedEscrowKey;
-  } catch {
-    // Invalid key: the boot guard rejects this at startup; treat the feature
-    // as disabled rather than half-working if it is somehow reached.
-    return null;
-  }
-}
-
-function loadEscrowKey(pem: string): KeyObject {
-  // Tolerate env-var PEMs with literal "\n" sequences.
-  const normalized = pem.includes("-----")
-    ? pem.replace(/\\n/g, "\n")
-    : Buffer.from(pem, "base64").toString("utf8");
-  const key = createPublicKey(normalized);
-  if (key.asymmetricKeyType !== "rsa") {
-    throw new Error(
-      "ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY must be an RSA public key " +
-        `(got ${key.asymmetricKeyType})`,
-    );
-  }
-  const modulusBits = key.asymmetricKeyDetails?.modulusLength ?? 0;
-  if (modulusBits < MIN_ESCROW_MODULUS_BITS) {
-    throw new Error(
-      `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY must be at least ` +
-        `${MIN_ESCROW_MODULUS_BITS} bits (got ${modulusBits})`,
-    );
-  }
-  return key;
-}
-
-function escrowKeyFingerprint(key: KeyObject): string {
-  const der = key.export({ type: "spki", format: "der" });
-  return createHash("sha256").update(der).digest("hex").slice(0, 16);
 }

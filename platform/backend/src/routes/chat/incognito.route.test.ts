@@ -1,8 +1,16 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Contract under test — incognito conversations at the route level:
- * - creation is gated on an EE license + configured escrow key + a valid
- *   32-byte key header, and stores fingerprint + escrow but never the raw key
+ * - the feature is FREE and on by default: creation needs no license and no
+ *   escrow key, only a valid 32-byte key header; disabling it via
+ *   ARCHESTRA_CHAT_INCOGNITO_ENABLED=false rejects creation (403)
+ * - without escrow configured, the fingerprint is stored and
+ *   incognito_escrow stays NULL (no recoverable key copy anywhere)
+ * - with enterprise escrow configured, the RSA-wrapped blob is stored and
+ *   independently recoverable with the offline private key
+ * - with the enterprise Vault escrow sink, the blob is written to
+ *   `incognito-escrow/<conversationId>` under the configured secret path and
+ *   the row stores only a reference marker; a failed Vault write fails the
+ *   creation (500) with no conversation row (fail closed)
  * - message content at rest is an envelope only the browser-held key opens;
  *   GET decrypts with the key, returns the locked shape without it, and 409s
  *   on a wrong key
@@ -17,20 +25,39 @@ import {
   randomBytes,
 } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { vi } from "vitest";
 import config from "@/config";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 import { runContentEncryptionBackfill } from "@/content-encryption/backfill.ee";
 import {
   _resetContentKeys,
-  isContentEnvelope,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 } from "@/content-encryption/index.ee";
 import db from "@/database";
 import MessageModel from "@/models/message";
+import { secretManagerCoordinator } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
+import { isContentEnvelope } from "@/utils/crypto";
+
+// Vault HTTP boundary for the escrow vault-sink tests — the same seam
+// secrets-manager.test.ts mocks. Everything else runs real against PGlite.
+const mockVaultClient = vi.hoisted(() => ({
+  write: vi.fn(),
+  read: vi.fn(),
+  delete: vi.fn(),
+  list: vi.fn(),
+  kubernetesLogin: vi.fn(),
+}));
+
+vi.mock("node-vault", () => {
+  return {
+    __esModule: true,
+    default: () => mockVaultClient,
+  };
+});
 
 const { publicKey, privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -47,8 +74,22 @@ describe("incognito conversation routes", () => {
   let dek: Buffer;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
-    config.enterpriseFeatures.core = true;
-    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
+    // Free-feature posture by default: NO enterprise license, NO escrow key.
+    // Individual tests opt into the enterprise escrow pieces they exercise.
+    // Explicit resets (not just overrides): this file mocks node-vault, so it
+    // runs in the isolated "mocked" vitest project where the shared-worker
+    // config auto-restore does not apply — a flag a test flips would
+    // otherwise leak into the next test.
+    config.enterpriseFeatures.core = false;
+    config.chatIncognito.enabled = true;
+    config.chatIncognito.escrowPublicKey = undefined;
+    config.chatIncognito.escrowSink = "db";
+    // Force at-rest content encryption OFF (a local .env may set
+    // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): incognito must be exercised on a
+    // free-instance posture, and the envelopes asserted on must be the
+    // browser-DEK ones.
+    config.contentEncryption.secret = undefined;
+    _resetContentKeys();
     dek = randomBytes(32);
 
     currentUser = await makeUser();
@@ -92,21 +133,20 @@ describe("incognito conversation routes", () => {
     return response.json().id as string;
   }
 
-  describe("POST /api/chat/conversations (incognito)", () => {
-    test("rejects without an enterprise license", async () => {
-      config.enterpriseFeatures.core = false;
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/chat/conversations",
-        headers: dekHeader(),
-        payload: { agentId, incognito: true },
-      });
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error.message).toContain("enterprise");
-    });
+  async function readIncognitoRow(id: string) {
+    const raw = await db.execute<{
+      incognito: boolean;
+      incognito_dek_fingerprint: string | null;
+      incognito_escrow: Record<string, unknown> | null;
+    }>(
+      sql`SELECT incognito, incognito_dek_fingerprint, incognito_escrow FROM conversations WHERE id = ${id}::uuid`,
+    );
+    return raw.rows[0];
+  }
 
-    test("rejects without a configured escrow key", async () => {
-      config.chatIncognito.escrowPublicKey = undefined;
+  describe("POST /api/chat/conversations (incognito)", () => {
+    test("rejects when disabled via ARCHESTRA_CHAT_INCOGNITO_ENABLED", async () => {
+      config.chatIncognito.enabled = false;
       const response = await app.inject({
         method: "POST",
         url: "/api/chat/conversations",
@@ -115,7 +155,7 @@ describe("incognito conversation routes", () => {
       });
       expect(response.statusCode).toBe(403);
       expect(response.json().error.message).toContain(
-        "ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY",
+        "ARCHESTRA_CHAT_INCOGNITO_ENABLED",
       );
     });
 
@@ -153,7 +193,7 @@ describe("incognito conversation routes", () => {
       expect(response.json().error.message).toContain("project");
     });
 
-    test("stores fingerprint + recoverable escrow, static title, and never the raw key", async () => {
+    test("escrow-less creation (free): fingerprint stored, escrow NULL, static title, never the raw key", async () => {
       const id = await createIncognitoConversation();
 
       const body = (
@@ -169,24 +209,24 @@ describe("incognito conversation routes", () => {
       expect(body.incognitoEscrow).toBeUndefined();
       expect(body.incognitoDekFingerprint).toBeUndefined();
 
-      const raw = await db.execute<{
-        incognito: boolean;
-        incognito_dek_fingerprint: string | null;
-        incognito_escrow: {
-          v: number;
-          alg: string;
-          wrappedDek: string;
-        } | null;
-      }>(
-        sql`SELECT incognito, incognito_dek_fingerprint, incognito_escrow FROM conversations WHERE id = ${id}::uuid`,
-      );
-      const row = raw.rows[0];
+      const row = await readIncognitoRow(id);
       expect(row.incognito).toBe(true);
       expect(row.incognito_dek_fingerprint).toBeTruthy();
       // The fingerprint is a digest, not the key.
       expect(row.incognito_dek_fingerprint).not.toContain(
         dek.toString("base64url"),
       );
+      // No escrow key configured: NO recoverable copy of the key exists.
+      expect(row.incognito_escrow).toBeNull();
+    });
+
+    test("with enterprise escrow configured: recoverable blob stored", async () => {
+      config.enterpriseFeatures.core = true;
+      config.chatIncognito.escrowPublicKey = ESCROW_PEM;
+
+      const id = await createIncognitoConversation();
+      const row = await readIncognitoRow(id);
+      expect(row.incognito_dek_fingerprint).toBeTruthy();
       // The escrow blob is independently recoverable with the private key —
       // the break-glass contract.
       expect(row.incognito_escrow?.alg).toBe("RSA-OAEP-256");
@@ -196,14 +236,102 @@ describe("incognito conversation routes", () => {
           padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING,
           oaepHash: "sha256",
         },
-        Buffer.from(row.incognito_escrow?.wrappedDek ?? "", "base64"),
+        Buffer.from(
+          (row.incognito_escrow?.wrappedDek as string) ?? "",
+          "base64",
+        ),
       );
       expect(recovered.equals(dek)).toBe(true);
     });
   });
 
+  describe("escrow vault sink (enterprise)", () => {
+    beforeEach(async () => {
+      config.enterpriseFeatures.core = true;
+      config.chatIncognito.escrowPublicKey = ESCROW_PEM;
+      config.chatIncognito.escrowSink = "vault";
+      config.secretsManager.type = "VAULT";
+      process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://vault.test:8200";
+      process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "test-token";
+      mockVaultClient.write.mockReset();
+      mockVaultClient.write.mockResolvedValue({});
+      await secretManagerCoordinator.initialize();
+    });
+
+    afterEach(async () => {
+      delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
+      delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
+      config.secretsManager.type = "DB";
+      await secretManagerCoordinator.initialize();
+    });
+
+    test("writes the blob to incognito-escrow/<id> and stores the reference marker", async () => {
+      const id = await createIncognitoConversation();
+
+      // KV v2 default path prefix + the escrow folder + the conversation id.
+      const expectedPath = `secret/data/archestra/incognito-escrow/${id}`;
+      expect(mockVaultClient.write).toHaveBeenCalledTimes(1);
+      const [writtenPath, payload] = mockVaultClient.write.mock.calls[0] as [
+        string,
+        { data: { value: string } },
+      ];
+      expect(writtenPath).toBe(expectedPath);
+
+      // The value written to Vault is the wrapped blob, recoverable offline.
+      const writtenBlob = JSON.parse(payload.data.value) as {
+        alg: string;
+        wrappedDek: string;
+      };
+      expect(writtenBlob.alg).toBe("RSA-OAEP-256");
+      const recovered = privateDecrypt(
+        {
+          key: privateKey,
+          padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING,
+          oaepHash: "sha256",
+        },
+        Buffer.from(writtenBlob.wrappedDek, "base64"),
+      );
+      expect(recovered.equals(dek)).toBe(true);
+
+      // The row stores only the reference marker — never the blob.
+      const row = await readIncognitoRow(id);
+      expect(row.incognito_escrow).toEqual({
+        v: 1,
+        sink: "vault",
+        path: expectedPath,
+      });
+      expect(row.incognito_dek_fingerprint).toBeTruthy();
+    });
+
+    test("a failed Vault write fails the creation (500) with NO conversation row", async () => {
+      mockVaultClient.write.mockRejectedValue(new Error("vault sealed"));
+
+      const before = await db.execute<{ count: string }>(
+        sql`SELECT count(*) FROM conversations WHERE incognito`,
+      );
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat/conversations",
+        headers: dekHeader(),
+        payload: { agentId, incognito: true },
+      });
+      expect(response.statusCode).toBe(500);
+      expect(response.json().error.message).toContain("Vault");
+
+      const after = await db.execute<{ count: string }>(
+        sql`SELECT count(*) FROM conversations WHERE incognito`,
+      );
+      expect(after.rows[0].count).toBe(before.rows[0].count);
+    });
+  });
+
   describe("GET /api/chat/conversations/:id (incognito)", () => {
     test("decrypts with the key; locked without it; 409 on a wrong key", async () => {
+      // Orthogonality pin: this full roundtrip runs on a FREE instance — no
+      // enterprise license (beforeEach) and no at-rest content-encryption
+      // secret. Incognito must not depend on either.
+      expect(config.contentEncryption.secret).toBeUndefined();
+
       const id = await createIncognitoConversation();
       const content = {
         id: "msg-1",
@@ -344,7 +472,9 @@ describe("incognito conversation routes", () => {
         sql`SELECT content FROM messages WHERE conversation_id = ${id}::uuid`,
       );
 
-      // Enable server-side content encryption and run the sweep to completion.
+      // Enable server-side content encryption (enterprise) and run the sweep
+      // to completion.
+      config.enterpriseFeatures.core = true;
       config.contentEncryption.secret = "server-secret-01234567890123456789";
       _resetContentKeys();
       try {

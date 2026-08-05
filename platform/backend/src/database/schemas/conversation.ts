@@ -94,20 +94,17 @@ const conversationsTable = softDeletablePgTable(
     titleIsPlaceholder: boolean("title_is_placeholder")
       .notNull()
       .default(false),
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     /**
-     * Incognito conversations (enterprise): message content is encrypted
-     * under a browser-held per-conversation key the server never persists.
+     * Incognito conversations: message content is encrypted under a
+     * browser-held per-conversation key the server never persists.
      * `incognitoDekFingerprint` rejects wrong keys up front;
-     * `incognitoEscrow` is the versioned RSA-wrapped copy of the key for the
-     * security team's break-glass recovery (see content-encryption/incognito.ee.ts).
+     * `incognitoEscrow` is the enterprise escrow record (RSA-wrapped key or
+     * Vault reference — see content-encryption/incognito-escrow.ee.ts), null
+     * when escrow is not configured.
      */
     incognito: boolean("incognito").notNull().default(false),
     incognitoDekFingerprint: text("incognito_dek_fingerprint"),
     incognitoEscrow: jsonb("incognito_escrow").$type<IncognitoEscrowBlob>(),
-    // SPDX-SnippetEnd
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
     lastMessageAt: timestamp("last_message_at", { mode: "date" })
       .notNull()

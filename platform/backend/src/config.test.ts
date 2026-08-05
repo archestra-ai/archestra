@@ -45,6 +45,7 @@ import config, {
   parseHackathonGalleryRepo,
   parseHackathonRecorderEnabled,
   parseHackathonRecorderMaxFinalCutMs,
+  parseIncognitoEscrowSink,
   parseK8sResourceQuantity,
   parseLogFormat,
   parseMetricsPort,
@@ -2867,6 +2868,27 @@ describe("parseNonNegativeInt", () => {
   test("accepts positive values and rejects negative ones", () => {
     expect(parseNonNegativeInt("30", 90)).toBe(30);
     expect(parseNonNegativeInt("-5", 90)).toBe(90);
+  });
+});
+
+describe("parseIncognitoEscrowSink", () => {
+  test("defaults to db when unset or blank", () => {
+    expect(parseIncognitoEscrowSink(undefined)).toBe("db");
+    expect(parseIncognitoEscrowSink("")).toBe("db");
+    expect(parseIncognitoEscrowSink("  ")).toBe("db");
+  });
+
+  test("accepts db and vault case-insensitively", () => {
+    expect(parseIncognitoEscrowSink("db")).toBe("db");
+    expect(parseIncognitoEscrowSink("DB")).toBe("db");
+    expect(parseIncognitoEscrowSink("vault")).toBe("vault");
+    expect(parseIncognitoEscrowSink("Vault")).toBe("vault");
+  });
+
+  test("rejects any other value (escrow must never silently fall back)", () => {
+    expect(() => parseIncognitoEscrowSink("s3")).toThrow(
+      /ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK/,
+    );
   });
 });
 

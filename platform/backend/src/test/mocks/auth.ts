@@ -45,6 +45,7 @@ export function authModuleMock() {
     fastifyAuthPlugin: vi.fn(),
     // ./utils
     hasPermission: vi.fn(),
+    isGlobalAdmin: vi.fn(),
     userHasPermission: vi.fn(),
   };
 }

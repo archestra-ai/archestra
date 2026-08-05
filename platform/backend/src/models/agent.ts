@@ -1,5 +1,6 @@
 import {
   type ArchestraToolShortName,
+  BUILT_IN_AGENT_IDS,
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
   type PaginationQuery,
@@ -72,6 +73,12 @@ import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
+
+/** The columns a boot-time sync reconciles against a shipped built-in definition. */
+type BuiltInAgentSyncRow = Pick<
+  typeof schema.agentsTable.$inferSelect,
+  "id" | "name" | "description" | "systemPrompt" | "builtInAgentConfig"
+>;
 
 class AgentModel {
   /**
@@ -629,6 +636,13 @@ class AgentModel {
       agentType?: AgentType;
       agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
+      /**
+       * Keep the advisor in the results even while built-ins are excluded.
+       * It is the one built-in another agent is meant to reach, so the
+       * subagent picker needs it without also offering the platform
+       * machinery — dual-LLM, compaction, title generation.
+       */
+      includeAdvisor?: boolean;
       scope?: AgentScope;
       excludeOtherPersonalAgents?: boolean;
       status?: AgentRecordStatus;
@@ -665,7 +679,17 @@ class AgentModel {
 
     // Exclude built-in agents when explicitly requested or when user is not an admin
     if (options?.excludeBuiltIn || !isAgentAdmin) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+      whereConditions.push(
+        options?.includeAdvisor
+          ? (or(
+              eq(schema.agentsTable.builtIn, false),
+              eq(
+                sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+                BUILT_IN_AGENT_IDS.ADVISOR,
+              ),
+            ) as SQL)
+          : eq(schema.agentsTable.builtIn, false),
+      );
     }
 
     // Filter by scope if specified
@@ -1655,6 +1679,32 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
+  /**
+   * Agents a toolset backfill may assign to. Everything in the organization
+   * except the advisor, which answers questions and must not act: a tool it
+   * holds is one a consultation can call, and the advisor's whole contract is
+   * that it returns a recommendation and edits nothing.
+   */
+  static async findToolAssignableIdsByOrganizationId(
+    organizationId: string,
+  ): Promise<string[]> {
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          ne(
+            sql`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
+            BUILT_IN_AGENT_IDS.ADVISOR,
+          ),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+
+    return agents.map((agent) => agent.id);
+  }
+
   static async findAllIds(): Promise<string[]> {
     const agents = await db
       .select({ id: schema.agentsTable.id })
@@ -1736,11 +1786,16 @@ class AgentModel {
 
   /**
    * Internal agents eligible as Auto-mode delegation targets for a caller:
-   * agentType "agent", not built-in, not soft-deleted, that the caller user can
-   * access (org, own personal, or a team the user belongs to), minus the caller
-   * agent itself. This is the delegation analog of
+   * agentType "agent", not soft-deleted, that the caller user can access (org,
+   * own personal, or a team the user belongs to), minus the caller agent
+   * itself. This is the delegation analog of
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
+   *
+   * Built-in agents are excluded with one exception: the advisor exists to be
+   * consulted, so it is the only built-in offered as a delegation target. The
+   * rest back platform machinery — dual-LLM, compaction, title generation —
+   * and delegating to them means driving an internal mechanism by hand.
    */
   static async findAccessibleDelegationTargets(params: {
     userId: string;
@@ -1751,12 +1806,20 @@ class AgentModel {
      * boundaries (null is the Default environment), mirroring tool isolation.
      */
     environmentId: string | null;
-  }): Promise<Pick<Agent, "id" | "name" | "description">[]> {
+  }): Promise<
+    Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
+  > {
     const { userId, isAdmin, excludeAgentId, environmentId } = params;
 
     const baseConditions = [
       eq(schema.agentsTable.agentType, "agent"),
-      eq(schema.agentsTable.builtIn, false),
+      or(
+        eq(schema.agentsTable.builtIn, false),
+        eq(
+          sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+          BUILT_IN_AGENT_IDS.ADVISOR,
+        ),
+      ),
       ne(schema.agentsTable.id, excludeAgentId),
       environmentId === null
         ? isNull(schema.agentsTable.environmentId)
@@ -1770,6 +1833,7 @@ class AgentModel {
           id: schema.agentsTable.id,
           name: schema.agentsTable.name,
           description: schema.agentsTable.description,
+          builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
         })
         .from(schema.agentsTable)
         .where(and(...baseConditions))
@@ -1781,6 +1845,7 @@ class AgentModel {
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         description: schema.agentsTable.description,
+        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
       })
       .from(schema.agentsTable)
       .leftJoin(
@@ -2339,6 +2404,16 @@ class AgentModel {
        * additive pre-fill re-add built-ins the source had un-excluded.
        */
       skipExclusionPrefill?: boolean;
+      /**
+       * Skip this update's config version fork. Set by callers that replay
+       * several writes as one user action and fork once at the end (see
+       * `restoreAgentVersion`) — one action should produce one version.
+       *
+       * The returned agent's `latestVersion` is then whatever the head was
+       * BEFORE the caller's own closing fork, so a caller that surfaces it
+       * must re-read the agent afterwards.
+       */
+      deferVersionFork?: boolean;
     },
   ): Promise<Agent | null> {
     let updatedAgent:
@@ -2497,9 +2572,11 @@ class AgentModel {
     // this mutation's final state), and unconditionally: a relational-only
     // update skips the agents-row write yet still changes config. Best-effort:
     // a versioning failure must never fail the update itself.
-    const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
-    if (fork && updatedAgent) {
-      updatedAgent.latestVersion = fork.version;
+    if (!options?.deferVersionFork) {
+      const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
+      if (fork && updatedAgent) {
+        updatedAgent.latestVersion = fork.version;
+      }
     }
 
     const [
@@ -2529,6 +2606,42 @@ class AgentModel {
       connectorIds: currentConnectorIds,
       suggestedPrompts: currentSuggestedPrompts.get(id) ?? [],
     };
+  }
+
+  /**
+   * The advisor is the one built-in that exists per environment rather than
+   * once per organization: delegation never crosses environments, so an agent
+   * can only reach the advisor sitting in its own. `null` is the Default
+   * environment, and is a distinct row from every named one.
+   */
+  static async getAdvisorForEnvironment(params: {
+    organizationId: string;
+    environmentId: string | null;
+  }): Promise<BuiltInAgentSyncRow | null> {
+    const { organizationId, environmentId } = params;
+
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        description: schema.agentsTable.description,
+        systemPrompt: schema.agentsTable.systemPrompt,
+        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.ADVISOR}`,
+          eq(schema.agentsTable.organizationId, organizationId),
+          environmentId === null
+            ? isNull(schema.agentsTable.environmentId)
+            : eq(schema.agentsTable.environmentId, environmentId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
   }
 
   /**
@@ -2675,6 +2788,81 @@ class AgentModel {
       eq(schema.agentsTable.id, id),
     );
     return count > 0;
+  }
+
+  /**
+   * Permanently destroy a soft-deleted agent. Irreversible.
+   *
+   * Everything the agent owns goes by cascade: versions, tool assignments and
+   * exclusions, team/user grants, labels, knowledge bases, connector
+   * assignments, suggested prompts, hook files, scheduled triggers and their
+   * runs, chatops bindings, connection setups, and gateway tasks. Its history
+   * SURVIVES, detached: conversations, interactions, MCP tool calls, and A2A
+   * tasks all have `ON DELETE SET NULL` on their agent column. The org, member,
+   * and /connection defaults clear themselves the same way — those foreign keys
+   * exist in the database even though Drizzle cannot declare them (they would
+   * make organization → agent → organization circular).
+   *
+   * ## Why the statement timeout is raised, and why only to five minutes
+   *
+   * `interactions.profile_id` is one of those `SET NULL` columns, and a busy
+   * LLM proxy owns millions of rows there. Postgres performs that rewrite
+   * INSIDE the DELETE statement, so the pool-wide 30s `statement_timeout`
+   * applies to the whole cascade and would abort — identically on every retry,
+   * making a large proxy permanently un-purgeable. `SET LOCAL` scopes the
+   * change to this transaction and reverts on commit, so no other query loses
+   * its safety net.
+   *
+   * There is also a floor cost independent of the agent's size:
+   * `conversations.agent_id` and `tools.agent_id` carry no index, so each
+   * constraint is enforced with a sequential scan of its table. Indexing them
+   * to speed up a rare admin action would tax every insert into those tables
+   * forever, which is not a trade worth making.
+   *
+   * Five minutes rather than no limit at all. The transaction is long by
+   * design: it blocks no proxy traffic — interactions are insert-only, and this
+   * touches existing rows — but it holds back vacuum cleanup database-wide
+   * while it runs and pins a pool connection, so it needs an end. Postgres
+   * counts lock waits toward `statement_timeout`, so this bounds a purge stuck
+   * behind someone else's lock too, and no separate `lock_timeout` is needed. A
+   * purge that genuinely needs longer fails with SQLSTATE 57014 and leaves the
+   * agent in the trash, unharmed — the whole thing is one transaction, so an
+   * interruption discards all of its progress rather than half-purging. That
+   * revives the un-purgeable-proxy problem above for the very largest agents;
+   * raise this deliberately if one ever shows up, rather than removing it.
+   *
+   * Returns false when there was no soft-deleted row to take, which is how a
+   * restore that won the race reports itself.
+   */
+  static async purge(id: string, organizationId: string): Promise<boolean> {
+    return withDbTransaction(async (tx) => {
+      // `sql.raw`, not an interpolated value: SET is a utility command and
+      // takes no bind parameters, so `= $1` is a syntax error. The value is a
+      // module constant, never caller input.
+      await tx.execute(
+        sql.raw(`SET LOCAL statement_timeout = ${PURGE_STATEMENT_TIMEOUT_MS}`),
+      );
+
+      // The row lock is the race guard: a concurrent restore either commits
+      // first (leaving no soft-deleted row here) or blocks until this
+      // transaction commits and then finds no row at all. Restore wins, and
+      // never against a half-purged agent.
+      const [locked] = await tx
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.id, id),
+            eq(schema.agentsTable.organizationId, organizationId),
+            isNotNull(schema.agentsTable.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!locked) return false;
+
+      return AgentModel.hardDelete(id, tx);
+    });
   }
 
   /** Check if an agent has any Playwright tools assigned via agent_tools. */
@@ -3338,6 +3526,37 @@ class AgentModel {
     }
     throw new Error("Unreachable");
   }
+  /**
+   * Identity of an agent for the audit trail, and nothing else — id, name, and
+   * type. The permanent-delete route uses this instead of
+   * {@link findByIdForAudit} because a purge is audited by identity only: the
+   * point of the action is to destroy the config, so an audit row that
+   * preserved a full snapshot of it would defeat the request.
+   *
+   * Does not filter soft-deleted rows — the purge target is by definition in
+   * the trash, so the filtered read paths cannot serve this.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -3366,6 +3585,8 @@ class AgentModel {
       connectorIds,
       delegations,
       excludedSubagentIds,
+      excludedToolIds,
+      hookRows,
       suggestedPrompts,
       modelRows,
       keyRows,
@@ -3377,6 +3598,18 @@ class AgentModel {
       AgentConnectorAssignmentModel.getConnectorIds(id),
       AgentToolModel.getDelegationTargets(id),
       AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
+      AgentExcludedToolModel.findToolIdsByAgent(id),
+      // Hook IDENTITY only, never `content`: a hook edit must produce a
+      // non-empty diff, but script bodies would ride along on every unrelated
+      // agent audit record.
+      db
+        .select({
+          event: schema.hookFilesTable.event,
+          fileName: schema.hookFilesTable.fileName,
+          enabled: schema.hookFilesTable.enabled,
+        })
+        .from(schema.hookFilesTable)
+        .where(eq(schema.hookFilesTable.agentId, id)),
       AgentSuggestedPromptModel.getForAgent(id),
       // Resolve the live modelId FK to its human-readable identity so a model
       // change surfaces as a real diff — the legacy llmModel text column is
@@ -3450,6 +3683,10 @@ class AgentModel {
       labels: labels.sort(),
       delegationTargets,
       excludedSubagentIds: [...excludedSubagentIds].sort(),
+      excludedToolIds: [...excludedToolIds].sort(),
+      hooks: hookRows
+        .map((h) => `${h.event}/${h.fileName}${h.enabled ? "" : " (disabled)"}`)
+        .sort(),
       suggestedPrompts,
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
@@ -3498,5 +3735,12 @@ function isQueryKnowledgeSourcesTool(toolName: string): boolean {
     TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
   );
 }
+
+/**
+ * Ceiling for {@link AgentModel.purge}'s transaction, ten times the pool-wide
+ * default. See that method for why the default is too low and why this is a
+ * finite number rather than no limit at all.
+ */
+const PURGE_STATEMENT_TIMEOUT_MS = 300_000;
 
 export default AgentModel;

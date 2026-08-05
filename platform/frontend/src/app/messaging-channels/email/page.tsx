@@ -418,9 +418,11 @@ function EmailAgentRow({
           <ResourceVisibilityBadge
             scope={agent.scope}
             teams={agent.teams}
+            users={agent.users}
             authorId={agent.authorId}
             authorName={agent.authorName}
             currentUserId={currentUserId}
+            showSelfAsMe
           />
         </div>
       </TableCell>

@@ -119,9 +119,11 @@ Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skil
 
 Deleting a skill hides it from every list, activation, slash command, and share link. It also stops the skill's GitHub sync. The skill is not destroyed — it moves to a trash. Its name is free to reuse right away, so you can create a new skill with that name.
 
-Admins and team admins switch the status filter to **Deleted** to open the trash. The one action there is **Restore**, which returns the skill to active. A restore is refused when an active skill already holds the name — rename or delete that one, then restore again.
+Admins and team admins switch the status filter to **Deleted** to open the trash. **Restore** returns the skill to active. A restore is refused when an active skill already holds the name — rename or delete that one, then restore again.
 
-Deleting a built-in skill is a lasting opt-out — it stays gone across restarts. You can still restore it from the trash.
+Global admins can also delete a skill from the trash for good, through the API. This destroys the skill, every version, and every file it holds. Nothing brings it back. A skill mounted in a code sandbox is refused until that sandbox is gone.
+
+Deleting a built-in skill is a lasting opt-out — it stays gone across restarts. You can still restore it from the trash. Built-in skills cannot be deleted for good, since the trash record is what keeps them from coming back.
 
 A synced skill can lose its GitHub token while it sits in the trash. It still restores, but the next pull runs unauthenticated — for a now-private repo that fails with a sync error. Re-attach a token under **Settings → GitHub** to fix it.
 

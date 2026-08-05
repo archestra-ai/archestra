@@ -58,6 +58,7 @@ import {
   toolInEnvironmentPredicate,
 } from "@/services/environments/environment-isolation";
 import type {
+  Agent,
   AssignedTool,
   ExtendedTool,
   InsertTool,
@@ -1710,7 +1711,8 @@ class ToolModel {
     );
     if (toolIds.length === 0) return 0;
 
-    const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
+    const agentIds =
+      await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
 
     for (const agentId of agentIds) {
       await AgentToolModel.createManyIfNotExists(agentId, toolIds);
@@ -1785,7 +1787,8 @@ class ToolModel {
         newAppShortNames,
       );
       if (toolIds.length === 0) continue;
-      const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
+      const agentIds =
+        await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }
@@ -3418,6 +3421,7 @@ class ToolModel {
         description: string | null;
         systemPrompt: string | null;
         environmentId: string | null;
+        builtInAgentConfig: Agent["builtInAgentConfig"];
       };
     }>
   > {
@@ -3430,6 +3434,7 @@ class ToolModel {
           description: schema.agentsTable.description,
           systemPrompt: schema.agentsTable.systemPrompt,
           environmentId: schema.agentsTable.environmentId,
+          builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
         },
       })
       .from(schema.agentToolsTable)

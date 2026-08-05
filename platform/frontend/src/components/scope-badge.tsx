@@ -1,6 +1,10 @@
 import type { ResourceVisibilityScope } from "@archestra/shared";
-import { Globe, User, UserRoundCheck, Users } from "lucide-react";
-import { scopeStyles } from "@/components/resource-visibility-badge";
+import { UserRoundCheck } from "lucide-react";
+import {
+  SCOPE_META,
+  scopeLabel,
+  scopeStyles,
+} from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -8,15 +12,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-const SCOPE_META: Record<
-  ResourceVisibilityScope,
-  { label: string; icon: typeof User }
-> = {
-  personal: { label: "Personal", icon: User },
-  team: { label: "Team", icon: Users },
-  org: { label: "Organization", icon: Globe },
-};
 
 // Icon-only scope pill (personal/team/org) with the label in the tooltip +
 // aria-label. Shared across the apps and projects cards so scope reads the same
@@ -46,7 +41,7 @@ export function ScopeBadge({
     return null;
   }
 
-  const { label: scopeLabel, icon: scopeIcon } = SCOPE_META[scope];
+  const { icon: scopeIcon } = SCOPE_META[scope];
   const Icon = sharedWithUsers ? UserRoundCheck : scopeIcon;
 
   const names = teamNames?.filter(Boolean) ?? [];
@@ -54,7 +49,7 @@ export function ScopeBadge({
     ? `Shared with: ${sharedWith.join(", ")}`
     : scope === "team" && names.length > 0
       ? `Team: ${names.join(", ")}`
-      : scopeLabel;
+      : scopeLabel(scope);
 
   return (
     <Tooltip>
@@ -63,7 +58,11 @@ export function ScopeBadge({
           variant="outline"
           aria-label={label}
           className={cn(
-            scopeStyles[sharedWithUsers ? "team" : scope],
+            // A shared personal resource stays personal-coloured — the grants
+            // change who can reach it, not its scope class. The distinct icon
+            // and tooltip carry the "shared" part, exactly as
+            // resource-visibility-badge renders the same case.
+            scopeStyles[scope],
             "px-1.5",
           )}
         >

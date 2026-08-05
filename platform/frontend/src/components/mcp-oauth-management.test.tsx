@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   useCreateMcpOauthClient,
   useDeleteMcpOauthClient,
@@ -63,6 +63,9 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as ReturnType<typeof useSession>);
   vi.mocked(useProfiles).mockReturnValue({ data: [] } as ReturnType<
     typeof useProfiles
   >);

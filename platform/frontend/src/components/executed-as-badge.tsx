@@ -3,7 +3,7 @@
 import type { McpExecutedAs, McpExecutedAsKind } from "@archestra/shared";
 import type { LucideIcon } from "lucide-react";
 import { Globe, User, Users } from "lucide-react";
-import { scopeStyles } from "@/components/resource-visibility-badge";
+import { scopeStyles } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,

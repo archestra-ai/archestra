@@ -278,6 +278,17 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
   [RouteId.RestoreAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`; `llm_proxy` requires `llmProxy:delete`. Additional scope checks may apply.",
+  // The three purge routes are gated by role, not by permission: the caller
+  // must hold a built-in admin role. Recorded here because the static
+  // permission alone would advertise `delete` as sufficient, and the handler's
+  // refusal is a 404 — so a caller acting on that would see "not found" rather
+  // than anything pointing at the missing access.
+  [RouteId.PermanentlyDeleteAgent]:
+    "Restricted to the built-in Admin and Platform Admin roles. No permission grants it: `agent:delete` and even `agent:admin` reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the agent exists.",
+  [RouteId.PermanentlyDeleteSkill]:
+    "Restricted to the built-in Admin and Platform Admin roles. No permission grants it: `skill:delete` and even `skill:admin` reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the skill exists.",
+  [RouteId.PermanentlyDeleteProject]:
+    "Restricted to the built-in Admin and Platform Admin roles. No permission grants it: `project:delete`, `project:admin`, and ownership of the project all reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the project exists.",
 } satisfies Partial<Record<RouteId, string>>;
 
 const PUBLIC_UNAUTHENTICATED_ROUTE_IDS = new Set<RouteId>([

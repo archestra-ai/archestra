@@ -44,6 +44,12 @@ interface EnvironmentSelectorProps {
    * rendered as muted helper text under the label.
    */
   helpText?: ReactNode;
+  /**
+   * Render the current value without letting it change. The advisor's
+   * environment is what makes it reachable by the agents in it, so it is shown
+   * for orientation rather than offered as a choice.
+   */
+  disabled?: boolean;
 }
 
 export function EnvironmentSelector({
@@ -53,6 +59,7 @@ export function EnvironmentSelector({
   hideWhenOnlyDefault,
   className,
   helpText,
+  disabled,
 }: EnvironmentSelectorProps) {
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments ?? [];
@@ -101,7 +108,7 @@ export function EnvironmentSelector({
       ) : null}
       <Select
         value={selectedValue}
-        disabled={!hasCustomEnvironmentOptions}
+        disabled={disabled || !hasCustomEnvironmentOptions}
         onValueChange={(next) =>
           onChange(next === DEFAULT_ENVIRONMENT_VALUE ? null : next)
         }

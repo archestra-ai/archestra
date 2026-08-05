@@ -43,6 +43,32 @@ export async function fetchInternalAgents() {
   return data ?? [];
 }
 
+const delegationTargetAgentsQuery = {
+  agentType: "agent",
+  excludeBuiltIn: true,
+  includeAdvisor: true,
+} as const;
+
+/**
+ * Agents that can be picked as a subagent. Separate from
+ * {@link useInternalAgents} because the advisor belongs here and nowhere else:
+ * it is a target to delegate to, not an agent to start a conversation with.
+ */
+export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["agents", "all", delegationTargetAgentsQuery],
+    queryFn: async () => {
+      const { data, error } = await getAllAgents({
+        query: delegationTargetAgentsQuery,
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: params?.enabled,
+    staleTime: 0,
+  });
+}
+
 // Returns all agents as an array
 export function useProfiles(
   params: {

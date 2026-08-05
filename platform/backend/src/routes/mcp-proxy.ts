@@ -8,6 +8,10 @@ import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import { AgentModel, ToolModel } from "@/models";
+import {
+  readCredentialKeyHeader,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; browser-key credential header helper
+} from "@/routes/mcp-server-browser-credential.ee";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import {
@@ -80,6 +84,11 @@ const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId,
         userId,
       });
+
+      // Browser-key MCP credentials: this is a session-auth (browser)
+      // surface, so a presented key is threaded into tool execution to
+      // unwrap browser-key-protected connections for this request only.
+      const credentialKey = readCredentialKeyHeader(request.headers);
 
       // Build a session-scoped TokenAuthContext so audit logs, user context, and
       // organisation-scoped Archestra tools all work the same as token auth.
@@ -163,14 +172,22 @@ const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let hijacked = false;
       let server: McpServer | undefined;
       let serverHealthy = false;
+      // The (agent, user) server cache bakes the request's credential key
+      // into the server's closures, so keyed requests never use or populate
+      // it: a cached keyless server would falsely refuse a keyed request,
+      // and a cached keyed server would let a later keyless request unlock.
+      const useServerCache = !credentialKey;
       try {
-        const cachedServer = mcpServerCache.acquire(agentId, userId);
+        const cachedServer = useServerCache
+          ? mcpServerCache.acquire(agentId, userId)
+          : undefined;
         if (cachedServer) {
           server = cachedServer;
         } else {
           ({ server } = await createAgentServer({
             agentId: agentId,
             tokenAuth: sessionTokenAuth,
+            credentialKey,
           }));
         }
 
@@ -183,6 +200,7 @@ const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ({ server } = await createAgentServer({
             agentId: agentId,
             tokenAuth: sessionTokenAuth,
+            credentialKey,
           }));
           await server.connect(transport);
         }
@@ -224,7 +242,7 @@ const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       } finally {
-        if (server)
+        if (server && useServerCache)
           mcpServerCache.release(agentId, userId, server, serverHealthy);
       }
     },

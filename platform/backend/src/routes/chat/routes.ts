@@ -117,6 +117,10 @@ import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { startActiveChatSpan } from "@/observability/tracing";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
+  readCredentialKeyHeader,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; browser-key credential header helper
+} from "@/routes/mcp-server-browser-credential.ee";
+import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
 } from "@/services/active-chat-run";
@@ -424,6 +428,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       }
+
+      // Browser-key MCP credentials: capture the per-browser credential key
+      // (when the browser presented one) request-scoped, so tool calls
+      // against browser-key-protected connections can unwrap them for this
+      // run only. Absent → null (protected connections refuse with the typed
+      // browser-locked message); malformed → 400.
+      const mcpCredentialKey: Buffer | null = readCredentialKeyHeader(
+        request.headers,
+      );
       // SPDX-SnippetEnd
 
       // Gate uploaded attachments before any bytes are persisted: anything
@@ -873,6 +886,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Incognito: tool-call logs / claim results / span content are
               // redacted, and long calls never detach into durable tasks.
               suppressContentLogging: conversation.incognito,
+              // Browser-key-protected connections unwrap with this request's
+              // key (null when the browser presented none).
+              credentialKey: mcpCredentialKey,
             }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),

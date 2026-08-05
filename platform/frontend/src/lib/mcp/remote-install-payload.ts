@@ -1,7 +1,10 @@
 import type { RemoteServerInstallResult } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
 
 export function buildRemoteInstallCredentialPayload(
-  result: Pick<RemoteServerInstallResult, "metadata" | "isByosVault">,
+  result: Pick<
+    RemoteServerInstallResult,
+    "metadata" | "isByosVault" | "browserKeyProtected"
+  >,
 ) {
   const accessToken =
     !result.isByosVault &&
@@ -18,6 +21,9 @@ export function buildRemoteInstallCredentialPayload(
     ...(accessToken ? { accessToken } : {}),
     ...(userConfigValues ? { userConfigValues } : {}),
     isByosVault: result.isByosVault,
+    // Only sent when the user chose browser-key protection; the install and
+    // reauthenticate mutations attach the credential-key header alongside.
+    ...(result.browserKeyProtected ? { browserKeyProtected: true } : {}),
   };
 }
 

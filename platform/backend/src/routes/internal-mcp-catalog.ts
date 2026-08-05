@@ -741,6 +741,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           restBody.dynamicConnectionMcpServerId,
           request.organizationId,
         );
+        // This also excludes browser-key-protected installs (which are always
+        // personal-scoped): a pin would route every caller into the
+        // browser-locked refusal, since no background caller holds the key.
         if (pinned?.scope === "personal") {
           throw new ApiError(
             400,

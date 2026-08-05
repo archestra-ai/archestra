@@ -18,7 +18,7 @@ import type { IncognitoEscrowBlob } from "@/types/conversation";
  * fingerprint domain, and AAD scheme.
  */
 
-export const BROWSER_KEY_LENGTH_BYTES = 32;
+const BROWSER_KEY_LENGTH_BYTES = 32;
 
 /**
  * Parse a browser-key header value. Returns null when absent; throws when
@@ -137,7 +137,7 @@ export function loadEscrowPublicKey(params: {
 }
 
 /** Short identifier of an escrow public key (sha256 over the SPKI DER). */
-export function escrowPublicKeyFingerprint(key: KeyObject): string {
+function escrowPublicKeyFingerprint(key: KeyObject): string {
   const der = key.export({ type: "spki", format: "der" });
   return createHash("sha256").update(der).digest("hex").slice(0, 16);
 }

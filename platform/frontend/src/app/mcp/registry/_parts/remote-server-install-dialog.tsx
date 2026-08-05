@@ -1,7 +1,14 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { AlertTriangle, Info, ShieldCheck, User } from "lucide-react";
+import {
+  AlertTriangle,
+  Building2,
+  Info,
+  MonitorSmartphone,
+  ShieldCheck,
+  User,
+} from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -21,9 +28,11 @@ import {
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
+import { cn } from "@/lib/utils";
 import {
   compileValidationRegex,
   toFieldValueType,
@@ -68,6 +77,11 @@ export interface RemoteServerInstallResult {
   teamId?: string | null;
   /** Whether metadata contains BYOS vault references in path#key format */
   isByosVault?: boolean;
+  /**
+   * True when the user chose to keep the credential key in this browser
+   * (enterprise browser-key protection) instead of platform storage.
+   */
+  browserKeyProtected?: boolean;
 }
 
 interface RemoteServerInstallDialogProps {
@@ -130,7 +144,15 @@ export function RemoteServerInstallDialog({
     Record<string, { path: string | null; key: string | null }>
   >({});
 
+  // Where the personal credential key lives: platform storage (default) or
+  // only in this browser (enterprise browser-key protection).
+  const [credentialStorage, setCredentialStorage] = useState<
+    "platform" | "browser"
+  >("platform");
+
   const byosEnabled = useFeature("byosEnabled");
+  const browserCredentialsEnabled = useFeature("mcpBrowserCredentialsEnabled");
+  const appName = useAppName();
   const { data: teamsWithVault } = useTeamsWithVaultFolders();
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
   const { data: environmentList } = useEnvironments();
@@ -220,6 +242,8 @@ export function RemoteServerInstallDialog({
         scope,
         teamId: selectedTeamId,
         isByosVault: useVaultSecrets,
+        browserKeyProtected:
+          showCredentialStorageChooser && credentialStorage === "browser",
       });
       resetForm();
       onClose();
@@ -234,6 +258,7 @@ export function RemoteServerInstallDialog({
     setScope(orgOnly ? "org" : "personal");
     setVaultTeamId(null);
     setVaultSecrets({});
+    setCredentialStorage("platform");
   };
 
   const handleClose = () => {
@@ -254,6 +279,16 @@ export function RemoteServerInstallDialog({
   const hasOAuth = !!catalogItem.oauthConfig;
   const usesBrowserOAuth =
     catalogItem.oauthConfig?.grant_type !== "client_credentials";
+
+  // Browser-key protection applies only to a PERSONAL static credential
+  // (API key / PAT) on a remote server — not OAuth, not BYOS vault
+  // references, and not credentials shared with a team or the organization.
+  const showCredentialStorageChooser =
+    browserCredentialsEnabled &&
+    scope === "personal" &&
+    !hasOAuth &&
+    hasPromptSensitiveFields &&
+    !useVaultSecrets;
 
   // Get sensitive and non-sensitive required fields
   const sensitiveRequiredFields = Object.entries(promptableUserConfig).filter(
@@ -431,6 +466,28 @@ export function RemoteServerInstallDialog({
         </div>
       )}
 
+      {canInstall && showCredentialStorageChooser && (
+        <div className="space-y-2">
+          <Label>Credential storage</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <CredentialStorageCard
+              icon={Building2}
+              title="Key will be stored in the platform"
+              description={`Managed by ${appName}. Works from any device, on schedules, and in background jobs.`}
+              selected={credentialStorage === "platform"}
+              onSelect={() => setCredentialStorage("platform")}
+            />
+            <CredentialStorageCard
+              icon={MonitorSmartphone}
+              title="Key will be stored in the browser"
+              description={`${appName} cannot use it without this browser. Not usable from other devices, schedules, or API clients — and losing browser data means re-entering the credential.`}
+              selected={credentialStorage === "browser"}
+              onSelect={() => setCredentialStorage("browser")}
+            />
+          </div>
+        </div>
+      )}
+
       {canInstall && hasOAuth && usesBrowserOAuth && (
         <Alert>
           <Info className="h-4 w-4" />
@@ -593,5 +650,46 @@ export function RemoteServerInstallDialog({
         </div>
       )}
     </StandardFormDialog>
+  );
+}
+
+function CredentialStorageCard({
+  icon: Icon,
+  title,
+  description,
+  selected,
+  onSelect,
+}: {
+  icon: typeof Building2;
+  title: string;
+  description: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={cn(
+        "flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors",
+        selected
+          ? "border-primary bg-primary/5"
+          : "hover:bg-muted/50 cursor-pointer",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <div
+          className={cn(
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+            selected ? "bg-primary/10 text-primary" : "bg-muted",
+          )}
+        >
+          <Icon className="h-4 w-4" />
+        </div>
+        <span className="text-sm font-medium">{title}</span>
+      </div>
+      <p className="text-xs text-muted-foreground">{description}</p>
+    </button>
   );
 }

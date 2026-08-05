@@ -37,6 +37,12 @@ import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-re
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
+import {
+  BrowserCredentialKeyMismatchError,
+  BrowserLockedCredentialError,
+  unlockCredentialBag,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; browser-key credential gate is enterprise logic
+} from "@/content-encryption/browser-credential.ee";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
@@ -309,6 +315,16 @@ interface ExecuteToolCallForOwnerOptions {
    * tool name but stores redacted arguments and result content.
    */
   suppressContentLogging?: boolean;
+  /**
+   * Browser-held MCP credential key (enterprise), parsed from the
+   * x-archestra-credential-key header on browser-session surfaces (chat
+   * stream, MCP proxy, app proxy). Unwraps a browser-key-protected install's
+   * envelope bag transiently for this call — never cached. Absent/null on
+   * background and token contexts, where a protected install yields the
+   * typed browser-locked refusal instead of falling through to another
+   * credential.
+   */
+  credentialKey?: Buffer | null;
 }
 
 class McpClient {
@@ -637,11 +653,14 @@ class McpClient {
       targetMcpServerId: targetMcpServerId,
       toolCall,
       owner,
+      credentialKey: options?.credentialKey,
+      catalog: { id: catalogItem.id, name: catalogItem.name },
     });
     if ("error" in secretsResult) {
       return secretsResult.error;
     }
-    const { secrets, secretId, serverState } = secretsResult;
+    const { secrets, secretId, serverState, browserKeyProtected } =
+      secretsResult;
 
     // The outbound credential is fully settled here (install secrets loaded,
     // enterprise exchange done), so every result below can name the identity
@@ -699,6 +718,19 @@ class McpClient {
       // server.
       connectionKey = `${connectionKey}:elicitation`;
     }
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Browser-key-protected install: a connection built from the unwrapped
+    // credential must never be pooled or reused (the pool outlives the
+    // request that presented the key). A per-call nonce guarantees no other
+    // call resolves this key, and the teardown below closes it after the
+    // call. The nonce rides AFTER the `catalogId:serverId` prefix so
+    // invalidateConnectionsForServer's parts[1] match still works mid-call.
+    if (browserKeyProtected) {
+      connectionKey = `${connectionKey}:browser-key:${randomUUID()}`;
+    }
+    // SPDX-SnippetEnd
 
     const executeToolCall = async (
       getTransport: () => Promise<Transport>,
@@ -1167,61 +1199,81 @@ class McpClient {
       }
     };
 
-    if (!this.shouldLimitConcurrency()) {
-      return executeToolCall(
-        () =>
-          this.getTransport(
-            catalogItem,
-            targetMcpServerId,
-            secrets,
-            secretId,
-            connectionKey,
-            tokenAuth,
-            enterpriseTransportCredential ?? undefined,
-          ),
-        secrets,
+    const dispatchToolCall = async (): Promise<CommonToolResult> => {
+      if (!this.shouldLimitConcurrency()) {
+        return executeToolCall(
+          () =>
+            this.getTransport(
+              catalogItem,
+              targetMcpServerId,
+              secrets,
+              secretId,
+              connectionKey,
+              tokenAuth,
+              enterpriseTransportCredential ?? undefined,
+            ),
+          secrets,
+        );
+      }
+
+      const transportKind = await this.getTransportKind(
+        catalogItem,
+        targetMcpServerId,
       );
-    }
+      // The MCP SDK stores request handlers on the client by method. Serialize
+      // elicitation-capable calls so a cached client's elicitation handler is
+      // not replaced while another tool call on the same connection is active.
+      const concurrencyLimit = options?.elicitationHandler
+        ? 1
+        : this.getConcurrencyLimit(transportKind);
 
-    const transportKind = await this.getTransportKind(
-      catalogItem,
-      targetMcpServerId,
-    );
-    // The MCP SDK stores request handlers on the client by method. Serialize
-    // elicitation-capable calls so a cached client's elicitation handler is
-    // not replaced while another tool call on the same connection is active.
-    const concurrencyLimit = options?.elicitationHandler
-      ? 1
-      : this.getConcurrencyLimit(transportKind);
-
-    return this.connectionLimiter.runWithLimit(
-      connectionKey,
-      concurrencyLimit,
-      () =>
-        executeToolCall(async () => {
-          const resolvedSecrets = await this.resolveSecretsForTransport({
-            catalogItem,
-            secrets,
-            secretId,
-          });
-          if (resolvedSecrets !== secrets) {
-            this.secretsCache.set(targetMcpServerId, {
-              secrets: resolvedSecrets,
-              ...(secretId ? { secretId } : {}),
+      return this.connectionLimiter.runWithLimit(
+        connectionKey,
+        concurrencyLimit,
+        () =>
+          executeToolCall(async () => {
+            const resolvedSecrets = await this.resolveSecretsForTransport({
+              catalogItem,
+              secrets,
+              secretId,
             });
-          }
+            if (resolvedSecrets !== secrets) {
+              this.secretsCache.set(targetMcpServerId, {
+                secrets: resolvedSecrets,
+                ...(secretId ? { secretId } : {}),
+              });
+            }
 
-          return this.getTransportWithKind(
-            catalogItem,
-            targetMcpServerId,
-            resolvedSecrets,
-            transportKind,
-            connectionKey,
-            tokenAuth,
-            enterpriseTransportCredential ?? undefined,
-          );
-        }, secrets),
-    );
+            return this.getTransportWithKind(
+              catalogItem,
+              targetMcpServerId,
+              resolvedSecrets,
+              transportKind,
+              connectionKey,
+              tokenAuth,
+              enterpriseTransportCredential ?? undefined,
+            );
+          }, secrets),
+      );
+    };
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Browser-key-protected install: the connection was keyed per call
+    // (nonce above); close it — and drop its persisted HTTP session — as
+    // soon as the call finishes so nothing built from the unwrapped
+    // credential outlives the request that presented the key.
+    if (browserKeyProtected) {
+      try {
+        return await dispatchToolCall();
+      } finally {
+        await this.teardownEphemeralConnection(connectionKey);
+      }
+    }
+    // SPDX-SnippetEnd
+
+    return dispatchToolCall();
   }
 
   /**
@@ -1443,6 +1495,39 @@ class McpClient {
     this.activeConnectionLastValidatedAt.clear();
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Close and forget a per-call (nonce-keyed) connection for a browser-key-
+   * protected install, including any HTTP session persisted under its key —
+   * the nonce guarantees no other call will ever resume it.
+   */
+  private async teardownEphemeralConnection(
+    connectionKey: string,
+  ): Promise<void> {
+    const client = this.activeConnections.get(connectionKey);
+    if (client) {
+      try {
+        await client.close();
+      } catch (error) {
+        logger.warn(
+          { connectionKey, error },
+          "Error closing ephemeral browser-keyed MCP connection (non-fatal)",
+        );
+      }
+    }
+    this.clearConnectionState(connectionKey);
+    await McpHttpSessionModel.deleteByConnectionKey(connectionKey).catch(
+      (err) =>
+        logger.warn(
+          { connectionKey, err },
+          "Failed to delete ephemeral MCP HTTP session (non-fatal)",
+        ),
+    );
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Validate tool and get metadata
    */
@@ -1653,15 +1738,25 @@ class McpClient {
     targetMcpServerId,
     toolCall,
     owner,
+    credentialKey,
+    catalog,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
     owner: ToolOwner;
+    /** Browser-held credential key from the request, when present. */
+    credentialKey?: Buffer | null;
+    /** Catalog identity for the typed browser-locked refusal, when known. */
+    catalog?: { id: string; name: string };
   }): Promise<
     | {
         secrets: Record<string, unknown>;
         secretId?: string;
         serverState: CachedServerState;
+        /** True when the install is browser-key-protected — the returned bag
+         * is a transiently unwrapped plaintext that must never be cached, and
+         * the connection built from it must not be pooled. */
+        browserKeyProtected: boolean;
       }
     | { error: CommonToolResult }
   > {
@@ -1683,10 +1778,57 @@ class McpClient {
       };
     }
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Browser-key-protected install: bypass the shared secrets cache in both
+    // directions (the unwrapped plaintext must never be cached, and the
+    // cached envelope form would be useless), and unlock — or refuse with the
+    // typed terminal error — per request. DISABLE-DON'T-LEAK: this refusal is
+    // final; no caller resolves a different install after it.
+    if (mcpServer.browserKeyProtected) {
+      try {
+        const result = await this.fetchSecretsForLoadedMcpServer(
+          mcpServer,
+          credentialKey,
+        );
+        return { ...result, browserKeyProtected: true };
+      } catch (error) {
+        if (
+          error instanceof BrowserLockedCredentialError ||
+          error instanceof BrowserCredentialKeyMismatchError
+        ) {
+          return {
+            error: await this.createErrorResult(
+              toolCall,
+              owner,
+              error.message,
+              mcpServer.name,
+              undefined,
+              catalog
+                ? {
+                    type: "assigned_credential_unavailable",
+                    message: error.message,
+                    catalogId: catalog.id,
+                    catalogName: catalog.name,
+                  }
+                : undefined,
+            ),
+          };
+        }
+        throw error;
+      }
+    }
+    // SPDX-SnippetEnd
+
     const currentServerState = this.toCachedServerState(mcpServer);
     const cached = this.secretsCache.get(targetMcpServerId);
     if (cached?.secretId === currentServerState.secretId) {
-      return { ...cached, serverState: currentServerState };
+      return {
+        ...cached,
+        serverState: currentServerState,
+        browserKeyProtected: false,
+      };
     }
 
     if (cached) {
@@ -1700,18 +1842,26 @@ class McpClient {
       secretId: result.secretId,
     });
 
-    return result;
+    return { ...result, browserKeyProtected: false };
   }
 
-  private async fetchSecretsForLoadedMcpServer(mcpServer: {
-    id: string;
-    secretId: string | null;
-  }): Promise<{
+  private async fetchSecretsForLoadedMcpServer(
+    mcpServer: {
+      id: string;
+      name: string;
+      secretId: string | null;
+      browserKeyProtected: boolean;
+      browserKeyFingerprint: string | null;
+    },
+    credentialKey?: Buffer | null,
+  ): Promise<{
     secrets: Record<string, unknown>;
     secretId?: string;
     serverState: CachedServerState;
   }> {
     const serverState = this.toCachedServerState(mcpServer);
+    let secrets: Record<string, unknown> = {};
+    let secretId: string | undefined;
     if (mcpServer.secretId) {
       const secret = await secretManager().getSecret(mcpServer.secretId);
       if (secret?.secret) {
@@ -1722,14 +1872,29 @@ class McpClient {
           },
           `Found secrets for MCP server ${mcpServer.id}`,
         );
-        return {
-          secrets: secret.secret,
-          secretId: mcpServer.secretId,
-          serverState,
-        };
+        secrets = secret.secret;
+        secretId = mcpServer.secretId;
       }
     }
-    return { secrets: {}, serverState };
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Browser-key-protected install: unwrap the envelope bag transiently for
+    // this call. Throws the typed browser-locked/mismatch error when the key
+    // is absent or wrong — every path through here (tool calls, resource
+    // reads, the direct server-run client) fails closed rather than sending
+    // envelopes upstream. The plaintext result must never be cached.
+    if (mcpServer.browserKeyProtected) {
+      secrets = unlockCredentialBag({
+        server: mcpServer,
+        secrets,
+        key: credentialKey,
+      });
+    }
+    // SPDX-SnippetEnd
+    return secretId
+      ? { secrets, secretId, serverState }
+      : { secrets, serverState };
   }
 
   // Determines the target MCP server ID for a local catalog item
@@ -2041,6 +2206,13 @@ class McpClient {
   // a team token prefers the team's install, then org-scoped. Returns undefined when
   // none match. Shared by dynamic resolution and by a retained static assignment
   // whose pinned install was uninstalled (its mcpServerId is null).
+  //
+  // Browser-key-protected installs (enterprise) are deliberately NOT filtered
+  // out here: the caller's own protected personal install is still selected
+  // first, making it the TERMINAL resolution — the central secrets gate
+  // (getSecretsForMcpServer) then refuses keyless/wrong-key calls with the
+  // typed browser-locked error. Skipping it here would silently fall through
+  // to a team/org credential, which DISABLE-DON'T-LEAK forbids.
   private async pickInstallForCaller(
     allServers: McpServer[],
     tokenAuth: TokenAuthContext | undefined,
@@ -3637,10 +3809,9 @@ class McpClient {
     if (!catalogItem) {
       throw new Error(`Catalog not found for MCP server ${mcpServerId}`);
     }
-    const { secrets } = await this.fetchSecretsForLoadedMcpServer({
-      id: mcpServerId,
-      secretId: server.secretId,
-    });
+    // For a browser-key-protected install this throws the typed
+    // browser-locked error — the direct run path carries no credential key.
+    const { secrets } = await this.fetchSecretsForLoadedMcpServer(server);
     const transport = await this.getTransport(
       catalogItem,
       mcpServerId,
@@ -4070,6 +4241,7 @@ class McpClient {
       targetMcpServerId: server.id,
       toolCall: { id: "resource-read", name: "read", arguments: {} },
       owner: agentOwner(agentId),
+      catalog: { id: catalogItem.id, name: catalogItem.name },
     });
 
     if ("error" in secretResult) {
@@ -4135,6 +4307,21 @@ class McpClient {
         );
         return;
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Browser-key-protected install: this refresh runs keyless in the
+      // background, so it can never unwrap the credential — skip instead of
+      // failing noisily on every cache hit. The cached result stays served.
+      if (mcpServer.server.browserKeyProtected) {
+        logger.debug(
+          { uri, agentId, serverId: mcpServer.server.id },
+          "readResource: Background refresh skipped for browser-key-protected install",
+        );
+        return;
+      }
+      // SPDX-SnippetEnd
 
       const newResult = await this.doReadResource(
         uri,
@@ -4240,7 +4427,10 @@ class McpClient {
           targetMcpServerId,
           toolCall: { id: "list-op", name: tool.toolName, arguments: {} },
           owner: agentOwner(agentId),
+          catalog: { id: catalogItem.id, name: catalogItem.name },
         });
+        // A browser-key-protected install without its key lands here too:
+        // the locked catalog simply contributes nothing to listings.
         if ("error" in secretResult) continue;
 
         const externalIdpUserId = tokenAuth?.isExternalIdp

@@ -117721,6 +117721,9 @@
                         "chatIncognitoEnabled": {
                           "type": "boolean"
                         },
+                        "mcpBrowserCredentialsEnabled": {
+                          "type": "boolean"
+                        },
                         "agentHooksEnabled": {
                           "type": "boolean"
                         },
@@ -117783,6 +117786,7 @@
                         "maintenanceMode",
                         "chatSecretScanEnabled",
                         "chatIncognitoEnabled",
+                        "mcpBrowserCredentialsEnabled",
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
@@ -234776,6 +234780,46 @@
                           "org"
                         ]
                       },
+                      "browserKeyProtected": {
+                        "type": "boolean"
+                      },
+                      "browserKeyFingerprint": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "browserKeyEscrow": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
                       "reinstallRequired": {
                         "type": "boolean"
                       },
@@ -235002,6 +235046,9 @@
                       "ownerId",
                       "teamId",
                       "scope",
+                      "browserKeyProtected",
+                      "browserKeyFingerprint",
+                      "browserKeyEscrow",
                       "reinstallRequired",
                       "reinstallReason",
                       "localInstallationStatus",
@@ -235347,6 +235394,9 @@
                   },
                   "serviceAccount": {
                     "type": "string"
+                  },
+                  "browserKeyProtected": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -235443,6 +235493,46 @@
                         "personal",
                         "team",
                         "org"
+                      ]
+                    },
+                    "browserKeyProtected": {
+                      "type": "boolean"
+                    },
+                    "browserKeyFingerprint": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "browserKeyEscrow": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
                       ]
                     },
                     "reinstallRequired": {
@@ -235671,6 +235761,9 @@
                     "ownerId",
                     "teamId",
                     "scope",
+                    "browserKeyProtected",
+                    "browserKeyFingerprint",
+                    "browserKeyEscrow",
                     "reinstallRequired",
                     "reinstallReason",
                     "localInstallationStatus",
@@ -236032,6 +236125,46 @@
                         "org"
                       ]
                     },
+                    "browserKeyProtected": {
+                      "type": "boolean"
+                    },
+                    "browserKeyFingerprint": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "browserKeyEscrow": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
                     "reinstallRequired": {
                       "type": "boolean"
                     },
@@ -236258,6 +236391,9 @@
                     "ownerId",
                     "teamId",
                     "scope",
+                    "browserKeyProtected",
+                    "browserKeyFingerprint",
+                    "browserKeyEscrow",
                     "reinstallRequired",
                     "reinstallReason",
                     "localInstallationStatus",
@@ -236822,6 +236958,9 @@
                   },
                   "isByosVault": {
                     "type": "boolean"
+                  },
+                  "browserKeyProtected": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -236926,6 +237065,46 @@
                         "personal",
                         "team",
                         "org"
+                      ]
+                    },
+                    "browserKeyProtected": {
+                      "type": "boolean"
+                    },
+                    "browserKeyFingerprint": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "browserKeyEscrow": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
                       ]
                     },
                     "reinstallRequired": {
@@ -237154,6 +237333,9 @@
                     "ownerId",
                     "teamId",
                     "scope",
+                    "browserKeyProtected",
+                    "browserKeyFingerprint",
+                    "browserKeyEscrow",
                     "reinstallRequired",
                     "reinstallReason",
                     "localInstallationStatus",
@@ -237515,6 +237697,46 @@
                         "org"
                       ]
                     },
+                    "browserKeyProtected": {
+                      "type": "boolean"
+                    },
+                    "browserKeyFingerprint": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "browserKeyEscrow": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
                     "reinstallRequired": {
                       "type": "boolean"
                     },
@@ -237741,6 +237963,9 @@
                     "ownerId",
                     "teamId",
                     "scope",
+                    "browserKeyProtected",
+                    "browserKeyFingerprint",
+                    "browserKeyEscrow",
                     "reinstallRequired",
                     "reinstallReason",
                     "localInstallationStatus",
@@ -239044,6 +239269,46 @@
                         "org"
                       ]
                     },
+                    "browserKeyProtected": {
+                      "type": "boolean"
+                    },
+                    "browserKeyFingerprint": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "browserKeyEscrow": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
                     "reinstallRequired": {
                       "type": "boolean"
                     },
@@ -239270,6 +239535,9 @@
                     "ownerId",
                     "teamId",
                     "scope",
+                    "browserKeyProtected",
+                    "browserKeyFingerprint",
+                    "browserKeyEscrow",
                     "reinstallRequired",
                     "reinstallReason",
                     "localInstallationStatus",

@@ -134,6 +134,14 @@ export interface ChatToolContext {
    */
   suppressContentLogging?: boolean;
   /**
+   * Browser-held MCP credential key (enterprise), parsed from the request
+   * header on the chat stream. Threaded into MCP tool execution so calls
+   * against browser-key-protected connections can unwrap them transiently.
+   * Absent in headless executions, which get the typed browser-locked
+   * refusal on protected installs.
+   */
+  credentialKey?: Buffer | null;
+  /**
    * Per-run guard against the model re-issuing the identical tool call forever.
    * One instance per getChatMcpTools call (shared by every tool wrapper), so it
    * carries no cross-run state.
@@ -359,6 +367,7 @@ export function buildMcpGatewayTool(params: {
               toolCallId: options.toolCallId,
               isUiProvidingTool,
               suppressContentLogging: ctx.suppressContentLogging,
+              credentialKey: ctx.credentialKey,
             });
           }
 
@@ -1103,6 +1112,8 @@ interface ToolExecutionContext {
    * the call is forced inline (no durable task detachment).
    */
   suppressContentLogging?: boolean;
+  /** Browser-held MCP credential key for browser-key-protected connections. */
+  credentialKey?: Buffer | null;
 }
 
 /**
@@ -1138,6 +1149,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     toolCallId,
     isUiProvidingTool,
     suppressContentLogging,
+    credentialKey,
   } = ctx;
   throwIfAborted(abortSignal);
   const startTime = Date.now();
@@ -1240,6 +1252,8 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
           : {}),
         // Incognito: the persisted mcp_tool_calls row is stored redacted.
         ...(suppressContentLogging ? { suppressContentLogging: true } : {}),
+        // Browser-key-protected connections unwrap with this request's key.
+        ...(credentialKey ? { credentialKey } : {}),
       },
     );
 

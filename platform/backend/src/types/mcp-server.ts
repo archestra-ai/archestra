@@ -129,6 +129,12 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     oauthRefreshFailedAt: true,
     // Server-owned reinstall bookkeeping — a fresh install is never flagged.
     reinstallReason: true,
+    // Browser-key credential state is server-owned: the install route derives
+    // fingerprint + escrow from the key HEADER after connection validation
+    // (`browserKeyProtected` is a route-level request flag, not row input).
+    browserKeyProtected: true,
+    browserKeyFingerprint: true,
+    browserKeyEscrow: true,
   });
 
 export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)

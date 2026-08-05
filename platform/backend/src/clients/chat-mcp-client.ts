@@ -830,6 +830,7 @@ export async function getChatMcpTools({
   taskBridge,
   repeatTracker,
   suppressContentLogging,
+  credentialKey,
 }: {
   agentName: string;
   agentId: string;
@@ -893,6 +894,12 @@ export async function getChatMcpTools({
    * so the cached tool context can safely retain it.
    */
   suppressContentLogging?: boolean;
+  /**
+   * Browser-held MCP credential key from this request. NOT stable across
+   * requests (another browser of the same user carries a different — or no —
+   * key), so it is re-bound onto the cached tool context on every call.
+   */
+  credentialKey?: Buffer | null;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -917,6 +924,11 @@ export async function getChatMcpTools({
     // caller owns the tracker, bind that instance so its stop condition reads the
     // same streak the breaker records into.
     cached.context.repeatTracker = repeatTracker ?? new ToolCallRepeatTracker();
+    // Re-bind the browser-held credential key per request: the cached context
+    // outlives the request that populated it, and retaining a previous
+    // request's key would let a keyless surface unlock a browser-key-protected
+    // connection (or a keyed one be refused with a stale key).
+    cached.context.credentialKey = credentialKey ?? null;
     logger.info(
       {
         agentId,
@@ -1038,6 +1050,7 @@ export async function getChatMcpTools({
       mcpGwToken,
       considerContextUntrusted,
       suppressContentLogging,
+      credentialKey,
       teams,
       userTeams,
       // One tracker per run: the caller's instance when it owns a stop policy,

@@ -46,6 +46,12 @@ export async function buildChatContext(params: {
    * content are redacted, and long calls never detach into durable tasks.
    */
   suppressContentLogging: boolean;
+  /**
+   * Browser-held MCP credential key from this request's header, for tool
+   * calls against browser-key-protected connections. Absent when the request
+   * carried none.
+   */
+  credentialKey?: Buffer | null;
 }): Promise<{
   mcpTools: Record<string, Tool>;
   toolUiResourceUris: Record<string, string>;
@@ -71,6 +77,7 @@ export async function buildChatContext(params: {
     taskBridge,
     abortSignal,
     suppressContentLogging,
+    credentialKey,
   } = params;
 
   const [enabledToolIds, hasCustomSelection] = await Promise.all([
@@ -107,6 +114,7 @@ export async function buildChatContext(params: {
       taskBridge,
       repeatTracker,
       suppressContentLogging,
+      credentialKey,
     }),
     getChatMcpToolUiResourceUris(agentId),
   ]);

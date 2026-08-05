@@ -75,6 +75,15 @@ type McpListTool = ListToolsResult["tools"][number];
 export async function createAppServer(
   appId: string,
   tokenAuth: TokenAuthContext,
+  options?: {
+    /**
+     * Browser-held MCP credential key (enterprise), parsed from the request
+     * header by the session-auth app proxy. Threaded into upstream tool
+     * execution so browser-key-protected connections unwrap for the
+     * presenting request only.
+     */
+    credentialKey?: Buffer | null;
+  },
 ): Promise<{ server: McpServer; app: App }> {
   const mcpServer = new McpServer(
     {
@@ -208,7 +217,14 @@ export async function createAppServer(
         toolCall,
         appOwner(appId),
         tokenAuth,
-        { abortSignal: extra.signal },
+        {
+          abortSignal: extra.signal,
+          // Browser-key-protected connections unwrap with the key the
+          // session-auth app proxy parsed from this request.
+          ...(options?.credentialKey
+            ? { credentialKey: options.credentialKey }
+            : {}),
+        },
       );
       return {
         content: Array.isArray(result.content)

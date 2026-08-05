@@ -14,6 +14,10 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
+import {
+  unlockCredentialBag,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; browser-key credential unlock is enterprise logic
+} from "@/content-encryption/browser-credential.ee";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
@@ -285,6 +289,13 @@ class McpServerModel {
           // Active installs only — a soft-deleted install must not drive a tool
           // refresh (its tools are gone with the uninstall).
           notDeleted(schema.mcpServersTable),
+          // Browser-key-protected installs cannot connect without the
+          // browser-held key, which no background job has — the owner's
+          // explicit reload-tools request (which carries the key) refreshes
+          // them instead. Personal installs in general remain eligible: the
+          // refresher predates browser keys and existing behavior (and its
+          // tests) rely on personal installs driving per-catalog refreshes.
+          eq(schema.mcpServersTable.browserKeyProtected, false),
         ),
       )
       .orderBy(
@@ -1585,7 +1596,18 @@ class McpServerModel {
   /**
    * Get the list of tools from a specific MCP server instance
    */
-  static async getToolsFromServer(mcpServer: McpServer): Promise<
+  static async getToolsFromServer(
+    mcpServer: McpServer,
+    options?: {
+      /**
+       * Browser-held key for a browser-key-protected install (enterprise).
+       * Required to unwrap the install's envelope bag; without it (or with a
+       * wrong key) discovery fails with a typed browser-locked error instead
+       * of connecting with garbage headers.
+       */
+      credentialKey?: Buffer | null;
+    },
+  ): Promise<
     Array<{
       name: string;
       description: string;
@@ -1615,6 +1637,21 @@ class McpServerModel {
         secrets = secretRecord.secret;
       }
     }
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Browser-key-protected install: unwrap the envelope bag transiently for
+    // this discovery only. Throws the typed browser-locked/mismatch error
+    // when the key is absent or wrong — never connects with envelopes.
+    if (mcpServer.browserKeyProtected) {
+      secrets = unlockCredentialBag({
+        server: mcpServer,
+        secrets,
+        key: options?.credentialKey,
+      });
+    }
+    // SPDX-SnippetEnd
 
     try {
       // Use the new structured API for all server types

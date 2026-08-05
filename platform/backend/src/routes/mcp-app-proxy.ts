@@ -9,6 +9,10 @@ import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import { AppModel } from "@/models";
 import {
+  readCredentialKeyHeader,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; browser-key credential header helper
+} from "@/routes/mcp-server-browser-credential.ee";
+import {
   buildConnectorResourceUri,
   connectorWwwAuthenticate,
 } from "@/services/apps/app-connector-resource";
@@ -150,6 +154,18 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (denied) return denied;
       }
 
+      // Browser-key MCP credentials: only the session (browser) path can
+      // carry the key. Keyed requests bypass the (app, user) server cache —
+      // the key is baked into the server's closures, so reuse across
+      // requests with different key states would either falsely refuse or
+      // falsely unlock.
+      const credentialKey = bearer
+        ? null
+        : readCredentialKeyHeader(request.headers);
+      if (credentialKey) {
+        useServerCache = false;
+      }
+
       let hijacked = false;
       let server: McpServer | undefined;
       let serverHealthy = false;
@@ -158,13 +174,16 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         server =
           (useServerCache
             ? appServerCache.acquire(appId, userId)
-            : undefined) ?? (await createAppServer(appId, tokenAuth)).server;
+            : undefined) ??
+          (await createAppServer(appId, tokenAuth, { credentialKey })).server;
 
         const transport = createStatelessTransport(appId);
         try {
           await server.connect(transport);
         } catch {
-          ({ server } = await createAppServer(appId, tokenAuth));
+          ({ server } = await createAppServer(appId, tokenAuth, {
+            credentialKey,
+          }));
           await server.connect(transport);
         }
         serverHealthy = true;

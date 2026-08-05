@@ -7,6 +7,8 @@ import {
   formatSecretStorageType,
   getDocsUrl,
   isPlaywrightCatalogItem,
+  MCP_CATALOG_REAUTH_QUERY_PARAM,
+  MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import { format } from "date-fns";
@@ -14,12 +16,14 @@ import {
   AlertTriangle,
   Info,
   KeyRound,
+  Lock,
   Plus,
   RefreshCw,
   Trash,
   User,
   Zap,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -67,6 +71,7 @@ import {
   setOAuthReturnUrl,
   setOAuthState,
 } from "@/lib/auth/oauth-session";
+import { getBrowserCredentialKey } from "@/lib/mcp/browser-credential-key";
 import {
   useInternalMcpCatalog,
   useUpdateInternalMcpCatalogItem,
@@ -185,6 +190,14 @@ export function ManageUsersContent({
 
   const [serviceAccountDialogOpen, setServiceAccountDialogOpen] =
     useState(false);
+
+  // Whether THIS browser holds the local MCP credential key. Read after mount
+  // (not during render) so server HTML and the first client render agree;
+  // defaulting to true avoids flashing the missing-key warning.
+  const [hasLocalBrowserKey, setHasLocalBrowserKey] = useState(true);
+  useEffect(() => {
+    setHasLocalBrowserKey(getBrowserCredentialKey() !== null);
+  }, []);
 
   // Use the first server for display purposes
   const firstServer = allServers?.[0];
@@ -390,6 +403,7 @@ export function ManageUsersContent({
 
   const rowProps: RowRenderProps = {
     isOAuthServer,
+    hasLocalBrowserKey,
     deploymentStatuses,
     canonicalStateByPod,
     getCredentialOwnerName,
@@ -545,6 +559,8 @@ type ConnectionRow = { server: ServerEntry; isYou: boolean };
 
 interface RowRenderProps {
   isOAuthServer: boolean;
+  /** Whether this browser holds the local MCP credential key. */
+  hasLocalBrowserKey: boolean;
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   canonicalStateByPod: Map<string, string>;
   getCredentialOwnerName: (s: ServerEntry) => string;
@@ -598,6 +614,7 @@ function ConnectionsTable({
   rows,
   testId,
   isOAuthServer,
+  hasLocalBrowserKey,
   deploymentStatuses,
   canonicalStateByPod,
   getCredentialOwnerName,
@@ -659,6 +676,18 @@ function ConnectionsTable({
                   <Badge variant="secondary" className="text-[10px]">
                     You
                   </Badge>
+                )}
+                {server.browserKeyProtected && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Protected by a key in the owner's browser
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
               {(server.teamId || server.scope === "org") && (
@@ -722,6 +751,27 @@ function ConnectionsTable({
             </TableCell>
             <TableCell>
               <div className="flex flex-col gap-1">
+                {isYou && server.browserKeyProtected && !hasLocalBrowserKey && (
+                  <>
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="h-7 w-full text-xs"
+                    >
+                      <Link
+                        href={`/mcp/registry?${MCP_CATALOG_REAUTH_QUERY_PARAM}=${server.catalogId}&${MCP_CATALOG_SERVER_QUERY_PARAM}=${server.id}`}
+                      >
+                        <RefreshCw className="mr-1 h-3 w-3" />
+                        Re-enter credential
+                      </Link>
+                    </Button>
+                    <p className="mb-2 text-[11px] leading-tight text-destructive">
+                      Key not found in this browser — re-enter the credential to
+                      use it here.
+                    </p>
+                  </>
+                )}
                 {isOAuthServer && server.oauthRefreshError && (
                   <TooltipProvider>
                     <Tooltip>

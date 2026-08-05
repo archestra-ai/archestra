@@ -31,6 +31,11 @@ export const REDACTED_LOG_PATHS = [
     '["x-archestra-incognito-key"]',
     '*["x-archestra-incognito-key"]',
     '*.headers["x-archestra-incognito-key"]',
+    // The browser-held MCP credential key rides this request header on
+    // browser-session surfaces; same never-persist contract as above.
+    '["x-archestra-credential-key"]',
+    '*["x-archestra-credential-key"]',
+    '*.headers["x-archestra-credential-key"]',
   ]);
 
 /**

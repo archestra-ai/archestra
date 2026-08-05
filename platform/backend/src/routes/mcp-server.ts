@@ -15,6 +15,10 @@ import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
 } from "@/clients/mcp-client";
+import {
+  decryptCredentialBag,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; browser-key credential helpers gate on the EE flag
+} from "@/content-encryption/browser-credential.ee";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
@@ -27,6 +31,12 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import {
+  requireBrowserCredentialInstallAllowed,
+  requireCredentialKeyForProtectedServer,
+  sealBrowserProtectedSecret,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; request-side browser-key credential helpers
+} from "@/routes/mcp-server-browser-credential.ee";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import {
   filterMcpServersAssignableToTarget,
@@ -215,6 +225,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override for local MCP servers
           serviceAccount: z.string().optional(),
+          // Enterprise: protect this personal remote install's credentials
+          // under a browser-held key (x-archestra-credential-key header).
+          browserKeyProtected: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -228,6 +241,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userConfigValues,
         environmentValues,
         serviceAccount,
+        browserKeyProtected,
         ...restDataFromRequestBody
       } = body;
       const serverData: typeof restDataFromRequestBody & {
@@ -452,6 +466,23 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Browser-key protection: gate eligibility BEFORE any secret is created
+      // and capture the browser key for the seal step after tool discovery.
+      // The key never persists — only its fingerprint and RSA-wrapped escrow.
+      const browserCredentialKey: Buffer | null = browserKeyProtected
+        ? requireBrowserCredentialInstallAllowed({
+            headers,
+            catalogItem,
+            scope: serverData.scope,
+            isByosVault,
+            providedSecretId: secretId,
+          })
+        : null;
+      // SPDX-SnippetEnd
+
       // For REMOTE servers: create secrets and validate connection
       if (catalogItem?.serverType === "remote") {
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
@@ -500,6 +531,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const secret = await secretManager().createSecret(
             { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${serverData.name}-token`,
+            // Browser-key-protected bags hold envelopes after the seal step;
+            // force DB storage so they never transit an external manager.
+            Boolean(browserCredentialKey),
           );
           secretId = secret.id;
           createdSecretId = secret.id;
@@ -512,6 +546,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ...installUserConfigValues,
             } as Record<string, unknown>,
             `${serverData.name}-secret`,
+            Boolean(browserCredentialKey),
           );
           secretId = secret.id;
           createdSecretId = secret.id;
@@ -522,10 +557,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const secret = await secretManager().createSecret(
             catalogStaticUserConfigValues,
             `${serverData.name}-secret`,
+            Boolean(browserCredentialKey),
           );
           secretId = secret.id;
           createdSecretId = secret.id;
         }
+
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // A protected install with no credential values would seal an empty
+        // bag — nothing to protect means the request is malformed.
+        if (browserCredentialKey && !secretId) {
+          throw new ApiError(
+            400,
+            "Browser-key protection requires credential values (an access " +
+              "token or connection settings) to protect.",
+          );
+        }
+        // SPDX-SnippetEnd
 
         // Validate connection for remote servers. Enterprise-managed catalogs
         // skip this static-secret probe: their MCP servers typically require
@@ -1114,6 +1164,31 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Seal AFTER connection validation and tool discovery (both need the
+        // plaintext) and AFTER the row exists, so the envelope AAD and the
+        // fingerprint bind to the final mcp_server id. A failure here rides
+        // the shared catch below, which hard-deletes the row and the secret.
+        if (browserCredentialKey && mcpServer.secretId) {
+          const browserKeyFields = await sealBrowserProtectedSecret({
+            secretId: mcpServer.secretId,
+            mcpServerId: mcpServer.id,
+            key: browserCredentialKey,
+            staticValueKeys: new Set(
+              Object.keys(
+                getCatalogStaticUserConfigValues(catalogItem.userConfig),
+              ),
+            ),
+          });
+          await McpServerModel.update(mcpServer.id, browserKeyFields);
+          // Drop any connection/secret state built during discovery so no
+          // plaintext outlives the seal.
+          await mcpClient.invalidateConnectionsForServer(mcpServer.id);
+        }
+        // SPDX-SnippetEnd
+
         // Set status to success for non-local servers
         await McpServerModel.update(mcpServer.id, {
           localInstallationStatus: "success",
@@ -1179,6 +1254,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues: z.record(z.string(), z.string()).optional(),
           environmentValues: z.record(z.string(), z.string()).optional(),
           isByosVault: z.boolean().optional(),
+          // Enterprise: (re)protect the replaced credential under a
+          // browser-held key (x-archestra-credential-key header). Omitted or
+          // false replaces the credential UNPROTECTED and clears the flags.
+          browserKeyProtected: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -1192,6 +1271,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues,
           environmentValues,
           isByosVault,
+          browserKeyProtected,
         },
         user,
         headers,
@@ -1269,6 +1349,24 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await assertInstallAllowedOrBlock({ catalogItem, organizationId });
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Browser-key protection on the replaced credential: gate eligibility
+      // before any secret is written. Reauth without the flag replaces the
+      // credential UNPROTECTED (the flags are cleared below) — protection is
+      // a property of a specific submitted credential, never carried over.
+      const browserCredentialKey: Buffer | null = browserKeyProtected
+        ? requireBrowserCredentialInstallAllowed({
+            headers,
+            catalogItem,
+            scope: mcpServer.scope,
+            isByosVault,
+            providedSecretId,
+          })
+        : null;
+      // SPDX-SnippetEnd
+
       // Resolve the new secret ID: either provided directly, or create from raw credentials
       let newSecretId = providedSecretId;
 
@@ -1292,6 +1390,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const secret = await secretManager().createSecret(
             { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${mcpServer.name}-token`,
+            // Browser-key-protected bags are sealed below; force DB storage.
+            Boolean(browserCredentialKey),
           );
           newSecretId = secret.id;
         } else if (installUserConfigValues) {
@@ -1312,6 +1412,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             isByosVault
               ? `${mcpServer.name}-vault-secret`
               : `${mcpServer.name}-secret`,
+            Boolean(browserCredentialKey),
           );
           newSecretId = secret.id;
 
@@ -1436,9 +1537,35 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Seal the replacement secret AFTER connection validation (which needs
+      // the plaintext), bound to this server's id. A reauth WITHOUT the flag
+      // explicitly clears protection — the old sealed secret is deleted below
+      // and the new one is plaintext, so stale flags would brick the install.
+      const browserKeyFields = browserCredentialKey
+        ? await sealBrowserProtectedSecret({
+            secretId: newSecretId,
+            mcpServerId: id,
+            key: browserCredentialKey,
+            staticValueKeys: new Set(
+              Object.keys(
+                getCatalogStaticUserConfigValues(catalogItem?.userConfig),
+              ),
+            ),
+          })
+        : {
+            browserKeyProtected: false as const,
+            browserKeyFingerprint: null,
+            browserKeyEscrow: null,
+          };
+      // SPDX-SnippetEnd
+
       // Update the server with new secret and clear OAuth error fields
       const updatedServer = await McpServerModel.update(id, {
         secretId: newSecretId,
+        ...browserKeyFields,
         oauthRefreshError: null,
         oauthRefreshErrorMessage: null,
         oauthRefreshErrorDescription: null,
@@ -1760,6 +1887,24 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           secrets = secretRecord.secret;
         }
       }
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Browser-key-protected install: the inspector runs in the owner's
+      // browser session, so the key header must be present and match before
+      // the envelope bag is unwrapped for this request only.
+      if (mcpServer.browserKeyProtected) {
+        const credentialKey = requireCredentialKeyForProtectedServer({
+          headers,
+          mcpServer,
+        });
+        secrets = decryptCredentialBag(secrets, {
+          key: credentialKey,
+          mcpServerId: mcpServer.id,
+        });
+      }
+      // SPDX-SnippetEnd
 
       // The inspector talks to the same upstream as the MCP Gateway, so it has
       // to present the same credential. Without this it connected with only the
@@ -2324,6 +2469,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
         action: "reload tools for",
       });
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Browser-key-protected install: re-discovery connects with the
+      // install's credentials, so it needs the browser-held key for this
+      // request (the periodic refresher excludes protected installs).
+      if (mcpServer.browserKeyProtected) {
+        const credentialKey = requireCredentialKeyForProtectedServer({
+          headers,
+          mcpServer,
+        });
+        return reloadToolsForServer(mcpServer, { credentialKey });
+      }
+      // SPDX-SnippetEnd
 
       return reloadToolsForServer(mcpServer);
     },

@@ -65,6 +65,7 @@ import {
 import { incognitoRequestHeaders } from "@/lib/chat/incognito";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { browserCredentialHeaders } from "@/lib/mcp/browser-credential-key";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
@@ -591,18 +592,23 @@ function ChatSessionHook({
       credentials: "include",
       // Resolved per request (function form) so an incognito conversation's
       // browser-held key — stored just before the session mounts — always
-      // rides on the stream POST.
+      // rides on the stream POST. The MCP credential key rides alongside so
+      // browser-key protected connections can execute tools mid-turn; the
+      // backend ignores it for unprotected installs.
       headers: () => ({
         [EXTERNAL_AGENT_ID_HEADER]: getChatExternalAgentId(appName),
         ...incognitoRequestHeaders(conversationId),
+        ...browserCredentialHeaders(),
       }),
       prepareReconnectToStreamRequest: ({ id, headers, credentials }) => {
-        // Merge the incognito key explicitly: the reconnect GET touches the
-        // conversation's content too and must carry the same header.
+        // Merge the incognito and MCP credential keys explicitly: the
+        // reconnect GET touches the conversation's content (and may resume a
+        // turn that executes tools), so it must carry the same headers.
         const merged = new Headers(headers);
-        for (const [name, value] of Object.entries(
-          incognitoRequestHeaders(id) ?? {},
-        )) {
+        for (const [name, value] of Object.entries({
+          ...incognitoRequestHeaders(id),
+          ...browserCredentialHeaders(),
+        })) {
           merged.set(name, value);
         }
         return {

@@ -13,6 +13,11 @@ import { clipErrorMessage, trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import {
+  browserCredentialHeaders,
+  CREDENTIAL_KEY_HEADER,
+  getOrCreateBrowserCredentialKey,
+} from "@/lib/mcp/browser-credential-key";
+import {
   getApiErrorMessage,
   handleApiError,
   throwOnApiError,
@@ -209,6 +214,16 @@ export function useInstallMcpServer() {
     ) => {
       const { data: installedServer, error } = await installMcpServer({
         body: data,
+        // Browser-key protection: the key never travels in the body — it
+        // rides on this dedicated header, minted on first use and shared by
+        // all of this browser's protected credentials.
+        ...(data.browserKeyProtected
+          ? {
+              headers: {
+                [CREDENTIAL_KEY_HEADER]: getOrCreateBrowserCredentialKey(),
+              },
+            }
+          : {}),
       });
       if (error) {
         // `handleApiError` doesn't throw, so API rejections still flow
@@ -312,6 +327,10 @@ export function useReloadMcpServerTools() {
     }) => {
       const { data: result, error } = await reloadMcpServerTools({
         path: { id: data.id },
+        // Tool discovery runs against the live server, so a browser-key
+        // protected connection needs this browser's credential key. Sent
+        // whenever present — ignored for unprotected installs.
+        headers: browserCredentialHeaders(),
       });
       if (error) {
         handleApiError(error);
@@ -463,12 +482,26 @@ export function useReauthenticateMcpServer() {
     mutationFn: async (
       data: { id: string; name: string } & NonNullable<
         archestraApiTypes.ReauthenticateMcpServerData["body"]
-      >,
+      > & {
+          /**
+           * Re-protect the re-entered credential under this browser's key
+           * (also the recovery path after the key was lost). Narrow local
+           * extension until the generated reauthenticate body carries it.
+           */
+          browserKeyProtected?: boolean;
+        },
     ) => {
       const { id, name, ...body } = data;
       const response = await reauthenticateMcpServer({
         path: { id },
         body,
+        ...(data.browserKeyProtected
+          ? {
+              headers: {
+                [CREDENTIAL_KEY_HEADER]: getOrCreateBrowserCredentialKey(),
+              },
+            }
+          : {}),
       });
       if (response.error) {
         handleApiError(response.error);

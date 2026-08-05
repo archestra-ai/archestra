@@ -500,7 +500,17 @@ async function syncToolsForServer(
  * catalog. Throws if the catalog item is missing; propagates the connection
  * error if the live server is unreachable.
  */
-export async function reloadToolsForServer(server: McpServer): Promise<{
+export async function reloadToolsForServer(
+  server: McpServer,
+  options?: {
+    /**
+     * Browser-held key for a browser-key-protected install (enterprise) —
+     * threaded into discovery so the envelope bag can be unwrapped for this
+     * request only.
+     */
+    credentialKey?: Buffer | null;
+  },
+): Promise<{
   created: number;
   updated: number;
   unchanged: number;
@@ -514,7 +524,18 @@ export async function reloadToolsForServer(server: McpServer): Promise<{
       `Catalog item ${server.catalogId} not found for MCP server ${server.id}`,
     );
   }
-  const result = await syncToolsForServer(server, catalogItem);
+  const result = await syncToolsForServer(
+    server,
+    catalogItem,
+    options?.credentialKey
+      ? {
+          getTools: ({ server }) =>
+            McpServerModel.getToolsFromServer(server, {
+              credentialKey: options.credentialKey,
+            }),
+        }
+      : undefined,
+  );
   return {
     created: result.created.length,
     updated: result.updated.length,

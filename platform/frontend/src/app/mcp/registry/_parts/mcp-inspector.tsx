@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { browserCredentialHeaders } from "@/lib/mcp/browser-credential-key";
 import { useReloadMcpServerTools } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 import { filterMcpTools } from "./mcp-tool-search";
@@ -132,6 +133,9 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
       const { data, error } = await archestraApiSdk.inspectMcpServer({
         path: { id: serverId },
         body,
+        // Browser-key protected connections need this browser's credential
+        // key; sent whenever present, ignored for unprotected installs.
+        headers: browserCredentialHeaders(),
       });
       const durationMs = Math.round(performance.now() - start);
       if (error) {
@@ -204,6 +208,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
       const { data, error } = await archestraApiSdk.inspectMcpServer({
         path: { id: serverId },
         body,
+        headers: browserCredentialHeaders(),
       });
       const durationMs = Math.round(performance.now() - start);
       if (error) {

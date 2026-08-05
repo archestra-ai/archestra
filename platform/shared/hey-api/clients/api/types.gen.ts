@@ -32453,6 +32453,7 @@ export type GetConfigResponses = {
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
             chatIncognitoEnabled: boolean;
+            mcpBrowserCredentialsEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
@@ -59788,6 +59789,11 @@ export type GetMcpServersResponses = {
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
+        browserKeyProtected: boolean;
+        browserKeyFingerprint: string | null;
+        browserKeyEscrow: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         reinstallRequired: boolean;
         reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -59854,6 +59860,7 @@ export type InstallMcpServerData = {
         accessToken?: string;
         isByosVault?: boolean;
         serviceAccount?: string;
+        browserKeyProtected?: boolean;
     };
     path?: never;
     query?: never;
@@ -59942,6 +59949,11 @@ export type InstallMcpServerResponses = {
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
+        browserKeyProtected: boolean;
+        browserKeyFingerprint: string | null;
+        browserKeyEscrow: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         reinstallRequired: boolean;
         reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -60162,6 +60174,11 @@ export type GetMcpServerResponses = {
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
+        browserKeyProtected: boolean;
+        browserKeyFingerprint: string | null;
+        browserKeyEscrow: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         reinstallRequired: boolean;
         reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -60217,6 +60234,7 @@ export type ReauthenticateMcpServerData = {
             [key: string]: string;
         };
         isByosVault?: boolean;
+        browserKeyProtected?: boolean;
     };
     path: {
         id: string;
@@ -60307,6 +60325,11 @@ export type ReauthenticateMcpServerResponses = {
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
+        browserKeyProtected: boolean;
+        browserKeyFingerprint: string | null;
+        browserKeyEscrow: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         reinstallRequired: boolean;
         reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -60442,6 +60465,11 @@ export type RestoreMcpServerResponses = {
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
+        browserKeyProtected: boolean;
+        browserKeyFingerprint: string | null;
+        browserKeyEscrow: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         reinstallRequired: boolean;
         reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';
@@ -60860,6 +60888,11 @@ export type ReinstallMcpServerResponses = {
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
+        browserKeyProtected: boolean;
+        browserKeyFingerprint: string | null;
+        browserKeyEscrow: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         reinstallRequired: boolean;
         reinstallReason: 'new-input' | 'restart';
         localInstallationStatus: 'idle' | 'pending' | 'discovering-tools' | 'success' | 'error';

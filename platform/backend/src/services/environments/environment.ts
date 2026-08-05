@@ -1,4 +1,3 @@
-import { syncAdvisorForEnvironment } from "@/database/seed";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import logger from "@/logging";
 import { AgentModel, EnvironmentModel, OrganizationModel } from "@/models";
@@ -84,6 +83,10 @@ export async function createEnvironment(params: {
   // reaches nothing. Best-effort: the environment is already created, and the
   // boot-time sync seeds any advisor missed here.
   try {
+    // Imported here, not at module scope: `seed` pulls in the model-sync
+    // service, and a static edge from this module closes a cycle that leaves
+    // model-sync half-initialised for anything loading it first.
+    const { syncAdvisorForEnvironment } = await import("@/database/seed");
     await syncAdvisorForEnvironment({
       organizationId,
       environmentId: created.id,

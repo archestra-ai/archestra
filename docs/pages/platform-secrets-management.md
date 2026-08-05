@@ -3,7 +3,7 @@ title: "Secrets Management"
 category: Administration
 description: "Configure external secrets storage for sensitive data"
 order: 4
-lastUpdated: 2026-07-20
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -43,10 +43,9 @@ See [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](./platform-deployment#authentication
 
 Beyond stored secrets, Archestra can encrypt conversation content at rest: LLM proxy request/response payloads (the LLM Logs records) and chat message bodies. Set `ARCHESTRA_CONTENT_ENCRYPTION_SECRET` — a key separate from the stored-secrets key, so a security team can hold it in their own vault and map it to the environment variable at deploy time. Encryption and decryption are transparent; rows written before enablement are encrypted by a background sweep.
 
-Three behaviors change while encryption is on:
+Two behaviors change while encryption is on:
 
 - Conversation search matches titles only — message bodies are ciphertext.
-- Claude Code request delta-compression is disabled for new records, so LLM log storage grows faster. Pair encryption with [data retention](./platform-deployment#data-retention).
 - OTel spans stop carrying message/tool content by default — the [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](./platform-deployment#observability--metrics) default flips to `false` so plaintext content does not reach the telemetry backend while the database copies are encrypted. An explicit `true` re-enables capture (see the [observability docs](./platform-observability)) and logs a startup warning.
 
 **Enabling on a running deployment** takes two rollouts, so replicas never mix encrypted writes with readers that lack the key: first deploy with the key in `ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS` (decrypt-capable everywhere, writes unchanged), then move it to `ARCHESTRA_CONTENT_ENCRYPTION_SECRET`. After the second rollout finishes, run `pnpm --filter backend db:reencrypt-content` once: replicas that had not yet restarted during the rollout may have written a few plaintext rows behind the background sweep, and an explicit run always re-verifies the full table.

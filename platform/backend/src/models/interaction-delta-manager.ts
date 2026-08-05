@@ -3,8 +3,6 @@ import { isClaudeSessionSource, TimeInMs } from "@archestra/shared";
 import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
-import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
-// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
 import { decryptInteractionRow } from "@/content-encryption/rows.ee";
 import db, { schema } from "@/database";
 import type { InsertInteraction } from "@/types";
@@ -193,6 +191,7 @@ class InteractionDeltaManager {
       requestSharedPrefix,
       processedRequestSharedPrefix,
       requestLastMessageIdx: lastIdx,
+      requestLastMessageHash: lastHash,
     };
 
     const tip: DeltaTipUpdate = {
@@ -294,15 +293,6 @@ class InteractionDeltaManager {
   }
 
   private static isEligible(data: InsertInteraction): boolean {
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Under content encryption, new rows store their FULL encrypted payload:
-    // parent resolution navigates `request -> 'messages'` server-side, which
-    // ciphertext breaks. Existing plaintext delta chains keep reconstructing
-    // (loadChain decrypts row-wise before folding).
-    if (isContentEncryptionEnabled()) return false;
-    // SPDX-SnippetEnd
     if (data.sessionId == null) return false;
     if (!isClaudeSessionSource(data.sessionSource ?? null)) {
       return false;
@@ -340,15 +330,15 @@ class InteractionDeltaManager {
     // concurrent branches share the threadId and reach the same message index, so
     // the most recent candidate can belong to a different branch. We require a
     // strict prefix (`request_last_message_idx < length - 1`) and then pick the
-    // most recent candidate whose stored last message actually matches the
-    // incoming request at that index. The candidate's delta always ends at the
-    // full request's last message, so `request -> 'messages' -> -1` is exactly the
-    // message at request_last_message_idx — no separate stored hash needed.
+    // most recent candidate whose stored last-message hash matches the incoming
+    // request at that index. Matching on the always-plaintext hash column (not on
+    // `request -> 'messages' -> -1`) keeps parent resolution working when content
+    // encryption at rest has replaced `request` with ciphertext.
     const candidates = await db
       .select({
         id: schema.interactionsTable.id,
         requestLastMessageIdx: schema.interactionsTable.requestLastMessageIdx,
-        lastMessage: sql<unknown>`${schema.interactionsTable.request} -> 'messages' -> -1`,
+        requestLastMessageHash: schema.interactionsTable.requestLastMessageHash,
       })
       .from(schema.interactionsTable)
       .where(
@@ -374,7 +364,8 @@ class InteractionDeltaManager {
     const chosen = candidates.find(
       (c) =>
         c.requestLastMessageIdx !== null &&
-        hashMessage(c.lastMessage) ===
+        c.requestLastMessageHash !== null &&
+        c.requestLastMessageHash ===
           hashMessage(messages[c.requestLastMessageIdx]),
     );
     if (!chosen || chosen.requestLastMessageIdx === null) {

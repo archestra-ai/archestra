@@ -29,6 +29,7 @@ import {
   CheckIcon,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   Globe,
   InfoIcon,
   Loader2,
@@ -2477,9 +2478,13 @@ export function AgentDialog({
                                 href={`/agents?edit=${advisorAgentId}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="underline underline-offset-4"
+                                className="inline-flex items-center gap-1 underline underline-offset-4"
                               >
                                 Edit the Advisor agent
+                                <span className="sr-only">
+                                  (opens in new tab)
+                                </span>
+                                <ExternalLink aria-hidden className="h-3 w-3" />
                               </Link>
                               .
                             </p>

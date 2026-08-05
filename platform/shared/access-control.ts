@@ -729,6 +729,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Version history: agent-type read permission checked dynamically in handler
   [RouteId.GetAgentVersions]: {},
   [RouteId.GetAgentVersion]: {},
+  [RouteId.RestoreAgentVersion]: {},
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},

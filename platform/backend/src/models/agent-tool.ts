@@ -460,6 +460,31 @@ class AgentToolModel {
     return results.map((r) => r.toolId);
   }
 
+  /**
+   * Full assignment identity per tool, not just the tool id. The version
+   * restore compares live assignments against a snapshot's, and the credential
+   * binding is part of what a version records: two rows with the same toolId
+   * but a different server or resolution mode are different configurations, so
+   * an id-only read would report "unchanged" and silently skip restoring them.
+   */
+  static async findAssignmentsByAgent(agentId: string): Promise<
+    {
+      toolId: string;
+      mcpServerId: string | null;
+      credentialResolutionMode: CredentialResolutionMode;
+    }[]
+  > {
+    return db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, agentId));
+  }
+
   static async findCatalogToolIdsByAgent(agentId: string): Promise<string[]> {
     const results = await db
       .select({ toolId: schema.agentToolsTable.toolId })

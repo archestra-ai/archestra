@@ -7,6 +7,7 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
+import { ApiError } from "@/types";
 import type {
   AgentConfigSnapshot,
   AgentVersion,
@@ -222,9 +223,23 @@ class AgentVersionModel {
    * lock — the fork's own FOR UPDATE would block on it from another connection.
    * Legacy rows (`latestVersion` 0, predating versioning) fork version 1 on
    * their first config write. Returns null when the agent does not exist.
+   *
+   * `expectedLatestVersion` makes the fork a compare-and-set, mirroring
+   * `SkillModel.updateWithFiles`: the caller's edit was computed from a head it
+   * read earlier, and a mismatch means someone forked past it in between. The
+   * comparison reads the locked row BEFORE anything is minted, so it answers
+   * "has the head moved since I read it" — comparing the return value instead
+   * would 409 against this call's own fork whenever live config had drifted
+   * ahead of the head snapshot. Opt-in per caller: only the restore path
+   * anchors, every fork-on-write boundary omits it and stays last-write-wins.
+   *
+   * The lock is released when this transaction commits, so for a caller whose
+   * writes follow the fork the CAS decides under the lock but does not hold it
+   * for the duration — see `restoreAgentVersion`, which is non-atomic by design.
    */
   static async forkIfChanged(
     agentId: string,
+    options?: { expectedLatestVersion?: number },
   ): Promise<{ version: number; forked: boolean } | null> {
     return await withDbTransaction(async (tx) => {
       const [agent] = await tx
@@ -233,6 +248,20 @@ class AgentVersionModel {
         .where(eq(schema.agentsTable.id, agentId))
         .for("update");
       if (!agent) return null;
+
+      if (
+        options?.expectedLatestVersion !== undefined &&
+        agent.latestVersion !== options.expectedLatestVersion
+      ) {
+        // Carries an internal code because the routes that anchor also raise
+        // unrelated 409s; a client that has to offer a reload cannot tell them
+        // apart on the status alone.
+        throw new ApiError(
+          409,
+          `Agent "${agent.name}" has moved to version ${agent.latestVersion}; the request was based on version ${options.expectedLatestVersion}.`,
+          "agent_version_conflict",
+        );
+      }
 
       const snapshot = await AgentVersionModel.buildConfigSnapshot(tx, agent);
       const contentHash = AgentVersionModel.computeContentHash(snapshot);

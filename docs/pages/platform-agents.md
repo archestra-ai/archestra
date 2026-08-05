@@ -129,6 +129,12 @@ The history is available through the API. `GET /api/agents/:id/versions` lists v
 
 Each agent keeps its last 100 versions. The oldest listed version can therefore be greater than 1.
 
+`POST /api/agents/:id/versions/:version/restore` returns an agent to an earlier configuration. The restore forks forward: the old configuration becomes a new version. Nothing in the history is overwritten.
+
+A restore is all-or-nothing. If the version points at something that no longer exists — a deleted tool, for example — the request fails with a 400. The agent is left exactly as it was. Recreate the missing piece, or restore a later version instead.
+
+Send the agent's current `latestVersion` as `baseVersion` to anchor the restore. A 409 then tells you someone else changed the agent first. Built-in agents cannot be restored.
+
 ## System Prompt Templating
 
 Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating. Templates are rendered at runtime before the prompt is sent to the LLM, with the current user's context injected as variables. Agent Skills can opt into the same rendering with a `templated: true` frontmatter field (set automatically when converting a templated agent); their `SKILL.md` body is then rendered with the same variables and helpers each time the skill is loaded.

@@ -13,6 +13,7 @@ export const RouteId = {
   PermanentlyDeleteAgent: "permanentlyDeleteAgent",
   GetAgentVersions: "getAgentVersions",
   GetAgentVersion: "getAgentVersion",
+  RestoreAgentVersion: "restoreAgentVersion",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
   GetAgentToolExclusions: "getAgentToolExclusions",

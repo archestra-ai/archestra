@@ -40,6 +40,7 @@ import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   type Agent,
@@ -62,6 +63,7 @@ import {
 } from "@/types";
 import {
   AgentVersionMetadataSchema,
+  RestoreAgentVersionBodySchema,
   SelectAgentVersionSchema,
 } from "@/types/agent-version";
 import { isForeignKeyConstraintError } from "@/utils/db";
@@ -653,6 +655,93 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, `Agent has no version ${version}`);
       }
       return reply.send(row);
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/versions/:version/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreAgentVersion,
+        description:
+          "Restore an agent's config to an earlier version by replaying its " +
+          "snapshot forward as a new head version — history is never " +
+          "rewritten. All-or-nothing: the restore is validated in full before " +
+          "anything is written, and a version referencing something that no " +
+          "longer exists or is out of the caller's reach (a deleted tool, key " +
+          "or knowledge source) is rejected with 400 rather than partially " +
+          "applied. Only differences from the agent's live config are written, " +
+          "so restoring the current configuration is a no-op. Retrying is " +
+          "safe: the source version is immutable, and the pre-restore config " +
+          "is forked as a version before anything is written.",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+          // capped at int4 max so impossible versions 400 instead of
+          // reaching Postgres as an out-of-range bind
+          version: z.coerce.number().int().positive().max(2_147_483_647),
+        }),
+        // Nullish so a bare POST without a payload keeps working (an empty
+        // body arrives as null)
+        body: RestoreAgentVersionBodySchema.nullish(),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id, version }, body, user, organizationId }, reply) => {
+      // Fetch agent to determine its type for permission check
+      const existingAgent = await AgentModel.findById(id, user.id, true);
+      if (!existingAgent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization access, even for
+      // admins. AgentModel.findById is not org-scoped.
+      if (existingAgent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Restoring is an update in permission terms
+      // (return 404 to avoid leaking existence)
+      try {
+        checker.require(existingAgent.agentType, "update");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Enforce scope-based modify permissions like UpdateAgent does
+      const userTeamIds = !checker.isAdmin(existingAgent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: existingAgent.agentType,
+        agentScope: existingAgent.scope,
+        agentAuthorId: existingAgent.authorId,
+        agentTeamIds: existingAgent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      // Built-in agents restrict which fields an update may touch; a snapshot
+      // replay would bypass that allowlist.
+      if (existingAgent.builtInAgentConfig) {
+        throw new ApiError(403, "Built-in agents cannot be restored");
+      }
+
+      return reply.send(
+        await restoreAgentVersion({
+          agentId: id,
+          version,
+          baseVersion: body?.baseVersion,
+          userId: user.id,
+          organizationId,
+        }),
+      );
     },
   );
 

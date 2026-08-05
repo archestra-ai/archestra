@@ -20,6 +20,7 @@ import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import { describe, expect, test } from "@/test";
 import {
+  APP_BUILD_CONDUCT_INSTRUCTION,
   buildAgentSystemPrompt,
   OPENED_APP_PREFIX,
   PROJECT_FILES_PREFIX,
@@ -295,6 +296,53 @@ describe("buildAgentSystemPrompt", () => {
     expect(
       await buildAgentSystemPrompt({ ...common, mcpTools: {} }),
     ).not.toContain(TOOL_UI_RESULT_INSTRUCTION);
+  });
+
+  test("adds the app-build conduct instruction when the agent can build apps", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const common = {
+      agent,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    };
+
+    // Direct exposure: keyed off the scaffold_app tool being assigned.
+    const withScaffoldApp: Record<string, Tool> = {
+      [brand(TOOL_SCAFFOLD_APP_SHORT_NAME)]: {} as Tool,
+    };
+    expect(
+      await buildAgentSystemPrompt({ ...common, mcpTools: withScaffoldApp }),
+    ).toContain(APP_BUILD_CONDUCT_INSTRUCTION);
+    expect(
+      await buildAgentSystemPrompt({ ...common, mcpTools: someTool }),
+    ).not.toContain(APP_BUILD_CONDUCT_INSTRUCTION);
+
+    // search_and_run_only can dispatch scaffold_app without it being listed,
+    // so the mode alone qualifies.
+    const searchAgent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "search_and_run_only",
+    });
+    await makeMember(user.id, searchAgent.organizationId);
+    expect(
+      await buildAgentSystemPrompt({
+        agent: searchAgent,
+        mcpTools: {},
+        organizationId: searchAgent.organizationId,
+        userId: user.id,
+        agentId: searchAgent.id,
+      }),
+    ).toContain(APP_BUILD_CONDUCT_INSTRUCTION);
   });
 
   test("adds the tool-loading instruction only in search_and_run_only mode", async ({

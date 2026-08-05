@@ -445,10 +445,16 @@ describe("interaction routes", () => {
       },
     };
     const m0 = { role: "user", content: "first message in the claude session" };
+    // The tip's own delta suffix carries no user TEXT (tool_result-only), so
+    // the preview's text exists only in the head row — a suffix-only
+    // (unreconstructed) read would yield a null preview.
     const fullMessages = [
       m0,
       { role: "assistant", content: "ack" },
-      { role: "user", content: "second message" },
+      {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tu_1", content: "ok" }],
+      },
     ];
 
     const anthropicReq = (messages: unknown[]) =>
@@ -467,6 +473,10 @@ describe("interaction routes", () => {
       type: "anthropic:messages",
       request: anthropicReq([m0]),
       response: anthropicResp,
+      // Explicit distinct timestamps: defaultNow() can tie within the same
+      // millisecond, and the last-interaction window ranks by created_at
+      // alone — a tie could select the head row and dodge tip reconstruction.
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
     });
     const tip = await InteractionModel.create({
       profileId: agent.id,
@@ -475,6 +485,7 @@ describe("interaction routes", () => {
       type: "anthropic:messages",
       request: anthropicReq(fullMessages),
       response: anthropicResp,
+      createdAt: new Date("2020-01-01T00:00:01.000Z"),
     });
 
     // Sessions endpoint derives its preview from the reconstructed request —
@@ -489,10 +500,14 @@ describe("interaction routes", () => {
     });
     expect(sessions.statusCode).toBe(200);
     const sessionRow = sessions.json().data[0];
-    expect(sessionRow.lastUserMessagePreview).toBe("second message");
+    expect(sessionRow.lastUserMessagePreview).toBe(
+      "first message in the claude session",
+    );
     expect(sessionRow).not.toHaveProperty("lastInteractionRequest");
 
-    // Detail endpoint reconstructs the full request and passes response schema.
+    // Detail endpoint reconstructs the full request and passes response
+    // schema. Cold cache again: the sessions call above warmed the tip.
+    InteractionDeltaManager.reset();
     const detail = await app.inject({
       method: "GET",
       url: `/api/interactions/${tip.id}`,
@@ -500,7 +515,9 @@ describe("interaction routes", () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().request.messages).toEqual(fullMessages);
 
-    // Session-filtered list reconstructs every interaction's request.
+    // Session-filtered list reconstructs every interaction's request — also
+    // from a cold cache.
+    InteractionDeltaManager.reset();
     const list = await app.inject({
       method: "GET",
       url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc&sessionId=route-delta-session",

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import * as k8s from "@kubernetes/client-node";
@@ -160,7 +160,11 @@ async function readReportedMarkers(): Promise<string[]> {
 
 async function writeReportedMarkers(markers: string[]): Promise<void> {
   try {
-    await writeFile(REPORTED_MARKER_PATH, JSON.stringify(markers));
+    // Write-then-rename: an interrupted in-place write would leave corrupt
+    // JSON, which reads back as "no markers" and re-reports stale kills.
+    const tmpPath = `${REPORTED_MARKER_PATH}.tmp`;
+    await writeFile(tmpPath, JSON.stringify(markers));
+    await rename(tmpPath, REPORTED_MARKER_PATH);
   } catch (error) {
     logger.debug({ err: error }, "Could not persist termination-report marker");
   }

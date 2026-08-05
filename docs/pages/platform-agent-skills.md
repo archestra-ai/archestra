@@ -129,11 +129,25 @@ A synced skill can lose its GitHub token while it sits in the trash. It still re
 
 Every edit that changes a skill's `SKILL.md` or resource files creates a new immutable version. An edit that changes nothing does not. Version numbers count up from 1, and the full history is kept.
 
+Open **Version history** from the actions on a skill's row to browse them. Pick a version to read its files. You can read them whole, or as a diff against the version before it.
+
 `GET /api/skills/:id/versions` lists versions as metadata, newest first. `GET /api/skills/:id/versions/:version` returns one version's body and file snapshots. Sandboxes mount a pinned version, so a running skill never changes mid-conversation.
+
+### Restoring a Version
+
+**Restore this version** republishes an older version's content. It creates a new version instead of rewinding, so the history is never rewritten.
+
+A restore replaces the skill's instructions and its resource files. Files the skill has today that the restored version lacks are removed — the confirmation tells you how many. A later restore brings them back.
+
+Nothing else changes. The name, description, and other frontmatter fields are not versioned. Neither are scope, teams, or environments, so a restore will not undo a rename.
+
+A GitHub-synced skill cannot be restored, since its content comes from the repository. Stop the sync in the skill editor to make the skill editable again.
+
+Built-in skills also offer **Reset to default**, next to the restore button. It overwrites your local edits with the content Archestra ships, recorded as a new version.
 
 ### Concurrent Edits
 
-An edit can be anchored to the version it started from. If someone changes the skill's content first, the save is refused. Their edit is never overwritten.
+The skill editor anchors each save to the version it loaded. If someone changes the skill's content first, the save is refused. Their edit is never overwritten.
 
 `PUT /api/skills/:id` takes `baseVersion` — the skill's `latestVersion` when you composed the edit. The request fails with 409 if the skill has moved past it. Omit `baseVersion` and the save is not guarded. The `edit_skill` tool takes the same field.
 

@@ -261,11 +261,10 @@ const SkillManifestInputSchema = SkillManifestFieldsSchema.superRefine(
 
 /**
  * Update payload: the manifest fields plus `baseVersion`, the compare-and-set
- * the `edit_skill` MCP tool already takes under the same name. Optional, and
- * not sent by any in-repo caller yet — the skill editor dialog still saves
- * last-write-wins. For now it guards API clients that opt in: a write landing
- * between their read and their save is rejected (409) rather than silently
- * buried.
+ * the `edit_skill` MCP tool already takes under the same name. The skill editor
+ * sends the head its form was seeded from, so a write landing between that read
+ * and the save is rejected (409) rather than silently buried. Optional, for
+ * callers composing a payload that owes nothing to a prior read of the skill.
  *
  * Split from {@link SkillManifestInputSchema} because `.superRefine()` yields a
  * `ZodEffects`, which cannot be `.extend()`ed — the shared fields have to live

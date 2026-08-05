@@ -359,26 +359,31 @@ function listSection(params: {
 }
 
 /**
- * One text section per hook across both sides, keyed by file name — a hook
- * only the baseline holds is a removal, and still gets a row to read.
+ * One text section per hook across both sides, keyed by event and file name —
+ * a hook only the baseline holds is a removal, and still gets a row to read.
+ * The file name alone would not do: the same name is allowed under two events,
+ * and collapsing those into one row would diff one hook's body against the
+ * other's.
  */
 function hookSections(
   current: Snapshot,
   previous: Snapshot | null,
 ): AgentTextSection[] {
-  const currentByName = new Map(
-    current.hooks.map((hook) => [hook.fileName, hook]),
+  const currentByKey = new Map(
+    current.hooks.map((hook) => [hookKey(hook), hook]),
   );
-  const previousByName = new Map(
-    (previous?.hooks ?? []).map((hook) => [hook.fileName, hook]),
+  const previousByKey = new Map(
+    (previous?.hooks ?? []).map((hook) => [hookKey(hook), hook]),
   );
-  const names = [
-    ...new Set([...currentByName.keys(), ...previousByName.keys()]),
+  const keys = [
+    ...new Set([...currentByKey.keys(), ...previousByKey.keys()]),
   ].sort((a, b) => a.localeCompare(b));
 
-  return names.map((name) => {
-    const after = currentByName.get(name) ?? null;
-    const before = previousByName.get(name) ?? null;
+  return keys.map((key) => {
+    const after = currentByKey.get(key) ?? null;
+    const before = previousByKey.get(key) ?? null;
+    // One side is always present, so either carries the hook's identity.
+    const { event, fileName } = (after ?? before) as SnapshotHook;
     const hasBaseline = previous !== null;
     const fields = HOOK_FIELDS.map(({ label, render }) =>
       fieldDiff(
@@ -389,10 +394,10 @@ function hookSections(
       ),
     );
     return {
-      id: `hook:${name}`,
-      label: name,
+      id: `hook:${key}`,
+      label: `${fileName} (${event})`,
       kind: "text" as const,
-      language: languageForFileName(name),
+      language: languageForFileName(fileName),
       fields,
       current: after?.content ?? null,
       previous: before?.content ?? null,
@@ -524,6 +529,11 @@ const CONFIGURATION_FIELDS: {
 ];
 
 type SnapshotHook = Snapshot["hooks"][number];
+
+/** What makes a hook unique on an agent, matching the database's constraint. */
+function hookKey(hook: SnapshotHook): string {
+  return `${hook.event}/${hook.fileName}`;
+}
 
 const HOOK_FIELDS: {
   label: string;

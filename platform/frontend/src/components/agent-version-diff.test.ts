@@ -144,7 +144,7 @@ describe("compareAgentSnapshots", () => {
     });
   });
 
-  it("gives every hook on either side a row, keyed by file name", () => {
+  it("gives every hook on either side a row, keyed by event and file name", () => {
     const hook = {
       event: "pre-tool",
       fileName: "pre-tool.ts",
@@ -160,7 +160,10 @@ describe("compareAgentSnapshots", () => {
         hooks: [hook, { ...hook, fileName: "post-tool.ts" }],
       }),
     );
-    const changed = section(sections, "hook:pre-tool.ts") as AgentTextSection;
+    const changed = section(
+      sections,
+      "hook:pre-tool/pre-tool.ts",
+    ) as AgentTextSection;
     expect(changed).toMatchObject({
       group: "Hooks",
       change: "changed",
@@ -169,8 +172,43 @@ describe("compareAgentSnapshots", () => {
       current: "export const x = 1",
     });
     // A hook only the baseline holds is a removal, not a missing row.
-    const removed = section(sections, "hook:post-tool.ts") as AgentTextSection;
+    const removed = section(
+      sections,
+      "hook:pre-tool/post-tool.ts",
+    ) as AgentTextSection;
     expect(removed).toMatchObject({ change: "removed", current: null });
+  });
+
+  it("keeps one file name registered under two events apart", () => {
+    const hook = {
+      fileName: "guard.py",
+      content: "print('before')",
+      requirements: [],
+      enabled: true,
+    };
+    const sections = compareAgentSnapshots(
+      makeSnapshot({
+        hooks: [
+          { ...hook, event: "pre-tool" },
+          { ...hook, event: "post-tool", content: "print('after')" },
+        ],
+      }),
+      null,
+    );
+    // Neither hook may swallow the other, and neither may be read against the
+    // other's body.
+    expect(
+      section(sections, "hook:pre-tool/guard.py") as AgentTextSection,
+    ).toMatchObject({
+      label: "guard.py (pre-tool)",
+      current: "print('before')",
+    });
+    expect(
+      section(sections, "hook:post-tool/guard.py") as AgentTextSection,
+    ).toMatchObject({
+      label: "guard.py (post-tool)",
+      current: "print('after')",
+    });
   });
 
   it("treats a hook meta-only edit as a change", () => {
@@ -185,7 +223,9 @@ describe("compareAgentSnapshots", () => {
       makeSnapshot({ hooks: [{ ...hook, enabled: false }] }),
       makeSnapshot({ hooks: [hook] }),
     );
-    expect(section(sections, "hook:pre-tool.ts").change).toBe("changed");
+    expect(section(sections, "hook:pre-tool/pre-tool.ts").change).toBe(
+      "changed",
+    );
   });
 
   it("shows an LLM proxy only the surface it edits", () => {

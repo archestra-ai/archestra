@@ -1096,15 +1096,11 @@ export async function getChatMcpTools({
         ]);
 
         // Convert delegation tools to AI SDK Tool format.
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
         // Incognito conversations exclude delegation entirely: a child-agent
         // run builds its own tool set and would log its tool calls with
         // content, outside the parent's suppression scope. Disable rather
         // than leak.
         if (!toolContext.suppressContentLogging) {
-          // SPDX-SnippetEnd
           for (const agentTool of [...agentToolsList, ...skillToolsList]) {
             aiTools[agentTool.name] = buildAgentDelegationTool({
               agentTool,

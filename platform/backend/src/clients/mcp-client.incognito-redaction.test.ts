@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Contract under test — incognito content redaction of persisted MCP tool
  * calls (executeToolCallForOwner with suppressContentLogging):

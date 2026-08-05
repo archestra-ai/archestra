@@ -187,8 +187,7 @@ import {
   requireIncognitoKey,
   resolveIncognitoAccess,
   resolveIncognitoCreation,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; incognito helpers reject when the feature is off
-} from "./incognito.ee";
+} from "./incognito";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
@@ -398,9 +397,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // Incognito: the browser-held key is required up front (fingerprint
       // checked, wrong key 409s before any side effect) and captured ONCE
       // into this request's closure — every persistence call below receives
@@ -429,6 +425,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // Browser-key MCP credentials: capture the per-browser credential key
       // (when the browser presented one) request-scoped, so tool calls
       // against browser-key-protected connections can unwrap them for this
@@ -2175,9 +2174,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // Incognito: the model returned no message content (it cannot — the key
       // only exists on this request). Decrypt here with the presented key, or
       // return the locked shape for the tombstone. A wrong key is a 409.
@@ -2202,7 +2198,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.send(conversation);
         }
       }
-      // SPDX-SnippetEnd
 
       // Hook-run debug parts are persisted on every turn but only surfaced to
       // admins while this conversation has debug mode on. Strip them otherwise
@@ -2614,21 +2609,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Creating conversation with model",
       );
 
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // Incognito: the id is generated up front because the key fingerprint
-      // is bound to it; the browser's key is fingerprinted + escrow-wrapped,
-      // never stored raw. The title is static — generation would send content
-      // to an LLM and store a derived plaintext title.
+      // (and any enterprise escrow record, including the Vault-sink write)
+      // is bound to it; the browser's key is fingerprinted, never stored
+      // raw. The title is static — generation would send content to an LLM
+      // and store a derived plaintext title.
       const incognitoConversationId = incognito ? randomUUID() : null;
       const incognitoFields = incognitoConversationId
-        ? resolveIncognitoCreation({
+        ? await resolveIncognitoCreation({
             request,
             conversationId: incognitoConversationId,
           })
         : null;
-      // SPDX-SnippetEnd
 
       // Create conversation with agent
       return reply.send(
@@ -2748,9 +2740,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // Incognito: the artifact column stores conversation-derived content in
       // plaintext, so the write is silently dropped (the feature no-ops).
       if (body.artifact !== undefined) {
@@ -2759,7 +2748,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           body.artifact = undefined;
         }
       }
-      // SPDX-SnippetEnd
 
       // Coerce pinnedAt ISO string to Date for database storage
       const pinnedAtDate =
@@ -3544,9 +3532,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Message not found or access denied");
       }
 
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       const editKey = conversation.incognito
         ? requireIncognitoKey({
             request,
@@ -3559,7 +3544,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           })
         : null;
-      // SPDX-SnippetEnd
 
       const message = await MessageModel.findByAnyIdInConversation(
         id,
@@ -3645,9 +3629,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Message not found or access denied");
       }
 
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // Incognito rows can only be resolved-by-content-id (and returned)
       // after decryption with the browser-held key.
       const feedbackKeyInfo =
@@ -3655,7 +3636,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const feedbackKey = feedbackKeyInfo?.incognito
         ? requireIncognitoKey({ request, conversation: feedbackKeyInfo })
         : null;
-      // SPDX-SnippetEnd
 
       // Resolve by DB UUID or AI SDK nanoid content ID, scoped to the
       // conversation — content IDs are client-supplied and not globally unique
@@ -4330,9 +4310,6 @@ function getSerializableChatError(error: ChatErrorResponse): ChatErrorResponse {
   }
 }
 
-// SPDX-SnippetBegin
-// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * The persisted form of a chat error for an incognito conversation: keep the
  * structured code, retryability, and trace correlation ids, but drop the
@@ -4358,7 +4335,6 @@ function redactChatErrorForIncognito(
     ...(error.authAction ? { authAction: error.authAction } : {}),
   };
 }
-// SPDX-SnippetEnd
 
 function getMessagesNotYetPersisted(params: {
   existingMessages: Array<{ id: string; content: unknown }>;

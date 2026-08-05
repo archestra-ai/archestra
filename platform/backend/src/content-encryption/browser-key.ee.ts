@@ -5,81 +5,16 @@ import {
   constants as cryptoConstants,
   type KeyObject,
   publicEncrypt,
-  timingSafeEqual,
 } from "node:crypto";
-import type { IncognitoEscrowBlob } from "@/types/conversation";
+import type { IncognitoEscrowWrappedDek } from "@/types/conversation";
 
 /**
- * Shared primitives for browser-held keys: features where a 32-byte key
- * lives only in the user's browser, rides requests as a header, and is
- * escrowed to an operator-configured RSA public key for break-glass
- * recovery. Consumed by incognito chats (incognito.ee.ts) and browser-key
- * MCP credentials (browser-credential.ee.ts) — each with its own env var,
- * fingerprint domain, and AAD scheme.
+ * Enterprise escrow half of the browser-key primitives (base half in
+ * browser-key.ts): wrapping a browser-held key to an operator-configured
+ * RSA public key for break-glass recovery. Consumed by incognito-chat
+ * escrow (incognito-escrow.ee.ts) and browser-key MCP credentials
+ * (browser-credential.ee.ts) — each with its own env var and blob storage.
  */
-
-const BROWSER_KEY_LENGTH_BYTES = 32;
-
-/**
- * Parse a browser-key header value. Returns null when absent; throws when
- * present but malformed (not base64url, wrong length) so routes can 400
- * with a precise message instead of failing GCM later.
- */
-export function parseBrowserKeyHeader(
-  headerValue: string | undefined,
-): Buffer | null {
-  if (headerValue === undefined || headerValue === "") return null;
-  let key: Buffer;
-  try {
-    key = Buffer.from(headerValue, "base64url");
-  } catch {
-    throw new Error("browser key header is not valid base64url");
-  }
-  if (key.length !== BROWSER_KEY_LENGTH_BYTES) {
-    throw new Error(
-      `browser key must decode to exactly ${BROWSER_KEY_LENGTH_BYTES} bytes`,
-    );
-  }
-  return key;
-}
-
-/**
- * Domain-separated fingerprint of a browser key bound to a subject id
- * (conversation, MCP server). Stored on the row so a wrong key is rejected
- * up front with a clean error instead of scattered GCM failures.
- */
-export function browserKeyFingerprint(params: {
-  domain: string;
-  subjectId: string;
-  key: Buffer;
-}): string {
-  return createHash("sha256")
-    .update(params.domain)
-    .update(params.subjectId)
-    .update(params.key)
-    .digest("hex");
-}
-
-/** Constant-time comparison of a stored fingerprint against a presented key. */
-export function browserKeyMatches(params: {
-  storedFingerprint: string;
-  domain: string;
-  subjectId: string;
-  key: Buffer;
-}): boolean {
-  const presented = Buffer.from(
-    browserKeyFingerprint({
-      domain: params.domain,
-      subjectId: params.subjectId,
-      key: params.key,
-    }),
-    "hex",
-  );
-  const stored = Buffer.from(params.storedFingerprint, "hex");
-  return (
-    stored.length === presented.length && timingSafeEqual(stored, presented)
-  );
-}
 
 /**
  * Wrap a browser key to an escrow public key. RSA-OAEP with an EXPLICIT
@@ -89,7 +24,7 @@ export function browserKeyMatches(params: {
 export function wrapBrowserKey(params: {
   key: Buffer;
   escrowKey: KeyObject;
-}): IncognitoEscrowBlob {
+}): IncognitoEscrowWrappedDek {
   const wrapped = publicEncrypt(
     {
       key: params.escrowKey,
@@ -136,12 +71,12 @@ export function loadEscrowPublicKey(params: {
   return key;
 }
 
+// === Internal ===
+
+const MIN_ESCROW_MODULUS_BITS = 2048;
+
 /** Short identifier of an escrow public key (sha256 over the SPKI DER). */
 function escrowPublicKeyFingerprint(key: KeyObject): string {
   const der = key.export({ type: "spki", format: "der" });
   return createHash("sha256").update(der).digest("hex").slice(0, 16);
 }
-
-// === Internal ===
-
-const MIN_ESCROW_MODULUS_BITS = 2048;

@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { KeyObject } from "node:crypto";
 import config from "@/config";
-import type { IncognitoEscrowBlob } from "@/types/conversation";
+import type { IncognitoEscrowWrappedDek } from "@/types/conversation";
 import { decryptStringWithKey, encryptStringWithKey } from "@/utils/crypto";
 import {
   browserKeyFingerprint,
   browserKeyMatches,
-  loadEscrowPublicKey,
   parseBrowserKeyHeader,
-  wrapBrowserKey,
-} from "./browser-key.ee";
+} from "./browser-key";
+import { loadEscrowPublicKey, wrapBrowserKey } from "./browser-key.ee";
 import { isContentEnvelope } from "./index.ee";
 
 /**
@@ -88,7 +87,7 @@ export function credentialKeyMatches(params: {
 }
 
 /** Escrow-wrap the browser key for one protected server (break-glass copy). */
-export function wrapCredentialKey(key: Buffer): IncognitoEscrowBlob {
+export function wrapCredentialKey(key: Buffer): IncognitoEscrowWrappedDek {
   const escrowKey = escrowKeyOrNull();
   if (!escrowKey) {
     throw new Error(

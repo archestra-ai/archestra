@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { type InteractionSource, TimeInMs } from "@archestra/shared";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";

@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
   constants as cryptoConstants,
   generateKeyPairSync,
@@ -7,6 +6,7 @@ import {
 } from "node:crypto";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
+import { isContentEnvelope } from "@/utils/crypto";
 import {
   decryptIncognitoMessageRow,
   encryptIncognitoMessageContent,
@@ -14,12 +14,14 @@ import {
   incognitoDekMatches,
   isIncognitoChatEnabled,
   parseIncognitoDekHeader,
+} from "./incognito";
+import {
+  isIncognitoEscrowConfigured,
+  produceIncognitoEscrow,
   verifyIncognitoChatConfig,
   wrapIncognitoDek,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
-} from "./incognito.ee";
-// biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
-import { isContentEnvelope } from "./index.ee";
+} from "./incognito-escrow.ee";
 
 const { publicKey, privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -30,50 +32,14 @@ const CONVERSATION_A = "11111111-1111-4111-8111-111111111111";
 const CONVERSATION_B = "22222222-2222-4222-8222-222222222222";
 
 describe("incognito chat crypto", () => {
-  beforeEach(() => {
-    config.enterpriseFeatures.core = true;
-    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
-  });
-
-  test("enabled only with both an EE license and a valid escrow key", () => {
+  test("enabled by default with NO license and NO escrow key; env flag disables", () => {
+    // Free feature: nothing enterprise, nothing escrow.
+    config.enterpriseFeatures.core = false;
+    config.chatIncognito.escrowPublicKey = undefined;
     expect(isIncognitoChatEnabled()).toBe(true);
 
-    config.enterpriseFeatures.core = false;
+    config.chatIncognito.enabled = false;
     expect(isIncognitoChatEnabled()).toBe(false);
-
-    config.enterpriseFeatures.core = true;
-    config.chatIncognito.escrowPublicKey = undefined;
-    expect(isIncognitoChatEnabled()).toBe(false);
-  });
-
-  test("boot guard rejects a key without a license, bad PEMs, and small keys", () => {
-    expect(() => verifyIncognitoChatConfig()).not.toThrow();
-
-    config.enterpriseFeatures.core = false;
-    expect(() => verifyIncognitoChatConfig()).toThrow(/enterprise license/);
-
-    config.enterpriseFeatures.core = true;
-    config.chatIncognito.escrowPublicKey = "not-a-pem";
-    expect(() => verifyIncognitoChatConfig()).toThrow();
-
-    const small = generateKeyPairSync("rsa", { modulusLength: 1024 });
-    config.chatIncognito.escrowPublicKey = small.publicKey.export({
-      type: "spki",
-      format: "pem",
-    }) as string;
-    expect(() => verifyIncognitoChatConfig()).toThrow(/at least 2048 bits/);
-
-    // Non-RSA keys are rejected by type, not size.
-    const ec = generateKeyPairSync("ed25519");
-    config.chatIncognito.escrowPublicKey = ec.publicKey.export({
-      type: "spki",
-      format: "pem",
-    }) as string;
-    expect(() => verifyIncognitoChatConfig()).toThrow(/must be an RSA/);
-
-    // Unset is always fine — the feature is simply off.
-    config.chatIncognito.escrowPublicKey = undefined;
-    expect(() => verifyIncognitoChatConfig()).not.toThrow();
   });
 
   test("DEK header parsing enforces exactly 32 base64url bytes", () => {
@@ -118,25 +84,6 @@ describe("incognito chat crypto", () => {
     ).toBe(false);
   });
 
-  test("escrow wrap is independently recoverable with the private key", () => {
-    const dek = randomBytes(32);
-    const blob = wrapIncognitoDek(dek);
-
-    expect(blob.v).toBe(1);
-    expect(blob.alg).toBe("RSA-OAEP-256");
-    // The exact recovery contract customers' offline tooling relies on:
-    // RSA-OAEP with SHA-256 over the base64 blob.
-    const recovered = privateDecrypt(
-      {
-        key: privateKey,
-        padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING,
-        oaepHash: "sha256",
-      },
-      Buffer.from(blob.wrappedDek, "base64"),
-    );
-    expect(recovered.equals(dek)).toBe(true);
-  });
-
   test("message content roundtrips; AAD rejects cross-conversation transplant", () => {
     const dek = randomBytes(32);
     const content = {
@@ -173,5 +120,107 @@ describe("incognito chat crypto", () => {
         { dek: randomBytes(32), conversationId: CONVERSATION_A },
       ),
     ).toThrow();
+  });
+});
+
+describe("incognito escrow (enterprise)", () => {
+  beforeEach(() => {
+    config.enterpriseFeatures.core = true;
+    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
+  });
+
+  test("escrow is configured only with both an EE license and a valid key", () => {
+    expect(isIncognitoEscrowConfigured()).toBe(true);
+
+    config.enterpriseFeatures.core = false;
+    expect(isIncognitoEscrowConfigured()).toBe(false);
+
+    config.enterpriseFeatures.core = true;
+    config.chatIncognito.escrowPublicKey = undefined;
+    expect(isIncognitoEscrowConfigured()).toBe(false);
+  });
+
+  test("boot guard rejects a key without a license, bad PEMs, and small keys", () => {
+    expect(() => verifyIncognitoChatConfig()).not.toThrow();
+
+    config.enterpriseFeatures.core = false;
+    expect(() => verifyIncognitoChatConfig()).toThrow(/enterprise license/);
+
+    config.enterpriseFeatures.core = true;
+    config.chatIncognito.escrowPublicKey = "not-a-pem";
+    expect(() => verifyIncognitoChatConfig()).toThrow();
+
+    const small = generateKeyPairSync("rsa", { modulusLength: 1024 });
+    config.chatIncognito.escrowPublicKey = small.publicKey.export({
+      type: "spki",
+      format: "pem",
+    }) as string;
+    expect(() => verifyIncognitoChatConfig()).toThrow(/at least 2048 bits/);
+
+    // Non-RSA keys are rejected by type, not size.
+    const ec = generateKeyPairSync("ed25519");
+    config.chatIncognito.escrowPublicKey = ec.publicKey.export({
+      type: "spki",
+      format: "pem",
+    }) as string;
+    expect(() => verifyIncognitoChatConfig()).toThrow(/must be an RSA/);
+
+    // Unset is always fine — the free feature runs without escrow.
+    config.chatIncognito.escrowPublicKey = undefined;
+    expect(() => verifyIncognitoChatConfig()).not.toThrow();
+  });
+
+  test("boot guard names each missing piece for the vault sink", () => {
+    config.chatIncognito.escrowSink = "vault";
+
+    // Missing license.
+    config.enterpriseFeatures.core = false;
+    expect(() => verifyIncognitoChatConfig()).toThrow(/enterprise license/);
+
+    // Missing escrow key.
+    config.enterpriseFeatures.core = true;
+    config.chatIncognito.escrowPublicKey = undefined;
+    expect(() => verifyIncognitoChatConfig()).toThrow(
+      /ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY/,
+    );
+
+    // Missing Vault secrets backend.
+    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
+    config.secretsManager.type = "DB";
+    expect(() => verifyIncognitoChatConfig()).toThrow(
+      /ARCHESTRA_SECRETS_MANAGER=Vault/,
+    );
+
+    // All three present: fine.
+    config.secretsManager.type = "VAULT";
+    expect(() => verifyIncognitoChatConfig()).not.toThrow();
+  });
+
+  test("escrow wrap is independently recoverable with the private key", () => {
+    const dek = randomBytes(32);
+    const blob = wrapIncognitoDek(dek);
+
+    expect(blob.v).toBe(1);
+    expect(blob.alg).toBe("RSA-OAEP-256");
+    // The exact recovery contract customers' offline tooling relies on:
+    // RSA-OAEP with SHA-256 over the base64 blob.
+    const recovered = privateDecrypt(
+      {
+        key: privateKey,
+        padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING,
+        oaepHash: "sha256",
+      },
+      Buffer.from(blob.wrappedDek, "base64"),
+    );
+    expect(recovered.equals(dek)).toBe(true);
+  });
+
+  test("produceIncognitoEscrow returns the inline blob for the db sink", async () => {
+    const dek = randomBytes(32);
+    const record = await produceIncognitoEscrow({
+      dek,
+      conversationId: CONVERSATION_A,
+    });
+    expect(record).toMatchObject({ v: 1, alg: "RSA-OAEP-256" });
   });
 });

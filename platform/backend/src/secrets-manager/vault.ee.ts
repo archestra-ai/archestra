@@ -218,6 +218,32 @@ export default class VaultSecretManager
     };
   }
 
+  /**
+   * Write an opaque value at `<secretPath>/<relativePath>` and return the
+   * full Vault path written. Used by the incognito escrow Vault sink
+   * (content-encryption/incognito-escrow.ee.ts): the platform only ever
+   * writes these paths — never reads or lists them — so a create-only Vault
+   * policy makes them write-only from the app's perspective. No database
+   * bookkeeping: the caller stores the returned path itself. Errors propagate
+   * raw so the caller controls the failure mode (the escrow path fails
+   * closed with its own error, not the generic 503).
+   */
+  async writeValueAtRelativePath(params: {
+    relativePath: string;
+    value: string;
+  }): Promise<string> {
+    const vaultPath = `${this.config.secretPath}/${params.relativePath}`;
+    await this.writeToPath(
+      vaultPath,
+      this.buildWritePayload({ value: params.value }),
+    );
+    logger.info(
+      { vaultPath, kvVersion: this.config.kvVersion },
+      "VaultSecretManager.writeValueAtRelativePath: value written",
+    );
+    return vaultPath;
+  }
+
   async checkConnectivity(): Promise<SecretsConnectivityResult> {
     const listBasePath = this.getListBasePath();
 

@@ -122,13 +122,9 @@ export async function buildModelMessages(params: {
   } = params;
 
   let compactionStarted = false;
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   // Incognito conversations skip auto-compaction outright: a summary is
   // derived conversation content, and generating one would both send the
   // history to the summarizer and persist the result in plaintext.
-  // SPDX-SnippetEnd
   const compactionResult: ContextCompactionResult = disableCompaction
     ? { messages: compaction.messages, status: "skipped", compaction: null }
     : await compactMessagesForChat({

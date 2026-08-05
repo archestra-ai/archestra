@@ -1198,6 +1198,24 @@ export const parseOtelCaptureContent = (params: {
   if (value === "false") return false;
   return !params.contentEncryptionConfigured;
 };
+
+/**
+ * Where the incognito escrow blob is persisted: on the conversation row
+ * (`db`, default) or in the configured HashiCorp Vault backend (`vault`).
+ * Rejected at parse time on any other value — escrow drives break-glass
+ * recovery, so a typo must fail the boot, never silently fall back to `db`.
+ * @public — exported for testability
+ */
+export const parseIncognitoEscrowSink = (
+  envValue: string | undefined,
+): "db" | "vault" => {
+  const value = envValue?.trim().toLowerCase();
+  if (!value || value === "db") return "db";
+  if (value === "vault") return "vault";
+  throw new Error(
+    `Invalid ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK="${envValue}". Expected "db" or "vault".`,
+  );
+};
 // SPDX-SnippetEnd
 
 /**
@@ -2705,21 +2723,40 @@ const config = {
       process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
       undefined,
   },
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   /**
-   * Incognito chats (enterprise): per-conversation encryption under a
-   * browser-held key. The value is the PEM (or base64-of-PEM) RSA public key
-   * conversation keys are escrowed to for break-glass recovery; the private
-   * half stays offline with the customer's security team. Setting it without
-   * an enterprise license fails startup (see verifyIncognitoChatConfig).
+   * Incognito chats: per-conversation encryption under a browser-held key.
+   * Free feature, enabled by default; ARCHESTRA_CHAT_INCOGNITO_ENABLED=false
+   * disables it. The escrow fields below are the enterprise add-on.
    */
   chatIncognito: {
+    enabled: process.env.ARCHESTRA_CHAT_INCOGNITO_ENABLED !== "false",
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    /**
+     * Enterprise escrow: the PEM (or base64-of-PEM) RSA public key
+     * conversation keys are escrowed to for break-glass recovery; the private
+     * half stays offline with the customer's security team. Setting it without
+     * an enterprise license fails startup (see verifyIncognitoChatConfig).
+     */
     escrowPublicKey:
       process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
       undefined,
+    /**
+     * Escrow sink: `db` stores the wrapped blob on the conversation row;
+     * `vault` writes it to the configured HashiCorp Vault backend at
+     * `incognito-escrow/<conversationId>` and stores only a path marker.
+     * `vault` requires an enterprise license, the escrow key, and
+     * ARCHESTRA_SECRETS_MANAGER=Vault (see verifyIncognitoChatConfig).
+     */
+    escrowSink: parseIncognitoEscrowSink(
+      process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK,
+    ),
+    // SPDX-SnippetEnd
   },
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   /**
    * Browser-key MCP credentials (enterprise): personal static credentials on
    * remote MCP servers protected by a key held only in the user's browser.

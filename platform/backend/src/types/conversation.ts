@@ -32,17 +32,35 @@ export const ConversationOriginSchema = z.enum([
 export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 
 /**
- * Versioned escrow blob stored on incognito conversations: the conversation
- * key wrapped to the operator's RSA escrow public key (enterprise
- * break-glass recovery — see content-encryption/incognito.ee.ts).
+ * Versioned escrow record stored on incognito conversations (enterprise
+ * break-glass recovery — see content-encryption/incognito-escrow.ee.ts).
+ * Union of the two escrow sinks:
+ * - `db` sink: the conversation key wrapped to the operator's RSA escrow
+ *   public key, stored inline on the row.
+ * - `vault` sink: a reference marker naming the HashiCorp Vault path the
+ *   wrapped key was written to (the blob itself never touches the database).
+ * Null when no escrow key is configured (free incognito chats store no
+ * recoverable copy of the key at all).
  */
-export const IncognitoEscrowBlobSchema = z.object({
-  v: z.literal(1),
-  alg: z.literal("RSA-OAEP-256"),
-  escrowKeyFingerprint: z.string(),
-  wrappedDek: z.string(),
-});
+export const IncognitoEscrowBlobSchema = z.union([
+  z.object({
+    v: z.literal(1),
+    alg: z.literal("RSA-OAEP-256"),
+    escrowKeyFingerprint: z.string(),
+    wrappedDek: z.string(),
+  }),
+  z.object({
+    v: z.literal(1),
+    sink: z.literal("vault"),
+    path: z.string(),
+  }),
+]);
 export type IncognitoEscrowBlob = z.infer<typeof IncognitoEscrowBlobSchema>;
+/** The `db`-sink variant: the RSA-wrapped conversation key itself. */
+export type IncognitoEscrowWrappedDek = Extract<
+  IncognitoEscrowBlob,
+  { wrappedDek: string }
+>;
 
 /**
  * Per-conversation content key for incognito conversations: the browser-held

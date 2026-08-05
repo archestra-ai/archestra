@@ -550,13 +550,9 @@ class ActiveChatRunEventBatcher {
       return;
     }
 
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // Suppressed (incognito) runs persist no payloads; the appendEvents call
     // below still runs when a liveness touch is due, so a long silent stream
     // is not reaped as stale.
-    // SPDX-SnippetEnd
     const payloads = this.suppressPayloads
       ? []
       : compactReplayPayloads(this.pending);

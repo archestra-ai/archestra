@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { beforeEach, describe, expect, it } from "vitest";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import {

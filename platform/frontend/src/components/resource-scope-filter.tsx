@@ -12,6 +12,7 @@ import {
   serializeLabels,
 } from "@/components/label-select";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { scopeStyles } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -27,6 +28,7 @@ import { useLabelKeys, useLabelValues } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
+import { cn } from "@/lib/utils";
 
 const SHARED_SCOPES = ["personal", "team", "org"] as const;
 
@@ -498,7 +500,7 @@ export function ActiveFilterBadges({
             <Badge
               key={team.id}
               variant="outline"
-              className="gap-1 pr-1 bg-green-500/10 text-green-600 border-green-500/30"
+              className={cn(scopeStyles.team, "gap-1 pr-1")}
             >
               {team.name}
               <button
@@ -528,7 +530,7 @@ export function ActiveFilterBadges({
             <Badge
               key={user.id}
               variant="outline"
-              className="gap-1 pr-1 bg-blue-500/10 text-blue-600 border-blue-500/30"
+              className={cn(scopeStyles.personal, "gap-1 pr-1")}
             >
               {user.name || user.email}
               <button

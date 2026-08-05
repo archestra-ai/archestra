@@ -56,6 +56,7 @@ import {
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
@@ -179,6 +180,7 @@ import {
   type ConnectivityState,
   useConnectivity,
 } from "@/lib/config/connectivity";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -246,6 +248,7 @@ export function ChatPageContent({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const appName = useAppName();
 
   const [conversationId, setConversationId] = useState<string | undefined>(
     routeConversationId,
@@ -2852,17 +2855,20 @@ export function ChatPageContent({
   if (conversationId && conversation?.contentLocked) {
     return (
       <div className="flex h-full w-full items-center justify-center p-8">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>This chat can&apos;t be unlocked</CardTitle>
-            <CardDescription>
+        <Card className="w-full max-w-xl">
+          <CardHeader className="justify-items-center text-center gap-3 pt-8">
+            <IncognitoIcon className="mx-auto block size-14" />
+            <CardTitle className="text-xl">
+              This chat can&apos;t be unlocked
+            </CardTitle>
+            <CardDescription className="max-w-md text-sm leading-relaxed">
               This is an incognito chat. Its encryption key existed only in the
               browser that created it and wasn&apos;t found here — clearing
-              browser data or switching browsers removes the key. The platform
+              browser data or switching browsers removes the key. {appName}{" "}
               cannot decrypt the messages.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex justify-center pb-8">
             <Button asChild>
               <Link href="/chat">Start a new chat</Link>
             </Button>

@@ -167,6 +167,13 @@ function toolsSections(
   ];
 }
 
+/**
+ * Suggested prompts carry no id, and nothing stops two from sharing a title —
+ * `normalizeSuggestedPrompts` only trims and drops empties. The title alone
+ * would collapse duplicates into one row, so deleting one of them would read
+ * as an edit of the one that stays. Numbering repeats keeps them apart, while
+ * a title that appears once still pairs across versions and reads as an edit.
+ */
 function suggestedPromptsSection(
   current: Snapshot,
   previous: Snapshot | null,
@@ -174,16 +181,25 @@ function suggestedPromptsSection(
   return listSection({
     id: "suggested-prompts",
     label: "Suggested prompts",
-    current: current.suggestedPrompts.map((prompt) => ({
-      key: prompt.summaryTitle,
+    current: suggestedPromptItems(current.suggestedPrompts),
+    previous: previous
+      ? suggestedPromptItems(previous.suggestedPrompts)
+      : undefined,
+  });
+}
+
+function suggestedPromptItems(
+  prompts: Snapshot["suggestedPrompts"],
+): ListInput[] {
+  const seen = new Map<string, number>();
+  return prompts.map((prompt) => {
+    const occurrence = seen.get(prompt.summaryTitle) ?? 0;
+    seen.set(prompt.summaryTitle, occurrence + 1);
+    return {
+      key: `${prompt.summaryTitle}#${occurrence}`,
       label: prompt.summaryTitle,
       detail: prompt.prompt,
-    })),
-    previous: previous?.suggestedPrompts.map((prompt) => ({
-      key: prompt.summaryTitle,
-      label: prompt.summaryTitle,
-      detail: prompt.prompt,
-    })),
+    };
   });
 }
 

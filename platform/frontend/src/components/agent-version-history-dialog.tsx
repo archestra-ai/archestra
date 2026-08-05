@@ -246,14 +246,16 @@ function VersionHistory({
           {activeVersion === null ? (
             isAgentLoading || versionsQuery.isPending ? (
               <p className="p-6 text-sm text-muted-foreground">
-                Loading version...
+                <span>Loading version...</span>
               </p>
             ) : versionsQuery.isSuccess ? (
               // The timeline settled empty, so there is genuinely no version
               // to preview — the state next to it already explains why.
               <p className="p-6 text-sm text-muted-foreground">
-                Nothing to preview yet. Once this {noun} records a version, its
-                configuration appears here.
+                <span>
+                  Nothing to preview yet. Once this {noun} records a version,
+                  its configuration appears here.
+                </span>
               </p>
             ) : (
               <LoadFailure
@@ -332,7 +334,7 @@ function VersionTimeline({
   if (isLoading && versions.length === 0) {
     return (
       <p className="px-4 py-3 text-sm text-muted-foreground">
-        Loading versions...
+        <span>Loading versions...</span>
       </p>
     );
   }
@@ -349,7 +351,7 @@ function VersionTimeline({
   if (versions.length === 0) {
     return (
       <p className="px-4 py-3 text-sm text-muted-foreground">
-        No versions yet. The next configuration change records one.
+        <span>No versions yet. The next configuration change records one.</span>
       </p>
     );
   }
@@ -475,7 +477,9 @@ function VersionPreview({
 
   if (isLoading && !detail) {
     return (
-      <p className="p-6 text-sm text-muted-foreground">Loading version...</p>
+      <p className="p-6 text-sm text-muted-foreground">
+        <span>Loading version...</span>
+      </p>
     );
   }
   // A 404 is the only reading that supports "no longer available": retention
@@ -488,7 +492,7 @@ function VersionPreview({
       />
     ) : (
       <p className="p-6 text-sm text-muted-foreground">
-        This version is no longer available.
+        <span>This version is no longer available.</span>
       </p>
     );
   }

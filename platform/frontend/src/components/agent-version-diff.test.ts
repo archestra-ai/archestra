@@ -144,6 +144,58 @@ describe("compareAgentSnapshots", () => {
     });
   });
 
+  it("keeps two suggested prompts sharing a title apart", () => {
+    const sections = compareAgentSnapshots(
+      makeSnapshot({
+        suggestedPrompts: [
+          { summaryTitle: "Ideas", prompt: "Give me release ideas" },
+          { summaryTitle: "Ideas", prompt: "Give me test ideas" },
+        ],
+      }),
+      null,
+    );
+    const prompts = section(sections, "suggested-prompts") as AgentListSection;
+    // Titles are not unique, so neither prompt may swallow the other, and two
+    // rows carrying one key would collide as React children.
+    expect(prompts.items.map((item) => item.detail)).toEqual([
+      "Give me release ideas",
+      "Give me test ideas",
+    ]);
+    expect(new Set(prompts.items.map((item) => item.key)).size).toBe(2);
+    expect(prompts.items.every((item) => item.label === "Ideas")).toBe(true);
+  });
+
+  it("reads a deleted duplicate title as a removal, not an edit", () => {
+    const sections = compareAgentSnapshots(
+      makeSnapshot({
+        suggestedPrompts: [
+          { summaryTitle: "Ideas", prompt: "Give me release ideas" },
+        ],
+      }),
+      makeSnapshot({
+        suggestedPrompts: [
+          { summaryTitle: "Ideas", prompt: "Give me release ideas" },
+          { summaryTitle: "Ideas", prompt: "Give me test ideas" },
+        ],
+      }),
+    );
+    const prompts = section(sections, "suggested-prompts") as AgentListSection;
+    expect({
+      added: prompts.addedCount,
+      removed: prompts.removedCount,
+      changed: prompts.changedCount,
+    }).toEqual({ added: 0, removed: 1, changed: 0 });
+    // Not a "Give me test ideas" -> "Give me release ideas" edit: the prompt
+    // that stayed is untouched, and the other one is gone.
+    expect(
+      prompts.items.find((item) => item.change === "removed"),
+    ).toMatchObject({
+      label: "Ideas",
+      detail: null,
+      previousDetail: "Give me test ideas",
+    });
+  });
+
   it("gives every hook on either side a row, keyed by event and file name", () => {
     const hook = {
       event: "pre-tool",

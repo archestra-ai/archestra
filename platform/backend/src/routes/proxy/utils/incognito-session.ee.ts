@@ -43,13 +43,16 @@ const INCOGNITO_SESSION_CACHE_TTL_MS = TimeInMs.Minute;
  */
 export async function isIncognitoChatSession(params: {
   source: InteractionSource;
-  requestIp: string;
+  requestIp: string | undefined;
   sessionId: string | null | undefined;
   userId: string | undefined;
 }): Promise<boolean> {
   const { source, requestIp, sessionId, userId } = params;
+  // chat:* covers the chat backend's internal subrequests too (e.g.
+  // chat:tool_call_repair) — a repair prompt carries the same conversation
+  // content as the turn it repairs.
   if (
-    source !== "chat" ||
+    !source?.startsWith("chat") ||
     !sessionId ||
     !userId ||
     !isLoopbackAddress(requestIp)

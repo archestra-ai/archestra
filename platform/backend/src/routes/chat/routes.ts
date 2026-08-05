@@ -2617,7 +2617,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? {
                 id: incognitoConversationId,
                 ...incognitoFields,
-                title: title || INCOGNITO_STATIC_TITLE,
+                // Always static: clients derive draft titles from the first
+                // message text, which must never land in the plaintext title.
+                title: INCOGNITO_STATIC_TITLE,
               }
             : { title }),
           userId: user.id,

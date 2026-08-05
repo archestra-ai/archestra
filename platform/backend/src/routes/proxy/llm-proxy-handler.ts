@@ -662,7 +662,10 @@ export async function handleLLMProxy<
   // closed) so the catch below and both stream handlers agree on it.
   const suppressContent = await isIncognitoChatSession({
     source,
-    requestIp: request.ip,
+    // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
+    // from forwarded headers, and this seam must only ever match the
+    // loopback socket the in-app chat actually dials.
+    requestIp: request.socket.remoteAddress,
     sessionId,
     userId,
   });

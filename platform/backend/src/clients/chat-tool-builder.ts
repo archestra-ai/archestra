@@ -1038,13 +1038,23 @@ async function executeWithToolSpan<R>(params: {
             isError: true,
           });
         }
-        const logPayload = {
-          agentId: ctx.agentId,
-          userId: ctx.userId,
-          toolName,
-          err: error,
-          errorMessage: error instanceof Error ? error.message : String(error),
-        };
+        // Incognito: upstream/tool errors routinely echo arguments or result
+        // content — keep only non-content metadata in the app log.
+        const logPayload = ctx.suppressContentLogging
+          ? {
+              agentId: ctx.agentId,
+              userId: ctx.userId,
+              toolName,
+              errorMessage: "[redacted: incognito conversation]",
+            }
+          : {
+              agentId: ctx.agentId,
+              userId: ctx.userId,
+              toolName,
+              err: error,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            };
         if (aborted) {
           logger.info(logPayload, abortLogMessage);
         } else {
@@ -1773,6 +1783,8 @@ interface ToolHookContext {
   /** Conversation user id — the default sandbox is keyed per org/user/conversation. */
   userId: string;
   conversationId?: string;
+  /** Incognito conversations: hook dispatch is skipped (payloads persist). */
+  suppressContentLogging?: boolean;
   /**
    * Per-turn sink the chat route drains into inline `data-hook-run` entries.
    * Pre/PostToolUse runs are appended here, tagged with the tool call's id so
@@ -1794,7 +1806,9 @@ async function firePreToolUseHook(params: {
   toolCallId?: string;
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolCallId } = params;
-  if (!ctx.conversationId) {
+  if (!ctx.conversationId || ctx.suppressContentLogging) {
+    // Incognito: hook dispatch would hand tool args to the hook sandbox,
+    // which persists its payloads into the durable replay log in plaintext.
     return null;
   }
   try {
@@ -1913,7 +1927,8 @@ async function firePostToolUseHook(params: {
   toolCallId?: string;
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
-  if (!ctx.conversationId) {
+  if (!ctx.conversationId || ctx.suppressContentLogging) {
+    // Incognito: see firePreToolUseHook — hook payloads persist in plaintext.
     return null;
   }
   try {

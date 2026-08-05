@@ -41,15 +41,16 @@ import { InsertHookFileSchema } from "@/types/hook";
  * snapshot forward: the restored config becomes a NEW head version, so nothing
  * in the history is rewritten (git-revert semantics).
  *
- * All-or-nothing. The governing rule is that a restore succeeds exactly when
- * the caller could have reached the same end state through the ordinary write
- * handlers — so the plan is built by diffing live config against the snapshot
- * and validating only what would actually be written. A reference that is
- * unchanged needs no handler call to reach its target state, and is therefore
- * neither written nor validated; anything that WOULD be written is validated
- * with the same rules its handler applies, and a rejection fails the whole
- * restore before a single row is touched. A version pointing at something
- * deleted or out of the caller's reach is simply not restorable.
+ * All-or-nothing at the validation boundary. The governing rule is that a
+ * restore succeeds exactly when the caller could have reached the same end
+ * state through the ordinary write handlers — so the plan is built by diffing
+ * live config against the snapshot and validating only what would actually be
+ * written. A reference that is unchanged needs no handler call to reach its
+ * target state, and is therefore neither written nor validated; anything that
+ * WOULD be written is validated with the same rules its handler applies, and a
+ * rejection fails the whole restore before a single row is touched. A version
+ * pointing at something deleted or out of the caller's reach is simply not
+ * restorable.
  *
  * Ordering:
  * 1. Read the snapshot, so a pruned or foreign version 404s immediately.
@@ -60,13 +61,23 @@ import { InsertHookFileSchema } from "@/types/hook";
  *    forking here records the true pre-restore state as a recoverable version.
  *    Passing `baseVersion` also makes it the compare-and-set. It sits below
  *    the plan so a rejected restore mints nothing.
- * 4. Apply, then fork once more so one restore yields one new version.
+ * 4. Apply, then fork once more so one restore yields one new version. This
+ *    fork runs even when the apply throws, so a FAILED restore can mint a
+ *    version too — see below.
  *
  * The apply spans several write paths that each own their transaction, so it
  * is not atomic. Nothing in it validates, and the preflight's reads are not
  * locked, so the residual failure window is a referent deleted between plan
- * and apply — small, and a retry converges because a partial apply leaves live
- * config closer to the snapshot than it was.
+ * and apply — small, and a partial apply leaves live config closer to the
+ * snapshot than it was.
+ *
+ * That partial state is recorded rather than left dangling: step 4's fork is in
+ * a `finally`, so the writes that landed before the throw become a version like
+ * any other config change. Two consequences for callers. The version is a real,
+ * restorable point in the history even though nobody authored it, and it counts
+ * against the retention window. And the head has moved despite the 400, so a
+ * client holding the `baseVersion` it sent must re-read the agent before
+ * retrying — retrying on the stale anchor 409s (`agent_version_conflict`).
  */
 export async function restoreAgentVersion(params: {
   agentId: string;
@@ -101,12 +112,20 @@ export async function restoreAgentVersion(params: {
     throw new ApiError(404, "Agent not found");
   }
 
-  await applyRestorePlan(plan);
-
-  // One fork for the whole apply. Best-effort like every post-commit fork: the
-  // restored config is already live, so a fork failure must not fail the
-  // restore — the next config write captures the state instead.
-  await AgentVersionModel.forkIfChangedBestEffort(agentId);
+  try {
+    await applyRestorePlan(plan);
+  } finally {
+    // One fork for the whole apply, minted on the failure path too: whatever
+    // landed before a throw is already live, so history has to account for it
+    // rather than leave the state uncaptured until an unrelated later write.
+    //
+    // Best-effort like every post-commit fork: the config is already live, so a
+    // fork failure must not fail the restore. That is also what makes `finally`
+    // safe here — `forkIfChangedBestEffort` swallows its own errors, so it can
+    // never replace the in-flight rejection with a fork error. A refactor that
+    // lets it throw would silently turn a 400 into a 500.
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
+  }
 
   // Re-read rather than returning the update's result: that update deferred its
   // fork, so its `latestVersion` is the pre-restore head, and clients anchor

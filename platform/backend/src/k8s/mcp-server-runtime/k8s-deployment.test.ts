@@ -4183,6 +4183,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsHttpMethods: false,
         message: null,
         enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
         probe: "absent",
         probedAt: null,
       },
@@ -4244,6 +4245,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsHttpMethods: false,
         message: null,
         enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
         probe: "absent",
         probedAt: null,
       },
@@ -4285,6 +4287,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsHttpMethods: false,
         message: null,
         enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
         probe: "absent",
         probedAt: null,
       },
@@ -4324,6 +4327,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsHttpMethods: false,
         message: null,
         enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
         probe: "absent",
         probedAt: null,
       },
@@ -4373,6 +4377,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsHttpMethods: false,
         message: null,
         enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
         probe: "absent",
         probedAt: null,
       },
@@ -4436,6 +4441,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsHttpMethods: false,
         message: null,
         enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
         probe: "absent",
         probedAt: null,
       },
@@ -4474,6 +4480,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsHttpMethods: false,
       message: null,
       enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
       probe: "absent",
       probedAt: null,
     };
@@ -4538,6 +4545,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsHttpMethods: false,
       message: null,
       enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
       probe: "absent",
       probedAt: null,
     };
@@ -4638,6 +4646,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsHttpMethods: false,
       message: null,
       enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
       probe: "absent",
       probedAt: null,
     };
@@ -4707,6 +4716,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsHttpMethods: false,
       message: null,
       enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
       probe: "absent",
       probedAt: null,
     };
@@ -4792,6 +4802,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsHttpMethods: false,
       message: null,
       enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
       probe: "absent",
       probedAt: null,
     };
@@ -4834,6 +4845,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsHttpMethods: false,
     message: null,
     enforcementSource: "api-discovery",
+    enforcementStatus: "unknown",
     probe: "absent",
     probedAt: null,
   };
@@ -4847,6 +4859,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsHttpMethods: false,
     message: null,
     enforcementSource: "api-discovery",
+    enforcementStatus: "unknown",
     probe: "absent",
     probedAt: null,
   };
@@ -4860,6 +4873,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsHttpMethods: false,
     message: null,
     enforcementSource: "api-discovery",
+    enforcementStatus: "unknown",
     probe: "absent",
     probedAt: null,
   };

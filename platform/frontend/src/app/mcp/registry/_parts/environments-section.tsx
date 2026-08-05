@@ -509,8 +509,11 @@ function EnvironmentEditorDialog({
       : null;
   const canSave = trimmedName.length > 0 && validationRegexError === null;
   const supportsFqdn = capabilities?.networkPolicy.supportsFqdn === true;
+  // Only a measured "nothing enforces" freezes the policy. A cluster we merely
+  // failed to measure keeps its editor: locking it there breaks every cluster
+  // that enforces without advertising a CRD.
   const enforcementUnavailable =
-    capabilities?.networkPolicy.provider === "none";
+    capabilities?.networkPolicy.enforcementStatus === "verified-not-enforced";
   const originalNetworkPolicy =
     mode === "default"
       ? (defaultEnvironment?.networkPolicy ?? null)
@@ -837,9 +840,8 @@ function EnvironmentEditorDialog({
               setEgressDirty(true);
             }}
             supportsFqdn={supportsFqdn}
-            provider={capabilities?.networkPolicy.provider ?? null}
-            enforcementMeasured={
-              capabilities?.networkPolicy.enforcementSource === "probe"
+            enforcementStatus={
+              capabilities?.networkPolicy.enforcementStatus ?? null
             }
             baselineLoaded={egressBaselineLoaded}
             disabled={isPending || !egressBaselineLoaded}
@@ -872,7 +874,7 @@ function EnvironmentEditorDialog({
   );
 }
 
-function NetworkPolicyFields({
+export function NetworkPolicyFields({
   egressMode,
   setEgressMode,
   domainPreset,
@@ -882,8 +884,7 @@ function NetworkPolicyFields({
   allowedCidrsText,
   setAllowedCidrsText,
   supportsFqdn,
-  provider,
-  enforcementMeasured,
+  enforcementStatus,
   baselineLoaded,
   disabled,
 }: {
@@ -896,18 +897,26 @@ function NetworkPolicyFields({
   allowedCidrsText: string;
   setAllowedCidrsText: (value: string) => void;
   supportsFqdn: boolean;
-  provider: string | null;
-  enforcementMeasured: boolean;
+  enforcementStatus:
+    | "verified-enforced"
+    | "verified-not-enforced"
+    | "unknown"
+    | null;
   baselineLoaded: boolean;
   disabled: boolean;
 }) {
-  // No enforcer on the cluster: every rule below would be accepted but never
-  // enforced, so the whole egress section is disabled rather than offering
-  // controls that silently do nothing.
-  const enforcementUnavailable = provider === "none";
+  // A probe watched a deny-all policy fail to stop a packet: every rule below
+  // would be accepted and never enforced, so the section is disabled rather
+  // than offering controls that silently do nothing.
+  const enforcementUnavailable = enforcementStatus === "verified-not-enforced";
+  // Nothing measured this cluster — the probe was disabled, never ran, or its
+  // pods aged out. The controls stay usable because most such clusters do
+  // enforce; the notice is what stops "no warning" from reading as "verified".
+  const enforcementUnverified =
+    enforcementStatus === "unknown" || enforcementStatus === null;
   return (
     <div className="space-y-4">
-      {enforcementUnavailable && enforcementMeasured ? (
+      {enforcementUnavailable ? (
         <Alert variant="warning">
           <TriangleAlert className="h-4 w-4" />
           <AlertTitle>Network policy enforcement test failed</AlertTitle>
@@ -919,15 +928,14 @@ function NetworkPolicyFields({
             </ExternalDocsLink>
           </AlertDescription>
         </Alert>
-      ) : enforcementUnavailable ? (
+      ) : enforcementUnverified ? (
         <Alert variant="info">
           <Info className="h-4 w-4" />
-          <AlertTitle>Network policy enforcement unavailable</AlertTitle>
+          <AlertTitle>Network policy enforcement not verified</AlertTitle>
           <AlertDescription className="block leading-6">
-            No Kubernetes NetworkPolicy enforcer (Calico, Cilium, or a supported
-            FQDN provider) was detected, or Kubernetes access isn't configured,
-            so egress can't be enforced on this cluster. These controls are
-            disabled until a supported network policy provider is available.{" "}
+            Nothing has confirmed this cluster acts on NetworkPolicy, so the
+            rules below may be accepted and then ignored. They are still
+            applied, and the enforcement check runs on the next upgrade.{" "}
             <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
               View docs
             </ExternalDocsLink>

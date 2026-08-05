@@ -18,7 +18,7 @@ import {
   requireSkillModifyPermission,
   type SkillPermissionChecker,
 } from "@/auth/skill-permissions";
-import { userHasPermission } from "@/auth/utils";
+import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -1077,6 +1077,83 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.delete(
+    "/api/skills/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeleteSkill,
+        description:
+          "Permanently destroy a soft-deleted skill (global admins only). " +
+          "Irreversible, with no grace period: every version and resource file " +
+          "is destroyed, along with the skill's team and user grants, " +
+          "environment assignments, usage events, and share links — so any " +
+          "public share URL for it stops working. 404 if there is no " +
+          "soft-deleted skill with that id in the org, which is also the " +
+          "answer when the skill is still live or the caller is not a global " +
+          "admin. 409 while a sandbox still has the skill mounted; that is " +
+          "retryable, but note nothing clears a mount on its own — it lasts as " +
+          "long as the sandbox does. Built-in skills cannot be purged: their " +
+          "soft-deleted row is what stops the seeder recreating them on the " +
+          "next restart. Restore wins a race.",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      // Checked before the skill is read: a caller who is not a global admin
+      // gets the same 404 whatever the id, so the endpoint never confirms the
+      // skill exists. `skill:admin` deliberately does not reach here — it is an
+      // oversight grant, and this destroys the bytes for good.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      const skill = await SkillModel.findDeletedById(id, organizationId);
+      if (!skill) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      // A built-in's soft-deleted row IS the opt-out: `SkillModel.findBuiltIn`
+      // includes deleted rows precisely so the startup seeder sees one and
+      // skips it. Destroying the row would hand the skill back on the next
+      // boot, making "permanent" deletion both untrue and silently
+      // opt-out-reverting. 403 rather than 404 — the skill is visibly in the
+      // trash to anyone who can list it, so there is nothing to conceal.
+      if (skill.sourceType === "built_in") {
+        throw new ApiError(
+          403,
+          "Built-in skills cannot be permanently deleted. Deleting one already " +
+            "removes it for good — its retained record is what stops it being " +
+            "recreated on the next restart.",
+        );
+      }
+
+      if (await SkillVersionModel.hasSandboxMountsForSkill(id)) {
+        throw skillStillMounted();
+      }
+
+      let purged: boolean;
+      try {
+        purged = await SkillModel.purge({ id, organizationId });
+      } catch (error) {
+        // The pre-check above is advisory; the RESTRICT foreign key is the real
+        // guard, and a sandbox can mount the skill between the two. Map that to
+        // the same 409 rather than a 500. Caught HERE, outside the model's
+        // transaction: a foreign-key violation aborts the whole Postgres
+        // transaction, so nothing inside it could have recovered.
+        if (isForeignKeyConstraintError(error)) {
+          throw skillStillMounted();
+        }
+        throw error;
+      }
+      if (!purged) {
+        throw new ApiError(404, "Skill not found");
+      }
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.post(
     "/api/skills/:id/reset",
     {
@@ -1983,6 +2060,21 @@ function parseManifestOrThrow(raw: string) {
 
 function skillNameConflict(name: string): ApiError {
   return new ApiError(409, `A skill named "${name}" already exists`);
+}
+
+/**
+ * A sandbox still mounts one of the skill's versions, and the mount pins those
+ * bytes (`ON DELETE RESTRICT`), so they cannot be destroyed yet. Says plainly
+ * that retrying is the remedy AND that nothing clears a mount on its own — a
+ * bare "try again later" would imply a wait that may never end.
+ */
+function skillStillMounted(): ApiError {
+  return new ApiError(
+    409,
+    "This skill is still mounted in a code sandbox, which pins the version " +
+      "files being deleted. Retry once those sandboxes are gone; note that a " +
+      "mount lasts as long as its sandbox, which is not cleaned up on a timer.",
+  );
 }
 
 /** Run a GitHub operation, converting import/parse failures into 400s. */

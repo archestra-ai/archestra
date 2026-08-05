@@ -12,6 +12,7 @@ import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
+  isGlobalAdmin,
   requireAgentModifyPermission,
   userHasPermission,
 } from "@/auth";
@@ -1490,6 +1491,49 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(restored);
+    },
+  );
+
+  fastify.delete(
+    "/api/agents/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeleteAgent,
+        description:
+          "Permanently destroy a soft-deleted agent. Global admins only — an " +
+          "`agent:delete` or `agent:admin` grant reaches the trash, not past " +
+          "it. Irreversible, with no grace period: the agent's configuration " +
+          "and scheduled runs are destroyed, and it is cleared from the " +
+          "organization, /connection, and member defaults. Its history " +
+          "survives, detached — conversations and LLM usage rows are kept and " +
+          "simply stop pointing at it. 404 if there is no soft-deleted agent " +
+          "with that id in the org, which is also the answer when the agent " +
+          "is still live or the caller is not a global admin. Restore wins a " +
+          "race. Purging a high-traffic LLM proxy detaches millions of usage " +
+          "rows in one transaction and can take minutes; past five it is " +
+          "abandoned and the agent stays in the trash, unharmed.",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Checked before the agent is looked up at all: a non-admin gets the same
+      // 404 whatever the id, so the endpoint never confirms an agent exists.
+      // The purge itself re-checks id, org, and soft-deleted state under a row
+      // lock, so there is no separate existence read to do here.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const purged = await AgentModel.purge(id, organizationId);
+      if (!purged) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      return reply.send({ success: true });
     },
   );
 

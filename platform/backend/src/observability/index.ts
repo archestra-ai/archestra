@@ -20,6 +20,7 @@ export async function initializeObservabilityMetrics(params?: {
   }
 
   metrics.database.initializeDatabaseMetrics();
+  metrics.fileStorage.initializeFileStorageMetrics();
   metrics.rag.initializeRagMetrics();
   metrics.sandbox.initializeSandboxMetrics();
   metrics.scheduleTrigger.initializeScheduleTriggerMetrics();

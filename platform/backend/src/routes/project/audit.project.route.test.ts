@@ -176,4 +176,35 @@ describe("project routes — audit trail", () => {
       0,
     );
   });
+
+  test("a permanent delete is recorded as project.purged, by identity only", async () => {
+    const project = await makeProject("audited-purge");
+    await projectService.delete({
+      id: project.id,
+      organizationId,
+      userId: user.id,
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/projects/${project.id}/permanent`,
+    });
+    expect(response.statusCode).toBe(200);
+
+    const rows = await auditRowsFor(project.id, "project.purged");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      action: "project.purged",
+      resourceType: "project",
+      resourceId: project.id,
+    });
+    // Identity and nothing else. A purge destroys the project on request, so
+    // its audit record must not preserve a copy of what was destroyed — unlike
+    // `project.deleted` above, whose `before` carries the whole row precisely
+    // because that row still exists and can be restored. Registering the route
+    // is what makes the difference: by walk-up it would inherit
+    // `/api/projects/:id`'s full-snapshot fetcher.
+    expect(rows[0].before).toEqual({ id: project.id, name: "audited-purge" });
+    expect(rows[0].after).toBeNull();
+  });
 });

@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import config from "@/config";
 import type { Transaction } from "@/database";
+import logger from "@/logging";
 import {
   FileModel,
   FileNameExistsError,
@@ -12,6 +13,7 @@ import {
   ProjectShareModel,
   UserModel,
 } from "@/models";
+import { metrics } from "@/observability";
 import type {
   PersistedFile,
   SandboxArtifactRow,
@@ -346,6 +348,68 @@ class FileStore {
           }).catch(() => {}),
         ),
       );
+    };
+  }
+
+  /**
+   * Capture the external bytes of a permanently deleted project's files, so the
+   * caller can remove them once the row cascade has taken the rows naming them.
+   * Unlike {@link purgeConversationFileRows} this deletes no rows: the project
+   * cascade already removes `files`. Inline (`db`) bytes die with the row and
+   * the returned closure is a no-op for them.
+   *
+   * ROWS ONLY — the project's folder in the object store is never listed. A
+   * file's owner is the `project_id` on its row; the folder is named by SLUG
+   * (`scopeFolder`), which is unique only per-organization and is freed for
+   * reuse by this very purge, so it cannot attribute anything to anyone.
+   * Objects sitting in the folder with no row are therefore left behind,
+   * exactly as the pre-soft-delete hard delete left them.
+   *
+   * Capture and closure BOTH run inside the caller's transaction — see
+   * `ProjectService.purge` for the ordering, and for why this differs from the
+   * conversation equivalent, which defers its closure to after commit.
+   *
+   * Best-effort per object: one that refuses to go must not strand the rest,
+   * and the row naming it is gone either way, so there is nothing left to retry
+   * against. The closure returns how many objects were left behind, so the
+   * caller can say so; each one is also logged WITH ITS OBJECT KEY and counted
+   * on `file_storage_orphaned_objects_total`. The key is the point — the `files`
+   * row naming it dies in this same transaction, so once this returns, that log
+   * line is the only thing in the system that still knows the object exists.
+   */
+  async captureProjectFileBytes(
+    params: {
+      organizationId: string;
+      projectId: string;
+    },
+    // Required, not optional: the capture has to see the rows before the
+    // cascade removes them, which only the caller's transaction guarantees.
+    executor: Transaction,
+  ): Promise<() => Promise<number>> {
+    const rows = await FileModel.listByProject(params, executor);
+
+    return async () => {
+      let orphaned = 0;
+      // Chunked rather than one `Promise.all` over the whole set: a project
+      // with thousands of files would otherwise open thousands of concurrent
+      // requests to the object store at once.
+      for (let i = 0; i < rows.length; i += PROJECT_BYTE_PURGE_CHUNK) {
+        await Promise.all(
+          rows.slice(i, i + PROJECT_BYTE_PURGE_CHUNK).map((row) => {
+            // Named so the failure path can report exactly which object stayed
+            // behind, not merely that one did.
+            const blob = {
+              provider: row.storageProvider,
+              objectKey: row.objectKey,
+            };
+            return deleteRowBytes(blob).catch((err) => {
+              orphaned += 1;
+              logOrphan(err, params, blob);
+            });
+          }),
+        );
+      }
+      return orphaned;
     };
   }
 
@@ -1030,6 +1094,32 @@ export const fileStore = new FileStore();
 export const OBJECT_REF_PREFIX = "obj_";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** How many object-store deletes a project purge has in flight at once. */
+const PROJECT_BYTE_PURGE_CHUNK = 25;
+
+/**
+ * Record one object the purge could not remove. `objectKey` is the whole point:
+ * the `files` row that named it is destroyed in the same transaction, so this
+ * line is the only remaining way to locate the leftover bytes. The counter
+ * exists because a log line nobody greps for is not an alert — an object store
+ * that is down fails every delete in the purge, and that has to be visible
+ * without anyone reading logs.
+ */
+function logOrphan(
+  err: unknown,
+  target: { organizationId: string; projectId: string },
+  blob: { provider: string; objectKey: string | null },
+): void {
+  logger.warn(
+    { err, ...target, ...blob },
+    "Failed to delete stored file contents for a permanently deleted project; the object is now orphaned",
+  );
+  metrics.fileStorage.reportOrphanedObject({
+    provider: blob.provider,
+    scope: "project",
+  });
+}
 
 function toListItem(
   row: SandboxArtifactRow,

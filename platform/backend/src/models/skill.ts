@@ -279,6 +279,11 @@ class SkillModel {
       teamIds?: string[];
       /** Environments the skill is restricted to; empty/omitted = every environment. */
       environmentIds?: string[];
+      /**
+       * Git commit the initial bytes came from, stamped on version 1. Passed
+       * only by the GitHub import; see `skill_versions.source_commit`.
+       */
+      versionSourceCommit?: string;
     },
     tx?: Transaction,
   ): Promise<Skill | null> {
@@ -325,6 +330,7 @@ class SkillModel {
           files: versionFiles,
         }),
         files: versionFiles,
+        sourceCommit: params.versionSourceCommit,
       });
 
       return skill;
@@ -362,6 +368,12 @@ class SkillModel {
     /** Replaces the environment assignments; [] clears them (every environment). */
     environmentIds?: string[];
     expectedLatestVersion?: number;
+    /**
+     * Git commit the new bytes came from, stamped on the forked version and
+     * dropped when the payload is unchanged and nothing forks. Passed only by
+     * the GitHub sync; see `skill_versions.source_commit`.
+     */
+    versionSourceCommit?: string;
   }): Promise<Skill | null> {
     return await withDbTransaction(async (tx) => {
       const [skill] = await tx
@@ -466,6 +478,7 @@ class SkillModel {
           content: skill.content,
           contentHash,
           files: versionFiles,
+          sourceCommit: params.versionSourceCommit,
         });
         const [bumped] = await tx
           .update(schema.skillsTable)

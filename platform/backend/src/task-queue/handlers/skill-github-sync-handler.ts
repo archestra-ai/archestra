@@ -101,6 +101,8 @@ async function syncSkill(skill: Skill): Promise<void> {
         sourceCommit: imported.sourceCommit,
       },
       files: imported.files,
+      // the fork came wholly from upstream, so it carries the commit.
+      versionSourceCommit: imported.sourceCommit,
     });
   } catch (error) {
     if (isSkillNameConflict(error)) {

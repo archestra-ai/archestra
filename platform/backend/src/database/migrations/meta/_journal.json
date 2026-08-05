@@ -2787,6 +2787,13 @@
       "when": 1785841780161,
       "tag": "0397_credential_connection_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 398,
+      "version": "7",
+      "when": 1785918805135,
+      "tag": "0398_crazy_sally_floyd",
+      "breakpoints": true
     }
   ]
 }

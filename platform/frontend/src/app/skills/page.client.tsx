@@ -63,6 +63,7 @@ import {
   useSkillSourceRepos,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
+import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { withOpenEditRewritten } from "./_parts/editor-url";
@@ -648,18 +649,6 @@ function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
   );
-}
-
-/** Extract `owner/repo` from a `source_ref` shaped like `owner/repo@ref:path`. */
-function parseRepoFromSourceRef(sourceRef: string | null): string | null {
-  if (!sourceRef) return null;
-  // Built-in skills carry an internal `builtin:<id>` ref (e.g.
-  // `builtin:archestra-platform-operations`); it is an identity token, not a
-  // source repo, and would leak the unbranded "archestra" id into the UI. The
-  // app-name badge already marks these as built-in, so show nothing here.
-  if (sourceRef.startsWith("builtin:")) return null;
-  const atIdx = sourceRef.indexOf("@");
-  return atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
 }
 
 function SkillsEmptyState() {

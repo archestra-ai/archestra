@@ -7,6 +7,7 @@ const version = (n: number, createdAt: string): SkillVersionSummary => ({
   skillId: "skill-1",
   version: n,
   contentHash: `hash-${n}`,
+  sourceCommit: null,
   createdAt,
 });
 

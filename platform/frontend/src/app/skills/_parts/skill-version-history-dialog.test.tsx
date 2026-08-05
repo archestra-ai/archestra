@@ -57,6 +57,7 @@ const versionRow = (version: number, contentHash: string) => ({
   skillId: "skill-1",
   version,
   contentHash,
+  sourceCommit: null,
   createdAt: "2026-08-03T10:00:00.000Z",
 });
 
@@ -64,11 +65,14 @@ const versionDetail = ({
   version,
   content,
   contentHash,
+  sourceCommit = null,
   files = [],
 }: {
   version: number;
   content: string;
   contentHash: string;
+  /** Set only on versions a GitHub import or sync produced. */
+  sourceCommit?: string | null;
   files?: {
     id: string;
     versionId: string;
@@ -84,6 +88,7 @@ const versionDetail = ({
   version,
   content,
   contentHash,
+  sourceCommit,
   createdAt: "2026-08-03T10:00:00.000Z",
   files,
 });
@@ -244,6 +249,50 @@ describe("SkillVersionHistoryDialog", () => {
     ).toBeInTheDocument();
     const headRow = screen.getByRole("button", { name: /v3/ });
     expect(within(headRow).getByText("Current")).toBeInTheDocument();
+  });
+
+  it("links a synced version to the upstream tree it was pulled from", () => {
+    mockSkill({
+      sourceType: "github",
+      sourceRef: "eph5xx/tiebreaker@main:skills/tiebreaker",
+    });
+    mockVersionDetails({
+      3: versionDetail({
+        version: 3,
+        content: HEAD_BODY,
+        contentHash: "hash-head",
+        sourceCommit: "6500e3659dd2a3ceeb745b03eb6ab2d169d4e1e7",
+      }),
+    });
+    renderDialog();
+
+    const link = screen.getByRole("link", { name: "Open version in GitHub" });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://github.com/eph5xx/tiebreaker/tree/6500e3659dd2a3ceeb745b03eb6ab2d169d4e1e7/skills/tiebreaker",
+    );
+    // the commit is not spelled out in the header, so the title carries it.
+    expect(link).toHaveAttribute(
+      "title",
+      "Open this version's source on GitHub (6500e3659dd2a3ceeb745b03eb6ab2d169d4e1e7)",
+    );
+  });
+
+  it("shows no source link for a version that was authored here", () => {
+    // The default skill is `manual` and its versions carry no commit: an
+    // authored edit has no upstream tree to point at.
+    renderDialog();
+
+    expect(
+      screen.queryByRole("link", { name: "Open version in GitHub" }),
+    ).toBeNull();
+    // The content hash identifies a version among its neighbours, so it belongs
+    // to the timeline row and nowhere else — the preview header does not repeat
+    // it. Exactly one occurrence pins both halves of that.
+    expect(screen.getAllByText("hash-he")).toHaveLength(1);
+    expect(
+      within(screen.getByRole("button", { name: /v3/ })).getByText("hash-he"),
+    ).toBeInTheDocument();
   });
 
   it("cannot restore the version the skill is already on", () => {

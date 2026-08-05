@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCcw } from "lucide-react";
+import { Github, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DiffEditor } from "@/components/diff-editor";
@@ -24,6 +24,7 @@ import {
   useSkillVersion,
   useSkillVersions,
 } from "@/lib/skills/skill.query";
+import { githubSourceUrlAtCommit } from "@/lib/skills/skill-source";
 import {
   compareSkillVersionFiles,
   type SkillFileChange,
@@ -323,6 +324,7 @@ function VersionHistory({
               onViewModeChange={setViewMode}
               activeFilePath={activeFilePath}
               onSelectFile={setActiveFilePath}
+              sourceRef={skill?.sourceRef ?? null}
             />
           )}
         </section>
@@ -395,6 +397,7 @@ function VersionPreview({
   onViewModeChange,
   activeFilePath,
   onSelectFile,
+  sourceRef,
 }: {
   version: number;
   isHead: boolean;
@@ -412,6 +415,8 @@ function VersionPreview({
   onViewModeChange: (mode: VersionViewMode) => void;
   activeFilePath: string | null;
   onSelectFile: (path: string | null) => void;
+  /** The skill's provenance string, paired with a version's commit to link out. */
+  sourceRef: string | null;
 }) {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
@@ -507,6 +512,10 @@ function VersionPreview({
   const language = activePath
     ? languageForPath(activePath)
     : SKILL_MANIFEST_LANGUAGE;
+  const sourceUrl = githubSourceUrlAtCommit({
+    sourceRef,
+    commit: detail.sourceCommit,
+  });
 
   return (
     <>
@@ -516,9 +525,20 @@ function VersionPreview({
         <span className="text-xs text-muted-foreground">
           {formatRelativeTimeFromNow(detail.createdAt)}
         </span>
-        <span className="ml-auto font-mono text-xs text-muted-foreground">
-          {detail.contentHash.slice(0, 7)}
-        </span>
+        {/* Only versions a GitHub pull produced. The link is named rather than
+            spelled out as a SHA, which stays in the title. */}
+        {sourceUrl && detail.sourceCommit ? (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-4 hover:text-primary"
+            title={`Open this version's source on GitHub (${detail.sourceCommit})`}
+          >
+            <Github className="size-3 shrink-0" />
+            <span>Open version in GitHub</span>
+          </a>
+        ) : null}
       </header>
       {baselineFailed ? (
         <LoadFailure

@@ -131,6 +131,8 @@ Every edit that changes a skill's `SKILL.md` or resource files creates a new imm
 
 Open **Version history** from the actions on a skill's row to browse them. Pick a version to read its files. You can read them whole, or as a diff against the version before it.
 
+A version pulled from GitHub links out to that skill's directory at the commit it came from, so you can read the change upstream. Versions you author here have no link.
+
 `GET /api/skills/:id/versions` lists versions as metadata, newest first. `GET /api/skills/:id/versions/:version` returns one version's body and file snapshots. Sandboxes mount a pinned version, so a running skill never changes mid-conversation.
 
 ### Restoring a Version

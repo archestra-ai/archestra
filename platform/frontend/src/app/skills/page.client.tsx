@@ -144,7 +144,7 @@ function SkillsList() {
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
   const restoreSkill = useRestoreSkill();
-  const { isGlobalAdmin } = useIsGlobalAdmin();
+  const admin = useIsGlobalAdmin();
 
   const setSourceRepoFilter = useCallback(
     (value: string) => {
@@ -444,7 +444,7 @@ function SkillsList() {
                 onClick: () => restoreSkill.mutate(skill.id),
               },
               permanentDeleteRowAction({
-                isGlobalAdmin,
+                admin,
                 onClick: () => setPermanentlyDeletingSkill(skill),
                 // A built-in's deleted row IS the opt-out: it is what stops the
                 // startup seeder recreating the skill, so the API refuses to

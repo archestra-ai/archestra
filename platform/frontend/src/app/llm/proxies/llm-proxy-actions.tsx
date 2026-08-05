@@ -47,7 +47,10 @@ export function LlmProxyActions({
         >
           <RotateCcw className="h-4 w-4" />
         </PermissionButton>
-        <PermanentDeleteButton onClick={() => onPermanentlyDelete(agent)} />
+        <PermanentDeleteButton
+          itemName={agent.name}
+          onClick={() => onPermanentlyDelete(agent)}
+        />
       </ButtonGroup>
     );
   }

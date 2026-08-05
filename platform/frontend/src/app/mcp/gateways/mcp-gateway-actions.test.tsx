@@ -42,7 +42,7 @@ describe("McpGatewayActions", () => {
     vi.clearAllMocks();
     vi.mocked(useIsGlobalAdmin).mockReturnValue({
       isGlobalAdmin: true,
-      isPending: false,
+      isLoading: false,
     });
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -55,7 +55,11 @@ describe("McpGatewayActions", () => {
     renderActions(gateway({ deletedAt: "2026-01-02T00:00:00.000Z" }));
 
     expect(screen.getByLabelText("Restore")).toBeInTheDocument();
-    expect(screen.getByLabelText("Delete permanently")).toBeInTheDocument();
+    // Named after the row: a trash list is a column of these buttons, and the
+    // accessible name is the only thing telling them apart.
+    expect(
+      screen.getByLabelText("Delete permanently billing-gateway"),
+    ).toBeInTheDocument();
   });
 
   it("keeps permanent delete out of the active list", () => {
@@ -64,8 +68,10 @@ describe("McpGatewayActions", () => {
     renderActions(gateway());
 
     expect(screen.getByLabelText("Delete")).toBeInTheDocument();
+    // The row's own label, not the bare one — an exact-match query for
+    // "Delete permanently" would pass even if the button did render.
     expect(
-      screen.queryByLabelText("Delete permanently"),
+      screen.queryByLabelText("Delete permanently billing-gateway"),
     ).not.toBeInTheDocument();
   });
 });

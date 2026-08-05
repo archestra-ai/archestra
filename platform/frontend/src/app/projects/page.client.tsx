@@ -224,12 +224,18 @@ function ProjectsList() {
       )}
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
-          <SearchInput placeholder="Search projects" paramName="search" />
-          <ResourceScopeFilter
-            ownerLabelPlural="projects"
-            allLabel="All projects"
-            adminPermission={{ project: ["admin"] }}
-          />
+          {/* Hidden in the trash: the backend serves that slice whole, ignoring
+              search and scope, so live controls would read as broken filters. */}
+          {!isDeletedView && (
+            <>
+              <SearchInput placeholder="Search projects" paramName="search" />
+              <ResourceScopeFilter
+                ownerLabelPlural="projects"
+                allLabel="All projects"
+                adminPermission={{ project: ["admin"] }}
+              />
+            </>
+          )}
           {/* Gated on `project:admin`, matching the slice the backend serves:
               anyone else switching to Deleted would get an empty table. */}
           <ResourceDeletedStatusFilter
@@ -245,9 +251,7 @@ function ProjectsList() {
           projects.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
               <FolderKanban className="h-8 w-8 opacity-50" />
-              <p>
-                <span>{isPending ? "Loading…" : "No deleted projects"}</span>
-              </p>
+              <p>{isPending ? "Loading…" : "No deleted projects"}</p>
             </div>
           ) : (
             <DeletedProjectsTable

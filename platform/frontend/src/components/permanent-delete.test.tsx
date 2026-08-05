@@ -10,10 +10,10 @@ import { TableRowActions } from "./table-row-actions";
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 
-function setGlobalAdmin(isGlobalAdmin: boolean) {
+function setAdminGate(gate: { isGlobalAdmin: boolean; isLoading?: boolean }) {
   vi.mocked(useIsGlobalAdmin).mockReturnValue({
-    isGlobalAdmin,
-    isPending: false,
+    isGlobalAdmin: gate.isGlobalAdmin,
+    isLoading: gate.isLoading ?? false,
   });
 }
 
@@ -21,7 +21,7 @@ describe("PermanentDeleteButton", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("runs the delete for a member holding a built-in admin role", () => {
-    setGlobalAdmin(true);
+    setAdminGate({ isGlobalAdmin: true });
     const onClick = vi.fn();
 
     render(<PermanentDeleteButton onClick={onClick} itemName="billing-gw" />);
@@ -35,7 +35,7 @@ describe("PermanentDeleteButton", () => {
   it("disables the button for everyone else", () => {
     // The route answers 404 to a non-admin whatever permissions they hold, so
     // an enabled button here would only ever produce a confusing "not found".
-    setGlobalAdmin(false);
+    setAdminGate({ isGlobalAdmin: false });
     const onClick = vi.fn();
 
     render(<PermanentDeleteButton onClick={onClick} itemName="billing-gw" />);
@@ -44,6 +44,18 @@ describe("PermanentDeleteButton", () => {
     expect(button).toBeDisabled();
     fireEvent.click(button);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("stays disabled while the role is still loading", () => {
+    // Fail closed: an unresolved role must never leave a destructive action
+    // enabled for the moment before the answer arrives.
+    setAdminGate({ isGlobalAdmin: false, isLoading: true });
+
+    render(<PermanentDeleteButton onClick={vi.fn()} itemName="billing-gw" />);
+
+    expect(
+      screen.getByLabelText("Delete permanently billing-gw"),
+    ).toBeDisabled();
   });
 });
 
@@ -56,7 +68,12 @@ describe("permanentDeleteRowAction", () => {
     render(
       <TableRowActions
         itemName="my-skill"
-        actions={[permanentDeleteRowAction({ isGlobalAdmin: true, onClick })]}
+        actions={[
+          permanentDeleteRowAction({
+            admin: { isGlobalAdmin: true, isLoading: false },
+            onClick,
+          }),
+        ]}
       />,
     );
 
@@ -70,7 +87,12 @@ describe("permanentDeleteRowAction", () => {
     render(
       <TableRowActions
         itemName="my-skill"
-        actions={[permanentDeleteRowAction({ isGlobalAdmin: false, onClick })]}
+        actions={[
+          permanentDeleteRowAction({
+            admin: { isGlobalAdmin: false, isLoading: false },
+            onClick,
+          }),
+        ]}
       />,
     );
 
@@ -82,7 +104,7 @@ describe("permanentDeleteRowAction", () => {
     // Telling an admin to go find an admin is useless when the API would
     // refuse them too — the concrete reason wins.
     const action = permanentDeleteRowAction({
-      isGlobalAdmin: true,
+      admin: { isGlobalAdmin: true, isLoading: false },
       onClick: vi.fn(),
       disabledReason: "Built-in skills cannot be permanently deleted",
     });
@@ -91,5 +113,17 @@ describe("permanentDeleteRowAction", () => {
     expect(action.disabledTooltip).toBe(
       "Built-in skills cannot be permanently deleted",
     );
+  });
+
+  it("does not blame the role while the role is still unknown", () => {
+    // The gate reads "not an admin" until the query settles, so an admin
+    // opening the trash would otherwise be told they lack the role.
+    const action = permanentDeleteRowAction({
+      admin: { isGlobalAdmin: false, isLoading: true },
+      onClick: vi.fn(),
+    });
+
+    expect(action.disabled).toBe(true);
+    expect(action.disabledTooltip).toBe("Checking your role…");
   });
 });

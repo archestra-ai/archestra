@@ -49,7 +49,7 @@ export function AgentActions({
   onExport,
   onConvertToSkill,
 }: AgentActionsProps) {
-  const { isGlobalAdmin } = useIsGlobalAdmin();
+  const admin = useIsGlobalAdmin();
   const isBuiltIn = Boolean(agent.builtIn);
   const isDeleted = Boolean(agent.deletedAt);
 
@@ -66,7 +66,7 @@ export function AgentActions({
             onClick: () => onRestore(agent.id),
           },
           permanentDeleteRowAction({
-            isGlobalAdmin,
+            admin,
             onClick: () => onPermanentlyDelete(agent),
           }),
         ]}

@@ -126,13 +126,20 @@ export function useActiveMemberRole() {
  * `useHasPermissions({ x: ["admin"] })` would show them to users the API
  * answers 404 to. Resolves to `false` while the role is still loading, so a
  * destructive action never flashes enabled before the answer arrives.
+ *
+ * `isLoading`, not `isPending`: the underlying query is disabled until the
+ * session names an active organization, and a disabled query stays `pending`
+ * forever. `isLoading` is `isPending && isFetching`, so "no organization to
+ * resolve a role against" reads as a settled "not an admin" — which is what
+ * the API answers such a caller anyway — rather than a request still in
+ * flight.
  */
 export function useIsGlobalAdmin() {
-  const { data: role, isPending } = useActiveMemberRole();
+  const { data: role, isLoading } = useActiveMemberRole();
   return {
     isGlobalAdmin:
       role === ADMIN_ROLE_NAME || role === PLATFORM_ADMIN_ROLE_NAME,
-    isPending,
+    isLoading,
   };
 }
 

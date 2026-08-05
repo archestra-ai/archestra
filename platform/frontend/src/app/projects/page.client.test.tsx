@@ -285,7 +285,7 @@ describe("ProjectsPageClient", () => {
     } as unknown as ReturnType<typeof useTeams>);
     vi.mocked(useIsGlobalAdmin).mockReturnValue({
       isGlobalAdmin: true,
-      isPending: false,
+      isLoading: false,
     });
     mockProjects = [];
     mockApiKeyState = {
@@ -466,6 +466,10 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Trashed project")).toBeInTheDocument();
     expect(screen.queryByText("Edit details")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Pin")).not.toBeInTheDocument();
+    // The backend serves the deleted slice whole, ignoring search and scope, so
+    // leaving those controls live would read as filters that do nothing.
+    expect(screen.queryByLabelText("Search projects")).not.toBeInTheDocument();
+    expect(screen.queryByText("scope filter")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("Restore Trashed project"));
     expect(mockRestoreMutate).toHaveBeenCalledWith({ id: "trashed" });

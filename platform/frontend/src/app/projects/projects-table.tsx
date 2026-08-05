@@ -181,7 +181,7 @@ export function DeletedProjectsTable({
   onRestore: (project: ProjectListItem) => void;
   onPermanentlyDelete: (project: ProjectListItem) => void;
 }) {
-  const { isGlobalAdmin } = useIsGlobalAdmin();
+  const admin = useIsGlobalAdmin();
 
   const columns: ColumnDef<ProjectListItem>[] = [
     {
@@ -241,7 +241,7 @@ export function DeletedProjectsTable({
                 onClick: () => onRestore(row.original),
               },
               permanentDeleteRowAction({
-                isGlobalAdmin,
+                admin,
                 onClick: () => onPermanentlyDelete(row.original),
               }),
             ]}
@@ -256,7 +256,6 @@ export function DeletedProjectsTable({
       columns={columns}
       data={projects}
       getRowId={(row) => row.id}
-      emptyMessage="No deleted projects"
       hidePaginationWhenSinglePage
     />
   );

@@ -10,9 +10,13 @@ import { type ChatMessage, ChatMessageMetadataSchema } from "@archestra/shared";
  * caller's access check before injecting anything, so a forged id can only ever
  * surface an app the caller could already see.
  */
-export function readOpenedAppRef(
-  messages: ChatMessage[],
-): { appId: string | null; appMcpServerId: string | null } | undefined {
+export function readOpenedAppRef(messages: ChatMessage[]):
+  | {
+      appId: string | null;
+      appMcpServerId: string | null;
+      modelContext: string | null;
+    }
+  | undefined {
   const lastUser = messages.findLast((message) => message.role === "user");
   const openedApp = ChatMessageMetadataSchema.safeParse(lastUser?.metadata).data
     ?.openedApp;
@@ -21,5 +25,11 @@ export function readOpenedAppRef(
     appId: "appId" in openedApp ? openedApp.appId : null,
     appMcpServerId:
       "appMcpServerId" in openedApp ? openedApp.appMcpServerId : null,
+    // App-reported display state (untrusted free text; sanitized before the
+    // prompt by resolveOpenedApp).
+    modelContext:
+      "appId" in openedApp && openedApp.modelContext
+        ? openedApp.modelContext
+        : null,
   };
 }

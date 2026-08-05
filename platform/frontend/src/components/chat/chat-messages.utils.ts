@@ -11,11 +11,13 @@ import {
   parseFullToolName,
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
+  TOOL_COPY_FILE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
+  getToolNameFromPart,
   isCompactEligible,
 } from "@/lib/chat/chat-tools-display.utils";
 import type { PanelApp } from "./apps-context";
@@ -343,6 +345,62 @@ export function deriveAppsFromMessages(
   }
 
   return apps;
+}
+
+/**
+ * Per-app revision of agent-side writes into an app's file store: how many
+ * successful `copy_file` calls into the app (`to.scope === "app"` on the call
+ * INPUT) the conversation holds, attributed to the app that was open for that
+ * turn (the openedApp metadata on the preceding user message — the same hint
+ * the backend resolves for the copy itself). The input is the only place the
+ * direction survives client-side: the chat flattens tool outputs to a text
+ * `content` for the model, so the result's `destination` field never reaches
+ * the part. Recomputed as parts stream in, so a bump reaches the running app
+ * the moment the copy's result lands, not at end of turn. Only delivered,
+ * successful results count — a bump must mean the write provably happened, or
+ * the app would re-list and see nothing.
+ */
+export function deriveAppFilesRevisions(
+  messages: UIMessage[],
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null,
+): ReadonlyMap<string, number> {
+  const revisions = new Map<string, number>();
+  let openAppId: string | null = null;
+
+  for (const message of messages) {
+    if (message.role === "user") {
+      // A raw field read, not a schema parse: this runs over the whole
+      // history on every streaming tick, and the id is only a grouping key —
+      // the backend re-validates and re-authorizes it in resolveOpenedApp.
+      const openedApp = (
+        message.metadata as { openedApp?: { appId?: unknown } } | undefined
+      )?.openedApp;
+      openAppId = typeof openedApp?.appId === "string" ? openedApp.appId : null;
+      continue;
+    }
+    if (message.role !== "assistant" || !openAppId) continue;
+
+    for (const part of message.parts ?? []) {
+      // Cheap field checks first — most parts on a streaming tick are other
+      // tools or not yet delivered, and name parsing is the expensive step.
+      const toolPart = part as DynamicToolUIPart | ToolUIPart;
+      if (toolPart.state !== "output-available") continue;
+      const to = (toolPart.input as { to?: { scope?: string } } | undefined)
+        ?.to;
+      if (to?.scope !== "app") continue;
+      const toolName = getToolNameFromPart(toolPart);
+      if (
+        !toolName ||
+        getToolShortName(toolName) !== TOOL_COPY_FILE_SHORT_NAME
+      ) {
+        continue;
+      }
+      if (getToolErrorText({ part: toolPart, toolResultPart: null })) continue;
+      revisions.set(openAppId, (revisions.get(openAppId) ?? 0) + 1);
+    }
+  }
+
+  return revisions;
 }
 
 /**

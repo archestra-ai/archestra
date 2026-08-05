@@ -589,7 +589,16 @@ export type ChatAppDiagnosticsMetadata = z.infer<
  * id can only ever surface an app the caller could already see.
  */
 export const ChatOpenedAppMetadataSchema = z.union([
-  z.object({ appId: z.string().uuid() }),
+  z.object({
+    appId: z.string().uuid(),
+    /**
+     * State the running app last reported for the model via the MCP-Apps
+     * `ui/update-model-context` request (e.g. which file it is displaying).
+     * App-authored free text — untrusted; the backend sanitizes and quotes it
+     * as data before it reaches the prompt.
+     */
+    modelContext: z.string().max(2000).optional(),
+  }),
   z.object({ appMcpServerId: z.string().uuid() }),
 ]);
 

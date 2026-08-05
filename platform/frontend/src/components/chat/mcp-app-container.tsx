@@ -319,6 +319,8 @@ export function McpAppEntryContent({
     portalTarget,
     settingsOpen,
     setSettingsOpen,
+    appFilesRevisions,
+    reportAppModelContext,
   } = useApps();
 
   // Owned apps can be renamed/re-described from settings. Read the live app so
@@ -477,6 +479,12 @@ export function McpAppEntryContent({
       // and keep the plain tool result rather than showing a load error.
       // Owned apps keep surfacing errors — a failure there is an authoring bug.
       degradeResourceLoadError={!appId}
+      // Owned apps only: their file store is what agent-side copy_file writes
+      // into, and their SDK is what reports display state back.
+      filesRevision={appId ? (appFilesRevisions.get(appId) ?? 0) : undefined}
+      onModelContextUpdate={
+        appId ? (text) => reportAppModelContext(appId, text) : undefined
+      }
     />
   );
 

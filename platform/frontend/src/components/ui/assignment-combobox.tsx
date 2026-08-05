@@ -105,7 +105,7 @@ export function AssignmentCombobox({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="w-96 max-h-72 flex flex-col"
+        className="flex max-h-72 w-96 max-w-[calc(100vw-2rem)] min-w-0 flex-col"
         align="start"
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
@@ -124,8 +124,8 @@ export function AssignmentCombobox({
             }
           />
         </div>
-        <div className="overflow-y-auto flex-1">
-          <DropdownMenuGroup>
+        <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <DropdownMenuGroup className="min-w-0">
             {filteredItems.length === 0 ? (
               <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                 {emptyMessage}
@@ -138,7 +138,7 @@ export function AssignmentCombobox({
                     <DropdownMenuItem
                       key={item.id}
                       disabled
-                      className="cursor-pointer opacity-50"
+                      className="min-w-0 cursor-pointer opacity-50"
                       data-testid={
                         testId
                           ? getAssignmentComboboxDisabledOptionTestId(
@@ -148,12 +148,12 @@ export function AssignmentCombobox({
                           : undefined
                       }
                     >
-                      <div className="flex items-center gap-3 min-w-0 pl-6">
+                      <div className="flex w-full min-w-0 items-center gap-3 pl-6">
                         {item.icon}
-                        <div className="min-w-0">
-                          <span className="truncate">{item.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate">{item.name}</span>
                           {item.disabledReason && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="truncate text-xs text-muted-foreground">
                               {item.disabledReason}
                             </p>
                           )}
@@ -166,7 +166,7 @@ export function AssignmentCombobox({
                   <DropdownMenuCheckboxItem
                     key={item.id}
                     checked={isSelected}
-                    className="cursor-pointer"
+                    className="min-w-0 cursor-pointer"
                     data-testid={
                       testId
                         ? getAssignmentComboboxOptionTestId(testId, item.name)
@@ -181,18 +181,18 @@ export function AssignmentCombobox({
                       if (isSelected) e.preventDefault();
                     }}
                   >
-                    <div className="flex items-center justify-between gap-2 w-full">
-                      <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex w-full min-w-0 items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
                         {item.icon}
-                        <div className="min-w-0">
-                          <span className="truncate">{item.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate">{item.name}</span>
                           {item.description && (
                             <ItemDescription description={item.description} />
                           )}
                         </div>
                       </div>
                       {item.badge && (
-                        <span className="text-xs text-muted-foreground shrink-0">
+                        <span className="max-w-[40%] shrink-0 truncate text-xs text-muted-foreground">
                           {item.badge}
                         </span>
                       )}
@@ -250,8 +250,11 @@ function ItemDescription({ description }: { description: string }) {
   }, [description]);
 
   return (
-    <div className="text-xs text-muted-foreground mt-0.5">
-      <p ref={ref} className={cn(!expanded && "line-clamp-1")}>
+    <div className="min-w-0 text-xs text-muted-foreground mt-0.5">
+      <p
+        ref={ref}
+        className={cn("[overflow-wrap:anywhere]", !expanded && "line-clamp-1")}
+      >
         {description}
       </p>
       {(isTruncated || expanded) && (

@@ -7,6 +7,7 @@ import type {
   UpdateHookFile,
 } from "@/types/hook";
 import { InsertHookFileSchema, UpdateHookFileSchema } from "@/types/hook";
+import AgentModel from "./agent";
 import AgentVersionModel from "./agent-version";
 
 class HookFileModel {
@@ -103,6 +104,11 @@ class HookFileModel {
    * `(agent_id, event, file_name)` and carry no FK referents, so a
    * delete-then-insert is safe and keeps the whole-set semantics the snapshot
    * replay needs (a hook absent from the payload must disappear).
+   *
+   * Takes the agent's row lock first, like the exclusions full-replace: without
+   * it a concurrent `create` landing between the delete and the insert hits the
+   * `(agent_id, event, file_name)` unique index, failing the replace with the
+   * old hooks already gone.
    */
   static async replaceForAgent(params: {
     agentId: string;
@@ -120,6 +126,7 @@ class HookFileModel {
     );
 
     await withDbTransaction(async (tx) => {
+      await AgentModel.lockRowForUpdate(params.agentId, tx);
       await tx
         .delete(schema.hookFilesTable)
         .where(

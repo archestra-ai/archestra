@@ -266,9 +266,14 @@ class AgentToolExclusionsService {
     };
   }
 
-  // === Private validation helpers ===
-
-  private async validateToolIds(
+  /**
+   * Throw unless every id is an excludable tool in this organization. Public
+   * because the version-restore preflight has to know whether an exclusion set
+   * WOULD be accepted before it writes anything — `replaceExclusions` decides
+   * that inside its own transaction, which is too late for a caller that must
+   * fail before touching the agent at all.
+   */
+  async validateToolIds(
     toolIds: string[],
     organizationId: string,
   ): Promise<void> {

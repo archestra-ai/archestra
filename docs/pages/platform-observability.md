@@ -139,7 +139,7 @@ If none of the authentication environment variables are configured, traces will 
 
 ### Content Capture
 
-Archestra can capture prompt/completion content and tool call arguments/results as span events for full audit trail visibility. This is enabled by default and can be disabled via the `ARCHESTRA_OTEL_CAPTURE_CONTENT` [environment variable](/docs/platform-deployment#observability--metrics). When [content encryption at rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) is configured, capture defaults to **off** instead — encrypted database content should not leave for the telemetry backend in plaintext — and only an explicit `ARCHESTRA_OTEL_CAPTURE_CONTENT=true` re-enables it (with a startup warning).
+Archestra can capture prompt/completion content and tool call arguments/results as span events for full audit trail visibility. This is enabled by default and can be disabled via the `ARCHESTRA_OTEL_CAPTURE_CONTENT` [environment variable](/docs/platform-deployment#observability--metrics). When [content encryption at rest](/docs/platform-content-encryption) is configured, capture defaults to **off** instead — encrypted database content should not leave for the telemetry backend in plaintext — and only an explicit `ARCHESTRA_OTEL_CAPTURE_CONTENT=true` re-enables it (with a startup warning).
 
 When enabled, traces include:
 

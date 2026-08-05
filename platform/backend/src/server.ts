@@ -66,8 +66,8 @@ import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import {
+  dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
-  dropMessagesContentTrgmIndexUnderEncryption,
 } from "@/database/index-maintenance";
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -1362,7 +1362,7 @@ const startWebServer = async () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      void dropMessagesContentTrgmIndexUnderEncryption();
+      void dropContentTrgmIndexesUnderEncryption();
       // SPDX-SnippetEnd
     }
 
@@ -1727,7 +1727,7 @@ const startWorker = async () => {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    void dropMessagesContentTrgmIndexUnderEncryption();
+    void dropContentTrgmIndexesUnderEncryption();
     // SPDX-SnippetEnd
 
     posthogErrorTrackingService.init().catch((error) => {

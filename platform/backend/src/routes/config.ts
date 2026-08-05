@@ -8,6 +8,10 @@ import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import {
+  isMcpBrowserCredentialsEnabled,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; returns false when the feature is off
+} from "@/content-encryption/browser-credential.ee";
+import {
   isIncognitoChatEnabled,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed; returns false when the feature is off
 } from "@/content-encryption/incognito.ee";
@@ -101,6 +105,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
               chatIncognitoEnabled: z.boolean(),
+              mcpBrowserCredentialsEnabled: z.boolean(),
               agentHooksEnabled: z.boolean(),
               chatopsTelegramEnabled: z.boolean(),
               /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
@@ -180,6 +185,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
           chatIncognitoEnabled: isIncognitoChatEnabled(),
+          mcpBrowserCredentialsEnabled: isMcpBrowserCredentialsEnabled(),
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,

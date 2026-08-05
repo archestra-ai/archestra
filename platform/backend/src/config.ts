@@ -2720,6 +2720,18 @@ const config = {
       process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
       undefined,
   },
+  /**
+   * Browser-key MCP credentials (enterprise): personal static credentials on
+   * remote MCP servers protected by a key held only in the user's browser.
+   * The value is the RSA public key (PEM or base64-of-PEM) the browser keys
+   * are escrowed to for break-glass recovery. Setting it without an
+   * enterprise license fails startup (see verifyMcpBrowserCredentialConfig).
+   */
+  mcpBrowserCredentials: {
+    escrowPublicKey:
+      process.env.ARCHESTRA_MCP_CREDENTIAL_ESCROW_PUBLIC_KEY?.trim() ||
+      undefined,
+  },
   // SPDX-SnippetEnd
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",

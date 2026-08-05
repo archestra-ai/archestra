@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import {
-  createHash,
-  createPublicKey,
-  constants as cryptoConstants,
-  type KeyObject,
-  publicEncrypt,
-  timingSafeEqual,
-} from "node:crypto";
+import type { KeyObject } from "node:crypto";
 import config from "@/config";
 import type { IncognitoEscrowBlob } from "@/types/conversation";
 import { decryptStringWithKey, encryptStringWithKey } from "@/utils/crypto";
+import {
+  browserKeyFingerprint,
+  browserKeyMatches,
+  loadEscrowPublicKey,
+  parseBrowserKeyHeader,
+  wrapBrowserKey,
+} from "./browser-key.ee";
 import { isContentEnvelope } from "./index.ee";
 
 /**
@@ -76,19 +76,7 @@ export function verifyIncognitoChatConfig(): void {
 export function parseIncognitoDekHeader(
   headerValue: string | undefined,
 ): Buffer | null {
-  if (headerValue === undefined || headerValue === "") return null;
-  let dek: Buffer;
-  try {
-    dek = Buffer.from(headerValue, "base64url");
-  } catch {
-    throw new Error("incognito key header is not valid base64url");
-  }
-  if (dek.length !== DEK_LENGTH_BYTES) {
-    throw new Error(
-      `incognito key must decode to exactly ${DEK_LENGTH_BYTES} bytes`,
-    );
-  }
-  return dek;
+  return parseBrowserKeyHeader(headerValue);
 }
 
 /**
@@ -100,11 +88,11 @@ export function incognitoDekFingerprint(
   conversationId: string,
   dek: Buffer,
 ): string {
-  return createHash("sha256")
-    .update("archestra-incognito-dek-fp-v1")
-    .update(conversationId)
-    .update(dek)
-    .digest("hex");
+  return browserKeyFingerprint({
+    domain: INCOGNITO_FP_DOMAIN,
+    subjectId: conversationId,
+    key: dek,
+  });
 }
 
 /** Constant-time comparison of a stored fingerprint against a presented DEK. */
@@ -113,14 +101,12 @@ export function incognitoDekMatches(params: {
   conversationId: string;
   dek: Buffer;
 }): boolean {
-  const presented = Buffer.from(
-    incognitoDekFingerprint(params.conversationId, params.dek),
-    "hex",
-  );
-  const stored = Buffer.from(params.storedFingerprint, "hex");
-  return (
-    stored.length === presented.length && timingSafeEqual(stored, presented)
-  );
+  return browserKeyMatches({
+    storedFingerprint: params.storedFingerprint,
+    domain: INCOGNITO_FP_DOMAIN,
+    subjectId: params.conversationId,
+    key: params.dek,
+  });
 }
 
 /**
@@ -136,20 +122,7 @@ export function wrapIncognitoDek(dek: Buffer): IncognitoEscrowBlob {
         "enablement gating",
     );
   }
-  const wrapped = publicEncrypt(
-    {
-      key,
-      padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING,
-      oaepHash: "sha256",
-    },
-    dek,
-  );
-  return {
-    v: 1,
-    alg: "RSA-OAEP-256",
-    escrowKeyFingerprint: escrowKeyFingerprint(key),
-    wrappedDek: wrapped.toString("base64"),
-  };
+  return wrapBrowserKey({ key: dek, escrowKey: key });
 }
 
 /**
@@ -193,8 +166,7 @@ export function decryptIncognitoMessageRow<T extends object>(
 
 // === Internal ===
 
-const DEK_LENGTH_BYTES = 32;
-const MIN_ESCROW_MODULUS_BITS = 2048;
+const INCOGNITO_FP_DOMAIN = "archestra-incognito-dek-fp-v1";
 
 let cachedEscrowKey: KeyObject | null = null;
 let cachedEscrowKeyPem: string | null = null;
@@ -219,28 +191,8 @@ function escrowKeyOrNull(): KeyObject | null {
 }
 
 function loadEscrowKey(pem: string): KeyObject {
-  // Tolerate env-var PEMs with literal "\n" sequences.
-  const normalized = pem.includes("-----")
-    ? pem.replace(/\\n/g, "\n")
-    : Buffer.from(pem, "base64").toString("utf8");
-  const key = createPublicKey(normalized);
-  if (key.asymmetricKeyType !== "rsa") {
-    throw new Error(
-      "ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY must be an RSA public key " +
-        `(got ${key.asymmetricKeyType})`,
-    );
-  }
-  const modulusBits = key.asymmetricKeyDetails?.modulusLength ?? 0;
-  if (modulusBits < MIN_ESCROW_MODULUS_BITS) {
-    throw new Error(
-      `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY must be at least ` +
-        `${MIN_ESCROW_MODULUS_BITS} bits (got ${modulusBits})`,
-    );
-  }
-  return key;
-}
-
-function escrowKeyFingerprint(key: KeyObject): string {
-  const der = key.export({ type: "spki", format: "der" });
-  return createHash("sha256").update(der).digest("hex").slice(0, 16);
+  return loadEscrowPublicKey({
+    pem,
+    envVarName: "ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY",
+  });
 }

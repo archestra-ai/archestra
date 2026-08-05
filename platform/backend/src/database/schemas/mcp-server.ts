@@ -8,6 +8,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  IncognitoEscrowBlob,
   InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatus,
   McpServerReinstallReason,
@@ -77,6 +78,22 @@ const mcpServerTable = softDeletablePgTable(
       .$type<ResourceVisibilityScope>()
       .notNull()
       .default("personal"),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    /**
+     * Browser-key protected personal credential (enterprise): the secret's
+     * sensitive values are encrypted under a key held only in the owner's
+     * browser. `browserKeyFingerprint` rejects wrong keys up front;
+     * `browserKeyEscrow` is the RSA-wrapped copy for break-glass recovery
+     * (see content-encryption/browser-credential.ee.ts).
+     */
+    browserKeyProtected: boolean("browser_key_protected")
+      .notNull()
+      .default(false),
+    browserKeyFingerprint: text("browser_key_fingerprint"),
+    browserKeyEscrow: jsonb("browser_key_escrow").$type<IncognitoEscrowBlob>(),
+    // SPDX-SnippetEnd
     reinstallRequired: boolean("reinstall_required").notNull().default(false),
     // Null iff `reinstallRequired` is false — enforced by McpServerModel.update.
     reinstallReason: text("reinstall_reason").$type<McpServerReinstallReason>(),

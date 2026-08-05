@@ -60,6 +60,8 @@ import config, {
   shouldRunWebServer,
   shouldRunWorker,
 } from "@/config";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-op when the feature is off
+import { verifyMcpBrowserCredentialConfig } from "@/content-encryption/browser-credential.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-op when the feature is off
@@ -1250,6 +1252,7 @@ const startWebServer = async () => {
     // (or silently plaintext) interaction/message content.
     await verifyContentEncryptionKey();
     verifyIncognitoChatConfig();
+    verifyMcpBrowserCredentialConfig();
     // SPDX-SnippetEnd
 
     await seedRequiredStartingData();
@@ -1698,6 +1701,7 @@ const startWorker = async () => {
     // the content-key guard must hold here too.
     await verifyContentEncryptionKey();
     verifyIncognitoChatConfig();
+    verifyMcpBrowserCredentialConfig();
     // SPDX-SnippetEnd
     cacheManager.start();
     await enterpriseTier.start();

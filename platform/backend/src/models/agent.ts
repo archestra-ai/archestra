@@ -75,7 +75,7 @@ import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
 /** The columns a boot-time sync reconciles against a shipped built-in definition. */
-export type BuiltInAgentSyncRow = Pick<
+type BuiltInAgentSyncRow = Pick<
   typeof schema.agentsTable.$inferSelect,
   "id" | "name" | "description" | "systemPrompt" | "builtInAgentConfig"
 >;

@@ -279,8 +279,8 @@ export default function LlmSettingsPage() {
             decision points rather than on every turn, so this usually costs
             less than running the stronger model throughout, though each call is
             billed at the advisor model&apos;s rates. Pick the advisor&apos;s
-            model on the Advisor agent, then turn on &quot;Consult the
-            advisor&quot; for the agents that should reach it.
+            model on the Advisor agent, then turn on &quot;Escalate hard
+            decisions to the advisor&quot; for the agents that should reach it.
           </>
         }
         control={

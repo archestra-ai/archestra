@@ -307,7 +307,7 @@ export const ADVISOR_AGENT_NAME = BUILT_IN_AGENT_NAMES.ADVISOR;
 
 /** Shown to an administrator on the Advisor agent. */
 // white-label-ok: shipped default text; branded by brandBuiltInText where it is seeded
-export const ADVISOR_AGENT_DESCRIPTION = `A stronger model your agents consult at the few decisions that shape a task — the approach, an error that keeps coming back, whether the work is really done — so they can run on a cheaper, faster model the rest of the time. Give it a model, then turn on "Consult the advisor" for the agents that should reach it. Each consultation is billed at this model's own rates.`;
+export const ADVISOR_AGENT_DESCRIPTION = `A stronger model your agents consult at the few decisions that shape a task — the approach, an error that keeps coming back, whether the work is really done — so they can run on a cheaper, faster model the rest of the time. Give it a model, then turn on "Escalate hard decisions to the advisor" for the agents that should reach it. Each consultation is billed at this model's own rates.`;
 
 /**
  * What the *calling model* reads as the advisor delegation tool's description.

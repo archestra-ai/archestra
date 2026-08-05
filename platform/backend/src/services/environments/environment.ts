@@ -80,7 +80,7 @@ export async function createEnvironment(params: {
     trustedImageRegistries: data.trustedImageRegistries ?? null,
   });
   // Delegation never crosses environments, so a new environment needs its own
-  // advisor row or every agent in it sees the "Consult the advisor" switch and
+  // advisor row or every agent in it sees the escalate-to-advisor switch and
   // reaches nothing. Best-effort: the environment is already created, and the
   // boot-time sync seeds any advisor missed here.
   try {

@@ -176,6 +176,13 @@ function toolItem(tool: Snapshot["tools"][number]): ListInput {
  * would collapse duplicates into one row, so deleting one of them would read
  * as an edit of the one that stays. Numbering repeats keeps them apart, while
  * a title that appears once still pairs across versions and reads as an edit.
+ *
+ * Position is compared as well as content, because order is configuration
+ * here: a prompt's place in the list is what the chat's picker shows, and
+ * `agent-version-restore.ts` compares the whole array as a sequence, so it
+ * rewrites the prompts on a pure reorder. Pairing on the title alone would
+ * read that reorder as no change at all, in a version minted precisely
+ * because something changed.
  */
 function suggestedPromptsSection(
   current: Snapshot,
@@ -195,13 +202,14 @@ function suggestedPromptItems(
   prompts: Snapshot["suggestedPrompts"],
 ): ListInput[] {
   const seen = new Map<string, number>();
-  return prompts.map((prompt) => {
+  return prompts.map((prompt, index) => {
     const occurrence = seen.get(prompt.summaryTitle) ?? 0;
     seen.set(prompt.summaryTitle, occurrence + 1);
     return {
       key: `${prompt.summaryTitle}#${occurrence}`,
       label: prompt.summaryTitle,
       detail: prompt.prompt,
+      identity: `position:${index}`,
     };
   });
 }
@@ -261,6 +269,10 @@ type Snapshot = AgentConfigSnapshot;
  * about the two snapshots, so a section can only be dropped when there was
  * nothing in it to compare — which means anything that moved survives the
  * filter, and an empty change set really does mean the two versions agree.
+ *
+ * Unset is `null`, not "the empty string": a body cleared to `""` is a value
+ * the snapshot carries and a restore writes, so a section holding one is
+ * emphatically not empty. Dropping it would hide the edit that produced it.
  */
 function sectionCarriesContent(section: AgentSnapshotSection): boolean {
   switch (section.kind) {
@@ -269,7 +281,7 @@ function sectionCarriesContent(section: AgentSnapshotSection): boolean {
     case "list":
       return section.items.length > 0;
     case "text":
-      return Boolean(section.current) || Boolean(section.previous);
+      return section.current !== null || section.previous !== null;
   }
 }
 
@@ -313,9 +325,14 @@ function systemPromptSection(
     current: current.systemPrompt,
     previous: previous?.systemPrompt ?? null,
     group: null,
+    // Compared as the snapshot stores it, so `null` and `""` are two values
+    // rather than one: the content hash separates them, which is why clearing
+    // a prompt to `""` mints a version, and the restore plan writes the
+    // difference. Folding them together here would call that version's only
+    // edit no change.
     change: !previous
       ? null
-      : (previous.systemPrompt ?? "") === (current.systemPrompt ?? "")
+      : previous.systemPrompt === current.systemPrompt
         ? "unchanged"
         : "changed",
   };
@@ -323,11 +340,19 @@ function systemPromptSection(
 
 interface ListInput {
   key: string;
+  /**
+   * Display only. A row pairs on `key` and is compared on `detail` and
+   * `identity`, never on the name it renders as — a tool or knowledge base
+   * renamed between two versions is the same assignment to
+   * `agent-version-restore.ts`, which reads these rows by id and would write
+   * nothing, so calling it "changed" would badge a row whose visible detail
+   * lines are identical. Same rule the scalar fields follow.
+   */
   label: string;
   detail: string | null;
   /**
-   * What "changed" is decided from, when a row is compared on more than it
-   * shows. Defaults to `detail`.
+   * What "changed" is decided from beyond `detail`, when a row is compared on
+   * more than it shows.
    */
   identity?: string;
 }
@@ -396,11 +421,7 @@ function listSection(params: {
 
 /** Two rows of a collection agree when everything compared about them does. */
 function sameListItem(before: ListInput, after: ListInput): boolean {
-  return (
-    before.label === after.label &&
-    before.detail === after.detail &&
-    (before.identity ?? "") === (after.identity ?? "")
-  );
+  return before.detail === after.detail && before.identity === after.identity;
 }
 
 /**
@@ -430,11 +451,13 @@ function hookSections(
     // One side is always present, so either carries the hook's identity.
     const { event, fileName } = (after ?? before) as SnapshotHook;
     const hasBaseline = previous !== null;
-    const fields = HOOK_FIELDS.map(({ label, render }) =>
+    const fields = HOOK_FIELDS.map(({ label, render, identity }) =>
       fieldDiff({
         label,
         current: after ? render(after) : null,
         previous: before ? render(before) : null,
+        currentIdentity: after ? identity?.(after) : null,
+        previousIdentity: before ? identity?.(before) : null,
         hasBaseline,
       }),
     );
@@ -481,11 +504,13 @@ function fieldDiff(params: {
     label,
     current,
     previous,
-    change: !hasBaseline
-      ? null
-      : (before ?? "") === (after ?? "")
-        ? "unchanged"
-        : "changed",
+    // Unset and empty are two values, not one. `description`, `icon`, and
+    // `incomingEmailAllowedDomain` all accept `""` through the update schema,
+    // `stableStringify` hashes `null` and `""` apart — which is why such an
+    // edit mints a version at all — and the restore plan writes the
+    // difference. Reading them as equal here would render that version as
+    // having changed nothing.
+    change: !hasBaseline ? null : before === after ? "unchanged" : "changed",
   };
 }
 
@@ -514,14 +539,16 @@ function renderBoolean(value: boolean): string {
  * scalars here plus the sections around them cover the whole snapshot, which
  * is what lets an empty change set be read as "these two versions agree".
  * A field added to the snapshot and not to this table would be restored
- * silently, so add both together.
+ * silently, so add both together — `agent-version-diff.test.ts` maps every
+ * snapshot key to its home here and fails to compile when one appears with no
+ * home, since a new field is mandated optional and would otherwise slip
+ * through type-check, the tests, and CI alike.
  *
  * Exhaustive against the snapshot, not against what a restore replays: `Type`,
  * `Identity provider`, and `Built-in configuration` are captured but never
- * written back — `agent-version-restore.ts` refuses the identity provider
- * outright, and never plans the other two. They stay because over-reporting a
- * change is the safe direction; under-reporting is the failure this table
- * exists to prevent.
+ * written back — `agent-version-restore.ts` simply never plans any of the
+ * three. They stay because over-reporting a change is the safe direction;
+ * under-reporting is the failure this table exists to prevent.
  */
 const CONFIGURATION_FIELDS: {
   label: string;
@@ -602,6 +629,8 @@ function hookKey(hook: SnapshotHook): string {
 const HOOK_FIELDS: {
   label: string;
   render: (hook: SnapshotHook) => string | null;
+  /** As on `CONFIGURATION_FIELDS`: what a non-unique rendering is decided on. */
+  identity?: (hook: SnapshotHook) => string | null;
 }[] = [
   { label: "Event", render: (hook) => hook.event },
   { label: "Enabled", render: (hook) => renderBoolean(hook.enabled) },
@@ -609,6 +638,14 @@ const HOOK_FIELDS: {
     label: "Requirements",
     render: (hook) =>
       hook.requirements.length > 0 ? hook.requirements.join(", ") : null,
+    // The separator is not reserved: a pip specifier pins a range with the
+    // same comma, so `["numpy>=1, <2"]` and `["numpy>=1", "<2"]` render one
+    // string while being two different requirement lists. A restore reads
+    // them apart — its hook identity is the JSON-stringified array — and
+    // rewrites the hook, so the comparison has to read them apart too. Null
+    // where `render` is, as the field contract requires.
+    identity: (hook) =>
+      hook.requirements.length > 0 ? JSON.stringify(hook.requirements) : null,
   },
 ];
 

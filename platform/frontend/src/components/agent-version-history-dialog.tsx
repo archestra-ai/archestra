@@ -42,6 +42,23 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
  */
 type VersionViewMode = "all" | "changes";
 
+/**
+ * What a restore would change about the agent as it stands today. Kept as
+ * three states rather than a change list, because "nothing changes" and "not
+ * worked out yet" are answers a confirmation has to give differently.
+ */
+type RestoreComparison =
+  | { status: "ready"; changes: AgentSnapshotSection[] }
+  | { status: "pending" }
+  | { status: "unavailable" };
+
+/**
+ * How the viewed version's snapshot stands: read, still coming, unreadable, or
+ * pruned by retention. The last two are distinct facts — a failed read
+ * supports no claim about whether the version still exists.
+ */
+type DetailState = "ready" | "loading" | "unavailable" | "pruned";
+
 /** How the surrounding page names the entity; the copy follows it. */
 const NOUN_BY_AGENT_TYPE: Record<string, string> = {
   agent: "agent",
@@ -124,32 +141,52 @@ function VersionHistory({
     versions[0]?.version ??
     (agent && agent.latestVersion > 0 ? agent.latestVersion : null);
   const activeVersion = selectedVersion ?? headVersion;
-  const isHead = activeVersion !== null && activeVersion === headVersion;
 
   const {
     data: detail,
     isPending: isDetailLoading,
+    isFetching: isDetailFetching,
     isError: isDetailUnavailable,
     refetch: refetchDetail,
   } = useAgentVersion(open ? agentId : null, activeVersion);
+  // Which version the pane is actually showing. A selection keeps the previous
+  // snapshot on screen until the next one lands, so the clicked version and
+  // the rendered one disagree for the length of that read — and every claim
+  // the pane makes, from the header down to what a restore would do, has to be
+  // about the snapshot in front of the reader rather than the click.
+  const previewedVersion = detail?.version ?? activeVersion;
+  const isHead = previewedVersion !== null && previewedVersion === headVersion;
   // Versions are contiguous, so the diff baseline is simply the previous
   // number — which retention may have pruned. One rule for the rest: a version
   // is compared against its predecessor when that predecessor loads, and shown
   // on its own when it does not.
-  const hasPredecessor = activeVersion !== null && activeVersion > 1;
+  const baselineVersion =
+    previewedVersion !== null && previewedVersion > 1
+      ? previewedVersion - 1
+      : null;
+  const hasPredecessor = baselineVersion !== null;
   const predecessorQuery = useAgentVersion(
     open ? agentId : null,
-    hasPredecessor ? (activeVersion as number) - 1 : null,
+    baselineVersion,
   );
-  const predecessor = predecessorQuery.data ?? null;
+  // The baseline read carries the same lag as the one above, so a snapshot is
+  // this version's baseline only when it is numerically its predecessor —
+  // otherwise the pane would diff two unrelated versions until the two reads
+  // line up.
+  const predecessor =
+    predecessorQuery.data?.version === baselineVersion
+      ? predecessorQuery.data
+      : null;
   const baselineFailed = hasPredecessor && predecessorQuery.isError;
   // A settled null is the hook's reading of a 404: retention pruned the
   // baseline. Nothing is loading and nothing failed, so neither state above
   // covers it — without this one, the switcher would claim to be loading a
-  // version that will never arrive.
+  // version that will never arrive. A held-over snapshot has settled for the
+  // version *before* this one, so it says nothing about this baseline.
   const baselinePruned =
     hasPredecessor &&
     predecessorQuery.isSuccess &&
+    !predecessorQuery.isPlaceholderData &&
     predecessorQuery.data === null;
 
   // What a restore would do to the agent *as it stands today* — a different
@@ -157,27 +194,46 @@ function VersionHistory({
   // to answer. The head snapshot is fetched for that comparison; it is cached
   // and immutable, so viewing the head itself costs nothing extra.
   const headQuery = useAgentVersion(open ? agentId : null, headVersion);
-  const restoreChanges = useMemo(() => {
-    if (!detail || !headQuery.data || isHead) return [];
-    return changedSections(
-      compareAgentSnapshots(detail.snapshot, headQuery.data.snapshot),
-    );
-  }, [detail, headQuery.data, isHead]);
+  const head = headQuery.data?.version === headVersion ? headQuery.data : null;
+  const restoreComparison = useMemo((): RestoreComparison => {
+    if (!detail) return { status: "unavailable" };
+    if (isHead) return { status: "ready", changes: [] };
+    if (!head) {
+      return headQuery.isError
+        ? { status: "unavailable" }
+        : { status: "pending" };
+    }
+    return {
+      status: "ready",
+      changes: changedSections(
+        compareAgentSnapshots(detail.snapshot, head.snapshot),
+      ),
+    };
+  }, [detail, head, headQuery.isError, isHead]);
 
   const noun = NOUN_BY_AGENT_TYPE[agent?.agentType ?? "agent"] ?? "agent";
   const isBuiltIn = Boolean(agent?.builtIn);
   const canRestore = !!detail && !!agent && !isHead && !isBuiltIn;
+  // The preview pane tells these four apart; the disabled button has to give
+  // the same reading rather than greying out with nothing to say.
+  const detailState: DetailState = detail
+    ? "ready"
+    : isDetailLoading
+      ? "loading"
+      : isDetailUnavailable
+        ? "unavailable"
+        : "pruned";
 
   const restoreVersion = useRestoreAgentVersion();
   const handleRestore = async () => {
-    if (!agentId || activeVersion === null || headVersion === null) return;
+    if (!agentId || !detail || headVersion === null) return;
     // A handled failure resolves to null and a transport failure rejects; both
     // keep the confirmation open, so the toast explaining why still has the
     // dialog it refers to on screen.
     const result = await restoreVersion
       .mutateAsync({
         agentId,
-        version: activeVersion,
+        version: detail.version,
         baseVersion: headVersion,
       })
       .catch(() => null);
@@ -216,7 +272,13 @@ function VersionHistory({
             }
             disabled={!canRestore}
             onClick={() => setConfirmingRestore(true)}
-            tooltip={restoreTooltip({ isHead, isBuiltIn, noun })}
+            tooltip={restoreTooltip({
+              version: activeVersion,
+              isHead,
+              isBuiltIn,
+              detailState,
+              noun,
+            })}
           >
             Restore this version
           </PermissionButton>
@@ -268,9 +330,10 @@ function VersionHistory({
             )
           ) : (
             <VersionPreview
-              version={activeVersion}
+              version={detail?.version ?? activeVersion}
               isHead={isHead}
               detail={detail ?? null}
+              isStale={isDetailFetching}
               predecessor={predecessor}
               baselineFailed={baselineFailed}
               baselinePruned={baselinePruned}
@@ -285,22 +348,22 @@ function VersionHistory({
         </section>
       </div>
 
-      {agent && detail && activeVersion !== null ? (
+      {agent && detail ? (
         <DeleteConfirmDialog
           open={confirmingRestore}
           onOpenChange={setConfirmingRestore}
-          title={`Restore version ${activeVersion}?`}
+          title={`Restore version ${detail.version}?`}
           description={restoreEffects({
-            version: activeVersion,
+            version: detail.version,
             noun,
-            changes: restoreChanges,
+            comparison: restoreComparison,
           })}
           isPending={restoreVersion.isPending}
           onConfirm={handleRestore}
           // A restore only ever appends to the history, so it does not get the
           // red a delete confirmation uses.
           confirmVariant="default"
-          confirmLabel={`Restore version ${activeVersion}`}
+          confirmLabel={`Restore version ${detail.version}`}
           pendingLabel="Restoring..."
         />
       ) : null}
@@ -385,8 +448,11 @@ function VersionTimeline({
                       Current
                     </Badge>
                   ) : null}
+                  {/* A day's worth of edits reads as identical rows without
+                      it; the content hash the row used to carry is on the
+                      version it selects, one pane over. */}
                   <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
-                    {version.contentHash.slice(0, 7)}
+                    {format(new Date(version.createdAt), "HH:mm")}
                   </span>
                 </span>
               </button>
@@ -441,6 +507,7 @@ function VersionPreview({
   version,
   isHead,
   detail,
+  isStale,
   predecessor,
   baselineFailed,
   baselinePruned,
@@ -454,6 +521,8 @@ function VersionPreview({
   version: number;
   isHead: boolean;
   detail: AgentVersionDetail | null;
+  /** A newer selection is in flight; what is on screen is the version before. */
+  isStale: boolean;
   predecessor: AgentVersionDetail | null;
   /** A baseline was expected and the read failed. */
   baselineFailed: boolean;
@@ -543,7 +612,15 @@ function VersionPreview({
           }
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div
+        aria-busy={isStale}
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto p-4",
+          // The next version is on its way and this one is still readable
+          // underneath, so the pane recedes rather than emptying out.
+          isStale && "opacity-60 transition-opacity",
+        )}
+      >
         {entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Nothing changed in this version.
@@ -867,8 +944,12 @@ function ListPane({
               </span>
             </span>
           ) : (item.detail ?? item.previousDetail) ? (
+            // Both branches root at a span, so React reconciles this one in
+            // place when the change arrives and deletes whatever text node it
+            // holds — which page-translate has since re-parented. The inner
+            // span keeps an element there for React to move instead.
             <span className="text-xs text-muted-foreground">
-              {item.detail ?? item.previousDetail}
+              <span>{item.detail ?? item.previousDetail}</span>
             </span>
           ) : null}
         </li>
@@ -982,22 +1063,42 @@ function textEditorHeight(
 function restoreEffects({
   version,
   noun,
-  changes,
+  comparison,
 }: {
   version: number;
   noun: string;
-  changes: AgentSnapshotSection[];
+  comparison: RestoreComparison;
 }): string {
   const base = `Version ${version}'s configuration becomes the ${noun}'s configuration, as a new version.`;
-  const summary =
-    changes.length > 0
-      ? ` This changes: ${changes.map(describeChange).join(", ")}.`
-      : "";
+  const summary = describeComparison(comparison, noun);
   // Snapshots reference tools, models, and keys by id, and a restore is
   // all-or-nothing: one referent deleted since this version refuses the whole
   // thing rather than quietly restoring a partial configuration.
   const caveat = ` If this version references anything deleted since — a tool, a model, a key — the restore is refused and the ${noun} is left as it is.`;
   return `${base}${summary}${caveat}`;
+}
+
+/**
+ * The change summary, or the reason there is not one. A comparison that has
+ * not been read yet and a comparison that came back empty are different
+ * answers, and rendering both as silence invites the reader to take an unread
+ * one for "this restore is a no-op" — which is the one reading a confirmation
+ * for a whole-configuration rewrite must not offer.
+ */
+function describeComparison(
+  comparison: RestoreComparison,
+  noun: string,
+): string {
+  switch (comparison.status) {
+    case "pending":
+      return ` What this changes is still being worked out against the ${noun}'s current configuration.`;
+    case "unavailable":
+      return ` What this changes could not be worked out: the ${noun}'s current configuration could not be read.`;
+    case "ready":
+      return comparison.changes.length > 0
+        ? ` This changes: ${comparison.changes.map(describeChange).join(", ")}.`
+        : ` Nothing changes: this version is identical to the ${noun}'s current configuration.`;
+  }
 }
 
 function describeChange(section: AgentSnapshotSection): string {
@@ -1014,18 +1115,35 @@ function describeChange(section: AgentSnapshotSection): string {
   return section.label;
 }
 
+/**
+ * Why the restore button is disabled, in the same reading the preview pane
+ * gives — a version that could not be read and a version that no longer exists
+ * disable it just as surely as the head does, and used to do so in silence.
+ */
 function restoreTooltip({
+  version,
   isHead,
   isBuiltIn,
+  detailState,
   noun,
 }: {
+  version: number | null;
   isHead: boolean;
   isBuiltIn: boolean;
+  detailState: DetailState;
   noun: string;
 }): string | undefined {
   if (isBuiltIn) return `Built-in ${noun}s cannot be modified.`;
   if (isHead) return `This is the ${noun}'s current configuration.`;
-  return undefined;
+  if (detailState === "ready" || version === null) return undefined;
+  switch (detailState) {
+    case "loading":
+      return `Loading version ${version}...`;
+    case "unavailable":
+      return `Version ${version} could not be loaded, so there is nothing to restore.`;
+    case "pruned":
+      return `Version ${version} is no longer available, so there is nothing to restore.`;
+  }
 }
 
 function groupByDay(versions: AgentVersionSummary[]) {

@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -67,6 +68,13 @@ export function useAgentVersions(id: string | null) {
  * pruned one 404s — and callers must tell a settled `null` apart from a
  * still-loading query by the query's own status rather than by data
  * truthiness.
+ *
+ * Switching versions serves the previously-read snapshot until the next one
+ * arrives, so the reader keeps a preview on screen rather than watching it
+ * unmount to a loading line. The cost is that the data and the version that
+ * was asked for disagree for as long as the read takes: callers must take the
+ * identity off the snapshot they were handed (`data.version`) rather than off
+ * their own argument, or they will label one version's config with another's.
  */
 export function useAgentVersion(id: string | null, version: number | null) {
   return useQuery({
@@ -80,6 +88,7 @@ export function useAgentVersion(id: string | null, version: number | null) {
     // A version's snapshot never changes; re-fetching it on focus or on an
     // unrelated agent edit would re-download the full config for nothing.
     staleTime: Number.POSITIVE_INFINITY,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const { data, error } = await getAgentVersion({
         path: { id: id as string, version: version as number },

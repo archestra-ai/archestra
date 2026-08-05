@@ -160,6 +160,31 @@ function mockVersionDetails(
   }) as never);
 }
 
+/**
+ * The hook's held-over reading: a version whose read is still in flight is
+ * served whichever snapshot was read before it, as `keepPreviousData` does, so
+ * the preview keeps something on screen across a selection.
+ */
+function mockHeldOverDetails(
+  settled: Record<number, ReturnType<typeof versionDetail>>,
+  heldOver: ReturnType<typeof versionDetail>,
+) {
+  vi.mocked(useAgentVersion).mockImplementation(((
+    _id: string | null,
+    version: number | null,
+  ) => {
+    const entry = version === null ? undefined : settled[version];
+    return {
+      data: entry ?? heldOver,
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isPlaceholderData: !entry,
+      refetch: vi.fn(),
+    };
+  }) as never);
+}
+
 function renderDialog() {
   return render(
     <AgentVersionHistoryDialog
@@ -329,6 +354,132 @@ describe("AgentVersionHistoryDialog", () => {
     expect(
       screen.getByText(/No versions yet\. The next configuration change/),
     ).toBeInTheDocument();
+  });
+
+  it("names what a restore would change about the current configuration", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+
+    expect(screen.getByText(/This changes: System prompt\./)).toBeVisible();
+  });
+
+  it("says a restore changes nothing only when it has read the head", async () => {
+    const user = userEvent.setup();
+    // v2 is byte-identical to the head, so this restore really is a no-op —
+    // the one case that gets to say so.
+    mockVersionDetails({
+      3: versionDetail(3, "hash-head"),
+      2: {
+        ...versionDetail(2, "hash-head"),
+        snapshot: snapshot({ systemPrompt: "prompt v3" }),
+      },
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+
+    expect(screen.getByText(/Nothing changes/)).toBeVisible();
+  });
+
+  it("does not pass an unread comparison off as a no-op restore", async () => {
+    const user = userEvent.setup();
+    // The head snapshot has not arrived, so what a restore would change is
+    // unknown. Saying nothing there reads exactly like "this changes nothing",
+    // which is how a whole-configuration rewrite gets confirmed by mistake.
+    mockVersionDetails({ 2: versionDetail(2, "hash-two") });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+
+    expect(screen.getByText(/still being worked out/)).toBeVisible();
+    expect(screen.queryByText(/Nothing changes/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/This changes:/)).not.toBeInTheDocument();
+  });
+
+  it("explains why a pruned version cannot be restored", async () => {
+    const user = userEvent.setup();
+    mockVersionDetails({ 3: versionDetail(3, "hash-head"), 2: null });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+
+    const restoreButton = screen.getByRole("button", {
+      name: "Restore this version",
+    });
+    expect(restoreButton).toBeDisabled();
+    await user.hover(restoreButton.parentElement as HTMLElement);
+    // radix renders the content and a screen-reader copy of it
+    expect(
+      await screen.findAllByText(
+        "Version 2 is no longer available, so there is nothing to restore.",
+      ),
+    ).not.toHaveLength(0);
+  });
+
+  it("keeps the preview on the version it is showing while the next one loads", async () => {
+    const user = userEvent.setup();
+    // Selecting v1 holds v2 on screen until v1 arrives. Everything the pane
+    // says — the heading, and which version a restore would write — has to
+    // stay with the snapshot the reader can actually see, not the click.
+    mockHeldOverDetails(
+      { 3: versionDetail(3, "hash-head"), 2: versionDetail(2, "hash-two") },
+      versionDetail(2, "hash-two"),
+    );
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(screen.getByRole("button", { name: /v1/ }));
+
+    expect(
+      screen.getByRole("heading", { name: "Version 2" }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Restore version 2" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not diff the shown version against a held-over baseline", async () => {
+    const user = userEvent.setup();
+    // v1's read is in flight, so the baseline query is serving v2's snapshot
+    // too. Pairing them would diff v2 against itself and report an empty
+    // change set as fact; the pane must wait for the real predecessor.
+    mockHeldOverDetails(
+      { 3: versionDetail(3, "hash-head"), 2: versionDetail(2, "hash-two") },
+      versionDetail(2, "hash-two"),
+    );
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(screen.getByRole("button", { name: /v1/ }));
+
+    const changesButton = screen.getByRole("button", { name: "Changes" });
+    expect(changesButton).toBeDisabled();
+    await user.hover(changesButton.parentElement as HTMLElement);
+    expect(await screen.findAllByText("Loading version 1...")).not.toHaveLength(
+      0,
+    );
+  });
+
+  it("stamps each timeline row with the time it was recorded", () => {
+    renderDialog();
+
+    expect(screen.getByRole("button", { name: /v3/ }).textContent).toMatch(
+      /\d{2}:\d{2}/,
+    );
   });
 
   it("blocks restoring a built-in agent", async () => {

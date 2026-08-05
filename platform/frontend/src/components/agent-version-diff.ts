@@ -12,14 +12,14 @@
 
 import type { AgentConfigSnapshot } from "@/lib/agent-version.query";
 
-export type AgentConfigChange = "added" | "removed" | "changed" | "unchanged";
+type AgentConfigChange = "added" | "removed" | "changed" | "unchanged";
 
 /**
  * One scalar setting, rendered for display on both sides. `change` is null
  * when there is no baseline — the oldest retained version, or a predecessor
  * that could not be read — since nothing about the row is then a comparison.
  */
-export interface AgentFieldDiff {
+interface AgentFieldDiff {
   label: string;
   /** Rendered value in the viewed version; null when unset. */
   current: string | null;
@@ -29,7 +29,7 @@ export interface AgentFieldDiff {
 }
 
 /** One row of an assignment collection (a tool, a knowledge base, ...). */
-export interface AgentListItemDiff {
+interface AgentListItemDiff {
   key: string;
   label: string;
   /** Secondary line in the viewed version (e.g. a credential mode). */
@@ -50,7 +50,7 @@ interface SectionBase {
 }
 
 /** Scalar settings, read as label/value rows. */
-export interface AgentFieldsSection extends SectionBase {
+interface AgentFieldsSection extends SectionBase {
   kind: "fields";
   fields: AgentFieldDiff[];
 }

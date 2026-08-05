@@ -144,6 +144,66 @@ describe("compareAgentSnapshots", () => {
     });
   });
 
+  // A restore decides what to write from the ids a snapshot holds, so the
+  // comparison has to read the same ids rather than the names they render as —
+  // otherwise "Changes (0)" claims two versions agree while a restore rewrites
+  // which credential the agent runs on.
+  it("reads a tool re-pinned to another installation as a change", () => {
+    const tool = {
+      toolId: "t1",
+      name: "github__create_pr",
+      credentialResolutionMode: "profile",
+    };
+    const sections = compareAgentSnapshots(
+      makeSnapshot({ tools: [{ ...tool, mcpServerId: "s2" }] }),
+      makeSnapshot({ tools: [{ ...tool, mcpServerId: "s1" }] }),
+    );
+    const tools = section(sections, "tools") as AgentListSection;
+    expect(tools.change).toBe("changed");
+    expect(tools.items[0]).toMatchObject({ key: "t1", change: "changed" });
+  });
+
+  it("tells two models sharing an external id apart", () => {
+    const sections = compareAgentSnapshots(
+      makeSnapshot({ model: { id: "m2", externalId: "claude-sonnet-5" } }),
+      makeSnapshot({ model: { id: "m1", externalId: "claude-sonnet-5" } }),
+    );
+    const config = section(sections, "configuration");
+    if (config.kind !== "fields") throw new Error("expected fields");
+    expect(config.fields.find((f) => f.label === "Model")?.change).toBe(
+      "changed",
+    );
+  });
+
+  it("tells two API keys sharing a name apart", () => {
+    const key = { name: "prod", provider: "anthropic" };
+    const sections = compareAgentSnapshots(
+      makeSnapshot({ llmApiKey: { ...key, id: "k2" } }),
+      makeSnapshot({ llmApiKey: { ...key, id: "k1" } }),
+    );
+    const config = section(sections, "configuration");
+    if (config.kind !== "fields") throw new Error("expected fields");
+    expect(config.fields.find((f) => f.label === "LLM API key")?.change).toBe(
+      "changed",
+    );
+  });
+
+  // The other direction, and the one a naive "compare id *and* name" fix gets
+  // wrong: renaming the model row a version points at is not a change to the
+  // version, because a restore would write nothing.
+  it("reads a renamed model row as unchanged", () => {
+    const sections = compareAgentSnapshots(
+      makeSnapshot({ model: { id: "m1", externalId: "claude-opus-5" } }),
+      makeSnapshot({ model: { id: "m1", externalId: "claude-sonnet-5" } }),
+    );
+    const config = section(sections, "configuration");
+    if (config.kind !== "fields") throw new Error("expected fields");
+    expect(config.fields.find((f) => f.label === "Model")?.change).toBe(
+      "unchanged",
+    );
+    expect(changedSections(sections)).toEqual([]);
+  });
+
   it("keeps two suggested prompts sharing a title apart", () => {
     const sections = compareAgentSnapshots(
       makeSnapshot({

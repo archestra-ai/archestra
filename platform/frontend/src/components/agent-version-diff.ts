@@ -122,16 +122,8 @@ function toolsSections(
     listSection({
       id: "tools",
       label: "Tools",
-      current: current.tools.map((tool) => ({
-        key: tool.toolId,
-        label: tool.name,
-        detail: tool.credentialResolutionMode,
-      })),
-      previous: previous?.tools.map((tool) => ({
-        key: tool.toolId,
-        label: tool.name,
-        detail: tool.credentialResolutionMode,
-      })),
+      current: current.tools.map(toolItem),
+      previous: previous?.tools.map(toolItem),
     }),
     listSection({
       id: "excluded-tools",
@@ -162,6 +154,20 @@ function toolsSections(
       })),
     }),
   ];
+}
+
+function toolItem(tool: Snapshot["tools"][number]): ListInput {
+  return {
+    key: tool.toolId,
+    label: tool.name,
+    detail: tool.credentialResolutionMode,
+    // `agent-version-restore.ts` reads a tool's identity as the whole
+    // (toolId, mcpServerId, credentialResolutionMode) tuple, so re-pinning a
+    // tool to another installation of its server — a different credential — is
+    // a write. Compared rather than shown: the snapshot carries the server as
+    // a bare id, with nothing readable to put in the row.
+    identity: tool.mcpServerId ?? "",
+  };
 }
 
 /**
@@ -272,8 +278,13 @@ function configurationSection(
   previous: Snapshot | null,
 ): AgentFieldsSection {
   const fields = CONFIGURATION_FIELDS.map(
-    ({ label, render }) =>
-      fieldDiff(label, render(current), previous ? render(previous) : null, {
+    ({ label, render, identity }) =>
+      fieldDiff({
+        label,
+        current: render(current),
+        previous: previous ? render(previous) : null,
+        currentIdentity: identity?.(current),
+        previousIdentity: previous ? identity?.(previous) : null,
         hasBaseline: previous !== null,
       }),
     // A setting neither side sets says nothing about either version — a
@@ -314,6 +325,11 @@ interface ListInput {
   key: string;
   label: string;
   detail: string | null;
+  /**
+   * What "changed" is decided from, when a row is compared on more than it
+   * shows. Defaults to `detail`.
+   */
+  identity?: string;
 }
 
 function listSection(params: {
@@ -338,7 +354,7 @@ function listSection(params: {
         ? null
         : !before
           ? "added"
-          : before.detail === item.detail && before.label === item.label
+          : sameListItem(before, item)
             ? "unchanged"
             : "changed",
     };
@@ -378,6 +394,15 @@ function listSection(params: {
   };
 }
 
+/** Two rows of a collection agree when everything compared about them does. */
+function sameListItem(before: ListInput, after: ListInput): boolean {
+  return (
+    before.label === after.label &&
+    before.detail === after.detail &&
+    (before.identity ?? "") === (after.identity ?? "")
+  );
+}
+
 /**
  * One text section per hook across both sides, keyed by event and file name —
  * a hook only the baseline holds is a removal, and still gets a row to read.
@@ -406,12 +431,12 @@ function hookSections(
     const { event, fileName } = (after ?? before) as SnapshotHook;
     const hasBaseline = previous !== null;
     const fields = HOOK_FIELDS.map(({ label, render }) =>
-      fieldDiff(
+      fieldDiff({
         label,
-        after ? render(after) : null,
-        before ? render(before) : null,
-        { hasBaseline },
-      ),
+        current: after ? render(after) : null,
+        previous: before ? render(before) : null,
+        hasBaseline,
+      }),
     );
     return {
       id: `hook:${key}`,
@@ -436,19 +461,29 @@ function hookSections(
   });
 }
 
-function fieldDiff(
-  label: string,
-  current: string | null,
-  previous: string | null,
-  { hasBaseline }: { hasBaseline: boolean },
-): AgentFieldDiff {
+function fieldDiff(params: {
+  label: string;
+  current: string | null;
+  previous: string | null;
+  /**
+   * Compared in place of the rendered values when given, so a field whose
+   * display string is not unique is decided on the id a restore writes.
+   * Supplied by a field's `identity`, which is null exactly where `render` is.
+   */
+  currentIdentity?: string | null;
+  previousIdentity?: string | null;
+  hasBaseline: boolean;
+}): AgentFieldDiff {
+  const { label, current, previous, hasBaseline } = params;
+  const after = params.currentIdentity ?? current;
+  const before = params.previousIdentity ?? previous;
   return {
     label,
     current,
     previous,
     change: !hasBaseline
       ? null
-      : (previous ?? "") === (current ?? "")
+      : (before ?? "") === (after ?? "")
         ? "unchanged"
         : "changed",
   };
@@ -470,29 +505,52 @@ function renderBoolean(value: boolean): string {
 
 /**
  * Every scalar setting a snapshot carries, in the order the configuration pane
- * reads them. Each renders to a display string so comparing and showing are
- * the same representation, and a setting neither side sets drops out of the
- * section rather than being hidden by agent type.
+ * reads them. Each renders to a display string, and a setting neither side
+ * sets drops out of the section rather than being hidden by agent type. Where
+ * that string is not unique, `identity` supplies what the row is compared on
+ * instead, so the reading matches the one a restore makes.
  *
  * This list is exhaustive against `AgentConfigSnapshotSchema` on purpose: the
  * scalars here plus the sections around them cover the whole snapshot, which
  * is what lets an empty change set be read as "these two versions agree".
  * A field added to the snapshot and not to this table would be restored
  * silently, so add both together.
+ *
+ * Exhaustive against the snapshot, not against what a restore replays: `Type`,
+ * `Identity provider`, and `Built-in configuration` are captured but never
+ * written back — `agent-version-restore.ts` refuses the identity provider
+ * outright, and never plans the other two. They stay because over-reporting a
+ * change is the safe direction; under-reporting is the failure this table
+ * exists to prevent.
  */
 const CONFIGURATION_FIELDS: {
   label: string;
   render: (snapshot: Snapshot) => string | null;
+  /**
+   * What "changed" is decided from, when the rendered value is not unique.
+   * Defaults to `render`, and must be null exactly where `render` is.
+   */
+  identity?: (snapshot: Snapshot) => string | null;
 }[] = [
   { label: "Name", render: (s) => s.name },
   { label: "Description", render: (s) => s.description },
   { label: "Icon", render: (s) => s.icon },
   { label: "Type", render: (s) => s.agentType },
-  { label: "Model", render: (s) => s.model?.externalId ?? null },
+  {
+    label: "Model",
+    render: (s) => s.model?.externalId ?? null,
+    // `models.external_id` is indexed but not unique — only (provider,
+    // model_id) is — so two rows can render the same. A restore compares the
+    // id and writes the pair on any difference.
+    identity: (s) => s.model?.id ?? null,
+  },
   {
     label: "LLM API key",
     render: (s) =>
       s.llmApiKey ? `${s.llmApiKey.name} (${s.llmApiKey.provider})` : null,
+    // Key names carry no uniqueness constraint at all, and rotating a key is
+    // exactly how two same-named keys on one provider come about.
+    identity: (s) => s.llmApiKey?.id ?? null,
   },
   { label: "Tool exposure", render: (s) => s.toolExposureMode },
   { label: "Access all tools", render: (s) => renderBoolean(s.accessAllTools) },
@@ -521,10 +579,11 @@ const CONFIGURATION_FIELDS: {
   { label: "Identity provider", render: (s) => s.identityProviderId },
   { label: "Environment", render: (s) => s.environmentId },
   {
-    // A managed blob rather than a setting anyone edits, but a restore writes
-    // it like any other field. Rendered as JSON so a change to it is visible
-    // instead of silent; key order could differ between two equal blobs, which
-    // over-reports a change — the safe direction for a restore preview.
+    // A managed blob rather than a setting anyone edits, and one a restore
+    // does not replay — captured, so shown rather than hidden. Rendered as
+    // JSON so a change to it is visible instead of silent; key order could
+    // differ between two equal blobs, which over-reports a change — the safe
+    // direction for a restore preview.
     label: "Built-in configuration",
     render: (s) =>
       s.builtInAgentConfig == null

@@ -3,8 +3,8 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 /**
- * Mounts its children the first time they scroll near the viewport, holding
- * their eventual height in reserve so nothing below them jumps when they land.
+ * Mounts its children the first time they scroll into view, holding their
+ * eventual height in reserve so nothing below them jumps when they land.
  *
  * Not worth the indirection for content that is cheap to render. It is here
  * for Monaco: an editor builds its own DOM tree and text models on mount, and
@@ -35,15 +35,17 @@ export function LazyMount({
       setIsMounted(true);
       return;
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // Mounted is a one-way door: rebuilding an editor on every scroll past
-        // would cost more than keeping the one that is already built.
-        if (entries.some((entry) => entry.isIntersecting)) setIsMounted(true);
-      },
-      // Start building a little before the reader arrives.
-      { rootMargin: "200px" },
-    );
+    // Deliberately no `rootMargin`: an ancestor's overflow clip is applied
+    // before the root's margin is, so a lead time measured against the
+    // viewport buys nothing for children of a scroll pane — which is where
+    // this is used. Mounting a little early would take passing that pane as
+    // `root`, and a callback ref to reach it; not worth the parts unless the
+    // reserved-height box is ever seen empty.
+    const observer = new IntersectionObserver((entries) => {
+      // Mounted is a one-way door: rebuilding an editor on every scroll past
+      // would cost more than keeping the one that is already built.
+      if (entries.some((entry) => entry.isIntersecting)) setIsMounted(true);
+    });
     observer.observe(element);
     return () => observer.disconnect();
   }, [isMounted]);

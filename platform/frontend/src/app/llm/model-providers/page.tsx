@@ -5,7 +5,6 @@ import {
   E2eTestId,
   formatSecretStorageType,
   isProviderApiKeyOptional,
-  type ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -36,12 +35,8 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
-import {
-  platformOwnedStyles,
-  SCOPE_META,
-  scopeLabel,
-  scopeStyles,
-} from "@/components/scope-vocabulary";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -62,6 +57,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -486,49 +487,64 @@ export default function ApiKeysPage() {
         cell: ({ row }) => {
           const credential = row.original;
           if (credential.kind === "subscription") {
-            // A subscription is one person's own account, so it is coloured as
-            // the personal scope it is rather than left as a bare pill beside
-            // the scoped rows.
-            const PersonalIcon = SCOPE_META.personal.icon;
+            // A subscription is a personal credential of whoever connected it
+            // (today the endpoint only returns the viewer's own, so this reads
+            // "Me"); the Name column's "Subscription" tag already says what
+            // kind of credential it is, so the Access cell answers only whose.
             return (
-              <Badge
-                variant="outline"
-                className={cn(scopeStyles.personal, "max-w-full gap-1")}
-              >
-                <PersonalIcon className="h-3 w-3" />
-                <span className="truncate">Personal account</span>
-              </Badge>
+              <ResourceVisibilityBadge
+                scope="personal"
+                teams={undefined}
+                authorId={credential.credential?.userId ?? currentUserId}
+                authorName={credential.credential?.userName ?? null}
+                currentUserId={currentUserId}
+                showSelfAsMe
+              />
             );
           }
           if (credential.isSystem) {
+            // Not a visibility scope: nobody in the org owns this row. It is
+            // auto-provisioned because the deployment authenticates with cloud
+            // credentials, so it borrows the platform-owned styling that the
+            // built-in agent badge uses.
             return (
-              <Badge
-                variant="outline"
-                className={cn(platformOwnedStyles, "max-w-full gap-1")}
-              >
-                <Server className="h-3 w-3" />
-                <span className="truncate">System</span>
-              </Badge>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        platformOwnedStyles,
+                        "max-w-full cursor-help gap-1",
+                      )}
+                    >
+                      <Server className="h-3 w-3" />
+                      <span className="truncate">System</span>
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Provisioned automatically because this deployment
+                    authenticates with cloud credentials instead of an API key.
+                    Managed through environment configuration and usable by the
+                    whole organization.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             );
           }
-          const { scope } = credential;
-          const ScopeIcon = SCOPE_META[scope].icon;
           return (
-            <Badge
-              variant="outline"
-              className={cn(scopeStyles[scope], "max-w-full gap-1")}
-            >
-              <ScopeIcon className="h-3 w-3" />
-              <span className="truncate">
-                {accessLabel({
-                  scope,
-                  userId: credential.userId,
-                  userName: credential.userName,
-                  teamName: credential.teamName,
-                  currentUserId,
-                })}
-              </span>
-            </Badge>
+            <ResourceVisibilityBadge
+              scope={credential.scope}
+              teams={
+                credential.teamId && credential.teamName
+                  ? [{ id: credential.teamId, name: credential.teamName }]
+                  : undefined
+              }
+              authorId={credential.userId}
+              authorName={credential.userName}
+              currentUserId={currentUserId}
+              showSelfAsMe
+            />
           );
         },
       },
@@ -834,42 +850,6 @@ export default function ApiKeysPage() {
       </div>
     </PageLayout>
   );
-}
-
-/**
- * What the Access badge says for a stored credential.
- *
- * A personal key names its owner instead of repeating the scope word. The list
- * endpoint only ever returns the caller's own personal keys (admins included),
- * so in practice that row reads "Me", matching how the rest of the app labels
- * the current user; the `userName` branch — the name the endpoint already
- * joins onto every row — is what a key owned by somebody else would say if
- * that visibility ever widens. A team key names its team, and the scope label
- * is the fallback whenever no name came back.
- */
-function accessLabel({
-  scope,
-  userId,
-  userName,
-  teamName,
-  currentUserId,
-}: {
-  scope: ResourceVisibilityScope;
-  userId: string | null;
-  userName?: string | null;
-  teamName?: string | null;
-  currentUserId?: string;
-}): string {
-  if (scope === "personal") {
-    if (currentUserId && userId === currentUserId) {
-      return "Me";
-    }
-    return userName || scopeLabel(scope);
-  }
-  if (scope === "team") {
-    return teamName || scopeLabel(scope);
-  }
-  return scopeLabel(scope);
 }
 
 function DeleteApiKeyDescription({

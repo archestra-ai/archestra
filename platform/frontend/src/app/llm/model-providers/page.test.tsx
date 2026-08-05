@@ -354,7 +354,9 @@ describe("ApiKeysPage", () => {
 
     // The owner is the point: the backend already joins userName, and before
     // this column showed only a generic scope word for every personal key.
-    expect(screen.getByText("Me")).toBeInTheDocument();
+    // "Me" appears four times — the viewer's own key plus the three
+    // subscription rows, which are the viewer's own accounts by definition.
+    expect(screen.getAllByText("Me")).toHaveLength(4);
     expect(screen.getByText("Dana")).toBeInTheDocument();
     expect(screen.getByText("Organization")).toBeInTheDocument();
   });

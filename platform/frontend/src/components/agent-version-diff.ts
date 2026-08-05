@@ -91,29 +91,26 @@ export type AgentSnapshotSection =
  * `added` would report the absence of a baseline as a fact about the agent's
  * history.
  *
- * The snapshot schema is one shape for every agent type, but the types edit
- * different parts of it — an LLM proxy assigns no tools, a gateway carries no
- * model or prompt. Sections and fields a type never edits are dropped, keyed
- * off the viewed snapshot's own `agentType`, so the history shows the same
- * surface the editor does.
+ * Every section is compared for every agent type. What a section is dropped
+ * for is emptiness, never the agent's type: a snapshot carries the whole
+ * config surface whatever the type is, and `agent-version-restore.ts` replays
+ * all of it, so hiding a section by type would let a restore rewrite settings
+ * this comparison never looked at. An LLM proxy loses its tools section
+ * because it assigns no tools, not because of what its type may edit — and a
+ * gateway that does carry a prompt gets one.
  */
 export function compareAgentSnapshots(
   current: AgentConfigSnapshot,
   previous: AgentConfigSnapshot | null,
 ): AgentSnapshotSection[] {
-  const agentType = current.agentType;
   return [
     configurationSection(current, previous),
-    ...(isInternalAgent(agentType)
-      ? [systemPromptSection(current, previous)]
-      : []),
-    ...(assignsTools(agentType) ? toolsSections(current, previous) : []),
-    ...(isInternalAgent(agentType)
-      ? [suggestedPromptsSection(current, previous)]
-      : []),
-    ...(assignsTools(agentType) ? knowledgeSections(current, previous) : []),
-    ...(isInternalAgent(agentType) ? hookSections(current, previous) : []),
-  ];
+    systemPromptSection(current, previous),
+    ...toolsSections(current, previous),
+    suggestedPromptsSection(current, previous),
+    ...knowledgeSections(current, previous),
+    ...hookSections(current, previous),
+  ].filter(sectionCarriesContent);
 }
 
 /** The tool surface: assignments, exclusions, and delegation exclusions. */
@@ -253,29 +250,36 @@ export function changedSections(
 
 type Snapshot = AgentConfigSnapshot;
 
-// What each agent type actually edits, mirrored from the agent dialog's
-// per-type visibility (`agent-dialog.tsx`). Only an internal agent carries a
-// prompt, a model, hooks, and email triggers; only an LLM proxy assigns no
-// tools. An unknown type errs toward showing more rather than hiding edits.
-function isInternalAgent(agentType: string): boolean {
-  return agentType === "agent";
-}
-
-function assignsTools(agentType: string): boolean {
-  return agentType !== "llm_proxy";
+/**
+ * Whether either side carries anything in this section. Emptiness is a fact
+ * about the two snapshots, so a section can only be dropped when there was
+ * nothing in it to compare — which means anything that moved survives the
+ * filter, and an empty change set really does mean the two versions agree.
+ */
+function sectionCarriesContent(section: AgentSnapshotSection): boolean {
+  switch (section.kind) {
+    case "fields":
+      return section.fields.length > 0;
+    case "list":
+      return section.items.length > 0;
+    case "text":
+      return Boolean(section.current) || Boolean(section.previous);
+  }
 }
 
 function configurationSection(
   current: Snapshot,
   previous: Snapshot | null,
 ): AgentFieldsSection {
-  const fields = CONFIGURATION_FIELDS.filter(
-    ({ when }) => when?.(current.agentType) ?? true,
-  ).map(({ label, render }) =>
-    fieldDiff(label, render(current), previous ? render(previous) : null, {
-      hasBaseline: previous !== null,
-    }),
-  );
+  const fields = CONFIGURATION_FIELDS.map(
+    ({ label, render }) =>
+      fieldDiff(label, render(current), previous ? render(previous) : null, {
+        hasBaseline: previous !== null,
+      }),
+    // A setting neither side sets says nothing about either version — a
+    // gateway has no model, and a row reading "Not set" forever is noise. A
+    // setting only one side carries is a change, so it stays.
+  ).filter((field) => field.current !== null || field.previous !== null);
   return {
     id: "configuration",
     label: "Configuration",
@@ -465,82 +469,67 @@ function renderBoolean(value: boolean): string {
 }
 
 /**
- * The scalar settings a snapshot carries, in the order the configuration pane
+ * Every scalar setting a snapshot carries, in the order the configuration pane
  * reads them. Each renders to a display string so comparing and showing are
- * the same representation. `when` limits a setting to the agent types that
- * edit it; absent means every type. `builtInAgentConfig` is deliberately
- * absent: it is an opaque managed blob, not a setting anyone edits.
+ * the same representation, and a setting neither side sets drops out of the
+ * section rather than being hidden by agent type.
+ *
+ * This list is exhaustive against `AgentConfigSnapshotSchema` on purpose: the
+ * scalars here plus the sections around them cover the whole snapshot, which
+ * is what lets an empty change set be read as "these two versions agree".
+ * A field added to the snapshot and not to this table would be restored
+ * silently, so add both together.
  */
 const CONFIGURATION_FIELDS: {
   label: string;
   render: (snapshot: Snapshot) => string | null;
-  when?: (agentType: string) => boolean;
 }[] = [
   { label: "Name", render: (s) => s.name },
   { label: "Description", render: (s) => s.description },
   { label: "Icon", render: (s) => s.icon },
   { label: "Type", render: (s) => s.agentType },
-  {
-    label: "Model",
-    when: isInternalAgent,
-    render: (s) => s.model?.externalId ?? null,
-  },
+  { label: "Model", render: (s) => s.model?.externalId ?? null },
   {
     label: "LLM API key",
-    when: isInternalAgent,
     render: (s) =>
       s.llmApiKey ? `${s.llmApiKey.name} (${s.llmApiKey.provider})` : null,
   },
-  {
-    label: "Tool exposure",
-    when: assignsTools,
-    render: (s) => s.toolExposureMode,
-  },
-  {
-    label: "Access all tools",
-    when: assignsTools,
-    render: (s) => renderBoolean(s.accessAllTools),
-  },
+  { label: "Tool exposure", render: (s) => s.toolExposureMode },
+  { label: "Access all tools", render: (s) => renderBoolean(s.accessAllTools) },
   {
     label: "Access all subagents",
-    when: assignsTools,
     render: (s) => renderBoolean(s.accessAllSubagents),
   },
   {
     label: "Treat context as untrusted",
-    when: (t) => t === "llm_proxy" || isInternalAgent(t),
     render: (s) => renderBoolean(s.considerContextUntrusted),
   },
   {
     label: "Passthrough headers",
-    when: (t) => t === "mcp_gateway",
     render: (s) =>
       s.passthroughHeaders.length > 0 ? s.passthroughHeaders.join(", ") : null,
   },
   {
     label: "Incoming email",
-    when: isInternalAgent,
     render: (s) => renderBoolean(s.incomingEmailEnabled),
   },
-  {
-    label: "Email security mode",
-    when: isInternalAgent,
-    render: (s) => s.incomingEmailSecurityMode,
-  },
+  { label: "Email security mode", render: (s) => s.incomingEmailSecurityMode },
   {
     label: "Email allowed domain",
-    when: isInternalAgent,
     render: (s) => s.incomingEmailAllowedDomain,
   },
+  { label: "Identity provider", render: (s) => s.identityProviderId },
+  { label: "Environment", render: (s) => s.environmentId },
   {
-    label: "Identity provider",
-    when: (t) => t !== "profile",
-    render: (s) => s.identityProviderId,
-  },
-  {
-    label: "Environment",
-    when: (t) => t !== "profile",
-    render: (s) => s.environmentId,
+    // A managed blob rather than a setting anyone edits, but a restore writes
+    // it like any other field. Rendered as JSON so a change to it is visible
+    // instead of silent; key order could differ between two equal blobs, which
+    // over-reports a change — the safe direction for a restore preview.
+    label: "Built-in configuration",
+    render: (s) =>
+      s.builtInAgentConfig == null
+        ? null
+        : JSON.stringify(s.builtInAgentConfig),
   },
 ];
 

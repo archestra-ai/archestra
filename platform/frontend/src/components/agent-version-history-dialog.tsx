@@ -44,16 +44,6 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 type VersionViewMode = "all" | "changes";
 
 /**
- * What a restore would change about the agent as it stands today. Kept as
- * three states rather than a change list, because "nothing changes" and "not
- * worked out yet" are answers a confirmation has to give differently.
- */
-type RestoreComparison =
-  | { status: "ready"; changes: AgentSnapshotSection[] }
-  | { status: "pending" }
-  | { status: "unavailable" };
-
-/**
  * How the viewed version's snapshot stands: read, still coming, unreadable, or
  * pruned by retention. The last two are distinct facts — a failed read
  * supports no claim about whether the version still exists.
@@ -198,28 +188,6 @@ function VersionHistory({
     !predecessorQuery.isPlaceholderData &&
     predecessorQuery.data === null;
 
-  // What a restore would do to the agent *as it stands today* — a different
-  // question from what this version changed, and the one the confirmation has
-  // to answer. The head snapshot is fetched for that comparison; it is cached
-  // and immutable, so viewing the head itself costs nothing extra.
-  const headQuery = useAgentVersion(agentId, headVersion);
-  const head = headQuery.data?.version === headVersion ? headQuery.data : null;
-  const restoreComparison = useMemo((): RestoreComparison => {
-    if (!detail) return { status: "unavailable" };
-    if (isHead) return { status: "ready", changes: [] };
-    if (!head) {
-      return headQuery.isError
-        ? { status: "unavailable" }
-        : { status: "pending" };
-    }
-    return {
-      status: "ready",
-      changes: changedSections(
-        compareAgentSnapshots(detail.snapshot, head.snapshot),
-      ),
-    };
-  }, [detail, head, headQuery.isError, isHead]);
-
   const noun = NOUN_BY_AGENT_TYPE[agent?.agentType ?? "agent"] ?? "agent";
   const isBuiltIn = Boolean(agent?.builtIn);
   const canRestore = !!detail && !!agent && !isHead && !isBuiltIn;
@@ -362,17 +330,8 @@ function VersionHistory({
           open={confirmingRestore}
           onOpenChange={setConfirmingRestore}
           title={`Restore version ${detail.version}?`}
-          description={restoreEffects({
-            version: detail.version,
-            noun,
-            comparison: restoreComparison,
-          })}
+          description={restoreEffects({ version: detail.version, noun })}
           isPending={restoreVersion.isPending}
-          // The description tells an unread comparison apart from a no-op, and
-          // the button has to honour the same distinction: confirming while
-          // the effects are still unknown is how a whole-configuration rewrite
-          // gets accepted sight unseen.
-          confirmDisabled={restoreComparison.status !== "ready"}
           onConfirm={handleRestore}
           // A restore only ever appends to the history, so it does not get the
           // red a delete confirmation uses.
@@ -1073,71 +1032,28 @@ function textEditorHeight(
 }
 
 /**
- * What a restore would do to the agent as it stands today — the one thing a
- * confirmation has to answer. Named by section so the reader knows whether it
- * is the prompt, the tools, or the whole configuration that moves back.
+ * What a restore does, stated rather than predicted. It deliberately makes no
+ * claim about how the result differs from the configuration in place today:
+ * answering that needs a comparison covering the whole snapshot, and a
+ * confirmation that gets it wrong talks a reader through a whole-configuration
+ * rewrite as though it were a no-op. The pane behind it already shows what
+ * this version holds, and a restore that turns out to change nothing is
+ * reported as such once it lands.
  */
 function restoreEffects({
   version,
   noun,
-  comparison,
 }: {
   version: number;
   noun: string;
-  comparison: RestoreComparison;
 }): string {
-  const base = `Version ${version}'s configuration becomes the ${noun}'s configuration, as a new version.`;
-  const summary = describeComparison(comparison, noun);
   // Snapshots reference tools, models, and keys by id, and a restore is
   // all-or-nothing: one referent deleted since this version refuses the whole
   // thing rather than quietly restoring a partial configuration.
-  //
-  // A version identical to the current configuration references exactly what
-  // the agent references today, so nothing it names can have been deleted —
-  // and warning about a refusal right after promising no change reads as a
-  // contradiction rather than a caveat.
-  const isNoOp =
-    comparison.status === "ready" && comparison.changes.length === 0;
-  if (isNoOp) return `${base}${summary}`;
-  const caveat = ` If this version references anything deleted since — a tool, a model, a key — the restore is refused and the ${noun} is left as it is.`;
-  return `${base}${summary}${caveat}`;
-}
-
-/**
- * The change summary, or the reason there is not one. A comparison that has
- * not been read yet and a comparison that came back empty are different
- * answers, and rendering both as silence invites the reader to take an unread
- * one for "this restore is a no-op" — which is the one reading a confirmation
- * for a whole-configuration rewrite must not offer.
- */
-function describeComparison(
-  comparison: RestoreComparison,
-  noun: string,
-): string {
-  switch (comparison.status) {
-    case "pending":
-      return ` What this changes is still being worked out against the ${noun}'s current configuration.`;
-    case "unavailable":
-      return ` What this changes could not be worked out: the ${noun}'s current configuration could not be read.`;
-    case "ready":
-      return comparison.changes.length > 0
-        ? ` This changes: ${comparison.changes.map(describeChange).join(", ")}.`
-        : ` Nothing changes: this version is identical to the ${noun}'s current configuration.`;
-  }
-}
-
-function describeChange(section: AgentSnapshotSection): string {
-  if (section.kind === "list") {
-    const counts = [
-      section.addedCount > 0 ? `+${section.addedCount}` : null,
-      section.removedCount > 0 ? `−${section.removedCount}` : null,
-      section.changedCount > 0 ? `~${section.changedCount}` : null,
-    ]
-      .filter(Boolean)
-      .join(" ");
-    return counts ? `${section.label} (${counts})` : section.label;
-  }
-  return section.label;
+  return (
+    `Version ${version}'s configuration becomes the ${noun}'s configuration, as a new version.` +
+    ` If this version references anything deleted since — a tool, a model, a key — the restore is refused and the ${noun} is left as it is.`
+  );
 }
 
 /**

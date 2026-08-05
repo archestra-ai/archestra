@@ -135,7 +135,7 @@ Each agent keeps its last 100 versions. The oldest listed version can therefore 
 
 **Restore this version** returns an agent to an earlier configuration. The restore forks forward: the old configuration becomes a new version. Nothing in the history is overwritten.
 
-The confirmation lists what the restore changes about the agent as it stands today. If someone else edits the agent while you preview it, the restore is refused.
+If someone else edits the agent while you preview it, the restore is refused.
 
 A restore is all-or-nothing. If the version points at something that no longer exists — a deleted tool, for example — the restore fails and the agent is left exactly as it was. Recreate the missing piece, or restore a later version instead.
 

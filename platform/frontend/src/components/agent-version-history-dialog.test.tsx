@@ -352,7 +352,7 @@ describe("AgentVersionHistoryDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("names what a restore would change about the current configuration", async () => {
+  it("states what a restore writes without predicting what it changes", async () => {
     const user = userEvent.setup();
     renderDialog();
 
@@ -361,13 +361,19 @@ describe("AgentVersionHistoryDialog", () => {
       screen.getByRole("button", { name: "Restore this version" }),
     );
 
-    expect(screen.getByText(/This changes: System prompt\./)).toBeVisible();
+    expect(
+      screen.getByText(/Version 2's configuration becomes the agent's/),
+    ).toBeVisible();
+    // The caveat is unconditional: whether a referent was deleted since is a
+    // question only the write can answer.
+    expect(screen.getByText(/the restore is refused/)).toBeVisible();
   });
 
-  it("says a restore changes nothing only when it has read the head", async () => {
+  it("makes no claim about how a version differs from the current one", async () => {
     const user = userEvent.setup();
-    // v2 is byte-identical to the head, so this restore really is a no-op —
-    // the one case that gets to say so.
+    // Answering that needs a comparison covering the whole snapshot. Getting
+    // it wrong walks the reader through a whole-configuration rewrite as
+    // though it were a no-op, so the confirmation does not attempt it.
     mockVersionDetails({
       3: versionDetail(3, "hash-head"),
       2: {
@@ -382,14 +388,14 @@ describe("AgentVersionHistoryDialog", () => {
       screen.getByRole("button", { name: "Restore this version" }),
     );
 
-    expect(screen.getByText(/Nothing changes/)).toBeVisible();
+    expect(screen.queryByText(/Nothing changes/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/This changes:/)).not.toBeInTheDocument();
   });
 
-  it("does not pass an unread comparison off as a no-op restore", async () => {
+  it("does not wait on a head it never reads before allowing a restore", async () => {
     const user = userEvent.setup();
-    // The head snapshot has not arrived, so what a restore would change is
-    // unknown. Saying nothing there reads exactly like "this changes nothing",
-    // which is how a whole-configuration rewrite gets confirmed by mistake.
+    // Only the previewed version has settled. Nothing else is needed to say
+    // what a restore writes, so the confirmation goes through.
     mockVersionDetails({ 2: versionDetail(2, "hash-two") });
     renderDialog();
 
@@ -398,39 +404,9 @@ describe("AgentVersionHistoryDialog", () => {
       screen.getByRole("button", { name: "Restore this version" }),
     );
 
-    expect(screen.getByText(/still being worked out/)).toBeVisible();
-    expect(screen.queryByText(/Nothing changes/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/This changes:/)).not.toBeInTheDocument();
-    // Saying the effects are unknown and then accepting the write anyway is
-    // the same mistake one step later.
     expect(
       screen.getByRole("button", { name: "Restore version 2" }),
-    ).toBeDisabled();
-  });
-
-  it("drops the deleted-referent caveat from a restore that changes nothing", async () => {
-    const user = userEvent.setup();
-    // A version identical to the head references what the agent references
-    // today, so warning that a deleted referent could refuse the restore
-    // contradicts the "Nothing changes" it follows.
-    mockVersionDetails({
-      3: versionDetail(3, "hash-head"),
-      2: {
-        ...versionDetail(2, "hash-head"),
-        snapshot: snapshot({ systemPrompt: "prompt v3" }),
-      },
-    });
-    renderDialog();
-
-    await user.click(screen.getByRole("button", { name: /v2/ }));
-    await user.click(
-      screen.getByRole("button", { name: "Restore this version" }),
-    );
-
-    expect(screen.getByText(/Nothing changes/)).toBeVisible();
-    expect(
-      screen.queryByText(/the restore is refused/),
-    ).not.toBeInTheDocument();
+    ).toBeEnabled();
   });
 
   it("explains why a pruned version cannot be restored", async () => {

@@ -8,8 +8,8 @@ import {
   compareAgentSnapshots,
 } from "./agent-version-diff";
 
-// An internal agent edits the whole snapshot surface, so nothing the
-// per-type filtering would hide gets in the way of the comparison tests.
+// Carries something in most of the snapshot's sections, so a comparison has
+// content on both sides rather than sections dropping out as empty.
 function makeSnapshot(
   overrides: Partial<AgentConfigSnapshot> = {},
 ): AgentConfigSnapshot {
@@ -280,59 +280,90 @@ describe("compareAgentSnapshots", () => {
     );
   });
 
-  it("shows an LLM proxy only the surface it edits", () => {
+  it("compares what a snapshot carries, not what its type may edit", () => {
     const sections = compareAgentSnapshots(
       makeSnapshot({ agentType: "llm_proxy" }),
       null,
     );
-    // No tool surface, no prompt, no hooks, no knowledge — a proxy edits none
-    // of them.
+    // A proxy's editor offers neither a prompt nor tools, but this snapshot
+    // holds both and a restore would replay both, so both get a section.
+    const ids = sections.map((s) => s.id);
+    expect(ids).toContain("system-prompt");
+    expect(ids).toContain("tools");
+    // Nothing on either side of these, so there is nothing to compare.
+    expect(ids).not.toContain("knowledge-bases");
+    expect(ids).not.toContain("suggested-prompts");
+  });
+
+  it("drops a section only when neither side carries anything", () => {
+    const sections = compareAgentSnapshots(
+      makeSnapshot({
+        agentType: "mcp_gateway",
+        tools: [],
+        systemPrompt: null,
+        model: null,
+      }),
+      null,
+    );
     expect(sections.map((s) => s.id)).toEqual(["configuration"]);
     const config = section(sections, "configuration");
     if (config.kind !== "fields") throw new Error("expected fields");
     const labels = config.fields.map((f) => f.label);
-    expect(labels).toContain("Treat context as untrusted");
+    // A setting neither side sets earns no row...
     expect(labels).not.toContain("Model");
-    expect(labels).not.toContain("Tool exposure");
     expect(labels).not.toContain("Passthrough headers");
+    // ...but one every snapshot carries does, whatever the agent type is.
+    expect(labels).toContain("Tool exposure");
+    expect(labels).toContain("Treat context as untrusted");
   });
 
-  it("shows an MCP gateway its tools but no prompt, model, or hooks", () => {
-    const sections = compareAgentSnapshots(
-      makeSnapshot({
-        agentType: "mcp_gateway",
-        hooks: [
-          {
-            event: "pre-tool",
-            fileName: "pre-tool.ts",
-            content: "export {}",
-            requirements: [],
-            enabled: true,
-          },
-        ],
-      }),
-      null,
-    );
-    const ids = sections.map((s) => s.id);
-    expect(ids).toContain("tools");
-    expect(ids).toContain("knowledge-bases");
-    expect(ids).not.toContain("system-prompt");
-    expect(ids).not.toContain("suggested-prompts");
-    expect(ids.some((id) => id.startsWith("hook:"))).toBe(false);
-    const config = section(sections, "configuration");
-    if (config.kind !== "fields") throw new Error("expected fields");
-    const labels = config.fields.map((f) => f.label);
-    expect(labels).toContain("Passthrough headers");
-    expect(labels).not.toContain("Model");
-    expect(labels).not.toContain("Treat context as untrusted");
+  it("reports a change in a setting the agent's own editor never shows", () => {
+    // Comparing by agent type let a gateway's prompt, hooks, and suggested
+    // prompts move without reaching the change set — so an empty change set
+    // read as "these two versions agree" while a restore rewrote all three.
+    const gateway = (overrides: Partial<AgentConfigSnapshot> = {}) =>
+      makeSnapshot({ agentType: "mcp_gateway", ...overrides });
+    const moved: [string, Partial<AgentConfigSnapshot>][] = [
+      ["system prompt", { systemPrompt: "Rewritten." }],
+      [
+        "hooks",
+        {
+          hooks: [
+            {
+              event: "pre-tool",
+              fileName: "guard.ts",
+              content: "export {}",
+              requirements: [],
+              enabled: true,
+            },
+          ],
+        },
+      ],
+      [
+        "suggested prompts",
+        { suggestedPrompts: [{ summaryTitle: "Ideas", prompt: "Go" }] },
+      ],
+      ["untrusted context", { considerContextUntrusted: true }],
+    ];
+    for (const [label, overrides] of moved) {
+      const changed = changedSections(
+        compareAgentSnapshots(gateway(overrides), gateway()),
+      );
+      expect(
+        changed,
+        `a changed ${label} must reach the change set`,
+      ).not.toEqual([]);
+    }
   });
 
-  it("diffs the system prompt as text, treating null and empty alike", () => {
-    const sections = compareAgentSnapshots(
+  it("diffs the system prompt as text, dropping it when neither side has one", () => {
+    // Null and empty read alike, so clearing a prompt that was already empty
+    // is not a change — and with nothing on either side there is no section.
+    const settled = compareAgentSnapshots(
       makeSnapshot({ systemPrompt: null }),
       makeSnapshot({ systemPrompt: "" }),
     );
-    expect(section(sections, "system-prompt").change).toBe("unchanged");
+    expect(settled.map((s) => s.id)).not.toContain("system-prompt");
 
     const moved = compareAgentSnapshots(
       makeSnapshot({ systemPrompt: "New prompt." }),

@@ -282,19 +282,20 @@ function buildOpenedAppInstruction(
   if (app.kind === "owned") {
     const authoring =
       "When they describe a change, change this app rather than building a new one.";
+    const appState = buildOpenedAppStateInstruction(app);
 
     // An app with no assigned tools (a game, a static tracker) has no tool story
     // to tell. Say nothing rather than emit an empty list, which would read as a
     // capability the model should go hunting for.
     if (app.tools.length === 0) {
-      return `${heading}\n\n${framing}\n\n${authoring}`;
+      return `${heading}\n\n${framing}${appState}\n\n${authoring}`;
     }
 
-    const shown = app.tools.slice(0, OPENED_APP_TOOL_LIST_MAX);
-    const names = shown.map((tool) => `\`${tool}\``).join(", ");
-    // A truncated list must never read as the complete one.
-    const overflow = app.tools.length - shown.length;
-    const more = overflow > 0 ? `, and ${overflow} more` : "";
+    const names = listWithOverflow(
+      app.tools,
+      OPENED_APP_TOOL_LIST_MAX,
+      (tool) => `\`${tool}\``,
+    );
 
     // These names come straight from the app's assignments, so they are exactly
     // the case `run_tool`'s "only names search_tools returned" rule exists to
@@ -329,7 +330,7 @@ function buildOpenedAppInstruction(
           )} with \`${searchTools}\` (\`mode: "regex"\`) before concluding the app cannot do it.`
         : "";
 
-    return `${heading}\n\n${framing}\n\nIt is built on these tools: ${names}${more}. What the user asks for while inside it is almost always one of these — call them by name rather than describing what they could click.${exact}${discovery}\n\n${authoring}`;
+    return `${heading}\n\n${framing}${appState}\n\nIt is built on these tools: ${names}. What the user asks for while inside it is almost always one of these — call them by name rather than describing what they could click.${exact}${discovery}\n\n${authoring}`;
   }
 
   if (!app.toolNamespace) {
@@ -347,6 +348,62 @@ function buildOpenedAppInstruction(
       : "";
 
   return `${heading}\n\n${framing}\n\nThis app's capabilities are the MCP tools named \`${app.toolNamespace}__*\`. Prefer them over a general-purpose tool or another server's, even when another server looks like a closer keyword match — a task, note, or reminder the user asks for while inside ${name} belongs in ${name}.${discovery} If it genuinely cannot do what they asked, say so and ask them where the work should go — never quietly do it somewhere else.`;
+}
+
+/** Most app files to name in the opened-app block; a truncated list says so. */
+const OPENED_APP_FILE_LIST_MAX = 50;
+
+/**
+ * Render up to `max` items as a comma list, stating the remainder explicitly —
+ * a truncated list must never read as the complete one.
+ */
+function listWithOverflow<T>(
+  items: T[],
+  max: number,
+  render: (item: T) => string,
+): string {
+  const shown = items.slice(0, max);
+  const overflow = items.length - shown.length;
+  return `${shown.map(render).join(", ")}${
+    overflow > 0 ? `, and ${overflow} more` : ""
+  }`;
+}
+
+/**
+ * The open app's observable state, appended to the opened-app framing: its
+ * per-viewer file inventory (listed server-side, so "what files are in the
+ * app" is answered without a lookup the model may not think to make) and what
+ * the app reports it is currently showing. Empty string when the deployment
+ * has no file store and the app reported nothing — the block then reads
+ * exactly as before.
+ */
+function buildOpenedAppStateInstruction(
+  app: Extract<OpenedApp, { kind: "owned" }>,
+): string {
+  const lines: string[] = [];
+
+  if (app.hasFileStore) {
+    lines.push(
+      app.files.length === 0
+        ? "Its per-user file store is currently empty — nothing has been copied in or saved by the app yet."
+        : `Its per-user file store currently holds: ${listWithOverflow(
+            app.files,
+            OPENED_APP_FILE_LIST_MAX,
+            (file) =>
+              `${quoteUntrusted(file.filename)} (${file.sizeBytes} bytes)`,
+          )}. This inventory is current as of this turn — when the user refers to a file "in the app", it is one of these; ask which rather than guessing when it is ambiguous. To read one here or hand it to the user for download, copy it out to this chat's files first.`,
+    );
+  }
+
+  if (app.reportedContext) {
+    lines.push(
+      `The app reports what it is currently showing as: ${quoteUntrusted(
+        app.reportedContext,
+      )}. When the user says "this file" or "what I'm looking at", they mean this.`,
+    );
+  }
+
+  return lines.length > 0 ? `\n\n${lines.join("\n\n")}` : "";
 }
 
 /**

@@ -150,14 +150,15 @@ export async function ensureProvisionedUser(params: {
 }
 
 /**
- * Check if any SSO identity provider is configured.
+ * Whether the signup welcome (the "finish signing up" message + link) should be
+ * sent to newly auto-provisioned users. Skipped when the operator disabled it
+ * via ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false (deployments whose chatops
+ * users don't get web app access) or when SSO is configured (users just sign in
+ * via their IdP).
  */
-export async function isSsoConfigured(): Promise<boolean> {
-  const [idp] = await db
-    .select({ id: schema.identityProvidersTable.id })
-    .from(schema.identityProvidersTable)
-    .limit(1);
-  return !!idp;
+export async function shouldSendSignupWelcome(): Promise<boolean> {
+  if (!config.chatops.signupWelcomeEnabled) return false;
+  return !(await isSsoConfigured());
 }
 
 interface WelcomeMessage {
@@ -183,4 +184,19 @@ export async function buildWelcomeMessage(params: {
     actionUrl: `${baseUrl}/auth/sign-up-with-invitation?invitationId=${invitationId}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}`,
     actionLabel: "Finish Signup",
   };
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+/**
+ * Check if any SSO identity provider is configured.
+ */
+async function isSsoConfigured(): Promise<boolean> {
+  const [idp] = await db
+    .select({ id: schema.identityProvidersTable.id })
+    .from(schema.identityProvidersTable)
+    .limit(1);
+  return !!idp;
 }

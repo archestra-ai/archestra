@@ -1536,6 +1536,13 @@ See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses lo
   - Optional: the token can also be saved from the Telegram channel page
   - Format: `123456789:ABC...`
 
+#### User provisioning
+
+- **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Opt-out switch for the signup welcome sent to auto-provisioned chatops users.
+  - Default: `true`
+  - `false` skips the "finish signing up" message and link. Use it when your chatops users don't get web app access. Users are still auto-provisioned.
+  - The welcome is also skipped automatically when an SSO identity provider is configured.
+
 #### Attachment processing
 
 - **`ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS`** - Per-process cap on concurrent chatops attachment downloads and image shrinking.

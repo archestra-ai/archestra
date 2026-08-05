@@ -14,7 +14,7 @@ import { z } from "zod";
 import {
   autoProvisionUser,
   buildWelcomeMessage,
-  isSsoConfigured,
+  shouldSendSignupWelcome,
 } from "@/agents/chatops/auto-provision";
 import {
   applyChannelGate,
@@ -570,11 +570,12 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
               // If this is a DM and user has a pending auto-provisioned invitation,
               // send the signup link before the agent selection card.
-              // Skip when SSO is enabled — users just sign in via their IdP.
+              // Skip when disabled by the operator or when SSO is enabled —
+              // users just sign in via their IdP.
               if (
                 isTeamsDm &&
                 message.senderEmail &&
-                !(await isSsoConfigured())
+                (await shouldSendSignupWelcome())
               ) {
                 const invitations = await InvitationModel.findByEmail(
                   message.senderEmail.toLowerCase(),
@@ -2271,10 +2272,11 @@ async function resolveAndVerifySenderForMSTeams(params: {
 
       // In channels, don't expose the signup link — ask user to DM the bot.
       // In DMs, the signup link is sent later (before the agent selection card).
-      // Skip entirely when SSO is enabled — users just sign in via their IdP.
+      // Skip entirely when disabled by the operator or when SSO is enabled —
+      // users just sign in via their IdP.
       const isDm =
         context.activity.conversation?.conversationType === "personal";
-      if (announce && !isDm && !(await isSsoConfigured())) {
+      if (announce && !isDm && (await shouldSendSignupWelcome())) {
         const botId = context.activity.recipient.id;
         const dmDeepLink = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(botId)}`;
         const appName = await OrganizationModel.getAppName();

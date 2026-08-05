@@ -6,7 +6,10 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { MemberModel, OrganizationModel, UserModel } from "@/models";
 import { describe, expect, test, vi } from "@/test";
-import { ensureProvisionedUser } from "./auto-provision";
+import {
+  ensureProvisionedUser,
+  shouldSendSignupWelcome,
+} from "./auto-provision";
 
 describe("ensureProvisionedUser", () => {
   test("existing user is returned without provisioning or resolving a display name", async ({
@@ -156,5 +159,22 @@ describe("ensureProvisionedUser", () => {
     // caller's `invitationId !== null` gate skips the welcome DM (an empty
     // string would pass that gate and send a broken signup link).
     expect(result?.invitationId).toBeNull();
+  });
+});
+
+describe("shouldSendSignupWelcome", () => {
+  // Single test so the no-SSO assertion can't race the identity provider
+  // insert — the file shares one database.
+  test("sent by default, skipped once an SSO identity provider is configured", async () => {
+    expect(await shouldSendSignupWelcome()).toBe(true);
+
+    await db.insert(schema.identityProvidersTable).values({
+      id: crypto.randomUUID(),
+      issuer: "https://idp.example.com",
+      providerId: `idp-${crypto.randomUUID()}`,
+      domain: "example.com",
+    });
+
+    expect(await shouldSendSignupWelcome()).toBe(false);
   });
 });

@@ -44,7 +44,7 @@ import { shrinkImageForModel } from "@/utils/image-conversion";
 import {
   buildWelcomeMessage,
   ensureProvisionedUser,
-  isSsoConfigured,
+  shouldSendSignupWelcome,
 } from "./auto-provision";
 import {
   applyChannelGate,
@@ -1128,8 +1128,11 @@ class SlackProvider implements ChatOpsProvider {
       };
     }
 
-    // Send welcome DM (fire-and-forget) — skip when SSO is enabled
-    if (provisioned.invitationId !== null && !(await isSsoConfigured())) {
+    // Send welcome DM (fire-and-forget) — skip when disabled or SSO is enabled
+    if (
+      provisioned.invitationId !== null &&
+      (await shouldSendSignupWelcome())
+    ) {
       const welcome = await buildWelcomeMessage({
         invitationId: provisioned.invitationId,
         email: senderEmail,

@@ -55,7 +55,7 @@ import type {
 import {
   buildWelcomeMessage,
   ensureProvisionedUser,
-  isSsoConfigured,
+  shouldSendSignupWelcome,
 } from "./auto-provision";
 import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
 import { chatOpsRunRegistry } from "./chatops-run-registry";
@@ -905,8 +905,9 @@ export class ChatOpsManager {
   }): Promise<void> {
     const { provider, message, invitationId, displayName } = params;
     try {
-      // Skip welcome message when SSO is enabled — users just sign in via their IdP
-      if (await isSsoConfigured()) return;
+      // Skip welcome message when disabled by the operator or when SSO is
+      // enabled — users just sign in via their IdP
+      if (!(await shouldSendSignupWelcome())) return;
 
       const welcome = await buildWelcomeMessage({
         invitationId,

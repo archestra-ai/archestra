@@ -274,13 +274,13 @@ export default function LlmSettingsPage() {
         title="Advisor"
         description={
           <>
-            Pair your agents&apos; cheaper model with a stronger advisor model
-            they consult at key moments in a task. The advisor is called at
-            decision points rather than on every turn, so this usually costs
-            less than running the stronger model throughout, though each call is
-            billed at the advisor model&apos;s rates. Pick the advisor&apos;s
-            model on the Advisor agent, then turn on &quot;Escalate hard
-            decisions to the advisor&quot; for the agents that should reach it.
+            Pair a cheaper model with a stronger advisor model consulted at key
+            moments in a task. The advisor is called at decision points rather
+            than on every turn, so this usually costs less than running the
+            stronger model throughout, though each call is billed at the advisor
+            model&apos;s rates. Pick the advisor&apos;s model on the Advisor
+            agent, then turn on &quot;Escalate hard decisions to the
+            advisor&quot; for the agents and MCP Gateways that should reach it.
           </>
         }
         control={

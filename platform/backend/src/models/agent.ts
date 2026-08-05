@@ -2790,6 +2790,81 @@ class AgentModel {
     return count > 0;
   }
 
+  /**
+   * Permanently destroy a soft-deleted agent. Irreversible.
+   *
+   * Everything the agent owns goes by cascade: versions, tool assignments and
+   * exclusions, team/user grants, labels, knowledge bases, connector
+   * assignments, suggested prompts, hook files, scheduled triggers and their
+   * runs, chatops bindings, connection setups, and gateway tasks. Its history
+   * SURVIVES, detached: conversations, interactions, MCP tool calls, and A2A
+   * tasks all have `ON DELETE SET NULL` on their agent column. The org, member,
+   * and /connection defaults clear themselves the same way — those foreign keys
+   * exist in the database even though Drizzle cannot declare them (they would
+   * make organization → agent → organization circular).
+   *
+   * ## Why the statement timeout is raised, and why only to five minutes
+   *
+   * `interactions.profile_id` is one of those `SET NULL` columns, and a busy
+   * LLM proxy owns millions of rows there. Postgres performs that rewrite
+   * INSIDE the DELETE statement, so the pool-wide 30s `statement_timeout`
+   * applies to the whole cascade and would abort — identically on every retry,
+   * making a large proxy permanently un-purgeable. `SET LOCAL` scopes the
+   * change to this transaction and reverts on commit, so no other query loses
+   * its safety net.
+   *
+   * There is also a floor cost independent of the agent's size:
+   * `conversations.agent_id` and `tools.agent_id` carry no index, so each
+   * constraint is enforced with a sequential scan of its table. Indexing them
+   * to speed up a rare admin action would tax every insert into those tables
+   * forever, which is not a trade worth making.
+   *
+   * Five minutes rather than no limit at all. The transaction is long by
+   * design: it blocks no proxy traffic — interactions are insert-only, and this
+   * touches existing rows — but it holds back vacuum cleanup database-wide
+   * while it runs and pins a pool connection, so it needs an end. Postgres
+   * counts lock waits toward `statement_timeout`, so this bounds a purge stuck
+   * behind someone else's lock too, and no separate `lock_timeout` is needed. A
+   * purge that genuinely needs longer fails with SQLSTATE 57014 and leaves the
+   * agent in the trash, unharmed — the whole thing is one transaction, so an
+   * interruption discards all of its progress rather than half-purging. That
+   * revives the un-purgeable-proxy problem above for the very largest agents;
+   * raise this deliberately if one ever shows up, rather than removing it.
+   *
+   * Returns false when there was no soft-deleted row to take, which is how a
+   * restore that won the race reports itself.
+   */
+  static async purge(id: string, organizationId: string): Promise<boolean> {
+    return withDbTransaction(async (tx) => {
+      // `sql.raw`, not an interpolated value: SET is a utility command and
+      // takes no bind parameters, so `= $1` is a syntax error. The value is a
+      // module constant, never caller input.
+      await tx.execute(
+        sql.raw(`SET LOCAL statement_timeout = ${PURGE_STATEMENT_TIMEOUT_MS}`),
+      );
+
+      // The row lock is the race guard: a concurrent restore either commits
+      // first (leaving no soft-deleted row here) or blocks until this
+      // transaction commits and then finds no row at all. Restore wins, and
+      // never against a half-purged agent.
+      const [locked] = await tx
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.id, id),
+            eq(schema.agentsTable.organizationId, organizationId),
+            isNotNull(schema.agentsTable.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!locked) return false;
+
+      return AgentModel.hardDelete(id, tx);
+    });
+  }
+
   /** Check if an agent has any Playwright tools assigned via agent_tools. */
   static async hasPlaywrightToolsAssigned(agentId: string): Promise<boolean> {
     const rows = await db
@@ -3451,6 +3526,37 @@ class AgentModel {
     }
     throw new Error("Unreachable");
   }
+  /**
+   * Identity of an agent for the audit trail, and nothing else — id, name, and
+   * type. The permanent-delete route uses this instead of
+   * {@link findByIdForAudit} because a purge is audited by identity only: the
+   * point of the action is to destroy the config, so an audit row that
+   * preserved a full snapshot of it would defeat the request.
+   *
+   * Does not filter soft-deleted rows — the purge target is by definition in
+   * the trash, so the filtered read paths cannot serve this.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -3629,5 +3735,12 @@ function isQueryKnowledgeSourcesTool(toolName: string): boolean {
     TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
   );
 }
+
+/**
+ * Ceiling for {@link AgentModel.purge}'s transaction, ten times the pool-wide
+ * default. See that method for why the default is too low and why this is a
+ * finite number rather than no limit at all.
+ */
+const PURGE_STATEMENT_TIMEOUT_MS = 300_000;
 
 export default AgentModel;

@@ -209,11 +209,14 @@ class FileModel {
   }
 
   /** Files belonging to one project (newest first), any author; org-scoped. */
-  static async listByProject(params: {
-    organizationId: string;
-    projectId: string;
-  }): Promise<SandboxArtifactRow[]> {
-    return db
+  static async listByProject(
+    params: {
+      organizationId: string;
+      projectId: string;
+    },
+    executor: typeof db | Transaction = db,
+  ): Promise<SandboxArtifactRow[]> {
+    return executor
       .select(artifactColumns)
       .from(schema.filesTable)
       .where(

@@ -352,6 +352,7 @@ function SkillsList() {
           authorId={row.original.authorId}
           authorName={row.original.authorName}
           currentUserId={currentUserId}
+          showSelfAsMe
         />
       ),
     },

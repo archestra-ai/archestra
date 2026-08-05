@@ -150,6 +150,17 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.updated",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  // Permanent deletion. Registered explicitly for two reasons: the walk-up to
+  // `/api/agents/:id` would log it as `agent.deleted` (indistinguishable from a
+  // recoverable soft delete), and it would attach that route's FULL snapshot as
+  // `before` — a copy of exactly the config the caller asked to destroy. The
+  // identity fetcher is the guarantee that a purge is audited by who/what/when
+  // and nothing more.
+  "/api/agents/:id/permanent": {
+    resourceType: "agent",
+    action: "agent.purged",
+    fetchById: (id, orgId) => AgentModel.findIdentityForAudit(id, orgId),
+  },
   "/api/agents/:agentId": {
     resourceType: "agent",
     resourceIdParam: "agentId",
@@ -446,6 +457,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "project.restored",
     fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
   },
+  // Identity-only, like the other purges — see the agent entry above.
+  "/api/projects/:id/permanent": {
+    resourceType: "project",
+    action: "project.purged",
+    fetchById: (id, orgId) => ProjectModel.findIdentityForAudit(id, orgId),
+  },
   // Visibility lives in `project_shares`, captured by the project snapshot.
   "/api/projects/:id/share": {
     resourceType: "project",
@@ -469,6 +486,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     action: "skill.restored",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
+  // Identity-only, like the other purges — see the agent entry above.
+  "/api/skills/:id/permanent": {
+    resourceType: "skill",
+    action: "skill.purged",
+    fetchById: (id, orgId) => SkillModel.findIdentityForAudit(id, orgId),
   },
   // Reset is a POST carrying :id, so the hook suppresses the parent walk-up.
   // Register it directly to capture the target id and before/after snapshots of

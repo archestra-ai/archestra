@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { hookKeys } from "@/lib/hook.query";
 import {
   getApiErrorInternalCode,
@@ -184,6 +185,11 @@ export function useRestoreAgentVersion() {
         // Prefix — covers the per-agent MCP tool list, which chat holds for
         // five minutes and would otherwise serve from before the restore.
         ["chat", "agents"],
+        // A restore rewrites the incoming-email settings too, and the address
+        // is derived from them: the ordinary edit path invalidates this exact
+        // key for that reason, and the email settings dialog and the A2A
+        // connection instructions both read it.
+        [...incomingEmailKeys.promptEmailAddress(variables.agentId)],
       ]) {
         queryClient.invalidateQueries({ queryKey });
       }

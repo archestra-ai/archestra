@@ -68,6 +68,10 @@ describe("useRestoreAgentVersion", () => {
         ["knowledge-bases"],
         ["connectors"],
         ["chat", "agents"],
+        // A restore rewrites the incoming-email settings the address is
+        // derived from, exactly as the ordinary edit path does — and that
+        // path invalidates this key for that reason.
+        ["incoming-email", "prompt-email", "agent-1"],
       ]),
     );
   });

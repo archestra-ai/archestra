@@ -1446,6 +1446,11 @@ These environment variables configure the Incoming Email feature, which allows e
 
 These environment variables configure the ChatOps feature, which allows users to interact with agents through messaging platforms like Microsoft Teams. See [Agents - ChatOps: Microsoft Teams](/docs/platform-agents#chatops-microsoft-teams) for setup instructions.
 
+- **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Opt-out switch for the signup welcome sent to auto-provisioned chatops users.
+  - Default: `true`
+  - `false` skips the "finish signing up" message and link. Use it when your chatops users don't get web app access. Users are still auto-provisioned.
+  - The welcome is also skipped automatically when an SSO identity provider is configured.
+
 #### Microsoft Teams
 
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED`** - Enable Microsoft Teams integration.
@@ -1535,13 +1540,6 @@ See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses lo
 - **`ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN`** - Bot token issued by [@BotFather](https://t.me/BotFather).
   - Optional: the token can also be saved from the Telegram channel page
   - Format: `123456789:ABC...`
-
-#### User provisioning
-
-- **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Opt-out switch for the signup welcome sent to auto-provisioned chatops users.
-  - Default: `true`
-  - `false` skips the "finish signing up" message and link. Use it when your chatops users don't get web app access. Users are still auto-provisioned.
-  - The welcome is also skipped automatically when an SSO identity provider is configured.
 
 #### Attachment processing
 

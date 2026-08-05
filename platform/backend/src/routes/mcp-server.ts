@@ -32,9 +32,10 @@ import {
   ToolModel,
 } from "@/models";
 import {
+  type BrowserKeyProtectionFields,
+  createSealedProtectedSecret,
   requireBrowserCredentialInstallAllowed,
   requireCredentialKeyForProtectedServer,
-  sealBrowserProtectedSecret,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed; request-side browser-key credential helpers
 } from "@/routes/mcp-server-browser-credential.ee";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -481,6 +482,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             providedSecretId: secretId,
           })
         : null;
+      // Populated for a protected install. The plaintext credential bag lives
+      // ONLY here in request memory: validation and tool discovery run on it,
+      // while the persisted secret holds sealed envelopes from its very first
+      // write — no plaintext ever reaches the database (or its WAL).
+      let protectedInstall: {
+        plaintextSecrets: Record<string, unknown>;
+        mcpServerId: string;
+        browserKeyFields: BrowserKeyProtectionFields;
+      } | null = null;
       // SPDX-SnippetEnd
 
       // For REMOTE servers: create secrets and validate connection
@@ -493,114 +503,165 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues,
         });
 
-        // If isByosVault flag is set, use vault references from userConfigValues
-        if (isByosVault && installUserConfigValues && !secretId) {
-          if (!isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Readonly Vault is not enabled. " +
-                "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
-            );
-          }
-
-          // userConfigValues already contains vault references in "path#key" format
-          const secret = await secretManager().createSecret(
-            {
-              ...catalogStaticUserConfigValues,
-              ...installUserConfigValues,
-            } as Record<string, unknown>,
-            `${serverData.name}-vault-secret`,
-          );
-          secretId = secret.id;
-          createdSecretId = secret.id;
-          logger.info(
-            { keyCount: Object.keys(installUserConfigValues).length },
-            "Created Readonly Vault secret with per-field references for remote server",
-          );
-        }
-
-        // If accessToken is provided (PAT flow), create a secret for it
-        // Not allowed when Readonly Vault is enabled - use vault secrets instead
-        if (accessToken && !secretId) {
-          if (isByosEnabled()) {
-            throw new ApiError(
-              400,
-              "Manual PAT token input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
-            );
-          }
-          const secret = await secretManager().createSecret(
-            { ...catalogStaticUserConfigValues, access_token: accessToken },
-            `${serverData.name}-token`,
-            // Browser-key-protected bags hold envelopes after the seal step;
-            // force DB storage so they never transit an external manager.
-            Boolean(browserCredentialKey),
-          );
-          secretId = secret.id;
-          createdSecretId = secret.id;
-        }
-
-        if (installUserConfigValues && !secretId) {
-          const secret = await secretManager().createSecret(
-            {
-              ...catalogStaticUserConfigValues,
-              ...installUserConfigValues,
-            } as Record<string, unknown>,
-            `${serverData.name}-secret`,
-            Boolean(browserCredentialKey),
-          );
-          secretId = secret.id;
-          createdSecretId = secret.id;
-        } else if (
-          !secretId &&
-          Object.keys(catalogStaticUserConfigValues).length > 0
-        ) {
-          const secret = await secretManager().createSecret(
-            catalogStaticUserConfigValues,
-            `${serverData.name}-secret`,
-            Boolean(browserCredentialKey),
-          );
-          secretId = secret.id;
-          createdSecretId = secret.id;
-        }
-
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        // A protected install with no credential values would seal an empty
-        // bag — nothing to protect means the request is malformed.
-        if (browserCredentialKey && !secretId) {
-          throw new ApiError(
-            400,
-            "Browser-key protection requires credential values (an access " +
-              "token or connection settings) to protect.",
-          );
-        }
-        // SPDX-SnippetEnd
+        if (browserCredentialKey) {
+          // Browser-key-protected install: validate with the IN-MEMORY bag,
+          // then seal it bound to a pre-generated server id and persist a
+          // single already-sealed secret. (BYOS is rejected by the gate.)
+          const plaintextBag: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+          };
+          if (accessToken) {
+            plaintextBag.access_token = accessToken;
+          } else if (installUserConfigValues) {
+            Object.assign(plaintextBag, installUserConfigValues);
+          }
 
-        // Validate connection for remote servers. Enterprise-managed catalogs
-        // skip this static-secret probe: their MCP servers typically require
-        // the per-user exchanged credential, which is only attached during the
-        // install discovery below, so probing here would hit the server
-        // without an Authorization header and fail the install.
-        if (secretId && !catalogItem.enterpriseManagedConfig) {
-          const { isValid, errorMessage } =
-            await McpServerModel.validateConnection(
-              serverData.name,
-              serverData.catalogId ?? undefined,
-              secretId,
+          // A protected install with no credential values would seal an empty
+          // bag — nothing to protect means the request is malformed.
+          if (Object.keys(plaintextBag).length === 0) {
+            throw new ApiError(
+              400,
+              "Browser-key protection requires credential values (an access " +
+                "token or connection settings) to protect.",
             );
+          }
 
+          // Validate BEFORE anything is persisted — a failure leaves no rows
+          // behind. (Enterprise-managed catalogs are rejected by the gate, so
+          // the static-secret probe is always meaningful here.)
+          const { isValid, errorMessage } =
+            await McpServerModel.validateConnection({
+              serverName: serverData.name,
+              catalogId: serverData.catalogId ?? undefined,
+              secretsOverride: plaintextBag,
+            });
           if (!isValid) {
-            // Clean up the secret we just created if validation fails
-            if (createdSecretId) {
-              secretManager().deleteSecret(createdSecretId);
-            }
-
             throw new ApiError(
               400,
               errorMessage ||
                 "Failed to connect to MCP server with provided credentials",
             );
+          }
+
+          // Pre-generate the mcp_server id (the row does not exist yet) so
+          // the envelope AAD and the fingerprint bind to the final id — the
+          // same pattern as the incognito conversation id.
+          const protectedMcpServerId = crypto.randomUUID();
+          const { secretId: sealedSecretId, browserKeyFields } =
+            await createSealedProtectedSecret({
+              values: plaintextBag,
+              secretName: accessToken
+                ? `${serverData.name}-token`
+                : `${serverData.name}-secret`,
+              mcpServerId: protectedMcpServerId,
+              key: browserCredentialKey,
+              staticValueKeys: new Set(
+                Object.keys(catalogStaticUserConfigValues),
+              ),
+            });
+          secretId = sealedSecretId;
+          createdSecretId = sealedSecretId;
+          protectedInstall = {
+            plaintextSecrets: plaintextBag,
+            mcpServerId: protectedMcpServerId,
+            browserKeyFields,
+          };
+        } else {
+          // SPDX-SnippetEnd
+
+          // If isByosVault flag is set, use vault references from userConfigValues
+          if (isByosVault && installUserConfigValues && !secretId) {
+            if (!isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Readonly Vault is not enabled. " +
+                  "Requires ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT and an enterprise license.",
+              );
+            }
+
+            // userConfigValues already contains vault references in "path#key" format
+            const secret = await secretManager().createSecret(
+              {
+                ...catalogStaticUserConfigValues,
+                ...installUserConfigValues,
+              } as Record<string, unknown>,
+              `${serverData.name}-vault-secret`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+            logger.info(
+              { keyCount: Object.keys(installUserConfigValues).length },
+              "Created Readonly Vault secret with per-field references for remote server",
+            );
+          }
+
+          // If accessToken is provided (PAT flow), create a secret for it
+          // Not allowed when Readonly Vault is enabled - use vault secrets instead
+          if (accessToken && !secretId) {
+            if (isByosEnabled()) {
+              throw new ApiError(
+                400,
+                "Manual PAT token input is not allowed when Readonly Vault is enabled. Please use Vault secrets instead.",
+              );
+            }
+            const secret = await secretManager().createSecret(
+              { ...catalogStaticUserConfigValues, access_token: accessToken },
+              `${serverData.name}-token`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+          }
+
+          if (installUserConfigValues && !secretId) {
+            const secret = await secretManager().createSecret(
+              {
+                ...catalogStaticUserConfigValues,
+                ...installUserConfigValues,
+              } as Record<string, unknown>,
+              `${serverData.name}-secret`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+          } else if (
+            !secretId &&
+            Object.keys(catalogStaticUserConfigValues).length > 0
+          ) {
+            const secret = await secretManager().createSecret(
+              catalogStaticUserConfigValues,
+              `${serverData.name}-secret`,
+            );
+            secretId = secret.id;
+            createdSecretId = secret.id;
+          }
+
+          // Validate connection for remote servers. Enterprise-managed catalogs
+          // skip this static-secret probe: their MCP servers typically require
+          // the per-user exchanged credential, which is only attached during the
+          // install discovery below, so probing here would hit the server
+          // without an Authorization header and fail the install.
+          if (secretId && !catalogItem.enterpriseManagedConfig) {
+            const { isValid, errorMessage } =
+              await McpServerModel.validateConnection({
+                serverName: serverData.name,
+                catalogId: serverData.catalogId ?? undefined,
+                secretId,
+              });
+
+            if (!isValid) {
+              // Clean up the secret we just created if validation fails
+              if (createdSecretId) {
+                secretManager().deleteSecret(createdSecretId);
+              }
+
+              throw new ApiError(
+                400,
+                errorMessage ||
+                  "Failed to connect to MCP server with provided credentials",
+              );
+            }
           }
         }
       }
@@ -840,6 +901,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...serverData,
         ...(secretId && { secretId }),
         environmentValues: installEnvironmentValues,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // A protected install lands already sealed in one insert: the
+        // pre-generated id its envelopes are bound to plus the protection
+        // fields — there is never a window where the row exists unprotected.
+        ...(protectedInstall && {
+          id: protectedInstall.mcpServerId,
+          ...protectedInstall.browserKeyFields,
+        }),
+        // SPDX-SnippetEnd
       });
 
       try {
@@ -1079,6 +1151,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogItem,
           mcpServerId: mcpServer.id,
           secretId: mcpServer.secretId ?? undefined,
+          // Protected installs discover with the request-scoped plaintext bag
+          // — the stored secret already holds sealed envelopes.
+          secretsOverride: protectedInstall?.plaintextSecrets,
           userId: user.id,
           // Shared enterprise-managed installs use the installer's linked IdP
           // token only for discovery. Runtime tool calls exchange each caller's
@@ -1167,24 +1242,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        // Seal AFTER connection validation and tool discovery (both need the
-        // plaintext) and AFTER the row exists, so the envelope AAD and the
-        // fingerprint bind to the final mcp_server id. A failure here rides
-        // the shared catch below, which hard-deletes the row and the secret.
-        if (browserCredentialKey && mcpServer.secretId) {
-          const browserKeyFields = await sealBrowserProtectedSecret({
-            secretId: mcpServer.secretId,
-            mcpServerId: mcpServer.id,
-            key: browserCredentialKey,
-            staticValueKeys: new Set(
-              Object.keys(
-                getCatalogStaticUserConfigValues(catalogItem.userConfig),
-              ),
-            ),
-          });
-          await McpServerModel.update(mcpServer.id, browserKeyFields);
-          // Drop any connection/secret state built during discovery so no
-          // plaintext outlives the seal.
+        // The protected secret was sealed BEFORE it was ever written and the
+        // row was created already protected; validation and discovery ran on
+        // the request-scoped plaintext bag. Drop any connection/secret state
+        // built from that plaintext so nothing derived from it outlives the
+        // install request.
+        if (protectedInstall) {
           await mcpClient.invalidateConnectionsForServer(mcpServer.id);
         }
         // SPDX-SnippetEnd
@@ -1365,6 +1428,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             providedSecretId,
           })
         : null;
+      // Row fields for the protected state, produced by the seal step of a
+      // protected reauth; stays null on an unprotected reauth (which clears
+      // the flags at the row update below).
+      let protectedReauthFields: BrowserKeyProtectionFields | null = null;
       // SPDX-SnippetEnd
 
       // Resolve the new secret ID: either provided directly, or create from raw credentials
@@ -1379,7 +1446,63 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userConfigValues,
         });
 
-        if (accessToken) {
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        if (browserCredentialKey) {
+          // Protected replacement credential: build the plaintext bag in
+          // request memory only, validate the connection with it (ONE shared
+          // step for the PAT and connection-settings branches alike — a
+          // failure persists nothing), then seal bound to this server's id
+          // and persist a single already-sealed secret.
+          const plaintextBag: Record<string, string> = {
+            ...catalogStaticUserConfigValues,
+          };
+          if (accessToken) {
+            plaintextBag.access_token = accessToken;
+          } else if (installUserConfigValues) {
+            Object.assign(plaintextBag, installUserConfigValues);
+          }
+          if (Object.keys(plaintextBag).length === 0) {
+            throw new ApiError(
+              400,
+              "Browser-key protection requires credential values (an access " +
+                "token or connection settings) to protect.",
+            );
+          }
+
+          // Strict validation against the submitted bag — no IdP-token
+          // fallback: only the credential that will actually be sealed may
+          // prove the connection.
+          const { isValid, errorMessage } =
+            await McpServerModel.validateConnection({
+              serverName: mcpServer.name,
+              catalogId: mcpServer.catalogId ?? undefined,
+              secretsOverride: plaintextBag,
+            });
+          if (!isValid) {
+            throw new ApiError(
+              400,
+              errorMessage ||
+                "Failed to connect to MCP server with provided credentials",
+            );
+          }
+
+          const sealed = await createSealedProtectedSecret({
+            values: plaintextBag,
+            secretName: accessToken
+              ? `${mcpServer.name}-token`
+              : `${mcpServer.name}-secret`,
+            mcpServerId: id,
+            key: browserCredentialKey,
+            staticValueKeys: new Set(
+              Object.keys(catalogStaticUserConfigValues),
+            ),
+          });
+          newSecretId = sealed.secretId;
+          protectedReauthFields = sealed.browserKeyFields;
+        } else if (accessToken) {
+          // SPDX-SnippetEnd
           // PAT token flow
           if (isByosVault && isByosEnabled()) {
             throw new ApiError(
@@ -1390,8 +1513,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const secret = await secretManager().createSecret(
             { ...catalogStaticUserConfigValues, access_token: accessToken },
             `${mcpServer.name}-token`,
-            // Browser-key-protected bags are sealed below; force DB storage.
-            Boolean(browserCredentialKey),
           );
           newSecretId = secret.id;
         } else if (installUserConfigValues) {
@@ -1412,7 +1533,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             isByosVault
               ? `${mcpServer.name}-vault-secret`
               : `${mcpServer.name}-secret`,
-            Boolean(browserCredentialKey),
           );
           newSecretId = secret.id;
 
@@ -1520,46 +1640,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Could not resolve credentials");
       }
 
-      // Delete the old secret if it exists
-      if (mcpServer.secretId) {
-        try {
-          await secretManager().deleteSecret(mcpServer.secretId);
-          logger.info(
-            { mcpServerId: id, oldSecretId: mcpServer.secretId },
-            "Deleted old secret during re-authentication",
-          );
-        } catch (error) {
-          logger.error(
-            { err: error, mcpServerId: id },
-            "Failed to delete old secret during re-authentication",
-          );
-          // Continue with update even if old secret deletion fails
-        }
-      }
-
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      // Seal the replacement secret AFTER connection validation (which needs
-      // the plaintext), bound to this server's id. A reauth WITHOUT the flag
-      // explicitly clears protection — the old sealed secret is deleted below
-      // and the new one is plaintext, so stale flags would brick the install.
-      const browserKeyFields = browserCredentialKey
-        ? await sealBrowserProtectedSecret({
-            secretId: newSecretId,
-            mcpServerId: id,
-            key: browserCredentialKey,
-            staticValueKeys: new Set(
-              Object.keys(
-                getCatalogStaticUserConfigValues(catalogItem?.userConfig),
-              ),
-            ),
-          })
-        : {
-            browserKeyProtected: false as const,
-            browserKeyFingerprint: null,
-            browserKeyEscrow: null,
-          };
+      // A protected reauth sealed the replacement secret before it was ever
+      // written (fields captured above). A reauth WITHOUT the flag explicitly
+      // clears protection — the replacement is plaintext, so stale flags
+      // would brick the install.
+      const browserKeyFields = protectedReauthFields ?? {
+        browserKeyProtected: false as const,
+        browserKeyFingerprint: null,
+        browserKeyEscrow: null,
+      };
       // SPDX-SnippetEnd
 
       // Update the server with new secret and clear OAuth error fields
@@ -1571,6 +1663,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthRefreshErrorDescription: null,
         oauthRefreshFailedAt: null,
       });
+
+      // Delete the old secret only AFTER the row points at the replacement —
+      // a failure anywhere above must never strand the server row referencing
+      // a deleted credential. Best-effort cleanup: the row is already
+      // consistent, so log and continue on failure.
+      if (mcpServer.secretId && mcpServer.secretId !== newSecretId) {
+        try {
+          await secretManager().deleteSecret(mcpServer.secretId);
+          logger.info(
+            { mcpServerId: id, oldSecretId: mcpServer.secretId },
+            "Deleted old secret during re-authentication",
+          );
+        } catch (error) {
+          logger.error(
+            { err: error, mcpServerId: id },
+            "Failed to delete old secret during re-authentication",
+          );
+        }
+      }
 
       // Re-auth swaps the secret behind the same MCP server ID. Cached MCP clients
       // are keyed by server ID and can otherwise keep reusing the stale auth/session.
@@ -2609,6 +2720,12 @@ async function connectAndGetToolsForInstallation(params: {
   catalogItem: Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
   mcpServerId: string;
   secretId?: string;
+  /**
+   * In-memory credential bag used INSTEAD of the stored secret. Browser-key-
+   * protected installs pass the request-scoped plaintext here because their
+   * persisted secret holds sealed envelopes the backend cannot open.
+   */
+  secretsOverride?: Record<string, unknown>;
   userId: string;
   allowCurrentUserTokenFallback: boolean;
 }) {
@@ -2617,7 +2734,11 @@ async function connectAndGetToolsForInstallation(params: {
     throw new Error("Catalog item not found");
   }
 
-  const secrets = await getSecretValues(params.secretId);
+  // With an override, drop the secretId too so nothing downstream re-reads
+  // (or caches against) the sealed stored secret.
+  const secretId = params.secretsOverride ? undefined : params.secretId;
+  const secrets =
+    params.secretsOverride ?? (await getSecretValues(params.secretId));
   const installDiscoveryAccessToken =
     params.allowCurrentUserTokenFallback && catalogItem.enterpriseManagedConfig
       ? await getInstallDiscoveryAccessToken({
@@ -2648,7 +2769,7 @@ async function connectAndGetToolsForInstallation(params: {
       catalogItem,
       mcpServerId: params.mcpServerId,
       secrets,
-      secretId: params.secretId,
+      secretId,
       enterpriseTransportCredential: installDiscoveryCredential,
     });
   } catch (error) {
@@ -2687,7 +2808,7 @@ async function connectAndGetToolsForInstallation(params: {
         ...secrets,
         access_token: accessToken,
       },
-      secretId: params.secretId,
+      secretId,
     });
   }
 }

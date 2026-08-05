@@ -1392,6 +1392,10 @@ class McpClient {
     try {
       await client.connect(transport);
     } catch (error) {
+      // The client is not registered in activeConnections yet, so no later
+      // teardown (including teardownEphemeralConnection for browser-key
+      // calls) can reach it — close it here or the client/transport leak.
+      await this.closeUnregisteredClient(client, connectionKey);
       // If we used a stored session ID and connection failed, the session is
       // likely stale (e.g. Playwright pod restarted).  Delete it and throw a
       // StaleSessionError so executeToolCall can retry with a fresh session.
@@ -1419,6 +1423,9 @@ class McpClient {
       try {
         await client.ping();
       } catch {
+        // Same pre-registration window as the connect failure above: nothing
+        // else holds this client, so close it before bailing out.
+        await this.closeUnregisteredClient(client, connectionKey);
         try {
           await McpHttpSessionModel.deleteStaleSession(connectionKey);
         } catch (err) {
@@ -1475,6 +1482,25 @@ class McpClient {
       Date.now() - lastValidatedAt >=
       ACTIVE_CONNECTION_PING_VALIDATION_INTERVAL_MS
     );
+  }
+
+  /**
+   * Best-effort close for a freshly created client that never made it into
+   * `activeConnections` (connect or the stored-session ping failed). Closing
+   * the client also closes its transport, so neither leaks.
+   */
+  private async closeUnregisteredClient(
+    client: Client,
+    connectionKey: string,
+  ): Promise<void> {
+    try {
+      await client.close();
+    } catch (closeError) {
+      logger.warn(
+        { connectionKey, closeError },
+        "Error closing MCP client after failed connect (non-fatal)",
+      );
+    }
   }
 
   private clearConnectionState(connectionKey: string): void {

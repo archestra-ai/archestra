@@ -10,6 +10,7 @@
  * - the periodic tools refresher never picks a protected install
  */
 import { randomBytes } from "node:crypto";
+import { vi } from "vitest";
 import type { LRUCacheManager } from "@/cache-manager";
 import {
   credentialKeyFingerprint,
@@ -28,6 +29,16 @@ const client = mcpClient as unknown as {
     allServers: McpServer[],
     tokenAuth: TokenAuthContext | undefined,
   ): Promise<McpServer | undefined>;
+  getOrCreateClient(
+    connectionKey: string,
+    transport: unknown,
+    targetMcpServerId: string,
+    currentServerState: {
+      secretId: string | null;
+      credentialFingerprint: string | null;
+    },
+  ): Promise<unknown>;
+  activeConnections: Map<string, unknown>;
   getSecretsForMcpServer(params: {
     targetMcpServerId: string;
     toolCall: { id: string; name: string; arguments: Record<string, unknown> };
@@ -190,6 +201,32 @@ describe("browser-key MCP credentials — use path", () => {
       expect(unlocked.secrets.access_token).toBe("sk-unwrapped-token");
       expect(client.secretsCache.get(server.id)).toBeUndefined();
     });
+  });
+
+  test("a client whose connect fails before registration is closed directly — nothing leaks for the ephemeral teardown to miss", async () => {
+    // A per-call (nonce-keyed) browser-key connection relies on
+    // teardownEphemeralConnection, which only closes clients registered in
+    // activeConnections. A connect() failure happens BEFORE registration, so
+    // the failure path itself must close the client (and thereby the
+    // transport).
+    const transportClose = vi.fn().mockResolvedValue(undefined);
+    const transport = {
+      start: vi.fn().mockRejectedValue(new Error("connect refused")),
+      send: vi.fn(),
+      close: transportClose,
+    };
+    const connectionKey = `catalog:server:browser-key:${randomBytes(4).toString("hex")}`;
+
+    await expect(
+      client.getOrCreateClient(connectionKey, transport, "server", {
+        secretId: null,
+        credentialFingerprint: null,
+      }),
+    ).rejects.toThrow("connect refused");
+
+    // Closed in the failure path itself, and never registered.
+    expect(transportClose).toHaveBeenCalled();
+    expect(client.activeConnections.has(connectionKey)).toBe(false);
   });
 
   test("the periodic tools refresher never picks a browser-key-protected install", async ({

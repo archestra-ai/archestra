@@ -14,8 +14,9 @@ import { ApiError, type IncognitoEscrowBlob } from "@/types";
 
 /**
  * Request-side helpers for browser-key MCP credentials: header parsing, the
- * connect-time eligibility gate, and sealing a validated plaintext secret
- * into browser-key envelopes. All key material stays request-scoped.
+ * connect-time eligibility gate, and sealing a validated in-memory credential
+ * bag into browser-key envelopes before it is ever persisted. All key and
+ * plaintext material stays request-scoped.
  */
 
 /** Error type surfaced on a present-but-wrong credential key (409). */
@@ -153,36 +154,55 @@ export function requireCredentialKeyForProtectedServer(params: {
   return key;
 }
 
+/** Row fields that flip an install into its browser-key-protected state. */
+export type BrowserKeyProtectionFields = {
+  browserKeyProtected: true;
+  browserKeyFingerprint: string;
+  browserKeyEscrow: IncognitoEscrowBlob;
+};
+
 /**
- * Seal a connection-validated plaintext secret under the browser key, bound
- * to the final mcp_server id: envelope-wrap the sensitive bag values in
- * place (catalog-static shared defaults stay plaintext) and return the row
- * fields that flip the install into its protected state.
+ * Seal a connection-validated IN-MEMORY credential bag under the browser key
+ * and persist it as a brand-new secret in one write: the sensitive values are
+ * envelope-wrapped (catalog-static shared defaults stay plaintext) bound to
+ * the caller-supplied mcp_server id BEFORE anything is stored, so the
+ * plaintext never reaches the database — not even transiently. Returns the
+ * sealed secret's id plus the row fields for the protected state.
  */
-export async function sealBrowserProtectedSecret(params: {
-  secretId: string;
+export async function createSealedProtectedSecret(params: {
+  /** The in-memory plaintext bag; never persisted by this function. */
+  values: Record<string, unknown>;
+  secretName: string;
+  /** Pre-generated (install) or existing (reauth) mcp_server id to bind to. */
   mcpServerId: string;
   key: Buffer;
   /** Catalog-static (shared, non-secret) bag keys left unwrapped. */
   staticValueKeys: ReadonlySet<string>;
 }): Promise<{
-  browserKeyProtected: true;
-  browserKeyFingerprint: string;
-  browserKeyEscrow: IncognitoEscrowBlob;
+  secretId: string;
+  browserKeyFields: BrowserKeyProtectionFields;
 }> {
-  const record = await secretManager().getSecret(params.secretId);
-  const sealed = encryptCredentialBagValues(record?.secret ?? {}, {
+  const sealed = encryptCredentialBagValues(params.values, {
     key: params.key,
     mcpServerId: params.mcpServerId,
     skipKeys: params.staticValueKeys,
   });
-  await secretManager().updateSecret(params.secretId, sealed);
+  // Browser-key bags hold envelopes; force DB storage so they never transit
+  // an external secrets manager.
+  const secret = await secretManager().createSecret(
+    sealed,
+    params.secretName,
+    true,
+  );
   return {
-    browserKeyProtected: true,
-    browserKeyFingerprint: credentialKeyFingerprint(
-      params.mcpServerId,
-      params.key,
-    ),
-    browserKeyEscrow: wrapCredentialKey(params.key),
+    secretId: secret.id,
+    browserKeyFields: {
+      browserKeyProtected: true,
+      browserKeyFingerprint: credentialKeyFingerprint(
+        params.mcpServerId,
+        params.key,
+      ),
+      browserKeyEscrow: wrapCredentialKey(params.key),
+    },
   };
 }

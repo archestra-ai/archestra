@@ -28,6 +28,7 @@ import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
+  IncognitoEscrowBlob,
   InsertMcpServer,
   McpServer,
   McpServerAgentUsage,
@@ -100,7 +101,24 @@ class McpServerModel {
   }
 
   static async create(
-    server: InsertMcpServer,
+    server: InsertMcpServer & {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      /**
+       * Browser-key-protected installs pre-generate the row id so the
+       * credential envelope AAD and key fingerprint can bind to it BEFORE the
+       * row exists; equivalent to the column's default otherwise. These
+       * fields are server-derived (never request input — the API insert
+       * schema omits them) and let a protected install land already sealed
+       * in a single insert.
+       */
+      id?: string;
+      browserKeyProtected?: boolean;
+      browserKeyFingerprint?: string;
+      browserKeyEscrow?: IncognitoEscrowBlob;
+      // SPDX-SnippetEnd
+    },
     tx?: Transaction,
   ): Promise<McpServer> {
     const { userId, ...serverData } = server;
@@ -119,7 +137,7 @@ class McpServerModel {
     // orphan the running deployment. Remote installs have no deployment.
     // Multitenant installs share the catalog-level deployment, so this
     // per-install name is simply never read for them.
-    const id = crypto.randomUUID();
+    const id = serverData.id ?? crypto.randomUUID();
     const deploymentName =
       serverData.serverType === "local"
         ? constructFrozenMcpDeploymentName(mcpServerName, id)
@@ -1791,16 +1809,26 @@ class McpServerModel {
   }
 
   /**
-   * Validate that an MCP server can be connected to with given secretId
+   * Validate that an MCP server can be connected to with the given
+   * credentials — a stored secret (`secretId`) or an in-memory bag
+   * (`secretsOverride`).
    */
-  static async validateConnection(
-    serverName: string,
-    catalogId?: string,
-    secretId?: string,
-  ): Promise<{ isValid: boolean; errorMessage?: string }> {
-    // Load secrets if secretId is provided
-    let secrets: Record<string, unknown> = {};
-    if (secretId) {
+  static async validateConnection(params: {
+    serverName: string;
+    catalogId?: string;
+    secretId?: string;
+    /**
+     * In-memory credential bag to validate with INSTEAD of loading a stored
+     * secret. Browser-key-protected installs validate before anything is
+     * persisted, so their plaintext never exists as a secret row.
+     */
+    secretsOverride?: Record<string, unknown>;
+  }): Promise<{ isValid: boolean; errorMessage?: string }> {
+    const { serverName, catalogId, secretId, secretsOverride } = params;
+
+    // Load secrets if secretId is provided (unless an in-memory bag is given)
+    let secrets: Record<string, unknown> = secretsOverride ?? {};
+    if (!secretsOverride && secretId) {
       const secretRecord = await secretManager().getSecret(secretId);
       if (secretRecord) {
         secrets = secretRecord.secret;

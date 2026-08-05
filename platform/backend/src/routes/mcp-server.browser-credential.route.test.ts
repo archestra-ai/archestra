@@ -3,10 +3,15 @@
  * Contract under test — browser-key MCP credentials at the connect path:
  * - install with `browserKeyProtected: true` is gated: EE license + escrow
  *   key + key header + remote-static-personal-non-OAuth-non-BYOS only
- * - the happy path stores the sensitive bag values as envelopes (never
- *   plaintext at rest), sets the fingerprint bound to the final server id,
- *   and escrows the key recoverable with the operator's RSA private key
+ * - the happy path stores the sensitive bag values as envelopes — the
+ *   plaintext is NEVER handed to secret persistence, not even transiently
+ *   pre-seal — sets the fingerprint bound to the final server id, and
+ *   escrows the key recoverable with the operator's RSA private key
  * - connection validation and discovery still ran with the plaintext
+ *   (in-memory bag); a failed validation persists nothing at all
+ * - reauthenticate with the flag validates EVERY protected replacement
+ *   credential (PAT included), seals before any write, and deletes the old
+ *   secret only after the row points at the new one
  */
 import {
   constants as cryptoConstants,
@@ -25,6 +30,7 @@ import {
   // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 } from "@/content-encryption/browser-credential.ee";
 import db, { schema } from "@/database";
+import { McpServerModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -267,10 +273,13 @@ describe("MCP server install — browser-key protection", () => {
   });
 
   describe("happy path", () => {
-    test("stores envelopes + fingerprint bound to the server id + recoverable escrow; plaintext absent at rest", async ({
+    test("stores envelopes + fingerprint bound to the server id + recoverable escrow; plaintext never persisted", async ({
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeRemoteCatalog(makeInternalMcpCatalog);
+      const createSecretSpy = vi.spyOn(secretManager(), "createSecret");
+      const updateSecretSpy = vi.spyOn(secretManager(), "updateSecret");
+
       const response = await app.inject({
         method: "POST",
         url: "/api/mcp_server",
@@ -285,6 +294,17 @@ describe("MCP server install — browser-key protection", () => {
       for (const call of connectAndGetToolsMock.mock.calls) {
         expect(call[0].secrets.access_token).toBe("sk-plain-token");
       }
+
+      // The plaintext was NEVER handed to secret persistence: exactly one
+      // secret write happened and it was the already-sealed bag — no
+      // plaintext-then-update window that could reach the DB or its WAL.
+      expect(createSecretSpy).toHaveBeenCalledTimes(1);
+      for (const call of createSecretSpy.mock.calls) {
+        expect(JSON.stringify(call[0])).not.toContain("sk-plain-token");
+      }
+      expect(updateSecretSpy).not.toHaveBeenCalled();
+      createSecretSpy.mockRestore();
+      updateSecretSpy.mockRestore();
 
       const [serverRow] = await db
         .select()
@@ -331,6 +351,42 @@ describe("MCP server install — browser-key protection", () => {
       ).toBe("sk-plain-token");
     });
 
+    test("a failed connection validation persists nothing — no secret write, no server row", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeRemoteCatalog(makeInternalMcpCatalog);
+      connectAndGetToolsMock.mockRejectedValue(
+        new Error("upstream rejected the credential"),
+      );
+      const createSecretSpy = vi.spyOn(secretManager(), "createSecret");
+      const updateSecretSpy = vi.spyOn(secretManager(), "updateSecret");
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/mcp_server",
+        headers: keyHeader(),
+        payload: { ...installPayload(catalog.id), browserKeyProtected: true },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "upstream rejected the credential",
+      );
+
+      // Validation ran on the IN-MEMORY bag: nothing was written that could
+      // need rollback — no secret (sealed or otherwise), no server row.
+      expect(createSecretSpy).not.toHaveBeenCalled();
+      expect(updateSecretSpy).not.toHaveBeenCalled();
+      const serverRows = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.catalogId, catalog.id));
+      expect(serverRows).toHaveLength(0);
+      const secretRows = await db.select().from(schema.secretsTable);
+      expect(JSON.stringify(secretRows)).not.toContain("sk-plain-token");
+      createSecretSpy.mockRestore();
+      updateSecretSpy.mockRestore();
+    });
+
     test("an unprotected install of the same catalog stays plaintext", async ({
       makeInternalMcpCatalog,
     }) => {
@@ -351,6 +407,175 @@ describe("MCP server install — browser-key protection", () => {
       if (!serverRow.secretId) throw new Error("expected a secretId");
       const stored = await secretManager().getSecret(serverRow.secretId);
       expect(stored?.secret.access_token).toBe("sk-plain-token");
+    });
+  });
+
+  describe("reauthenticate — browser-key protection", () => {
+    type MakeMcpServer = (
+      overrides: Record<string, unknown>,
+    ) => Promise<{ id: string; secretId: string | null }>;
+
+    async function makeInstalledServer(
+      makeInternalMcpCatalog: Parameters<typeof makeRemoteCatalog>[0],
+      makeMcpServer: MakeMcpServer,
+    ) {
+      const catalog = await makeRemoteCatalog(makeInternalMcpCatalog);
+      const oldSecret = await secretManager().createSecret(
+        { access_token: "sk-old-plain-token" },
+        "bk-reauth-old-secret",
+      );
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        name: "browser-cred-reauth",
+        serverType: "remote",
+        scope: "personal",
+        ownerId: user.id,
+        secretId: oldSecret.id,
+      });
+      return { catalog, server, oldSecretId: oldSecret.id };
+    }
+
+    test("PAT reauth validates the replacement, seals before any write, swaps the row, then deletes the old secret", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const { server, oldSecretId } = await makeInstalledServer(
+        makeInternalMcpCatalog,
+        makeMcpServer as MakeMcpServer,
+      );
+      const createSecretSpy = vi.spyOn(secretManager(), "createSecret");
+      const updateSecretSpy = vi.spyOn(secretManager(), "updateSecret");
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${server.id}/reauthenticate`,
+        headers: keyHeader(),
+        payload: {
+          accessToken: "sk-new-plain-token",
+          browserKeyProtected: true,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      // The PAT branch is connection-validated too (it used to skip this),
+      // and validation ran with the in-memory plaintext.
+      expect(connectAndGetToolsMock).toHaveBeenCalled();
+      for (const call of connectAndGetToolsMock.mock.calls) {
+        expect(call[0].secrets.access_token).toBe("sk-new-plain-token");
+      }
+
+      // The replacement plaintext was never handed to persistence: one
+      // already-sealed write, no post-hoc update.
+      expect(createSecretSpy).toHaveBeenCalledTimes(1);
+      for (const call of createSecretSpy.mock.calls) {
+        expect(JSON.stringify(call[0])).not.toContain("sk-new-plain-token");
+      }
+      expect(updateSecretSpy).not.toHaveBeenCalled();
+      createSecretSpy.mockRestore();
+      updateSecretSpy.mockRestore();
+
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(serverRow.browserKeyProtected).toBe(true);
+      expect(serverRow.browserKeyFingerprint).toBe(
+        credentialKeyFingerprint(server.id, key),
+      );
+      expect(serverRow.browserKeyEscrow?.alg).toBe("RSA-OAEP-256");
+      expect(serverRow.secretId).not.toBe(oldSecretId);
+      if (!serverRow.secretId) throw new Error("expected a secretId");
+
+      // At rest: envelope only the browser key opens; no plaintext anywhere.
+      const stored = await secretManager().getSecret(serverRow.secretId);
+      const bag = stored?.secret as Record<string, unknown>;
+      expect(isCredentialEnvelope(bag.access_token)).toBe(true);
+      expect(
+        decryptCredentialValue(bag.access_token, {
+          key,
+          mcpServerId: server.id,
+        }),
+      ).toBe("sk-new-plain-token");
+
+      // The old secret is cleaned up — but only after the swap (see the
+      // stranding test below for the failure ordering).
+      expect(await secretManager().getSecret(oldSecretId)).toBeNull();
+    });
+
+    test("a failed replacement validation persists nothing and keeps the old credential working", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const { server, oldSecretId } = await makeInstalledServer(
+        makeInternalMcpCatalog,
+        makeMcpServer as MakeMcpServer,
+      );
+      connectAndGetToolsMock.mockRejectedValue(
+        new Error("upstream rejected the credential"),
+      );
+      const createSecretSpy = vi.spyOn(secretManager(), "createSecret");
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${server.id}/reauthenticate`,
+        headers: keyHeader(),
+        payload: {
+          accessToken: "sk-new-plain-token",
+          browserKeyProtected: true,
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "upstream rejected the credential",
+      );
+
+      // Nothing was written and the install still points at its old,
+      // working secret.
+      expect(createSecretSpy).not.toHaveBeenCalled();
+      createSecretSpy.mockRestore();
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(serverRow.secretId).toBe(oldSecretId);
+      expect(serverRow.browserKeyProtected).toBe(false);
+      const oldSecret = await secretManager().getSecret(oldSecretId);
+      expect(oldSecret?.secret.access_token).toBe("sk-old-plain-token");
+    });
+
+    test("the old secret survives a failed row update — deletion runs last", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const { server, oldSecretId } = await makeInstalledServer(
+        makeInternalMcpCatalog,
+        makeMcpServer as MakeMcpServer,
+      );
+      const updateSpy = vi
+        .spyOn(McpServerModel, "update")
+        .mockRejectedValueOnce(new Error("row update failed"));
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/mcp_server/${server.id}/reauthenticate`,
+        headers: keyHeader(),
+        payload: {
+          accessToken: "sk-new-plain-token",
+          browserKeyProtected: true,
+        },
+      });
+      updateSpy.mockRestore();
+      expect(response.statusCode).toBe(500);
+
+      // The row still references the old secret AND that secret still
+      // exists — the server is never stranded on a deleted credential.
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(serverRow.secretId).toBe(oldSecretId);
+      const oldSecret = await secretManager().getSecret(oldSecretId);
+      expect(oldSecret?.secret.access_token).toBe("sk-old-plain-token");
     });
   });
 });

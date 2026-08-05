@@ -56,3 +56,13 @@ export const scopeStyles: Record<ResourceVisibilityScope, string> = {
   team: SCOPE_META.team.styles,
   org: SCOPE_META.org.styles,
 };
+
+/**
+ * For things the platform provides rather than a person or org owning them —
+ * a built-in agent, a system-managed credential. Not a visibility scope, but it
+ * sits in the same column as one, so it needs to be deliberately distinct from
+ * all three rather than falling back to an uncoloured pill that reads as
+ * "nobody filled this in".
+ */
+export const platformOwnedStyles =
+  "bg-purple-500/10 text-purple-700 border-purple-500/30 dark:text-purple-400 dark:border-purple-400/30";

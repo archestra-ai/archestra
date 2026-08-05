@@ -16,7 +16,6 @@ import {
   Plus,
   Server,
   Trash2,
-  User,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -38,6 +37,7 @@ import {
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
 import {
+  platformOwnedStyles,
   SCOPE_META,
   scopeLabel,
   scopeStyles,
@@ -486,16 +486,26 @@ export default function ApiKeysPage() {
         cell: ({ row }) => {
           const credential = row.original;
           if (credential.kind === "subscription") {
+            // A subscription is one person's own account, so it is coloured as
+            // the personal scope it is rather than left as a bare pill beside
+            // the scoped rows.
+            const PersonalIcon = SCOPE_META.personal.icon;
             return (
-              <Badge variant="outline" className="max-w-full gap-1">
-                <User className="h-3 w-3" />
+              <Badge
+                variant="outline"
+                className={cn(scopeStyles.personal, "max-w-full gap-1")}
+              >
+                <PersonalIcon className="h-3 w-3" />
                 <span className="truncate">Personal account</span>
               </Badge>
             );
           }
           if (credential.isSystem) {
             return (
-              <Badge variant="secondary" className="max-w-full gap-1">
+              <Badge
+                variant="outline"
+                className={cn(platformOwnedStyles, "max-w-full gap-1")}
+              >
                 <Server className="h-3 w-3" />
                 <span className="truncate">System</span>
               </Badge>

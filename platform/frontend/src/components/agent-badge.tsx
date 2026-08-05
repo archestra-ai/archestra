@@ -1,17 +1,17 @@
 import type { AgentScope } from "@archestra/shared";
-import { SCOPE_META } from "@/components/scope-vocabulary";
+import { platformOwnedStyles, SCOPE_META } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 // The three visibility scopes speak the shared vocabulary. "builtIn" is not a
-// scope — it marks an agent Archestra ships rather than one an org created — so
-// its colour and label stay local to this badge.
+// scope — it marks an agent the platform ships rather than one an org created —
+// so it borrows the shared platform-owned styling instead, which the system
+// credential badge uses too.
 const styles = {
   personal: SCOPE_META.personal.styles,
   team: SCOPE_META.team.styles,
   org: SCOPE_META.org.styles,
-  builtIn:
-    "bg-purple-500/10 text-purple-700 border-purple-500/30 dark:text-purple-400 dark:border-purple-400/30",
+  builtIn: platformOwnedStyles,
 } as const;
 const labels = {
   personal: SCOPE_META.personal.label,

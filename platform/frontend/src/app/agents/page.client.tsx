@@ -349,8 +349,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             enableSorting: false,
             size: 160,
             cell: ({ row }) => {
-              // Same resolution the MCP registry tables use, including the
-              // fallback for an id whose environment no longer exists.
               const label =
                 resolveCatalogEnvironmentLabel({
                   environmentId: row.original.environmentId ?? null,

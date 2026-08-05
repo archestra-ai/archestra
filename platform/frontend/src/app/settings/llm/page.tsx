@@ -286,7 +286,9 @@ export default function LlmSettingsPage() {
         control={
           <Button asChild variant="outline">
             <Link
-              href={`/agents?name=${encodeURIComponent(ADVISOR_AGENT_NAME)}`}
+              // The agents list hides built-ins under its default scope, so
+              // the name filter alone lands on an empty table.
+              href={`/agents?name=${encodeURIComponent(ADVISOR_AGENT_NAME)}&scope=built_in`}
             >
               Configure advisor
             </Link>

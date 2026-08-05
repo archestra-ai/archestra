@@ -38,6 +38,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { providerToLogoProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
 
@@ -226,6 +227,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // the same gate InitialAgentSelector uses via its callback prop) and only
   // when the instance has incognito chats enabled.
   const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
+  const appName = useAppName();
   const showIncognitoToggle =
     incognitoEnabled && !conversationId && !!onIncognitoChange;
 
@@ -525,8 +527,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4} className="max-w-64">
-            Incognito chat: encrypted with a key that stays in this browser. The
-            platform cannot read it. Not usable from other devices.
+            Incognito chat: encrypted with a key that stays in this browser.{" "}
+            {appName} cannot read it. Not usable from other devices.
           </TooltipContent>
         </Tooltip>
       )}

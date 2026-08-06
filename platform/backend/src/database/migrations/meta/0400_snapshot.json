@@ -1,5 +1,5 @@
 {
-  "id": "007e0db3-348c-485e-97cc-021ce2758887",
+  "id": "8c75f0ce-a17a-40b6-a743-3ffd882ecbcc",
   "prevId": "4601c8c7-bb51-438a-ac00-0660a13a5d76",
   "version": "7",
   "dialect": "postgresql",
@@ -5355,6 +5355,12 @@
         },
         "messages_cursor_id": {
           "name": "messages_cursor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mcp_tool_calls_cursor_id": {
+          "name": "mcp_tool_calls_cursor_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -13893,12 +13899,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "default_agent_id": {
-          "name": "default_agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -13977,19 +13977,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "projects_default_agent_id_agents_id_fk": {
-          "name": "projects_default_agent_id_agents_id_fk",
-          "tableFrom": "projects",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "default_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },

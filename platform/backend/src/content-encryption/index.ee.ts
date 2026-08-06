@@ -54,7 +54,9 @@ export type ContentEncryptionContext =
   | "interactions.response"
   | "interactions.dual_llm_analyses"
   | "interactions.unsafe_context_boundary"
-  | "messages.content";
+  | "messages.content"
+  | "mcp_tool_calls.tool_call"
+  | "mcp_tool_calls.tool_result";
 
 /**
  * Encrypt an arbitrary JSON value for storage. Returns the value unchanged

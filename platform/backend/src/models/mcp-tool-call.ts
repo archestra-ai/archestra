@@ -15,6 +15,16 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import {
+  isContentDecryptionAvailable,
+  isContentEncryptionEnabled,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
+} from "@/content-encryption/index.ee";
+import {
+  decryptMcpToolCallRow,
+  encryptMcpToolCallInsert,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
+} from "@/content-encryption/rows.ee";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -25,16 +35,25 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
 
 /**
- * Builds a search condition for MCP tool calls across server name, method, tool name, arguments, and result.
+ * Builds a search condition for MCP tool calls across server name, method,
+ * tool name, arguments, and result. Under content encryption the tool_call
+ * and tool_result columns store ciphertext, so search degrades to the
+ * metadata columns (server name + method) — same pattern as conversation
+ * search degrading to titles.
  */
 function buildMcpToolCallSearchCondition(search: string) {
   const searchPattern = `%${escapeLikePattern(search)}%`;
+  const searchContent = !isContentEncryptionEnabled();
   return or(
     ilike(schema.mcpToolCallsTable.mcpServerName, searchPattern),
     ilike(schema.mcpToolCallsTable.method, searchPattern),
-    sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
-    sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
-    sql`${schema.mcpToolCallsTable.toolResult}::text ILIKE ${searchPattern}`,
+    ...(searchContent
+      ? [
+          sql`${schema.mcpToolCallsTable.toolCall}->>'name' ILIKE ${searchPattern}`,
+          sql`(${schema.mcpToolCallsTable.toolCall}->'arguments')::text ILIKE ${searchPattern}`,
+          sql`${schema.mcpToolCallsTable.toolResult}::text ILIKE ${searchPattern}`,
+        ]
+      : []),
   );
 }
 
@@ -42,10 +61,12 @@ class McpToolCallModel {
   static async create(data: InsertMcpToolCall) {
     const [mcpToolCall] = await db
       .insert(schema.mcpToolCallsTable)
-      .values(data)
+      // Spread first: the encrypt helper mutates in place, and callers must
+      // keep their plaintext copy (e.g. to build the JSON-RPC response).
+      .values(encryptMcpToolCallInsert({ ...data }))
       .returning();
 
-    return mcpToolCall;
+    return decryptMcpToolCallRow(mcpToolCall);
   }
 
   /**
@@ -143,7 +164,7 @@ class McpToolCallModel {
     ]);
 
     return createPaginatedResult(
-      data.map(toVisibleMcpToolCall),
+      data.map((row) => toVisibleMcpToolCall(decryptMcpToolCallRow(row))),
       Number(total),
       pagination,
     );
@@ -218,14 +239,14 @@ class McpToolCallModel {
       }
     }
 
-    return toVisibleMcpToolCall(mcpToolCall);
+    return toVisibleMcpToolCall(decryptMcpToolCallRow(mcpToolCall));
   }
 
   static async getAllMcpToolCallsForAgent(
     agentId: string,
     whereClauses?: SQL[],
   ) {
-    return db
+    const rows = await db
       .select()
       .from(schema.mcpToolCallsTable)
       .where(
@@ -235,6 +256,7 @@ class McpToolCallModel {
         ),
       )
       .orderBy(asc(schema.mcpToolCallsTable.createdAt));
+    return rows.map(decryptMcpToolCallRow);
   }
 
   /**
@@ -312,7 +334,7 @@ class McpToolCallModel {
     ]);
 
     return createPaginatedResult(
-      data as McpToolCall[],
+      data.map(decryptMcpToolCallRow) as McpToolCall[],
       Number(total),
       pagination,
     );
@@ -330,10 +352,11 @@ class McpToolCallModel {
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   /**
    * Enterprise data-retention sweep: delete tool-call rows older than the
-   * retention window in bounded batches. Batches stay small because the three
-   * GIN trigram indexes (method, server name, tool_result) make bulk deletes
-   * substantially more expensive than the row count suggests. SQL-side cutoff
-   * for the same timestamp-without-time-zone reason as the interactions sweep.
+   * retention window in bounded batches. Batches stay small because the GIN
+   * trigram indexes (method, server name, and — outside content encryption,
+   * which drops it — tool_result) make bulk deletes substantially more
+   * expensive than the row count suggests. SQL-side cutoff for the same
+   * timestamp-without-time-zone reason as the interactions sweep.
    */
   static async deleteExpired(params: {
     retentionDays: number;
@@ -369,6 +392,58 @@ class McpToolCallModel {
   // SPDX-SnippetEnd
 
   /**
+   * App-level variant of the first-success scan for encrypted deployments:
+   * keyset-walk tools/call rows oldest-first, decrypt each result, return
+   * the first without `isError: true`. Cursor uses the driver's raw
+   * `created_at` text so the timestamp-without-time-zone value round-trips
+   * exactly (same reasoning as the content backfill's interactions cursor).
+   */
+  private static async findFirstSuccessfulToolCallAtDecrypting(): Promise<Date | null> {
+    const batchSize = 200;
+    let cursor: { createdAt: string; id: string } | null = null;
+
+    while (true) {
+      const cursorClause: SQL = cursor
+        ? sql`AND (created_at, id) > (${cursor.createdAt}::timestamp, ${cursor.id}::uuid)`
+        : sql``;
+      const page = await db.execute<{
+        id: string;
+        created_at_text: string;
+        tool_result: unknown;
+      }>(sql`
+        SELECT id, created_at::text AS created_at_text, tool_result
+        FROM ${schema.mcpToolCallsTable}
+        WHERE method = 'tools/call' AND tool_result IS NOT NULL
+        ${cursorClause}
+        ORDER BY created_at ASC, id ASC
+        LIMIT ${batchSize}
+      `);
+
+      for (const row of page.rows) {
+        const result = decryptMcpToolCallRow(row).tool_result;
+        const isError =
+          typeof result === "object" &&
+          result !== null &&
+          (result as { isError?: unknown }).isError === true;
+        if (!isError) {
+          // Re-read through drizzle so the Date carries the same
+          // timestamp-without-time-zone interpretation as every other model
+          // read (the raw driver would parse the bare text as local time).
+          const [hit] = await db
+            .select({ createdAt: schema.mcpToolCallsTable.createdAt })
+            .from(schema.mcpToolCallsTable)
+            .where(eq(schema.mcpToolCallsTable.id, row.id));
+          return hit?.createdAt ?? null;
+        }
+      }
+
+      const last = page.rows.at(-1);
+      if (!last || page.rows.length < batchSize) return null;
+      cursor = { createdAt: last.created_at_text, id: last.id };
+    }
+  }
+
+  /**
    * Batch-load the timestamp of the most recent MCP call (any method) per
    * agent. Agents with no recorded calls are absent from the returned map.
    */
@@ -399,8 +474,18 @@ class McpToolCallModel {
    * When the first successful tools/call was routed (a recorded result
    * without `isError`); null when none yet. An activation signal for the
    * feedback pop-up.
+   *
+   * Under content encryption `tool_result` may be a ciphertext envelope the
+   * SQL `->> 'isError'` predicate cannot see into (it would read every
+   * encrypted error as a success), so when decryption is in play the rows
+   * are walked oldest-first and checked after decryption. Successful calls
+   * dominate real tables, so the walk exits on the first batch in practice.
    */
   static async getFirstSuccessfulToolCallAt(): Promise<Date | null> {
+    if (isContentDecryptionAvailable()) {
+      return McpToolCallModel.findFirstSuccessfulToolCallAtDecrypting();
+    }
+
     const [row] = await db
       .select({ createdAt: schema.mcpToolCallsTable.createdAt })
       .from(schema.mcpToolCallsTable)

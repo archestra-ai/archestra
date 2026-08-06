@@ -874,12 +874,12 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Startup verifies this key against previously encrypted secrets and aborts on a mismatch (see `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`).
   - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets on startup, decrypting each with the previous key and re-encrypting with the new one (idempotent, and a no-op when the key is unchanged). You can also run it explicitly with `pnpm --filter backend db:reencrypt-secrets`. Vault-managed secrets are unaffected.
 
-- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Enables enterprise content encryption at rest: LLM interaction payloads and chat message content are encrypted in the database with a key derived from this secret, separate from the stored-secrets key.
+- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Enables enterprise content encryption at rest: LLM interaction payloads, chat message content, and MCP tool call arguments/results are encrypted in the database with a key derived from this secret, separate from the stored-secrets key.
   - Default: not set (disabled). Operator-supplied only — never auto-generated.
   - Requires an enterprise license; startup fails when set without one.
   - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
   - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
-  - See [Content Encryption at Rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) for the enable and rotation procedures.
+  - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
@@ -1376,7 +1376,7 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Example: `your-bearer-token`
 
 - **`ARCHESTRA_OTEL_CAPTURE_CONTENT`** - Enable or disable prompt/completion content capture in trace spans.
-  - Default: `true` (enabled) — **unless [content encryption at rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) is configured, in which case the default flips to `false`**: exporting the same content in plaintext to a telemetry backend would bypass the at-rest guarantee. Setting `true` explicitly still enables capture (for telemetry pipelines protected to the same standard) and logs a startup warning.
+  - Default: `true` (enabled) — **unless [content encryption at rest](/docs/platform-content-encryption) is configured, in which case the default flips to `false`**: exporting the same content in plaintext to a telemetry backend would bypass the at-rest guarantee. Setting `true` explicitly still enables capture (for telemetry pipelines protected to the same standard) and logs a startup warning.
   - Set to `false` to disable content capture for privacy or to reduce span sizes
 
 - **`ARCHESTRA_OTEL_CONTENT_MAX_LENGTH`** - Maximum character length for captured content in span events (prompt messages, completions, tool arguments, tool results).

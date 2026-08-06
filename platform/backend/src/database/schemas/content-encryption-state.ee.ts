@@ -26,6 +26,11 @@ const contentEncryptionStateTable = pgTable("content_encryption_state", {
   interactionsCursorId: uuid("interactions_cursor_id"),
   /** Keyset cursor over messages (id — uuidv7, time-ordered), ascending. */
   messagesCursorId: uuid("messages_cursor_id"),
+  /**
+   * Keyset cursor over mcp_tool_calls (id — uuidv4, so the order is stable
+   * but NOT time-correlated; a full sweep visits every row regardless).
+   */
+  mcpToolCallsCursorId: uuid("mcp_tool_calls_cursor_id"),
   completedAt: timestamp("completed_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })

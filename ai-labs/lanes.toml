@@ -10,6 +10,12 @@
 #   openrouter_model optional OpenRouter slug to price this lane against. An openrouter lane is priced
 #                    off its own model; set this only to map a lane served elsewhere onto an OR
 #                    offering. Unset on a non-openrouter lane ⇒ run cost is reported as n/a.
+#   advisor          optional name of another lane in this file whose model serves as this lane's
+#                    Advisor (the built-in agent the lane's agents may consult via delegation). The
+#                    referenced lane must not itself be advised. An advised lane always runs on an
+#                    isolated backend (the Advisor's model is per-backend state, so it cannot share
+#                    one with concurrently running lanes), and its cost is the sum of both models'
+#                    spend, each priced against its own slug.
 
 # [[lane]]
 # name = "or-nex"

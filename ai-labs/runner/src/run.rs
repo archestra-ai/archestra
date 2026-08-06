@@ -311,6 +311,12 @@ fn pick_key(platform: Option<&str>, process: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
+/// `ctx.api_keys` slot for an advised lane's advisor key. `#` cannot appear in a slug-normalized
+/// lane name, so the slot can never collide with a real lane's.
+fn advisor_key_slot(lane_name: &str) -> String {
+    format!("{lane_name}#advisor")
+}
+
 fn lane_api_keys(lanes: &[Lane], platform_env: &HashMap<String, String>) -> Result<HashMap<String, String>, RunError> {
     let mut keys = HashMap::new();
     for lane in lanes {
@@ -323,6 +329,17 @@ fn lane_api_keys(lanes: &[Lane], platform_env: &HashMap<String, String>) -> Resu
             ))
         })?;
         keys.insert(lane.name.clone(), key);
+        if let Some(advisor) = &lane.advisor {
+            let key_env = advisor.key_env();
+            let process = std::env::var(&key_env).ok();
+            let key = pick_key(platform_env.get(&key_env).map(String::as_str), process.as_deref()).ok_or_else(|| {
+                RunError::Config(format!(
+                    "set {} in platform/.env or the environment to seed advisor {:?} of lane {:?} ({})",
+                    key_env, advisor.lane_name, lane.name, advisor.provider
+                ))
+            })?;
+            keys.insert(advisor_key_slot(&lane.name), key);
+        }
     }
     Ok(keys)
 }
@@ -338,9 +355,17 @@ fn build_run_plan(selected: Vec<(EnvConfig, Vec<Task>)>, lanes: Vec<Lane>) -> Ve
         .collect()
 }
 
+/// Whether this lane runs on the env's shared backend. An advised lane never does: the Advisor's
+/// model is per-backend state (one built-in Advisor row per platform environment), so configuring it
+/// per lane on a shared backend would cross-contaminate concurrently running lanes.
+fn lane_shares_backend(env_plan: &EnvPlan, lane: &Lane) -> bool {
+    env_plan.share_backend() && lane.advisor.is_none()
+}
+
 /// Scheduling skeleton for the lane-grouped executor: per distinct lane, the plan-ordered list of
-/// `(env index, env shares a backend)` it must run. Lanes are global (every `EnvPlan` carries the same
-/// list), taken from the first env; an env contributes a stop only for the lanes it actually carries.
+/// `(env index, lane runs on the env's shared backend)` it must run. Lanes are global (every `EnvPlan`
+/// carries the same list), taken from the first env; an env contributes a stop only for the lanes it
+/// actually carries.
 fn lane_stop_plan(plan: &[EnvPlan]) -> Vec<(Lane, Vec<(usize, bool)>)> {
     let lanes = plan.first().map(|p| p.lanes.clone()).unwrap_or_default();
     lanes
@@ -350,7 +375,7 @@ fn lane_stop_plan(plan: &[EnvPlan]) -> Vec<(Lane, Vec<(usize, bool)>)> {
                 .iter()
                 .enumerate()
                 .filter(|(_, ep)| ep.lanes.iter().any(|l| l.name == lane.name))
-                .map(|(i, ep)| (i, ep.share_backend()))
+                .map(|(i, ep)| (i, lane_shares_backend(ep, &lane)))
                 .collect();
             (lane, stops)
         })
@@ -440,6 +465,10 @@ struct LaneAgents {
     /// task id -> that task's dedicated agent.
     task_agents: HashMap<String, String>,
     submit_tool: String,
+    /// The built-in Advisor agent this lane's agents delegate to; set only for an advised lane.
+    /// Deliberately not part of `all_ids` — the advisor is a delegation target, not a lane agent,
+    /// and must not get the env's MCPs registered to it.
+    advisor_agent_id: Option<String>,
 }
 
 impl LaneAgents {
@@ -495,7 +524,8 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
     let mut shared_fixtures: Vec<FixtureMcp> = Vec::new();
     let mut infra: Vec<RunResult> = Vec::new();
     for (i, env_plan) in plan.iter().enumerate() {
-        if env_plan.share_backend() {
+        // Skip when every lane is advised: they all run isolated, so a shared backend would boot idle.
+        if env_plan.share_backend() && env_plan.lanes.iter().any(|l| lane_shares_backend(env_plan, l)) {
             match setup_shared_env(env_plan, &ctx).await {
                 Ok((instance, fixture, setups)) => {
                     shared_instances.push(instance);
@@ -670,7 +700,15 @@ async fn setup_shared_env(
     instance.start().await.map_err(|e| e.to_string())?;
 
     let client = instance.client.clone();
-    let resolved = match resolve_lanes(&client, &env_plan.lanes, ctx).await {
+    // Advised lanes never run here (lane_stop_plan routes them to isolated backends), so neither
+    // their agents nor their models belong on the shared backend.
+    let shared_lanes: Vec<Lane> = env_plan
+        .lanes
+        .iter()
+        .filter(|l| lane_shares_backend(env_plan, l))
+        .cloned()
+        .collect();
+    let resolved = match resolve_lanes(&client, &shared_lanes, ctx).await {
         Ok(r) => r,
         Err(e) => {
             let _ = instance.shutdown().await;
@@ -687,7 +725,7 @@ async fn setup_shared_env(
     };
 
     let mut setups: Vec<(Lane, LaneAgents, BenchmarkMcp)> = Vec::new();
-    for lane in &env_plan.lanes {
+    for lane in &shared_lanes {
         let token = &uuid::Uuid::new_v4().simple().to_string()[..8];
         let mcp = match BenchmarkMcp::start(format!("{BENCH_MCP_NAME}-{token}")).await {
             Ok(m) => m,
@@ -697,7 +735,7 @@ async fn setup_shared_env(
                 return Err(e.to_string());
             }
         };
-        match setup_lane_agent(&client, env, &env_plan.tasks, lane, &mcp, &team_id).await {
+        match setup_lane_agent(&client, env, &env_plan.tasks, lane, &mcp, &team_id, None).await {
             Ok(agents) => {
                 setups.push((lane.clone(), agents, mcp));
             }
@@ -731,7 +769,7 @@ async fn setup_shared_env(
     let lane_setups = setups
         .into_iter()
         .map(|(lane, agents, mcp)| {
-            let resolved = resolved[&lane.name].clone();
+            let resolved = resolved[&lane.name].primary.clone();
             (
                 lane.name.clone(),
                 SharedLaneSetup {
@@ -768,7 +806,7 @@ async fn run_isolated_lane(
     }
 
     let client = instance.client.clone();
-    let resolved = match resolve_lanes(&client, std::slice::from_ref(&lane), &ctx).await {
+    let LaneResolved { primary, advisor } = match resolve_lanes(&client, std::slice::from_ref(&lane), &ctx).await {
         Ok(mut r) => r.remove(&lane.name).unwrap(),
         Err(e) => {
             let _ = instance.shutdown().await;
@@ -792,7 +830,7 @@ async fn run_isolated_lane(
         }
     };
 
-    let agents = match setup_lane_agent(&client, &env, &tasks, &lane, &mcp, &team_id).await {
+    let agents = match setup_lane_agent(&client, &env, &tasks, &lane, &mcp, &team_id, advisor.as_ref()).await {
         Ok(s) => s,
         Err(e) => {
             mcp.stop().await;
@@ -818,7 +856,7 @@ async fn run_isolated_lane(
         mcp,
         agents,
         ctx.root_run_dir.clone(),
-        resolved,
+        primary,
         progress,
         ctx.prices.clone(),
     )
@@ -830,9 +868,12 @@ async fn run_isolated_lane(
     results
 }
 
+/// Whole-env infra failure for a shared env's setup. Covers only the lanes that were going to run on
+/// that shared backend — an advised lane boots its own and still runs, so including it here would
+/// collide with its real result.
 fn infra_results(env_plan: &EnvPlan, ctx: &RunCtx, progress: &ProgressBar, error: &str) -> Vec<RunResult> {
     let mut results = Vec::new();
-    for lane in &env_plan.lanes {
+    for lane in env_plan.lanes.iter().filter(|l| lane_shares_backend(env_plan, l)) {
         results.extend(infra_results_for_lane(
             &env_plan.env,
             &env_plan.tasks,
@@ -911,11 +952,19 @@ fn infra_results_for_lane(
     results
 }
 
+/// A lane's seeded models on one backend: the lane's own endpoint plus, for an advised lane, the
+/// advisor's — resolved on the same backend so the Advisor agent can be pointed at it.
+#[derive(Debug, Clone)]
+struct LaneResolved {
+    primary: ResolvedModel,
+    advisor: Option<ResolvedModel>,
+}
+
 async fn resolve_lanes(
     client: &EvalClient,
     lanes: &[Lane],
     ctx: &RunCtx,
-) -> Result<HashMap<String, ResolvedModel>, crate::seeding::SeedingError> {
+) -> Result<HashMap<String, LaneResolved>, crate::seeding::SeedingError> {
     let mut resolved = HashMap::new();
     let mut seen_providers = HashSet::new();
     for lane in lanes {
@@ -934,14 +983,37 @@ async fn resolve_lanes(
             3.0,
         )
         .await?;
-        resolved.insert(lane.name.clone(), models[&lane.model].clone());
+        let primary = models[&lane.model].clone();
+        // The advisor key is never primary: primary-ness belongs to the lane whose model answers the
+        // conversation, and the advisor's provider may coincide with a later lane's.
+        let advisor = match &lane.advisor {
+            None => None,
+            Some(advisor) => {
+                let models = ensure_provider_and_models(
+                    client,
+                    advisor.provider.as_str(),
+                    &ctx.api_keys[&advisor_key_slot(&lane.name)],
+                    std::slice::from_ref(&advisor.model),
+                    advisor.base_url.as_deref(),
+                    Some(&format!("bench-{}-advisor", lane.name)),
+                    false,
+                    "personal",
+                    180.0,
+                    3.0,
+                )
+                .await?;
+                Some(models[&advisor.model].clone())
+            }
+        };
+        resolved.insert(lane.name.clone(), LaneResolved { primary, advisor });
     }
     Ok(resolved)
 }
 
-/// Create the lane's shared agent plus a dedicated agent for every selected task that overrides the
-/// system prompt, then give all of them the same tool surface. `tasks` is the run's selection for
-/// this env (post `--task` filter), so no agent is created for a task that won't run.
+/// Create the lane's shared agent plus a dedicated agent per task that overrides the system prompt,
+/// give all of them the same tool surface, and — for an advised lane — point the backend's built-in
+/// Advisor at the advisor model and delegate every lane agent to it. `tasks` is the run's selection
+/// for this env (post `--task` filter), so no agent is created for a task that won't run.
 async fn setup_lane_agent(
     client: &EvalClient,
     env: &EnvConfig,
@@ -949,6 +1021,7 @@ async fn setup_lane_agent(
     lane: &Lane,
     mcp: &BenchmarkMcp,
     team_id: &str,
+    advisor_resolved: Option<&ResolvedModel>,
 ) -> Result<LaneAgents, RunError> {
     let agent_id = ensure_agent(
         client,
@@ -976,9 +1049,45 @@ async fn setup_lane_agent(
         agent_id,
         task_agents,
         submit_tool: String::new(),
+        advisor_agent_id: None,
     };
     agents.submit_tool = setup_agent_tools(client, &agents.all_ids(), mcp.base_url(), &env.tools, mcp.name()).await?;
+    if let Some(advisor) = &lane.advisor {
+        let resolved = advisor_resolved.ok_or_else(|| {
+            RunError::Config(format!(
+                "lane {:?} is advised but its advisor model was not resolved on this backend",
+                lane.name
+            ))
+        })?;
+        agents.advisor_agent_id = Some(setup_advisor(client, lane, advisor, &agents, resolved).await?);
+    }
     Ok(agents)
+}
+
+/// Point the backend's built-in Default-environment Advisor at the advisor model and delegate every
+/// lane agent to it. Delegation — not tool assignment — is what creates and grants the
+/// `agent__advisor` tool; the bench authenticates with a minted API key, for which the platform never
+/// auto-expands subagents, so the explicit delegation rows are the only path that works here.
+async fn setup_advisor(
+    client: &EvalClient,
+    lane: &Lane,
+    advisor: &archestra_bench_core::AdvisorConfig,
+    agents: &LaneAgents,
+    resolved: &ResolvedModel,
+) -> Result<String, RunError> {
+    let advisor_agent = client.find_default_advisor().await?;
+    let advisor_id = require_id(&advisor_agent, "advisor agent")?;
+    client
+        .update_agent_model(&advisor_id, &resolved.model_id, &resolved.api_key_id)
+        .await?;
+    for agent_id in agents.all_ids() {
+        client.set_agent_delegations(&agent_id, std::slice::from_ref(&advisor_id)).await?;
+    }
+    info!(
+        "advisor for lane {}: {} ({}) as agent {advisor_id}",
+        lane.name, advisor.lane_name, advisor.model
+    );
+    Ok(advisor_id)
 }
 
 /// Pull a required `id` string from a platform API object. A missing or non-string `id` is a
@@ -2684,6 +2793,20 @@ async fn write_run_config(
         .map(|l| {
             let price_model = l.price_model();
             let price = price_model.as_deref().and_then(|slug| prices.get(slug));
+            // An advised lane always runs isolated regardless of the env's `share_backend`, so the
+            // per-env flag alone would misdescribe it — `isolated` records the effective mode.
+            let advisor = l.advisor.as_ref().map(|a| {
+                let price_model = a.price_model();
+                let price = price_model.as_deref().and_then(|slug| prices.get(slug));
+                serde_json::json!({
+                    "lane": a.lane_name,
+                    "provider": a.provider,
+                    "model": a.model,
+                    "price_model": price_model,
+                    "price": price,
+                    "isolated": true,
+                })
+            });
             serde_json::json!({
                 "name": l.name,
                 "provider": l.provider,
@@ -2691,6 +2814,7 @@ async fn write_run_config(
                 "base_url": l.base_url,
                 "price_model": price_model,
                 "price": price,
+                "advisor": advisor,
             })
         })
         .collect();
@@ -3030,6 +3154,21 @@ mod tests {
             base_url: None,
             api_key_env: None,
             openrouter_model: None,
+            advisor: None,
+        }
+    }
+
+    fn advised_lane(name: &str) -> Lane {
+        Lane {
+            advisor: Some(archestra_bench_core::AdvisorConfig {
+                lane_name: "strong".to_string(),
+                provider: archestra_bench_core::Provider::Openrouter,
+                model: "vendor/strong".to_string(),
+                base_url: None,
+                api_key_env: None,
+                openrouter_model: None,
+            }),
+            ..dummy_lane(name)
         }
     }
 
@@ -3107,6 +3246,23 @@ mod tests {
         for (_, stops) in &schedule {
             assert_eq!(stops, &vec![(0usize, true), (1usize, false)]);
         }
+    }
+
+    #[test]
+    fn test_lane_stop_plan_isolates_advised_lanes_on_shared_envs() {
+        let mut shared = dummy_env("basic", vec![dummy_task("t1")]);
+        shared.share_backend = true;
+        let plan = build_run_plan(
+            vec![(shared, vec![dummy_task("t1")])],
+            vec![dummy_lane("plain"), advised_lane("advised")],
+        );
+
+        let schedule = lane_stop_plan(&plan);
+
+        // The plain lane keeps the shared backend; the advised lane is forced isolated — the
+        // Advisor's model is per-backend state and must not be shared with concurrent lanes.
+        assert_eq!(schedule[0].1, vec![(0usize, true)]);
+        assert_eq!(schedule[1].1, vec![(0usize, false)]);
     }
 
     #[test]

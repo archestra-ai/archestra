@@ -370,6 +370,61 @@ impl EvalClient {
         items(body)
     }
 
+    /// The built-in Advisor agent of the Default environment — the one agents created without an
+    /// `environmentId` resolve to. Built-ins are one row per environment, so the environment filter
+    /// is what disambiguates; `name` is a substring match on the platform side, hence the exact
+    /// client-side check on the built-in discriminator.
+    pub async fn find_default_advisor(&self) -> Result<HashMap<String, JsonValue>, ClientError> {
+        let agents = self.list_agents(Some("Advisor"), Some("built_in")).await?;
+        agents
+            .into_iter()
+            .find(|a| {
+                a.get("builtInAgentConfig")
+                    .and_then(|c| c.get("name"))
+                    .and_then(|v| v.as_str())
+                    == Some("advisor-agent")
+                    && a.get("environmentId").map(|v| v.is_null()).unwrap_or(false)
+            })
+            .ok_or_else(|| {
+                ContractError(
+                    "GET /api/agents?scope=built_in: no Default-environment Advisor agent found".to_string(),
+                )
+                .into()
+            })
+    }
+
+    /// Set an agent's LLM. The platform requires `modelId` and `llmApiKeyId` as a pair — sending one
+    /// without the other is a 400.
+    pub async fn update_agent_model(
+        &self,
+        agent_id: &str,
+        model_id: &str,
+        llm_api_key_id: &str,
+    ) -> Result<(), ClientError> {
+        self.request(
+            Method::PUT,
+            &format!("/api/agents/{agent_id}"),
+            None,
+            Some(&serde_json::json!({ "modelId": model_id, "llmApiKeyId": llm_api_key_id })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Replace an agent's delegation set. The platform find-or-creates the `agent__<slug>` delegation
+    /// tool rows and assigns them, so this is the whole path to giving an agent a subagent — plain
+    /// tool assignment cannot reach delegation tools.
+    pub async fn set_agent_delegations(&self, agent_id: &str, target_agent_ids: &[String]) -> Result<(), ClientError> {
+        self.request(
+            Method::POST,
+            &format!("/api/agents/{agent_id}/delegations"),
+            None,
+            Some(&serde_json::json!({ "targetAgentIds": target_agent_ids })),
+        )
+        .await?;
+        Ok(())
+    }
+
     pub async fn create_agent(&self, payload: &AgentCreate) -> Result<HashMap<String, JsonValue>, ClientError> {
         require_dict(
             self.request(

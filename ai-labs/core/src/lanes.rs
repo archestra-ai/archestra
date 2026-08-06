@@ -69,6 +69,52 @@ pub struct Lane {
     /// OpenRouter slug to price this lane against. For an `openrouter` lane the `model` already is the
     /// slug, so this is only needed to map a lane served by another provider onto an OR offering.
     pub openrouter_model: Option<String>,
+    /// The advisor endpoint this lane's agents consult, resolved from the `advisor = "<lane>"`
+    /// reference at load time. Embedded rather than referenced by name: `--lanes` selection strips
+    /// unselected lanes from the catalog, and the advisor must survive that.
+    pub advisor: Option<AdvisorConfig>,
+}
+
+/// A resolved copy of the advisor lane's endpoint fields. The advisor is model configuration for the
+/// lane that references it, not a rollout arm of its own — hence a copy, not a `Lane`.
+#[derive(Debug, Clone)]
+pub struct AdvisorConfig {
+    /// The advisor lane's name in `lanes.toml` — the identity used in config records and reports.
+    pub lane_name: String,
+    pub provider: Provider,
+    pub model: String,
+    pub base_url: Option<String>,
+    pub api_key_env: Option<String>,
+    pub openrouter_model: Option<String>,
+}
+
+impl AdvisorConfig {
+    fn from_lane(lane: &Lane) -> Self {
+        Self {
+            lane_name: lane.name.clone(),
+            provider: lane.provider,
+            model: lane.model.clone(),
+            base_url: lane.base_url.clone(),
+            api_key_env: lane.api_key_env.clone(),
+            openrouter_model: lane.openrouter_model.clone(),
+        }
+    }
+
+    /// The OpenRouter slug whose pricing applies to advisor consultations; same rules as
+    /// [`Lane::price_model`].
+    pub fn price_model(&self) -> Option<String> {
+        self.openrouter_model.clone().or_else(|| match self.provider {
+            Provider::Openrouter => Some(self.model.clone()),
+            _ => None,
+        })
+    }
+
+    /// Env var holding the advisor's key; same rules as [`Lane::key_env`].
+    pub fn key_env(&self) -> String {
+        self.api_key_env
+            .clone()
+            .unwrap_or_else(|| format!("{}_API_KEY", self.provider.as_str().to_uppercase()))
+    }
 }
 
 impl Lane {
@@ -122,6 +168,8 @@ struct RawLane {
     api_key_env: Option<String>,
     #[serde(default)]
     openrouter_model: Option<String>,
+    #[serde(default)]
+    advisor: Option<String>,
 }
 
 /// Load `[[lane]]` entries from a `lanes.toml`. With `select = Some("a,b")`, return exactly those
@@ -138,6 +186,7 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
 
     let mut catalog: Vec<Lane> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
+    let mut advisor_refs: Vec<Option<String>> = Vec::new();
     for raw in parsed.lane {
         let name = slug(&raw.name);
         if !seen.insert(name.clone()) {
@@ -145,6 +194,7 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
         }
         let provider =
             Provider::from_str(&raw.provider).map_err(|e| LaneError(format!("{ctx}: lane {:?}: {e}", name)))?;
+        advisor_refs.push(raw.advisor);
         catalog.push(Lane {
             name,
             provider,
@@ -152,7 +202,40 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
             base_url: raw.base_url,
             api_key_env: raw.api_key_env,
             openrouter_model: raw.openrouter_model,
+            advisor: None,
         });
+    }
+
+    // Second pass so a lane may reference an advisor declared later in the file.
+    let by_name: HashMap<String, usize> = catalog.iter().enumerate().map(|(i, l)| (l.name.clone(), i)).collect();
+    let mut resolved_advisors: Vec<(usize, AdvisorConfig)> = Vec::new();
+    for (idx, advisor_ref) in advisor_refs.iter().enumerate() {
+        let Some(advisor_ref) = advisor_ref else { continue };
+        let lane_name = &catalog[idx].name;
+        let target_name = slug(advisor_ref);
+        let Some(&target_idx) = by_name.get(&target_name) else {
+            let mut available: Vec<String> = catalog.iter().map(|l| l.name.clone()).collect();
+            available.sort();
+            return Err(LaneError(format!(
+                "{ctx}: lane {lane_name:?}: advisor {target_name:?} is not a lane in this file; choose from {available:?}"
+            )));
+        };
+        if target_idx == idx {
+            return Err(LaneError(format!(
+                "{ctx}: lane {lane_name:?}: a lane cannot be its own advisor"
+            )));
+        }
+        // An advisor is a leaf: an advised advisor would make chains/cycles possible, and nothing in
+        // the runner gives the advisor's own agent a delegation surface anyway.
+        if advisor_refs[target_idx].is_some() {
+            return Err(LaneError(format!(
+                "{ctx}: lane {lane_name:?}: advisor {target_name:?} has an advisor of its own; advisor lanes must not themselves be advised"
+            )));
+        }
+        resolved_advisors.push((idx, AdvisorConfig::from_lane(&catalog[target_idx])));
+    }
+    for (idx, advisor) in resolved_advisors {
+        catalog[idx].advisor = Some(advisor);
     }
 
     match split_names(select) {
@@ -405,6 +488,98 @@ model = "glm-5.2"
         assert_eq!(lanes[0].price_model().as_deref(), Some("vendor/m"));
         assert_eq!(lanes[1].price_model().as_deref(), Some("z-ai/glm-5.2"));
         assert_eq!(lanes[2].price_model(), None);
+    }
+
+    #[test]
+    fn advisor_resolves_forward_reference_and_survives_selection() {
+        let body = r#"
+[[lane]]
+name = "cheap"
+provider = "openrouter"
+model = "vendor/cheap"
+advisor = "strong"
+
+[[lane]]
+name = "strong"
+provider = "anthropic"
+model = "glm-5.2"
+api_key_env = "ZAI_API_KEY"
+openrouter_model = "z-ai/glm-5.2"
+"#;
+        // Selection strips the `strong` lane, yet the embedded advisor keeps its endpoint fields.
+        let lanes = load(body, Some("cheap")).unwrap();
+        assert_eq!(lanes.len(), 1);
+        let advisor = lanes[0].advisor.as_ref().unwrap();
+        assert_eq!(advisor.lane_name, "strong");
+        assert_eq!(advisor.provider, Provider::Anthropic);
+        assert_eq!(advisor.model, "glm-5.2");
+        assert_eq!(advisor.key_env(), "ZAI_API_KEY");
+        assert_eq!(advisor.price_model().as_deref(), Some("z-ai/glm-5.2"));
+        // The referenced lane itself carries no advisor.
+        let all = load(body, None).unwrap();
+        assert!(all[1].advisor.is_none());
+    }
+
+    #[test]
+    fn advisor_unknown_reference_rejected() {
+        let err = load(
+            r#"
+[[lane]]
+name = "cheap"
+provider = "openrouter"
+model = "m"
+advisor = "nope"
+"#,
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("advisor \"nope\" is not a lane"), "{err}");
+    }
+
+    #[test]
+    fn advisor_self_reference_rejected() {
+        let err = load(
+            r#"
+[[lane]]
+name = "cheap"
+provider = "openrouter"
+model = "m"
+advisor = "cheap"
+"#,
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("cannot be its own advisor"), "{err}");
+    }
+
+    #[test]
+    fn advised_advisor_rejected() {
+        let err = load(
+            r#"
+[[lane]]
+name = "a"
+provider = "openrouter"
+model = "m1"
+advisor = "b"
+
+[[lane]]
+name = "b"
+provider = "openrouter"
+model = "m2"
+advisor = "c"
+
+[[lane]]
+name = "c"
+provider = "openrouter"
+model = "m3"
+"#,
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("advisor lanes must not themselves be advised"), "{err}");
     }
 
     #[test]

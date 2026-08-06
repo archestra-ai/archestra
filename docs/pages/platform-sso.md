@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Sign users in with their existing identity provider via OIDC or SAML"
 order: 4
-lastUpdated: 2026-07-16
+lastUpdated: 2026-08-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -151,7 +151,7 @@ The IdP didn't return the required user attributes. For GitHub, the user must ha
 
 ### `account not linked` error
 
-The SSO provider is not trusted for automatic account linking, or the provider returned an email that doesn't match the existing account. Verify the provider is configured in Identity Providers and the user is signing in with the same email as their existing account.
+The IdP returned an email that doesn't match the existing account, or reported the email as unverified. Verify the user signs in with the same email as their existing Archestra account and that the IdP marks the email verified.
 
 ### `invalid_dpop_proof` error (Okta)
 

@@ -167,6 +167,17 @@ export const handlers: HttpHandler[] = [
     },
   }),
   ...getJson("/api/internal_mcp_catalog", catalogSeed),
+  // Online-catalog proxy (browser baseUrl of the archestra-catalog SDK).
+  // The create form's template auto-fill searches it as soon as a
+  // connection field carries an identity; an empty result set keeps the
+  // auto-fill inert unless a test overrides this with a fixture.
+  ...getJson("/api/archestra-catalog/search", {
+    servers: [],
+    totalCount: 0,
+    limit: 10,
+    offset: 0,
+    hasMore: false,
+  }),
   ...getJson("/api/internal_mcp_catalog/labels/keys", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),
   ...getJson("/api/mcp_server", installedServersSeed),

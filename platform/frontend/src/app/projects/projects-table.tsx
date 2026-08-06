@@ -5,7 +5,6 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { ArchiveRestore, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AgentIcon } from "@/components/agent-icon";
-import { DeletedRowMeta } from "@/components/deleted-row-meta";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { ScopeBadge } from "@/components/scope-badge";
@@ -189,7 +188,7 @@ export function DeletedProjectsTable({
       id: "name",
       accessorKey: "name",
       header: "Project",
-      size: 500,
+      size: 560,
       cell: ({ row }) => {
         const project = row.original;
         return (
@@ -218,9 +217,13 @@ export function DeletedProjectsTable({
     },
     {
       id: "deleted",
-      size: 240,
+      size: 200,
       header: "Deleted",
-      cell: ({ row }) => <DeletedRowMeta deletedAt={row.original.deletedAt} />,
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {formatRelativeTimeFromNow(row.original.deletedAt)}
+        </span>
+      ),
     },
     {
       id: "actions",

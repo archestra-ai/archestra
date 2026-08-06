@@ -301,32 +301,6 @@ class FileModel {
       );
   }
 
-  /**
-   * Every file row belonging to one project (any author), with the storage
-   * pointer needed to purge external bytes. Purge paths only: the rows would
-   * cascade with the project, but the external bytes would not.
-   */
-  static async listAllByProject(
-    projectId: string,
-    executor: typeof db | Transaction = db,
-  ): Promise<SandboxArtifactRow[]> {
-    return executor
-      .select(artifactColumns)
-      .from(schema.filesTable)
-      .where(eq(schema.filesTable.projectId, projectId));
-  }
-
-  /** {@link listAllByProject}, for one MCP App's whole file namespace. */
-  static async listAllByApp(
-    appId: string,
-    executor: typeof db | Transaction = db,
-  ): Promise<SandboxArtifactRow[]> {
-    return executor
-      .select(artifactColumns)
-      .from(schema.filesTable)
-      .where(eq(schema.filesTable.appId, appId));
-  }
-
   /** Files the user authored in one conversation, newest first. */
   static async listByConversation(params: {
     organizationId: string;

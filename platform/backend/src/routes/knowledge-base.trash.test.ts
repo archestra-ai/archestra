@@ -6,7 +6,12 @@ import { KnowledgeBaseConnectorModel, KnowledgeBaseModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { AuditEventName, ConnectorConfig, User } from "@/types";
+import type {
+  AuditEventName,
+  ConnectorConfig,
+  InsertKnowledgeBaseConnector,
+  User,
+} from "@/types";
 
 const jiraConfig: ConnectorConfig = {
   type: "jira",
@@ -17,8 +22,9 @@ const jiraConfig: ConnectorConfig = {
 
 /**
  * The knowledge trash lifecycle through the routes: `status=deleted` listings
- * (manage-deleted gated), restore, and permanent delete for knowledge bases
- * and connectors — plus the audit records each mutation must emit.
+ * (delete-gated), restore, and permanent delete (global admins only) for
+ * knowledge bases and connectors — plus the audit records each mutation must
+ * emit.
  */
 describe("knowledge base + connector trash routes", () => {
   let app: FastifyInstanceWithZod;
@@ -52,13 +58,17 @@ describe("knowledge base + connector trash routes", () => {
   const makeKb = (name: string) =>
     KnowledgeBaseModel.create({ organizationId, name });
 
-  const makeConnector = (name: string, enabled = true) =>
+  const makeConnector = (
+    name: string,
+    overrides: Partial<InsertKnowledgeBaseConnector> = {},
+  ) =>
     KnowledgeBaseConnectorModel.create({
       organizationId,
       name,
       connectorType: "jira",
       config: jiraConfig,
-      enabled,
+      enabled: true,
+      ...overrides,
     });
 
   const auditRow = async (action: AuditEventName, resourceId: string) => {
@@ -116,8 +126,8 @@ describe("knowledge base + connector trash routes", () => {
     expect(row).toBeDefined();
     expect(row.deletedAt).toEqual(expect.any(String));
 
-    // An ordinary member (delete permission included) must not see the
-    // org-wide tombstone view.
+    // An ordinary member holds knowledgeSource read+query but not delete, so
+    // the trash — the delete permission's other half — stays closed to them.
     currentUser = memberUser;
     expect(
       (
@@ -223,7 +233,7 @@ describe("knowledge base + connector trash routes", () => {
   // ===== Connectors =====
 
   test("restored connector comes back disabled and stays off the sync schedulers", async () => {
-    const connector = await makeConnector("Sync connector", true);
+    const connector = await makeConnector("Sync connector");
     expect(
       (
         await app.inject({
@@ -348,10 +358,118 @@ describe("knowledge base + connector trash routes", () => {
     );
   });
 
-  test("all four trash routes are gated on knowledgeSource:manage-deleted in the endpoint permission map", async () => {
+  test("connector restore is gated on management visibility, not just the org", async ({
+    makeCustomRole,
+    makeMember,
+    makeTeam,
+    makeUser,
+  }) => {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const otherTeam = await makeTeam(organizationId, adminUser.id);
+    const teamScoped = await makeConnector("Team-scoped connector", {
+      visibility: "team-scoped",
+      teamIds: [otherTeam.id],
+    });
+    const autoSync = await makeConnector("Auto-sync connector", {
+      visibility: "auto-sync-permissions",
+    });
+    for (const { id } of [teamScoped, autoSync]) {
+      expect(
+        (await app.inject({ method: "DELETE", url: `/api/connectors/${id}` }))
+          .statusCode,
+      ).toBe(200);
+    }
+
+    // A knowledgeSource:delete holder on no team and with no auto-sync grant.
+    const deleter = await makeUser();
+    await makeCustomRole(organizationId, {
+      role: `kb_deleter_${suffix}`,
+      permission: { knowledgeSource: ["read", "delete"] },
+    });
+    await makeMember(deleter.id, organizationId, {
+      role: `kb_deleter_${suffix}`,
+    });
+    currentUser = deleter;
+
+    // The trash listing already hides both rows from them...
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/connectors?status=deleted",
+    });
+    expect(listed.statusCode).toBe(200);
+    const listedIds = listed.json().data.map((c: { id: string }) => c.id);
+    expect(listedIds).not.toContain(teamScoped.id);
+    expect(listedIds).not.toContain(autoSync.id);
+
+    // ...so restoring by id must not be the way around that: a connector the
+    // caller may not edit or delete is one they may not revive either.
+    for (const { id } of [teamScoped, autoSync]) {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/api/connectors/${id}/restore`,
+          })
+        ).statusCode,
+      ).toBe(404);
+      expect(
+        await KnowledgeBaseConnectorModel.findDeletedByIdForOrganization(
+          id,
+          organizationId,
+        ),
+      ).not.toBeNull();
+    }
+
+    // The same calls succeed for an admin, so the 404s above are the gate and
+    // not a broken route.
+    currentUser = adminUser;
+    for (const { id } of [teamScoped, autoSync]) {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/api/connectors/${id}/restore`,
+          })
+        ).statusCode,
+      ).toBe(200);
+    }
+  });
+
+  test("knowledgeBaseId is rejected on the deleted slice, not silently dropped", async () => {
+    const kb = await makeKb("Scoping guard");
+    const connector = await makeConnector("Scoped connector");
+    await app.inject({
+      method: "DELETE",
+      url: `/api/connectors/${connector.id}`,
+    });
+
+    // The per-knowledge-base path has no deleted-slice variant. Answering the
+    // org-wide trash here would look like a scoped result and silently leak
+    // every other knowledge base's deleted connectors into it.
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/connectors?status=deleted&knowledgeBaseId=${kb.id}`,
+    });
+    expect(response.statusCode).toBe(400);
+
+    // The same id on the active slice still works.
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/connectors?knowledgeBaseId=${kb.id}`,
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
+  test("all four trash routes are gated on knowledgeSource:delete in the endpoint permission map", async () => {
     const { requiredEndpointPermissionsMap } = await import(
       "@archestra/shared/access-control"
     );
+    // The permission map is only the outer gate — restore is the inverse of
+    // delete, and the two permanent-delete handlers narrow further to a
+    // built-in admin ROLE (asserted below), exactly as skills and projects do.
     for (const routeId of [
       "restoreKnowledgeBase",
       "permanentlyDeleteKnowledgeBase",
@@ -359,8 +477,57 @@ describe("knowledge base + connector trash routes", () => {
       "permanentlyDeleteConnector",
     ] as const) {
       expect(requiredEndpointPermissionsMap[routeId]).toEqual({
-        knowledgeSource: ["manage-deleted"],
+        knowledgeSource: ["delete"],
       });
     }
+  });
+
+  test("permanent delete answers 404, not 403, to a caller who is not a global admin", async () => {
+    const kb = await makeKb("Admin-gated KB");
+    const connector = await makeConnector("Admin-gated connector");
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/knowledge-bases/${kb.id}`,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/connectors/${connector.id}`,
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    // 404 rather than 403, so the endpoint never confirms that a trashed
+    // knowledge base or connector exists — the same answer a non-admin gets
+    // for an id that was never real.
+    currentUser = memberUser;
+
+    for (const url of [
+      `/api/knowledge-bases/${kb.id}/permanent`,
+      `/api/connectors/${connector.id}/permanent`,
+    ]) {
+      expect((await app.inject({ method: "DELETE", url })).statusCode).toBe(
+        404,
+      );
+    }
+
+    // Still in the trash, not destroyed.
+    expect(
+      await KnowledgeBaseModel.findDeletedByIdForOrganization(
+        kb.id,
+        organizationId,
+      ),
+    ).not.toBeNull();
+    expect(
+      await KnowledgeBaseConnectorModel.findDeletedByIdForOrganization(
+        connector.id,
+        organizationId,
+      ),
+    ).not.toBeNull();
   });
 });

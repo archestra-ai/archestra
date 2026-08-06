@@ -213,9 +213,12 @@ export function usePermanentlyDeleteKnowledgeBase() {
       }
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, id) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      // Drop the detail query for an id that no longer resolves, rather than
+      // letting a stale `?edit=` URL remount it and refetch into a 404.
+      queryClient.removeQueries({ queryKey: ["knowledge-bases", id] });
       toast.success("Knowledge base permanently deleted");
     },
   });

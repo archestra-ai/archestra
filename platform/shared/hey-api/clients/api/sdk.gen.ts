@@ -3935,7 +3935,7 @@ export const kimiChatCompletionsWithAgent = <ThrowOnError extends boolean = fals
 });
 
 /**
- * List all knowledge bases for the organization. `status=deleted` lists soft-deleted knowledge bases org-wide and requires the manage-deleted permission (granted to admins by default); `search` does not apply to that slice.
+ * List all knowledge bases for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and pagination behave identically on both slices.
  *
  * Authentication:
  *
@@ -4014,7 +4014,7 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * Restore a soft-deleted knowledge base (requires the manage-deleted permission). Agent assignments and connector links survive deletion, so the restored knowledge base is immediately live for previously-assigned agents. 404 if there is no soft-deleted knowledge base with that id in the org.
+ * Restore a soft-deleted knowledge base. Agent assignments and connector links survive deletion, so the restored knowledge base is immediately live for previously-assigned agents. 404 if there is no soft-deleted knowledge base with that id in the org.
  *
  * Authentication:
  *
@@ -4022,12 +4022,12 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `knowledgeSource:manage-deleted`: View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
  */
 export const restoreKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<RestoreKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).post<RestoreKnowledgeBaseResponses, RestoreKnowledgeBaseErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/restore', ...options });
 
 /**
- * Permanently delete a soft-deleted knowledge base (requires the manage-deleted permission). Destroys the row and its assignments; the data cannot be recovered. A trash action, never a shortcut: 404 unless the knowledge base is already soft-deleted.
+ * Permanently destroy a soft-deleted knowledge base (global admins only — a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: the row and its agent and connector assignments are destroyed. Its connectors survive, detached. 404 if there is no soft-deleted knowledge base with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.
  *
  * Authentication:
  *
@@ -4035,7 +4035,7 @@ export const restoreKnowledgeBase = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `knowledgeSource:manage-deleted`: View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
  */
 export const permanentlyDeleteKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<PermanentlyDeleteKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).delete<PermanentlyDeleteKnowledgeBaseResponses, PermanentlyDeleteKnowledgeBaseErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/permanent', ...options });
 
@@ -4053,7 +4053,7 @@ export const permanentlyDeleteKnowledgeBase = <ThrowOnError extends boolean = fa
 export const getKnowledgeBaseHealth = <ThrowOnError extends boolean = false>(options: Options<GetKnowledgeBaseHealthData, ThrowOnError>) => (options.client ?? client).get<GetKnowledgeBaseHealthResponses, GetKnowledgeBaseHealthErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/health', ...options });
 
 /**
- * List all connectors for the organization. `status=deleted` lists soft-deleted connectors org-wide and requires the manage-deleted permission (granted to admins by default); the other filters do not apply to that slice.
+ * List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`.
  *
  * Authentication:
  *
@@ -4171,7 +4171,7 @@ export const deleteConnectorDocument = <ThrowOnError extends boolean = false>(op
 export const getConnectorDocument = <ThrowOnError extends boolean = false>(options: Options<GetConnectorDocumentData, ThrowOnError>) => (options.client ?? client).get<GetConnectorDocumentResponses, GetConnectorDocumentErrors, ThrowOnError>({ url: '/api/connectors/{id}/documents/{docId}', ...options });
 
 /**
- * Restore a soft-deleted connector (requires the manage-deleted permission). The stored credential was destroyed when the connector was deleted, so it is restored DISABLED — re-authenticate, then re-enable it to resume syncing. 404 if there is no soft-deleted connector with that id in the org.
+ * Restore a soft-deleted connector. The stored credential was destroyed when the connector was deleted, so it is restored DISABLED — re-authenticate, then re-enable it to resume syncing. 404 if there is no soft-deleted connector with that id in the org.
  *
  * Authentication:
  *
@@ -4179,12 +4179,12 @@ export const getConnectorDocument = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `knowledgeSource:manage-deleted`: View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
  */
 export const restoreConnector = <ThrowOnError extends boolean = false>(options: Options<RestoreConnectorData, ThrowOnError>) => (options.client ?? client).post<RestoreConnectorResponses, RestoreConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}/restore', ...options });
 
 /**
- * Permanently delete a soft-deleted connector (requires the manage-deleted permission). Destroys its documents, chunks, runs, ACLs, and assignments; the data cannot be recovered. A trash action, never a shortcut: 404 unless the connector is already soft-deleted.
+ * Permanently destroy a soft-deleted connector (global admins only — a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: its synced documents and their chunks, run history, access mappings, and assignments are all destroyed. 404 if there is no soft-deleted connector with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.
  *
  * Authentication:
  *
@@ -4192,7 +4192,7 @@ export const restoreConnector = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * `knowledgeSource:manage-deleted`: View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
  */
 export const permanentlyDeleteConnector = <ThrowOnError extends boolean = false>(options: Options<PermanentlyDeleteConnectorData, ThrowOnError>) => (options.client ?? client).delete<PermanentlyDeleteConnectorResponses, PermanentlyDeleteConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}/permanent', ...options });
 

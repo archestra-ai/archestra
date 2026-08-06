@@ -95,19 +95,16 @@ const knowledgeBaseConnectorsTable = softDeletablePgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // Partial: every read of this table filters `deleted_at IS NULL`, so both
-    // indexes only ever need the active rows.
+    // Partial: every read of this table but the trash listing filters
+    // `deleted_at IS NULL`, so both indexes only ever need the active rows.
+    // The trash's `status=deleted` slice scans instead — deliberately
+    // unindexed, since soft-deleted rows are a small tail of a small table.
     index("knowledge_base_connectors_organization_id_idx")
       .on(table.organizationId)
       .where(sql`deleted_at IS NULL`),
     index("knowledge_base_connectors_environment_id_idx")
       .on(table.environmentId)
       .where(sql`deleted_at IS NULL`),
-    // Serves the retention sweep's find-deleted scan; the active-rows partial
-    // indexes above cannot, since they exclude soft-deleted rows.
-    index("knowledge_base_connectors_deleted_at_purge_idx")
-      .on(table.deletedAt)
-      .where(sql`deleted_at IS NOT NULL`),
   ],
 );
 

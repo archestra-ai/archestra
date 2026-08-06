@@ -1601,18 +1601,6 @@ Automatic deletion of content-bearing records after a configurable number of day
 - **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to retain audit log records (administrative actions — mutations via `/api/*` and auth events) before automatic deletion.
   - Default: `0` (disabled — audit rows are kept indefinitely).
 
-### Soft-Delete Retention
-
-Deleting a resource — a project, agent, skill, app, knowledge source, or MCP server — soft-deletes it: the record is hidden but kept, and an admin can restore it. This sweep permanently deletes soft-deleted records once they are older than the window. It is part of the core platform; no license is required. Each purge writes an audit log entry. Admins can also permanently delete a project, agent, skill, knowledge base, or connector from its Deleted view at any time, whether or not the sweep is enabled.
-
-- **`ARCHESTRA_SOFT_DELETE_RETENTION_ENABLED`** - Master switch for the daily purge sweep.
-  - Default: `false` (soft-deleted records are kept indefinitely).
-  - Enabling it purges everything already past the window on the next daily sweep — there is no grace period.
-- **`ARCHESTRA_SOFT_DELETE_RETENTION_DAYS`** - Days a soft-deleted record survives before the sweep permanently deletes it.
-  - Default: `30`.
-  - Must be a positive integer. Disable the sweep with the enabled flag, not `0`. Shortening the window takes effect on the next sweep.
-  - Chat conversations are not covered — they follow `ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS` above.
-
 ### Maintenance Mode
 
 - **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.

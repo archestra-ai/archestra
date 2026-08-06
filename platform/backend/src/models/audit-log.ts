@@ -13,7 +13,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema } from "@/database";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -49,11 +49,8 @@ function buildSearchCondition(search: string) {
 const impersonatorUsers = alias(schema.usersTable, "impersonator_users");
 
 class AuditLogModel {
-  static async create(
-    input: InsertAuditLog,
-    executor: typeof db | Transaction = db,
-  ): Promise<AuditLog> {
-    const [row] = await executor
+  static async create(input: InsertAuditLog): Promise<AuditLog> {
+    const [row] = await db
       .insert(schema.auditLogsTable)
       .values(input)
       .returning();

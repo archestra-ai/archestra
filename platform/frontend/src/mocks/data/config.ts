@@ -59,8 +59,6 @@ export function makeConfig(
       hackathonVideoDownloadEnabled: false,
       hackathonMaxFinalCutMs: APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
       hackathonGalleryRepo: null,
-      // Off by default, exactly as a real deployment has it.
-      softDeleteRetention: { enabled: false, days: 30 },
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

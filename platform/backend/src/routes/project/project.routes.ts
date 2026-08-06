@@ -8,10 +8,8 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import { ProjectModel } from "@/models";
 import { projectService } from "@/services/project";
 import {
-  ApiError,
   constructResponseSchema,
   ProjectConversationItemSchema,
   ProjectDetailSchema,

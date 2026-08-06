@@ -2801,13 +2801,6 @@
       "when": 1785954195482,
       "tag": "0399_broken_lady_ursula",
       "breakpoints": true
-    },
-    {
-      "idx": 400,
-      "version": "7",
-      "when": 1786003260705,
-      "tag": "0400_deleted_at_purge_indexes",
-      "breakpoints": true
     }
   ]
 }

@@ -119,7 +119,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "create",
     "update",
     "delete",
-    "manage-deleted",
     "query",
     "admin",
     "deploy-to-restricted",
@@ -647,9 +646,8 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:read": "View Knowledge Bases and Connectors",
   "knowledgeSource:create": "Create Knowledge Bases and Connectors",
   "knowledgeSource:update": "Modify Knowledge Bases and Connectors",
-  "knowledgeSource:delete": "Delete Knowledge Bases and Connectors",
-  "knowledgeSource:manage-deleted":
-    "View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors",
+  "knowledgeSource:delete":
+    "Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
     "View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions",
@@ -1637,12 +1635,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetKnowledgeBase]: { knowledgeSource: ["read"] },
   [RouteId.UpdateKnowledgeBase]: { knowledgeSource: ["update"] },
   [RouteId.DeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
-  // Deleted-resource lifecycle is its own capability, granted by default to
-  // admins only — delete does not imply the ability to see or revive tombstones.
-  [RouteId.RestoreKnowledgeBase]: { knowledgeSource: ["manage-deleted"] },
-  [RouteId.PermanentlyDeleteKnowledgeBase]: {
-    knowledgeSource: ["manage-deleted"],
-  },
+  // Restore is the inverse of delete — same gate, as for skills and projects.
+  [RouteId.RestoreKnowledgeBase]: { knowledgeSource: ["delete"] },
+  // Permanent deletion is irreversible, so the handler narrows this further to
+  // a built-in admin ROLE — no knowledgeSource permission, `admin` included,
+  // gets you past the trash.
+  [RouteId.PermanentlyDeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
   [RouteId.GetKnowledgeBaseHealth]: { knowledgeSource: ["read"] },
 
   // Knowledge Base Connector Routes
@@ -1653,10 +1651,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorDocument]: { knowledgeSource: ["read"] },
   [RouteId.UpdateConnector]: { knowledgeSource: ["update"] },
   [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
-  // Deleted-resource lifecycle is its own capability, granted by default to
-  // admins only — delete does not imply the ability to see or revive tombstones.
-  [RouteId.RestoreConnector]: { knowledgeSource: ["manage-deleted"] },
-  [RouteId.PermanentlyDeleteConnector]: { knowledgeSource: ["manage-deleted"] },
+  // Same gates as the knowledge-base pair above.
+  [RouteId.RestoreConnector]: { knowledgeSource: ["delete"] },
+  [RouteId.PermanentlyDeleteConnector]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },

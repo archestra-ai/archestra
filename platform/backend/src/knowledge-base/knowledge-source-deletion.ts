@@ -26,9 +26,10 @@ import { secretManager } from "@/secrets-manager";
  * Deliberately NOT here:
  * - Authorization — stays at each entry point (route / MCP handler), including
  *   the enterprise `auto-sync-permissions` check.
- * - The physical child cascade (documents, chunks, ACLs, runs) — deferred to
- *   the purge follow-up. Those rows are unreachable meanwhile: every resolver
- *   is `notDeleted()`-filtered.
+ * - The physical child cascade (documents, chunks, ACLs, runs) — that belongs
+ *   to permanent delete, which the models own (`KnowledgeBaseModel.purge` /
+ *   `KnowledgeBaseConnectorModel.purge`, one transaction, FK cascade). Those
+ *   rows are unreachable meanwhile: every resolver is `notDeleted()`-filtered.
  *
  * Un-transactioned, mirroring the pre-soft-delete route: the only inter-step
  * failure (queued syncs cancelled, then `softDelete` fails) self-heals via cron

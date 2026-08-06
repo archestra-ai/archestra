@@ -17,16 +17,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-
-import {
-  findExpiredSoftDeleted,
-  type HardDeleteOpts,
-  hardDelete,
-  lockRowForPurge,
-  restore,
-  softDelete,
-} from "@/database/soft-delete";
-
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
@@ -47,7 +38,6 @@ import type {
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { trackBackgroundWork } from "@/utils/background-work";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
-import TaskModel from "./task";
 
 class SkillModel {
   static async findByOrganization(params: {
@@ -665,49 +655,6 @@ class SkillModel {
     return count > 0;
   }
 
-  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
-  static async findExpiredDeleted(params: {
-    retentionDays: number;
-    limit: number;
-    offset: number;
-  }): Promise<{ id: string; organizationId: string }[]> {
-    return findExpiredSoftDeleted(
-      db,
-      schema.skillsTable,
-      {
-        id: schema.skillsTable.id,
-        organizationId: schema.skillsTable.organizationId,
-      },
-      params,
-    );
-  }
-
-  /**
-   * Identity-only audit snapshot ({ id, name, deletedAt }), org-scoped,
-   * soft-deleted rows included. A purge audit row records that the row is
-   * gone, not what it contained.
-   */
-  static async findIdentityForAudit(
-    id: string,
-    organizationId: string,
-  ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select({
-        id: schema.skillsTable.id,
-        name: schema.skillsTable.name,
-        deletedAt: schema.skillsTable.deletedAt,
-      })
-      .from(schema.skillsTable)
-      .where(
-        and(
-          eq(schema.skillsTable.id, id),
-          eq(schema.skillsTable.organizationId, organizationId),
-        ),
-      );
-    if (!row) return null;
-    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
-  }
-
   /**
    * Restore a soft-deleted skill by clearing `deletedAt`. A pure un-delete:
    * no other column is touched. The GitHub sync config and credentials are
@@ -738,10 +685,6 @@ class SkillModel {
    * behind, unreachable and undeletable, which is the opposite of what a purge
    * is for.
    *
-   * Its queued GitHub-sync tasks go too — they carry the skill id in their
-   * payload rather than an FK, so nothing else would clear them and the worker
-   * would keep dequeuing work whose skill no longer exists.
-   *
    * That delete can fail: `skill_sandbox_skill_mounts.skill_version_id` is
    * `ON DELETE RESTRICT`, so a sandbox still holding this skill blocks it. The
    * violation is deliberately NOT caught here — an aborted Postgres transaction
@@ -749,38 +692,30 @@ class SkillModel {
    * transaction and answers 409.
    *
    * Returns false if there was no soft-deleted row to take, which is how a
-   * restore that won the race reports itself — and, for the retention sweep,
-   * how a row that aged back under the window reports itself too.
+   * restore that won the race reports itself.
    */
-  static async purge(
-    params: {
-      id: string;
-      organizationId: string;
-    },
-    opts?: HardDeleteOpts,
-  ): Promise<boolean> {
+  static async purge(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
     return withDbTransaction(async (tx) => {
       // The row lock is the race guard: a concurrent restore either commits
       // first (leaving no soft-deleted row for us to find) or blocks until this
-      // transaction commits and then finds no row at all. The sweep also passes
-      // `onlyIfDeletedForDays`, re-checking the retention window under the same
-      // lock so a row restored-and-redeleted mid-sweep is not purged.
-      const locked = await lockRowForPurge(
-        tx,
-        schema.skillsTable,
-        and(
-          eq(schema.skillsTable.id, params.id),
-          eq(schema.skillsTable.organizationId, params.organizationId),
-          isNotNull(schema.skillsTable.deletedAt),
-        ),
-        opts,
-      );
+      // transaction commits and then finds no row at all.
+      const [locked] = await tx
+        .select({ id: schema.skillsTable.id })
+        .from(schema.skillsTable)
+        .where(
+          and(
+            eq(schema.skillsTable.id, params.id),
+            eq(schema.skillsTable.organizationId, params.organizationId),
+            isNotNull(schema.skillsTable.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
       if (!locked) return false;
 
-      await TaskModel.deleteQueuedForPayloadValue(
-        { taskType: "skill_github_sync", key: "skillId", value: params.id },
-        tx,
-      );
       await tx
         .delete(schema.skillVersionsTable)
         .where(eq(schema.skillVersionsTable.skillId, params.id));
@@ -789,7 +724,6 @@ class SkillModel {
         schema.skillsTable,
         eq(schema.skillsTable.id, params.id),
       );
-      await opts?.onPurged?.(tx);
       return true;
     });
   }
@@ -864,6 +798,32 @@ class SkillModel {
     return conflict
       ? `Cannot restore: a shared skill named "${skill.name}" already exists.`
       : null;
+  }
+
+  /**
+   * Identity of a skill for the audit trail, and nothing else. The
+   * permanent-delete route uses this rather than {@link findByIdForAudit}: a
+   * purge is audited by identity only, never by keeping a copy of the content
+   * it destroyed. Includes soft-deleted rows — the purge target is always one.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.skillsTable.id,
+        name: schema.skillsTable.name,
+      })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          eq(schema.skillsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */

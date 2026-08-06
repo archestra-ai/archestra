@@ -12,13 +12,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import {
-  findExpiredSoftDeleted,
-  type HardDeleteOpts,
-  hardDelete,
-  lockRowForPurge,
-  softDelete,
-} from "@/database/soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import { connectorInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   InsertKnowledgeBaseConnector,
@@ -106,6 +100,7 @@ class KnowledgeBaseConnectorModel {
     canReadAll?: boolean;
     viewerTeamIds?: string[];
     visibilityScope?: ConnectorVisibilityScope;
+    status?: "active" | "deleted";
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
     const {
       organizationId,
@@ -117,14 +112,18 @@ class KnowledgeBaseConnectorModel {
       canReadAll,
       viewerTeamIds,
       visibilityScope,
+      status,
     } = params;
     const searchPattern = search ? `%${escapeLikePattern(search)}%` : null;
 
     const filters = [
       // Added once to the shared array: covers both the data query and the
       // count() total below, so a page can never show N rows with a total of
-      // N + soft-deleted.
-      notDeleted(schema.knowledgeBaseConnectorsTable),
+      // N + rows the other filter would have excluded. `status=deleted` is the
+      // trash view; every other read stays notDeleted.
+      status === "deleted"
+        ? isNotNull(schema.knowledgeBaseConnectorsTable.deletedAt)
+        : notDeleted(schema.knowledgeBaseConnectorsTable),
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       buildVisibilityFilter({
         canReadAll,
@@ -563,34 +562,9 @@ class KnowledgeBaseConnectorModel {
   }
 
   /**
-   * Org-scoped listing of SOFT-DELETED connectors, for the `status=deleted`
-   * trash view. Does NOT filter `notDeleted` — it is a deleted-only read, and
-   * deliberately org-wide rather than team-visibility scoped: deleted-resource
-   * lifecycle is one org-scoped capability (`knowledgeSource:manage-deleted`),
-   * matching the MCP catalog's trash.
-   */
-  static async findDeletedForOrganization(
-    organizationId: string,
-  ): Promise<KnowledgeBaseConnector[]> {
-    return await db
-      .select()
-      .from(schema.knowledgeBaseConnectorsTable)
-      .where(
-        and(
-          eq(
-            schema.knowledgeBaseConnectorsTable.organizationId,
-            organizationId,
-          ),
-          isNotNull(schema.knowledgeBaseConnectorsTable.deletedAt),
-        ),
-      )
-      .orderBy(desc(schema.knowledgeBaseConnectorsTable.deletedAt));
-  }
-
-  /**
-   * Org-scoped lookup of a SOFT-DELETED connector, for the restore and
-   * permanent-delete routes. Does NOT filter `notDeleted` — it is the one
-   * point read that must see deleted rows.
+   * Org-scoped lookup of a SOFT-DELETED connector, for the restore route. Does
+   * NOT filter `notDeleted` — it is the one point read that must see deleted
+   * rows.
    */
   static async findDeletedByIdForOrganization(
     id: string,
@@ -614,51 +588,54 @@ class KnowledgeBaseConnectorModel {
   }
 
   /**
-   * Physical delete for the purge paths (`onlyIfDeletedForDays` restricts to
-   * aged-out soft-deleted rows, re-checked under FOR UPDATE so a concurrent
-   * restore wins). Children — runs, documents (and their chunks), ACLs,
-   * external groups, member overrides, assignments — all cascade. Queued-sync
-   * cancellation and secret revocation already happened at soft-delete time
-   * (knowledge-source-deletion service), so there is nothing external left.
+   * Physical delete, for the permanent-delete route. Locks on `(id,
+   * organization_id, deleted_at IS NOT NULL)` — self-authorizing, and a
+   * concurrent restore wins the race; see KnowledgeBaseModel.purge. Children —
+   * runs, documents (and their chunks), ACLs, external groups, member
+   * overrides, assignments — all cascade. Queued-sync cancellation and secret
+   * revocation already happened at soft-delete time (knowledge-source-deletion
+   * service), so there is nothing external left.
+   *
+   * The statement timeout is raised for the duration: the document/chunk
+   * cascade of a large connector is a single statement, and under the
+   * pool-wide 30s ceiling it would abort identically on every retry, leaving
+   * the connector permanently un-purgeable (same reasoning as AgentModel.purge).
    */
-  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
+  static async purge(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
-      if (
-        !(await lockRowForPurge(
-          tx,
-          schema.knowledgeBaseConnectorsTable,
-          eq(schema.knowledgeBaseConnectorsTable.id, id),
-          opts,
-        ))
-      ) {
-        return false;
-      }
+      // `sql.raw`: SET is a utility command and takes no bind parameters, so
+      // `= $1` is a syntax error. The value is a module constant, never input.
+      await tx.execute(
+        sql.raw(`SET LOCAL statement_timeout = ${PURGE_STATEMENT_TIMEOUT_MS}`),
+      );
+
+      const [locked] = await tx
+        .select({ id: schema.knowledgeBaseConnectorsTable.id })
+        .from(schema.knowledgeBaseConnectorsTable)
+        .where(
+          and(
+            eq(schema.knowledgeBaseConnectorsTable.id, params.id),
+            eq(
+              schema.knowledgeBaseConnectorsTable.organizationId,
+              params.organizationId,
+            ),
+            isNotNull(schema.knowledgeBaseConnectorsTable.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!locked) return false;
+
       const count = await hardDelete(
         tx,
         schema.knowledgeBaseConnectorsTable,
-        eq(schema.knowledgeBaseConnectorsTable.id, id),
+        eq(schema.knowledgeBaseConnectorsTable.id, params.id),
       );
-      if (count === 0) return false;
-      await opts?.onPurged?.(tx);
-      return true;
+      return count > 0;
     });
-  }
-
-  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
-  static async findExpiredDeleted(params: {
-    retentionDays: number;
-    limit: number;
-    offset: number;
-  }): Promise<{ id: string; organizationId: string }[]> {
-    return findExpiredSoftDeleted(
-      db,
-      schema.knowledgeBaseConnectorsTable,
-      {
-        id: schema.knowledgeBaseConnectorsTable.id,
-        organizationId: schema.knowledgeBaseConnectorsTable.organizationId,
-      },
-      params,
-    );
   }
 
   /** Identity-only audit snapshot for purge audit rows; org-scoped. */
@@ -1010,3 +987,15 @@ function buildVisibilityFilter(params: {
   return and(...conditions);
 }
 // SPDX-SnippetEnd
+
+/**
+ * Ceiling for {@link KnowledgeBaseConnectorModel.purge}'s transaction, ten
+ * times the pool-wide default. The document/chunk cascade happens INSIDE the
+ * DELETE statement, so the pool-wide 30s `statement_timeout` applies to the
+ * whole of it; for a connector with a large corpus that aborts identically on
+ * every retry, making the row permanently un-purgeable. `SET LOCAL` scopes the
+ * change to this transaction and reverts on commit, so no other query loses
+ * its safety net. Finite rather than unlimited: a purge that cannot finish in
+ * five minutes should surface as a failure, not hold locks indefinitely.
+ */
+const PURGE_STATEMENT_TIMEOUT_MS = 300_000;

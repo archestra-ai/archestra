@@ -2788,21 +2788,6 @@ const config = {
       process.env.ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS,
     ),
   },
-  // Retention window for soft-deleted rows (trash). Core, not enterprise —
-  // unlike the two blocks above. Off by default: an upgrade that flipped
-  // purging on by itself would start permanently deleting month-old trash on
-  // the next daily tick with no operator action. `days` deliberately uses
-  // parsePositiveInt, not parseRetentionDays — `enabled` is the off switch
-  // here, so 0 days is a misconfiguration rather than "disabled".
-  softDeleteRetention: {
-    /** Master switch for the purge sweep. Off until an operator opts in. */
-    enabled: process.env.ARCHESTRA_SOFT_DELETE_RETENTION_ENABLED === "true",
-    /** Days a soft-deleted row survives before the sweep purges it. */
-    days: parsePositiveInt(
-      process.env.ARCHESTRA_SOFT_DELETE_RETENTION_DAYS,
-      30,
-    ),
-  },
 };
 
 // "all" runs the web server and the worker in one process; "web"/"worker" run

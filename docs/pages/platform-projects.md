@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-08-06
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -46,4 +46,4 @@ A finance person approves incoming invoices against the company's vendor list. A
 
 ![Sharing the project with the Finance team](/docs/automated_screenshots/platform-projects_sharing-dialog.webp)
 
-Everyone with access to a shared project can start their own chats and work with its files. You can share with any team you belong to — admins can share with any team in the organization. Reading other members' chats takes a separate permission that admins have by default. Sharing with the whole organization — and deleting or unsharing an org-wide project — takes its own permission, which custom roles can withhold. Deleting a project keeps its chats as ordinary conversations and hides its files and scheduled tasks; a project administrator switches the status filter to **Deleted** to open the trash and restore one, bringing them back. A global admin can also delete a project from the trash for good, with **Delete permanently**. That destroys its files and scheduled tasks, and nothing brings them back — the chats still stay. Deployments can also purge deleted items automatically after a retention window; see [Soft-Delete Retention](./platform-deployment#soft-delete-retention). See [Access Control](./platform-access-control) for permissions.
+Everyone with access to a shared project can start their own chats and work with its files. You can share with any team you belong to — admins can share with any team in the organization. Reading other members' chats takes a separate permission that admins have by default. Sharing with the whole organization — and deleting or unsharing an org-wide project — takes its own permission, which custom roles can withhold. Deleting a project keeps its chats as ordinary conversations and hides its files and scheduled tasks; a project administrator switches the status filter to **Deleted** to open the trash and restore one, bringing them back. A global admin can also delete a project from the trash for good, with **Delete permanently**. That destroys its files and scheduled tasks, and nothing brings them back — the chats still stay. See [Access Control](./platform-access-control) for permissions.

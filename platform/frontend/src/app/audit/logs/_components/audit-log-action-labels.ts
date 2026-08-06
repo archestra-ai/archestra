@@ -37,7 +37,6 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "app.created": "App created",
   "app.updated": "App updated",
   "app.deleted": "App deleted",
-  "app.purged": "App permanently deleted",
   // ChatOps binding
   "chatOpsBinding.created": "ChatOps binding created",
   "chatOpsBinding.updated": "ChatOps binding updated",
@@ -77,7 +76,6 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "internalMcpCatalog.updated": "Internal catalog updated",
   "internalMcpCatalog.deleted": "Internal catalog deleted",
   "internalMcpCatalog.restored": "Internal catalog restored",
-  "internalMcpCatalog.purged": "Internal catalog permanently deleted",
   "internalMcpCatalog.reinstalled": "Internal catalog reinstalled",
   // Invitation
   "invitation.created": "Invitation sent",
@@ -113,7 +111,6 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "mcpServer.updated": "MCP server updated",
   "mcpServer.deleted": "MCP server deleted",
   "mcpServer.restored": "MCP server restored",
-  "mcpServer.purged": "MCP server permanently deleted",
   "mcpServer.reinstalled": "MCP server reinstalled",
   // MCP install request
   // Retired with the installation-request feature; retained so audit rows
@@ -164,7 +161,6 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "teamToken.rotated": "Team token rotated",
   // Tool
   "tool.deleted": "Tool deleted",
-  "tool.purged": "Tool permanently deleted",
   // Tool invocation policy
   "toolInvocationPolicy.created": "Tool policy created",
   "toolInvocationPolicy.updated": "Tool policy updated",

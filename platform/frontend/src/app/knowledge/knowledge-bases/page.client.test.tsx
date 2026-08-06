@@ -7,6 +7,7 @@ import {
   useMissingPermissions,
 } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import KnowledgeBasesPage from "./page.client";
 
@@ -51,6 +52,7 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 vi.mock("next/navigation");
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 
 // The status filter reads permissions and URL state of its own; its behavior
@@ -126,6 +128,10 @@ beforeEach(() => {
   vi.mocked(useFeature).mockReturnValue(
     undefined as ReturnType<typeof useFeature>,
   );
+  vi.mocked(useIsGlobalAdmin).mockReturnValue({
+    isGlobalAdmin: true,
+    isLoading: false,
+  });
   vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
   vi.mocked(useSearchParams).mockReturnValue({
     get: () => null,
@@ -183,16 +189,12 @@ describe("KnowledgeBasesPage", () => {
     expect(screen.getAllByText(/Every 6 hours/i).length).toBeGreaterThan(0);
   });
 
-  it("deleted view: rows collapse to Restore + Delete permanently with the purge countdown", async () => {
+  it("deleted view: rows show how long they have sat in the trash and collapse to Restore + Delete permanently", async () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("status=deleted") as unknown as ReturnType<
         typeof useSearchParams
       >,
     );
-    vi.mocked(useFeature).mockReturnValue({
-      enabled: true,
-      days: 30,
-    } as unknown as ReturnType<typeof useFeature>);
     const deletedAt = new Date(
       Date.now() - 5 * 24 * 60 * 60 * 1000,
     ).toISOString();
@@ -223,12 +225,8 @@ describe("KnowledgeBasesPage", () => {
       expect.objectContaining({ status: "deleted" }),
     );
 
-    // Trash metadata: "Deleted N ago" plus the retention countdown, phrased
-    // as eligibility — the sweep can lag, so no exact purge moment.
-    expect(screen.getByText(/^Deleted /)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Eligible for deletion in \d+ days/),
-    ).toBeInTheDocument();
+    // Trash metadata: how long the row has sat in the trash.
+    expect(screen.getByText(/5 days ago/)).toBeInTheDocument();
 
     // The connector sub-table is an active-KB surface; no expander in trash.
     expect(

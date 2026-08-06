@@ -10,14 +10,8 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import {
-  findExpiredSoftDeleted,
-  type HardDeleteOpts,
-  lockRowForPurge,
-  softDelete,
-} from "@/database/soft-delete";
+import { softDelete } from "@/database/soft-delete";
 import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
-import { deleteRowsBytesBestEffort } from "@/skills-sandbox/file-storage";
 import { ApiError } from "@/types";
 import {
   APP_NAME_MAX_LENGTH,
@@ -32,7 +26,6 @@ import AppAccessModel from "./app-access";
 import AppLabelModel from "./app-label";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
-import FileModel from "./file";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpCatalogUserModel from "./mcp-catalog-user";
 
@@ -687,83 +680,18 @@ class AppModel {
   }
 
   /**
-   * Physically delete an app: its version rows (`app_versions.app_id` is
-   * ON DELETE SET NULL — a bare row delete would orphan version bytes), its
-   * files' external bytes (`files.app_id` cascades the rows but not the
-   * bytes), then the app row itself (sandboxes, pins, and tool assignments
-   * cascade). Serves the create-rollback (active row, no opts) and the purge
-   * paths (`onlyIfDeletedForDays` restricts to aged-out soft-deleted rows,
-   * re-checked under FOR UPDATE so a concurrent restore wins). Byte deletion
-   * runs after commit, so bytes never vanish for rows a rollback resurrects.
+   * Hard-remove a just-created app and its version rows. Used only to roll back
+   * a create whose backing failed: a soft-delete would leave a ghost app row and
+   * — because `app_versions.app_id` is ON DELETE SET NULL — orphaned version
+   * bytes. The app never became visible, so there is nothing to preserve.
    */
-  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
-    let purgeBytes: (() => Promise<void>) | null = null;
-    const deleted = await withDbTransaction(async (tx) => {
-      if (
-        !(await lockRowForPurge(
-          tx,
-          schema.appsTable,
-          eq(schema.appsTable.id, id),
-          opts,
-        ))
-      ) {
-        return false;
-      }
-      const files = await FileModel.listAllByApp(id, tx);
-      for (const file of files) {
-        await FileModel.deleteById(file.id, tx);
-      }
-      purgeBytes = () => deleteRowsBytesBestEffort(files);
+  static async purge(id: string): Promise<void> {
+    await withDbTransaction(async (tx) => {
       await tx
         .delete(schema.appVersionsTable)
         .where(eq(schema.appVersionsTable.appId, id));
       await tx.delete(schema.appsTable).where(eq(schema.appsTable.id, id));
-      await opts?.onPurged?.(tx);
-      return true;
     });
-    if (deleted && purgeBytes) {
-      await (purgeBytes as () => Promise<void>)();
-    }
-    return deleted;
-  }
-
-  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
-  static async findExpiredDeleted(params: {
-    retentionDays: number;
-    limit: number;
-    offset: number;
-  }): Promise<{ id: string; organizationId: string }[]> {
-    return findExpiredSoftDeleted(
-      db,
-      schema.appsTable,
-      {
-        id: schema.appsTable.id,
-        organizationId: schema.appsTable.organizationId,
-      },
-      params,
-    );
-  }
-
-  /** Identity-only audit snapshot for purge audit rows; org-scoped. */
-  static async findIdentityForAudit(
-    id: string,
-    organizationId: string,
-  ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select({
-        id: schema.appsTable.id,
-        name: schema.appsTable.name,
-        deletedAt: schema.appsTable.deletedAt,
-      })
-      .from(schema.appsTable)
-      .where(
-        and(
-          eq(schema.appsTable.id, id),
-          eq(schema.appsTable.organizationId, organizationId),
-        ),
-      );
-    if (!row) return null;
-    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */

@@ -10,14 +10,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import {
-  findExpiredSoftDeleted,
-  type HardDeleteOpts,
-  hardDelete,
-  lockRowForPurge,
-  restore,
-  softDelete,
-} from "@/database/soft-delete";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import type {
   InsertKnowledgeBase,
   KnowledgeBase,
@@ -25,29 +18,46 @@ import type {
 } from "@/types";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 
+/**
+ * Filters shared by the list and its count, so a page can never show N rows
+ * with a total of N + rows the other filter would have excluded. `status`
+ * picks the lifecycle slice: `deleted` is the trash view, every other read
+ * stays `notDeleted`.
+ */
+function buildOrgFilters(params: {
+  organizationId: string;
+  search?: string;
+  status?: "active" | "deleted";
+}) {
+  const normalizedSearch = params.search?.trim();
+  return [
+    params.status === "deleted"
+      ? isNotNull(schema.knowledgeBasesTable.deletedAt)
+      : notDeleted(schema.knowledgeBasesTable),
+    eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
+    ...(normalizedSearch
+      ? [
+          or(
+            ilike(schema.knowledgeBasesTable.name, `%${normalizedSearch}%`),
+            ilike(
+              schema.knowledgeBasesTable.description,
+              `%${normalizedSearch}%`,
+            ),
+          ),
+        ]
+      : []),
+  ];
+}
+
 class KnowledgeBaseModel {
   static async findByOrganization(params: {
     organizationId: string;
     limit?: number;
     offset?: number;
     search?: string;
+    status?: "active" | "deleted";
   }): Promise<KnowledgeBase[]> {
-    const normalizedSearch = params.search?.trim();
-    const filters = [
-      notDeleted(schema.knowledgeBasesTable),
-      eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
-      ...(normalizedSearch
-        ? [
-            or(
-              ilike(schema.knowledgeBasesTable.name, `%${normalizedSearch}%`),
-              ilike(
-                schema.knowledgeBasesTable.description,
-                `%${normalizedSearch}%`,
-              ),
-            ),
-          ]
-        : []),
-    ];
+    const filters = buildOrgFilters(params);
 
     let query = db
       .select()
@@ -159,31 +169,9 @@ class KnowledgeBaseModel {
   }
 
   /**
-   * Org-scoped listing of SOFT-DELETED knowledge bases, for the
-   * `status=deleted` trash view. Does NOT filter `notDeleted` — it is a
-   * deleted-only read, and deliberately org-wide rather than team-visibility
-   * scoped: deleted-resource lifecycle is one org-scoped capability
-   * (`knowledgeSource:manage-deleted`), matching the MCP catalog's trash.
-   */
-  static async findDeletedForOrganization(
-    organizationId: string,
-  ): Promise<KnowledgeBase[]> {
-    return await db
-      .select()
-      .from(schema.knowledgeBasesTable)
-      .where(
-        and(
-          eq(schema.knowledgeBasesTable.organizationId, organizationId),
-          isNotNull(schema.knowledgeBasesTable.deletedAt),
-        ),
-      )
-      .orderBy(desc(schema.knowledgeBasesTable.deletedAt));
-  }
-
-  /**
-   * Org-scoped lookup of a SOFT-DELETED knowledge base, for the restore and
-   * permanent-delete routes. Does NOT filter `notDeleted` — it is the one
-   * point read that must see deleted rows.
+   * Org-scoped lookup of a SOFT-DELETED knowledge base, for the restore route.
+   * Does NOT filter `notDeleted` — it is the one point read that must see
+   * deleted rows.
    */
   static async findDeletedByIdForOrganization(
     id: string,
@@ -204,50 +192,43 @@ class KnowledgeBaseModel {
   }
 
   /**
-   * Physical delete for the purge paths (`onlyIfDeletedForDays` restricts to
-   * aged-out soft-deleted rows, re-checked under FOR UPDATE so a concurrent
-   * restore wins). Children (agent assignments, connector assignments)
-   * cascade; the single-statement delete is the established pattern and
-   * nothing writes to a soft-deleted knowledge base.
+   * Physical delete, for the permanent-delete route. Locks on `(id,
+   * organization_id, deleted_at IS NOT NULL)` so the purge is
+   * self-authorizing — the route needs no separate existence read — and a
+   * concurrent restore wins the race (it either commits first, leaving no
+   * soft-deleted row to find, or blocks until this transaction commits and
+   * then finds no row at all). Children (agent assignments, connector
+   * assignments) cascade.
    */
-  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
+  static async purge(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
-      if (
-        !(await lockRowForPurge(
-          tx,
-          schema.knowledgeBasesTable,
-          eq(schema.knowledgeBasesTable.id, id),
-          opts,
-        ))
-      ) {
-        return false;
-      }
+      const [locked] = await tx
+        .select({ id: schema.knowledgeBasesTable.id })
+        .from(schema.knowledgeBasesTable)
+        .where(
+          and(
+            eq(schema.knowledgeBasesTable.id, params.id),
+            eq(
+              schema.knowledgeBasesTable.organizationId,
+              params.organizationId,
+            ),
+            isNotNull(schema.knowledgeBasesTable.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!locked) return false;
+
       const count = await hardDelete(
         tx,
         schema.knowledgeBasesTable,
-        eq(schema.knowledgeBasesTable.id, id),
+        eq(schema.knowledgeBasesTable.id, params.id),
       );
-      if (count === 0) return false;
-      await opts?.onPurged?.(tx);
-      return true;
+      return count > 0;
     });
-  }
-
-  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
-  static async findExpiredDeleted(params: {
-    retentionDays: number;
-    limit: number;
-    offset: number;
-  }): Promise<{ id: string; organizationId: string }[]> {
-    return findExpiredSoftDeleted(
-      db,
-      schema.knowledgeBasesTable,
-      {
-        id: schema.knowledgeBasesTable.id,
-        organizationId: schema.knowledgeBasesTable.organizationId,
-      },
-      params,
-    );
   }
 
   /** Identity-only audit snapshot for purge audit rows; org-scoped. */
@@ -275,28 +256,12 @@ class KnowledgeBaseModel {
   static async countByOrganization(params: {
     organizationId: string;
     search?: string;
+    status?: "active" | "deleted";
   }): Promise<number> {
-    const normalizedSearch = params.search?.trim();
-    const filters = [
-      notDeleted(schema.knowledgeBasesTable),
-      eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
-      ...(normalizedSearch
-        ? [
-            or(
-              ilike(schema.knowledgeBasesTable.name, `%${normalizedSearch}%`),
-              ilike(
-                schema.knowledgeBasesTable.description,
-                `%${normalizedSearch}%`,
-              ),
-            ),
-          ]
-        : []),
-    ];
-
     const [result] = await db
       .select({ count: count() })
       .from(schema.knowledgeBasesTable)
-      .where(and(...filters));
+      .where(and(...buildOrgFilters(params)));
 
     return result?.count ?? 0;
   }

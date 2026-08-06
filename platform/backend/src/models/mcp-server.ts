@@ -14,15 +14,9 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
-import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import {
-  type HardDeleteOpts,
-  hardDelete,
-  lockRowForPurge,
-  restore,
-  softDelete,
-} from "@/database/soft-delete";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
@@ -1356,129 +1350,14 @@ class McpServerModel {
     return restored.length;
   }
 
-  /**
-   * Physical delete — install-create rollback (no opts) and the purge paths
-   * (`onlyIfDeletedForDays` restricts to aged-out soft-deleted rows,
-   * re-checked under FOR UPDATE so a concurrent restore wins).
-   *
-   * Soft-delete deliberately RETAINED the DB secret bag so a restore could
-   * recover credentials; the purge is the end of that story. The FK points
-   * from `mcp_server` to `secret` (SET NULL), so deleting the install fires
-   * no cascade toward it — destroy it explicitly via the secret manager,
-   * which also covers Vault-backed secrets a raw row delete would leak.
-   */
-  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
-    let secretId: string | null = null;
-    const deleted = await withDbTransaction(async (tx) => {
-      if (
-        !(await lockRowForPurge(
-          tx,
-          schema.mcpServersTable,
-          eq(schema.mcpServersTable.id, id),
-          opts,
-        ))
-      ) {
-        return false;
-      }
-      const [row] = await tx
-        .select({ secretId: schema.mcpServersTable.secretId })
-        .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.id, id));
-      secretId = row?.secretId ?? null;
-      const count = await hardDelete(
-        tx,
-        schema.mcpServersTable,
-        eq(schema.mcpServersTable.id, id),
-      );
-      if (count === 0) return false;
-      await opts?.onPurged?.(tx);
-      return true;
-    });
-
-    if (deleted && secretId && opts?.onlyIfDeletedForDays !== undefined) {
-      try {
-        await secretManager().deleteSecret(secretId);
-      } catch (error) {
-        logger.warn(
-          { mcpServerId: id, secretId, error: String(error) },
-          "McpServerModel.hardDelete: failed to delete secret (orphaned). DB record already removed.",
-        );
-      }
-    }
-    return deleted;
-  }
-
-  /**
-   * The purge sweep's find-expired scan. `mcp_server` has no org column, so
-   * the org is inferred from the row's own links, mirroring
-   * {@link findByIdInOrg}: the team's org, else any org the owner is a member
-   * of. Legacy unowned+teamless rows resolve to no org and are excluded —
-   * purging them would destroy data with no audit trail (see
-   * {@link countExpiredDeletedUnresolvable}).
-   */
-  static async findExpiredDeleted(params: {
-    retentionDays: number;
-    limit: number;
-    offset: number;
-  }): Promise<{ id: string; organizationId: string }[]> {
-    const { rows } = await db.execute<{
-      id: string;
-      organization_id: string;
-    }>(sql`
-      SELECT s.id, COALESCE(t.organization_id, m.organization_id) AS organization_id
-      FROM mcp_server s
-      LEFT JOIN team t ON t.id = s.team_id
-      LEFT JOIN LATERAL (
-        SELECT organization_id FROM member WHERE user_id = s.owner_id LIMIT 1
-      ) m ON true
-      WHERE s.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
-        AND COALESCE(t.organization_id, m.organization_id) IS NOT NULL
-      ORDER BY s.deleted_at, s.id
-      LIMIT ${params.limit}
-      OFFSET ${params.offset}
-    `);
-    return rows.map((row) => ({
-      id: row.id,
-      organizationId: row.organization_id,
-    }));
-  }
-
-  /** Expired soft-deleted installs with no resolvable org (skipped, logged). */
-  static async countExpiredDeletedUnresolvable(params: {
-    retentionDays: number;
-  }): Promise<number> {
-    const { rows } = await db.execute<{ count: number }>(sql`
-      SELECT COUNT(*)::int AS count
-      FROM mcp_server s
-      LEFT JOIN team t ON t.id = s.team_id
-      LEFT JOIN LATERAL (
-        SELECT organization_id FROM member WHERE user_id = s.owner_id LIMIT 1
-      ) m ON true
-      WHERE s.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
-        AND COALESCE(t.organization_id, m.organization_id) IS NULL
-    `);
-    return Number(rows[0]?.count ?? 0);
-  }
-
-  /**
-   * Identity-only audit snapshot for purge audit rows. NOT org-scoped — the
-   * table has no org column and callers (the sweep) have already inferred the
-   * org via {@link findExpiredDeleted}.
-   */
-  static async findIdentityForAudit(
-    id: string,
-  ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select({
-        id: schema.mcpServersTable.id,
-        name: schema.mcpServersTable.name,
-        serverType: schema.mcpServersTable.serverType,
-        deletedAt: schema.mcpServersTable.deletedAt,
-      })
-      .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.id, id));
-    if (!row) return null;
-    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
+  /** Physical delete — reserved for install-create rollback (never a ghost row). */
+  static async hardDelete(id: string): Promise<boolean> {
+    const count = await hardDelete(
+      db,
+      schema.mcpServersTable,
+      eq(schema.mcpServersTable.id, id),
+    );
+    return count > 0;
   }
 
   /**

@@ -11,20 +11,16 @@ import {
   sql,
 } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-
 import db, { schema, type Transaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
-  findExpiredSoftDeleted,
   hardDelete,
-  lockRowForPurge,
   restore as restoreRows,
   softDelete,
 } from "@/database/soft-delete";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
 import ProjectShareModel from "./project-share";
-import TaskModel from "./task";
 
 /**
  * CRUD for `projects`. Share/visibility queries live in
@@ -259,49 +255,6 @@ class ProjectModel {
     });
   }
 
-  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
-  static async findExpiredDeleted(params: {
-    retentionDays: number;
-    limit: number;
-    offset: number;
-  }): Promise<{ id: string; organizationId: string }[]> {
-    return findExpiredSoftDeleted(
-      db,
-      schema.projectsTable,
-      {
-        id: schema.projectsTable.id,
-        organizationId: schema.projectsTable.organizationId,
-      },
-      params,
-    );
-  }
-
-  /**
-   * Identity-only audit snapshot ({ id, name, deletedAt }), org-scoped,
-   * soft-deleted rows included. A purge audit row records that the row is
-   * gone, not what it contained.
-   */
-  static async findIdentityForAudit(
-    id: string,
-    organizationId: string,
-  ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select({
-        id: schema.projectsTable.id,
-        name: schema.projectsTable.name,
-        deletedAt: schema.projectsTable.deletedAt,
-      })
-      .from(schema.projectsTable)
-      .where(
-        and(
-          eq(schema.projectsTable.id, id),
-          eq(schema.projectsTable.organizationId, organizationId),
-        ),
-      );
-    if (!row) return null;
-    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
-  }
-
   /**
    * Restore a soft-deleted project: clears `deleted_at` so the row (and its
    * retained files and schedules) is visible again. Org-scoped so an admin can
@@ -406,57 +359,61 @@ class ProjectModel {
    *
    * Runs on the caller's transaction so the lock, the byte capture, and the
    * delete are one unit — a lock released before the delete would be no lock.
-   *
-   * The retention sweep additionally passes `onlyIfDeletedForDays`, so the
-   * window is re-checked under the same lock: a project restored and deleted
-   * again mid-sweep is no longer expired and is left alone.
    */
   static async lockIfDeleted(
     tx: Transaction,
     params: { id: string; organizationId: string },
-    opts?: { onlyIfDeletedForDays?: number },
   ): Promise<{ id: string } | null> {
-    const locked = await lockRowForPurge(
-      tx,
-      schema.projectsTable,
-      and(
-        eq(schema.projectsTable.id, params.id),
-        eq(schema.projectsTable.organizationId, params.organizationId),
-        isNotNull(schema.projectsTable.deletedAt),
-      ),
-      opts,
-    );
-    return locked ? { id: params.id } : null;
+    const [row] = await tx
+      .select({ id: schema.projectsTable.id })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.id, params.id),
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          isNotNull(schema.projectsTable.deletedAt),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    return row ?? null;
   }
 
   /**
    * Physically delete a project already locked by {@link lockIfDeleted}. The
-   * cascade takes its files, pins, share config, and scheduled triggers (with
+   * cascade takes its files, pins, share config, and scheduled tasks (with
    * their runs); its chats detached at soft-delete time and are unaffected.
-   * Queued trigger-run tasks are dropped explicitly — they carry the trigger id
-   * in their payload rather than an FK, so the cascade misses them and the
-   * worker would keep dequeuing work whose rows are gone.
-   *
    * Externally-stored file bytes are NOT covered — capture them before this
    * runs and delete them after it (see `fileStore.captureProjectFileBytes`).
    */
   static async hardDeleteLocked(tx: Transaction, id: string): Promise<void> {
-    const triggers = await tx
-      .select({ id: schema.scheduleTriggersTable.id })
-      .from(schema.scheduleTriggersTable)
-      .where(eq(schema.scheduleTriggersTable.projectId, id));
-    for (const trigger of triggers) {
-      await TaskModel.deleteQueuedForPayloadValue(
-        {
-          taskType: "schedule_trigger_run_execute",
-          key: "triggerId",
-          value: trigger.id,
-        },
-        tx,
-      );
-    }
-
     await hardDelete(tx, schema.projectsTable, eq(schema.projectsTable.id, id));
+  }
+
+  /**
+   * Identity of a project for the audit trail, and nothing else. The
+   * permanent-delete route uses this rather than {@link findByIdForAudit}: a
+   * purge is audited by identity only, never by keeping a copy of what it
+   * destroyed. Soft-deleted rows are included — the purge target is always one.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.projectsTable.id,
+        name: schema.projectsTable.name,
+      })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.id, id),
+          eq(schema.projectsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   /**

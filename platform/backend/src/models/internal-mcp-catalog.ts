@@ -14,14 +14,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import {
-  findExpiredSoftDeleted,
-  type HardDeleteOpts,
-  hardDelete,
-  lockRowForPurge,
-  restore,
-  softDelete,
-} from "@/database/soft-delete";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import {
   constructLegacyMcpDeploymentName,
   constructLegacyMultitenantMcpDeploymentName,
@@ -1095,147 +1088,14 @@ class InternalMcpCatalogModel {
     return true;
   }
 
-  /**
-   * Physical delete — reserved for purge/rollback flows, never a user action.
-   *
-   * Refuses (returns false) while any install row — active or soft-deleted,
-   * of this row or a legacy child — still points here: `mcp_server.catalog_id`
-   * is SET NULL + NOT NULL, so the delete would raise 23502, and the purge
-   * rules delete a shared-`deletedAt` cascade as a unit, so a catalog must
-   * outlive its unpurged installs (the sweep retries next run). The FOR UPDATE
-   * lock on the catalog row serializes against a concurrent restore; a racing
-   * install insert still trips 23502, which the sweep's per-row try/catch
-   * absorbs.
-   *
-   * The DB secret bags (client/localConfig/preset) were deliberately retained
-   * at soft-delete so restore could recover credentials; a purge destroys
-   * them — including a legacy child's bag, since children cascade with the
-   * parent row.
-   */
-  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
-    const secretIds: string[] = [];
-    const deleted = await withDbTransaction(async (tx) => {
-      if (
-        !(await lockRowForPurge(
-          tx,
-          schema.internalMcpCatalogTable,
-          eq(schema.internalMcpCatalogTable.id, id),
-          opts,
-        ))
-      ) {
-        return false;
-      }
-
-      const [pinned] = await tx
-        .select({ id: schema.mcpServersTable.id })
-        .from(schema.mcpServersTable)
-        .innerJoin(
-          schema.internalMcpCatalogTable,
-          eq(
-            schema.mcpServersTable.catalogId,
-            schema.internalMcpCatalogTable.id,
-          ),
-        )
-        .where(
-          or(
-            eq(schema.internalMcpCatalogTable.id, id),
-            eq(schema.internalMcpCatalogTable.parentCatalogItemId, id),
-          ),
-        )
-        .limit(1);
-      if (pinned) return false;
-
-      const rows = await tx
-        .select({
-          clientSecretId: schema.internalMcpCatalogTable.clientSecretId,
-          localConfigSecretId:
-            schema.internalMcpCatalogTable.localConfigSecretId,
-          presetSecretId: schema.internalMcpCatalogTable.presetSecretId,
-        })
-        .from(schema.internalMcpCatalogTable)
-        .where(
-          or(
-            eq(schema.internalMcpCatalogTable.id, id),
-            eq(schema.internalMcpCatalogTable.parentCatalogItemId, id),
-          ),
-        );
-      for (const row of rows) {
-        for (const secretId of [
-          row.clientSecretId,
-          row.localConfigSecretId,
-          row.presetSecretId,
-        ]) {
-          if (secretId) secretIds.push(secretId);
-        }
-      }
-
-      const count = await hardDelete(
-        tx,
-        schema.internalMcpCatalogTable,
-        eq(schema.internalMcpCatalogTable.id, id),
-      );
-      if (count === 0) return false;
-      await opts?.onPurged?.(tx);
-      return true;
-    });
-
-    if (deleted) {
-      for (const secretId of secretIds) {
-        try {
-          await secretManager().deleteSecret(secretId);
-        } catch (error) {
-          logger.warn(
-            { catalogId: id, secretId, error: String(error) },
-            "InternalMcpCatalogModel.hardDelete: failed to delete secret (orphaned). DB record already removed.",
-          );
-        }
-      }
-    }
-    return deleted;
-  }
-
-  /**
-   * The purge sweep's find-expired scan. Rows with a NULL `organization_id`
-   * (the built-in system entries) are excluded by findExpiredSoftDeleted:
-   * without a tenant there is no audit-attributable purge.
-   */
-  static async findExpiredDeleted(params: {
-    retentionDays: number;
-    limit: number;
-    offset: number;
-  }): Promise<{ id: string; organizationId: string }[]> {
-    return findExpiredSoftDeleted(
+  /** Physical delete — reserved for purge/rollback flows, never a user action. */
+  static async hardDelete(id: string): Promise<boolean> {
+    const count = await hardDelete(
       db,
       schema.internalMcpCatalogTable,
-      {
-        id: schema.internalMcpCatalogTable.id,
-        organizationId: schema.internalMcpCatalogTable.organizationId,
-      },
-      params,
+      eq(schema.internalMcpCatalogTable.id, id),
     );
-  }
-
-  /** Identity-only audit snapshot for purge audit rows; org-scoped. */
-  static async findIdentityForAudit(
-    id: string,
-    organizationId: string,
-  ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select({
-        id: schema.internalMcpCatalogTable.id,
-        name: schema.internalMcpCatalogTable.name,
-        serverType: schema.internalMcpCatalogTable.serverType,
-        deletedAt: schema.internalMcpCatalogTable.deletedAt,
-      })
-      .from(schema.internalMcpCatalogTable)
-      .where(
-        and(
-          eq(schema.internalMcpCatalogTable.id, id),
-          eq(schema.internalMcpCatalogTable.organizationId, organizationId),
-        ),
-      );
-    if (!row) return null;
-    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
+    return count > 0;
   }
 
   /**

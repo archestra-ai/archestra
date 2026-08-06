@@ -18,7 +18,10 @@ import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/con
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { DeletedRowMeta } from "@/components/deleted-row-meta";
+import {
+  PERMANENT_DELETE_LABEL,
+  permanentDeleteRowAction,
+} from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
@@ -40,7 +43,9 @@ import {
   usePermanentlyDeleteConnector,
   useRestoreConnector,
 } from "@/lib/knowledge/connector.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { formatDate } from "@/lib/utils";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 type ConnectorItem =
@@ -121,9 +126,14 @@ function ConnectorsList() {
     useState<ConnectorItem | null>(null);
   const restoreConnector = useRestoreConnector();
   const permanentlyDeleteConnector = usePermanentlyDeleteConnector();
+  // Resolved once here rather than inside a cell renderer, as the shared
+  // permanent-delete action requires.
+  const admin = useIsGlobalAdmin();
 
   const items = connectors?.data ?? [];
   const pagination = connectors?.pagination;
+  const hasActiveFilters =
+    !!search || connectorTypeFilter !== "all" || isDeletedView;
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -150,8 +160,13 @@ function ConnectorsList() {
   );
 
   const clearFilters = useCallback(() => {
-    router.push(pathname, { scroll: false });
-  }, [router, pathname]);
+    const params = new URLSearchParams(searchParams.toString());
+    for (const key of ["search", "connectorType", "status"]) {
+      params.delete(key);
+    }
+    params.set("page", "1");
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [searchParams, router, pathname]);
 
   const columns: ColumnDef<ConnectorItem>[] = [
     {
@@ -293,7 +308,12 @@ function ConnectorsList() {
     {
       id: "deleted",
       header: "Deleted",
-      cell: ({ row }) => <DeletedRowMeta deletedAt={row.original.deletedAt} />,
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {formatRelativeTimeFromNow(row.original.deletedAt)}
+        </span>
+      ),
     },
     {
       id: "actions",
@@ -305,16 +325,13 @@ function ConnectorsList() {
             {
               icon: <ArchiveRestore className="h-4 w-4" />,
               label: "Restore",
-              permissions: { knowledgeSource: ["manage-deleted"] },
+              permissions: { knowledgeSource: ["delete"] },
               onClick: () => restoreConnector.mutate(row.original.id),
             },
-            {
-              icon: <Trash2 className="h-4 w-4" />,
-              label: "Delete permanently",
-              permissions: { knowledgeSource: ["manage-deleted"] },
-              variant: "destructive",
+            permanentDeleteRowAction({
+              admin,
               onClick: () => setPermanentlyDeletingConnector(row.original),
-            },
+            }),
           ]}
         />
       ),
@@ -353,7 +370,7 @@ function ConnectorsList() {
               </SelectContent>
             </Select>
             <ResourceDeletedStatusFilter
-              deletePermission={{ knowledgeSource: ["manage-deleted"] }}
+              deletePermission={{ knowledgeSource: ["delete"] }}
             />
           </div>
         </div>
@@ -368,12 +385,16 @@ function ConnectorsList() {
             columns={isDeletedView ? deletedColumns : columns}
             data={items}
             getRowId={(row) => row.id}
-            emptyMessage={
-              isDeletedView ? "No deleted connectors" : "No connectors found"
-            }
-            hasActiveFilters={!!search || connectorTypeFilter !== "all"}
+            // The deleted view always counts as filtered (see
+            // hasActiveFilters), so its empty state is the filtered one below.
+            emptyMessage="No connectors found"
+            hasActiveFilters={hasActiveFilters}
             onClearFilters={clearFilters}
-            filteredEmptyMessage="No connectors match your filters. Try adjusting your search."
+            filteredEmptyMessage={
+              isDeletedView
+                ? "No deleted connectors found."
+                : "No connectors match your filters. Try adjusting your search."
+            }
             hideSelectedCount
             manualPagination
             pagination={{
@@ -398,7 +419,7 @@ function ConnectorsList() {
               if (!open) setPermanentlyDeletingConnector(null);
             }}
             title="Delete connector permanently"
-            description={`This permanently deletes "${permanentlyDeletingConnector.name}" along with its synced documents, run history, and access mappings. The data cannot be recovered.`}
+            description={`This destroys "${permanentlyDeletingConnector.name}" along with its synced documents, run history, and access mappings. Nothing recovers them.`}
             isPending={permanentlyDeleteConnector.isPending}
             onConfirm={async () => {
               const ok = await permanentlyDeleteConnector.mutateAsync(
@@ -406,8 +427,7 @@ function ConnectorsList() {
               );
               if (ok) setPermanentlyDeletingConnector(null);
             }}
-            confirmLabel="Delete permanently"
-            pendingLabel="Deleting..."
+            confirmLabel={PERMANENT_DELETE_LABEL}
           />
         )}
 

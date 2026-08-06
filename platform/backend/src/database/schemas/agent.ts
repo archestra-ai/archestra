@@ -201,11 +201,6 @@ const agentsTable = softDeletablePgTable(
       .where(
         sql`${table.agentType} = 'llm_proxy' AND ${table.isPersonalProxy} = true AND ${table.deletedAt} IS NULL`,
       ),
-    // Serves the retention sweep's find-deleted scan; the active-rows partial
-    // indexes above cannot, since they exclude soft-deleted rows.
-    index("agents_deleted_at_purge_idx")
-      .on(table.deletedAt)
-      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 

@@ -123,15 +123,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               hackathonGalleryRepo: z
                 .object({ owner: z.string(), name: z.string() })
                 .nullable(),
-              /**
-               * Soft-delete retention window, for the trash views' "eligible
-               * for deletion in N days" countdown. `days` is meaningful only
-               * when `enabled` is true.
-               */
-              softDeleteRetention: z.strictObject({
-                enabled: z.boolean(),
-                days: z.number(),
-              }),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -194,7 +185,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (config.hackathonRecorder.gallery.githubClientId &&
               config.hackathonRecorder.gallery.repo) ||
             null,
-          softDeleteRetention: config.softDeleteRetention,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

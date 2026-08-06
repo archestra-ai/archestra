@@ -17,17 +17,13 @@ const knowledgeBasesTable = softDeletablePgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // Partial: every read of this table filters `deleted_at IS NULL`, so the
-    // index only ever needs the active rows — soft-deleted ones stay out of it
-    // rather than growing an index nothing scans.
+    // Partial: every read of this table but the trash listing filters
+    // `deleted_at IS NULL`, so the index only ever needs the active rows.
+    // The trash's `status=deleted` slice scans instead — deliberately
+    // unindexed, since soft-deleted rows are a small tail of a small table.
     index("knowledge_bases_organization_id_idx")
       .on(table.organizationId)
       .where(sql`deleted_at IS NULL`),
-    // Serves the retention sweep's find-deleted scan; the active-rows partial
-    // index above cannot, since it excludes soft-deleted rows.
-    index("knowledge_bases_deleted_at_purge_idx")
-      .on(table.deletedAt)
-      .where(sql`deleted_at IS NOT NULL`),
   ],
 );
 

@@ -22,7 +22,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { DeletedRowMeta } from "@/components/deleted-row-meta";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import {
@@ -431,18 +430,6 @@ function SkillsList() {
         </div>
       ),
     },
-    ...(isDeletedView
-      ? [
-          {
-            id: "deleted",
-            header: "Deleted",
-            enableSorting: false,
-            cell: ({ row }) => (
-              <DeletedRowMeta deletedAt={row.original.deletedAt} />
-            ),
-          } satisfies ColumnDef<SkillItem>,
-        ]
-      : []),
     {
       id: "actions",
       size: 150,

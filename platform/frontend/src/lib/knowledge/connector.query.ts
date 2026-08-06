@@ -258,10 +258,13 @@ export function usePermanentlyDeleteConnector() {
       }
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, id) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["connectors"] });
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      // Drop the detail and document queries for an id that no longer
+      // resolves, rather than letting a stale URL remount them into a 404.
+      queryClient.removeQueries({ queryKey: ["connectors", id] });
       toast.success("Connector permanently deleted");
     },
   });

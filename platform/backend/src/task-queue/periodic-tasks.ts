@@ -50,9 +50,6 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 600,
     payload: {},
   },
-  // Soft-delete retention sweep (trash purge). A fast no-op unless
-  // ARCHESTRA_SOFT_DELETE_RETENTION_ENABLED is set.
-  { taskType: "soft_delete_purge", intervalSeconds: 86400, payload: {} },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

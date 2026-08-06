@@ -6,7 +6,6 @@ import {
 import { sql } from "drizzle-orm";
 import { isGlobalAdmin, userHasPermission } from "@/auth";
 import { withDbTransaction } from "@/database";
-import type { HardDeleteOpts } from "@/database/soft-delete";
 import logger from "@/logging";
 import {
   ConversationModel,
@@ -714,32 +713,6 @@ class ProjectService {
       throw new ApiError(404, "Project not found");
     }
 
-    if (
-      !(await this.purgeUnchecked({
-        id: params.id,
-        organizationId: params.organizationId,
-      }))
-    ) {
-      throw new ApiError(404, "Project not found");
-    }
-  }
-
-  /**
-   * The purge itself, with no caller to authorize. Shared by {@link purge}
-   * (which checks the caller is a global admin first, then maps false to 404)
-   * and the retention sweep, which has no caller at all and passes
-   * `onlyIfDeletedForDays` so only an aged-out row is taken. Returns whether a
-   * project was destroyed; false means a restore won the race, or the row is
-   * no longer past the retention window.
-   *
-   * Not on the model: project bytes live in the external file store, which is
-   * a service-layer dependency (`fileStore`), and the capture has to happen
-   * inside the same transaction as the row delete.
-   */
-  async purgeUnchecked(
-    params: { id: string; organizationId: string },
-    opts?: HardDeleteOpts,
-  ): Promise<boolean> {
     const purged = await withDbTransaction(async (tx) => {
       // `sql.raw`, not an interpolated value: SET is a utility command and
       // takes no bind parameters. The value is a module constant.
@@ -751,11 +724,10 @@ class ProjectService {
 
       // The lock is the race guard: a concurrent restore either wins (no
       // soft-deleted row here, so we stop) or waits and then finds nothing.
-      const locked = await ProjectModel.lockIfDeleted(
-        tx,
-        { id: params.id, organizationId: params.organizationId },
-        opts,
-      );
+      const locked = await ProjectModel.lockIfDeleted(tx, {
+        id: params.id,
+        organizationId: params.organizationId,
+      });
       if (!locked) return false;
 
       // Captured while the rows still exist — the cascade below removes them.
@@ -764,12 +736,10 @@ class ProjectService {
         tx,
       );
       await ProjectModel.hardDeleteLocked(tx, params.id);
-      const orphaned = await purgeBytes();
-      await opts?.onPurged?.(tx);
-      return { orphaned };
+      return { orphaned: await purgeBytes() };
     });
 
-    if (!purged) return false;
+    if (!purged) throw new ApiError(404, "Project not found");
 
     // A byte delete that fails does NOT fail the purge: the rows are already
     // gone, so refusing to commit would only trade leftover bytes for a project
@@ -786,7 +756,6 @@ class ProjectService {
         "Project permanently deleted, but some stored file contents could not be removed and are now orphaned; see the preceding warnings for their object keys",
       );
     }
-    return true;
   }
 
   /**

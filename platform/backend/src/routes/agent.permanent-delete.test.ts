@@ -280,14 +280,11 @@ describe("DELETE /api/agents/:id/permanent", () => {
     // Identity and nothing more. Without its own registry entry this route
     // would walk up to `/api/agents/:id` and be logged as `agent.deleted` with
     // that route's FULL snapshot attached — a preserved copy of exactly the
-    // configuration the caller asked to destroy. `deletedAt` rides along as
-    // lifecycle metadata, not content: it is how long the agent sat in the
-    // trash, which is the retention sweep's whole reason for taking it.
+    // configuration the caller asked to destroy.
     expect(rows[0].before).toEqual({
       id: agent.id,
       name: "Audited Proxy",
       agentType: "llm_proxy",
-      deletedAt: expect.any(String),
     });
     expect(rows[0].after).toBeNull();
   });

@@ -22,7 +22,6 @@ import {
   ConnectDialogSection,
 } from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { DeletedRowMeta } from "@/components/deleted-row-meta";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -374,19 +373,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 </Badge>
               );
             },
-          } satisfies ColumnDef<AgentData>,
-        ]
-      : []),
-    ...(isDeletedView
-      ? [
-          {
-            id: "deleted",
-            header: "Deleted",
-            enableSorting: false,
-            size: 240,
-            cell: ({ row }) => (
-              <DeletedRowMeta deletedAt={row.original.deletedAt} />
-            ),
           } satisfies ColumnDef<AgentData>,
         ]
       : []),

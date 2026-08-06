@@ -992,7 +992,7 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
               teamIds: [],
             });
           } catch (backingError) {
-            await AppModel.hardDelete(app.id);
+            await AppModel.purge(app.id);
             throw backingError;
           }
           created++;

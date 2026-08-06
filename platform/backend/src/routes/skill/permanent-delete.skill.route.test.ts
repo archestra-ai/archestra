@@ -242,13 +242,7 @@ describe("DELETE /api/skills/:id/permanent", () => {
     // content, so an audit row carrying a snapshot of it would defeat the
     // request — and a missing registry entry would produce exactly that, by
     // inheriting `/api/skills/:id`'s full-snapshot fetcher through walk-up.
-    // `deletedAt` rides along as lifecycle metadata, not content: it is how
-    // long the skill sat in the trash, which is what the retention sweep acts on.
-    expect(rows[0].before).toEqual({
-      id: created.id,
-      name: "audited-purge",
-      deletedAt: expect.any(String),
-    });
+    expect(rows[0].before).toEqual({ id: created.id, name: "audited-purge" });
     expect(rows[0].after).toBeNull();
   });
 

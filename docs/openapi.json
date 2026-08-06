@@ -74575,7 +74575,6 @@
                 "app.created",
                 "app.updated",
                 "app.deleted",
-                "app.purged",
                 "chatOpsBinding.created",
                 "chatOpsBinding.updated",
                 "chatOpsBinding.deleted",
@@ -74584,8 +74583,8 @@
                 "connector.created",
                 "connector.updated",
                 "connector.deleted",
-                "connector.purged",
                 "connector.restored",
+                "connector.purged",
                 "connector.permission_sync_triggered",
                 "connector.synced",
                 "defaultUserLimit.created",
@@ -74606,7 +74605,6 @@
                 "internalMcpCatalog.created",
                 "internalMcpCatalog.updated",
                 "internalMcpCatalog.deleted",
-                "internalMcpCatalog.purged",
                 "internalMcpCatalog.restored",
                 "internalMcpCatalog.reinstalled",
                 "invitation.created",
@@ -74614,8 +74612,8 @@
                 "knowledgeBase.created",
                 "knowledgeBase.updated",
                 "knowledgeBase.deleted",
-                "knowledgeBase.purged",
                 "knowledgeBase.restored",
+                "knowledgeBase.purged",
                 "limit.created",
                 "limit.updated",
                 "limit.deleted",
@@ -74634,7 +74632,6 @@
                 "mcpServer.created",
                 "mcpServer.updated",
                 "mcpServer.deleted",
-                "mcpServer.purged",
                 "mcpServer.restored",
                 "mcpServer.reinstalled",
                 "mcpServerInstallationRequest.created",
@@ -74649,8 +74646,8 @@
                 "project.created",
                 "project.updated",
                 "project.deleted",
-                "project.purged",
                 "project.restored",
+                "project.purged",
                 "role.created",
                 "role.updated",
                 "role.deleted",
@@ -74664,15 +74661,14 @@
                 "skill.created",
                 "skill.updated",
                 "skill.deleted",
-                "skill.purged",
                 "skill.restored",
+                "skill.purged",
                 "skill.imported",
                 "team.created",
                 "team.updated",
                 "team.deleted",
                 "teamToken.rotated",
                 "tool.deleted",
-                "tool.purged",
                 "toolInvocationPolicy.created",
                 "toolInvocationPolicy.updated",
                 "toolInvocationPolicy.deleted",
@@ -74876,7 +74872,6 @@
                                   "app.created",
                                   "app.updated",
                                   "app.deleted",
-                                  "app.purged",
                                   "chatOpsBinding.created",
                                   "chatOpsBinding.updated",
                                   "chatOpsBinding.deleted",
@@ -74885,8 +74880,8 @@
                                   "connector.created",
                                   "connector.updated",
                                   "connector.deleted",
-                                  "connector.purged",
                                   "connector.restored",
+                                  "connector.purged",
                                   "connector.permission_sync_triggered",
                                   "connector.synced",
                                   "defaultUserLimit.created",
@@ -74907,7 +74902,6 @@
                                   "internalMcpCatalog.created",
                                   "internalMcpCatalog.updated",
                                   "internalMcpCatalog.deleted",
-                                  "internalMcpCatalog.purged",
                                   "internalMcpCatalog.restored",
                                   "internalMcpCatalog.reinstalled",
                                   "invitation.created",
@@ -74915,8 +74909,8 @@
                                   "knowledgeBase.created",
                                   "knowledgeBase.updated",
                                   "knowledgeBase.deleted",
-                                  "knowledgeBase.purged",
                                   "knowledgeBase.restored",
+                                  "knowledgeBase.purged",
                                   "limit.created",
                                   "limit.updated",
                                   "limit.deleted",
@@ -74935,7 +74929,6 @@
                                   "mcpServer.created",
                                   "mcpServer.updated",
                                   "mcpServer.deleted",
-                                  "mcpServer.purged",
                                   "mcpServer.restored",
                                   "mcpServer.reinstalled",
                                   "mcpServerInstallationRequest.created",
@@ -74950,8 +74943,8 @@
                                   "project.created",
                                   "project.updated",
                                   "project.deleted",
-                                  "project.purged",
                                   "project.restored",
+                                  "project.purged",
                                   "role.created",
                                   "role.updated",
                                   "role.deleted",
@@ -74965,15 +74958,14 @@
                                   "skill.created",
                                   "skill.updated",
                                   "skill.deleted",
-                                  "skill.purged",
                                   "skill.restored",
+                                  "skill.purged",
                                   "skill.imported",
                                   "team.created",
                                   "team.updated",
                                   "team.deleted",
                                   "teamToken.rotated",
                                   "tool.deleted",
-                                  "tool.purged",
                                   "toolInvocationPolicy.created",
                                   "toolInvocationPolicy.updated",
                                   "toolInvocationPolicy.deleted",
@@ -75480,7 +75472,6 @@
                             "app.created",
                             "app.updated",
                             "app.deleted",
-                            "app.purged",
                             "chatOpsBinding.created",
                             "chatOpsBinding.updated",
                             "chatOpsBinding.deleted",
@@ -75489,8 +75480,8 @@
                             "connector.created",
                             "connector.updated",
                             "connector.deleted",
-                            "connector.purged",
                             "connector.restored",
+                            "connector.purged",
                             "connector.permission_sync_triggered",
                             "connector.synced",
                             "defaultUserLimit.created",
@@ -75511,7 +75502,6 @@
                             "internalMcpCatalog.created",
                             "internalMcpCatalog.updated",
                             "internalMcpCatalog.deleted",
-                            "internalMcpCatalog.purged",
                             "internalMcpCatalog.restored",
                             "internalMcpCatalog.reinstalled",
                             "invitation.created",
@@ -75519,8 +75509,8 @@
                             "knowledgeBase.created",
                             "knowledgeBase.updated",
                             "knowledgeBase.deleted",
-                            "knowledgeBase.purged",
                             "knowledgeBase.restored",
+                            "knowledgeBase.purged",
                             "limit.created",
                             "limit.updated",
                             "limit.deleted",
@@ -75539,7 +75529,6 @@
                             "mcpServer.created",
                             "mcpServer.updated",
                             "mcpServer.deleted",
-                            "mcpServer.purged",
                             "mcpServer.restored",
                             "mcpServer.reinstalled",
                             "mcpServerInstallationRequest.created",
@@ -75554,8 +75543,8 @@
                             "project.created",
                             "project.updated",
                             "project.deleted",
-                            "project.purged",
                             "project.restored",
+                            "project.purged",
                             "role.created",
                             "role.updated",
                             "role.deleted",
@@ -75569,15 +75558,14 @@
                             "skill.created",
                             "skill.updated",
                             "skill.deleted",
-                            "skill.purged",
                             "skill.restored",
+                            "skill.purged",
                             "skill.imported",
                             "team.created",
                             "team.updated",
                             "team.deleted",
                             "teamToken.rotated",
                             "tool.deleted",
-                            "tool.purged",
                             "toolInvocationPolicy.created",
                             "toolInvocationPolicy.updated",
                             "toolInvocationPolicy.deleted",
@@ -119060,22 +119048,6 @@
                             "name"
                           ],
                           "additionalProperties": false
-                        },
-                        "softDeleteRetention": {
-                          "type": "object",
-                          "properties": {
-                            "enabled": {
-                              "type": "boolean"
-                            },
-                            "days": {
-                              "type": "number"
-                            }
-                          },
-                          "required": [
-                            "enabled",
-                            "days"
-                          ],
-                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -119107,8 +119079,7 @@
                         "hackathonRecorderEnabled",
                         "hackathonVideoDownloadEnabled",
                         "hackathonMaxFinalCutMs",
-                        "hackathonGalleryRepo",
-                        "softDeleteRetention"
+                        "hackathonGalleryRepo"
                       ],
                       "additionalProperties": false
                     },
@@ -210506,7 +210477,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "List all knowledge bases for the organization. `status=deleted` lists soft-deleted knowledge bases org-wide and requires the manage-deleted permission (granted to admins by default); `search` does not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "description": "List all knowledge bases for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and pagination behave identically on both slices, but the deleted slice carries identity only: `connectors` and `assignedAgents` come back empty and `totalDocsIndexed` zero, since those links resolve to nothing while the knowledge base is in the trash.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -210550,7 +210521,7 @@
             "in": "query",
             "name": "status",
             "required": false,
-            "description": "Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires the manage-deleted permission (granted to admins by default)."
+            "description": "Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires `knowledgeSource:delete`."
           }
         ],
         "responses": {
@@ -212286,7 +212257,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Restore a soft-deleted knowledge base (requires the manage-deleted permission). Agent assignments and connector links survive deletion, so the restored knowledge base is immediately live for previously-assigned agents. 404 if there is no soft-deleted knowledge base with that id in the org.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:manage-deleted`: View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors",
+        "description": "Restore a soft-deleted knowledge base. Agent assignments and connector links survive deletion, so the restored knowledge base is immediately live for previously-assigned agents. 404 if there is no soft-deleted knowledge base with that id in the org.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -212551,7 +212522,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSource:manage-deleted"
+            "knowledgeSource:delete"
           ]
         }
       }
@@ -212562,7 +212533,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Permanently delete a soft-deleted knowledge base (requires the manage-deleted permission). Destroys the row and its assignments; the data cannot be recovered. A trash action, never a shortcut: 404 unless the knowledge base is already soft-deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:manage-deleted`: View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors",
+        "description": "Permanently destroy a soft-deleted knowledge base (global admins only — a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: the row and its agent and connector assignments are destroyed. Its connectors survive, detached. 404 if there is no soft-deleted knowledge base with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -212827,7 +212798,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSource:manage-deleted"
+            "knowledgeSource:delete"
           ]
         }
       }
@@ -213121,7 +213092,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List all connectors for the organization. `status=deleted` lists soft-deleted connectors org-wide and requires the manage-deleted permission (granted to admins by default); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "description": "List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -213278,7 +213249,7 @@
             "in": "query",
             "name": "status",
             "required": false,
-            "description": "Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires the manage-deleted permission (granted to admins by default)."
+            "description": "Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`."
           }
         ],
         "responses": {
@@ -221553,7 +221524,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Restore a soft-deleted connector (requires the manage-deleted permission). The stored credential was destroyed when the connector was deleted, so it is restored DISABLED — re-authenticate, then re-enable it to resume syncing. 404 if there is no soft-deleted connector with that id in the org.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:manage-deleted`: View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors",
+        "description": "Restore a soft-deleted connector. The stored credential was destroyed when the connector was deleted, so it is restored DISABLED — re-authenticate, then re-enable it to resume syncing. 404 if there is no soft-deleted connector with that id in the org that the caller may manage — restoring one is gated on the same visibility as editing or deleting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -221818,7 +221789,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSource:manage-deleted"
+            "knowledgeSource:delete"
           ]
         }
       }
@@ -221829,7 +221800,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Permanently delete a soft-deleted connector (requires the manage-deleted permission). Destroys its documents, chunks, runs, ACLs, and assignments; the data cannot be recovered. A trash action, never a shortcut: 404 unless the connector is already soft-deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:manage-deleted`: View, restore, and permanently delete soft-deleted Knowledge Bases and Connectors",
+        "description": "Permanently destroy a soft-deleted connector (global admins only — a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: its synced documents and their chunks, run history, access mappings, and assignments are all destroyed. 404 if there is no soft-deleted connector with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -222094,7 +222065,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "knowledgeSource:manage-deleted"
+            "knowledgeSource:delete"
           ]
         }
       }

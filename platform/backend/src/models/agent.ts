@@ -37,14 +37,7 @@ import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import {
-  findExpiredSoftDeleted,
-  type HardDeleteOpts,
-  hardDelete,
-  lockRowForPurge,
-  restore,
-  softDelete,
-} from "@/database/soft-delete";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -79,7 +72,6 @@ import AgentVersionModel from "./agent-version";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
-import TaskModel from "./task";
 import ToolModel from "./tool";
 
 /** The columns a boot-time sync reconciles against a shipped built-in definition. */
@@ -2798,51 +2790,6 @@ class AgentModel {
     return count > 0;
   }
 
-  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
-  static async findExpiredDeleted(params: {
-    retentionDays: number;
-    limit: number;
-    offset: number;
-  }): Promise<{ id: string; organizationId: string }[]> {
-    return findExpiredSoftDeleted(
-      db,
-      schema.agentsTable,
-      {
-        id: schema.agentsTable.id,
-        organizationId: schema.agentsTable.organizationId,
-      },
-      params,
-    );
-  }
-
-  /**
-   * Identity-only audit snapshot ({ id, name, type, deletedAt }), org-scoped,
-   * soft-deleted rows included. A purge audit row records that the row is
-   * gone, not what it contained — full snapshots stay on user-initiated soft
-   * deletes, where recovery is the point.
-   */
-  static async findIdentityForAudit(
-    id: string,
-    organizationId: string,
-  ): Promise<Record<string, unknown> | null> {
-    const [row] = await db
-      .select({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-        agentType: schema.agentsTable.agentType,
-        deletedAt: schema.agentsTable.deletedAt,
-      })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.id, id),
-          eq(schema.agentsTable.organizationId, organizationId),
-        ),
-      );
-    if (!row) return null;
-    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
-  }
-
   /**
    * Permanently destroy a soft-deleted agent. Irreversible.
    *
@@ -2885,14 +2832,9 @@ class AgentModel {
    * raise this deliberately if one ever shows up, rather than removing it.
    *
    * Returns false when there was no soft-deleted row to take, which is how a
-   * restore that won the race reports itself — and, for the retention sweep,
-   * how a row that aged back under the window reports itself too.
+   * restore that won the race reports itself.
    */
-  static async purge(
-    id: string,
-    organizationId: string,
-    opts?: HardDeleteOpts,
-  ): Promise<boolean> {
+  static async purge(id: string, organizationId: string): Promise<boolean> {
     return withDbTransaction(async (tx) => {
       // `sql.raw`, not an interpolated value: SET is a utility command and
       // takes no bind parameters, so `= $1` is a syntax error. The value is a
@@ -2904,44 +2846,22 @@ class AgentModel {
       // The row lock is the race guard: a concurrent restore either commits
       // first (leaving no soft-deleted row here) or blocks until this
       // transaction commits and then finds no row at all. Restore wins, and
-      // never against a half-purged agent. The sweep additionally passes
-      // `onlyIfDeletedForDays`, re-checking the retention window under the
-      // same lock so a row restored-and-redeleted mid-sweep is not purged.
-      const locked = await lockRowForPurge(
-        tx,
-        schema.agentsTable,
-        and(
-          eq(schema.agentsTable.id, id),
-          eq(schema.agentsTable.organizationId, organizationId),
-          isNotNull(schema.agentsTable.deletedAt),
-        ),
-        opts,
-      );
+      // never against a half-purged agent.
+      const [locked] = await tx
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.id, id),
+            eq(schema.agentsTable.organizationId, organizationId),
+            isNotNull(schema.agentsTable.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
       if (!locked) return false;
 
-      // Queued runs of this agent's schedule triggers reference trigger/run
-      // rows that cascade with the agent; the tasks themselves have no FK (ids
-      // live in the payload), so drop them or the worker keeps dequeuing work
-      // whose rows are gone. Inside the transaction, after the FOR UPDATE
-      // re-check, so a restore that wins the race keeps its queued runs.
-      const triggers = await tx
-        .select({ id: schema.scheduleTriggersTable.id })
-        .from(schema.scheduleTriggersTable)
-        .where(eq(schema.scheduleTriggersTable.agentId, id));
-      for (const trigger of triggers) {
-        await TaskModel.deleteQueuedForPayloadValue(
-          {
-            taskType: "schedule_trigger_run_execute",
-            key: "triggerId",
-            value: trigger.id,
-          },
-          tx,
-        );
-      }
-
-      if (!(await AgentModel.hardDelete(id, tx))) return false;
-      await opts?.onPurged?.(tx);
-      return true;
+      return AgentModel.hardDelete(id, tx);
     });
   }
 
@@ -3606,6 +3526,37 @@ class AgentModel {
     }
     throw new Error("Unreachable");
   }
+  /**
+   * Identity of an agent for the audit trail, and nothing else — id, name, and
+   * type. The permanent-delete route uses this instead of
+   * {@link findByIdForAudit} because a purge is audited by identity only: the
+   * point of the action is to destroy the config, so an audit row that
+   * preserved a full snapshot of it would defeat the request.
+   *
+   * Does not filter soft-deleted rows — the purge target is by definition in
+   * the trash, so the filtered read paths cannot serve this.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,

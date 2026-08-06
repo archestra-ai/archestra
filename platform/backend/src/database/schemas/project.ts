@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import {
-  index,
   pgEnum,
   pgTable,
   primaryKey,
@@ -66,11 +65,6 @@ const projectsTable = softDeletablePgTable(
     // on the same folder, so a recreated same-named project gets a fresh
     // suffixed slug via `generateUniqueSlug` instead of colliding with it.
     uniqueIndex("projects_org_slug_uidx").on(table.organizationId, table.slug),
-    // Serves the retention sweep's find-deleted scan; the active-rows partial
-    // indexes above cannot, since they exclude soft-deleted rows.
-    index("projects_deleted_at_purge_idx")
-      .on(table.deletedAt)
-      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 

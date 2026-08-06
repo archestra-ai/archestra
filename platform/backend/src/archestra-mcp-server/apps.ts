@@ -597,7 +597,7 @@ const registry = defineArchestraTools([
         }
         app = await AppModel.findById(created.id);
       } catch (error) {
-        await AppModel.hardDelete(created.id);
+        await AppModel.purge(created.id);
         throw error;
       }
 

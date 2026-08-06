@@ -13,6 +13,7 @@ import {
 } from "@/services/agent-tool-assignment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { InternalMcpCatalog, Tool, User } from "@/types";
+import { MAX_BULK_AGENT_TOOL_ENTRIES } from "@/types";
 
 /**
  * Build a minimal Tool object for test maps.
@@ -1224,6 +1225,11 @@ describe("POST /api/agents/tools/bulk-update", () => {
       });
 
       expect(response.statusCode).toBe(500);
+      // Nothing was applied, so nothing is reported as removed. The result
+      // arrays are built inside the transaction callback precisely so a rollback
+      // cannot leave a removal report behind for a delete that was undone.
+      expect(response.json().removed).toBeUndefined();
+      expect(response.json().notAssigned).toBeUndefined();
     } finally {
       spy.mockRestore();
     }
@@ -1236,6 +1242,81 @@ describe("POST /api/agents/tools/bulk-update", () => {
     expect((await AgentModel.findById(agent.id))?.latestVersion).toBe(
       versionBefore,
     );
+  });
+
+  // Contradictory input: the same pair in both lists. Before the removal was
+  // filtered out, the row was deleted and re-inserted and the pair came back in
+  // BOTH `removed` and `succeeded` — two outcomes a client reconciling against
+  // the response cannot both act on.
+  test("lets the assignment win when a pair appears in both lists", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const tool = await makeTool();
+    // Already assigned statically, so the assignment below is a real change and
+    // lands in `succeeded` rather than `duplicates`.
+    const original = await makeAgentTool(agent.id, tool.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            credentialResolutionMode: "dynamic",
+          },
+        ],
+        removals: [{ agentId: agent.id, toolId: tool.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.failed).toEqual([]);
+    expect(body.succeeded).toEqual([{ agentId: agent.id, toolId: tool.id }]);
+    expect(body.removed).toEqual([]);
+    expect(body.notAssigned).toEqual([]);
+
+    // Updated in place rather than deleted and re-created: same row, so an
+    // audit trail keyed on the assignment id still follows it.
+    const rows = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(original.id);
+    expect(rows[0].credentialResolutionMode).toBe("dynamic");
+  });
+
+  test("rejects a body over the entry ceiling", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const tool = await makeTool();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: Array.from(
+          { length: MAX_BULK_AGENT_TOOL_ENTRIES + 1 },
+          () => ({ agentId: agent.id, toolId: tool.id }),
+        ),
+        removals: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 
   test("writes an audit record naming the affected agents and their assignments", async ({

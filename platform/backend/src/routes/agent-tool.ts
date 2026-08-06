@@ -32,7 +32,7 @@ import {
   type ToolAssignmentError,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
-import type { InternalMcpCatalog, Tool } from "@/types";
+import type { InternalMcpCatalog, Tool, ToolOwnerContext } from "@/types";
 import {
   AgentToolAssignmentBodySchema,
   AgentToolFilterSchema,
@@ -44,6 +44,7 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
+  MAX_BULK_AGENT_TOOL_ENTRIES,
   SelectAgentToolSchema,
   UpdateAgentToolSchema,
   UuidIdSchema,
@@ -192,7 +193,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Assign multiple tools to multiple agents in bulk",
         tags: ["Agent Tools"],
         body: z.object({
-          assignments: z.array(BulkAgentToolAssignmentSchema),
+          assignments: z
+            .array(BulkAgentToolAssignmentSchema)
+            .max(MAX_BULK_AGENT_TOOL_ENTRIES),
         }),
         response: constructResponseSchema(
           z.object({
@@ -222,14 +225,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { assignments } = request.body;
 
-      const existingAgentIds = await assertCanModifyAgents({
-        request,
-        agentIds: [...new Set(assignments.map((a) => a.agentId))],
-      });
+      const { existingAgentIds, ownerContextsByAgentId } =
+        await assertCanModifyAgents({
+          request,
+          agentIds: [...new Set(assignments.map((a) => a.agentId))],
+        });
 
       const { validated, failed } = await prepareToolAssignments({
         assignments,
         existingAgentIds,
+        ownerContextsByAgentId,
       });
       const { succeeded, duplicates } = await writeToolAssignments({
         validated,
@@ -263,11 +268,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.BulkUpdateAgentTools,
         description:
-          "Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool.",
+          "Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool. If the same agent/tool pair appears in both lists, the assignment wins and the removal is ignored.",
         tags: ["Agent Tools"],
         body: z.object({
-          assignments: z.array(BulkAgentToolAssignmentSchema).default([]),
-          removals: z.array(BulkAgentToolRemovalSchema).default([]),
+          assignments: z
+            .array(BulkAgentToolAssignmentSchema)
+            .max(MAX_BULK_AGENT_TOOL_ENTRIES)
+            .default([]),
+          removals: z
+            .array(BulkAgentToolRemovalSchema)
+            .max(MAX_BULK_AGENT_TOOL_ENTRIES)
+            .default([]),
         }),
         response: constructResponseSchema(
           z.object({
@@ -297,15 +308,16 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { assignments, removals } = request.body;
 
-      const existingAgentIds = await assertCanModifyAgents({
-        request,
-        agentIds: [
-          ...new Set([
-            ...assignments.map((a) => a.agentId),
-            ...removals.map((r) => r.agentId),
-          ]),
-        ],
-      });
+      const { existingAgentIds, ownerContextsByAgentId } =
+        await assertCanModifyAgents({
+          request,
+          agentIds: [
+            ...new Set([
+              ...assignments.map((a) => a.agentId),
+              ...removals.map((r) => r.agentId),
+            ]),
+          ],
+        });
 
       // A batch has no single resource id, and the audit registry only sees
       // route params — never the body — so this route registers without a
@@ -321,14 +333,22 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { validated, failed } = await prepareToolAssignments({
         assignments,
         existingAgentIds,
+        ownerContextsByAgentId,
       });
 
-      const removed: { agentId: string; toolId: string }[] = [];
-      const notAssigned: { agentId: string; toolId: string }[] = [];
       // Deduped per agent: a pair repeated in the body deletes one row, so
       // reporting it once per occurrence would claim more removals than
       // happened.
       const removalToolIdsByAgent = new Map<string, Set<string>>();
+      // A pair the body both assigns and removes is contradictory input. The
+      // assignment wins and the removal is dropped, rather than deleting the row
+      // and re-inserting it: the end state is identical either way, but dropping
+      // it keeps the row's identity and `createdAt`, and stops one pair from
+      // being reported in both `removed` and `succeeded` — two outcomes a client
+      // reconciling against the response cannot both act on.
+      const assignedPairs = new Set(
+        validated.map((a) => `${a.agentId}:${a.toolId}`),
+      );
 
       for (const removal of removals) {
         // An agent that is absent here does not exist, belongs to another
@@ -336,6 +356,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // was applied, so this is a failure, not the benign `notAssigned` a
         // client is told to ignore. Same id and message the assignment side
         // produces, so both halves of one request report it identically.
+        // Stays outside the transaction below: it rejects the request as
+        // written, and is not state a rollback could undo.
         if (!existingAgentIds.has(removal.agentId)) {
           failed.push({
             agentId: removal.agentId,
@@ -344,44 +366,57 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
           continue;
         }
+        if (assignedPairs.has(`${removal.agentId}:${removal.toolId}`)) {
+          continue;
+        }
         const toolIds =
           removalToolIdsByAgent.get(removal.agentId) ?? new Set<string>();
         toolIds.add(removal.toolId);
         removalToolIdsByAgent.set(removal.agentId, toolIds);
       }
 
-      // One transaction so a save is all-or-nothing. Without it a throw in the
-      // assignment write leaves the removals committed but unforked: the agent
-      // has silently lost tools and no config version records the state to
-      // restore from.
-      const { succeeded, duplicates } = await db.transaction(async (tx) => {
-        // Removals run before assignments so a tool being re-pinned to a
-        // different credential in the same save cannot have its fresh
-        // assignment deleted by a stale removal.
-        for (const [agentId, toolIdSet] of removalToolIdsByAgent) {
-          const toolIds = [...toolIdSet];
-          const deletedToolIds = new Set(
-            await AgentToolModel.bulkDelete(agentId, toolIds, tx),
-          );
-          for (const toolId of toolIds) {
-            // `notAssigned` means the row was already gone — a concurrent
-            // edit, or a client working from a stale view. It is the
-            // removal-side twin of `duplicates`, NOT a failure, and clients
-            // must not treat it as one.
-            if (deletedToolIds.has(toolId)) {
-              removed.push({ agentId, toolId });
-            } else {
-              notAssigned.push({ agentId, toolId });
+      // One transaction so the writes are all-or-nothing. Without it a throw in
+      // the assignment write leaves the removals committed but unforked: the
+      // agent has silently lost tools and no config version records the state to
+      // restore from. The version fork below is deliberately outside — it is
+      // best-effort and runs after the commit, so "committed" here means the
+      // rows are final, not that a version already records them.
+      const { succeeded, duplicates, removed, notAssigned } =
+        await db.transaction(async (tx) => {
+          // Built inside the callback and returned, so a rollback cannot leave
+          // behind a report of removals that were undone.
+          const removed: { agentId: string; toolId: string }[] = [];
+          const notAssigned: { agentId: string; toolId: string }[] = [];
+
+          // Removals run before assignments so a tool being re-pinned to a
+          // different credential in the same save cannot have its fresh
+          // assignment deleted by a stale removal.
+          for (const [agentId, toolIdSet] of removalToolIdsByAgent) {
+            const toolIds = [...toolIdSet];
+            const deletedToolIds = new Set(
+              await AgentToolModel.bulkDelete(agentId, toolIds, tx),
+            );
+            for (const toolId of toolIds) {
+              // `notAssigned` means the row was already gone — a concurrent
+              // edit, or a client working from a stale view. It is the
+              // removal-side twin of `duplicates`, NOT a failure, and clients
+              // must not treat it as one.
+              if (deletedToolIds.has(toolId)) {
+                removed.push({ agentId, toolId });
+              } else {
+                notAssigned.push({ agentId, toolId });
+              }
             }
           }
-        }
 
-        return writeToolAssignments({
-          validated,
-          organizationId: request.organizationId,
-          tx,
+          const written = await writeToolAssignments({
+            validated,
+            organizationId: request.organizationId,
+            tx,
+          });
+
+          return { ...written, removed, notAssigned };
         });
-      });
 
       request.auditAfter =
         await buildBulkToolUpdateAuditSnapshot(existingAgentIds);
@@ -1087,7 +1122,16 @@ async function buildBulkToolUpdateAuditSnapshot(
 async function assertCanModifyAgents(params: {
   request: { user: { id: string }; organizationId: string };
   agentIds: string[];
-}): Promise<Set<string>> {
+}): Promise<{
+  existingAgentIds: Set<string>;
+  /**
+   * The same rows, reshaped for assignment validation. Returned rather than
+   * re-derived because the permission check already read every field
+   * `ToolOwnerContext` needs; without this, validating a statically-bound
+   * assignment re-reads its agent — once per assignment, not once per agent.
+   */
+  ownerContextsByAgentId: Map<string, ToolOwnerContext>;
+}> {
   const { request, agentIds } = params;
 
   const [agentsForPermCheck, checker] = await Promise.all([
@@ -1115,7 +1159,22 @@ async function assertCanModifyAgents(params: {
     });
   }
 
-  return new Set(agentsForPermCheck.keys());
+  return {
+    existingAgentIds: new Set(agentsForPermCheck.keys()),
+    ownerContextsByAgentId: new Map(
+      [...agentsForPermCheck].map(([agentId, agent]) => [
+        agentId,
+        {
+          // The caller's org is the right value here only because the lookup
+          // above was fenced on it — every row in the map is in this tenant.
+          organizationId: request.organizationId,
+          scope: agent.scope,
+          authorId: agent.authorId,
+          teamIds: agent.teamIds,
+        },
+      ]),
+    ),
+  };
 }
 
 /**
@@ -1130,11 +1189,12 @@ async function assertCanModifyAgents(params: {
 async function prepareToolAssignments(params: {
   assignments: z.infer<typeof BulkAgentToolAssignmentSchema>[];
   existingAgentIds: Set<string>;
+  ownerContextsByAgentId: Map<string, ToolOwnerContext>;
 }): Promise<{
   validated: z.infer<typeof BulkAgentToolAssignmentSchema>[];
   failed: { agentId: string; toolId: string; error: string }[];
 }> {
-  const { assignments, existingAgentIds } = params;
+  const { assignments, existingAgentIds, ownerContextsByAgentId } = params;
 
   const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
   const tools = await ToolModel.getByIds(uniqueToolIds);
@@ -1167,6 +1227,7 @@ async function prepareToolAssignments(params: {
 
   const preFetchedData = {
     existingAgentIds,
+    ownerContextsByAgentId,
     toolsMap,
     catalogItemsMap,
     mcpServersBasicMap,

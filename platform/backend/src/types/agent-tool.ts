@@ -70,6 +70,17 @@ export const BulkAgentToolRemovalSchema = z.object({
   toolId: UuidIdSchema,
 });
 
+/**
+ * Ceiling on entries in one bulk agent-tool request body.
+ *
+ * A fence, not a tuning knob: the widest realistic save is a single MCP server's
+ * catalog across a handful of agents, which is two orders of magnitude below
+ * this. It exists because the batch reaches the database as `(agentId, toolId)`
+ * pair predicates, so an unbounded body would eventually hit a statement-level
+ * parameter limit while a write transaction is open.
+ */
+export const MAX_BULK_AGENT_TOOL_ENTRIES = 5000;
+
 export const AgentToolFilterSchema = z.object({
   search: z.string().max(TOOL_SEARCH_MAX_LENGTH).optional(),
   agentId: UuidIdSchema.optional(),

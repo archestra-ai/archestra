@@ -509,7 +509,7 @@ export const bulkAssignTools = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
- * Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool.
+ * Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool. If the same agent/tool pair appears in both lists, the assignment wins and the removal is ignored.
  *
  * Authentication:
  *

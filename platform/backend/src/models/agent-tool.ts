@@ -368,10 +368,15 @@ class AgentToolModel {
   }
 
   /**
-   * Bulk insert multiple agent-tool assignments in a single query.
-   * Checks auto-configure setting once (not per-row) to avoid N+1 queries.
+   * Insert-or-update several agent-tool assignments in a single statement.
+   *
+   * `ON CONFLICT` rather than a plain insert so a caller holding a mix of new
+   * and already-assigned pairs needs no per-row UPDATE. That matters because the
+   * bulk routes run this inside a transaction: a per-row loop would hold write
+   * locks on `agent_tools` for as many round trips as there are rows, so lock
+   * hold time would scale with batch size.
    */
-  static async bulkCreate(
+  static async bulkUpsert(
     values: Array<{
       agentId: string;
       toolId: string;
@@ -390,10 +395,25 @@ class AgentToolModel {
         values.map((value) => ({
           agentId: value.agentId,
           toolId: value.toolId,
-          ...(value.mcpServerId ? { mcpServerId: value.mcpServerId } : {}),
+          // Explicit null, never an omitted key. The conflict clause below sets
+          // `excluded.mcp_server_id`, which is whatever this row proposed —
+          // omitting the column would make it default to null on insert but
+          // leave a stale pin in place on update, so the same input would clear
+          // a pin or not depending on whether the row already existed.
+          mcpServerId: value.mcpServerId ?? null,
           credentialResolutionMode: normalizeCredentialResolutionMode(value),
         })),
       )
+      .onConflictDoUpdate({
+        target: [schema.agentToolsTable.agentId, schema.agentToolsTable.toolId],
+        set: {
+          mcpServerId: sql`excluded.mcp_server_id`,
+          credentialResolutionMode: sql`excluded.credential_resolution_mode`,
+          // Set explicitly: this is an INSERT statement, so the column's
+          // `$onUpdate` never fires for the conflict path.
+          updatedAt: new Date(),
+        },
+      })
       .returning();
 
     return rows;
@@ -868,8 +888,10 @@ class AgentToolModel {
 
   /**
    * Bulk create-or-update agent-tool assignments.
-   * Fetches all existing assignments in a single query, then batch-inserts new ones
-   * and individually updates those that need credential changes.
+   *
+   * Classifies every pair against one batched read, then writes every pair that
+   * actually changed with a single upsert. The statement count inside a caller's
+   * transaction is therefore fixed rather than proportional to the batch.
    */
   static async bulkCreateOrUpdateCredentials(
     assignments: Array<{
@@ -890,31 +912,55 @@ class AgentToolModel {
     if (assignments.length === 0) return [];
     const dbx = tx ?? db;
 
-    // Build OR conditions for all (agentId, toolId) pairs
-    const pairConditions = assignments.map((a) =>
-      and(
-        eq(schema.agentToolsTable.agentId, a.agentId),
-        eq(schema.agentToolsTable.toolId, a.toolId),
-      ),
-    );
+    // Chunked: the predicate is one `OR` group per pair, two bind params each,
+    // and this is the FIRST statement in the function — so an oversized batch
+    // would trip Postgres' 65535-parameter cap here, before any of the work
+    // below, no matter what the callers cap their request bodies at.
+    const existingMap = new Map<
+      string,
+      {
+        mcpServerId: string | null;
+        credentialResolutionMode: CredentialResolutionMode;
+      }
+    >();
+    for (
+      let offset = 0;
+      offset < assignments.length;
+      offset += EXISTING_LOOKUP_CHUNK_SIZE
+    ) {
+      const chunk = assignments.slice(
+        offset,
+        offset + EXISTING_LOOKUP_CHUNK_SIZE,
+      );
+      const existing = await dbx
+        .select({
+          agentId: schema.agentToolsTable.agentId,
+          toolId: schema.agentToolsTable.toolId,
+          mcpServerId: schema.agentToolsTable.mcpServerId,
+          credentialResolutionMode:
+            schema.agentToolsTable.credentialResolutionMode,
+        })
+        .from(schema.agentToolsTable)
+        .where(
+          or(
+            ...chunk.map((a) =>
+              and(
+                eq(schema.agentToolsTable.agentId, a.agentId),
+                eq(schema.agentToolsTable.toolId, a.toolId),
+              ),
+            ),
+          ),
+        );
+      for (const row of existing) {
+        existingMap.set(`${row.agentId}:${row.toolId}`, row);
+      }
+    }
 
-    // Batch fetch all existing assignments in one query
-    const existing = await dbx
-      .select()
-      .from(schema.agentToolsTable)
-      .where(or(...pairConditions));
-
-    const existingMap = new Map(
-      existing.map((e) => [`${e.agentId}:${e.toolId}`, e]),
-    );
-
-    const toCreate: Array<{
-      agentId: string;
-      toolId: string;
-      mcpServerId?: string | null;
-      resolveAtCallTime?: boolean;
-      credentialResolutionMode?: CredentialResolutionMode;
-    }> = [];
+    // Keyed, not a list: one upsert cannot name the same conflict target twice
+    // ("ON CONFLICT DO UPDATE command cannot affect row a second time"), and a
+    // body repeating a pair is a client mistake, not a reason to fail the save.
+    // Last occurrence wins, mirroring the sequential writes this replaced.
+    const toUpsert = new Map<string, (typeof assignments)[number]>();
     const results: Array<{
       agentId: string;
       toolId: string;
@@ -926,57 +972,40 @@ class AgentToolModel {
       const existingRow = existingMap.get(key);
 
       if (!existingRow) {
-        // New assignment - collect for batch insert
-        toCreate.push(assignment);
+        toUpsert.set(key, assignment);
         results.push({
           agentId: assignment.agentId,
           toolId: assignment.toolId,
           status: "created",
         });
-      } else {
-        // Check if credentials need updating
-        const needsUpdate =
-          existingRow.mcpServerId !== (assignment.mcpServerId ?? null) ||
-          existingRow.credentialResolutionMode !==
-            normalizeCredentialResolutionMode(assignment);
+        continue;
+      }
 
-        if (needsUpdate) {
-          const updateData: Partial<
-            Pick<UpdateAgentTool, "mcpServerId" | "credentialResolutionMode">
-          > = {
-            mcpServerId: assignment.mcpServerId ?? null,
-            credentialResolutionMode:
-              normalizeCredentialResolutionMode(assignment),
-          };
-          await AgentToolModel.update(existingRow.id, updateData, tx);
-          results.push({
-            agentId: assignment.agentId,
-            toolId: assignment.toolId,
-            status: "updated",
-          });
-        } else {
-          results.push({
-            agentId: assignment.agentId,
-            toolId: assignment.toolId,
-            status: "unchanged",
-          });
-        }
+      const needsUpdate =
+        existingRow.mcpServerId !== (assignment.mcpServerId ?? null) ||
+        existingRow.credentialResolutionMode !==
+          normalizeCredentialResolutionMode(assignment);
+
+      if (needsUpdate) {
+        // Only changed pairs reach the write. An `unchanged` row included here
+        // would have its `updatedAt` bumped by the conflict clause for a write
+        // that alters nothing else.
+        toUpsert.set(key, assignment);
+        results.push({
+          agentId: assignment.agentId,
+          toolId: assignment.toolId,
+          status: "updated",
+        });
+      } else {
+        results.push({
+          agentId: assignment.agentId,
+          toolId: assignment.toolId,
+          status: "unchanged",
+        });
       }
     }
 
-    // Batch insert all new assignments in a single query
-    if (toCreate.length > 0) {
-      await AgentToolModel.bulkCreate(
-        toCreate.map((a) => ({
-          agentId: a.agentId,
-          toolId: a.toolId,
-          ...(a.mcpServerId ? { mcpServerId: a.mcpServerId } : {}),
-          credentialResolutionMode: normalizeCredentialResolutionMode(a),
-        })),
-        organizationId,
-        tx,
-      );
-    }
+    await AgentToolModel.bulkUpsert([...toUpsert.values()], organizationId, tx);
 
     return results;
   }
@@ -1455,6 +1484,13 @@ type AgentToolAssignment = {
   mcpServerId: string | null;
   credentialResolutionMode: CredentialResolutionMode;
 };
+
+/**
+ * Pairs per existing-assignment lookup in `bulkCreateOrUpdateCredentials`. Two
+ * bind params per pair, so this keeps a chunk an order of magnitude below
+ * Postgres' 65535-parameter statement cap.
+ */
+const EXISTING_LOOKUP_CHUNK_SIZE = 2000;
 
 function normalizeCredentialResolutionMode(params: {
   resolveAtCallTime?: boolean;

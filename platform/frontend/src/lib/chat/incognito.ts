@@ -48,13 +48,26 @@ export function storeIncognitoKey(conversationId: string, key: string): void {
   }
 }
 
-/** Read a conversation's stored DEK, or null when this browser has none. */
+/**
+ * Read a conversation's stored DEK, or null when this browser has none.
+ *
+ * A stored value that is not a well-formed key (43 base64url chars = 32
+ * bytes) is discarded and treated as absent: sending garbage in the header
+ * gets a 400 from the backend's key parser, which the UI would misreport as
+ * "conversation not found" — whereas sending no key at all yields the honest
+ * locked-tombstone view.
+ */
 export function getIncognitoKey(conversationId: string): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return localStorage.getItem(
-      conversationStorageKeys(conversationId).incognitoKey,
-    );
+    const storageKey = conversationStorageKeys(conversationId).incognitoKey;
+    const value = localStorage.getItem(storageKey);
+    if (value === null) return null;
+    if (!/^[A-Za-z0-9_-]{43}$/.test(value)) {
+      localStorage.removeItem(storageKey);
+      return null;
+    }
+    return value;
   } catch {
     return null;
   }

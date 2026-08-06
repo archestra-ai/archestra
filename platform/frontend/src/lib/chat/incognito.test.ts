@@ -30,25 +30,38 @@ describe("key storage", () => {
   });
 
   it("round-trips a key per conversation under the registered storage key", () => {
-    storeIncognitoKey("conv-1", "key-1");
+    const key = generateIncognitoKey();
+    storeIncognitoKey("conv-1", key);
 
-    expect(getIncognitoKey("conv-1")).toBe("key-1");
+    expect(getIncognitoKey("conv-1")).toBe(key);
     expect(getIncognitoKey("conv-2")).toBeNull();
     // Stored under the conversationStorageKeys registry entry so the
     // delete-conversation cleanup sweeps it.
     expect(
       localStorage.getItem(conversationStorageKeys("conv-1").incognitoKey),
-    ).toBe("key-1");
+    ).toBe(key);
   });
 
   it("builds request headers only when a key is stored", () => {
     expect(incognitoRequestHeaders("conv-1")).toBeUndefined();
     expect(incognitoRequestHeaders(undefined)).toBeUndefined();
 
-    storeIncognitoKey("conv-1", "key-1");
+    const key = generateIncognitoKey();
+    storeIncognitoKey("conv-1", key);
     expect(incognitoRequestHeaders("conv-1")).toEqual({
-      [INCOGNITO_KEY_HEADER]: "key-1",
+      [INCOGNITO_KEY_HEADER]: key,
     });
+  });
+
+  it("discards a malformed stored key so the chat gets the tombstone, not a 400", () => {
+    const storageKey = conversationStorageKeys("conv-1").incognitoKey;
+    // e.g. localStorage corrupted, or a stringified undefined written by a bug
+    localStorage.setItem(storageKey, "undefined");
+
+    expect(getIncognitoKey("conv-1")).toBeNull();
+    expect(incognitoRequestHeaders("conv-1")).toBeUndefined();
+    // Self-heals: the garbage entry is removed.
+    expect(localStorage.getItem(storageKey)).toBeNull();
   });
 });
 

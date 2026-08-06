@@ -596,6 +596,7 @@ class McpClient {
       resolvedServer,
       tokenAuth,
       enterpriseTransportCredential,
+      catalogItem,
       secrets,
     });
     if (executedAs) {
@@ -2116,7 +2117,7 @@ class McpClient {
             enterpriseTransportCredential,
           );
         } else if (
-          !hasStaticAuthorizationCredential(secrets) &&
+          !staticCredentialsProvideAuthorization({ catalogItem, secrets }) &&
           tokenAuth?.isExternalIdp &&
           tokenAuth.rawToken
         ) {
@@ -2170,7 +2171,7 @@ class McpClient {
             enterpriseTransportCredential,
           );
         } else if (
-          !hasStaticAuthorizationCredential(secrets) &&
+          !staticCredentialsProvideAuthorization({ catalogItem, secrets }) &&
           tokenAuth?.isExternalIdp &&
           tokenAuth.rawToken
         ) {
@@ -3064,12 +3065,14 @@ class McpClient {
     resolvedServer: ResolvedInstallIdentity | null;
     tokenAuth: TokenAuthContext | undefined;
     enterpriseTransportCredential: ResolvedEnterpriseTransportCredential | null;
+    catalogItem: InternalMcpCatalog;
     secrets: Record<string, unknown>;
   }): Promise<McpExecutedAs | null> {
     const {
       resolvedServer,
       tokenAuth,
       enterpriseTransportCredential,
+      catalogItem,
       secrets,
     } = params;
 
@@ -3081,7 +3084,7 @@ class McpClient {
       return { kind: "idp_exchange", callerUserId };
     }
 
-    if (!hasStaticAuthorizationCredential(secrets)) {
+    if (!staticCredentialsProvideAuthorization({ catalogItem, secrets })) {
       if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
         return { kind: "idp_passthrough", callerUserId };
       }
@@ -4793,6 +4796,27 @@ function hasStaticAuthorizationCredential(
   }
 
   return false;
+}
+
+/**
+ * True when the install's stored static credentials already settle the
+ * outbound authorization — either via the canonical token secret fields, or
+ * via a custom userConfig field mapped to the `Authorization` header. The
+ * external-IdP JWT fallback (end-to-end JWKS pattern) must never fire in that
+ * case: it would overwrite a working stored credential with the caller's JWT
+ * and the upstream would reject the call.
+ */
+function staticCredentialsProvideAuthorization(params: {
+  catalogItem: InternalMcpCatalog;
+  secrets: Record<string, unknown>;
+}): boolean {
+  if (hasStaticAuthorizationCredential(params.secrets)) {
+    return true;
+  }
+
+  return Object.keys(buildStaticCredentialHeaders(params)).some(
+    (name) => name.toLowerCase() === "authorization",
+  );
 }
 
 function getStaticCredentialHeaderValue(params: {

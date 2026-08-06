@@ -11,13 +11,11 @@ on:
   workflow_dispatch:
     inputs:
       envs:
-        description: "Comma-separated env ids to run (BENCH_ENVS)"
+        description: "Comma-separated env ids to run (empty = the daily default)"
         required: false
-        default: "basic"
       lanes:
-        description: "Comma-separated lane names to run (BENCH_LANES)"
+        description: "Comma-separated lane names to run (empty = the daily roster)"
         required: false
-        default: "glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-56-luna,mimo-25,qwen36-35b-a3b,qwen36-27b"
 
 permissions: {}
 
@@ -174,11 +172,22 @@ jobs:
           DAGGER_RUNNER_HOST: ${{ steps.dagger.outputs.runner_host }}
           DAGGER_ENGINE_POD: ${{ steps.dagger.outputs.pod_name }}
           RUN_NUMBER: ${{ steps.dagger.outputs.run_number }}
-          # Scheduled runs carry no inputs, so the fallbacks keep the daily sweep unchanged.
+          # Scheduled runs carry no inputs and an empty dispatch field is falsy, so these fallbacks
+          # are the single source of the daily selection.
           BENCH_ENVS: ${{ inputs.envs || 'basic' }}
           BENCH_LANES: ${{ inputs.lanes || 'glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-56-luna,mimo-25,qwen36-35b-a3b,qwen36-27b' }}
         run: |
           set -euo pipefail
+          # Dispatch inputs are the only caller-controlled values on the envsubst allowlist, and they
+          # land inside the Job manifest — a quote or newline there would be YAML injection into a pod
+          # that mounts the bench secrets. Env ids and lane names are slugs, so a strict allowlist
+          # rejects anything surprising.
+          for v in "${BENCH_ENVS}" "${BENCH_LANES}"; do
+            if ! [[ "${v}" =~ ^[A-Za-z0-9.,_-]+$ ]]; then
+              echo "::error::envs/lanes selections may only contain [A-Za-z0-9.,_-]; got: ${v}"
+              exit 1
+            fi
+          done
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           # An ephemeral, localhost-only sidecar password (the DB dies with the pod); alphanumeric so it
           # is safe in the bench .env URL.

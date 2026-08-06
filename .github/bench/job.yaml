@@ -100,12 +100,13 @@ spec:
           resources:
             requests:
               cpu: "1"
-              memory: 2Gi
+              # Advised lanes (lanes.toml `advisor = ...`) each boot an isolated backend process in
+              # this pod alongside the shared-env one, so the request covers the realistic working
+              # set of harness + two Node backends rather than scheduling at half of it and leaving
+              # the pod a burst-far-above-request eviction target.
+              memory: 3Gi
             limits:
               cpu: "2"
-              # Advised lanes (lanes.toml `advisor = ...`) each boot an isolated backend process in
-              # this pod alongside the shared-env one, so the burst ceiling covers several Node
-              # servers at once; the request is unchanged to keep scheduling pressure as before.
               memory: 6Gi
           volumeMounts:
             - name: work

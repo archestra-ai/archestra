@@ -228,18 +228,26 @@ tests:
           value: hook-succeeded,hook-failed
         documentIndex: 2
 
-  - it: states each outcome in a single self-contained line
+  - it: warns in one self-contained line and stays silent otherwise
     asserts:
       # Helm emits a pod's whole log as one record and the two arms arrive in no
       # guaranteed order, so a message that refers to the other arm, or spans
       # lines, arrives unreadable.
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'Network policy enforced'
+          pattern: 'NETWORK POLICY NOT ENFORCED'
+        documentIndex: 2
+      # No all-clear from this arm. Blocked is also how an unreachable target
+      # looks from inside the policy, so a pod holding half the evidence would
+      # sometimes announce enforcement nobody measured. The termination message
+      # still carries the verdict to the platform, which holds both halves.
+      - notMatchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'echo "\[archestra\][^"]*(enforced|OK|✅)'
         documentIndex: 2
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'NETWORK POLICY NOT ENFORCED'
+          pattern: "printf '%s' \"\\$result\" > /dev/termination-log"
         documentIndex: 2
       # The warning is one line with nowhere to explain itself, so it has to
       # carry both what silently stops working and the way out. Helm output
@@ -272,17 +280,13 @@ tests:
         documentIndex: 2
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: '✅'
-        documentIndex: 2
-      - matchRegex:
-          path: spec.containers[0].args[0]
           pattern: '⚠️'
         documentIndex: 1
 
-  # A working cluster should cost one line. The control arm speaks only to void
-  # a result the treatment arm cannot know is meaningless: with the target down
-  # it is blocked for the wrong reason and would report enforcement regardless.
-  - it: says nothing when the target answers, and voids the result when it does not
+  # A healthy cluster should cost no output at all. This arm speaks only when the
+  # target never came up, which is the one state the treatment arm cannot detect:
+  # it is blocked for the wrong reason and measures nothing.
+  - it: says nothing when the target answers, and reports why when it does not
     asserts:
       - notMatchRegex:
           path: spec.containers[0].args[0]
@@ -292,9 +296,16 @@ tests:
           path: spec.containers[0].args[0]
           pattern: 'NETWORK POLICY CHECK INCONCLUSIVE'
         documentIndex: 1
+      # Never tells the operator to discount a result. With no all-clear from the
+      # treatment arm, the only line that can accompany this one is the warning,
+      # and that is the direction it is safe to believe.
+      - notMatchRegex:
+          path: spec.containers[0].args[0]
+          pattern: '[Dd]isregard'
+        documentIndex: 1
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: '[Dd]isregard any enforcement result reported for this release'
+          pattern: 'Re-run once the platform is up'
         documentIndex: 1
       # Unmeasured and unenforced leave the operator equally exposed, so this
       # arm names the same consequence rather than only reporting that the

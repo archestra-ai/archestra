@@ -1827,10 +1827,7 @@ async function authorizeDeployScope(params: {
 
 /**
  * Moves credential values out of a catalog write payload into the item's secret
- * bags, rewriting the payload to reference them instead. Mirrors what the REST
- * catalog routes do: without it a tool-supplied secret is persisted as
- * plaintext in the `local_config` / `oauth_config` jsonb columns, and every
- * later secret-expanding read serializes it back out.
+ * bags, rewriting the payload to reference them instead.
  */
 async function moveCatalogSecretsToBag(params: {
   updateData: Record<string, unknown>;

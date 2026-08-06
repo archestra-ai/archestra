@@ -18,12 +18,6 @@ Start a project from the Projects page, or turn an existing chat into one with *
 
 ![Chat sidebar menu with the Create project action](/docs/automated_screenshots/platform-projects_create-from-chat.webp)
 
-## Default Agent
-
-An agent gives a chat its tools, its model, and the instructions it follows. Pick one in the project's edit dialog and every new chat in the project starts on it, instead of the organization-wide default. New scheduled tasks pick it up too.
-
-The list follows your sharing choice, so everyone in the project can use the agent you pick. A private project offers every agent you can use; sharing with teams narrows it to agents those teams have, and sharing with the whole organization to org-wide agents. Widen the sharing and an agent that no longer fits is dropped back to the default. Anyone can still switch agents in an individual chat.
-
 ## Files
 
 When an agent saves a file in a project chat — a report, for example — it goes to the project. The project page lists them all, and every chat in the project can read them.

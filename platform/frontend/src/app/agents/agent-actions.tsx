@@ -3,6 +3,7 @@ import {
   Copy,
   Download,
   Eye,
+  History,
   MessageSquare,
   Pencil,
   Plug,
@@ -34,6 +35,12 @@ type AgentActionsProps = {
   onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
+  /**
+   * Carries `canModify` with the id: the history dialog offers a restore,
+   * which is an update, so it needs the same scope check the row's own
+   * mutating buttons apply rather than RBAC alone.
+   */
+  onHistory: (agentId: string, canModify: boolean) => void;
 };
 
 export function AgentActions({
@@ -48,6 +55,7 @@ export function AgentActions({
   onClone,
   onExport,
   onConvertToSkill,
+  onHistory,
 }: AgentActionsProps) {
   const admin = useIsGlobalAdmin();
   const isBuiltIn = Boolean(agent.builtIn);
@@ -133,6 +141,13 @@ export function AgentActions({
           ? "Only internal agents can be exported"
           : undefined,
       onClick: () => onExport(agent),
+    },
+    {
+      icon: <History className="h-4 w-4" />,
+      label: "Version history",
+      permissions: { agent: ["read"] },
+      testId: `${E2eTestId.AgentVersionHistoryButton}-${agent.name}`,
+      onClick: () => onHistory(agent.id, canModify),
     },
     {
       icon: <Sparkles className="h-4 w-4" />,

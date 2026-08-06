@@ -32,6 +32,7 @@ function renderActions(agent: GatewayProp) {
       onRestore={vi.fn()}
       onPermanentlyDelete={onPermanentlyDelete}
       onClone={vi.fn()}
+      onHistory={vi.fn()}
     />,
   );
   return { onPermanentlyDelete };

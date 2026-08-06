@@ -15,6 +15,7 @@ import { A2AConnectionInstructions } from "@/components/a2a-connection-instructi
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   ConnectDialog,
@@ -221,6 +222,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const restoreAgent = useRestoreProfile();
   const permanentlyDeleteAgent = usePermanentlyDeleteProfile();
 
+  // The row's scope check travels with the id: it is computed per row, and the
+  // dialog's restore is an update that has to answer to it.
+  const [history, setHistory] = useState<{
+    id: string;
+    canModify: boolean;
+  } | null>(null);
   const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
     null,
   );
@@ -408,6 +415,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             onPermanentlyDelete={setPermanentlyDeletingAgent}
             onClone={setCloningAgent}
             onConvertToSkill={setConvertingAgent}
+            onHistory={(id, historyCanModify) =>
+              setHistory({ id, canModify: historyCanModify })
+            }
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
                 onSuccess: (data) => {
@@ -619,6 +629,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onCloned={(cloned) => {
                 // Open edit dialog for the cloned agent so user can rename immediately
                 editDialog.open(cloned as AgentData);
+              }}
+            />
+
+            <AgentVersionHistoryDialog
+              agentId={history?.id ?? null}
+              canModify={!!history?.canModify}
+              onOpenChange={(open) => {
+                if (!open) setHistory(null);
               }}
             />
           </div>

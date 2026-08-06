@@ -1,5 +1,5 @@
 import { E2eTestId } from "@archestra/shared";
-import { Copy, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
+import { Copy, History, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
 import { PermanentDeleteButton } from "@/components/permanent-delete";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -21,6 +21,12 @@ type McpGatewayActionsProps = {
   onRestore: (agentId: string) => void;
   onPermanentlyDelete: (agent: Gateway) => void;
   onClone: (agent: Gateway) => void;
+  /**
+   * Carries `canModify` with the id: the history dialog offers a restore,
+   * which is an update, so it needs the same scope check the row's own
+   * mutating buttons apply rather than RBAC alone.
+   */
+  onHistory: (agentId: string, canModify: boolean) => void;
 };
 
 export function McpGatewayActions({
@@ -32,6 +38,7 @@ export function McpGatewayActions({
   onRestore,
   onPermanentlyDelete,
   onClone,
+  onHistory,
 }: McpGatewayActionsProps) {
   if (agent.deletedAt) {
     return (
@@ -98,6 +105,19 @@ export function McpGatewayActions({
         }}
       >
         <Copy className="h-4 w-4" />
+      </PermissionButton>
+      <PermissionButton
+        permissions={{ mcpGateway: ["read"] }}
+        aria-label="Version history"
+        variant="outline"
+        size="icon-sm"
+        data-testid={`${E2eTestId.AgentVersionHistoryButton}-${agent.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onHistory(agent.id, canModify);
+        }}
+      >
+        <History className="h-4 w-4" />
       </PermissionButton>
       <PermissionButton
         permissions={{ mcpGateway: ["delete"] }}

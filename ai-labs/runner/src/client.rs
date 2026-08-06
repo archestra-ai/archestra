@@ -927,7 +927,8 @@ impl EvalClient {
             JsonValue::Array(skill_paths.iter().map(|s| JsonValue::String(s.clone())).collect()),
         );
         body.insert("scope".to_string(), JsonValue::String(scope.to_string()));
-        with_github_token(&mut body);
+        // No githubToken here: the import route rejects transient tokens (scheduled
+        // sync pulls could not reuse them), and the benchmark's skill repos are public.
 
         let prev_timeout = self.timeout();
         self.set_timeout(Duration::from_secs_f64(600.0));

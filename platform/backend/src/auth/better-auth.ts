@@ -322,9 +322,12 @@ export const auth = betterAuth({
     accountLinking: {
       enabled: true,
       /**
-       * Trust built-in SSO providers plus any identity providers configured by users.
-       * This allows existing users to sign in with built-in providers and custom
-       * generic OIDC/SAML providers without an env var override.
+       * Trust built-in SSO providers plus any identity providers configured by
+       * users. Note this list only affects better-auth's built-in social
+       * providers: the SSO plugin calls handleOAuthUserInfo with
+       * `trustProviderByName: false` and instead derives trust from the
+       * provider's `domainVerified` flag, so custom OIDC/SAML providers are
+       * NOT trusted through this list.
        */
       trustedProviders: getTrustedAccountLinkingProviderIds,
       /**
@@ -335,6 +338,27 @@ export const auth = betterAuth({
        */
       allowDifferentEmails: false,
       allowUnlinkingAll: true,
+      /**
+       * Let an SSO/social sign-in implicitly link onto an existing local
+       * account whose email was never marked verified.
+       *
+       * better-auth's default (true) guards against pre-registration account
+       * takeover: an attacker self-registers an unverified password account
+       * at the victim's email and waits for the victim's first SSO login to
+       * link onto it, keeping the planted password. That attack needs open
+       * self-registration, which Archestra does not have — accounts are only
+       * created by operators or through admin-issued invitations that fix the
+       * email address — and no verification email is ever sent, so every
+       * password-created user stays emailVerified=false forever. Under the
+       * default, switching an instance to SSO sign-in (especially with
+       * ARCHESTRA_AUTH_DISABLE_BASIC_AUTH) permanently locks those users out
+       * with "Account Not Linked" on their first SSO login.
+       *
+       * Linking still requires an email-verified assertion from the IdP (or a
+       * domain-verified provider) and an exact email match
+       * (allowDifferentEmails: false).
+       */
+      requireLocalEmailVerified: false,
     },
   },
 

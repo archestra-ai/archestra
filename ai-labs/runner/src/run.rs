@@ -332,12 +332,13 @@ fn lane_api_keys(lanes: &[Lane], platform_env: &HashMap<String, String>) -> Resu
         if let Some(advisor) = &lane.advisor {
             let key_env = advisor.key_env();
             let process = std::env::var(&key_env).ok();
-            let key = pick_key(platform_env.get(&key_env).map(String::as_str), process.as_deref()).ok_or_else(|| {
-                RunError::Config(format!(
-                    "set {} in platform/.env or the environment to seed advisor {:?} of lane {:?} ({})",
-                    key_env, advisor.lane_name, lane.name, advisor.provider
-                ))
-            })?;
+            let key =
+                pick_key(platform_env.get(&key_env).map(String::as_str), process.as_deref()).ok_or_else(|| {
+                    RunError::Config(format!(
+                        "set {} in platform/.env or the environment to seed advisor {:?} of lane {:?} ({})",
+                        key_env, advisor.lane_name, lane.name, advisor.provider
+                    ))
+                })?;
             keys.insert(advisor_key_slot(&lane.name), key);
         }
     }
@@ -947,6 +948,9 @@ fn infra_results_for_lane(
             stage_count: task.stages.len(),
             format_attempts: 0,
             artifact_dir: Some(ctx.root_run_dir.join(&subdir).to_string_lossy().to_string()),
+            advisor_consult_count: None,
+            advisor_total_tokens: None,
+            advisor_cost_usd: None,
         });
     }
     results
@@ -1081,7 +1085,9 @@ async fn setup_advisor(
         .update_agent_model(&advisor_id, &resolved.model_id, &resolved.api_key_id)
         .await?;
     for agent_id in agents.all_ids() {
-        client.set_agent_delegations(&agent_id, std::slice::from_ref(&advisor_id)).await?;
+        client
+            .set_agent_delegations(&agent_id, std::slice::from_ref(&advisor_id))
+            .await?;
     }
     info!(
         "advisor for lane {}: {} ({}) as agent {advisor_id}",
@@ -1323,6 +1329,7 @@ async fn run_lane(
             env.platform.tool_exposure_mode,
             &lane,
             agent_id,
+            agents.advisor_agent_id.as_deref(),
             &task,
             &resolved,
             &prices,
@@ -1345,6 +1352,7 @@ async fn run_one(
     tool_exposure_mode: ToolExposureMode,
     lane: &Lane,
     agent_id: &str,
+    advisor_agent_id: Option<&str>,
     task: &Task,
     resolved: &ResolvedModel,
     prices: &PriceBook,
@@ -1374,6 +1382,9 @@ async fn run_one(
                 stage_count: task.stages.len(),
                 format_attempts: 0,
                 artifact_dir: None,
+                advisor_consult_count: None,
+                advisor_total_tokens: None,
+                advisor_cost_usd: None,
             };
         }
     };
@@ -1413,6 +1424,7 @@ async fn run_one(
         agent_system_prompt,
         lane,
         agent_id,
+        advisor_agent_id,
         task,
         resolved,
         &artifacts,
@@ -1438,6 +1450,7 @@ async fn capture_effective_prompts(
     interactions: &[serde_json::Value],
     conversation_id: &str,
     artifacts: &RunArtifacts,
+    advisor_agent_id: Option<&str>,
 ) {
     // Every emitted event carries `conversation_id` so a multi-conversation rollout's captured prompts
     // can be attributed to the conversation they came from.
@@ -1450,7 +1463,7 @@ async fn capture_effective_prompts(
             .await;
     };
 
-    let outcome = extract_effective_prompts(interactions);
+    let outcome = extract_effective_prompts(interactions, advisor_agent_id);
     for prompt in &outcome.prompts {
         match serde_json::to_value(prompt) {
             Ok(mut value) => {
@@ -1517,6 +1530,7 @@ async fn grade_rollout(
     agent_system_prompt: &str,
     lane: &Lane,
     agent_id: &str,
+    advisor_agent_id: Option<&str>,
     task: &Task,
     resolved: &ResolvedModel,
     artifacts: &RunArtifacts,
@@ -1686,8 +1700,8 @@ async fn grade_rollout(
                         )
                         .await;
                 }
-                capture_effective_prompts(&rows, cid, artifacts).await;
-                usage.add(&sum_usage(&rows));
+                capture_effective_prompts(&rows, cid, artifacts, advisor_agent_id).await;
+                usage.add(&sum_usage(&rows, advisor_agent_id));
             }
             Err(e) => {
                 // A fetch failure leaves the rollout's usage incomplete; record it so cost is reported
@@ -2255,11 +2269,35 @@ async fn finish(
             None => (None, None, None, None, None),
         };
     let price_model = lane.price_model();
-    let cost = run_cost(run, prices, price_model.as_deref());
+    let advisor_price_model = lane.advisor.as_ref().and_then(|a| a.price_model());
+    let cost = run_cost(run, prices, price_model.as_deref(), advisor_price_model.as_deref());
     let (cost_value, cost_status) = match cost {
         RunCost::Priced(c) => (serde_json::Value::from(c), "priced"),
         RunCost::Unpriced => (serde_json::Value::Null, "unpriced"),
         RunCost::NoSpend => (serde_json::Value::Null, "no_spend"),
+    };
+    // Advisor metrics exist only for an advised lane; zero consults is then a real measurement
+    // (the tool was offered and never used), not a missing one.
+    let advisor_consults = lane
+        .advisor
+        .as_ref()
+        .map(|_| run.map(advisor_consult_count).unwrap_or(0));
+    let advisor_usage = run
+        .and_then(ChatRunResult::reliable_usage)
+        .and_then(|u| u.advisor.as_deref());
+    let advisor_total_tokens = advisor_usage.map(RunUsage::total_tokens);
+    // The advisor's cost share, priced only when the whole rollout priced (same book, same slugs), so
+    // the share can never disagree with the total's status. Advised-but-unconsulted is a real $0.
+    let advisor_cost_usd = match (&cost, advisor_usage) {
+        (RunCost::Priced(_), Some(a)) if a.had_spend() => prices.cost(
+            Some(a.prompt_tokens),
+            Some(a.completion_tokens),
+            Some(a.cache_read_tokens),
+            Some(a.cache_write_tokens),
+            advisor_price_model.as_deref(),
+        ),
+        (RunCost::Priced(_), Some(_)) => Some(0.0),
+        _ => None,
     };
     if let serde_json::Value::Object(map) = metadata {
         map["finished_at"] = serde_json::Value::String(timestamp());
@@ -2277,6 +2315,24 @@ async fn finish(
             "cost_status".to_string(),
             serde_json::Value::String(cost_status.to_string()),
         );
+        if lane.advisor.is_some() {
+            map.insert(
+                "advisor_consult_count".to_string(),
+                serde_json::to_value(advisor_consults).unwrap_or(serde_json::Value::Null),
+            );
+            map.insert(
+                "advisor_total_tokens".to_string(),
+                serde_json::to_value(advisor_total_tokens).unwrap_or(serde_json::Value::Null),
+            );
+            map.insert(
+                "advisor_cost_usd".to_string(),
+                serde_json::to_value(advisor_cost_usd).unwrap_or(serde_json::Value::Null),
+            );
+            map.insert(
+                "advisor_price_model".to_string(),
+                serde_json::to_value(&advisor_price_model).unwrap_or(serde_json::Value::Null),
+            );
+        }
     }
     artifacts.write_run(metadata).await;
     RunResult {
@@ -2300,15 +2356,45 @@ async fn finish(
         stage_count: task.stages.len(),
         format_attempts,
         artifact_dir: Some(artifacts.path.to_string_lossy().to_string()),
+        advisor_consult_count: advisor_consults,
+        advisor_total_tokens,
+        advisor_cost_usd,
     }
+}
+
+/// How many times the rollout consulted the advisor: top-level `agent__advisor` calls plus, as a
+/// belt-and-braces for a search-and-run surface, dispatches through `archestra__run_tool` naming it.
+fn advisor_consult_count(run: &ChatRunResult) -> usize {
+    run.tool_invocations
+        .iter()
+        .filter(|inv| match inv.get("name").and_then(|v| v.as_str()) {
+            Some("agent__advisor") => true,
+            Some("archestra__run_tool") => {
+                inv.get("input")
+                    .and_then(|i| i.get("tool_name"))
+                    .and_then(|v| v.as_str())
+                    == Some("agent__advisor")
+            }
+            _ => false,
+        })
+        .count()
 }
 
 /// Classify a rollout's USD cost from its interaction-sourced usage. Billable spend that we cannot
 /// fully and faithfully price is `Unpriced` (loud), never silently dropped: an incomplete fetch, no
-/// recorded rows despite turns, a per-row telemetry gap, or a session that mixed models (which one
-/// lane slug cannot price) all unprice it, as does a slug absent from the price book. A rollout with
+/// recorded rows despite turns, a per-row telemetry gap, or a session that mixed more models than
+/// its lane accounts for all unprice it, as does a slug absent from the price book. A rollout with
 /// no recorded LLM call is `NoSpend` (a real zero).
-fn run_cost(run: Option<&ChatRunResult>, prices: &PriceBook, price_model: Option<&str>) -> RunCost {
+///
+/// An advised lane prices as the sum of two buckets: the advisor's rows (split off by agent in
+/// `sum_usage`) at `advisor_price_model`, the remainder at `price_model`. Two distinct models are
+/// then expected, so only a third one unprices the run.
+fn run_cost(
+    run: Option<&ChatRunResult>,
+    prices: &PriceBook,
+    price_model: Option<&str>,
+    advisor_price_model: Option<&str>,
+) -> RunCost {
     let Some(run) = run else {
         return RunCost::NoSpend;
     };
@@ -2326,18 +2412,44 @@ fn run_cost(run: Option<&ChatRunResult>, prices: &PriceBook, price_model: Option
     if !usage.had_spend() {
         return RunCost::NoSpend;
     }
-    if usage.rows_with_null_tokens > 0 || usage.models.len() > 1 {
+    let expected_models = if usage.advisor.is_some() { 2 } else { 1 };
+    if usage.rows_with_null_tokens > 0 || usage.models.len() > expected_models {
         return RunCost::Unpriced;
     }
-    match prices.cost(
-        Some(usage.prompt_tokens),
-        Some(usage.completion_tokens),
-        Some(usage.cache_read_tokens),
-        Some(usage.cache_write_tokens),
-        price_model,
-    ) {
-        Some(c) => RunCost::Priced(c),
-        None => RunCost::Unpriced,
+    match usage.advisor.as_deref() {
+        // Advised and actually consulted: price each bucket at its own slug, both or nothing.
+        Some(advisor) if advisor.had_spend() => {
+            let executor = |total: i64, advisor_share: i64| Some((total - advisor_share).max(0));
+            let executor_cost = prices.cost(
+                executor(usage.prompt_tokens, advisor.prompt_tokens),
+                executor(usage.completion_tokens, advisor.completion_tokens),
+                executor(usage.cache_read_tokens, advisor.cache_read_tokens),
+                executor(usage.cache_write_tokens, advisor.cache_write_tokens),
+                price_model,
+            );
+            let advisor_cost = prices.cost(
+                Some(advisor.prompt_tokens),
+                Some(advisor.completion_tokens),
+                Some(advisor.cache_read_tokens),
+                Some(advisor.cache_write_tokens),
+                advisor_price_model,
+            );
+            match (executor_cost, advisor_cost) {
+                (Some(e), Some(a)) => RunCost::Priced(e + a),
+                _ => RunCost::Unpriced,
+            }
+        }
+        // No advisor, or advised but never consulted: the whole spend is the lane model's.
+        _ => match prices.cost(
+            Some(usage.prompt_tokens),
+            Some(usage.completion_tokens),
+            Some(usage.cache_read_tokens),
+            Some(usage.cache_write_tokens),
+            price_model,
+        ) {
+            Some(c) => RunCost::Priced(c),
+            None => RunCost::Unpriced,
+        },
     }
 }
 
@@ -3476,6 +3588,210 @@ mod tests {
         let written: serde_json::Value =
             serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap()).unwrap();
         assert_eq!(written["cost_status"], "no_spend");
+    }
+
+    fn two_slug_book() -> PriceBook {
+        crate::pricing::parse_price_book(&serde_json::json!({
+            "data": [
+                { "id": "vendor/cheap", "pricing": { "prompt": "0.000001", "completion": "0.000002" } },
+                { "id": "vendor/strong", "pricing": { "prompt": "0.00001", "completion": "0.00002" } },
+            ]
+        }))
+    }
+
+    fn advised_or_lane(name: &str) -> Lane {
+        let mut lane = advised_lane(name);
+        lane.provider = archestra_bench_core::Provider::Openrouter;
+        lane.model = "vendor/cheap".to_string();
+        lane.advisor = Some(archestra_bench_core::AdvisorConfig {
+            lane_name: "strong".to_string(),
+            provider: archestra_bench_core::Provider::Openrouter,
+            model: "vendor/strong".to_string(),
+            base_url: None,
+            api_key_env: None,
+            openrouter_model: None,
+        });
+        lane
+    }
+
+    /// An advised run: 1000/500 executor tokens at vendor/cheap + 200/100 advisor tokens at
+    /// vendor/strong (the flat totals include the advisor share), one consult in the trajectory.
+    fn advised_run() -> ChatRunResult {
+        ChatRunResult {
+            turn_count: 3,
+            tool_invocations: vec![HashMap::from([
+                (
+                    "name".to_string(),
+                    serde_json::Value::String("agent__advisor".to_string()),
+                ),
+                ("input".to_string(), serde_json::Value::Null),
+            ])],
+            usage: RunUsage {
+                prompt_tokens: 1200,
+                completion_tokens: 600,
+                chat_rows: 3,
+                models: ["vendor/cheap".to_string(), "vendor/strong".to_string()]
+                    .into_iter()
+                    .collect(),
+                advisor: Some(Box::new(RunUsage {
+                    prompt_tokens: 200,
+                    completion_tokens: 100,
+                    chat_rows: 1,
+                    models: ["vendor/strong".to_string()].into_iter().collect(),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn finish_prices_advised_rollout_across_two_slugs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1")).await.unwrap();
+        let lane = advised_or_lane("l1");
+        let task = dummy_task("t1");
+        let run = advised_run();
+        let mut metadata = serde_json::json!({
+            "finished_at": null, "outcome": null, "agent_error": null, "format_attempts": 0,
+        });
+        let result = finish(
+            "e",
+            &lane,
+            &task,
+            Outcome::Passed,
+            Some(&run),
+            &artifacts,
+            &mut metadata,
+            0,
+            None,
+            &two_slug_book(),
+        )
+        .await;
+        // executor: (1200-200)*1e-6 + (600-100)*2e-6 = 0.001 + 0.001; advisor: 200*1e-5 + 100*2e-5
+        let executor_cost = 0.002;
+        let advisor_cost = 0.004;
+        match result.cost {
+            RunCost::Priced(c) => assert!((c - (executor_cost + advisor_cost)).abs() < 1e-12, "{c}"),
+            other => panic!("expected priced, got {other:?}"),
+        }
+        assert_eq!(result.advisor_consult_count, Some(1));
+        assert_eq!(result.advisor_total_tokens, Some(300));
+        assert!((result.advisor_cost_usd.unwrap() - advisor_cost).abs() < 1e-12);
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap()).unwrap();
+        assert_eq!(written["cost_status"], "priced");
+        assert_eq!(written["advisor_consult_count"], 1);
+        assert_eq!(written["advisor_total_tokens"], 300);
+        assert_eq!(written["advisor_price_model"], "vendor/strong");
+    }
+
+    #[tokio::test]
+    async fn advised_rollout_never_consulting_prices_at_lane_slug() {
+        let tmp = tempfile::tempdir().unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1")).await.unwrap();
+        let lane = advised_or_lane("l1");
+        let task = dummy_task("t1");
+        let mut run = advised_run();
+        run.tool_invocations.clear();
+        run.usage = RunUsage {
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+            chat_rows: 2,
+            models: ["vendor/cheap".to_string()].into_iter().collect(),
+            advisor: Some(Box::new(RunUsage::default())),
+            ..Default::default()
+        };
+        let mut metadata = serde_json::json!({
+            "finished_at": null, "outcome": null, "agent_error": null, "format_attempts": 0,
+        });
+        let result = finish(
+            "e",
+            &lane,
+            &task,
+            Outcome::Passed,
+            Some(&run),
+            &artifacts,
+            &mut metadata,
+            0,
+            None,
+            &two_slug_book(),
+        )
+        .await;
+        // 1000*1e-6 + 500*2e-6, all at the lane slug; advisor share is a real $0, consults a real 0.
+        match result.cost {
+            RunCost::Priced(c) => assert!((c - 0.002).abs() < 1e-12, "{c}"),
+            other => panic!("expected priced, got {other:?}"),
+        }
+        assert_eq!(result.advisor_consult_count, Some(0));
+        assert_eq!(result.advisor_cost_usd, Some(0.0));
+    }
+
+    #[test]
+    fn advised_usage_with_a_third_model_is_unpriced() {
+        let mut run = advised_run();
+        run.usage.models.insert("vendor/mystery".to_string());
+        let cost = run_cost(
+            Some(&run),
+            &two_slug_book(),
+            Some("vendor/cheap"),
+            Some("vendor/strong"),
+        );
+        assert_eq!(cost, RunCost::Unpriced);
+    }
+
+    #[test]
+    fn unadvised_usage_with_two_models_stays_unpriced() {
+        // Pin: without an advisor split, a mixed-model session is still unpriceable by one slug.
+        let mut run = advised_run();
+        run.usage.advisor = None;
+        let cost = run_cost(Some(&run), &two_slug_book(), Some("vendor/cheap"), None);
+        assert_eq!(cost, RunCost::Unpriced);
+    }
+
+    #[test]
+    fn advisor_consults_count_top_level_and_run_tool_wrapped() {
+        let run = ChatRunResult {
+            tool_invocations: vec![
+                HashMap::from([
+                    (
+                        "name".to_string(),
+                        serde_json::Value::String("agent__advisor".to_string()),
+                    ),
+                    ("input".to_string(), serde_json::Value::Null),
+                ]),
+                HashMap::from([
+                    (
+                        "name".to_string(),
+                        serde_json::Value::String("archestra__run_tool".to_string()),
+                    ),
+                    (
+                        "input".to_string(),
+                        serde_json::json!({"tool_name": "agent__advisor", "tool_args": {}}),
+                    ),
+                ]),
+                HashMap::from([
+                    (
+                        "name".to_string(),
+                        serde_json::Value::String("archestra__run_tool".to_string()),
+                    ),
+                    (
+                        "input".to_string(),
+                        serde_json::json!({"tool_name": "final_answer__submit_result"}),
+                    ),
+                ]),
+                HashMap::from([
+                    (
+                        "name".to_string(),
+                        serde_json::Value::String("archestra__run_command".to_string()),
+                    ),
+                    ("input".to_string(), serde_json::Value::Null),
+                ]),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(advisor_consult_count(&run), 2);
     }
 
     #[tokio::test]

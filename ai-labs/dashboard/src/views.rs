@@ -596,6 +596,26 @@ pub fn build_rollout(run: &Run, rollout: &Rollout) -> RolloutTemplate {
             value: opt_str(&meta.agent_error),
         },
     ];
+    // Advisor rows only for an advised rollout, so unadvised detail pages stay unchanged.
+    let mut meta_rows = meta_rows;
+    if let Some(consults) = meta.advisor_consult_count {
+        meta_rows.push(SummaryRow {
+            label: "advisor consults".to_string(),
+            value: consults.to_string(),
+        });
+        meta_rows.push(SummaryRow {
+            label: "advisor tokens".to_string(),
+            value: meta
+                .advisor_total_tokens
+                .map_or_else(|| "—".to_string(), |t| t.to_string()),
+        });
+        meta_rows.push(SummaryRow {
+            label: "advisor cost".to_string(),
+            value: meta
+                .advisor_cost_usd
+                .map_or_else(|| "—".to_string(), |c| format!("${c:.4}")),
+        });
+    }
 
     let rubric = run.rubrics.get(&key).map(rubric_view);
     let (trajectory_html, trajectory_note) = render_trajectory(&rollout.dir);

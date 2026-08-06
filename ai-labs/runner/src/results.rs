@@ -39,6 +39,13 @@ pub struct RunResult {
     pub stage_count: usize,
     pub format_attempts: usize,
     pub artifact_dir: Option<String>,
+    /// Advisor consultations this rollout made. `Some` only for an advised lane, where 0 is a real
+    /// measurement (offered, never used); `None` on unadvised lanes.
+    pub advisor_consult_count: Option<usize>,
+    /// The advisor's token share of `total_tokens`; `Some` only for an advised lane with reliable usage.
+    pub advisor_total_tokens: Option<i64>,
+    /// The advisor's USD share of `cost`; `Some` only when the rollout priced.
+    pub advisor_cost_usd: Option<f64>,
 }
 
 impl RunResult {
@@ -88,6 +95,13 @@ pub struct GroupAggregate {
     /// *incomplete*: it covers only the priced rollouts, so it is reported with a loud marker and
     /// nulled in JSON rather than passed off as the full figure.
     pub cost_unpriced_n: usize,
+    /// Advised rollouts in this group (rollouts whose lane carries an advisor). 0 means the advisor
+    /// stats below don't apply to this group.
+    pub advised_n: usize,
+    /// Total advisor consultations across the group's advised rollouts.
+    pub advisor_consults: usize,
+    /// Advisor share of `total_cost_usd`, summed over rollouts that reported one.
+    pub advisor_cost_usd: f64,
 }
 
 impl GroupAggregate {
@@ -160,7 +174,7 @@ impl Aggregate {
 }
 
 fn group_json(key_name: &str, g: &GroupAggregate) -> serde_json::Value {
-    serde_json::json!({
+    let mut value = serde_json::json!({
         key_name: g.key,
         "total": g.total,
         "passed": g.passed,
@@ -172,7 +186,20 @@ fn group_json(key_name: &str, g: &GroupAggregate) -> serde_json::Value {
         "total_turns": g.total_turns,
         "total_tokens": g.total_tokens,
         "outcomes": g.outcomes,
-    })
+    });
+    // Advisor stats only where they mean something — an all-unadvised group stays byte-identical to
+    // the pre-advisor schema.
+    if g.advised_n > 0
+        && let serde_json::Value::Object(map) = &mut value
+    {
+        map.insert("advised_n".to_string(), g.advised_n.into());
+        map.insert("advisor_consults".to_string(), g.advisor_consults.into());
+        map.insert(
+            "advisor_cost_usd".to_string(),
+            serde_json::Value::from(g.advisor_cost_usd),
+        );
+    }
+    value
 }
 
 pub fn aggregate(results: &[RunResult]) -> Aggregate {
@@ -207,6 +234,9 @@ fn group_aggregate(key: String, rows: &[&RunResult]) -> GroupAggregate {
             .sum(),
         cost_n: rows.iter().filter(|r| matches!(r.cost, RunCost::Priced(_))).count(),
         cost_unpriced_n: rows.iter().filter(|r| matches!(r.cost, RunCost::Unpriced)).count(),
+        advised_n: rows.iter().filter(|r| r.advisor_consult_count.is_some()).count(),
+        advisor_consults: rows.iter().filter_map(|r| r.advisor_consult_count).sum(),
+        advisor_cost_usd: rows.iter().filter_map(|r| r.advisor_cost_usd).sum(),
     }
 }
 
@@ -270,6 +300,14 @@ fn stats(g: &GroupAggregate) -> String {
         (0, n) => format!("incomplete ({n} unpriced)"),
         (_, n) => format!("${:.4} (+{n} unpriced)", g.total_cost_usd),
     };
+    let advisor = if g.advised_n > 0 {
+        format!(
+            " · advisor consults {} (${:.4})",
+            g.advisor_consults, g.advisor_cost_usd
+        )
+    } else {
+        String::new()
+    };
     let failures = failure_summary(&g.outcomes);
     let tail = if failures.is_empty() {
         String::new()
@@ -277,13 +315,14 @@ fn stats(g: &GroupAggregate) -> String {
         format!(" — {failures}")
     };
     format!(
-        "{}/{} passed ({:.0}%) · avg turns {:.1} · avg tokens {} · cost {}{}",
+        "{}/{} passed ({:.0}%) · avg turns {:.1} · avg tokens {} · cost {}{}{}",
         g.passed,
         g.total,
         g.pass_rate() * 100.0,
         g.avg_turns(),
         tokens,
         cost,
+        advisor,
         tail
     )
 }
@@ -327,6 +366,9 @@ mod tests {
             stage_count: 1,
             format_attempts: 0,
             artifact_dir: None,
+            advisor_consult_count: None,
+            advisor_total_tokens: None,
+            advisor_cost_usd: None,
         }
     }
 

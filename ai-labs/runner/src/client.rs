@@ -386,10 +386,8 @@ impl EvalClient {
                     && a.get("environmentId").map(|v| v.is_null()).unwrap_or(false)
             })
             .ok_or_else(|| {
-                ContractError(
-                    "GET /api/agents?scope=built_in: no Default-environment Advisor agent found".to_string(),
-                )
-                .into()
+                ContractError("GET /api/agents?scope=built_in: no Default-environment Advisor agent found".to_string())
+                    .into()
             })
     }
 

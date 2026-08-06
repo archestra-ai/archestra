@@ -31,6 +31,18 @@ pub struct ConfigLane {
     pub name: String,
     #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
+    pub advisor: Option<ConfigLaneAdvisor>,
+}
+
+/// Advisor metadata on an advised lane — enough to label the lane column as a policy arm
+/// (executor + advisor) rather than a bare model.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConfigLaneAdvisor {
+    #[serde(default)]
+    pub lane: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 /// Subset of `aggregate.json` the dashboard reads.

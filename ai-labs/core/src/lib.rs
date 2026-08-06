@@ -118,6 +118,15 @@ pub struct RunMeta {
     pub verifier_exit_code: Option<i64>,
     #[serde(default)]
     pub verifier_timed_out: Option<bool>,
+    /// Advisor consultations the rollout made; present only for an advised lane (0 = offered, unused).
+    #[serde(default)]
+    pub advisor_consult_count: Option<u64>,
+    /// The advisor's token share of `total_tokens`; present only for an advised lane with reliable usage.
+    #[serde(default)]
+    pub advisor_total_tokens: Option<i64>,
+    /// The advisor's USD share of the rollout cost; present only when the rollout priced.
+    #[serde(default)]
+    pub advisor_cost_usd: Option<f64>,
 }
 
 impl RunMeta {

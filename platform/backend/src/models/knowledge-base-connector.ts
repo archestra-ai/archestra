@@ -159,7 +159,16 @@ class KnowledgeBaseConnectorModel {
         .select()
         .from(schema.knowledgeBaseConnectorsTable)
         .where(and(...filters))
-        .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt))
+        // The trash renders `deletedAt` as its only temporal column, so it
+        // sorts by it — ordering by `createdAt` there would scatter the visible
+        // column into arbitrary order. `deletedAt` is non-null across that
+        // slice by construction (the `isNotNull` filter above), so no null
+        // ordering.
+        .orderBy(
+          status === "deleted"
+            ? desc(schema.knowledgeBaseConnectorsTable.deletedAt)
+            : desc(schema.knowledgeBaseConnectorsTable.createdAt),
+        )
         .limit(limit)
         .offset(offset),
       db

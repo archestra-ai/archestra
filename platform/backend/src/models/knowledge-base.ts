@@ -63,7 +63,15 @@ class KnowledgeBaseModel {
       .select()
       .from(schema.knowledgeBasesTable)
       .where(and(...filters))
-      .orderBy(desc(schema.knowledgeBasesTable.createdAt))
+      // The trash renders `deletedAt` as its only temporal column, so it sorts
+      // by it — ordering by `createdAt` there would scatter the visible column
+      // into arbitrary order. `deletedAt` is non-null across that slice by
+      // construction (buildOrgFilters pins `isNotNull`), so no null ordering.
+      .orderBy(
+        params.status === "deleted"
+          ? desc(schema.knowledgeBasesTable.deletedAt)
+          : desc(schema.knowledgeBasesTable.createdAt),
+      )
       .$dynamic();
 
     if (params.limit !== undefined) {

@@ -188,15 +188,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { query: { limit, offset, search, status }, organizationId, user },
       reply,
     ) => {
+      // Viewing the trash is the delete permission's other half — the same
+      // gate that put the rows there, as for skills and projects. Checked
+      // before the access-control context is built so a rejected caller pays
+      // for neither the permission lookup nor the team-membership query.
+      await requireTrashAccess({ status, userId: user.id, organizationId });
+
       const access =
         await knowledgeSourceAccessControlService.buildAccessControlContext({
           userId: user.id,
           organizationId,
         });
-
-      // Viewing the trash is the delete permission's other half — the same
-      // gate that put the rows there, as for skills and projects.
-      await requireTrashAccess({ status, userId: user.id, organizationId });
 
       const [knowledgeBases, total] = await Promise.all([
         KnowledgeBaseModel.findByOrganization({
@@ -560,14 +562,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
+      // Viewing the trash is the delete permission's other half — the same
+      // gate that put the rows there, as for skills and projects. Checked
+      // before the access-control context is built so a rejected caller pays
+      // for neither the permission lookup nor the team-membership query.
+      await requireTrashAccess({ status, userId: user.id, organizationId });
+
       const access =
         await knowledgeSourceAccessControlService.buildAccessControlContext({
           userId: user.id,
           organizationId,
         });
-      // Viewing the trash is the delete permission's other half — the same
-      // gate that put the rows there, as for skills and projects.
-      await requireTrashAccess({ status, userId: user.id, organizationId });
 
       let data: Awaited<
         ReturnType<typeof KnowledgeBaseConnectorModel.findByOrganization>
@@ -2387,9 +2392,17 @@ async function findConnectorOrThrow(params: {
  *
  * Without that second half, restore would be a by-id bypass of the visibility
  * rules every other connector mutation enforces: the trash LISTING hides those
- * rows (buildVisibilityFilter in the model), so a delete-holder outside the
- * team could revive a connector they cannot see, edit, or delete. Skill
- * restore authorizes the deleted object the same way.
+ * rows from non-admins (buildVisibilityFilter in the model), so a delete-holder
+ * outside the team could revive a connector they cannot see, edit, or delete.
+ * Skill restore authorizes the deleted object the same way.
+ *
+ * The one asymmetry, inherited from the active list rather than introduced
+ * here: `buildVisibilityFilter` short-circuits on `canReadAll`, while
+ * `canAccessSource` deliberately does NOT let that bypass reach
+ * `auto-sync-permissions` connectors. So a `knowledgeSource:admin` WITHOUT
+ * `knowledgeSourceAutoSync:read` sees those rows listed and 404s here — the
+ * same 404 they already get from edit and delete on the active list. No
+ * default role holds that combination.
  */
 async function findDeletedConnectorOrThrow(params: {
   id: string;

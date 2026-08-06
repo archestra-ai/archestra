@@ -71,6 +71,19 @@ describe("knowledge base + connector trash routes", () => {
       ...overrides,
     });
 
+  /**
+   * Pins `createdAt`/`deletedAt` outright, so the ordering tests assert on a
+   * fixed sequence instead of on whichever microsecond the inserts landed in.
+   * Setting `deletedAt` IS the soft delete, so no separate DELETE is needed.
+   */
+  const stampLifecycle = (
+    table:
+      | typeof schema.knowledgeBasesTable
+      | typeof schema.knowledgeBaseConnectorsTable,
+    id: string,
+    values: { createdAt: Date; deletedAt: Date },
+  ) => db.update(table).set(values).where(eq(table.id, id));
+
   const auditRow = async (action: AuditEventName, resourceId: string) => {
     let rows: Array<Record<string, unknown>> = [];
     await vi.waitFor(async () => {
@@ -230,7 +243,78 @@ describe("knowledge base + connector trash routes", () => {
     );
   });
 
+  test("the KB trash sorts by deletedAt, the column it actually renders", async () => {
+    // Created oldest-first, deleted newest-first, so `createdAt` and
+    // `deletedAt` disagree: an ordering assertion that passed under either
+    // would not be testing anything.
+    const older = await makeKb("Created first, deleted last");
+    const newer = await makeKb("Created last, deleted first");
+    await stampLifecycle(schema.knowledgeBasesTable, older.id, {
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      deletedAt: new Date("2026-03-01T00:00:00Z"),
+    });
+    await stampLifecycle(schema.knowledgeBasesTable, newer.id, {
+      createdAt: new Date("2026-02-01T00:00:00Z"),
+      deletedAt: new Date("2026-01-15T00:00:00Z"),
+    });
+
+    const deleted = await app.inject({
+      method: "GET",
+      url: "/api/knowledge-bases?status=deleted",
+    });
+    expect(deleted.json().data.map((k: { id: string }) => k.id)).toEqual([
+      older.id,
+      newer.id,
+    ]);
+
+    // The active list is unchanged: newest-created first.
+    await KnowledgeBaseModel.restore(older.id);
+    await KnowledgeBaseModel.restore(newer.id);
+    const active = await app.inject({
+      method: "GET",
+      url: "/api/knowledge-bases",
+    });
+    expect(active.json().data.map((k: { id: string }) => k.id)).toEqual([
+      newer.id,
+      older.id,
+    ]);
+  });
+
   // ===== Connectors =====
+
+  test("the connector trash sorts by deletedAt, the column it actually renders", async () => {
+    const older = await makeConnector("Created first, deleted last");
+    const newer = await makeConnector("Created last, deleted first");
+    await stampLifecycle(schema.knowledgeBaseConnectorsTable, older.id, {
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      deletedAt: new Date("2026-03-01T00:00:00Z"),
+    });
+    await stampLifecycle(schema.knowledgeBaseConnectorsTable, newer.id, {
+      createdAt: new Date("2026-02-01T00:00:00Z"),
+      deletedAt: new Date("2026-01-15T00:00:00Z"),
+    });
+
+    const deleted = await app.inject({
+      method: "GET",
+      url: "/api/connectors?status=deleted",
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().data.map((c: { id: string }) => c.id)).toEqual([
+      older.id,
+      newer.id,
+    ]);
+
+    await KnowledgeBaseConnectorModel.restore(older.id);
+    await KnowledgeBaseConnectorModel.restore(newer.id);
+    const active = await app.inject({
+      method: "GET",
+      url: "/api/connectors",
+    });
+    expect(active.json().data.map((c: { id: string }) => c.id)).toEqual([
+      newer.id,
+      older.id,
+    ]);
+  });
 
   test("restored connector comes back disabled and stays off the sync schedulers", async () => {
     const connector = await makeConnector("Sync connector");

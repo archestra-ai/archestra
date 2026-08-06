@@ -271,8 +271,6 @@ export function useBulkUpdateAgentTools() {
           ...result.removed.map((r) => r.agentId),
         ]),
       );
-      // Assignment counts hang off server and catalog cards.
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
     },
   });
 }

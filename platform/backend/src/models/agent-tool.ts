@@ -382,6 +382,7 @@ class AgentToolModel {
       toolId: string;
       mcpServerId?: string | null;
       credentialResolutionMode?: CredentialResolutionMode;
+      resolveAtCallTime?: boolean;
     }>,
     _organizationId?: string,
     tx?: Transaction,
@@ -389,10 +390,16 @@ class AgentToolModel {
     if (values.length === 0) return [];
     const dbx = tx ?? db;
 
+    // Row locks are taken in the order this VALUES list names them, so a stable
+    // order keeps two concurrent batches with overlapping pairs from deadlocking.
+    const ordered = [...values].sort((a, b) =>
+      `${a.agentId}:${a.toolId}`.localeCompare(`${b.agentId}:${b.toolId}`),
+    );
+
     const rows = await dbx
       .insert(schema.agentToolsTable)
       .values(
-        values.map((value) => ({
+        ordered.map((value) => ({
           agentId: value.agentId,
           toolId: value.toolId,
           // Explicit null, never an omitted key. The conflict clause below sets
@@ -959,7 +966,8 @@ class AgentToolModel {
     // Keyed, not a list: one upsert cannot name the same conflict target twice
     // ("ON CONFLICT DO UPDATE command cannot affect row a second time"), and a
     // body repeating a pair is a client mistake, not a reason to fail the save.
-    // Last occurrence wins, mirroring the sequential writes this replaced.
+    // Among the occurrences that need a write, the last one wins, mirroring the
+    // sequential writes this replaced.
     const toUpsert = new Map<string, (typeof assignments)[number]>();
     const results: Array<{
       agentId: string;

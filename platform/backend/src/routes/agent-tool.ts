@@ -268,18 +268,28 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.BulkUpdateAgentTools,
         description:
-          "Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool. If the same agent/tool pair appears in both lists, the assignment wins and the removal is ignored.",
+          "Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool. If the same agent/tool pair appears in both lists, the assignment wins and the removal is ignored. A pair repeated within a list is written once but reported once per occurrence.",
         tags: ["Agent Tools"],
-        body: z.object({
-          assignments: z
-            .array(BulkAgentToolAssignmentSchema)
-            .max(MAX_BULK_AGENT_TOOL_ENTRIES)
-            .default([]),
-          removals: z
-            .array(BulkAgentToolRemovalSchema)
-            .max(MAX_BULK_AGENT_TOOL_ENTRIES)
-            .default([]),
-        }),
+        body: z
+          .object({
+            assignments: z
+              .array(BulkAgentToolAssignmentSchema)
+              .max(MAX_BULK_AGENT_TOOL_ENTRIES)
+              .default([]),
+            removals: z
+              .array(BulkAgentToolRemovalSchema)
+              .max(MAX_BULK_AGENT_TOOL_ENTRIES)
+              .default([]),
+          })
+          // The per-array caps above would let one body carry twice the ceiling.
+          .refine(
+            (body) =>
+              body.assignments.length + body.removals.length <=
+              MAX_BULK_AGENT_TOOL_ENTRIES,
+            {
+              message: `A bulk update accepts at most ${MAX_BULK_AGENT_TOOL_ENTRIES} entries across both lists`,
+            },
+          ),
         response: constructResponseSchema(
           z.object({
             succeeded: z.array(
@@ -345,9 +355,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // and re-inserting it: the end state is identical either way, but dropping
       // it keeps the row's identity and `createdAt`, and stops one pair from
       // being reported in both `removed` and `succeeded` — two outcomes a client
-      // reconciling against the response cannot both act on.
+      // reconciling against the response cannot both act on. Built from the
+      // requested assignments, not `validated`: a pair whose assignment failed
+      // must not have its row deleted by the removal it was paired with.
       const assignedPairs = new Set(
-        validated.map((a) => `${a.agentId}:${a.toolId}`),
+        assignments.map((a) => `${a.agentId}:${a.toolId}`),
       );
 
       for (const removal of removals) {
@@ -391,7 +403,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Removals run before assignments so a tool being re-pinned to a
           // different credential in the same save cannot have its fresh
           // assignment deleted by a stale removal.
-          for (const [agentId, toolIdSet] of removalToolIdsByAgent) {
+          // Sorted so every request locks agents in the same order: two
+          // concurrent saves listing overlapping agents cannot deadlock.
+          for (const [agentId, toolIdSet] of [...removalToolIdsByAgent].sort(
+            ([a], [b]) => a.localeCompare(b),
+          )) {
             const toolIds = [...toolIdSet];
             const deletedToolIds = new Set(
               await AgentToolModel.bulkDelete(agentId, toolIds, tx),

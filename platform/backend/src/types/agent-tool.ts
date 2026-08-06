@@ -75,9 +75,9 @@ export const BulkAgentToolRemovalSchema = z.object({
  *
  * A fence, not a tuning knob: the widest realistic save is a single MCP server's
  * catalog across a handful of agents, which is two orders of magnitude below
- * this. It exists because the batch reaches the database as `(agentId, toolId)`
- * pair predicates, so an unbounded body would eventually hit a statement-level
- * parameter limit while a write transaction is open.
+ * this. It bounds the work one request can hold open a write transaction for.
+ * The statement-level parameter limit is a separate concern, handled by
+ * chunking the pair lookup rather than by this cap.
  */
 export const MAX_BULK_AGENT_TOOL_ENTRIES = 5000;
 

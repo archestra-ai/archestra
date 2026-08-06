@@ -57271,7 +57271,7 @@
         "tags": [
           "Agent Tools"
         ],
-        "description": "Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool. If the same agent/tool pair appears in both lists, the assignment wins and the removal is ignored.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool. If the same agent/tool pair appears in both lists, the assignment wins and the removal is ignored. A pair repeated within a list is written once but reported once per occurrence.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {

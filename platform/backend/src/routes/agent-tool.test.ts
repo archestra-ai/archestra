@@ -1297,6 +1297,62 @@ describe("POST /api/agents/tools/bulk-update", () => {
     expect(rows[0].credentialResolutionMode).toBe("dynamic");
   });
 
+  // The same contradictory input, but the assignment fails validation. The
+  // removal must still be dropped: a client re-pinning a tool to a server that
+  // vanished asked to change the pin, not to lose the tool. Reporting the pair
+  // in both `failed` and `removed` would also contradict the endpoint's promise
+  // that an assignment shields its paired removal.
+  test("keeps the row when a pair appears in both lists and the assignment fails", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const tool = await makeTool();
+    const original = await makeAgentTool(agent.id, tool.id);
+    const missingServerId = "00000000-0000-4000-8000-000000000001";
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            mcpServerId: missingServerId,
+          },
+        ],
+        removals: [{ agentId: agent.id, toolId: tool.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.failed).toHaveLength(1);
+    expect(body.failed[0]).toMatchObject({
+      agentId: agent.id,
+      toolId: tool.id,
+    });
+    expect(body.succeeded).toEqual([]);
+    expect(body.removed).toEqual([]);
+    expect(body.notAssigned).toEqual([]);
+
+    // The pre-existing assignment is untouched — same row, same pin.
+    const rows = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(original.id);
+    expect(rows[0].mcpServerId).toBe(original.mcpServerId);
+  });
+
   test("rejects a body over the entry ceiling", async ({
     makeAgent,
     makeTool,
@@ -1313,6 +1369,34 @@ describe("POST /api/agents/tools/bulk-update", () => {
           () => ({ agentId: agent.id, toolId: tool.id }),
         ),
         removals: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  // The ceiling is per body, not per list: two arrays each just under it would
+  // otherwise carry twice the work the cap is meant to bound.
+  test("rejects a body over the entry ceiling across both lists", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const tool = await makeTool();
+    const half = Math.ceil(MAX_BULK_AGENT_TOOL_ENTRIES / 2) + 1;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: Array.from({ length: half }, () => ({
+          agentId: agent.id,
+          toolId: tool.id,
+        })),
+        removals: Array.from({ length: half }, () => ({
+          agentId: agent.id,
+          toolId: tool.id,
+        })),
       },
     });
 

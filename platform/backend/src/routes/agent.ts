@@ -33,6 +33,7 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   MemberModel,
+  ProjectModel,
   TeamModel,
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
@@ -1514,6 +1515,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!success) {
         throw new ApiError(404, "Agent not found");
       }
+
+      // Projects pinning this agent are shown "no default" from here on, so
+      // clear the rows to match. Left set, restoring the agent would silently
+      // re-pin projects whose owners were last told the pin was gone.
+      await ProjectModel.clearDefaultAgent(id);
 
       return reply.send({ success: true });
     },

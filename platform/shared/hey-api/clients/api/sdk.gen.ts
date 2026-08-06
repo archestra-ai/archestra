@@ -6353,7 +6353,7 @@ export const deleteProject = <ThrowOnError extends boolean = false>(options: Opt
 export const getProject = <ThrowOnError extends boolean = false>(options: Options<GetProjectData, ThrowOnError>) => (options.client ?? client).get<GetProjectResponses, GetProjectErrors, ThrowOnError>({ url: '/api/projects/{id}', ...options });
 
 /**
- * Update a project's name, description, and/or icon (owner or a project admin). Only the provided fields change.
+ * Update a project's name, description, icon, and/or default agent (owner or a project admin). Only the provided fields change. The default agent must be an organization-wide chat agent; null clears it.
  *
  * Authentication:
  *

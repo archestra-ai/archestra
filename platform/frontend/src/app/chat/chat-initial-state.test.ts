@@ -128,6 +128,7 @@ describe("resolveInitialAgentSelection", () => {
     { id: "member-default" },
     { id: "saved-agent" },
     { id: "org-default" },
+    { id: "project-default" },
   ];
 
   test("prefers the organization default over saved and member defaults", () => {
@@ -138,8 +139,60 @@ describe("resolveInitialAgentSelection", () => {
         savedAgentId: "saved-agent",
         memberDefaultAgentId: "member-default",
         canUseSavedAgent: true,
-      })?.id,
-    ).toBe("org-default");
+      }),
+    ).toEqual({ agent: { id: "org-default" }, fromProjectDefault: false });
+  });
+
+  test("prefers the project default over the organization default", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents,
+        projectDefaultAgentId: "project-default",
+        organizationDefaultAgentId: "org-default",
+        savedAgentId: "saved-agent",
+        memberDefaultAgentId: "member-default",
+        canUseSavedAgent: true,
+      }),
+    ).toEqual({ agent: { id: "project-default" }, fromProjectDefault: true });
+  });
+
+  test("falls through to the organization default when the project's pinned agent is not accessible", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents,
+        projectDefaultAgentId: "agent-the-caller-cannot-see",
+        organizationDefaultAgentId: "org-default",
+        savedAgentId: "saved-agent",
+        memberDefaultAgentId: "member-default",
+        canUseSavedAgent: true,
+      }),
+    ).toEqual({ agent: { id: "org-default" }, fromProjectDefault: false });
+  });
+
+  test("a null project default leaves the rest of the chain untouched", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents,
+        projectDefaultAgentId: null,
+        organizationDefaultAgentId: null,
+        savedAgentId: "saved-agent",
+        memberDefaultAgentId: "member-default",
+        canUseSavedAgent: true,
+      }),
+    ).toEqual({ agent: { id: "saved-agent" }, fromProjectDefault: false });
+  });
+
+  test("the project default outranks the saved pick even when the picker is available", () => {
+    expect(
+      resolveInitialAgentSelection({
+        agents,
+        projectDefaultAgentId: "project-default",
+        organizationDefaultAgentId: null,
+        savedAgentId: "saved-agent",
+        memberDefaultAgentId: "member-default",
+        canUseSavedAgent: true,
+      }),
+    ).toEqual({ agent: { id: "project-default" }, fromProjectDefault: true });
   });
 
   test("uses saved agent before member default when the picker is available", () => {
@@ -150,8 +203,8 @@ describe("resolveInitialAgentSelection", () => {
         savedAgentId: "saved-agent",
         memberDefaultAgentId: "member-default",
         canUseSavedAgent: true,
-      })?.id,
-    ).toBe("saved-agent");
+      }),
+    ).toEqual({ agent: { id: "saved-agent" }, fromProjectDefault: false });
   });
 
   test("ignores saved agent when the picker is hidden", () => {
@@ -162,14 +215,15 @@ describe("resolveInitialAgentSelection", () => {
         savedAgentId: "saved-agent",
         memberDefaultAgentId: "member-default",
         canUseSavedAgent: false,
-      })?.id,
-    ).toBe("member-default");
+      }),
+    ).toEqual({ agent: { id: "member-default" }, fromProjectDefault: false });
   });
 
   test("returns null when no agents are available", () => {
     expect(
       resolveInitialAgentSelection({
         agents: [],
+        projectDefaultAgentId: "project-default",
         organizationDefaultAgentId: "org-default",
         savedAgentId: "saved-agent",
         memberDefaultAgentId: "member-default",
@@ -186,8 +240,8 @@ describe("resolveInitialAgentSelection", () => {
         savedAgentId: "missing-saved-agent",
         memberDefaultAgentId: "missing-member-default",
         canUseSavedAgent: true,
-      })?.id,
-    ).toBe("first-agent");
+      }),
+    ).toEqual({ agent: { id: "first-agent" }, fromProjectDefault: false });
   });
 });
 

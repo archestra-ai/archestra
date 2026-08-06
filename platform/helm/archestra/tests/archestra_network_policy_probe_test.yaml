@@ -230,15 +230,16 @@ tests:
 
   - it: states each outcome in a single self-contained line
     asserts:
-      # Helm emits one log record per line and in no guaranteed order, so a
-      # message that refers to the other arm, or spans lines, arrives unreadable.
+      # Helm emits a pod's whole log as one record and the two arms arrive in no
+      # guaranteed order, so a message that refers to the other arm, or spans
+      # lines, arrives unreadable.
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'OK, enforcement enabled'
+          pattern: 'Network policy enforced'
         documentIndex: 2
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'WARNING, network policy not enforced'
+          pattern: 'NETWORK POLICY NOT ENFORCED'
         documentIndex: 2
       # The warning is one line with nowhere to explain itself, so it has to
       # carry the way out.
@@ -246,6 +247,32 @@ tests:
           path: spec.containers[0].args[0]
           pattern: 'https://archestra\.ai/docs/platform-environments#network-egress-policies'
         documentIndex: 2
+
+  # Helm renders an embedded newline as a literal \n inside the single quoted
+  # record, so a stacked banner reaches the operator as one line of escapes. The
+  # emphasis has to come from emoji on one line instead.
+  - it: keeps every operator-facing message on one line
+    asserts:
+      - notMatchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'echo "[^"]*\n[^"]*"'
+        documentIndex: 1
+      - notMatchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'echo "[^"]*\n[^"]*"'
+        documentIndex: 2
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: '🚨'
+        documentIndex: 2
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: '✅'
+        documentIndex: 2
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: '⚠️'
+        documentIndex: 1
 
   # A working cluster should cost one line. The control arm speaks only to void
   # a result the treatment arm cannot know is meaningless: with the target down
@@ -258,7 +285,7 @@ tests:
         documentIndex: 1
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'INCONCLUSIVE, could not reach'
+          pattern: 'NETWORK POLICY CHECK INCONCLUSIVE'
         documentIndex: 1
       - matchRegex:
           path: spec.containers[0].args[0]

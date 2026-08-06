@@ -528,7 +528,7 @@ args:
       says it without depending on which line Helm printed first.
     */}}
     if [ "$result" = blocked ]; then
-      echo "[archestra] network policy check: INCONCLUSIVE, could not reach {{ .host }}:9000 — disregard any enforcement result reported for this release"
+      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY CHECK INCONCLUSIVE  ⚠️ ⚠️ ⚠️  Could not reach {{ .host }}:9000 — disregard any enforcement result reported for this release"
     fi
     exit 0
 {{- end }}
@@ -572,14 +572,15 @@ args:
     fi
     printf '%s' "$result" > /dev/termination-log
     {{- /*
-      One line per outcome: Helm wraps each log record in its own `level=... msg=`
-      envelope, so a multi-line banner would arrive as a column of quoted
-      fragments.
+      One line per outcome. Helm emits a pod's whole log as a single `level=...
+      msg="..."` record, so an embedded newline arrives as a literal \n inside one
+      quoted string — a stacked banner renders as garbage. Emoji survive intact,
+      which is what carries the emphasis instead.
     */}}
     if [ "$result" = reachable ]; then
-      echo "[archestra] network policy check: WARNING, network policy not enforced. See https://archestra.ai/docs/platform-environments#network-egress-policies"
+      echo "[archestra] 🚨 🚨 🚨  NETWORK POLICY NOT ENFORCED  🚨 🚨 🚨  Egress rules are accepted and then silently ignored — see https://archestra.ai/docs/platform-environments#network-egress-policies"
     else
-      echo "[archestra] network policy check: OK, enforcement enabled"
+      echo "[archestra] ✅ Network policy enforced"
     fi
     exit 0
 {{- end }}

@@ -17,12 +17,12 @@ import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
-import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
+import ProjectModel from "@/models/project";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -141,6 +141,26 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.restored",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  // Restoring a config version rewrites the agent's whole config surface.
+  // Registered explicitly because the walk-up to "/api/agents/:id" resolves
+  // with viaWalkUp set, and the hook discards every walk-up POST — without
+  // this entry the restore produces no audit record at all.
+  "/api/agents/:id/versions/:version/restore": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+  // Permanent deletion. Registered explicitly for two reasons: the walk-up to
+  // `/api/agents/:id` would log it as `agent.deleted` (indistinguishable from a
+  // recoverable soft delete), and it would attach that route's FULL snapshot as
+  // `before` — a copy of exactly the config the caller asked to destroy. The
+  // identity fetcher is the guarantee that a purge is audited by who/what/when
+  // and nothing more.
+  "/api/agents/:id/permanent": {
+    resourceType: "agent",
+    action: "agent.purged",
+    fetchById: (id, orgId) => AgentModel.findIdentityForAudit(id, orgId),
+  },
   "/api/agents/:agentId": {
     resourceType: "agent",
     resourceIdParam: "agentId",
@@ -207,6 +227,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/mcp_server/:id/reinstall": {
     resourceType: "mcpServer",
     action: "mcpServer.reinstalled",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+  },
+  // Restore is a POST carrying :id — register directly so the POST walk-up
+  // isn't dropped (which would mis-log it as unknown.created). findByIdForAudit
+  // does NOT filter soft-deleted rows, so `before` captures the deleted install
+  // and `after` the revived one (deletedAt → null, reinstallRequired → true).
+  "/api/mcp_server/:id/restore": {
+    resourceType: "mcpServer",
+    action: "mcpServer.restored",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
   },
 
@@ -402,6 +431,45 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => OptimizationRuleModel.findByIdForAudit(id, orgId),
   },
 
+  // Projects. Delete soft-deletes and restore is a project:admin action on
+  // another member's project, so both need a trail. The pin and instructions
+  // children are denylisted in audit-log-hook.ts rather than registered: they
+  // would inherit project.updated/project.deleted by walk-up while changing
+  // nothing on the project row (a pin is per-user state; instructions are a
+  // file), producing empty diffs under the wrong action.
+  "/api/projects": {
+    resourceType: "project",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+  },
+  // Converting a chat into a project creates one; POST walk-ups are dropped, so
+  // it needs its own entry or the create goes unrecorded.
+  "/api/projects/from-conversation": {
+    resourceType: "project",
+    action: "project.created",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+  },
+  "/api/projects/:id": {
+    resourceType: "project",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+  },
+  "/api/projects/:id/restore": {
+    resourceType: "project",
+    action: "project.restored",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+  },
+  // Identity-only, like the other purges — see the agent entry above.
+  "/api/projects/:id/permanent": {
+    resourceType: "project",
+    action: "project.purged",
+    fetchById: (id, orgId) => ProjectModel.findIdentityForAudit(id, orgId),
+  },
+  // Visibility lives in `project_shares`, captured by the project snapshot.
+  "/api/projects/:id/share": {
+    resourceType: "project",
+    action: "project.updated",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+  },
+
   // Skills
   "/api/skills": {
     resourceType: "skill",
@@ -410,6 +478,20 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/skills/:id": {
     resourceType: "skill",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
+  // Restore is a POST carrying :id; register it directly so the hook captures
+  // the target id and the before/after (deletedAt) snapshots. findByIdForAudit
+  // returns soft-deleted rows, so the "before" is the still-deleted skill.
+  "/api/skills/:id/restore": {
+    resourceType: "skill",
+    action: "skill.restored",
+    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
+  // Identity-only, like the other purges — see the agent entry above.
+  "/api/skills/:id/permanent": {
+    resourceType: "skill",
+    action: "skill.purged",
+    fetchById: (id, orgId) => SkillModel.findIdentityForAudit(id, orgId),
   },
   // Reset is a POST carrying :id, so the hook suppresses the parent walk-up.
   // Register it directly to capture the target id and before/after snapshots of
@@ -520,18 +602,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => ModelModel.findByIdForAudit(id, orgId),
   },
 
-  // MCP installation requests & internal catalog
-  "/api/mcp_server_installation_requests": {
-    resourceType: "mcpServerInstallationRequest",
-    fetchById: (id, _orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, _orgId),
-  },
-  "/api/mcp_server_installation_requests/:id": {
-    resourceType: "mcpServerInstallationRequest",
-    fetchById: (id, orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
-  },
-
+  // Internal catalog
   "/api/internal_mcp_catalog": {
     resourceType: "internalMcpCatalog",
     fetchById: (id, _orgId) =>
@@ -688,6 +759,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       InternalMcpCatalogModel.findByIdForAudit(id, orgId),
   },
+  // Catalog restore is a POST carrying :id — register directly (walk-up POSTs
+  // are dropped). One catalog-level summary record: the snapshot carries the
+  // install/tool counts affected, and `before`/`after` diff on deletedAt (plus
+  // the counts the cascade revives).
+  "/api/internal_mcp_catalog/:id/restore": {
+    resourceType: "internalMcpCatalog",
+    action: "internalMcpCatalog.restored",
+    fetchById: (id, orgId) =>
+      InternalMcpCatalogModel.findByIdForAudit(id, orgId),
+  },
   "/api/internal_mcp_catalog/:id/refresh-image": {
     resourceType: "internalMcpCatalog",
     action: "internalMcpCatalog.updated",
@@ -738,27 +819,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "connector.updated",
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
-  },
-
-  // Installation-request review actions (approve/decline/notes) are POSTs
-  // carrying :id; register directly so they log the update, not unknown.created.
-  "/api/mcp_server_installation_requests/:id/approve": {
-    resourceType: "mcpServerInstallationRequest",
-    action: "mcpServerInstallationRequest.updated",
-    fetchById: (id, orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp_server_installation_requests/:id/decline": {
-    resourceType: "mcpServerInstallationRequest",
-    action: "mcpServerInstallationRequest.updated",
-    fetchById: (id, orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp_server_installation_requests/:id/notes": {
-    resourceType: "mcpServerInstallationRequest",
-    action: "mcpServerInstallationRequest.updated",
-    fetchById: (id, orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
   },
 
   // Agent import (creates agents in bulk — no single resourceId, like skill

@@ -37,7 +37,14 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { ApiError, createStreamAccumulatorState } from "@/types";
+import {
+  ApiError,
+  createStreamAccumulatorState,
+  extractCommonToolCallArguments,
+} from "@/types";
+import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import { fromResponsesUsage, toResponsesUsage } from "./responses-usage";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type AzureResponsesRequest = Azure.Types.ResponsesRequest;
 type AzureResponsesResponse = Azure.Types.ResponsesResponse;
@@ -61,6 +68,10 @@ export const azureResponsesAdapterFactory: LLMProvider<
 > = {
   provider: "azure",
   interactionType: "azure:responses",
+
+  // The Responses parser drops a chat-completions-shaped error frame as an
+  // unknown chunk, turning an upstream failure into a blank turn.
+  formatStreamErrorFrame: formatResponsesStreamErrorFrame,
 
   createRequestAdapter(
     request: AzureResponsesRequest,
@@ -111,6 +122,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
       return new OpenAIProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
         apiKey: getAzureOpenAiBearerTokenProvider(options.baseUrl),
         baseURL: resolvedBaseUrl,
         defaultQuery: getAzureResponsesDefaultQuery(options.baseUrl),
@@ -126,6 +138,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
     const normalizedApiKey = normalizeAzureApiKey(apiKey);
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: normalizedApiKey,
       baseURL: resolvedBaseUrl,
       defaultQuery: getAzureResponsesDefaultQuery(options.baseUrl),
@@ -221,17 +234,19 @@ class AzureResponsesRequestAdapter
       return [];
     }
 
-    const toolNamesByCallId = getToolNamesByCallId(this.request.input);
+    const toolCallsByCallId = getToolCallsByCallId(this.request.input);
 
     return this.request.input.flatMap((item) => {
       if (!isFunctionCallOutputItem(item)) {
         return [];
       }
 
+      const toolCall = toolCallsByCallId.get(item.call_id);
       return [
         {
           id: item.call_id,
-          name: toolNamesByCallId.get(item.call_id) ?? "unknown",
+          name: toolCall?.name ?? "unknown",
+          arguments: toolCall?.arguments,
           content: item.output,
           isError: false,
         },
@@ -386,16 +401,7 @@ class AzureResponsesResponseAdapter
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.usage?.input_tokens ?? 0,
-      outputTokens: this.response.usage?.output_tokens ?? 0,
-      reasoningTokens:
-        (
-          this.response.usage?.output_tokens_details as
-            | { reasoning_tokens?: number }
-            | undefined
-        )?.reasoning_tokens ?? 0,
-    };
+    return fromResponsesUsage(this.response.usage);
   }
 
   getOriginalResponse(): AzureResponsesResponse {
@@ -468,16 +474,7 @@ class AzureResponsesStreamAdapter
       this.state.responseId = chunk.response.id;
       this.state.model = chunk.response.model;
       if (chunk.response.usage) {
-        this.state.usage = {
-          inputTokens: chunk.response.usage.input_tokens ?? 0,
-          outputTokens: chunk.response.usage.output_tokens ?? 0,
-          reasoningTokens:
-            (
-              chunk.response.usage.output_tokens_details as
-                | { reasoning_tokens?: number }
-                | undefined
-            )?.reasoning_tokens ?? 0,
-        };
+        this.state.usage = fromResponsesUsage(chunk.response.usage);
       }
     }
 
@@ -641,13 +638,9 @@ class AzureResponsesStreamAdapter
               ],
             },
           ],
-          usage: {
-            input_tokens: 0,
-            input_tokens_details: { cached_tokens: 0 },
-            output_tokens: 0,
-            output_tokens_details: { reasoning_tokens: 0 },
-            total_tokens: 0,
-          },
+          // Always numeric, and the tokens actually observed: this is the
+          // client's only usage report for a replaced turn.
+          usage: toResponsesUsage(this.state.usage),
         },
       }),
     ].join("");
@@ -667,10 +660,6 @@ class AzureResponsesStreamAdapter
   }
 
   toProviderResponse(): AzureResponsesResponse {
-    if (this.replacedText === null && this.completedResponse) {
-      return this.completedResponse;
-    }
-
     const outputItems: AzureResponsesResponse["output"] = [];
 
     const messageText = this.replacedText ?? this.state.text;
@@ -703,6 +692,24 @@ class AzureResponsesStreamAdapter
       );
     }
 
+    // The upstream `response.completed` envelope is the richest record (it
+    // echoes tools, reasoning config and the real ids), so it wins — but only
+    // when it actually carries the turn. Reasoning turns finish with an empty
+    // `output` even though the text arrived in `response.output_text.delta`
+    // chunks; persisting that verbatim lost the whole assistant side of the
+    // interaction, leaving LLM Logs with nothing to render. Keep the envelope
+    // and restore the items we accumulated.
+    if (this.replacedText === null && this.completedResponse) {
+      const upstreamOutput = this.completedResponse.output;
+      if (
+        (Array.isArray(upstreamOutput) && upstreamOutput.length > 0) ||
+        outputItems.length === 0
+      ) {
+        return this.completedResponse;
+      }
+      return { ...this.completedResponse, output: outputItems };
+    }
+
     return {
       id: this.state.responseId || `resp_${Date.now()}`,
       object: "response",
@@ -710,16 +717,7 @@ class AzureResponsesStreamAdapter
       model: this.state.model,
       status: "completed",
       output: outputItems,
-      usage: this.state.usage
-        ? {
-            input_tokens: this.state.usage.inputTokens,
-            input_tokens_details: { cached_tokens: 0 },
-            output_tokens: this.state.usage.outputTokens,
-            output_tokens_details: { reasoning_tokens: 0 },
-            total_tokens:
-              this.state.usage.inputTokens + this.state.usage.outputTokens,
-          }
-        : undefined,
+      usage: this.state.usage ? toResponsesUsage(this.state.usage) : undefined,
     } as unknown as AzureResponsesResponse;
   }
 
@@ -789,7 +787,11 @@ function createEmptyToolCompressionStats(): ToolCompressionStats {
 }
 
 function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
-  if (item.type === "message") {
+  // "easy input message" items carry role/content and omit `type` (it defaults
+  // to "message"); the AI SDK emits this shape. Without handling it here,
+  // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
+  // evaluation (llm-proxy-handler) silently sees an empty conversation.
+  if ((item.type === "message" || item.type === undefined) && "role" in item) {
     return [
       {
         role: normalizeResponseMessageRole(item.role),
@@ -908,14 +910,24 @@ function toSse(event: unknown): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
-function getToolNamesByCallId(input: ResponseInputItem[]): Map<string, string> {
+function getToolCallsByCallId(
+  input: ResponseInputItem[],
+): Map<string, { name: string; arguments?: Record<string, unknown> }> {
   return new Map(
     input.flatMap((item) => {
       if (!isResponseInputFunctionCall(item)) {
         return [];
       }
 
-      return [[item.call_id, item.name] as const];
+      return [
+        [
+          item.call_id,
+          {
+            name: item.name,
+            arguments: extractCommonToolCallArguments(item.arguments),
+          },
+        ] as const,
+      ];
     }),
   );
 }

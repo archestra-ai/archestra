@@ -44,9 +44,8 @@ Load these project skills when the task matches their domain:
 - **Chat**: <http://localhost:3000/chat> (n8n expert chat with MCP tools, conversations in main sidebar)
 - **Tools**: <http://localhost:3000/tools> (Unified tools management with server-side pagination)
 - **Settings**: <http://localhost:3000/settings> (lands on the first permitted tab; tabs: Organization, Service Accounts, Chat, LLM, MCP, Security, Knowledge, Environments, Users, Teams, Roles, GitHub, Identity Providers, Secrets)
-- **Your Account**: <http://localhost:3000/account> (personal profile, API keys, gateway token, sessions; opened by clicking your name in the sidebar)
+- **Personal Settings**: <http://localhost:3000/account> (personal profile, API keys, gateway token, sessions; opened by clicking your name in the sidebar)
 - **MCP Registry**: <http://localhost:3000/mcp/registry> (Install and manage MCP servers)
-- **MCP Installation Requests**: <http://localhost:3000/mcp/registry/installation-requests> (View/manage server installation requests)
 - **LLM Proxy Logs**: <http://localhost:3000/llm/logs> (View LLM proxy request logs)
 - **MCP Gateway Logs**: <http://localhost:3000/mcp/logs> (View MCP tool call logs)
 - **Roles**: <http://localhost:3000/settings/roles> (Admin-only: manage custom RBAC roles)
@@ -118,7 +117,7 @@ tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an upda
 
 **Tech Stack**: pnpm monorepo, Fastify backend (port 9000), metrics server (port 9050), Next.js frontend (port 3000), PostgreSQL + Drizzle ORM, Biome linting, Tilt orchestration, Kubernetes for MCP server runtime
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), MCP server installation request workflow, K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control, TOON format conversion for efficient token usage
+**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control, TOON format conversion for efficient token usage
 
 **Workspaces**:
 
@@ -340,13 +339,6 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Labels returned in alphabetical order by key for consistency
 - API endpoints: GET `/api/profiles/labels/keys`, GET `/api/profiles/labels/values?key=<key>` (key param filters values by key)
 
-**MCP Server Installation Requests**:
-
-- Members can request MCP servers from external catalog
-- Admins approve/decline requests with optional messages
-- Prevents duplicate pending requests for same catalog item
-- Full timeline and notes functionality for collaboration
-
 **MCP Server Runtime**:
 
 - Local MCP servers run in K8s pods (one pod per server) when K8s is configured
@@ -385,8 +377,8 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **LLM Cost Billing Mode**:
 
 - Every interaction records a `billing_mode` (`metered` | `subscription`, default `metered`) alongside `cost`. `cost` stays the list-price estimate; **billed spend** = `cost` for metered rows, `0` for subscription rows. Never re-interpret `cost` as billed spend — derive billed spend with a `billing_mode = 'metered'` filter (statistics/session aggregations already do this).
-- Resolved at proxy write time by `resolveInteractionBillingMode` (`routes/proxy/utils/billing-mode.ts`) purely from the credential format via the provider adapter's `isSubscriptionCredential`: Anthropic OAuth access tokens (Claude Pro/Max, what Claude Code forwards) are `sk-ant-oat…` while metered API keys are `sk-ant-api…`. Applies uniformly to passthrough, virtual-key, and DB-managed keys — there is deliberately NO per-key billing configuration or UI. Gated by `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT` (default true). Bearer transport alone is NOT a signal (Workload Identity etc. stay metered).
-- Read sites split billed vs subscription: `statistics.getCostSavingsStatistics` (`totalSubscriptionCost` + per-bucket `subscriptionCost`), `interaction.getSessions` (`totalBilledCost`/`totalSubscriptionCost`). Frontend uses the `<BilledCost>` component. Metric `llm_cost_total` carries a `billing_mode` label. **Not yet billing-aware (documented follow-up): cost-based usage limits in `models/limit.ts`.**
+- Resolved at proxy write time by `resolveInteractionBillingMode` (`routes/proxy/utils/billing-mode.ts`) purely from the credential format via the provider adapter's `isSubscriptionCredential`: Anthropic OAuth access tokens (Claude Pro/Max, what Claude Code forwards) are `sk-ant-oat…` while metered API keys are `sk-ant-api…`; ChatGPT-subscription (Codex) credentials are the `chatgpt-oauth:…` marker-encoded strings on the OpenAI chat + Responses adapters. Applies uniformly to passthrough, virtual-key, and DB-managed keys — there is deliberately NO per-key billing configuration or UI. Gated by `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT` (default true). Bearer transport alone is NOT a signal (Workload Identity etc. stay metered).
+- Read sites split billed vs subscription: `statistics.getCostSavingsStatistics` (`totalSubscriptionCost` + per-bucket `subscriptionCost`), `interaction.getSessions` (`totalBilledCost`/`totalSubscriptionCost`). Frontend uses the `<BilledCost>` component. Metric `llm_cost_total` carries a `billing_mode` label. Cost limits are billing-aware too: `InteractionModel.updateUsageAfterInteraction` skips limit accumulation entirely for `billing_mode = 'subscription'` interactions, and default user limits (`getDefaultUserLimitUsage` in `models/limit.ts`, which sums interactions directly) filter to `billing_mode = 'metered'` — so subscription traffic never burns down token-cost limits.
 
 **Chat Feature**:
 

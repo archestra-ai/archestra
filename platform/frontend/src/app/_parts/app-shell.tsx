@@ -3,11 +3,13 @@
 import { APP_RECORDING_RENDER_ROUTE } from "@archestra/shared";
 import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { MOBILE_HEADER_ACTIONS_CONTAINER_ID } from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { FeedbackPopupDialog } from "@/components/feedback-popup-dialog";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { LoadingSpinner } from "@/components/loading";
 import {
   NavigationStatusProvider,
   useNavigationStatus,
@@ -20,13 +22,14 @@ import {
 } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   ConnectivityProvider,
   useConnectivity,
 } from "@/lib/config/connectivity";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
+import { useOrganization } from "@/lib/organization.query";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { cn } from "@/lib/utils";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
@@ -51,6 +54,28 @@ const MAIN_CONTENT_ID = "main-content";
 
 interface AppShellProps {
   children: React.ReactNode;
+}
+
+/**
+ * When the organization requires 2FA and the signed-in user hasn't enrolled,
+ * every non-exempt API call is refused anyway — send them straight to the
+ * enrollment page instead of flashing the app chrome and waiting for the
+ * first 403 to bounce them.
+ */
+function useTwoFactorEnrollmentRedirect(enabled: boolean): boolean {
+  const { data: session } = useSession();
+  const { data: organization } = useOrganization();
+  const mustEnroll =
+    !!organization?.requireTwoFactor &&
+    !!session &&
+    !session.user.twoFactorEnabled;
+  const shouldRedirect = enabled && mustEnroll;
+  useEffect(() => {
+    if (shouldRedirect) {
+      window.location.replace("/auth/two-factor-setup");
+    }
+  }, [shouldRedirect]);
+  return shouldRedirect;
 }
 
 export function AppShell({ children }: AppShellProps) {
@@ -90,6 +115,21 @@ export function AppShell({ children }: AppShellProps) {
       !isAppRuntime &&
       !isReview,
   });
+
+  const redirectingToTwoFactorSetup = useTwoFactorEnrollmentRedirect(
+    !isAuthPage &&
+      !isBrowserPreview &&
+      !isAppRuntime &&
+      !isRecordingRender &&
+      !isReview,
+  );
+  if (redirectingToTwoFactorSetup) {
+    return (
+      <main className="h-app-viewport w-full flex items-center justify-center bg-background">
+        <LoadingSpinner />
+      </main>
+    );
+  }
 
   // Chromeless surfaces (browser preview, app runtime, video render, review):
   // no sidebar/header/version.
@@ -138,8 +178,12 @@ export function AppShell({ children }: AppShellProps) {
         <NavigationStatusProvider>
           <SidebarProvider defaultOpen={!shouldCollapse}>
             <SkipToContentLink />
-            <AppSidebar />
+            {/* The toggle is position:fixed, so DOM order only affects focus
+                order: keeping it before the sidebar means expanding it with
+                the keyboard tabs forward into the revealed sidebar content
+                instead of skipping to <main> (WCAG 2.4.3). */}
             <NavAwareSidebarCircleToggle />
+            <AppSidebar />
             <MaintenanceModeOverlay />
             <main
               id={MAIN_CONTENT_ID}

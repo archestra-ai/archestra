@@ -549,11 +549,11 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
       >
         {loading ? (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Loading logos...
+            <span>Loading logos...</span>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            No logos found
+            <span>No logos found</span>
           </div>
         ) : (
           <>

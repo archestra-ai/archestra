@@ -23,6 +23,8 @@ type SubscriptionConnectOption = {
   scope: "personal";
   isChatgptSubscription?: boolean;
   connectRequired: true;
+  dialogTitle: string;
+  dialogDescription: string;
   defaultValues: Partial<LlmProviderApiKeyFormValues>;
 };
 
@@ -34,6 +36,8 @@ const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] = [
     scope: "personal",
     isChatgptSubscription: true,
     connectRequired: true,
+    dialogTitle: "Sign in with ChatGPT",
+    dialogDescription: "Connect your ChatGPT account to use your subscription",
     defaultValues: {
       name: CHATGPT_SUBSCRIPTION_LABEL,
       provider: "openai",
@@ -47,6 +51,8 @@ const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] = [
     provider: "github-copilot",
     scope: "personal",
     connectRequired: true,
+    dialogTitle: "Sign in with GitHub Copilot",
+    dialogDescription: "Connect your GitHub Copilot subscription",
     defaultValues: {
       name: "GitHub Copilot",
       provider: "github-copilot",
@@ -59,6 +65,8 @@ const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] = [
     provider: "microsoft-365-copilot",
     scope: "personal",
     connectRequired: true,
+    dialogTitle: "Sign in with Microsoft 365 Copilot",
+    dialogDescription: "Connect your Microsoft 365 Copilot subscription",
     defaultValues: {
       name: "Microsoft 365 Copilot",
       provider: "microsoft-365-copilot",
@@ -162,6 +170,9 @@ export function LlmProviderApiKeySelector({
   const [open, setOpen] = useState(false);
   const [subscriptionToConnect, setSubscriptionToConnect] =
     useState<SubscriptionConnectOption | null>(null);
+  // Set when the connect dialog re-authenticates an existing credential
+  // (rotating its secret) instead of creating a new one.
+  const [reconnectKeyId, setReconnectKeyId] = useState<string | null>(null);
   const [connectedProviderToSelect, setConnectedProviderToSelect] = useState<
     SubscriptionConnectOption["provider"] | null
   >(null);
@@ -352,11 +363,31 @@ export function LlmProviderApiKeySelector({
       (option) => option.id === keyId,
     );
     if (connectOption) {
+      setReconnectKeyId(null);
       setSubscriptionToConnect(connectOption);
       handleOpenChange(false);
       return;
     }
     if (keyId === currentConversationChatApiKeyId) {
+      // Re-clicking the selected credential: for a connected personal
+      // subscription, open the sign-in dialog again so an expired or revoked
+      // session can be re-authenticated (otherwise the click is a dead end).
+      const selectedKey = availableKeys.find((key) => key.id === keyId);
+      const reconnectOption =
+        selectedKey && isPersonalSubscription(selectedKey)
+          ? SUBSCRIPTION_CONNECT_OPTIONS.find((option) =>
+              subscriptionMatchesKey(option, selectedKey),
+            )
+          : undefined;
+      if (reconnectOption) {
+        setReconnectKeyId(keyId);
+        setSubscriptionToConnect({
+          ...reconnectOption,
+          dialogTitle: `Reconnect ${reconnectOption.name}`,
+          dialogDescription:
+            "Sign in again to refresh this connection. The saved credential is replaced.",
+        });
+      }
       handleOpenChange(false);
       return;
     }
@@ -387,12 +418,17 @@ export function LlmProviderApiKeySelector({
         <CreateLlmProviderApiKeyDialog
           open
           onOpenChange={(dialogOpen) => {
-            if (!dialogOpen) setSubscriptionToConnect(null);
+            if (!dialogOpen) {
+              setSubscriptionToConnect(null);
+              setReconnectKeyId(null);
+            }
           }}
-          title={`Connect ${subscriptionToConnect.name}`}
-          description={`Connect your ${subscriptionToConnect.name} subscription`}
+          title={subscriptionToConnect.dialogTitle}
+          description={subscriptionToConnect.dialogDescription}
           defaultValues={subscriptionToConnect.defaultValues}
           allowedProviders={[subscriptionToConnect.provider]}
+          credentialMode="subscription"
+          reconnectKeyId={reconnectKeyId ?? undefined}
           onSuccess={() =>
             setConnectedProviderToSelect(subscriptionToConnect.provider)
           }

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { CONNECT_CLIENTS } from "./clients";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 
@@ -38,8 +39,12 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
 // The component reads the selected provider from the URL and writes selections
 // back; a static search param + no-op updater is enough for these assertions.
 vi.mock("next/navigation");
+// The panel brands its copy with the deployment's app name, which otherwise
+// reaches for the appearance-settings query and needs a QueryClientProvider.
+vi.mock("@/lib/hooks/use-app-name");
 
 beforeEach(() => {
+  vi.mocked(useAppName).mockReturnValue("Archestra");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams("providerId=anthropic") as unknown as ReturnType<
       typeof useSearchParams
@@ -226,7 +231,7 @@ describe("ProxyClientInstructions — Claude Desktop attribution header", () => 
     ).toBeGreaterThan(0);
   });
 
-  it("points to the Virtual API Keys page when the user can't mint a key", () => {
+  it("points to LLM Proxies when the user can't mint a key", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
@@ -234,7 +239,7 @@ describe("ProxyClientInstructions — Claude Desktop attribution header", () => 
 
     expect(passthroughProvisionMock).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("link", { name: /Virtual API Keys/i }),
+      screen.getByRole("link", { name: /LLM Proxies/i }),
     ).toBeInTheDocument();
   });
 

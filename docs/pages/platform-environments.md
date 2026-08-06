@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-07-22
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,8 +16,9 @@ This document is the canonical reference for deployment Environments. Include:
 - Environment isolation: how an environment scopes which tools, knowledge,
   skills, and delegation targets an agent / MCP gateway / LLM proxy can use
   (strict matching; Default is a peer, not a wildcard; skills can be
-  restricted to several environments or none = everywhere; built-in servers
-  and built-in skills are exempt)
+  restricted to several environments or none = everywhere; MCP Apps accept
+  Default tools as a shared baseline; built-in servers and built-in skills
+  are exempt)
 - Network egress policies (namespace + egress policy applied to MCP server pods AND
   agent code sandboxes), provider support matrix, and domain presets
 - How environments scope per-environment cost limits
@@ -30,7 +31,7 @@ Viewing environments requires the `environment:read` permission — every predef
 
 ## The Default environment
 
-Every organization has an implicit **Default** environment. Any resource whose environment is unset belongs to Default. Default is a real peer environment, not a wildcard: a resource in Default is not visible to a resource assigned to a named environment, and vice versa. Because everything starts in Default, isolation only changes behavior once you explicitly assign a non-default environment. Default can define a Kubernetes namespace and network egress policy like any other environment.
+Every organization has an implicit **Default** environment. Any resource whose environment is unset belongs to Default. Default is a real peer environment, not a wildcard: a resource in Default is not visible to a resource assigned to a named environment, and vice versa. [MCP Apps](/docs/platform-apps) are the one exception — an app accepts Default-environment tools as a shared baseline. Because everything starts in Default, isolation only changes behavior once you explicitly assign a non-default environment. Default can define a Kubernetes namespace and network egress policy like any other environment.
 
 ## Restricted environments
 
@@ -53,19 +54,24 @@ Acme wants engineers to install MCP servers only from its own image registry. An
 An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and use:
 
 - MCP tools whose server (catalog item) is in Production
+- MCP servers in the [private registry](/docs/platform-private-registry) that are in Production, including their deployments
 - knowledge connectors in Production
 - [Agent Skills](/docs/platform-agent-skills#environments) restricted to Production, or restricted to no environment at all
 - [subagent delegation targets](/docs/platform-agents#delegation) in Production
 
-Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
+Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. [MCP Apps](/docs/platform-apps) differ too: an app accepts Default-environment tools alongside its own environment's, so Default acts as a shared baseline for apps. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available. The [Advisor](/docs/platform-built-in-subagents#advisor) is not exempt — each environment gets its own, so an agent consults the one beside it.
+
+An agent creates in its own environment. When an agent adds an MCP server to the registry, or builds an [app](/docs/platform-apps), that resource lands in the agent's environment — so the agent can still see it afterwards. You can name a different environment explicitly when adding a server.
+
+An agent also configures only its own environment. It can assign and remove tools on agents and gateways in that environment, and nowhere else.
 
 This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, chat slash commands, and the skills offered on the [connect page](/docs/platform-llm-proxy#environment); a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
 
 ## Network egress policies
 
-An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent [code sandboxes](/docs/platform-code-sandbox) for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. Policies can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent [code sandboxes](/docs/platform-code-sandbox) for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. A policy sets one of three egress modes. **Block all** (`off`) denies all egress. **Allowlist** (`restricted`) permits only selected IP/CIDR ranges and domains. **Allow all** (`unrestricted`) permits everything — cluster-hosted workloads still get a fixed floor of blocked reserved ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
-When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
+When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in Allow all policy (`unrestricted`).
 
 How a policy applies depends on the workload. A **self-hosted MCP server** (or agent code sandbox) runs as a pod in your cluster, so the policy is enforced continuously at the network layer — a workload that needs broad outbound access (for example one that visits arbitrary sites) fails under a restrictive policy unless its destinations are allowlisted.
 

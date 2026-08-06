@@ -78,6 +78,7 @@ vi.mock("@/observability");
 
 // Import after mocks
 import { metrics } from "@/observability";
+import { upstreamHttpError } from "./adapters/upstream-http-error";
 import {
   buildInteractionRecord,
   calculateInteractionCosts,
@@ -158,6 +159,60 @@ describe("normalizeToolCallsForPolicy", () => {
         toolCallName: "c",
         toolCallArgs: JSON.stringify({ raw: "broken" }),
       },
+    ]);
+  });
+
+  test("unwraps a run_tool dispatch to the target tool it names", () => {
+    const result = normalizeToolCallsForPolicy([
+      {
+        name: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "github__create_or_update_file",
+          tool_args: { path: "README.md" },
+        }),
+      },
+    ]);
+    expect(result).toEqual([
+      {
+        toolCallName: "github__create_or_update_file",
+        toolCallArgs: '{"path":"README.md"}',
+        isRunToolDispatchTarget: true,
+      },
+    ]);
+  });
+
+  test("canonicalizes client-decorated names before dispatch resolution", () => {
+    const canonicalize = (name: string) =>
+      name.startsWith("mcp__gw__") ? name.slice("mcp__gw__".length) : name;
+    const result = normalizeToolCallsForPolicy(
+      [
+        {
+          name: "mcp__gw__archestra__run_tool",
+          arguments: JSON.stringify({
+            tool_name: "github__create_issue",
+            tool_args: {},
+          }),
+        },
+        { name: "mcp__gw__github__direct_tool", arguments: "{}" },
+      ],
+      canonicalize,
+    );
+    expect(result).toEqual([
+      {
+        toolCallName: "github__create_issue",
+        toolCallArgs: "{}",
+        isRunToolDispatchTarget: true,
+      },
+      { toolCallName: "github__direct_tool", toolCallArgs: "{}" },
+    ]);
+  });
+
+  test("keeps an unresolvable run_tool dispatch under the wrapper name", () => {
+    const result = normalizeToolCallsForPolicy([
+      { name: "archestra__run_tool", arguments: '{"tool_args":{}}' },
+    ]);
+    expect(result).toEqual([
+      { toolCallName: "archestra__run_tool", toolCallArgs: '{"tool_args":{}}' },
     ]);
   });
 });
@@ -678,6 +733,70 @@ describe("handleError", () => {
     );
   });
 
+  // The fetch-based adapters (Cohere, MiniMax, Zhipu) throw upstreamHttpError
+  // for non-OK responses. The attached status must reach the client (a
+  // provider 429 relays as 429, not 500), and a provider 5xx must be marked
+  // upstream so error tracking drops the relay as expected noise.
+  test("relays a provider 429 thrown as upstreamHttpError with its own status and body", () => {
+    const rateLimited = upstreamHttpError(
+      "Error from Cohere API : 429 - trial key limit",
+      429,
+    );
+
+    const { reply, sent } = makeReply(false);
+    handleError(rateLimited, reply, extractMessage, false, () => undefined);
+
+    expect(sent.statusCode).toBe(429);
+    expect(sent.body).toEqual({
+      error: { message: "Error from Cohere API : 429 - trial key limit" },
+    });
+  });
+
+  test("marks a provider 5xx thrown as upstreamHttpError as an upstream failure", () => {
+    const providerDown = upstreamHttpError(
+      "MiniMax API error: 503 Service Unavailable",
+      503,
+    );
+
+    const { reply } = makeReply(false);
+    let thrown: unknown;
+    try {
+      handleError(providerDown, reply, extractMessage, false, () => undefined);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect((thrown as ApiError).statusCode).toBe(503);
+    expect((thrown as ApiError).upstream).toBe(true);
+  });
+
+  test("classifies a downstream client abort as a 499", () => {
+    // The fetch AbortError raised when the client-disconnect signal fires.
+    expect(
+      throwStatusFor(
+        new DOMException("This operation was aborted", "AbortError"),
+      ),
+    ).toBe(499);
+    // The provider SDKs' wrapper for a caller-supplied signal firing mid-call.
+    expect(
+      throwStatusFor(
+        Object.assign(new Error("Request was aborted."), {
+          name: "APIUserAbortError",
+        }),
+      ),
+    ).toBe(499);
+  });
+
+  test("keeps classifying an abort-due-to-timeout as a 504, not a client abort", () => {
+    expect(
+      throwStatusFor(
+        Object.assign(new Error("The operation was aborted due to timeout"), {
+          name: "TimeoutError",
+        }),
+      ),
+    ).toBe(504);
+  });
+
   function makeStreamedOverloadError(headers?: Headers) {
     const body = {
       type: "error",
@@ -748,14 +867,88 @@ describe("handleError", () => {
     );
   });
 
-  test("does not tag an explicit 503 without overload wording", () => {
+  test("tags any explicit provider 503 as overloaded, regardless of wording", () => {
+    // Providers phrase unavailability differently (Google returns UNAVAILABLE
+    // "experiencing high demand" with no "overloaded" wording) — a 503 from
+    // the provider call is provider unavailability either way.
     const thrown = throwErrorFor(
       Object.assign(new Error("Service Unavailable"), { status: 503 }),
       makeReply(false).reply,
     );
 
     expect(thrown.statusCode).toBe(503);
-    expect(thrown.internalCode).toBeUndefined();
+    expect(thrown.internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
+    );
+    expect(thrown.upstream).toBe(true);
+  });
+
+  test("reads the HTTP status from AWS SDK response metadata", () => {
+    // AWS SDK errors (Bedrock) carry the status on $metadata — without it a
+    // throttling 429 surfaced as a generic 500.
+    const throttled = throwErrorFor(
+      Object.assign(new Error("Too many requests, please wait."), {
+        $metadata: { httpStatusCode: 429 },
+      }),
+      makeReply(false).reply,
+    );
+    expect(throttled.statusCode).toBe(429);
+
+    const providerFault = throwErrorFor(
+      Object.assign(new Error("Bedrock is unable to process your request."), {
+        $metadata: { httpStatusCode: 500 },
+      }),
+      makeReply(false).reply,
+    );
+    expect(providerFault.statusCode).toBe(500);
+    expect(providerFault.upstream).toBe(true);
+  });
+
+  test("marks a status-less in-stream provider error as an upstream failure", () => {
+    // Once the provider's stream commits 200, a failure arrives as an SSE
+    // `error` event that the SDK relays with a parsed provider body but no
+    // HTTP status — e.g. Anthropic's mid-stream `api_error` ("Internal
+    // server error"). Without the upstream marker it was captured as a
+    // crash of ours.
+    const body = {
+      type: "error",
+      error: { type: "api_error", message: "Internal server error" },
+    };
+    const thrown = throwErrorFor(
+      Object.assign(new Error(JSON.stringify(body)), {
+        error: body,
+        headers: new Headers(),
+      }),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.upstream).toBe(true);
+  });
+
+  test("marks a status-less in-stream provider error with a bare-string payload as upstream", () => {
+    // OpenAI-compatible upstreams may put a plain string under the stream's
+    // `error` member; the SDK relays it verbatim with no HTTP status.
+    const thrown = throwErrorFor(
+      Object.assign(new Error("tool call refused by upstream"), {
+        error: "tool call refused by upstream",
+        headers: new Headers(),
+      }),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.upstream).toBe(true);
+  });
+
+  test("does not mark an internal 500 as an upstream failure", () => {
+    const thrown = throwErrorFor(
+      new TypeError("cannot read x of undefined"),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.upstream).toBeFalsy();
   });
 
   test("forwards the upstream Retry-After header before headers commit", () => {

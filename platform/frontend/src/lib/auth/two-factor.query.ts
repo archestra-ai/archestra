@@ -1,7 +1,9 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { archestraApiSdk } from "@archestra/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { throwOnApiError } from "@/lib/utils";
 
 type AuthClientError = {
   message?: string;
@@ -9,14 +11,44 @@ type AuthClientError = {
 };
 
 /**
+ * Whether a two-factor SIGN-IN challenge is currently pending. better-auth
+ * keeps that state in a signed httpOnly cookie the browser cannot read, so
+ * the auth pages ask the server before deciding whether they apply.
+ */
+export function useTwoFactorChallengePending() {
+  return useQuery({
+    queryKey: ["auth-state", "two-factor-pending"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAuthState();
+      throwOnApiError(error, { toastOnError: false });
+      return data?.twoFactorPending ?? false;
+    },
+    // A challenge is short-lived and single-use; never serve it from cache.
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+}
+
+/**
  * Enable two-factor authentication. Returns the TOTP URI (for the QR setup
  * step) and the generated backup codes, or null when the request fails.
  */
 export function useEnableTwoFactorMutation() {
   return useMutation({
-    mutationFn: async (params: { password: string }) => {
+    /**
+     * `issuer` is the label the user's authenticator app shows beside the code.
+     * It has to be passed per-request: Better Auth resolves the issuer as
+     * `body.issuer ?? options.issuer ?? context.appName`, and the latter two are
+     * fixed when the auth instance is constructed at import time — before any
+     * organization row (and so any white-label app name) can be read. Passing it
+     * here is what makes a white-labeled deployment enroll under its own brand
+     * instead of the default one.
+     */
+    mutationFn: async (params: { password: string; issuer: string }) => {
       const { data, error } = await authClient.twoFactor.enable({
         password: params.password,
+        issuer: params.issuer,
       });
 
       if (error) {

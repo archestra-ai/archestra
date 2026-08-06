@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { type Button, type ColorScheme, WebClient } from "@slack/web-api";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   type AllowedCacheKey,
   CacheKey,
@@ -43,20 +44,12 @@ import { shrinkImageForModel } from "@/utils/image-conversion";
 import {
   buildWelcomeMessage,
   ensureProvisionedUser,
-  isSsoConfigured,
+  resolveSignupWelcomeMode,
 } from "./auto-provision";
 import {
-  clearChannelThreadMuted,
-  isChannelAnswerAllEnabled,
-  isChannelThreadActive,
-  isChannelThreadMuted,
+  applyChannelGate,
   isMuteReaction,
-  isThreadMuteCommand,
-  markChannelThreadActive,
-  markChannelThreadMuted,
-  mightBeAddressedMuteCommand,
   muteChannelThread,
-  resolveChannelGateAction,
 } from "./channel-activation";
 import {
   buildThreadMutedNotice,
@@ -85,6 +78,13 @@ class SlackProvider implements ChatOpsProvider {
 
   private client: WebClient | null = null;
   private botUserId: string | null = null;
+  /**
+   * The bot's name as Slack shows it, which is what someone types when they
+   * address it without an @mention ("Archestra mute"). auth.test can't provide
+   * it — for a bot token its `user` field is the literal string "bot" — so it is
+   * resolved from the bot's own profile.
+   */
+  private botDisplayName: string | null = null;
   private teamId: string | null = null;
   private teamName: string | null = null;
   private config: SlackDbConfig;
@@ -168,8 +168,16 @@ class SlackProvider implements ChatOpsProvider {
       this.botUserId = (body.user_id as string) || null;
       this.teamId = (body.team_id as string) || null;
       this.teamName = (body.team as string) || null;
+      // Best-effort: without it the bot simply stops answering to its own name.
+      this.botDisplayName = this.botUserId
+        ? await this.getUserName(this.botUserId)
+        : null;
       logger.info(
-        { botUserId: this.botUserId, teamId: this.teamId },
+        {
+          botUserId: this.botUserId,
+          botDisplayName: this.botDisplayName,
+          teamId: this.teamId,
+        },
         "[SlackProvider] Authenticated successfully",
       );
 
@@ -212,6 +220,7 @@ class SlackProvider implements ChatOpsProvider {
     this.socketDedup.clear();
     this.client = null;
     this.botUserId = null;
+    this.botDisplayName = null;
     this.teamId = null;
     this.teamName = null;
     logger.info("[SlackProvider] Cleaned up");
@@ -328,85 +337,20 @@ class SlackProvider implements ChatOpsProvider {
     //
     // A channel can also opt into answering EVERY message (a per-channel
     // "answer all messages" binding setting): a message the gate would normally
-    // ignore is processed instead, unless that thread was muted. That flag is
-    // only consulted when the message would otherwise be ignored, so mentions-
-    // only channels (the default) do no extra work.
+    // ignore is processed instead, unless that thread was muted.
     if (!isDM) {
-      const activation = {
+      const { proceed } = await applyChannelGate({
         provider: this.providerId,
         channelId: event.channel,
         threadId: threadTs,
-      };
-      // "mute" / "shut up" etc., optionally prefixed by a name the bot answers
-      // to ("Archestra shut up") with no explicit @mention. The app name is
-      // DB-backed, so only resolve it when the message might be such a command.
-      let wantsMute = isThreadMuteCommand(cleanedText);
-      if (!wantsMute && mightBeAddressedMuteCommand(cleanedText)) {
-        wantsMute = isThreadMuteCommand(cleanedText, [
-          await OrganizationModel.getAppName(),
-        ]);
-      }
-      // isActive is only consulted when the bot wasn't mentioned (see
-      // resolveChannelGateAction), so skip the cache read on mentions.
-      const isActive = hasBotMention
-        ? false
-        : await isChannelThreadActive(activation);
-      // Consult the per-channel "answer all messages" flag only for the cases it
-      // can change: a message the base gate would ignore (un-mentioned +
-      // inactive), or any mute we may need to persist on the thread (an
-      // answer-all channel has no mention-driven activation to clear). Mentioned
-      // or already-active messages resolve without it, so mentions-only channels
-      // (the default) do no extra work.
-      const answerAll =
-        (!hasBotMention && !isActive) || wantsMute
-          ? await isChannelAnswerAllEnabled({
-              provider: this.providerId,
-              channelId: event.channel,
-              workspaceId: body.team_id || null,
-            })
-          : false;
-      const isMuted =
-        answerAll && !hasBotMention && !isActive && !wantsMute
-          ? await isChannelThreadMuted(activation)
-          : false;
-      switch (
-        resolveChannelGateAction({
-          botMentioned: hasBotMention,
-          wantsMute,
-          isActive,
-          answerAll,
-          isMuted,
-        })
-      ) {
-        case "mute": {
-          const wasActive = await this.muteThreadAndNotify(
-            event.channel,
-            threadTs,
-          );
-          // An answer-all channel replies without a mention, so clearing the
-          // mention-driven activation isn't enough — remember the mute on the
-          // thread itself so it stays quiet until re-mentioned. Confirm it once
-          // (muteThreadAndNotify only confirms an active→muted transition, and a
-          // fresh answer-all thread isn't "active").
-          if (answerAll) {
-            const alreadyMuted = await isChannelThreadMuted(activation);
-            await markChannelThreadMuted(activation);
-            if (!wasActive && !alreadyMuted) {
-              await this.postThreadMutedNotice(event.channel, threadTs);
-            }
-          }
-          return null;
-        }
-        case "activate":
-          await markChannelThreadActive(activation);
-          // A re-mention lifts an answer-all mute (see the "mute" case).
-          await clearChannelThreadMuted(activation);
-          break;
-        case "ignore":
-          return null;
-        case "process":
-          break;
-      }
+        botMentioned: hasBotMention,
+        text: cleanedText,
+        botDisplayName: this.botDisplayName,
+        postMutedNotice: () =>
+          this.postThreadMutedNotice(event.channel, threadTs),
+        resolveAnswerAllWorkspaceId: async () => body.team_id || null,
+      });
+      if (!proceed) return null;
     }
 
     // Download file attachments first (we're already in an addressed context —
@@ -714,7 +658,7 @@ class SlackProvider implements ChatOpsProvider {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).",
+              text: `*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).`,
             },
           },
           {
@@ -752,7 +696,7 @@ class SlackProvider implements ChatOpsProvider {
 
     const isDM = params.message.metadata?.channelType === "im";
     const fallbackText = params.isWelcome
-      ? "Welcome to Archestra!"
+      ? `Welcome to ${archestraMcpBranding.appName}!`
       : "Change Default Agent";
 
     if (isDM) {
@@ -1184,9 +1128,14 @@ class SlackProvider implements ChatOpsProvider {
       };
     }
 
-    // Send welcome DM (fire-and-forget) — skip when SSO is enabled
-    if (provisioned.invitationId !== null && !(await isSsoConfigured())) {
+    // Send welcome DM (fire-and-forget) for newly provisioned users
+    const welcomeMode =
+      provisioned.invitationId !== null
+        ? await resolveSignupWelcomeMode()
+        : "none";
+    if (provisioned.invitationId !== null && welcomeMode !== "none") {
       const welcome = await buildWelcomeMessage({
+        mode: welcomeMode,
         invitationId: provisioned.invitationId,
         email: senderEmail,
         name: displayName,
@@ -1225,7 +1174,7 @@ class SlackProvider implements ChatOpsProvider {
             response_type: "ephemeral",
             text:
               `This channel is assigned to agent: *${agent?.name || binding.agentId}*\n\n` +
-              "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
+              `*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).\n\n` +
               `Use \`${slashCommands.SELECT_AGENT}\` to change the default agent.`,
           };
         }

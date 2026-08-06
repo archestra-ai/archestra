@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-23
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -325,7 +325,10 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 
 ### Supported Perplexity APIs
 
-- **Chat Completions API** (`/chat/completions`)
+- **Chat Completions API** (`/chat/completions`) — the `sonar` model family
+- **Agent API** (`/responses`) — vendor-prefixed models such as `anthropic/claude-opus-5` and `perplexity/glm-5.2`
+
+One API key works for both. The model you pick selects the API.
 
 ### Perplexity Connection Details
 
@@ -345,9 +348,9 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ### Important Notes
 
-- **No tool calling support**: Perplexity does NOT support external tool calling. It performs internal web searches and returns results in the response. Use Perplexity for search-augmented generation, not agentic workflows requiring custom tools.
-- **Search results**: Perplexity responses may include `search_results` and `citations` fields containing web search results used to generate the answer.
-- **Models**: Popular models include `sonar-pro`, `sonar`, and `sonar-deep-research` for different use cases.
+- **Tool calling is per model**: The `sonar` models take no external tools. They perform internal web searches and return the results. The Agent API models accept tools, so agents can run their usual workflows on them.
+- **Search results**: `sonar` responses may include `search_results` and `citations` fields containing web search results used to generate the answer.
+- **Models**: Popular models include `sonar-pro` and `sonar-deep-research` for search, and `anthropic/claude-opus-5` for tool-using agents.
 
 ## vLLM
 
@@ -729,6 +732,12 @@ Archestra fetches the model list from the upstream's `{base-url}/models` endpoin
 - **Base URL**: `http://localhost:9000/v1/bedrock/{profile-id}`
 - **Authentication**: Bearer API key or AWS IAM (see below)
 
+### Region
+
+Each Bedrock key carries an AWS region. Amazon enables models per region, so the region decides which models the key can use — pick the one where your models are turned on.
+
+A key can also point at a custom endpoint instead, for a VPC or PrivateLink setup. Archestra reads the region back out of that endpoint, and falls back to `us-east-1` when the endpoint carries no region.
+
 ### Authentication Methods
 
 Bedrock supports two authentication methods:
@@ -792,7 +801,10 @@ Archestra calls the Bedrock **Converse API**, and the **InvokeModel API** for cl
     },
     {
       "Effect": "Allow",
-      "Action": ["bedrock:ListInferenceProfiles"],
+      "Action": [
+        "bedrock:ListInferenceProfiles",
+        "bedrock:ListFoundationModels"
+      ],
       "Resource": "*"
     }
   ]
@@ -800,6 +812,8 @@ Archestra calls the Bedrock **Converse API**, and the **InvokeModel API** for cl
 ```
 
 Use `*` for the region in resource ARNs — cross-region inference profiles (`us.` prefix) can route requests to any US region.
+
+The two list actions populate the model picker. `ListInferenceProfiles` returns cross-region and application inference profiles. `ListFoundationModels` adds on-demand models that have no inference profile. Without it, those models are not offered.
 
 ### Environment Variables
 

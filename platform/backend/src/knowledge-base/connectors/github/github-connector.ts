@@ -376,9 +376,10 @@ export class GithubConnector extends BaseConnector {
     const { octokit, config, repo, checkpoint, isLastGroup } = params;
     const repoFullName = `${repo.owner}/${repo.name}`;
     const indexedExtensions = getIndexedFileExtensions(config);
+    const indexedPathPrefixes = getIndexedPathPrefixes(config);
 
     this.log.info(
-      { repo: repoFullName, indexedExtensions },
+      { repo: repoFullName, indexedExtensions, indexedPathPrefixes },
       "Starting repository file sync",
     );
 
@@ -436,6 +437,7 @@ export class GithubConnector extends BaseConnector {
           (item) =>
             item.type === "blob" &&
             item.path &&
+            isWithinIndexedPaths(item.path, indexedPathPrefixes) &&
             isIndexedRepositoryFile(item.path, indexedExtensions) &&
             item.sha,
         )
@@ -443,6 +445,16 @@ export class GithubConnector extends BaseConnector {
           path: item.path as string,
           sha: item.sha as string,
         }));
+
+      // GitHub caps a recursive tree listing; past the cap it returns a partial
+      // tree with `truncated: true`. Silently indexing a subset looks identical
+      // to "that folder has no matching files", so say it out loud.
+      if (treeResponse.data.truncated) {
+        this.log.warn(
+          { repo: repoFullName, branch, treeSha },
+          "Repository tree was truncated by GitHub, some files will not be indexed",
+        );
+      }
 
       this.log.info(
         {
@@ -1233,6 +1245,36 @@ function getIndexedFileExtensions(config: GithubConfig): string[] {
 function isIndexedRepositoryFile(path: string, extensions: string[]): boolean {
   const lower = path.toLowerCase();
   return extensions.some((extension) => lower.endsWith(extension));
+}
+
+/**
+ * Normalize the configured folders into repo-root-relative prefixes: users
+ * paste `/docs`, `docs/`, or `./docs` interchangeably, and a tree path never
+ * carries a leading slash. Entries that just name the repository root (`/`,
+ * `./`, `.`, blank) normalize away, leaving no filter at all rather than a
+ * prefix that matches nothing.
+ */
+function getIndexedPathPrefixes(config: GithubConfig): string[] {
+  return (config.includePaths ?? [])
+    .map((entry) =>
+      entry
+        .trim()
+        .replace(/^\.?\/+/, "")
+        .replace(/\/+$/, ""),
+    )
+    .filter((entry) => entry !== "" && entry !== ".");
+}
+
+/**
+ * A file is in scope when it sits at or under one of the prefixes. The `/`
+ * boundary matters: `docs` must not swallow `docs-internal/guide.md`.
+ * Comparison is case-sensitive because git paths are.
+ */
+function isWithinIndexedPaths(path: string, prefixes: string[]): boolean {
+  if (prefixes.length === 0) return true;
+  return prefixes.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  );
 }
 
 async function getFileContent(

@@ -2,10 +2,8 @@
 
 import {
   type archestraApiTypes,
-  CLIENT_FILTER_OPTIONS,
   type ClientFilter,
   clientForExternalAgentIds,
-  DynamicInteraction,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
 } from "@archestra/shared";
@@ -17,10 +15,8 @@ import { useCallback, useMemo } from "react";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
-  ClientFilterOption,
   ProfileFilterOption,
   SourceFilterOption,
-  UserFilterOption,
 } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
@@ -36,7 +32,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  ClientFilterSelect,
+  UserFilterSelect,
+} from "@/components/user-client-filter-selects";
 import { useProfiles } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
@@ -84,7 +85,6 @@ function formatDuration(start: Date | string, end: Date | string): string {
 
 type SessionData =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
-type UniqueUser = archestraApiTypes.GetUniqueUserIdsResponses["200"][number];
 
 function getSessionDisplayData(session: SessionData) {
   const isSingleInteraction =
@@ -97,22 +97,9 @@ function getSessionDisplayData(session: SessionData) {
   // not the session-id provenance.
   const clientSource = clientForExternalAgentIds(session.externalAgentIds);
 
-  let lastUserMessage = "";
-  if (session.lastInteractionRequest && session.lastInteractionType) {
-    try {
-      const mockInteraction = {
-        request: session.lastInteractionRequest,
-        response: {},
-        type: session.lastInteractionType,
-      };
-      const interaction = new DynamicInteraction(
-        mockInteraction as archestraApiTypes.GetInteractionResponses["200"],
-      );
-      lastUserMessage = interaction.getLastUserMessage();
-    } catch {
-      lastUserMessage = "";
-    }
-  }
+  // Server-computed preview — the sessions API never returns raw request
+  // bodies (shipping them OOM-killed the platform container, T-1015).
+  const lastUserMessage = session.lastUserMessagePreview ?? "";
 
   const displayText = claudeCodeTitle || lastUserMessage;
 
@@ -130,7 +117,6 @@ export default function LlmProxyLogsPage({
   initialData,
 }: {
   initialData?: {
-    interactions: archestraApiTypes.GetInteractionsResponses["200"];
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
@@ -147,7 +133,6 @@ function SessionsTable({
   initialData,
 }: {
   initialData?: {
-    interactions: archestraApiTypes.GetInteractionsResponses["200"];
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   };
 }) {
@@ -266,6 +251,7 @@ function SessionsTable({
   });
 
   const { data: uniqueUsers } = useUniqueUserIds();
+  const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
 
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;
@@ -572,24 +558,18 @@ function SessionsTable({
               selectedContent: <ProfileFilterOption profile={agent} />,
             })) || []),
           ]}
-          className="w-[200px]"
+          className="w-full sm:w-[200px]"
         />
 
-        <SearchableSelect
-          value={userFilter}
-          onValueChange={handleUserFilterChange}
-          placeholder="Filter by User"
-          items={[
-            { value: "all", label: "All Users" },
-            ...(uniqueUsers?.map((user: UniqueUser) => ({
-              value: user.id,
-              label: user.name || user.id,
-              content: <UserFilterOption name={user.name || user.id} />,
-              selectedContent: <UserFilterOption name={user.name || user.id} />,
-            })) || []),
-          ]}
-          className="w-[200px]"
-        />
+        {canSeeAllLogs ? (
+          // Without log:admin the server scopes every listing to the caller's
+          // own rows, so a user filter would be a one-entry dropdown.
+          <UserFilterSelect
+            value={userFilter}
+            onValueChange={handleUserFilterChange}
+            users={uniqueUsers}
+          />
+        ) : null}
 
         <SearchableSelect
           value={sourceFilter}
@@ -610,25 +590,12 @@ function SessionsTable({
               }),
             ),
           ]}
-          className="w-[200px]"
+          className="w-full sm:w-[200px]"
         />
 
-        <SearchableSelect
+        <ClientFilterSelect
           value={clientFilter}
           onValueChange={handleClientFilterChange}
-          placeholder="Filter by Client"
-          items={[
-            { value: "all", label: "All Clients" },
-            ...CLIENT_FILTER_OPTIONS.map(({ value, label, provider }) => ({
-              value,
-              label,
-              content: <ClientFilterOption label={label} provider={provider} />,
-              selectedContent: (
-                <ClientFilterOption label={label} provider={provider} />
-              ),
-            })),
-          ]}
-          className="w-[200px]"
         />
 
         <DateTimeRangePicker

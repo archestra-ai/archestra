@@ -1,9 +1,14 @@
 "use client";
 
-import { providerRequiresPerUserCredential } from "@archestra/shared";
+import {
+  DocsPage,
+  getDocsUrl,
+  providerRequiresPerUserCredential,
+} from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -22,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useOrgScopedAgents } from "@/lib/agent.query";
 import {
   APPS_HACKATHON_DATE_RANGE_LABEL,
@@ -63,6 +69,9 @@ export default function AgentSettingsPage() {
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
   const [hackathonRecorder, setHackathonRecorder] =
     useState<FileUploadsEnabled>("enabled");
+  const [newAppsDisabledByDefault, setNewAppsDisabledByDefault] =
+    useState(false);
+  const [newAppsLockedByDefault, setNewAppsLockedByDefault] = useState(false);
   const initializedRef = useRef(false);
   const savedStateRef = useRef<AgentSettingsState>({
     selectedApiKeyId: "",
@@ -71,6 +80,8 @@ export default function AgentSettingsPage() {
   });
   const savedFileUploadsRef = useRef<FileUploadsEnabled>("enabled");
   const savedHackathonRecorderRef = useRef<FileUploadsEnabled>("enabled");
+  const savedNewAppsDisabledRef = useRef(false);
+  const savedNewAppsLockedRef = useRef(false);
   // Only offered while this deployment carries the hackathon and it is still
   // running; an enterprise deployment never does, so there is nothing here to
   // switch on. Past the closing date the whole section goes rather than
@@ -120,9 +131,15 @@ export default function AgentSettingsPage() {
         ? "enabled"
         : "disabled";
     setHackathonRecorder(savedHackathonRecorder);
+    const savedNewAppsDisabled = organization.newAppsDisabledByDefault ?? false;
+    const savedNewAppsLocked = organization.newAppsLockedByDefault ?? false;
+    setNewAppsDisabledByDefault(savedNewAppsDisabled);
+    setNewAppsLockedByDefault(savedNewAppsLocked);
     savedStateRef.current = state;
     savedFileUploadsRef.current = savedFileUploads;
     savedHackathonRecorderRef.current = savedHackathonRecorder;
+    savedNewAppsDisabledRef.current = savedNewAppsDisabled;
+    savedNewAppsLockedRef.current = savedNewAppsLocked;
     initializedRef.current = true;
   }, [organization, apiKeys]);
 
@@ -137,7 +154,9 @@ export default function AgentSettingsPage() {
   const changes = detectChanges(localState, savedStateRef.current);
   const securityHasChanges =
     fileUploads !== savedFileUploadsRef.current ||
-    hackathonRecorder !== savedHackathonRecorderRef.current;
+    hackathonRecorder !== savedHackathonRecorderRef.current ||
+    newAppsDisabledByDefault !== savedNewAppsDisabledRef.current ||
+    newAppsLockedByDefault !== savedNewAppsLockedRef.current;
 
   const handleSave = async () => {
     if (!apiKeys) return;
@@ -158,9 +177,13 @@ export default function AgentSettingsPage() {
         ...(hackathonOffered
           ? { appsHackathonRecorderEnabled: hackathonRecorder === "enabled" }
           : {}),
+        newAppsDisabledByDefault,
+        newAppsLockedByDefault,
       });
       savedFileUploadsRef.current = fileUploads;
       savedHackathonRecorderRef.current = hackathonRecorder;
+      savedNewAppsDisabledRef.current = newAppsDisabledByDefault;
+      savedNewAppsLockedRef.current = newAppsLockedByDefault;
     }
 
     initializedRef.current = false;
@@ -173,6 +196,8 @@ export default function AgentSettingsPage() {
     setDefaultAgentId(saved.defaultAgentId);
     setFileUploads(savedFileUploadsRef.current);
     setHackathonRecorder(savedHackathonRecorderRef.current);
+    setNewAppsDisabledByDefault(savedNewAppsDisabledRef.current);
+    setNewAppsLockedByDefault(savedNewAppsLockedRef.current);
   };
 
   const modelItems = useMemo(() => {
@@ -374,12 +399,75 @@ export default function AgentSettingsPage() {
           </span>
         }
       />
+      <SettingsBlock
+        title="New Apps Are Disabled by Default"
+        description={
+          <>
+            Create every new app disabled: author-only and invisible to agents
+            until its author enables it in App settings. Existing apps are
+            unaffected.{" "}
+            <ExternalDocsLink
+              href={getDocsUrl(DocsPage.PlatformApps, "defaults-for-new-apps")}
+              className="text-primary hover:underline"
+              showIcon={false}
+            >
+              Learn more.
+            </ExternalDocsLink>
+          </>
+        }
+        control={
+          <WithPermissions
+            permissions={{ agentSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <Switch
+                checked={newAppsDisabledByDefault}
+                onCheckedChange={setNewAppsDisabledByDefault}
+                disabled={isSaving || !hasPermission}
+              />
+            )}
+          </WithPermissions>
+        }
+      />
+      <SettingsBlock
+        title="New Apps Are Locked by Default"
+        description={
+          <>
+            Create every new app locked: immutable to agents until a user
+            unlocks it, in App settings or by asking an agent directly. Existing
+            apps are unaffected.{" "}
+            <ExternalDocsLink
+              href={getDocsUrl(DocsPage.PlatformApps, "locking-an-app")}
+              className="text-primary hover:underline"
+              showIcon={false}
+            >
+              Learn more.
+            </ExternalDocsLink>
+          </>
+        }
+        control={
+          <WithPermissions
+            permissions={{ agentSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <Switch
+                checked={newAppsLockedByDefault}
+                onCheckedChange={setNewAppsLockedByDefault}
+                disabled={isSaving || !hasPermission}
+              />
+            )}
+          </WithPermissions>
+        }
+      />
       {hackathonOffered && (
         <SettingsBlock
           id={APPS_HACKATHON_SETTING_ANCHOR}
           title="Apps Hackathon Recorder"
           description={
             <>
+              {/* white-label-ok: names the real Archestra-run hackathon and its repo; hidden unless that offer is enabled */}
               Show the session recorder control panel in chat composer to
               participate in Archestra Apps Hackathon{" "}
               {APPS_HACKATHON_DATE_RANGE_LABEL}.{" "}

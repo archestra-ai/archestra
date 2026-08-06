@@ -20,7 +20,7 @@ concurrency:
 jobs:
   lint-pr-title:
     name: PR Title Linter
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read # Required to checkout the repository and read commitlint config.
       pull-requests: read # Required by lint-pr-title to read PR metadata.
@@ -31,14 +31,14 @@ jobs:
 
       - name: Checkout project
         if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Lint PR title
         if: ${{ github.event_name == 'pull_request' }}
-        uses: grafana/shared-workflows/actions/lint-pr-title@823ed150196915a86971ab4beb899b0c80d835fe # v1.2.3
+        uses: grafana/shared-workflows/actions/lint-pr-title@70c40e5b6522c854a55334124545261cae3d4c73 # v1.2.4
         with:
           config-path: "${{ github.workspace }}/.github/commitlint.config.js" # zizmor: ignore[template-injection] workspace path is provided by GitHub and not user input.
         env:

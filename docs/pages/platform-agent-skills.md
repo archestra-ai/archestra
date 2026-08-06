@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-22
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,7 @@ Agent Skills are markdown instruction sets an agent loads on demand. A skill is 
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
-Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
+Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Filter the list by visibility — personal, team, or organization — or by source repository. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
 
 Click a skill's use count (or its chart action) to open usage analytics — a chart of who activated the skill over the last 30 days, and how often.
 
@@ -114,6 +114,48 @@ Every skill carries a visibility **scope**, set in the skill editor or the GitHu
 `skill:read` governs *using* a skill — listing it, loading it, or invoking its slash command in chat. A user only ever sees skills inside their scope (org-wide skills, their own personal skills, and skills in their teams); `list_skills`, `load_skill`, and the `/skill-name` slash commands are all filtered the same way. `skill:admin` bypasses scope and sees every skill.
 
 Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skill requires `skill:team-admin` and membership in the teams it is assigned to. By default the predefined roles grant: **admin** — full control; **editor** — create/update/delete plus team sharing; **member** — create and manage their own personal skills, and read everything in scope.
+
+## Deleting and Restoring Skills
+
+Deleting a skill hides it from every list, activation, slash command, and share link. It also stops the skill's GitHub sync. The skill is not destroyed — it moves to a trash. Its name is free to reuse right away, so you can create a new skill with that name.
+
+Admins and team admins switch the status filter to **Deleted** to open the trash. **Restore** returns the skill to active. A restore is refused when an active skill already holds the name — rename or delete that one, then restore again.
+
+Global admins can also delete a skill from the trash for good, with **Delete permanently**. This destroys the skill, every version, and every file it holds. Nothing brings it back. A skill mounted in a code sandbox is refused until that sandbox is gone.
+
+Deleting a built-in skill is a lasting opt-out — it stays gone across restarts. You can still restore it from the trash. Built-in skills cannot be deleted for good, since the trash record is what keeps them from coming back.
+
+A synced skill can lose its GitHub token while it sits in the trash. It still restores, but the next pull runs unauthenticated — for a now-private repo that fails with a sync error. Re-attach a token under **Settings → GitHub** to fix it.
+
+## Version History
+
+Every edit that changes a skill's `SKILL.md` or resource files creates a new immutable version. An edit that changes nothing does not. Version numbers count up from 1, and the full history is kept.
+
+Open **Version history** from the actions on a skill's row to browse them. Pick a version to read its files. You can read them whole, or as a diff against the version before it.
+
+A version pulled from GitHub links out to that skill's directory at the commit it came from, so you can read the change upstream. Versions you author here have no link.
+
+`GET /api/skills/:id/versions` lists versions as metadata, newest first. `GET /api/skills/:id/versions/:version` returns one version's body and file snapshots. Sandboxes mount a pinned version, so a running skill never changes mid-conversation.
+
+### Restoring a Version
+
+**Restore this version** republishes an older version's content. It creates a new version instead of rewinding, so the history is never rewritten.
+
+A restore replaces the skill's instructions and its resource files. Files the skill has today that the restored version lacks are removed — the confirmation tells you how many. A later restore brings them back.
+
+Nothing else changes. The name, description, and other frontmatter fields are not versioned. Neither are scope, teams, or environments, so a restore will not undo a rename.
+
+A GitHub-synced skill cannot be restored, since its content comes from the repository. Stop the sync in the skill editor to make the skill editable again.
+
+Built-in skills also offer **Reset to default**, next to the restore button. It overwrites your local edits with the content Archestra ships, recorded as a new version.
+
+### Concurrent Edits
+
+The skill editor anchors each save to the version it loaded. If someone changes the skill's content first, the save is refused. Their edit is never overwritten.
+
+`PUT /api/skills/:id` takes `baseVersion` — the skill's `latestVersion` when you composed the edit. The request fails with 409 if the skill has moved past it. Omit `baseVersion` and the save is not guarded. The `edit_skill` tool takes the same field.
+
+Only content is versioned. A change to the name, scope, teams, or environments is not caught.
 
 ## Environments
 

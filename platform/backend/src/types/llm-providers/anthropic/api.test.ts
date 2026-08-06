@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { MessagesRequestSchema } from "./api";
+import { MessagesRequestSchema, MessagesResponseSchema } from "./api";
 
 describe("MessagesRequestSchema", () => {
   // Fastify replaces request.body with the Zod parse result, so any thinking
@@ -45,5 +45,20 @@ describe("MessagesRequestSchema", () => {
     });
 
     expect(parsed.thinking).toEqual({ type: "adaptive" });
+  });
+});
+
+describe("MessagesResponseSchema", () => {
+  test("accepts a response that omits stop_sequence", () => {
+    const result = MessagesResponseSchema.safeParse({
+      id: "msg_1",
+      content: [{ type: "text", text: "hi", citations: null }],
+      model: "claude-sonnet-4-5",
+      role: "assistant",
+      stop_reason: "end_turn",
+      type: "message",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    expect(result.success).toBe(true);
   });
 });

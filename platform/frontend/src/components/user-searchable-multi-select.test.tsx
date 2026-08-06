@@ -10,6 +10,34 @@ describe("UserSearchableMultiSelect", () => {
     { userId: "user-3", name: "Bob Wilson", email: "bob@example.com" },
   ];
 
+  it("finds a user whose stored name order differs from the typed one", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <UserSearchableMultiSelect
+        value={[]}
+        onValueChange={vi.fn()}
+        users={[
+          {
+            userId: "user-ada",
+            name: "Lovelace, Ada M.",
+            email: "ada@example.com",
+          },
+          ...mockUsers,
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.type(
+      screen.getByPlaceholderText("Search users by name or email"),
+      "Ada Lovelace",
+    );
+
+    expect(screen.getByText("Lovelace, Ada M.")).toBeInTheDocument();
+    expect(screen.queryByText("John Doe")).not.toBeInTheDocument();
+  });
+
   it("renders with placeholder when no users selected", () => {
     render(
       <UserSearchableMultiSelect

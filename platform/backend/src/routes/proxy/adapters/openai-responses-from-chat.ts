@@ -13,6 +13,8 @@ import {
   chatCompletionToResponses,
   type OpenaiResponsesContext,
 } from "./openai-responses-translator";
+import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import { toResponsesUsage } from "./responses-usage";
 
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 
@@ -336,7 +338,13 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
       this.toSse({
         type: "response.completed",
         sequence_number: this.nextSequenceNumber(),
-        response: this.buildResponsesResponse(),
+        // The builder omits usage entirely for an unobserved turn, which is
+        // fine for the non-streaming body but not here: a terminal frame
+        // without numeric usage is silently dropped by the Responses parser.
+        response: {
+          ...this.buildResponsesResponse(),
+          usage: toResponsesUsage(this.state.usage),
+        },
       }),
     ].join("");
   }
@@ -417,6 +425,11 @@ export function makeResponsesFromChatAdapterFactory<
 ): LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   return {
     ...provider,
+    // The wrapped provider speaks chat completions, but this surface emits a
+    // Responses stream — so its mid-stream error frame has to be Responses-
+    // shaped too, or the client parses it as an unknown chunk and the failure
+    // reaches the user as a blank turn.
+    formatStreamErrorFrame: formatResponsesStreamErrorFrame,
     createResponseAdapter(response) {
       return new ResponsesFromChatAdapter(
         provider.createResponseAdapter(response),

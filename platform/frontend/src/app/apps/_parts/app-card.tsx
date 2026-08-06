@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,7 @@ import {
   useOpenExternalAppInChat,
   usePinApp,
 } from "@/lib/app.query";
+import { appRunUrl } from "@/lib/apps/app-run-url";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { cn } from "@/lib/utils";
@@ -112,7 +114,7 @@ function PinMenuItem({
       onSelect={() => pinAppMutation.mutate({ pinned: !pinned, target })}
     >
       {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-      {pinned ? "Unpin" : "Pin"}
+      <span>{pinned ? "Unpin" : "Pin"}</span>
     </DropdownMenuItem>
   );
 }
@@ -232,15 +234,18 @@ function OwnedAppCard({
           <CardOverflowMenu
             leading={
               <>
+                <LabelTags labels={app.labels} />
                 <ScopeBadge
                   scope={app.scope}
                   teamNames={app.teams?.map((team) => team.name)}
+                  userNames={app.users?.map((user) => user.name)}
                 />
                 {/* A disabled app is author-only, so this badge only ever
                     shows on the author's own card. */}
                 {!app.enabled ? (
                   <Badge variant="outline">Disabled</Badge>
                 ) : null}
+                {app.locked ? <Badge variant="outline">Locked</Badge> : null}
                 {/* Between the scope pill and the overflow menu, exactly as the
                     project card places its owner badge. */}
                 {isForeignPersonalApp ? (
@@ -262,7 +267,7 @@ function OwnedAppCard({
               Settings
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href={`/a/${app.id}`} target="_blank" rel="noreferrer">
+              <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
                 <SquareArrowOutUpRight className="h-4 w-4" />
                 Open in new tab
               </Link>
@@ -360,7 +365,14 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
             {app.name}
           </CardTitle>
         </div>
-        <CardOverflowMenu leading={<ScopeBadge scope={app.scope} />}>
+        <CardOverflowMenu
+          leading={
+            <>
+              <LabelTags labels={app.labels} />
+              <ScopeBadge scope={app.scope} />
+            </>
+          }
+        >
           <PinMenuItem
             pinned={!!app.pinnedAt}
             target={{

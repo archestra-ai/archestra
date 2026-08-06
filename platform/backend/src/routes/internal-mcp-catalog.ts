@@ -49,8 +49,8 @@ import {
 } from "@/services/mcp-install-policy";
 import {
   autoReinstallServer,
-  localExecutionConfigChanged,
   manualReinstallReason,
+  multitenantSharedPodChanged,
   onlyForwardCompatibleEnvDiff,
   reinstallMultitenantCatalog,
   requiresNewUserInputForReinstall,
@@ -102,6 +102,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Apps are hidden from the registry but assignable to a gateway, so the
           // capabilities picker opts in to their backing catalogs here.
           includeApps: z.coerce.boolean().optional(),
+          status: z
+            .enum(["active", "deleted"])
+            .default("active")
+            .describe(
+              "Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default).",
+            ),
         }),
         response: constructResponseSchema(
           z.array(ListInternalMcpCatalogSchema),
@@ -109,6 +115,34 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      // Soft-deleted catalog items are visible only to holders of the dedicated
+      // manage-deleted capability (admins by default) — the ordinary delete
+      // permission must not unlock the org-wide tombstone view. This lists
+      // org-scoped deleted roots (a backend affordance for discovering
+      // restorable ids — no UI toggle this change).
+      if (request.query.status === "deleted") {
+        const { success: canManageDeleted } = await hasPermission(
+          { mcpRegistry: ["manage-deleted"] },
+          request.headers,
+        );
+        if (!canManageDeleted) {
+          throw new ApiError(
+            403,
+            "You do not have permission to list deleted catalog items.",
+          );
+        }
+        const deleted =
+          await InternalMcpCatalogModel.findDeletedForOrganization(
+            request.organizationId,
+          );
+        return reply.send(
+          deleted.map((item) => ({
+            ...item,
+            imageApprovalRequired: false,
+          })),
+        );
+      }
+
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         request.headers,
@@ -453,16 +487,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
       });
-      // Clone source must resolve within the caller's org — `create` copies
-      // the source's tools + guardrail policies, so an unscoped `clonedFrom`
-      // would let a caller pull another org's catalog config into their own.
+      // Clone source must resolve under the CALLER's own access. `create` copies
+      // the source's tools, guardrail policies, and secret bags (OAuth client
+      // secret, local-config env, presets) onto the new item — which the caller
+      // owns and can therefore read back expanded. Resolving the source with a
+      // hardcoded admin flag would skip the personal/team scope checks and let
+      // any member clone someone else's item to harvest those values, so pass
+      // the caller's real privilege instead.
       if (restBody.clonedFrom) {
         const cloneSource = await InternalMcpCatalogModel.findById(
           restBody.clonedFrom,
           {
             expandSecrets: false,
             userId: request.user.id,
-            isAdmin: true,
+            isAdmin: checker.isAdmin,
             organizationId: request.organizationId,
           },
         );
@@ -520,6 +558,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetInternalMcpCatalogTools,
         description:
+          // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
           "Get tools for a catalog item (including builtin Archestra tools)",
         tags: ["MCP Catalog"],
         params: z.object({
@@ -696,6 +735,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         writeMembershipTeamIds,
         userId: request.user.id,
       });
+
+      if (restBody.dynamicConnectionMcpServerId) {
+        const pinned = await McpServerModel.findByIdInOrg(
+          restBody.dynamicConnectionMcpServerId,
+          request.organizationId,
+        );
+        if (pinned?.scope === "personal") {
+          throw new ApiError(
+            400,
+            "Personal connections cannot be set as the default credential. Use on-behalf-of-user resolution instead.",
+          );
+        }
+      }
 
       // Re-authorize and re-sync teams only when scope, team assignments, or
       // their access levels actually change. A content-only edit that echoes
@@ -1298,9 +1350,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         await reinstallMultitenantCatalog(catalogItem);
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        throw new ApiError(500, errorMessage);
+        throw toMcpOperationApiError(error);
       }
 
       return reply.send({ success: true });
@@ -1369,7 +1419,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           result.status === "rejected",
       );
       if (failures.length === restartResults.length) {
-        throw new ApiError(500, getSettledErrorMessage(failures[0]));
+        throw toMcpOperationApiError(failures[0].reason);
       }
 
       return reply.send({ success: true });
@@ -1547,6 +1597,59 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(catalogItem.id),
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreInternalMcpCatalogItem,
+        description:
+          "Restore a soft-deleted Internal MCP catalog item and its cascaded installs and tools (flag-only reinstall).",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      if (isBuiltInCatalogId(id)) {
+        throw new ApiError(403, "Built-in catalog items cannot be restored");
+      }
+
+      const catalogItem =
+        await InternalMcpCatalogModel.findDeletedByIdForOrganization(
+          id,
+          request.organizationId,
+        );
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      // App-backed catalogs are managed through the Apps lifecycle (mirrors delete).
+      if (catalogItem.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App-backed catalog items are managed through the Apps API and cannot be restored here.",
+        );
+      }
+
+      // Authorization is the route-level manage-deleted permission (admin-only
+      // by default): deleted-resource lifecycle is one org-scoped capability,
+      // not derived from authorship of the live resource.
+
+      const conflict =
+        await InternalMcpCatalogModel.getRestoreConflictMessage(catalogItem);
+      if (conflict) {
+        throw new ApiError(409, conflict);
+      }
+
+      return reply.send({
+        success: await InternalMcpCatalogModel.restore(id),
       });
     },
   );
@@ -1966,30 +2069,14 @@ async function cascadeReinstallForCatalog(
 
   // Multi-tenant local catalogs have one shared K8s Deployment across all
   // installs. Execution-config drift (image, command, args, transport) on
-  // this kind of catalog is a catalog-level event — one rollout serves
-  // every tenant — so we flag it on the catalog row instead of marking
-  // each install reinstall-required. An admin/owner clears the flag via
-  // POST /api/internal-mcp-catalog/:id/reinstall, which does the actual
-  // pod recreate + tool cascade. Single-tenant catalogs continue to use
-  // the per-install flag (see `requiresNewUserInputForReinstall`).
-  const catalogScopeChangeOnMultitenant =
-    catalogItem.multitenant === true &&
-    catalogItem.serverType === "local" &&
-    (localExecutionConfigChanged(originalCatalogItem, catalogItem) ||
-      multitenantSharedEnvChanged(originalCatalogItem, catalogItem));
-
-  if (catalogScopeChangeOnMultitenant) {
-    logger.info(
-      { catalogId: catalogItem.id, serverCount: installedServers.length },
-      "Catalog execution config changed on multi-tenant local catalog - setting catalogReinstallRequired",
-    );
-    await InternalMcpCatalogModel.update(catalogItem.id, {
-      catalogReinstallRequired: true,
-    });
-    // Fall through to also evaluate per-install marking: a prompt-input
-    // change could have landed in the same edit and still needs per-tenant
-    // input on top of the catalog-level rollout.
-  }
+  // this kind of catalog is a catalog-level event — one rollout serves every
+  // tenant — so it's handled as a single shared-pod recreate rather than by
+  // marking each install reinstall-required. Single-tenant catalogs continue
+  // to use the per-install flag (see `requiresNewUserInputForReinstall`).
+  const catalogScopeChangeOnMultitenant = multitenantSharedPodChanged(
+    originalCatalogItem,
+    catalogItem,
+  );
 
   // Manual path is authoritative: a re-prompt edit blocks both the
   // gate-decided auto path AND the forced auto path. Run it before any
@@ -1999,6 +2086,14 @@ async function cascadeReinstallForCatalog(
   // an install still owing input from an earlier edit.
   const manualReason = manualReinstallReason(originalCatalogItem, catalogItem);
   if (manualReason !== null) {
+    // A shared pod can't roll onto a spec whose new prompted fields no
+    // tenant has filled in yet, so the recreate waits for the catalog
+    // Reinstall button rather than firing now.
+    if (catalogScopeChangeOnMultitenant) {
+      await InternalMcpCatalogModel.update(catalogItem.id, {
+        catalogReinstallRequired: true,
+      });
+    }
     logger.info(
       {
         catalogId: catalogItem.id,
@@ -2019,18 +2114,17 @@ async function cascadeReinstallForCatalog(
     return;
   }
 
-  // If we set the catalog-level flag and nothing else needs handling per
-  // install, skip the auto-cascade. The pod is still running the old
-  // spec; the catalog-reinstall endpoint will recreate it and cascade
-  // tool sync to every install in one shot. Without this short-circuit,
-  // every install would auto-cascade against the unchanged pod, flipping
-  // statuses to "success" while the catalog flag still says "reinstall
-  // required" — a confusing mixed signal.
+  // Execution-only drift on a shared deployment. The admin who saved the
+  // edit is the sole owner of that pod and no tenant owes new input, so the
+  // recreate runs now instead of parking behind a second click. Not routed
+  // through `autoReinstallInstallsInBackground`: that reinstalls per install,
+  // which against one shared pod would recreate it N times.
   if (catalogScopeChangeOnMultitenant) {
     logger.info(
-      { catalogId: catalogItem.id },
-      "Catalog reinstall pending - skipping auto-cascade; admin clicks 'Reinstall catalog' to apply",
+      { catalogId: catalogItem.id, serverCount: installedServers.length },
+      "Catalog execution config changed on multi-tenant local catalog - recreating shared deployment",
     );
+    reinstallMultitenantCatalogInBackground(catalogItem);
     return;
   }
 
@@ -2144,6 +2238,58 @@ function autoReinstallInstallsInBackground(
 }
 
 /**
+ * Recreate a multi-tenant catalog's shared deployment and cascade tool sync to
+ * every install, off the request path.
+ *
+ * A failed recreate leaves the pod on the old spec, so the catalog falls back
+ * to `catalogReinstallRequired` — that surfaces the card's Reinstall button for
+ * a retry. `reinstallMultitenantCatalog` has already marked the installs
+ * themselves `error` by then.
+ */
+function reinstallMultitenantCatalogInBackground(
+  catalogItem: InternalMcpCatalog,
+): void {
+  setImmediate(async () => {
+    try {
+      // Re-read rather than closing over the caller's row: another edit can
+      // land while this sits queued, and the recreate both syncs tools against
+      // whichever row it's handed and clears `catalogReinstallRequired`
+      // unconditionally when it succeeds.
+      const current = await InternalMcpCatalogModel.findById(catalogItem.id, {
+        expandSecrets: false,
+      });
+      if (!current) return;
+      // That later edit deferred its own rollout because it needs values no
+      // tenant has supplied. Recreating now would roll a spec nobody can
+      // satisfy and clear the very flag asking for those values.
+      if (current.catalogReinstallRequired) {
+        logger.info(
+          { catalogId: catalogItem.id },
+          "Newer catalog edit is awaiting manual reinstall - skipping background recreate",
+        );
+        return;
+      }
+      await reinstallMultitenantCatalog(current);
+    } catch (error) {
+      logger.error(
+        { err: error, catalogId: catalogItem.id },
+        "Shared deployment recreate failed - flagging catalog for manual reinstall",
+      );
+      try {
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          catalogReinstallRequired: true,
+        });
+      } catch (flagError) {
+        logger.error(
+          { err: flagError, catalogId: catalogItem.id },
+          "Failed to flag catalog for manual reinstall after a failed recreate",
+        );
+      }
+    }
+  });
+}
+
+/**
  * Release the auto-reinstall that a gated catalog edit deferred: once an admin
  * approves the image, roll every install onto it. Single-tenant catalogs
  * auto-reinstall each pod; multi-tenant catalogs flag `catalogReinstallRequired`
@@ -2206,36 +2352,57 @@ async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
     (result): result is PromiseRejectedResult => result.status === "rejected",
   );
   if (failures.length > 0 && failures.length === restartResults.length) {
-    throw new Error(getSettledErrorMessage(failures[0]));
+    // Rethrow the original reason (not a rewrapped Error) so the route can
+    // classify it by error name in toMcpOperationApiError.
+    throw failures[0].reason;
   }
 }
 
-function getSettledErrorMessage(result: PromiseRejectedResult): string {
-  return result.reason instanceof Error
-    ? result.reason.message
-    : "Unknown error";
+/**
+ * Error names thrown by the MCP client/runtime for a user's server being
+ * unreachable, not ready, or failing to deploy. Matched by name so this route
+ * module doesn't import the runtime's error classes.
+ */
+const MCP_RUNTIME_FAILURE_ERROR_NAMES = new Set([
+  "McpServerNotReadyError",
+  "McpServerConnectionTimeoutError",
+  "McpServerUnreachableError",
+  "McpServerDeploymentFailedError",
+]);
+
+/**
+ * Map a failed install/restart operation to the ApiError surfaced to the
+ * caller. MCP-runtime failures (the user's server unreachable, its container
+ * crashing) are upstream faults → 502; Kubernetes control-plane throttling is
+ * transient → retryable 503 with a readable message (instead of the raw
+ * "HTTP-Code: 429" client error); anything else stays a 500.
+ */
+function toMcpOperationApiError(reason: unknown): ApiError {
+  const message = reason instanceof Error ? reason.message : "Unknown error";
+  if (
+    reason instanceof Error &&
+    MCP_RUNTIME_FAILURE_ERROR_NAMES.has(reason.name)
+  ) {
+    return new ApiError(502, message);
+  }
+  if (isK8sApiThrottlingError(reason)) {
+    return new ApiError(
+      503,
+      "The Kubernetes API is temporarily throttling requests. Please retry in a moment.",
+    );
+  }
+  return new ApiError(500, message);
 }
 
 /**
- * Non-prompted env entries land directly in the shared K8s pod's env on a
- * multi-tenant local catalog, so any change to one of them requires a pod
- * recreate. Prompted entries are per-install secrets surfaced at request
- * time — they don't live on the shared pod and are tracked separately by
- * `promptedEnvVarsChanged`, so we exclude them here. Compared fields are
- * `key + type + value` only;
- * `description`, `required`, and other metadata don't reach the pod env.
+ * The Kubernetes client reports API-server throttling as an ApiException with
+ * `code: 429` and an "HTTP-Code: 429" message (e.g. while etcd/storage is
+ * re-initializing during control-plane churn).
  */
-function multitenantSharedEnvChanged(
-  oldCatalog: InternalMcpCatalog,
-  newCatalog: InternalMcpCatalog,
-): boolean {
-  const project = (cat: InternalMcpCatalog) =>
-    (cat.localConfig?.environment ?? [])
-      .filter((e) => !e.promptOnInstallation)
-      .map((e) => ({ key: e.key, type: e.type, value: e.value }));
-  return (
-    JSON.stringify(project(oldCatalog)) !== JSON.stringify(project(newCatalog))
-  );
+function isK8sApiThrottlingError(reason: unknown): boolean {
+  if (!(reason instanceof Error)) return false;
+  const code = (reason as { code?: unknown }).code;
+  return code === 429 || /^HTTP-Code: 429\b/.test(reason.message);
 }
 
 /**

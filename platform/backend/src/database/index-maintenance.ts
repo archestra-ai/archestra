@@ -1,4 +1,6 @@
 import { sql } from "drizzle-orm";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
+import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
 import db from "@/database";
 import logger from "@/logging";
 
@@ -61,6 +63,50 @@ export async function dropLegacyPayloadTrgmIndexes(
   }
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Under enterprise content encryption, `messages.content` and
+ * `mcp_tool_calls.tool_result` store ciphertext: the trigram indexes cannot
+ * serve searches anymore (conversation search degrades to titles, tool-call
+ * search to server name + method) and would pay GIN maintenance on every
+ * backfill rewrite. Dropped out-of-band for the same lock-safety reasons as
+ * the legacy payload indexes above; the backfill additionally verifies the
+ * indexes are gone before rewriting rows, because this drop is best-effort.
+ */
+export async function dropContentTrgmIndexesUnderEncryption(
+  options: { concurrently?: boolean } = {},
+): Promise<void> {
+  if (!isContentEncryptionEnabled()) return;
+  const concurrently = options.concurrently ?? true;
+  for (const indexName of ENCRYPTED_CONTENT_TRGM_INDEXES) {
+    try {
+      const existing = await db.execute(
+        sql`select to_regclass(${indexName}) as index_oid`,
+      );
+      if (!existing.rows[0]?.index_oid) continue;
+
+      logger.info({ indexName }, "Dropping encrypted-content trgm index");
+      await db.execute(
+        sql.raw(
+          `DROP INDEX ${concurrently ? "CONCURRENTLY " : ""}IF EXISTS "${indexName}"`,
+        ),
+      );
+      logger.info({ indexName }, "Dropped encrypted-content trgm index");
+    } catch (error) {
+      logger.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+          indexName,
+        },
+        "Failed to drop encrypted-content trgm index; will retry on next boot",
+      );
+    }
+  }
+}
+// SPDX-SnippetEnd
+
 // ============================================================
 // Internal implementation
 // ============================================================
@@ -69,3 +115,12 @@ const LEGACY_PAYLOAD_TRGM_INDEXES = [
   "interactions_request_trgm_idx",
   "interactions_response_trgm_idx",
 ];
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+const ENCRYPTED_CONTENT_TRGM_INDEXES = [
+  "messages_content_trgm_idx",
+  "mcp_tool_calls_tool_result_trgm_idx",
+];
+// SPDX-SnippetEnd

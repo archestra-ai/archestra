@@ -1,13 +1,18 @@
 import {
   ADMIN_ROLE_NAME,
+  ADVISOR_AGENT_DESCRIPTION,
+  ADVISOR_SYSTEM_PROMPT,
   ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
+  DUAL_LLM_DEFAULT_MAX_ROUNDS,
+  DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
+  DUAL_LLM_MAIN_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@archestra/shared";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
@@ -20,6 +25,9 @@ import {
   SkillModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
+import AgentVersionModel from "@/models/agent-version";
+import ToolModel from "@/models/tool";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
   BUILT_IN_SKILLS,
@@ -69,6 +77,205 @@ describe("syncBuiltInAgents", () => {
       firstOrg.id,
     );
     expect(titleAgent?.systemPrompt).toBe(CHAT_TITLE_GENERATION_SYSTEM_PROMPT);
+  });
+
+  test("seeds the advisor with the description callers are steered by", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    await syncBuiltInAgents();
+
+    const advisor = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.ADVISOR,
+      organization.id,
+    );
+
+    expect(advisor?.systemPrompt).toBe(ADVISOR_SYSTEM_PROMPT);
+    // Reaches the calling model as the delegation tool's description, so an
+    // empty or generic one leaves it with no idea when to consult.
+    expect(advisor?.description).toBe(ADVISOR_AGENT_DESCRIPTION);
+    // An advisor that can act is no longer only an advisor.
+    expect(await AgentToolModel.findToolIdsByAgent(advisor?.id ?? "")).toEqual(
+      [],
+    );
+  });
+
+  test("gives every environment its own advisor, and no other built-in one", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const [staging] = await db
+      .insert(schema.environmentsTable)
+      .values({ organizationId: organization.id, name: "Staging" })
+      .returning();
+
+    await syncBuiltInAgents();
+
+    // An agent in Staging can only delegate to a target in Staging, so an
+    // advisor only in the Default environment would be unreachable there.
+    const stagingAdvisor = await AgentModel.getAdvisorForEnvironment({
+      organizationId: organization.id,
+      environmentId: staging.id,
+    });
+    const defaultAdvisor = await AgentModel.getAdvisorForEnvironment({
+      organizationId: organization.id,
+      environmentId: null,
+    });
+
+    expect(stagingAdvisor).not.toBeNull();
+    expect(defaultAdvisor).not.toBeNull();
+    expect(stagingAdvisor?.id).not.toBe(defaultAdvisor?.id);
+    expect(stagingAdvisor?.description).toBe(ADVISOR_AGENT_DESCRIPTION);
+
+    // Every other built-in is invoked by the platform, not delegated to, so it
+    // stays org-wide — one row, in the Default environment.
+    const titleAgents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organization.id),
+          eq(
+            sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+            BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+          ),
+        ),
+      );
+    expect(titleAgents).toHaveLength(1);
+  });
+
+  test("seeds an advisor into an environment created after the first boot", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await syncBuiltInAgents();
+
+    const [added] = await db
+      .insert(schema.environmentsTable)
+      .values({ organizationId: organization.id, name: "Added later" })
+      .returning();
+
+    expect(
+      await AgentModel.getAdvisorForEnvironment({
+        organizationId: organization.id,
+        environmentId: added.id,
+      }),
+    ).toBeNull();
+
+    await syncBuiltInAgents();
+
+    expect(
+      await AgentModel.getAdvisorForEnvironment({
+        organizationId: organization.id,
+        environmentId: added.id,
+      }),
+    ).not.toBeNull();
+  });
+
+  test("carries a renamed or reworded built-in to an org that already has it", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await syncBuiltInAgents();
+
+    const seeded = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.ADVISOR,
+      organization.id,
+    );
+    // What an environment seeded by an earlier release looks like. Neither
+    // field is editable on a built-in, so a stale value can only come from a
+    // deploy that predates the current text.
+    await db
+      .update(schema.agentsTable)
+      .set({ name: "Advisor Agent", description: "an older description" })
+      .where(eq(schema.agentsTable.id, seeded?.id ?? ""));
+    const staleDelegation = await ToolModel.findOrCreateDelegationTool(
+      seeded?.id ?? "",
+    );
+    expect(staleDelegation.name).toBe("agent__advisor_agent");
+
+    await syncBuiltInAgents();
+
+    const reconciled = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.ADVISOR,
+      organization.id,
+    );
+    expect(reconciled?.name).toBe(BUILT_IN_AGENT_NAMES.ADVISOR);
+    expect(reconciled?.description).toBe(ADVISOR_AGENT_DESCRIPTION);
+    // A delegation tool is named for its target, so callers would otherwise
+    // keep reaching a name the agent no longer answers to.
+    const [delegationTool] = await db
+      .select({ name: schema.toolsTable.name })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, staleDelegation.id));
+    expect(delegationTool.name).toBe("agent__advisor");
+  });
+
+  test("seeds the dual LLM main agent with the current maxRounds default", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    await syncBuiltInAgents();
+
+    const mainAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+      organization.id,
+    );
+    expect(mainAgent?.builtInAgentConfig).toMatchObject({
+      maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
+    });
+  });
+
+  test("migrates a dual LLM maxRounds still on the legacy default, leaving admin choices alone", async ({
+    makeOrganization,
+  }) => {
+    const legacyOrg = await makeOrganization();
+    const customOrg = await makeOrganization();
+
+    await db.insert(schema.agentsTable).values([
+      {
+        organizationId: legacyOrg.id,
+        name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
+        agentType: "agent",
+        scope: "org",
+        systemPrompt: DUAL_LLM_MAIN_SYSTEM_PROMPT,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+          maxRounds: DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
+        },
+      },
+      {
+        organizationId: customOrg.id,
+        name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
+        agentType: "agent",
+        scope: "org",
+        systemPrompt: DUAL_LLM_MAIN_SYSTEM_PROMPT,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+          // A deliberate admin value — anything but the legacy default.
+          maxRounds: 8,
+        },
+      },
+    ]);
+
+    await syncBuiltInAgents();
+
+    const [migrated, untouched] = await Promise.all([
+      AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        legacyOrg.id,
+      ),
+      AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        customOrg.id,
+      ),
+    ]);
+    expect(migrated?.builtInAgentConfig).toMatchObject({
+      maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
+    });
+    expect(untouched?.builtInAgentConfig).toMatchObject({ maxRounds: 8 });
   });
 
   test("updates legacy policy configuration system prompts", async ({
@@ -164,6 +371,63 @@ describe("syncBuiltInAgents", () => {
     );
 
     expect(builtInAgent?.systemPrompt).toBe(customPrompt);
+  });
+
+  test("seeded built-in agents get a config version", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    await syncBuiltInAgents();
+
+    const builtInAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      organization.id,
+    );
+
+    // This path inserts into agentsTable directly rather than through
+    // AgentModel, so without an explicit fork built-ins would stay at version
+    // 0 and their seeded config would land in whichever user edits them first.
+    expect(builtInAgent?.latestVersion).toBe(1);
+    const head = await AgentVersionModel.findByAgentAndVersion({
+      agentId: builtInAgent?.id ?? "",
+      version: 1,
+      organizationId: organization.id,
+    });
+    expect(head?.snapshot.systemPrompt).toBe(POLICY_CONFIG_SYSTEM_PROMPT);
+  });
+
+  test("a deploy rewriting a legacy prompt forks its own version", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    const [existing] = await db
+      .insert(schema.agentsTable)
+      .values({
+        organizationId: organization.id,
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        agentType: "agent",
+        scope: "org",
+        systemPrompt: LEGACY_POLICY_CONFIG_SYSTEM_PROMPT,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+      })
+      .returning();
+    expect(existing.latestVersion).toBe(0);
+
+    await syncBuiltInAgents();
+
+    // The prompt rewrite is attributed to the deploy that made it, instead of
+    // being folded into the next user edit's version.
+    const head = await AgentVersionModel.findByAgentAndVersion({
+      agentId: existing.id,
+      version: 1,
+      organizationId: organization.id,
+    });
+    expect(head?.snapshot.systemPrompt).toBe(POLICY_CONFIG_SYSTEM_PROMPT);
   });
 });
 
@@ -385,6 +649,34 @@ describe("syncBuiltInSkills", () => {
     expect(preserved?.content).toBe("EDITED BY USER");
   });
 
+  test("a soft-deleted built-in stays deleted across syncs (durable opt-out)", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+
+    await syncBuiltInSkills();
+    const seeded = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    if (!seeded) throw new Error("seed failed");
+
+    await SkillModel.delete(seeded.id);
+    await syncBuiltInSkills();
+
+    // not resurrected: no new copy, the soft-deleted row is untouched, and
+    // the skill stays invisible to reads.
+    expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length);
+    const afterSync = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(afterSync?.id).toBe(seeded.id);
+    expect(afterSync?.deletedAt).toBeInstanceOf(Date);
+    expect(await SkillModel.findById(seeded.id)).toBeNull();
+  });
+
   test("brands the seeded skill under the org's white-label app name", async ({
     makeOrganization,
   }) => {
@@ -451,7 +743,20 @@ describe("syncBuiltInSkills", () => {
       sourceRef: buildAppRef,
     });
     expect(seeded).not.toBeNull();
-    expect(seeded?.content).toContain("window.archestra");
+
+    // SKILL.md carries the flow and chat-conduct rules; the SDK contract is
+    // bundled as a reference file instead of embedded in the body, so loading
+    // the skill front-loads how to build and talk, not the API surface.
+    expect(seeded?.content).toContain("references/apps-sdk.md");
+    expect(seeded?.content).not.toContain("connect-src");
+
+    const files = await SkillFileModel.findBySkillId(seeded?.id ?? "");
+    const sdkReference = files.find(
+      (file) => file.path === "references/apps-sdk.md",
+    );
+    expect(sdkReference?.kind).toBe("reference");
+    expect(sdkReference?.content).toContain("window.archestra");
+    expect(sdkReference?.content).toContain("connect-src");
   });
 });
 

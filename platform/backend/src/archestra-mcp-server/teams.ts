@@ -585,8 +585,9 @@ async function handleCreateTeam(params: {
       labels: args.labels ? deduplicateLabels(args.labels) : undefined,
     });
 
-    // A freshly created team has no members yet.
-    const serialized = serializeTeam(team, 0);
+    // A freshly created team has exactly one member: its creator, added as a
+    // team admin by TeamModel.create.
+    const serialized = serializeTeam(team, team.members?.length ?? 0);
     return structuredSuccessResult(
       { team: serialized },
       `Successfully created team.\n\nTeam ID: ${serialized.id}\nName: ${serialized.name}${

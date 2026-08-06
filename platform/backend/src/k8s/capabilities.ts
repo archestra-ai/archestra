@@ -1,6 +1,10 @@
 import type * as k8s from "@kubernetes/client-node";
 import logger from "@/logging";
 import type { K8sCapabilities } from "@/types";
+import {
+  type NetworkPolicyProbeVerdict,
+  networkPolicyProbeReader,
+} from "./network-policy-probe";
 import { createK8sClients, isK8sNotFoundError, loadKubeConfig } from "./shared";
 
 // === Public API ===
@@ -14,6 +18,7 @@ export async function getK8sCapabilities(): Promise<K8sCapabilities> {
     const clients = createK8sClients(kubeConfig, namespace);
     const capabilities = await getK8sCapabilitiesFromApi(
       clients.customObjectsApi,
+      { coreApi: clients.coreApi, namespace: clients.namespace },
     );
     globalCapabilitiesCache = createCacheEntry(capabilities);
     return capabilities;
@@ -23,8 +28,13 @@ export async function getK8sCapabilities(): Promise<K8sCapabilities> {
   }
 }
 
+/**
+ * `probeSource` points at the namespace the chart's enforcement probe runs in.
+ * It is optional so callers without a CoreV1Api still get the inferred answer.
+ */
 export async function getK8sCapabilitiesFromApi(
   customObjectsApi: k8s.CustomObjectsApi,
+  probeSource?: { coreApi: k8s.CoreV1Api; namespace: string },
 ): Promise<K8sCapabilities> {
   const cached = getValidCacheEntry(apiCapabilitiesCache.get(customObjectsApi));
   if (cached) return cached;
@@ -34,24 +44,57 @@ export async function getK8sCapabilitiesFromApi(
     ciliumNetworkPolicy,
     gkeFqdnNetworkPolicy,
     awsApplicationNetworkPolicy,
+    probe,
   ] = await Promise.all([
     hasCalicoNetworkPolicyResource(customObjectsApi),
     hasCiliumNetworkPolicyResource(customObjectsApi),
     hasGkeFqdnNetworkPolicyResource(customObjectsApi),
     hasAwsApplicationNetworkPolicyResource(customObjectsApi),
+    probeSource
+      ? networkPolicyProbeReader.readVerdict(
+          probeSource.coreApi,
+          probeSource.namespace,
+        )
+      : Promise.resolve(NO_PROBE),
   ]);
   const supportsFqdn =
     ciliumNetworkPolicy || gkeFqdnNetworkPolicy || awsApplicationNetworkPolicy;
-  // A NetworkPolicy is only enforced if a dataplane agent backs it. Calico,
-  // Cilium, and the FQDN providers each install a provider-exclusive CRD group
-  // we can discover; absent all of them — e.g. GKE with the NetworkPolicy addon
-  // off, only `netd` running — the API accepts NetworkPolicy objects but nothing
-  // enforces them, so we report "none" rather than a false promise of isolation.
-  // Known limitation: plain GKE Dataplane V2 enforces standard NetworkPolicy but
-  // exposes no discoverable CRD (its FQDN CRD is feature-gated), so it is not
-  // detected here and would report "none". Acceptable while no environment runs
-  // plain Dataplane V2; revisit (probe the `anetd` DaemonSet) if one does.
-  const enforced = supportsFqdn || calicoNetworkPolicy;
+  // Which CRD group the API serves tells us which policy dialect this cluster
+  // speaks, not whether anything acts on the objects. Those come apart in both
+  // directions: GKE serves the Calico CRDs with node enforcement switched off,
+  // while Dataplane V2, kindnet and the EKS VPC CNI enforce the standard API
+  // and publish nothing. So inference only stands in when the probe has no
+  // answer, and it stays the source of the dialect either way.
+  //
+  // Calico is deliberately not part of it. The others each name a dialect the
+  // runtime emits, so discovering them decides what to write; Calico clusters
+  // are served by plain NetworkPolicy, leaving that CRD with no job here beyond
+  // the enforcement guess — the one guess measured to be wrong, and wrong in
+  // the direction that hides the warning.
+  const inferredEnforced = supportsFqdn;
+  // The probe exercises a plain networking.k8s.io NetworkPolicy, so it only
+  // speaks for clusters whose enforcing policy is that kind. On the AWS VPC CNI
+  // a plain NetworkPolicy is accepted and never enforced (see
+  // `shouldUseAwsApplicationNetworkPolicy`), so its verdict there describes a
+  // dialect the runtime deliberately does not use — and letting it win would
+  // drop the provider to "none" and tear down the ApplicationNetworkPolicy
+  // baseline that is doing the actual enforcing.
+  const probeMeasuresTheEnforcingKind = !awsApplicationNetworkPolicy;
+  const probeDecided =
+    probeMeasuresTheEnforcingKind &&
+    (probe.result === "enforced" || probe.result === "not-enforced");
+  const enforced = probeDecided
+    ? probe.result === "enforced"
+    : inferredEnforced;
+  const enforcementSource = probeDecided ? "probe" : "api-discovery";
+  // Only the probe observes a packet, so only the probe can verify. Everything
+  // else is "unknown", including AWS, where the probe is bypassed because the
+  // dialect it drives is not the one enforcing.
+  const enforcementStatus = !probeDecided
+    ? "unknown"
+    : enforced
+      ? "verified-enforced"
+      : "verified-not-enforced";
   const provider = !enforced
     ? "none"
     : ciliumNetworkPolicy
@@ -62,6 +105,18 @@ export async function getK8sCapabilitiesFromApi(
           ? "aws-application-network-policy"
           : "kubernetes";
 
+  // Keyed off the CRDs themselves rather than off disagreement with the
+  // inference: Calico is not part of that inference, so comparing against it
+  // would stay silent on exactly the cluster this warning is for, and would fire
+  // on every healthy Calico cluster saying no CRD advertises what plainly does.
+  const advertisesAPolicyDialect = calicoNetworkPolicy || supportsFqdn;
+  if (probeDecided && !enforced && advertisesAPolicyDialect) {
+    logger.warn(
+      { probe: probe.result, detail: probe.detail, provider },
+      "Network policy CRDs are installed on this cluster but a probe found egress rules are not enforced",
+    );
+  }
+
   const capabilities: K8sCapabilities = {
     networkPolicy: {
       kubernetesNetworkPolicy: enforced,
@@ -69,15 +124,24 @@ export async function getK8sCapabilitiesFromApi(
       gkeFqdnNetworkPolicy,
       awsApplicationNetworkPolicy,
       provider,
-      supportsFqdn,
+      // Only a provider CRD can carry domain rules, so a probe that proves the
+      // standard API is enforced says nothing about FQDN support.
+      supportsFqdn: enforced && supportsFqdn,
       supportsHttpMethods: false,
       message: capabilityMessage({
         enforced,
+        calicoNetworkPolicy,
         ciliumNetworkPolicy,
         gkeFqdnNetworkPolicy,
         awsApplicationNetworkPolicy,
-        supportsFqdn,
+        supportsFqdn: enforced && supportsFqdn,
+        probe: probe.result,
+        enforcementStatus,
       }),
+      enforcementSource,
+      enforcementStatus,
+      probe: probe.result,
+      probedAt: probe.probedAt,
     },
   };
   apiCapabilitiesCache.set(customObjectsApi, createCacheEntry(capabilities));
@@ -88,11 +152,19 @@ export async function getK8sCapabilitiesFromApi(
 export function clearK8sCapabilitiesCache(): void {
   globalCapabilitiesCache = null;
   apiCapabilitiesCache = new WeakMap();
+  networkPolicyProbeReader.clearCache();
 }
 
 // === Internal helpers ===
 
 const K8S_CAPABILITIES_CACHE_TTL_MS = 5 * 60 * 1000;
+const PENDING_PROBE_CACHE_TTL_MS = 30 * 1000;
+
+const NO_PROBE: NetworkPolicyProbeVerdict = {
+  result: "absent",
+  probedAt: null,
+  detail: null,
+};
 
 type CacheEntry = {
   expiresAt: number;
@@ -102,7 +174,18 @@ type CacheEntry = {
 let globalCapabilitiesCache: CacheEntry | null = null;
 let apiCapabilitiesCache = new WeakMap<k8s.CustomObjectsApi, CacheEntry>();
 
+/**
+ * A pending verdict expires quickly. The probe runs as a post-install hook, so
+ * the platform starts up before it reports; caching the inferred answer for the
+ * full interval would leave the measured one unused long after it arrived.
+ */
 function createCacheEntry(value: K8sCapabilities): CacheEntry {
+  if (value.networkPolicy.probe === "absent") {
+    return {
+      value,
+      expiresAt: Date.now() + PENDING_PROBE_CACHE_TTL_MS,
+    };
+  }
   return {
     value,
     expiresAt: Date.now() + K8S_CAPABILITIES_CACHE_TTL_MS,
@@ -143,11 +226,28 @@ async function hasCiliumNetworkPolicyResource(
 
 function capabilityMessage(params: {
   enforced: boolean;
+  calicoNetworkPolicy: boolean;
   ciliumNetworkPolicy: boolean;
   gkeFqdnNetworkPolicy: boolean;
   awsApplicationNetworkPolicy: boolean;
   supportsFqdn: boolean;
+  probe: NetworkPolicyProbeVerdict["result"];
+  enforcementStatus: "verified-enforced" | "verified-not-enforced" | "unknown";
 }): string {
+  // A measured answer is stated as measured; the inferred wording below has to
+  // hedge because serving a policy CRD is not evidence that anything enforces.
+  // Keyed on the status, not the raw probe result: on an AWS ANP cluster the
+  // probe truthfully reports the plain-NetworkPolicy dialect unenforced, the
+  // decision ignores that verdict, and the message must not resurrect it.
+  if (params.enforcementStatus === "verified-not-enforced") {
+    return "A test pod under a deny-all policy still reached the cluster, so NetworkPolicy objects are accepted but not enforced here.";
+  }
+  if (
+    params.enforcementStatus === "verified-enforced" &&
+    !params.supportsFqdn
+  ) {
+    return "NetworkPolicy enforcement confirmed by a test pod. IP/CIDR egress is enforced; domain allowlists require a supported FQDN policy provider.";
+  }
   if (params.ciliumNetworkPolicy) {
     return "CiliumNetworkPolicy API detected. Domain allowlists can be enforced by Cilium.";
   }
@@ -156,6 +256,14 @@ function capabilityMessage(params: {
   }
   if (params.awsApplicationNetworkPolicy) {
     return "AWS ApplicationNetworkPolicy API detected. Domain allowlists can be enforced by EKS Auto Mode.";
+  }
+  if (params.enforcementStatus === "unknown") {
+    // Naming Calico here is the point of still discovering it: its CRDs are the
+    // one signal that looks like an enforcer and routinely is not, so an
+    // operator seeing this has somewhere specific to look.
+    return params.calicoNetworkPolicy
+      ? "Calico CRDs are installed, but nothing has verified that this cluster enforces NetworkPolicy — GKE serves them with node enforcement switched off. Egress rules are applied but may be ignored."
+      : "NetworkPolicy enforcement has not been verified on this cluster. Egress rules are applied, but no test has confirmed the cluster acts on them.";
   }
   if (!params.enforced) {
     return "No NetworkPolicy enforcer detected (no Calico, Cilium, or FQDN policy provider). NetworkPolicy objects are accepted by the API but not enforced.";
@@ -253,6 +361,12 @@ function unavailableCapabilities(): K8sCapabilities {
       supportsHttpMethods: false,
       message:
         "Kubernetes capabilities could not be inspected. Network policy enforcement is unavailable until Kubernetes access is configured.",
+      enforcementSource: "api-discovery",
+      // Reaching nothing is not the same as finding nothing: this says the
+      // cluster was never inspected, rather than asserting it fails to enforce.
+      enforcementStatus: "unknown",
+      probe: "absent",
+      probedAt: null,
     },
   };
 }

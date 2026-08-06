@@ -5,6 +5,7 @@ import {
   ChatMessageFeedbackSchema,
   HOOK_RUN_PART_TYPE,
   hasRenderableAssistantContent,
+  toPlaceholderTitle,
 } from "@archestra/shared";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
@@ -110,6 +111,9 @@ export function migrateLegacyNewChatDraft(storage: DraftStorage): void {
 /**
  * Extracts a display title for a conversation.
  * Priority: explicit title > first user message > default session name
+ *
+ * The first-user-message case covers a chat that has no title at all, so it is
+ * a whole prompt rather than a title — show it title-shaped.
  */
 export function getConversationDisplayTitle(
   title: string | null,
@@ -118,20 +122,33 @@ export function getConversationDisplayTitle(
 ): string {
   if (title) return title;
 
-  // Try to extract from first user message
-  if (messages && messages.length > 0) {
-    for (const msg of messages) {
-      if (msg.role === "user" && msg.parts) {
-        for (const part of msg.parts) {
-          if (part.type === "text" && part.text) {
-            return part.text;
-          }
-        }
-      }
-    }
-  }
+  // A prompt of only whitespace shapes down to nothing, so fall through to the
+  // default name rather than showing a blank row.
+  return (
+    toPlaceholderTitle(getFirstUserMessageText(messages)) ||
+    DEFAULT_SESSION_NAME
+  );
+}
 
-  return DEFAULT_SESSION_NAME;
+/**
+ * Whether a stored title is still the placeholder taken from the opening prompt
+ * rather than one the server generated. A title equal to the *untrimmed* prompt
+ * counts too: conversations created before placeholders were shortened hold the
+ * whole prompt, and should still be retitled.
+ */
+export function isPlaceholderTitle(
+  title: string | null | undefined,
+  // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
+  messages?: any[],
+): boolean {
+  if (!title) return false;
+
+  const firstUserMessage = getFirstUserMessageText(messages).trim();
+  if (!firstUserMessage) return false;
+
+  return (
+    title === firstUserMessage || title === toPlaceholderTitle(firstUserMessage)
+  );
 }
 
 export function getConversationShareTooltip(
@@ -422,4 +439,24 @@ function getObjectMetadata(message: UIMessage): Record<string, unknown> {
   return typeof message.metadata === "object" && message.metadata !== null
     ? { ...message.metadata }
     : {};
+}
+
+/** The verbatim text of the first user message, or "" when there is none. */
+function getFirstUserMessageText(
+  // biome-ignore lint/suspicious/noExplicitAny: UIMessage structure from AI SDK is dynamic
+  messages?: any[],
+): string {
+  if (messages && messages.length > 0) {
+    for (const msg of messages) {
+      if (msg.role === "user" && msg.parts) {
+        for (const part of msg.parts) {
+          if (part.type === "text" && part.text) {
+            return part.text;
+          }
+        }
+      }
+    }
+  }
+
+  return "";
 }

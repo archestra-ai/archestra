@@ -1,10 +1,13 @@
 import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
+import { tryParseJson } from "./json";
 
 type OpenAiResponsesArm = Extract<
   Interaction,
-  { type: "azure:responses" | "openai:responses" }
+  {
+    type: "azure:responses" | "openai:responses" | "perplexity:responses";
+  }
 >;
 
 // Failed interactions persist `{ error }` in place of a provider response;
@@ -264,12 +267,4 @@ function extractInputMessageText(content: unknown): string {
       return [];
     })
     .join("\n");
-}
-
-function tryParseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
 }

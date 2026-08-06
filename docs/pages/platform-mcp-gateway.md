@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-07-09
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -87,6 +87,48 @@ Use OAuth 2.1 for standard MCP clients, ID-JAG or JWKS for enterprise-managed id
 
 See [MCP Authentication](/docs/mcp-authentication) for more details.
 
+## Protocol Versions
+
+Gateways serve both the `2025-11-25` and `2026-07-28` MCP revisions from the same endpoint. Clients pick one with the `MCP-Protocol-Version` header, or by sending `io.modelcontextprotocol/protocolVersion` in a request's `_meta`. A client that declares neither keeps the older behavior, so existing integrations need no change.
+
+Older revisions still work too. Anything back to `2024-11-05` is accepted and served as `2025-11-25` would be — the gateway echoes back the version you asked for rather than upgrading you.
+
+### What Each Revision Gets
+
+| Feature | `2025-11-25` | `2026-07-28` |
+| --- | --- | --- |
+| Capability discovery | `initialize` handshake | `server/discover` |
+| Session | `Mcp-Session-Id` header | None — every request stands alone |
+| Routing headers | Not sent | `Mcp-Method` and `Mcp-Name` required |
+| Interactive input | Elicitation during the call | Multi round-trip: the call returns what it needs, you retry with the answer |
+| Result caching hints | Sent, ignored by older clients | `ttlMs` and `cacheScope` on tool, prompt, and resource results |
+| Result envelope | Plain result | `resultType`, plus server identity in `_meta` |
+| Missing-resource error | `-32002` | `-32602` |
+| `ping` and `logging/setLevel` | Answered | Removed — method-not-found |
+| Change notifications | None | `subscriptions/listen` stream for tool-list changes |
+| `x-mcp-header` params | Ignored | Mirrored to `Mcp-Param-*` headers on upstream calls |
+| Long-running tools | Call blocks until done | Tasks extension — slow calls return a handle to poll |
+
+Both revisions see the same tools, the same access control, and the same policies. The differences are all in how a client talks to the gateway, not in what it can reach.
+
+### Notes for Clients on `2026-07-28`
+
+Routing headers must agree with the request body. The gateway rejects a mismatch — the headers exist so proxies can route without reading the body, so one that disagrees with its body is treated as a problem rather than ignored.
+
+Tool, prompt, and resource results carry a freshness hint. It is always marked private: a gateway filters results per caller, so two users can legitimately see different ones and a shared cache must not serve one person's view to another.
+
+A tool that needs input mid-call returns a request for it instead of prompting inline. Your client gathers the answer and retries the same call with it attached. The retry re-runs the tool, and the gateway caps how many times one call can go around.
+
+To hear about tool-list changes, open a `subscriptions/listen` stream with `toolsListChanged` in the filter. The first event acknowledges which types the gateway honors — tool-list changes only, since prompt and resource lists come from upstream servers. Close the stream to unsubscribe.
+
+### Long-Running Tools
+
+Declare the Tasks extension (`io.modelcontextprotocol/tasks`) in a request's `_meta` capabilities and the gateway may answer a slow tool call with a task handle instead of blocking. Poll `tasks/get` with the handle until the task completes — the result is exactly what the blocking call would have returned. `tasks/cancel` stops a running task.
+
+The gateway decides per call: anything that finishes within the threshold (10 seconds by default) returns normally. A client that never declares the extension always gets the blocking behavior. Tasks belong to the caller that started them — another caller's `tasks/get` finds nothing.
+
+One limit to know: a tool that asks for interactive input after its call became a task fails with an explanatory error, since no one is connected to answer. Re-run the call without task mode to answer interactively.
+
 ## Access Control
 
 Gateway access depends on both the caller and the gateway configuration. A user must be allowed to see the MCP Gateway, usually through organization visibility or team membership, and the gateway must have the specific tool assigned to it.
@@ -125,6 +167,10 @@ Header passthrough applies to remote MCP servers and local MCP servers using str
 ## Elicitation
 
 MCP servers behind a gateway can use MCP elicitation to ask the connected client for more information during a tool call. Archestra passes these requests through only when the caller supports elicitation, so non-interactive clients are not asked to complete forms.
+
+## Version History
+
+Every configuration change to a gateway is kept as a version. Open **Version history** from the gateway's row to browse them. Read what changed, and restore an earlier one. Restoring creates a new version — the history is never rewritten. See [Version History](/docs/platform-agents#version-history).
 
 ## Environment
 

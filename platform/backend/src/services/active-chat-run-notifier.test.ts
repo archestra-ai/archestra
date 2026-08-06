@@ -14,173 +14,112 @@ afterEach(() => {
   process.env = originalEnv;
 });
 
-test("PostgresActiveChatRunNotifier listens before publishing notifications", async () => {
-  const { PostgresActiveChatRunNotifier } = await import(
+test("an event notification wakes only the run it names", async () => {
+  const { InMemoryActiveChatRunNotifier } = await import(
     "./active-chat-run-notifier"
   );
-  const clients: MockPgClient[] = [];
-  const notifier = new PostgresActiveChatRunNotifier(
-    "postgresql://user:pass@localhost:5432/db",
-    createMockPgClientFactory(clients),
-  );
+  const notifier = new InMemoryActiveChatRunNotifier();
+
+  let otherWoken = false;
+  const other = notifier
+    .waitForEvent({ runId: "run-2", timeoutMs: 150 })
+    .then(() => {
+      otherWoken = true;
+    });
+  const target = notifier.waitForEvent({ runId: "run-1", timeoutMs: 60_000 });
 
   await notifier.notifyEvent("run-1");
+  await target;
+
+  expect(otherWoken).toBe(false);
+  await other;
+});
+
+test("stop and event notifications do not cross", async () => {
+  const { InMemoryActiveChatRunNotifier } = await import(
+    "./active-chat-run-notifier"
+  );
+  const notifier = new InMemoryActiveChatRunNotifier();
+
+  // Same run id on both channels: a stop must not be mistaken for an event.
+  let eventWoken = false;
+  const event = notifier
+    .waitForEvent({ runId: "run-1", timeoutMs: 150 })
+    .then(() => {
+      eventWoken = true;
+    });
+  const stop = notifier.waitForStop({ runId: "run-1", timeoutMs: 60_000 });
+
   await notifier.notifyStop("run-1");
+  await stop;
 
-  const client = clients[0];
-  expect(client?.connect).toHaveBeenCalledTimes(1);
-  expect(client?.query).toHaveBeenNthCalledWith(
-    1,
-    "LISTEN chat_active_run_events",
-  );
-  expect(client?.query).toHaveBeenNthCalledWith(
-    2,
-    "LISTEN chat_active_run_stops",
-  );
-  expect(client?.query).toHaveBeenNthCalledWith(3, "select pg_notify($1, $2)", [
-    "chat_active_run_events",
-    JSON.stringify({ runId: "run-1" }),
-  ]);
-  expect(client?.query).toHaveBeenNthCalledWith(4, "select pg_notify($1, $2)", [
-    "chat_active_run_stops",
-    JSON.stringify({ runId: "run-1" }),
-  ]);
+  expect(eventWoken).toBe(false);
+  await event;
 });
 
-test("PostgresActiveChatRunNotifier listens before waiting for event notifications", async () => {
-  const { PostgresActiveChatRunNotifier } = await import(
+test("a wait still ends on its timeout when nothing is notified", async () => {
+  // Notifications are not durable, so this is what keeps a stream correct when
+  // one is missed.
+  const { InMemoryActiveChatRunNotifier } = await import(
     "./active-chat-run-notifier"
   );
-  const clients: MockPgClient[] = [];
-  const notifier = new PostgresActiveChatRunNotifier(
-    "postgresql://user:pass@localhost:5432/db",
-    createMockPgClientFactory(clients),
-  );
+  const notifier = new InMemoryActiveChatRunNotifier();
 
-  const waitPromise = notifier.waitForEvent({
+  await expect(
+    notifier.waitForEvent({ runId: "run-1", timeoutMs: 10 }),
+  ).resolves.toBeUndefined();
+});
+
+test("an aborted wait returns without waiting out the timeout", async () => {
+  const { InMemoryActiveChatRunNotifier } = await import(
+    "./active-chat-run-notifier"
+  );
+  const notifier = new InMemoryActiveChatRunNotifier();
+  const controller = new AbortController();
+
+  const waiting = notifier.waitForStop({
     runId: "run-1",
-    timeoutMs: 10_000,
+    timeoutMs: 60_000,
+    abortSignal: controller.signal,
   });
-  await new Promise((resolve) => setImmediate(resolve));
-  clients[0]?.handlers.notification?.({
-    channel: "chat_active_run_events",
-    payload: JSON.stringify({ runId: "run-1" }),
-  });
-  await waitPromise;
+  controller.abort();
 
-  const client = clients[0];
-  expect(client?.connect).toHaveBeenCalledTimes(1);
-  expect(client?.query).toHaveBeenNthCalledWith(
-    1,
-    "LISTEN chat_active_run_events",
-  );
-  expect(client?.query).toHaveBeenNthCalledWith(
-    2,
-    "LISTEN chat_active_run_stops",
-  );
+  await expect(waiting).resolves.toBeUndefined();
 });
 
-test("PostgresActiveChatRunNotifier listens before waiting for stop notifications", async () => {
-  const { PostgresActiveChatRunNotifier } = await import(
+test("the polling notifier never wakes early, only on the timeout", async () => {
+  const { PollingActiveChatRunNotifier } = await import(
     "./active-chat-run-notifier"
   );
-  const clients: MockPgClient[] = [];
-  const notifier = new PostgresActiveChatRunNotifier(
-    "postgresql://user:pass@localhost:5432/db",
-    createMockPgClientFactory(clients),
-  );
+  const notifier = new PollingActiveChatRunNotifier();
 
-  const waitPromise = notifier.waitForStop({
-    runId: "run-1",
-    timeoutMs: 10_000,
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-  clients[0]?.handlers.notification?.({
-    channel: "chat_active_run_stops",
-    payload: JSON.stringify({ runId: "run-1" }),
-  });
-  await waitPromise;
-
-  const client = clients[0];
-  expect(client?.connect).toHaveBeenCalledTimes(1);
-  expect(client?.query).toHaveBeenNthCalledWith(
-    1,
-    "LISTEN chat_active_run_events",
-  );
-  expect(client?.query).toHaveBeenNthCalledWith(
-    2,
-    "LISTEN chat_active_run_stops",
-  );
-});
-
-test("PostgresActiveChatRunNotifier reconnects after initial listen failure", async () => {
-  const { PostgresActiveChatRunNotifier } = await import(
-    "./active-chat-run-notifier"
-  );
-  const clients: MockPgClient[] = [];
-  const notifier = new PostgresActiveChatRunNotifier(
-    "postgresql://user:pass@localhost:5432/db",
-    createMockPgClientFactory(clients, [
-      {
-        query: vi
-          .fn(async (_queryText: string, _values?: unknown[]) => ({
-            rows: [],
-          }))
-          .mockRejectedValueOnce(new Error("listen failed"))
-          .mockResolvedValue({ rows: [] }),
-      },
-    ]),
-  );
+  let woken = false;
+  const waiting = notifier
+    .waitForEvent({ runId: "run-1", timeoutMs: 120 })
+    .then(() => {
+      woken = true;
+    });
 
   await notifier.notifyEvent("run-1");
-  await notifier.notifyEvent("run-2");
+  expect(woken).toBe(false);
 
-  expect(clients).toHaveLength(2);
-  expect(clients[0]?.end).toHaveBeenCalledTimes(1);
-  expect(clients[1]?.connect).toHaveBeenCalledTimes(1);
-  expect(clients[1]?.query).toHaveBeenLastCalledWith(
-    "select pg_notify($1, $2)",
-    ["chat_active_run_events", JSON.stringify({ runId: "run-2" })],
-  );
+  await waiting;
+  expect(woken).toBe(true);
 });
 
-test("PostgresActiveChatRunNotifier reconnects after client error", async () => {
-  const { PostgresActiveChatRunNotifier } = await import(
-    "./active-chat-run-notifier"
-  );
-  const clients: MockPgClient[] = [];
-  const notifier = new PostgresActiveChatRunNotifier(
-    "postgresql://user:pass@localhost:5432/db",
-    createMockPgClientFactory(clients),
-  );
-
-  await notifier.notifyEvent("run-1");
-  clients[0]?.handlers.error?.(new Error("connection lost"));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await notifier.notifyStop("run-2");
-
-  expect(clients).toHaveLength(2);
-  expect(clients[0]?.end).toHaveBeenCalledTimes(1);
-  expect(clients[1]?.connect).toHaveBeenCalledTimes(1);
-  expect(clients[1]?.query).toHaveBeenLastCalledWith(
-    "select pg_notify($1, $2)",
-    ["chat_active_run_stops", JSON.stringify({ runId: "run-2" })],
-  );
-});
-
-test("createActiveChatRunNotifier uses Postgres notifier by default", async () => {
+test("createActiveChatRunNotifier opens a listener by default", async () => {
   delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED;
 
-  const { createActiveChatRunNotifier, PostgresActiveChatRunNotifier } =
+  const { createActiveChatRunNotifier, PollingActiveChatRunNotifier } =
     await import("./active-chat-run-notifier");
 
   const notifier = createActiveChatRunNotifier();
 
-  expect(notifier).toBeInstanceOf(PostgresActiveChatRunNotifier);
+  expect(notifier).not.toBeInstanceOf(PollingActiveChatRunNotifier);
   await notifier.close?.();
 });
 
-test("createActiveChatRunNotifier uses polling notifier in compatibility mode", async () => {
+test("createActiveChatRunNotifier skips the listener in compatibility mode", async () => {
   process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
 
   const { createActiveChatRunNotifier, PollingActiveChatRunNotifier } =
@@ -190,39 +129,3 @@ test("createActiveChatRunNotifier uses polling notifier in compatibility mode", 
     PollingActiveChatRunNotifier,
   );
 });
-
-function createMockPgClientFactory(
-  clients: MockPgClient[],
-  overrides: Array<Partial<MockPgClient>> = [],
-) {
-  return () => {
-    const client = createMockPgClient(overrides[clients.length]);
-    clients.push(client);
-    return client;
-  };
-}
-
-function createMockPgClient(overrides?: Partial<MockPgClient>): MockPgClient {
-  const handlers: MockPgClient["handlers"] = {};
-  return {
-    connect: vi.fn(async () => undefined),
-    end: vi.fn(async () => undefined),
-    handlers,
-    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-      handlers[event] = handler;
-      return undefined;
-    }),
-    query: vi.fn(async (_queryText: string, _values?: unknown[]) => ({
-      rows: [],
-    })),
-    ...overrides,
-  };
-}
-
-interface MockPgClient {
-  connect: () => Promise<unknown>;
-  end: () => Promise<unknown>;
-  handlers: Record<string, (...args: unknown[]) => void>;
-  on: (event: string, handler: (...args: unknown[]) => void) => unknown;
-  query: (queryText: string, values?: unknown[]) => Promise<unknown>;
-}

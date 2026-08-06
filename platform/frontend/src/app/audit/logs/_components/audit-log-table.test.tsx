@@ -28,7 +28,7 @@ Element.prototype.setPointerCapture = vi.fn();
 Element.prototype.releasePointerCapture = vi.fn();
 
 const mockUseAuditLogs = vi.fn();
-const mockUseMembersPaginated = vi.fn();
+const mockUseMemberSearch = vi.fn();
 const mockUseProfilesPaginated = vi.fn();
 const mockUseMcpServers = vi.fn();
 const mockUseRolesPaginated = vi.fn();
@@ -50,7 +50,7 @@ vi.mock("@/lib/audit-log/audit-log.query", async () => {
 });
 
 vi.mock("@/lib/member.query", () => ({
-  useMembersPaginated: (...args: unknown[]) => mockUseMembersPaginated(...args),
+  useMemberSearch: (...args: unknown[]) => mockUseMemberSearch(...args),
 }));
 
 vi.mock("@/lib/agent.query", () => ({
@@ -87,6 +87,8 @@ function makeEvent(overrides: Partial<AuditLog> = {}): AuditLog {
     actorType: "user",
     actorName: "Ada Lovelace",
     actorEmail: "ada@example.com",
+    impersonatedBy: null,
+    impersonatedByEmail: null,
     action: "agent.updated",
     outcome: "success",
     resourceType: "agent",
@@ -176,7 +178,12 @@ describe("AuditLogTable", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
-    mockUseMembersPaginated.mockReturnValue({ data: { data: [] } });
+    mockUseMemberSearch.mockReturnValue({
+      users: [],
+      isSearching: false,
+      onSearchQueryChange: vi.fn(),
+      emptyMessage: "No matching users found.",
+    });
     mockUseProfilesPaginated.mockReturnValue({ data: { data: [] } });
     mockUseMcpServers.mockReturnValue({ data: [] });
     vi.mocked(useTeams).mockReturnValue({

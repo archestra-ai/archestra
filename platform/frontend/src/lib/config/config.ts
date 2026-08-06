@@ -1,3 +1,4 @@
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
 
@@ -5,16 +6,16 @@ const environment: "development" | "production" =
   (process.env.NODE_ENV?.toLowerCase() as "development" | "production") ??
   "development";
 
-export const DEFAULT_BACKEND_URL = "http://localhost:9000";
+export const DEFAULT_BACKEND_URL = DEFAULT_INTERNAL_API_BASE_URL;
 
 /**
  * Get the backend API base URL.
- * Returns the configured URL or defaults to localhost:9000 for development.
+ * Returns the configured URL or defaults to the loopback API for development.
  *
  * Priority:
  * 1. NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL (runtime env var for client/server)
  * 2. ARCHESTRA_INTERNAL_API_BASE_URL (server-side only, for SSR/API routes)
- * 3. Default: http://localhost:9000
+ * 3. Default: {@link DEFAULT_INTERNAL_API_BASE_URL}
  */
 export const getBackendBaseUrl = (): string => {
   // Try runtime env var first (works in both client and server)
@@ -99,11 +100,7 @@ export const getWebSocketUrl = (): string => {
   }
 
   // Server-side: use absolute URL
-  const backendBaseUrl = getBackendBaseUrl();
-  const wsBaseUrl = backendBaseUrl
-    ? backendBaseUrl.replace(/^http/, "ws")
-    : "ws://localhost:9000";
-  return `${wsBaseUrl}/ws`;
+  return `${getBackendBaseUrl().replace(/^http/, "ws")}/ws`;
 };
 
 /**

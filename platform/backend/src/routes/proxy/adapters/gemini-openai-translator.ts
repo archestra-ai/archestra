@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Gemini, OpenAi } from "@/types";
+import type { Gemini, OpenAi, UsageView } from "@/types";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import {
   type NormalizedContentPart,
@@ -178,6 +178,64 @@ export function openaiToGemini(req: OpenAiRequest): {
   };
 }
 
+/**
+ * Same mapping as `geminiUsageToOpenai`, but from the stream accumulator.
+ *
+ * The accumulator normalizes `inputTokens` to *uncached* input and keeps the
+ * cache and thinking counts alongside, so the gross figures OpenAI's wire
+ * format expects are reassembled here: `prompt_tokens` adds the cache reads
+ * back, and `total_tokens` adds the thinking tokens that Gemini counts in
+ * `totalTokenCount` but not in `candidatesTokenCount`.
+ *
+ * Reading the accumulator rather than the streamed adapter's rebuilt response
+ * is deliberate: that rebuild reports `promptTokenCount` net of cache, so it
+ * cannot be the source of truth for the gross number.
+ */
+export function geminiUsageViewToOpenai(
+  usage: UsageView | null | undefined,
+):
+  | { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+  | undefined {
+  if (!usage) {
+    return undefined;
+  }
+  const promptTokens = usage.inputTokens + (usage.cacheReadTokens ?? 0);
+  const completionTokens = usage.outputTokens;
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens:
+      promptTokens + completionTokens + (usage.reasoningTokens ?? 0),
+  };
+}
+
+/**
+ * Map Gemini's `usageMetadata` onto the OpenAI usage fields.
+ *
+ * Deliberately reads the raw metadata rather than the stream accumulator's
+ * `UsageView`: that view normalizes `inputTokens` to *uncached* input
+ * (`promptTokenCount - cachedContentTokenCount`, see the gemini adapter), while
+ * OpenAI's `prompt_tokens` is the gross prompt count. Going through the view
+ * would make a streamed turn report a smaller prompt — and a smaller total,
+ * since `totalTokenCount` also counts thinking tokens — than the non-streaming
+ * reply for the identical request on the same route.
+ */
+export function geminiUsageToOpenai(response: GeminiResponse): {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+} {
+  const promptTokens = response.usageMetadata?.promptTokenCount ?? 0;
+  const completionTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens:
+      response.usageMetadata?.totalTokenCount ??
+      promptTokens + completionTokens,
+  };
+}
+
 export function geminiResponseToOpenai(
   response: GeminiResponse,
   ctx: GeminiOpenaiContext,
@@ -190,7 +248,8 @@ export function geminiResponseToOpenai(
   }> = [];
   let text = "";
 
-  for (const part of candidate?.content.parts ?? []) {
+  // Blocked candidates carry a `finishReason` but no `content`.
+  for (const part of candidate?.content?.parts ?? []) {
     if ("text" in part && part.text) {
       text += part.text;
       continue;
@@ -209,8 +268,23 @@ export function geminiResponseToOpenai(
     }
   }
 
-  const promptTokens = response.usageMetadata?.promptTokenCount ?? 0;
-  const completionTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+  const usage = geminiUsageToOpenai(response);
+
+  // A prompt-blocked reply carries only `promptFeedback` — no candidates, so no
+  // `finishReason` to map. Without this branch it would report a plain "stop"
+  // and the client would see an empty completion with no sign it was filtered.
+  const promptBlockReason = response.promptFeedback?.blockReason;
+  const promptBlocked =
+    candidate === undefined &&
+    promptBlockReason !== undefined &&
+    promptBlockReason !== "BLOCK_REASON_UNSPECIFIED";
+
+  let finishReason = mapGeminiFinishReason(candidate?.finishReason);
+  if (toolCalls.length > 0) {
+    finishReason = "tool_calls";
+  } else if (promptBlocked) {
+    finishReason = "content_filter";
+  }
 
   return {
     id: ctx.chatcmplId,
@@ -221,10 +295,7 @@ export function geminiResponseToOpenai(
       {
         index: 0,
         logprobs: null,
-        finish_reason:
-          toolCalls.length > 0
-            ? "tool_calls"
-            : mapGeminiFinishReason(candidate?.finishReason),
+        finish_reason: finishReason,
         message: {
           role: "assistant",
           content: text || null,
@@ -232,13 +303,7 @@ export function geminiResponseToOpenai(
         },
       },
     ],
-    usage: {
-      prompt_tokens: promptTokens,
-      completion_tokens: completionTokens,
-      total_tokens:
-        response.usageMetadata?.totalTokenCount ??
-        promptTokens + completionTokens,
-    },
+    usage,
   } as OpenAiResponse;
 }
 

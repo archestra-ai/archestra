@@ -3,7 +3,8 @@
 import {
   APP_GALLERY_CATEGORIES,
   type AppRecordingBundle,
-  pruneTrailingTrimEvents,
+  exceedsFinalCutLimit,
+  pruneCutEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
 import {
@@ -63,12 +64,17 @@ import {
   submitRecordingToAppGallery,
   takeCachedGithubToken,
 } from "@/lib/app-session-recording/app-gallery-share";
+import { useMaxFinalCutMs } from "@/lib/app-session-recording/app-recording.query";
 import { reviveRecordingEvents } from "@/lib/app-session-recording/app-recording-binary";
 import { recordingStore } from "@/lib/app-session-recording/app-recording-store";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { cn } from "@/lib/utils";
-import { buildPlayback, presentedTranscript } from "./app-session-player";
+import {
+  buildPlayback,
+  formatMs,
+  presentedTranscript,
+} from "./app-session-player";
 
 /**
  * The player's "Submit to Archestra for review" action: one click runs GitHub
@@ -89,6 +95,7 @@ export function AppGalleryShareButton(props: {
   disabledReason?: React.ReactNode;
 }) {
   const galleryRepo = useFeature("hackathonGalleryRepo");
+  const maxFinalCutMs = useMaxFinalCutMs();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<ShareState>({ step: "idle" });
   // The pull request this app already has (submitted now or remembered from
@@ -174,8 +181,9 @@ export function AppGalleryShareButton(props: {
           fail(`This recording can't be shared. ${validation.reason}`);
           return;
         }
-        // Same size trim the video export ships (renders identically).
-        const trimmed = pruneTrailingTrimEvents(validation.bundle);
+        // Same cut-away pruning the video export ships: what the edit hides
+        // never leaves the browser (replays identically).
+        const trimmed = pruneCutEvents(validation.bundle);
         slug = gallerySubmissionSlug(trimmed);
 
         // Never block a working recording on a missing AI draft. Guarantee a
@@ -194,6 +202,24 @@ export function AppGalleryShareButton(props: {
         if (oversize) {
           failedTitle = "Recording too large";
           fail(oversize);
+          return;
+        }
+
+        // The length limit, enforced on the SUBMISSION and not only on the
+        // button that opens it. The button's disabled state is a courtesy the
+        // player computes from the recording it happens to be showing; this is
+        // the check the upload actually clears, so a cut that grew after the
+        // dialog opened (or a path that reached submit some other way) cannot
+        // ship a recording the gallery will refuse to render downstream.
+        // Measured on the final cut — cuts applied — because that is what the
+        // gallery plays; the raw capture is a different and always larger
+        // number.
+        const finalCutMs = finalCutDurationMs(trimmed);
+        if (exceedsFinalCutLimit(finalCutMs, maxFinalCutMs)) {
+          failedTitle = "Recording too long";
+          fail(
+            `This cut runs ${formatMs(finalCutMs)}. Trim it to ${formatMs(maxFinalCutMs)} or less to submit.`,
+          );
           return;
         }
 
@@ -300,7 +326,7 @@ export function AppGalleryShareButton(props: {
         );
       }
     },
-    [galleryRepo, props.conversationId, category],
+    [galleryRepo, props.conversationId, category, maxFinalCutMs],
   );
 
   // The fallback when the automatic flow fails: hand the participant the
@@ -323,7 +349,7 @@ export function AppGalleryShareButton(props: {
       });
       return;
     }
-    const trimmed = pruneTrailingTrimEvents(validation.bundle);
+    const trimmed = pruneCutEvents(validation.bundle);
     const token = takeCachedGithubToken();
     const identity = token
       ? await fetchGithubIdentity(token, cancellation.signal)
@@ -1054,7 +1080,7 @@ function ManualStep(props: {
         1. Download{" "}
         {props.files.map((file, index) => (
           <span key={file.name}>
-            {index > 0 && " and "}
+            {index > 0 && <span> and </span>}
             <button
               type="button"
               className={LINK_CLASS}

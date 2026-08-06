@@ -1,4 +1,6 @@
+import type { SensitiveContextOrigin } from "@archestra/shared";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
+import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 
@@ -35,6 +37,15 @@ export interface ArchestraContext {
    * off a tool argument — so an app can only touch its own data store.
    */
   appId?: string;
+  /**
+   * The owned app the chat's UI currently has open, set ONLY by the chat route
+   * after `resolveOpenedApp` re-verified the viewer's access this turn. The
+   * agent-side exchange tool (`copy_file`) keys its "app" side off this — never
+   * off a tool argument — so an agent can only reach the namespace of the app
+   * the user is actually looking at. Distinct from `appId`: that is "this call
+   * IS the app runtime"; this is "the chat has an app open".
+   */
+  openedAppId?: string;
   /** The organization ID */
   organizationId?: string;
   /** Virtual API key ID used for the request */
@@ -63,6 +74,12 @@ export interface ArchestraContext {
   /** Whether the current caller context is still trusted/safe */
   contextIsTrusted?: boolean;
   /**
+   * What flipped the caller's session into the sensitive state, when known.
+   * Meaningful only when `contextIsTrusted` is false; used to phrase
+   * sensitive-context policy blocks so they name the origin.
+   */
+  sensitiveContextOrigin?: SensitiveContextOrigin;
+  /**
    * Bridge that surfaces a delegated child agent's tool calls on the caller's
    * conversation surface. Present only when a chat stream is driving the call;
    * absent in headless executions (no conversation surface to render onto). One
@@ -70,9 +87,18 @@ export interface ArchestraContext {
    */
   subagentToolStream?: SubagentToolStreamBridge;
   /**
+   * Bridge that detaches a long-running dispatched call into a durable,
+   * cancellable task. Matters most for `run_tool`: in `search_and_run_only`
+   * mode every third-party tool call arrives through it, so without this the
+   * agents most likely to call a slow tool would be the ones that never got a
+   * task. Absent in headless executions, where nobody is watching.
+   */
+  taskBridge?: ChatTaskBridge;
+  /**
    * The id of the tool call currently executing. Set on the delegation path so
    * the child's surfaced tool calls can be attributed to the delegation call
-   * (`agent__<slug>`) that spawned them.
+   * (`agent__<slug>`) that spawned them, and on the `run_tool` path so a task
+   * card attaches to the call the user can actually see.
    */
   currentToolCallId?: string;
   /**

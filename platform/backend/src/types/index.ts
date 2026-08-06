@@ -1,3 +1,4 @@
+export * from "./a2a-artifact";
 export * from "./a2a-context";
 export * from "./a2a-message";
 export * from "./a2a-task";
@@ -59,7 +60,6 @@ export * from "./llm-providers";
 export * from "./mcp-catalog";
 export * from "./mcp-oauth-client";
 export * from "./mcp-server";
-export * from "./mcp-server-installation-request";
 export * from "./mcp-tool-call";
 export * from "./member";
 export * from "./message";

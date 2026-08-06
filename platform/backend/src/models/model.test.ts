@@ -787,6 +787,28 @@ describe("ModelModel", () => {
       );
       expect(after?.discoveredViaLlmProxy).toBe(false);
     });
+
+    test("a repeat call neither duplicates the row nor resets its fields", async () => {
+      await ModelModel.ensureModelExists("repeat-model", "openai");
+      const first = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "repeat-model",
+      );
+      await ModelModel.update(first?.id ?? "", {
+        customPricePerMillionInput: "4.00",
+      });
+
+      await ModelModel.ensureModelExists("repeat-model", "openai");
+
+      const all = await ModelModel.findAll({ provider: "openai" });
+      expect(all.filter((m) => m.modelId === "repeat-model")).toHaveLength(1);
+      const after = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "repeat-model",
+      );
+      expect(after?.id).toBe(first?.id);
+      expect(after?.customPricePerMillionInput).toBe("4.00");
+    });
   });
 
   describe("findLlmProxyModels", () => {
@@ -948,8 +970,8 @@ describe("ModelModel", () => {
       expect(capabilities.inputModalities).toEqual(["text", "image"]);
       expect(capabilities.outputModalities).toEqual(["text"]);
       expect(capabilities.supportsToolCalling).toBe(true);
-      expect(capabilities.pricePerMillionInput).toBe("5.00");
-      expect(capabilities.pricePerMillionOutput).toBe("15.00");
+      expect(capabilities.pricePerMillionInput).toBe("5");
+      expect(capabilities.pricePerMillionOutput).toBe("15");
     });
   });
 
@@ -1279,6 +1301,49 @@ describe("ModelModel", () => {
       expect(pricing.source).toBe("default");
       expect(pricing.pricePerMillionCacheRead).toBe("5");
       expect(pricing.cacheSource).toBe("derived_multiplier");
+    });
+
+    // Ollama charges no per-token rate on either transport, so the generic
+    // estimate would bill local inference at $50/M against a real rate of zero.
+    test.each([
+      "ollama",
+      "ollama-native",
+      "vllm",
+    ] as const)("prices an unpriced %s model at zero rather than the generic estimate", async (provider) => {
+      const model = await ModelModel.create({
+        externalId: `${provider}/qwen3:8b`,
+        provider,
+        modelId: "qwen3:8b",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      const pricing = ModelModel.getEffectivePricing(model);
+
+      expect(pricing.pricePerMillionInput).toBe("0.00");
+      expect(pricing.pricePerMillionOutput).toBe("0.00");
+    });
+
+    test("prices an unknown Ollama model at zero from the provider hint alone", () => {
+      const pricing = ModelModel.getEffectivePricing(
+        null,
+        "some-local-model",
+        "ollama",
+      );
+
+      expect(pricing.pricePerMillionInput).toBe("0.00");
+      expect(pricing.pricePerMillionOutput).toBe("0.00");
+    });
+
+    test("leaves the generic estimate in place for other providers", () => {
+      const pricing = ModelModel.getEffectivePricing(
+        null,
+        "some-unknown-model",
+        "openai",
+      );
+
+      expect(pricing.pricePerMillionInput).toBe("50.00");
     });
   });
 

@@ -104,7 +104,10 @@ const EmbeddingInteractionResponseSchema =
       z.object({
         object: z.literal("embedding"),
         embedding: z.array(z.number()),
-        index: z.number(),
+        // Optional for the same reason as the canonical embedding schema: a
+        // stored interaction from an OpenAI-compatible upstream that omitted
+        // `index` must not fail the whole interaction list on read-back.
+        index: z.number().optional(),
         truncatedFrom: z.number().optional(),
       }),
     ),
@@ -173,12 +176,19 @@ const DELTA_ENCODING_COLUMNS = {
   requestSharedPrefix: true,
   processedRequestSharedPrefix: true,
   requestLastMessageIdx: true,
+  requestLastMessageHash: true,
 } as const;
 
 const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit(
   DELTA_ENCODING_COLUMNS,
 ).extend({
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
+  /**
+   * Name of `connectorId`'s knowledge base connector, resolved within the
+   * caller's organization. Null once the connector is gone; absent on endpoints
+   * that do not resolve it.
+   */
+  connectorName: z.string().nullable().optional(),
 });
 
 /**
@@ -511,6 +521,17 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["perplexity:responses"]),
+    request: withReadFallback(Perplexity.API.ResponsesRequestSchema),
+    processedRequest: withReadFallback(Perplexity.API.ResponsesRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Perplexity.API.ResponsesResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
 ]);
 
 /**
@@ -580,6 +601,9 @@ export const ToonSkipReasonCountsSchema = z.object({
   noToolResults: z.number(),
 });
 
+/** Max length of `lastUserMessagePreview` on session summaries. */
+export const LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH = 200;
+
 /**
  * Session summary schema for the sessions endpoint
  */
@@ -614,7 +638,20 @@ export const SessionSummarySchema = z.object({
   authMethods: z.array(InteractionAuthMethodSchema),
   authenticatedAppNames: z.array(z.string()),
   userNames: z.array(z.string()),
-  lastInteractionRequest: z.unknown().nullable(),
+  /**
+   * Short preview of the session's last user message, computed server-side
+   * from the reconstructed request. The raw request body is intentionally
+   * never returned by the listing — shipping full bodies OOM-killed the
+   * platform container (T-1015). Fetch bodies per interaction via
+   * GET /api/interactions when needed.
+   */
+  lastUserMessagePreview: z
+    .string()
+    .max(LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH)
+    .nullable()
+    .describe(
+      "Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.",
+    ),
   lastInteractionType: z.string().nullable(),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),

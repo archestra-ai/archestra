@@ -148,15 +148,17 @@ function NewSkillChooser() {
                   {isSearchingSkills ? (
                     catalogSearch.isLoading ? (
                       <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                        Searching the skill index…
+                        <span>Searching the skill index…</span>
                       </div>
                     ) : catalogSearch.isError ? (
                       <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                        Could not search the skill index. Try again.
+                        <span>
+                          Could not search the skill index. Try again.
+                        </span>
                       </div>
                     ) : skillResults.length === 0 ? (
                       <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                        No indexed skills match “{search}”.
+                        <span>No indexed skills match “{search}”.</span>
                       </div>
                     ) : (
                       <ul>

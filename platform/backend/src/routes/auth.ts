@@ -35,6 +35,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { AUTH_STATE_PATH } from "@/routes/route-paths";
 import {
   appConnectorAudienceRef,
   appIdFromConnectorPath,
@@ -60,7 +61,64 @@ import {
 import { isPublicOAuthCorsPath } from "./oauth-cors";
 import { getPublicRequestOrigin } from "./request-origin";
 
+/**
+ * better-auth's two-factor plugin marks a pending sign-in challenge with a
+ * signed, httpOnly cookie (TWO_FACTOR_COOKIE_NAME = "two_factor" in
+ * better-auth/dist/plugins/two-factor/constant.mjs — not re-exported from the
+ * package entry, hence the literal). The browser cannot read it, so the auth
+ * pages ask us instead.
+ *
+ * Only the cookie's PRESENCE is reported: the value is never read and the
+ * signature is deliberately not verified, because this is a UX gate for
+ * redirecting away from pages that don't apply. better-auth remains the only
+ * gate that matters on /two-factor/verify-*.
+ */
+function hasTwoFactorChallengeCookie(cookieHeader: string | undefined) {
+  if (!cookieHeader) {
+    return false;
+  }
+  // createCookieGetter builds `${secureCookiePrefix}${prefix}.${name}`, and
+  // the secure prefix appears only on https deployments — accept both.
+  const { cookiePrefix } = config.auth;
+  const candidates = new Set([
+    `${cookiePrefix}.two_factor`,
+    `__Secure-${cookiePrefix}.two_factor`,
+  ]);
+  return cookieHeader.split(";").some((segment) => {
+    const separatorIndex = segment.indexOf("=");
+    // A segment without "=" has no value and so is not our cookie.
+    if (separatorIndex === -1) {
+      return false;
+    }
+    return candidates.has(segment.slice(0, separatorIndex).trim());
+  });
+}
+
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  /**
+   * Pre-authentication state for the auth pages. Unauthenticated by design:
+   * it is read before any session exists.
+   */
+  fastify.route({
+    method: "GET",
+    url: AUTH_STATE_PATH,
+    schema: {
+      operationId: RouteId.GetAuthState,
+      description:
+        "Report whether a two-factor sign-in challenge is currently pending",
+      tags: ["Auth"],
+      response: {
+        200: z.strictObject({
+          twoFactorPending: z.boolean(),
+        }),
+      },
+    },
+    handler: async (request, reply) =>
+      reply.send({
+        twoFactorPending: hasTwoFactorChallengeCookie(request.headers.cookie),
+      }),
+  });
+
   fastify.route({
     method: "GET",
     url: "/api/auth/default-credentials-status",
@@ -210,13 +268,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      reply.status(response.status);
-
-      response.headers.forEach((value: string, key: string) => {
-        reply.header(key, value);
+      relayBetterAuthResponse({
+        reply,
+        response,
+        body: await readBetterAuthResponseBody(response),
       });
-
-      reply.send(response.body ? await response.text() : null);
     },
   });
 
@@ -360,11 +416,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const response = await betterAuth.handler(req);
 
-      reply.status(response.status);
-      response.headers.forEach((value: string, key: string) => {
-        reply.header(key, value);
+      relayBetterAuthResponse({
+        reply,
+        response,
+        body: await readBetterAuthResponseBody(response),
       });
-      reply.send(response.body ? await response.text() : null);
     },
   });
 
@@ -572,7 +628,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       const response = await betterAuth.handler(req);
-      const rawResponseBody = response.body ? await response.text() : null;
+      const rawResponseBody = await readBetterAuthResponseBody(response);
 
       // Bind a shareable-App connector token to its canonical resource URI
       // (RFC 8707) so it is accepted only at its own connector — before deriving
@@ -633,14 +689,38 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      reply.status(response.status);
-      response.headers.forEach((value: string, key: string) => {
-        if (key.toLowerCase() === "content-length") {
-          return;
-        }
-        reply.header(key, value);
+      // better-auth answers bodyless whenever its router cannot dispatch the
+      // request (unknown path, wrong method, path-shape mismatch) or turns an
+      // unhandled error into a 500. RFC 6749 §5.2 requires a JSON object here,
+      // so translate rather than forward the empty body: a client that gets
+      // nothing — or the JSON literal `null` this used to send — can only
+      // report a parse failure against its own token-response schema, naming
+      // neither the status nor the cause.
+      if (responseBody === null) {
+        const tokenError = oauthTokenErrorForBodylessResponse(response.status);
+        logger.error(
+          {
+            grantType: body?.grant_type,
+            clientId: body?.client_id,
+            betterAuthStatus: response.status,
+            status: tokenError.status,
+          },
+          "[auth:oauth2/token] better-auth returned no response body; answering with an OAuth error",
+        );
+        return reply
+          .status(tokenError.status)
+          .header("content-type", "application/json; charset=utf-8")
+          .header("cache-control", "no-store")
+          .header("pragma", "no-cache")
+          .send(tokenError.body);
+      }
+
+      relayBetterAuthResponse({
+        reply,
+        response,
+        body: responseBody,
+        skipContentLength: true,
       });
-      reply.send(responseBody);
     },
   });
 
@@ -706,16 +786,12 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           body: serializedBody,
         }),
       );
-      const responseBody = response.body ? await response.text() : null;
-
-      reply.status(response.status);
-      response.headers.forEach((value: string, key: string) => {
-        if (key.toLowerCase() === "content-length") {
-          return;
-        }
-        reply.header(key, value);
+      relayBetterAuthResponse({
+        reply,
+        response,
+        body: await readBetterAuthResponseBody(response),
+        skipContentLength: true,
       });
-      reply.send(responseBody);
     },
   });
 
@@ -909,11 +985,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return;
       }
 
-      reply.status(response.status);
-      response.headers.forEach((value: string, key: string) => {
-        reply.header(key, value);
+      relayBetterAuthResponse({
+        reply,
+        response,
+        body: await readBetterAuthResponseBody(response),
       });
-      reply.send(response.body ? await response.text() : null);
     },
   });
 
@@ -941,11 +1017,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requestBody: request.body as Record<string, unknown> | undefined,
       });
 
-      reply.status(response.status);
-      response.headers.forEach((value: string, key: string) => {
-        reply.header(key, value);
+      relayBetterAuthResponse({
+        reply,
+        response,
+        body: await readBetterAuthResponseBody(response),
       });
-      reply.send(response.body ? await response.text() : null);
     },
   });
   // SPDX-SnippetEnd
@@ -1018,13 +1094,11 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(responseText);
       }
 
-      reply.status(response.status);
-
-      response.headers.forEach((value: string, key: string) => {
-        reply.header(key, value);
+      relayBetterAuthResponse({
+        reply,
+        response,
+        body: await readBetterAuthResponseBody(response),
       });
-
-      reply.send(response.body ? await response.text() : null);
     },
   });
 };
@@ -1270,6 +1344,111 @@ async function issueMcpOauthClientAccessToken(params: {
       expires_in: expiresIn,
       scope: MCP_GATEWAY_OAUTH_SCOPE,
     },
+  };
+}
+
+/**
+ * Minimal shape of the Fastify reply used by `relayBetterAuthResponse`, kept
+ * structural so the helper works with every route's zod-typed reply.
+ */
+type BetterAuthRelayReply = {
+  status: (statusCode: number) => unknown;
+  header: (name: string, value: string) => unknown;
+  send: (payload?: string) => unknown;
+};
+
+/**
+ * Copy a better-auth `Response` onto a Fastify reply.
+ *
+ * better-auth's router (better-call) answers with a *bodyless* `Response`
+ * whenever it cannot dispatch a request — an unknown path, a path that only
+ * exists under a different method, a trailing-slash or double-slash mismatch —
+ * and whenever it turns an unhandled error into a 500.
+ *
+ * That missing body must not be handed to `reply.send(null)`. Fastify does not
+ * read `null` as "no body": it serializes the JSON literal `null`, a four-byte
+ * body sent as `application/json`. It parses as valid JSON but is not an
+ * object, so a client decoding a typed response reports a *type* error against
+ * its own schema instead of the HTTP failure that actually happened. On the
+ * OAuth token endpoint that is the difference between a diagnosable error and
+ * none at all: the Codex CLI aborts the whole MCP gateway login with
+ * `OAuth token exchange failed: invalid type: null, expected struct
+ * StandardTokenResponse at line 1 column 4`, which names neither the status nor
+ * the cause.
+ *
+ * A bodyless upstream response therefore stays bodyless.
+ */
+function relayBetterAuthResponse(params: {
+  reply: BetterAuthRelayReply;
+  response: Response;
+  body: string | null;
+  skipContentLength?: boolean;
+}): void {
+  const { reply, response, body, skipContentLength } = params;
+
+  reply.status(response.status);
+  response.headers.forEach((value: string, key: string) => {
+    const name = key.toLowerCase();
+    if (skipContentLength && name === "content-length") {
+      return;
+    }
+    // A response with no body must not claim to carry one. better-call builds
+    // its router misses with `new Response(null, …)`, which has no headers at
+    // all — but an `APIError` thrown without a body (better-auth's admin plugin
+    // and authorization middleware both do this) is turned into a bodyless
+    // response that still declares `content-type: application/json`. Forwarding
+    // that pairs an empty body with a JSON content type, so a client that
+    // trusts the header and calls `.json()` gets a parse error — the same class
+    // of failure this whole change exists to remove.
+    if (
+      body === null &&
+      (name === "content-type" || name === "content-length")
+    ) {
+      return;
+    }
+    reply.header(key, value);
+  });
+
+  reply.send(body ?? undefined);
+}
+
+/**
+ * Read a better-auth response body, preserving the distinction between "empty
+ * body" and "no body at all" — `null` means the response carried no body.
+ */
+async function readBetterAuthResponseBody(
+  response: Response,
+): Promise<string | null> {
+  return response.body ? await response.text() : null;
+}
+
+/**
+ * Status and body for a token-endpoint response that better-auth answered
+ * without one. RFC 6749 §5.2 requires a JSON object carrying an `error`
+ * member, so the bodyless response is translated instead of forwarded.
+ *
+ * A token endpoint must never report success without a token, so anything that
+ * is not an explicit client error is reported as `server_error` with a 5xx.
+ */
+function oauthTokenErrorForBodylessResponse(betterAuthStatus: number): {
+  status: number;
+  body: string;
+} {
+  const isClientError = betterAuthStatus >= 400 && betterAuthStatus < 500;
+  return {
+    status: isClientError ? betterAuthStatus : 500,
+    body: JSON.stringify(
+      isClientError
+        ? {
+            error: "invalid_request",
+            error_description: `The authorization server rejected the token request (HTTP ${betterAuthStatus}).`,
+          }
+        : {
+            error: "server_error",
+            error_description:
+              "The authorization server did not return a token response.",
+          },
+    ),
   };
 }
 

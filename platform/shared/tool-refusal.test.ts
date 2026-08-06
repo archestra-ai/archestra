@@ -6,6 +6,7 @@ import {
   buildArchestraToolRefusalMetadata,
   buildToolInvocationRefusalMessages,
   buildTrustedDataBlockedContentNotice,
+  buildTrustedDataSanitizedContentNotice,
   parseArchestraToolRefusal,
 } from "./tool-refusal";
 
@@ -96,6 +97,29 @@ Your session id: session-123.`);
       "Acme Gateway LLM Proxy blocked unsafe tool call",
     );
     expect(contentMessage).not.toContain("Archestra");
+  });
+
+  test("trusted-data sanitized content notice attributes the substitution and closes both escapes", () => {
+    const notice = buildTrustedDataSanitizedContentNotice({
+      summary: "The page discusses MCP prompt-injection risks.",
+      productName: "Acme Gateway",
+    });
+
+    // The model must be able to tell a policy substitution from a broken tool:
+    // an unlabelled summary got the MCP server reported as malfunctioning.
+    expect(notice).toContain("Acme Gateway security guardrails");
+    expect(notice).toContain("the tool ran normally");
+    // ...and must not retry, nor route around it to an ungoverned tool.
+    expect(notice).toContain("Retrying the call");
+    expect(notice).toContain("reaching for another tool");
+    // The summary itself is still delivered verbatim, after the notice.
+    expect(
+      notice.endsWith("\nThe page discusses MCP prompt-injection risks."),
+    ).toBe(true);
+
+    expect(buildTrustedDataSanitizedContentNotice({ summary: "x" })).toContain(
+      "Archestra security guardrails",
+    );
   });
 
   test("trusted-data blocked content notice attributes the removal", () => {

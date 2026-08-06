@@ -52,8 +52,16 @@ vi.mock("@/components/ai-elements/model-selector", () => ({
     <div>{children}</div>
   ),
   ModelSelectorEmpty: () => null,
-  ModelSelectorGroup: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
+  ModelSelectorGroup: ({
+    children,
+    heading,
+  }: {
+    children: ReactNode;
+    heading?: string;
+  }) => (
+    <div data-testid="model-group" data-heading={heading}>
+      {children}
+    </div>
   ),
   ModelSelectorItem: ({ children }: { children: ReactNode }) => (
     <div data-testid="model-option">{children}</div>
@@ -120,6 +128,46 @@ function renderSelector(
 beforeEach(() => {
   vi.clearAllMocks();
   setQuery({});
+});
+
+describe("clear control", () => {
+  // The trigger is itself a <button>. A clear control nested inside it is
+  // invalid HTML: React reports it, hydration breaks, and keyboard users
+  // cannot reach it separately from the trigger.
+  it.each([
+    "outline",
+    "default",
+  ] as const)("renders the clear control outside the trigger button (%s variant)", (variant) => {
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    renderSelector({ selectedModel: "m1", onClear: vi.fn(), variant });
+
+    const clear = screen.getByRole("button", { name: /clear model/i });
+    expect(clear.parentElement?.closest("button")).toBeNull();
+    expect(document.querySelector("button button")).toBeNull();
+  });
+
+  it("clears without opening the model dialog", () => {
+    const onClear = vi.fn();
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    renderSelector({ selectedModel: "m1", onClear, variant: "outline" });
+
+    fireEvent.click(screen.getByRole("button", { name: /clear model/i }));
+
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("dialog-content")).not.toBeInTheDocument();
+  });
+
+  it("does not offer the clear control while the selector is disabled", () => {
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    renderSelector({
+      selectedModel: "m1",
+      onClear: vi.fn(),
+      variant: "outline",
+      disabled: true,
+    });
+
+    expect(screen.getByRole("button", { name: /clear model/i })).toBeDisabled();
+  });
 });
 
 describe("ModelSelector coverage matrix", () => {
@@ -229,6 +277,53 @@ describe("ModelSelector coverage matrix", () => {
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
     expect(screen.queryByTestId("dialog-content")).not.toBeInTheDocument();
+  });
+
+  it("splits Perplexity into a chat-completions section above the Agent API one", () => {
+    // One provider, two backing APIs: the picker must show which API each
+    // model speaks, with the sonar chat-completions family listed first.
+    setQuery({
+      modelsByProvider: {
+        perplexity: [
+          model({
+            dbId: "p1",
+            id: "anthropic/claude-opus-5",
+            isBest: false,
+            capabilities: { supportsToolCalling: true },
+          }),
+          model({
+            dbId: "p2",
+            id: "sonar-pro",
+            isBest: true,
+            capabilities: {
+              inputModalities: ["text"],
+              supportsToolCalling: false,
+            },
+          }),
+        ],
+        openai: [model()],
+      },
+    });
+    renderSelector({ selectedModel: "p2", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    const headings = screen
+      .getAllByTestId("model-group")
+      .map((group) => group.getAttribute("data-heading"))
+      .filter((heading) => heading?.includes("Perplexity"));
+    expect(headings).toEqual([
+      "Perplexity AI — Chat Completions",
+      "Perplexity AI — Agent API",
+    ]);
+    // The plain-provider group is untouched by the sectioning.
+    expect(
+      screen
+        .getAllByTestId("model-group")
+        .some((group) => group.getAttribute("data-heading") === "OpenAI"),
+    ).toBe(true);
+    // A recorded supportsToolCalling: false is known data — the row carries
+    // the explicit tool-less marker, not the unknown-capabilities badge.
+    expect(screen.getByText("Tool calling not supported")).toBeInTheDocument();
   });
 
   it("keeps the pinned model and shows the fallback name when auto-select is suppressed", () => {

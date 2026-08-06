@@ -7,7 +7,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
-import type { AuditLog } from "@/lib/audit-log/audit-log.query";
+import type { AuditEventName, AuditLog } from "@/lib/audit-log/audit-log.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
 import {
   ACTION_BADGE_VARIANT,
@@ -82,7 +82,9 @@ function AuditLogDetailBody({ event }: { event: AuditLog }) {
 
         <DetailRow label="Action">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={ACTION_BADGE_VARIANT[event.action]}>
+            <Badge
+              variant={ACTION_BADGE_VARIANT[event.action as AuditEventName]}
+            >
               {formatAction(event.action)}
             </Badge>
             <Badge variant={OUTCOME_BADGE_VARIANT[event.outcome]}>
@@ -161,9 +163,20 @@ function WhenBlock({ event }: { event: AuditLog }) {
 }
 
 function ActorBlock({ event }: { event: AuditLog }) {
-  const { actorName, actorEmail, actorType } = event;
+  const { actorName, actorEmail, actorType, impersonatedBy } = event;
+  const impersonationNote = impersonatedBy ? (
+    <div className="text-xs text-amber-600 dark:text-amber-500">
+      Impersonated session — performed by{" "}
+      {event.impersonatedByEmail ?? "a since-deleted admin"}
+    </div>
+  ) : null;
   if (!actorName && !actorEmail) {
-    return <span className="text-muted-foreground">Deleted user</span>;
+    return (
+      <div className="space-y-0.5">
+        <span className="text-muted-foreground">Deleted user</span>
+        {impersonationNote}
+      </div>
+    );
   }
   return (
     <div className="space-y-0.5">
@@ -174,6 +187,7 @@ function ActorBlock({ event }: { event: AuditLog }) {
       <div className="text-xs text-muted-foreground">
         {ACTOR_TYPE_LABEL[actorType]}
       </div>
+      {impersonationNote}
     </div>
   );
 }
@@ -199,7 +213,7 @@ function ResourceBlock({ event }: { event: AuditLog }) {
                 {formatResourceType(event.resourceType)}
               </span>
             )}
-            {event.resourceType && name ? ": " : ""}
+            {event.resourceType && name ? <span>: </span> : null}
             {name && <span>{name}</span>}
           </span>
         </Badge>

@@ -376,7 +376,7 @@ export default function ServiceAccountDetailPage({
                     platform API
                   </ExternalDocsLink>
                 ) : (
-                  "platform API"
+                  <span>platform API</span>
                 )}{" "}
                 as this service account.
               </p>
@@ -480,7 +480,7 @@ function CreateTokenDialog({
             disabled={isPending || !form.watch("name").trim()}
           >
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Create
+            <span>Create</span>
           </Button>
         </DialogStickyFooter>
       </DialogForm>

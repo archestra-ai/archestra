@@ -118,14 +118,6 @@ const navigationItems = [
     href: "/llm/model-providers",
   },
   {
-    icon: Key,
-    label: "Client Credentials",
-    value: "credentials",
-    keywords:
-      "virtual keys oauth clients client credentials llm mcp gateways agents a2a",
-    href: "/credentials",
-  },
-  {
     icon: MessagesSquare,
     label: "Logs",
     value: "logs",
@@ -245,6 +237,15 @@ export function ConversationSearchPalette({
     setIsPendingDeletion(null);
   }, [selectedValue, searchQuery]);
 
+  // Search replaces the entire item set (nav items ↔ conv-<id> results). With a
+  // controlled value, cmdk only auto-selects the first item when the value is
+  // falsy — a stale selection leaves the fresh list with no selected option, so
+  // ArrowUp and Enter dead-end (WCAG 2.1.1). Clear it whenever the query flips.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reacting to debouncedSearch changes to reset the selection
+  useEffect(() => {
+    setSelectedValue("");
+  }, [debouncedSearch]);
+
   const handleSelectConversation = (conversationId: string) => {
     router.push(`/chat/${conversationId}`);
     onOpenChange(false);
@@ -299,13 +300,16 @@ export function ConversationSearchPalette({
     if (!open) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // In cmdk, the input always retains focus even during arrow-key navigation.
-      // Only intercept shortcuts when the search input is empty (browse mode).
-      // When the user is typing a search query, let keys pass through normally.
-      if (searchQuery) return;
+      // Alt-qualified shortcuts (WCAG 2.1.4 forbids bare character keys) that
+      // also work while a search query is being typed. Matching on e.code
+      // sidesteps macOS Option dead-key characters, like SHORTCUT_NEW_CHAT.
+      if (!e.altKey || e.metaKey || e.ctrlKey) return;
 
-      // 'd' for delete when conversation is selected
-      if (e.key === SHORTCUT_DELETE.key && selectedValue?.startsWith("conv-")) {
+      // Alt+D deletes the selected conversation (press twice to confirm)
+      if (
+        e.code === SHORTCUT_DELETE.code &&
+        selectedValue?.startsWith("conv-")
+      ) {
         e.preventDefault();
         e.stopPropagation();
         const conversationId = selectedValue.substring(5);
@@ -317,8 +321,8 @@ export function ConversationSearchPalette({
         }
       }
 
-      // 'p' for pin/unpin when conversation is selected
-      if (e.key === SHORTCUT_PIN.key && selectedValue?.startsWith("conv-")) {
+      // Alt+P pins/unpins the selected conversation
+      if (e.code === SHORTCUT_PIN.code && selectedValue?.startsWith("conv-")) {
         e.preventDefault();
         e.stopPropagation();
         const conversationId = selectedValue.substring(5);
@@ -332,7 +336,6 @@ export function ConversationSearchPalette({
   }, [
     open,
     selectedValue,
-    searchQuery,
     isPendingDeletion,
     handleDeleteConversation,
     handlePinConversation,
@@ -458,10 +461,9 @@ export function ConversationSearchPalette({
           {isPending && (
             <Badge
               variant="destructive"
-              role="status"
               className="absolute right-3 top-2.5 text-[10px] shadow-sm animate-in fade-in zoom-in duration-200"
             >
-              Press "{SHORTCUT_DELETE.label}" to confirm
+              Press "{altKey} {SHORTCUT_DELETE.label}" to confirm
             </Badge>
           )}
         </div>
@@ -490,6 +492,17 @@ export function ConversationSearchPalette({
         value={searchQuery}
         onValueChange={setSearchQuery}
       />
+      {/* Persistent live region: mounting the visual confirm badge together
+          with its text is not reliably announced, so the delete-confirmation
+          prompt is mirrored here (WCAG 4.1.3). */}
+      <output aria-live="polite" className="sr-only">
+        {isPendingDeletion && (
+          <span>
+            Press {altKey} {SHORTCUT_DELETE.label} again to confirm deleting the
+            selected conversation.
+          </span>
+        )}
+      </output>
       <CommandList className="max-h-[500px]">
         {isLoading && !isSearching ? (
           <div className="py-6 text-center text-sm text-muted-foreground">
@@ -627,15 +640,25 @@ export function ConversationSearchPalette({
             <span className="text-muted-foreground">New Chat</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-              {SHORTCUT_PIN.label}
-            </kbd>
+            <div className="flex items-center gap-1">
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {altKey}
+              </kbd>
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {SHORTCUT_PIN.label}
+              </kbd>
+            </div>
             <span className="text-muted-foreground">Pin / Unpin Chat</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-              {SHORTCUT_DELETE.label}
-            </kbd>
+            <div className="flex items-center gap-1">
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {altKey}
+              </kbd>
+              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
+                {SHORTCUT_DELETE.label}
+              </kbd>
+            </div>
             <span className="text-muted-foreground">Delete Chat</span>
           </div>
           <div className="flex items-center gap-1.5">

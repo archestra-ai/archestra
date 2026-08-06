@@ -49,7 +49,12 @@ describe("SystemPromptEditor", () => {
     expect(
       screen.queryByRole("link", { name: "docs(opens in new tab)" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/templating\./)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === "P" && /templating\./.test(el.textContent ?? ""),
+      ),
+    ).toBeInTheDocument();
   });
 
   it("expands and collapses the shared editor height", async () => {

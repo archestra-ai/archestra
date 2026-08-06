@@ -377,6 +377,64 @@ describe("ToolInvocationPolicyModel", () => {
       );
     });
 
+    test("names the origin tool in the sensitive-context block reason when known", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeToolPolicy,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({ agentId: agent.id, name: "guarded-tool" });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+      await makeToolPolicy(tool.id, {
+        conditions: [],
+        action: "block_when_context_is_untrusted",
+        reason: null,
+      });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "guarded-tool", toolInput: {} }],
+        {
+          ...mockContext,
+          sensitiveContextOrigin: { kind: "tool_result", toolName: "Bash" },
+        },
+        false, // untrusted context
+      );
+
+      expect(result.isAllowed).toBe(false);
+      expect(result.reason).toBe(
+        '"Block in sensitive context" tool call policy violated: this session contains sensitive data, introduced by an earlier "Bash" tool result',
+      );
+    });
+
+    test("names the agent setting in the default-block reason when the origin is agent config", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({ agentId: agent.id, name: "strict-tool" });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "strict-tool", toolInput: {} }],
+        {
+          ...mockContext,
+          sensitiveContextOrigin: { kind: "agent_configured" },
+        },
+        false, // untrusted context
+      );
+
+      expect(result.isAllowed).toBe(false);
+      expect(result.reason).toBe(
+        "Blocked by default in sensitive context: this agent is configured to treat every session as sensitive from the start, and no tool call policy explicitly allows this tool in that state",
+      );
+    });
+
     test("allows tool when explicit allow rule matches in untrusted context", async ({
       makeAgent,
       makeTool,

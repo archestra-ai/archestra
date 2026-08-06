@@ -126,3 +126,96 @@ describe("Reasoning auto-collapse", () => {
     }
   });
 });
+
+describe("Reasoning across a merged run", () => {
+  it("sums the streaming bursts and ignores the pause between them", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(
+        <Reasoning isStreaming keepOpen>
+          <ReasoningTrigger />
+        </Reasoning>,
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      rerender(
+        <Reasoning isStreaming={false} keepOpen>
+          <ReasoningTrigger />
+        </Reasoning>,
+      );
+      // Between bursts the 3s measured so far is a partial sum, so the trigger
+      // keeps reading "Thinking…" instead of announcing a total it will revise.
+      expect(screen.getByText(/Thinking/)).toBeInTheDocument();
+      expect(
+        screen.queryByText(/Thought for 3 seconds/),
+      ).not.toBeInTheDocument();
+
+      // The tool calls the run spans are not thinking time.
+      act(() => {
+        vi.advanceTimersByTime(20_000);
+      });
+      rerender(
+        <Reasoning isStreaming keepOpen>
+          <ReasoningTrigger />
+        </Reasoning>,
+      );
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+      // Something rendered below the run, so it has settled for good.
+      rerender(
+        <Reasoning isStreaming={false} keepOpen={false}>
+          <ReasoningTrigger />
+        </Reasoning>,
+      );
+
+      expect(screen.getByText(/Thought for 7 seconds/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stays open until the run stops growing, then collapses once", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(
+        <Reasoning isStreaming keepOpen>
+          <ReasoningTrigger />
+          <ReasoningContent>first pass</ReasoningContent>
+        </Reasoning>,
+      );
+
+      const trigger = screen.getByRole("button");
+      expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+      // Between blocks: this one has stopped streaming, but more may still join.
+      rerender(
+        <Reasoning isStreaming={false} keepOpen>
+          <ReasoningTrigger />
+          <ReasoningContent>first pass</ReasoningContent>
+        </Reasoning>,
+      );
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+      // Something rendered below the run, so it can no longer grow.
+      rerender(
+        <Reasoning isStreaming={false} keepOpen={false}>
+          <ReasoningTrigger />
+          <ReasoningContent>first pass and second pass</ReasoningContent>
+        </Reasoning>,
+      );
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

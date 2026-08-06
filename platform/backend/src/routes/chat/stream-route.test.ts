@@ -629,7 +629,11 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const patchResponse = await app.inject({
       method: "PATCH",
       url: `/api/chat/messages/${userMessage?.id}`,
-      payload: { partIndex: 0, text: "Edited after provider error" },
+      payload: {
+        conversationId,
+        partIndex: 0,
+        text: "Edited after provider error",
+      },
     });
     expect(patchResponse.statusCode).toBe(200);
   });
@@ -904,7 +908,9 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
 
     const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
     expect(systemPrompt).toContain(PROJECT_FILES_PREFIX);
-    expect(systemPrompt).toContain("`index.html`");
+    // Filenames are chosen by whoever uploaded the file, so the manifest
+    // renders them as quoted data rather than inline code.
+    expect(systemPrompt).toContain('"index.html"');
   });
 
   test("lists no project files for a project chat whose project has none", async () => {
@@ -1324,6 +1330,146 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     });
   });
 
+  // Seeds a synced Perplexity model row; the provider serves two transports
+  // discriminated by the model id's vendor prefix.
+  const makePerplexityModelRow = (perplexityModelId: string) =>
+    ModelModel.create({
+      externalId: `perplexity/${perplexityModelId}`,
+      provider: "perplexity",
+      modelId: perplexityModelId,
+      description: perplexityModelId,
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+  test("configures the Responses transport for a Perplexity Agent API model", async ({
+    makeConversation,
+  }) => {
+    // The Agent API stores nothing (store:false keeps the SDK from sending
+    // item references it cannot resolve), and the SDK's reasoning request
+    // path is gated on OpenAI's model-name heuristic, which no
+    // vendor-prefixed Perplexity id matches — without forceReasoning the
+    // request carries no `reasoning` block and thinking never streams.
+    const model = await makePerplexityModelRow("anthropic/claude-sonnet-5");
+    const conversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+      forceReasoning: true,
+      reasoningSummary: "auto",
+      systemMessageMode: "system",
+    });
+  });
+
+  test("keeps chat-completions Perplexity models off the Responses options", async ({
+    makeConversation,
+  }) => {
+    // A bare `sonar*` id is served over chat completions, where none of the
+    // Responses options exist — the turn must not carry the openai namespace
+    // at all.
+    const model = await makePerplexityModelRow("sonar-pro");
+    const conversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.openai,
+    ).toBeUndefined();
+  });
+
+  // T-959: a GitHub Copilot conversation pins a models.id UUID; the turn must
+  // dereference it to the catalogued provider model name before dispatch —
+  // Copilot 400s ("The requested model is not supported") on anything else.
+  test("dereferences a GitHub Copilot conversation's model FK to the provider model name", async ({
+    makeConversation,
+  }) => {
+    const model = await ModelModel.create({
+      externalId: "github-copilot/gpt-4o",
+      provider: "github-copilot",
+      modelId: "gpt-4o",
+      description: "gpt-4o",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const copilotConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockCreateLLMModelForAgent.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: copilotConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockCreateLLMModelForAgent).toHaveBeenCalledTimes(1);
+    const dispatch = mockCreateLLMModelForAgent.mock.calls[0]?.[0];
+    expect(dispatch.provider).toBe("github-copilot");
+    // The provider model name — never the models.id UUID the conversation stores.
+    expect(dispatch.model).toBe("gpt-4o");
+    expect(dispatch.model).not.toBe(model.id);
+  });
+
   test("omits reasoningSummary while the credential is negative-cached as unsupported", async ({
     makeConversation,
   }) => {
@@ -1728,13 +1874,18 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(response.statusCode).toBe(200);
     await executionPromise;
 
+    // Transient: these fire before the model stream's `start` chunk, and a
+    // non-transient pre-start data part makes the client mint a phantom
+    // assistant message per attach (see prepare-model-messages.ts).
     expect(writerWrites).toContainEqual({
       type: "data-context-compaction-start",
       data: { trigger: "auto" },
+      transient: true,
     });
     expect(writerWrites).toContainEqual({
       type: "data-context-compaction-finish",
       data: { status: "skipped", reason: "not_beneficial" },
+      transient: true,
     });
   });
 
@@ -2455,6 +2606,51 @@ describe("POST /api/chat handler composition", () => {
     );
   });
 
+  test("marks every context-window data part transient, including the per-step re-emit", async ({
+    expect,
+  }) => {
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // A tool-call step re-emits the breakdown with the provider's real input
+    // count. onStepFinish only emits once a result is committed, which the
+    // awaited execution above has done.
+    const streamConfig = mockStreamText.mock.calls.at(-1)?.[0] as {
+      onStepFinish?: (step: unknown) => Promise<void> | void;
+    };
+    await streamConfig.onStepFinish?.({
+      usage: { inputTokens: 1200, outputTokens: 10, totalTokens: 1210 },
+      finishReason: "tool-calls",
+      toolCalls: [],
+    });
+
+    const breakdownWrites = writerEvents.filter(
+      (event) =>
+        event.kind === "write" &&
+        (event.value as { type?: string })?.type ===
+          "data-context-window-breakdown",
+    );
+    // Both the pre-stream breakdown and the post-step re-emit.
+    expect(breakdownWrites.length).toBeGreaterThan(1);
+
+    // Every one of these carries UI state the client reads via onData. A
+    // non-transient copy lands in the assistant message instead, where it is
+    // persisted, re-appended on each replay, and — when it arrives before the
+    // stream's `start` chunk — makes the AI SDK open a message of its own to
+    // hold it, which renders the turn twice.
+    const uiStateWrites = writerEvents.filter(
+      (event) =>
+        event.kind === "write" &&
+        /^data-context-(window|compaction)/.test(
+          (event.value as { type?: string })?.type ?? "",
+        ),
+    );
+    for (const write of uiStateWrites) {
+      expect(write.value).toMatchObject({ transient: true });
+    }
+  });
+
   test("emits compaction start/finish and context-window-estimate events in order, before the stream merge", async () => {
     mockCompactMessagesForChat.mockImplementation(
       async ({
@@ -2821,11 +3017,57 @@ describe("POST /api/chat handler composition", () => {
     expect(attachments[0].mimeType).toBe("application/zip");
   });
 
-  test("rejects an attachment over the storage byte limit and persists nothing", async () => {
-    // Just over the artifact/storage limit — too big for the sandbox AND for
-    // Files-panel storage, so the gate still rejects before any bytes persist.
+  test("accepts an attachment over the sandbox limit and stores it", async () => {
+    // Too big to stage into the sandbox, but well under the storage cap: the
+    // sandbox is bypassed and the file still lands in the Files panel. The
+    // staging limit defaults to the storage cap, so it is lowered here to
+    // keep that band non-empty (and the buffer small).
+    const original = config.skillsSandbox.artifactBytesLimit;
+    (
+      config.skillsSandbox as { artifactBytesLimit: number }
+    ).artifactBytesLimit = 1024;
+    try {
+      const overSandbox = Buffer.alloc(
+        config.skillsSandbox.artifactBytesLimit + 1,
+        0x61,
+      );
+      const dataUrl = `data:application/zip;base64,${overSandbox.toString("base64")}`;
+      const response = await postMessage([
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [
+            { type: "text", text: "process this" },
+            {
+              type: "file",
+              url: dataUrl,
+              mediaType: "application/zip",
+              filename: "big.zip",
+            },
+          ],
+        },
+      ]);
+
+      expect(response.statusCode).toBe(200);
+      const attachments =
+        await ConversationAttachmentModel.findByConversationIdWithoutData(
+          conversationId,
+        );
+      expect(attachments).toHaveLength(1);
+      expect(attachments[0].originalName).toBe("big.zip");
+      expect(attachments[0].fileSize).toBe(overSandbox.byteLength);
+    } finally {
+      (
+        config.skillsSandbox as { artifactBytesLimit: number }
+      ).artifactBytesLimit = original;
+    }
+  });
+
+  test("rejects an attachment over the attachment storage cap and persists nothing", async () => {
+    // Past the one remaining gate — no surface can hold it, so the request is
+    // refused before any bytes persist.
     const oversized = Buffer.alloc(
-      config.skillsSandbox.artifactBytesLimit + 1,
+      config.chat.attachmentStorageBytesLimit + 1,
       0x61,
     );
     const dataUrl = `data:application/zip;base64,${oversized.toString("base64")}`;
@@ -2846,6 +3088,7 @@ describe("POST /api/chat handler composition", () => {
     ]);
 
     expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("is too large to attach");
     const attachments =
       await ConversationAttachmentModel.findByConversationIdWithoutData(
         conversationId,

@@ -2,7 +2,7 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Info, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Info, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -509,8 +509,11 @@ function EnvironmentEditorDialog({
       : null;
   const canSave = trimmedName.length > 0 && validationRegexError === null;
   const supportsFqdn = capabilities?.networkPolicy.supportsFqdn === true;
+  // Only a measured "nothing enforces" freezes the policy. A cluster we merely
+  // failed to measure keeps its editor: locking it there breaks every cluster
+  // that enforces without advertising a CRD.
   const enforcementUnavailable =
-    capabilities?.networkPolicy.provider === "none";
+    capabilities?.networkPolicy.enforcementStatus === "verified-not-enforced";
   const originalNetworkPolicy =
     mode === "default"
       ? (defaultEnvironment?.networkPolicy ?? null)
@@ -837,7 +840,9 @@ function EnvironmentEditorDialog({
               setEgressDirty(true);
             }}
             supportsFqdn={supportsFqdn}
-            provider={capabilities?.networkPolicy.provider ?? null}
+            enforcementStatus={
+              capabilities?.networkPolicy.enforcementStatus ?? null
+            }
             baselineLoaded={egressBaselineLoaded}
             disabled={isPending || !egressBaselineLoaded}
           />
@@ -869,7 +874,7 @@ function EnvironmentEditorDialog({
   );
 }
 
-function NetworkPolicyFields({
+export function NetworkPolicyFields({
   egressMode,
   setEgressMode,
   domainPreset,
@@ -879,7 +884,7 @@ function NetworkPolicyFields({
   allowedCidrsText,
   setAllowedCidrsText,
   supportsFqdn,
-  provider,
+  enforcementStatus,
   baselineLoaded,
   disabled,
 }: {
@@ -892,25 +897,45 @@ function NetworkPolicyFields({
   allowedCidrsText: string;
   setAllowedCidrsText: (value: string) => void;
   supportsFqdn: boolean;
-  provider: string | null;
+  enforcementStatus:
+    | "verified-enforced"
+    | "verified-not-enforced"
+    | "unknown"
+    | null;
   baselineLoaded: boolean;
   disabled: boolean;
 }) {
-  // No enforcer on the cluster: every rule below would be accepted but never
-  // enforced, so the whole egress section is disabled rather than offering
-  // controls that silently do nothing.
-  const enforcementUnavailable = provider === "none";
+  // A probe watched a deny-all policy fail to stop a packet: every rule below
+  // would be accepted and never enforced, so the section is disabled rather
+  // than offering controls that silently do nothing.
+  const enforcementUnavailable = enforcementStatus === "verified-not-enforced";
+  // Nothing measured this cluster — the probe was disabled, never ran, or its
+  // pods aged out. The controls stay usable because most such clusters do
+  // enforce; the notice is what stops "no warning" from reading as "verified".
+  const enforcementUnverified =
+    enforcementStatus === "unknown" || enforcementStatus === null;
   return (
     <div className="space-y-4">
       {enforcementUnavailable ? (
+        <Alert variant="warning">
+          <TriangleAlert className="h-4 w-4" />
+          <AlertTitle>Network policy enforcement test failed</AlertTitle>
+          <AlertDescription className="block leading-6">
+            Egress rules would be accepted and then ignored, so these controls
+            stay disabled until the cluster enforces NetworkPolicy.{" "}
+            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+              View docs
+            </ExternalDocsLink>
+          </AlertDescription>
+        </Alert>
+      ) : enforcementUnverified ? (
         <Alert variant="info">
           <Info className="h-4 w-4" />
-          <AlertTitle>Network policy enforcement unavailable</AlertTitle>
+          <AlertTitle>Network policy enforcement not verified</AlertTitle>
           <AlertDescription className="block leading-6">
-            No Kubernetes NetworkPolicy enforcer (Calico, Cilium, or a supported
-            FQDN provider) was detected, or Kubernetes access isn't configured,
-            so egress can't be enforced on this cluster. These controls are
-            disabled until a supported network policy provider is available.{" "}
+            Nothing has confirmed this cluster acts on NetworkPolicy, so the
+            rules below may be accepted and then ignored. They are still
+            applied, and the enforcement check runs on the next upgrade.{" "}
             <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
               View docs
             </ExternalDocsLink>
@@ -947,7 +972,24 @@ function NetworkPolicyFields({
       <div className="space-y-2">
         <FieldLabel
           label="Egress"
-          description="Controls outbound internet access. Off blocks egress, Restricted allows only the CIDR/domain rules below, and Unrestricted allows all egress."
+          description={
+            <>
+              Controls outbound internet access. Block all (
+              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
+                off
+              </code>{" "}
+              in the API) denies all egress, Allowlist (
+              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
+                restricted
+              </code>
+              ) permits only the CIDR/domain rules below, and Allow all (
+              <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
+                unrestricted
+              </code>
+              ) permits everything — workloads hosted in your cluster still get
+              a fixed floor of blocked reserved ranges.
+            </>
+          }
         />
         <Select
           value={egressMode}
@@ -958,9 +1000,13 @@ function NetworkPolicyFields({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="off">Off</SelectItem>
-            <SelectItem value="restricted">Restricted</SelectItem>
-            <SelectItem value="unrestricted">Unrestricted</SelectItem>
+            <SelectItem value="off">{EGRESS_MODE_LABELS.off}</SelectItem>
+            <SelectItem value="restricted">
+              {EGRESS_MODE_LABELS.restricted}
+            </SelectItem>
+            <SelectItem value="unrestricted">
+              {EGRESS_MODE_LABELS.unrestricted}
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -969,7 +1015,7 @@ function NetworkPolicyFields({
         <FieldLabel
           htmlFor="network-policy-cidrs"
           label="Allowed CIDRs"
-          description="IPv4 or IPv6 CIDR ranges that restricted workloads may reach. These rules are enforced by standard Kubernetes NetworkPolicy."
+          description="IPv4 or IPv6 CIDR ranges that workloads in Allowlist mode may reach. These rules are enforced by standard Kubernetes NetworkPolicy."
         />
         <Textarea
           id="network-policy-cidrs"
@@ -1019,7 +1065,7 @@ function NetworkPolicyFields({
         <FieldLabel
           htmlFor="network-policy-domains"
           label="Allowed domains"
-          description="Domain names or wildcard domains that restricted workloads may reach. Requires a supported FQDN policy provider."
+          description="Domain names or wildcard domains that workloads in Allowlist mode may reach. Requires a supported FQDN policy provider."
         />
         <Textarea
           id="network-policy-domains"
@@ -1066,15 +1112,14 @@ function FieldLabel({
   );
 }
 
+const EGRESS_MODE_LABELS: Record<EgressMode, string> = {
+  off: "Block all",
+  restricted: "Allowlist",
+  unrestricted: "Allow all",
+};
+
 function formatEgressMode(mode: EgressMode) {
-  switch (mode) {
-    case "off":
-      return "Off";
-    case "restricted":
-      return "Restricted";
-    case "unrestricted":
-      return "Unrestricted";
-  }
+  return EGRESS_MODE_LABELS[mode];
 }
 
 function formatPolicySummary(policy: NetworkPolicy) {
@@ -1118,7 +1163,8 @@ function DeleteEnvironmentDialog({
         <div className="space-y-2 text-sm">
           <p>
             This removes the <span className="font-medium">{target.name}</span>{" "}
-            environment. This cannot be undone.
+            environment and its Advisor agent, including the model configured on
+            it. This cannot be undone.
           </p>
         </div>
       }

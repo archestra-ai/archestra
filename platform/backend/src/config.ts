@@ -2,11 +2,14 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_APP_NAME,
+  DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
+  DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   isValidK8sCpuQuantity,
@@ -387,6 +390,16 @@ const MAX_DATABASE_POOL_MAX = 500;
 const DEFAULT_CHAT_MAX_OUTPUT_TOKENS = 32_768;
 const MAX_CHAT_MAX_OUTPUT_TOKENS = 1_000_000;
 
+// Output-token budget for providers that charge a request's `max_tokens`
+// reservation against a per-minute token bucket (see the provider set in
+// agents/agent-output-budget.ts). Sized to leave prompt room inside the small
+// buckets those providers' entry tiers hand out — at 32_768 a single one-word
+// message is rejected before generating a token, and no amount of shortening
+// the conversation helps. Operators on higher tiers should raise it: the cost
+// of this cap is truncated long generations, the cost of not having it is that
+// every request fails.
+const DEFAULT_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS = 4_096;
+
 // Per-connection statement timeout (ms). Defense-in-depth: kills runaway
 // queries instead of letting them hang a connection indefinitely. 0 disables.
 const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
@@ -396,6 +409,8 @@ const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
 const DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS = 60;
 const DEFAULT_METRICS_PORT = 9050;
+const DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS = 30 * 1000;
 const MIN_TCP_PORT = 1;
 const MAX_TCP_PORT = 65_535;
 const OTEL_TRACES_PATH = "/v1/traces";
@@ -558,10 +573,32 @@ export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
 /** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
   envValue?: string | undefined,
-): number => {
+): number =>
+  parseOutputTokenCeiling({
+    envValue,
+    envName: "ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS",
+    fallback: DEFAULT_CHAT_MAX_OUTPUT_TOKENS,
+  });
+
+/** @public — exported for testability */
+export const parseChatRateMeteredMaxOutputTokens = (
+  envValue?: string | undefined,
+): number =>
+  parseOutputTokenCeiling({
+    envValue,
+    envName: "ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS",
+    fallback: DEFAULT_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS,
+  });
+
+const parseOutputTokenCeiling = (params: {
+  envValue: string | undefined;
+  envName: string;
+  fallback: number;
+}): number => {
+  const { envValue, envName, fallback } = params;
   const value = envValue?.trim();
   if (!value) {
-    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+    return fallback;
   }
 
   // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
@@ -573,9 +610,9 @@ export const parseChatMaxOutputTokens = (
     parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
   ) {
     logger.warn(
-      `Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "${value}", using default ${DEFAULT_CHAT_MAX_OUTPUT_TOKENS}`,
+      `Invalid ${envName} value "${value}", using default ${fallback}`,
     );
-    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+    return fallback;
   }
 
   return parsed;
@@ -721,6 +758,44 @@ export const parseMetricsPort = (envValue?: string | undefined): number => {
 };
 
 /**
+ * Parse the refresh interval for the `llm_active_users` gauge (milliseconds).
+ * `0` disables collection entirely. The value is clamped to a floor because the
+ * underlying query is a DISTINCT count over the (very large) interactions
+ * table, and every replica runs it — a small interval turns into steady
+ * background load for a number that barely moves.
+ * @public — exported for testability
+ */
+export const parseActiveUsersRefreshIntervalMs = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "${value}", using default ${DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS}`,
+    );
+    return DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS;
+  }
+
+  if (parsed === 0) {
+    return 0;
+  }
+
+  if (parsed < MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS) {
+    logger.warn(
+      `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "${value}" is below the ${MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS}ms floor, using the floor`,
+    );
+    return MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS;
+  }
+
+  return parsed;
+};
+
+/**
  * Parse virtual key default expiration from environment variable.
  * Must be a non-negative integer (seconds). 0 means "never expires".
  * Returns the default (30 days) for invalid or negative values.
@@ -772,6 +847,22 @@ const parsePositiveInt = (
   if (!envValue) return defaultValue;
   const parsed = Number.parseInt(envValue, 10);
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
+};
+
+/**
+ * Like {@link parsePositiveInt} but accepts 0, for knobs where zero is a
+ * meaningful setting rather than a missing one — a retention window of 0
+ * means "keep forever", not "use the default".
+ *
+ * @public — exported for testability
+ */
+export const parseNonNegativeInt = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseInt(envValue, 10);
+  return !Number.isNaN(parsed) && parsed >= 0 ? parsed : defaultValue;
 };
 
 /** @public — exported for testability */
@@ -1061,26 +1152,53 @@ export function parseProcessType(value: string | undefined): ProcessType {
 }
 
 /**
- * Parse ARCHESTRA_AUDIT_LOG_RETENTION_DAYS into a non-negative integer.
- * Default is 0 (retention disabled — audit rows are never auto-deleted).
- * Org admins opt in by setting a positive number of days.
+ * Parse a `*_RETENTION_DAYS` env var into a non-negative integer.
+ * Default is 0 (retention disabled — rows are never auto-deleted).
+ * Operators opt in by setting a positive number of days.
  * @public — exported for testability
  */
-export const parseAuditLogRetentionDays = (
+export const parseRetentionDays = (
+  envVarName: string,
   envValue: string | undefined,
 ): number => {
   const DEFAULT_RETENTION_DAYS = 0;
   const value = envValue?.trim();
   if (!value) return DEFAULT_RETENTION_DAYS;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed) || parsed < 0) {
+  // Strictly digits: retention drives deletion, so a typo like "30days" or
+  // "1.5" must disable the sweep, never silently truncate to an unintended
+  // window.
+  if (!/^\d+$/.test(value)) {
     logger.warn(
-      `Invalid ARCHESTRA_AUDIT_LOG_RETENTION_DAYS value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
+      `Invalid ${envVarName} value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
     );
     return DEFAULT_RETENTION_DAYS;
   }
-  return parsed;
+  return Number.parseInt(value, 10);
 };
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Whether OTel spans may carry message/tool content (gen_ai.content.*).
+ *
+ * Content encryption at rest flips the DEFAULT to false: exporting the same
+ * content in plaintext to a telemetry backend would bypass the at-rest
+ * guarantee through a side door. An EXPLICIT `true` still wins — the operator
+ * may run an equally protected telemetry pipeline — and the encryption boot
+ * guard logs a warning for that combination so the choice is always visible.
+ * @public — exported for testability
+ */
+export const parseOtelCaptureContent = (params: {
+  envValue: string | undefined;
+  contentEncryptionConfigured: boolean;
+}): boolean => {
+  const value = params.envValue?.trim();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return !params.contentEncryptionConfigured;
+};
+// SPDX-SnippetEnd
 
 /**
  * Parse a Kubernetes resource quantity (memory/CPU/ephemeral-storage) from an
@@ -1247,6 +1365,74 @@ export const parseEngineDeniedCidrs = (
   return valid;
 };
 
+/**
+ * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
+ * undefined when it is not one.
+ *
+ * @public — exported for testability
+ */
+export const k8sMemoryQuantityToBytes = (
+  quantity: string,
+): number | undefined => {
+  const match = quantity
+    .trim()
+    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/);
+  if (!match) return undefined;
+  const multipliers: Record<string, number> = {
+    Ki: 1024,
+    Mi: 1024 ** 2,
+    Gi: 1024 ** 3,
+    Ti: 1024 ** 4,
+    k: 1000,
+    M: 1000 ** 2,
+    G: 1000 ** 3,
+    T: 1000 ** 4,
+  };
+  // Floored because the only consumers are a cgroup limit and a byte
+  // comparison, neither of which takes a fraction.
+  return Math.floor(Number(match[1]) * (match[2] ? multipliers[match[2]] : 1));
+};
+
+const DEFAULT_ENGINE_SANDBOX_MEMORY_MAX_BYTES = 5 * 1024 ** 3;
+
+/**
+ * The sandbox memory ceiling, checked against the engine's memory request.
+ *
+ * The sandboxes are charged to a cgroup the scheduler cannot see, so the
+ * request is the only thing reserving node capacity for them. A ceiling at or
+ * above the request means the engine can hold more than it reserved and the
+ * shortfall lands on whatever else the node is running. Lowering the request
+ * alone is enough to get there, so say so rather than let it pass silently.
+ *
+ * @public — exported for testability
+ */
+export const parseSandboxMemoryMaxBytes = (
+  envValue: string | undefined,
+  memoryRequest: string,
+): number => {
+  let bytes = DEFAULT_ENGINE_SANDBOX_MEMORY_MAX_BYTES;
+  const configured = envValue?.trim();
+  if (configured) {
+    const parsed = k8sMemoryQuantityToBytes(configured);
+    // Falling back beats honouring a half-understood value: a ceiling read as a
+    // handful of bytes would kill every sandbox the moment it allocated.
+    if (parsed === undefined || parsed <= 0) {
+      logger.error(
+        `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX is not a Kubernetes quantity (${configured}); using the default`,
+      );
+    } else {
+      bytes = parsed;
+    }
+  }
+  const requestBytes = k8sMemoryQuantityToBytes(memoryRequest);
+  if (requestBytes !== undefined && bytes >= requestBytes) {
+    logger.error(
+      `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX (${configured ?? "default"}) is not below ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST (${memoryRequest}): the engine can hold more memory than it reserves on the node`,
+    );
+  }
+  return bytes;
+};
+
 const IPV4_CIDR =
   /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(3[0-2]|[12]?\d)$/;
 
@@ -1331,9 +1517,10 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
  * deployment needs no third switch of its own.
  *
  * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
- * Archestra's own licensed staging AND bypasses the date window. It is
- * documented nowhere and named as an enterprise override on purpose, so no
- * customer stumbles onto the enterprise path.
+ * Archestra's own licensed staging. It affects this deployment gate only — the
+ * date window and the organization toggle still apply. It is documented
+ * nowhere and named as an enterprise override on purpose, so no customer
+ * stumbles onto the enterprise path.
  *
  * This is the DEPLOYMENT gate only. Two more gates sit above it at request
  * time — the organization's own toggle, and the hackathon date window —
@@ -1350,6 +1537,44 @@ export function parseHackathonRecorderEnabled(params: {
   }
   return true;
 }
+
+/**
+ * The longest final cut a recording may be submitted or exported at, in ms.
+ *
+ * One bound behind every length surface — the submit button, the submission
+ * flow's own backstop, the video export, the editor's trim-to-limit control and
+ * the tour's "keep it under N" note — so a deployment that raises it raises all
+ * of them together and no surface can quote a number the checks disagree with.
+ *
+ * Rejects a value that is not a positive integer number of milliseconds rather
+ * than silently falling back: a typo here would otherwise read as the platform
+ * ignoring the operator's limit. A hard floor keeps a fat-fingered tiny value
+ * from making every recording unsubmittable.
+ *
+ * Undocumented on purpose, like the rest of the recorder — not in .env.example
+ * or the deployment docs.
+ *
+ * @public — exported for testability
+ */
+export function parseHackathonRecorderMaxFinalCutMs(
+  value: string | undefined,
+): number {
+  const raw = value?.trim();
+  if (!raw) return APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < MIN_HACKATHON_FINAL_CUT_MS) {
+    throw new Error(
+      `ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS must be a whole number of milliseconds >= ${MIN_HACKATHON_FINAL_CUT_MS}, got "${raw}"`,
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Floor for the configurable final-cut limit. Below a few seconds nothing is a
+ * demo and every recording would be born over the line.
+ */
+const MIN_HACKATHON_FINAL_CUT_MS = 5_000;
 
 /**
  * Defaults for the "Archestra App Gallery" sharing surface — the PUBLIC
@@ -1439,6 +1664,9 @@ const skillsSandboxEnabled = isCodeRuntimeEnabled({
 // the Dagger runtime fronts the sandbox; enabling the sandbox lights it up.
 // runnerHost is the optional process-default/BYO engine — unset in the
 // code-managed per-organization mode, where each run carries its own target.
+// Read before the config object so the sandbox ceiling can be checked against it.
+const daggerEngineMemoryRequest =
+  process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "6Gi";
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled = skillsSandboxEnabled;
 
@@ -1544,6 +1772,16 @@ const config = {
   },
   a2aV2Gateway: {
     endpoint: "/v2/a2a",
+    /**
+     * How long a terminal A2A task is retained before the reaper deletes it
+     * (with its artifacts and stream events). Its messages are detached
+     * first, so the conversation history they belong to is never affected.
+     * 0 keeps tasks forever.
+     */
+    taskRetentionDays: parseNonNegativeInt(
+      process.env.ARCHESTRA_A2A_TASK_RETENTION_DAYS,
+      90,
+    ),
   },
   agents: {
     incomingEmail: {
@@ -1597,6 +1835,13 @@ const config = {
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
+    /**
+     * Kill switch for user impersonation ("View as user" role debugging).
+     * Blocks starting new impersonated sessions and hides the pickers;
+     * stopping an in-flight impersonation always stays possible.
+     */
+    disableImpersonation:
+      process.env.ARCHESTRA_AUTH_DISABLE_IMPERSONATION === "true",
     /**
      * OAuth Dynamic Client Registration (DCR, RFC 7591) and CIMD auto-registration.
      * Enabled by default. Set ARCHESTRA_AUTH_DCR_ENABLED=false to allow only
@@ -1960,13 +2205,13 @@ const config = {
         defaultValue: 500,
         envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
       }),
+      // One value, not one per mode: this is the fallback a stream wants when
+      // notifications are being delivered. When they are not, the notify hub
+      // tightens its own fallback, so nothing here has to know whether the
+      // database endpoint can hold a listener.
       stopPollIntervalMs: parseActiveChatRunPollIntervalMs({
         value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS,
-        defaultValue:
-          process.env
-            .ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED === "true"
-            ? 500
-            : 30_000,
+        defaultValue: 30_000,
         envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
       }),
       pollingCompatibilityEnabled:
@@ -1979,6 +2224,30 @@ const config = {
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
     maxOutputTokensCeiling: parseChatMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
+    rateMeteredMaxOutputTokensCeiling: parseChatRateMeteredMaxOutputTokens(
+      process.env.ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS,
+    ),
+    /**
+     * Largest single upload a chat turn may store as a conversation
+     * attachment. Independent of the sandbox artifact limit: bigger files skip
+     * sandbox staging but still land in the Files panel. Raising this needs
+     * `ARCHESTRA_API_BODY_LIMIT` raised too — uploads arrive base64-encoded
+     * (~4/3 of the byte size) alongside the conversation JSON.
+     */
+    attachmentStorageBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT,
+      DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+    ),
+    /**
+     * Largest attachment that may be embedded in a provider request. Separate
+     * from the storage cap on purpose: a file over this is still stored and
+     * downloadable, it just never reaches the model. Keeps a big upload from
+     * inflating a request past what the provider accepts.
+     */
+    attachmentInlineBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT,
+      DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
     ),
   },
   enterpriseFeatures: {
@@ -1999,13 +2268,22 @@ const config = {
         process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
     }),
     /**
-     * The staging override is active. It forces the recorder on for Archestra's
-     * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
-     * hackathon date window, so staging can exercise the feature before it
-     * opens and after it closes. Undocumented, same as the override itself.
+     * Offering the offline VIDEO export (the player's download button and the
+     * render endpoints behind it). Off unless a deployment opts in: a render
+     * drives a headless Chromium for as long as the cut runs, which is a cost
+     * no deployment should pay by surprise — and the gallery submission, which
+     * is what the hackathon actually needs, does not depend on it.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
      */
-    overrideActive:
-      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
+    videoDownloadEnabled:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_VIDEO_DOWNLOAD_ENABLED ===
+      "true",
+    /** The longest final cut that may be submitted or exported (see the parser). */
+    maxFinalCutMs: parseHackathonRecorderMaxFinalCutMs(
+      process.env.ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS,
+    ),
     /**
      * Sharing a recording to the public App Gallery (a PR filed on the
      * participant's own GitHub account). Both values default to the official
@@ -2131,9 +2409,15 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT,
       256 * 1024,
     ),
+    /**
+     * Per-file byte cap at the sandbox boundary: attachment staging, uploads,
+     * saves/edits, inline reads, and artifact export. Defaults to the chat
+     * attachment storage cap so any stored attachment can be staged for the
+     * agent; tune independently via env.
+     */
     artifactBytesLimit: parsePositiveInt(
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
-      16 * 1024 * 1024,
+      DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
     ),
   },
   /**
@@ -2169,17 +2453,33 @@ const config = {
       50,
     ),
     // Resource requests/limits for a code-managed engine StatefulSet (K8s
-    // quantity strings). Production defaults; override down for small/local
-    // clusters that can't schedule the full engine.
+    // quantity strings). Two separate budgets, because the workloads live in
+    // two separate cgroups: the pod's request/limit cover the buildkit daemon,
+    // while `sandboxMemoryMaxBytes` caps the sandbox containers buildkit runs
+    // beside it. The memory request is sized to hold node capacity for both,
+    // since the sandbox cgroup sits outside the pod's accounting and the
+    // scheduler cannot see it; the limit tracks the request because Kubernetes
+    // requires `request <= limit`, and it stays far above the daemon's own
+    // footprint so ordinary sandbox load can never OOM-kill the engine.
     engine: {
       cpuRequest:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
-      memoryRequest:
-        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "8Gi",
+      memoryRequest: daggerEngineMemoryRequest,
       memoryLimit:
-        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "16Gi",
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "6Gi",
       cacheStorage:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE || "50Gi",
+      // Ceiling on everything the sandboxes hold at once. Without it nothing
+      // bounds them: the per-run cap is an RLIMIT_AS, which the kernel applies
+      // per process, so one run that spawns N processes holds N times it. It is
+      // an engine-wide ceiling rather than a per-run allowance, so
+      // `maxConcurrent` runs each at the per-run limit can reach it; raise this
+      // and `memoryRequest` together, or lower `maxConcurrent`, for deployments
+      // that sustain that. Resolved to bytes because it lands in a cgroup.
+      sandboxMemoryMaxBytes: parseSandboxMemoryMaxBytes(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX,
+        daggerEngineMemoryRequest,
+      ),
       // Extra IPv4 CIDRs to block from an unrestricted engine's public-egress
       // floor (on top of the built-in RFC1918/link-local/metadata ranges). Set
       // to the cluster's Service/Pod CIDRs when they fall outside RFC1918 so
@@ -2228,7 +2528,12 @@ const config = {
   },
   observability: {
     otel: {
-      captureContent: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT !== "false",
+      captureContent: parseOtelCaptureContent({
+        envValue: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT,
+        contentEncryptionConfigured: Boolean(
+          process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET,
+        ),
+      }),
       contentMaxLength: parseContentMaxLength(
         process.env.ARCHESTRA_OTEL_CONTENT_MAX_LENGTH,
       ),
@@ -2250,6 +2555,9 @@ const config = {
       endpoint: "/metrics",
       port: parseMetricsPort(process.env.ARCHESTRA_METRICS_PORT),
       secret: process.env.ARCHESTRA_METRICS_SECRET,
+      activeUsersRefreshIntervalMs: parseActiveUsersRefreshIntervalMs(
+        process.env.ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS,
+      ),
     },
     sentry: {
       enabled: sentryDsn !== "",
@@ -2380,6 +2688,23 @@ const config = {
     acceptNewEncryptionKey:
       process.env.ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY === "true",
   },
+  /**
+   * Enterprise content-encryption-at-rest for interactions and chat messages
+   * (content-encryption/). Both secrets are operator-supplied with NO
+   * fallback: an unset current secret means the feature is off for writes,
+   * deliberately unlike the secrets-manager key. `secretPrevious` is an
+   * additional decrypt-only key — it makes enabling and rotating safe across
+   * rolling deployments (distribute a key to every replica as decrypt-capable
+   * first, then activate it for writes) and lets the backfill re-encrypt
+   * rotated rows.
+   */
+  contentEncryption: {
+    secret:
+      process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET?.trim() || undefined,
+    secretPrevious:
+      process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
+      undefined,
+  },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
     enableTestMcpServer: process.env.ENABLE_TEST_MCP_SERVER === "true",
@@ -2410,6 +2735,15 @@ const config = {
     // the config endpoint rejects updates, and the frontend hides the
     // Telegram messaging channel.
     telegramEnabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED !== "false",
+    // Signup welcome for auto-provisioned chatops users: on by default, with
+    // ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false as the operator opt-out
+    // for deployments whose chatops users don't get web app access — the
+    // "finish signing up to use the web app" DM/link is just noise there.
+    // Off = users are still auto-provisioned, but no welcome message is ever
+    // sent. See resolveSignupWelcomeMode for how the welcome adapts to SSO
+    // and disabled invitations/basic sign-in when this is on.
+    signupWelcomeEnabled:
+      process.env.ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED !== "false",
     // Per-process cap on concurrent chatops file downloads + image shrinking.
     // Chatops events are acked to the provider before processing, so an OOM
     // during a burst of attachment-heavy messages means silent message loss —
@@ -2428,9 +2762,30 @@ const config = {
   // maintenanceMode it does not affect request handling.
   siteNotificationMessage:
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
+  // Enterprise-licensed like the `retention` block below — the boot-time
+  // assertion in data-retention/license-gate.ee.ts covers this window too.
   auditLog: {
-    retentionDays: parseAuditLogRetentionDays(
+    retentionDays: parseRetentionDays(
+      "ARCHESTRA_AUDIT_LOG_RETENTION_DAYS",
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,
+    ),
+  },
+  // Data-retention windows for content-bearing tables. All default to 0
+  // (disabled). Enterprise-licensed — the boot-time assertion in
+  // data-retention/license-gate.ee.ts fails startup when any of these is set
+  // without an active enterprise license.
+  retention: {
+    llmLogsDays: parseRetentionDays(
+      "ARCHESTRA_LLM_LOGS_RETENTION_DAYS",
+      process.env.ARCHESTRA_LLM_LOGS_RETENTION_DAYS,
+    ),
+    mcpLogsDays: parseRetentionDays(
+      "ARCHESTRA_MCP_LOGS_RETENTION_DAYS",
+      process.env.ARCHESTRA_MCP_LOGS_RETENTION_DAYS,
+    ),
+    chatConversationsDays: parseRetentionDays(
+      "ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS",
+      process.env.ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS,
     ),
   },
 };

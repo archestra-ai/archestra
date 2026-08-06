@@ -1,8 +1,9 @@
 import { PermissionsSchema, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import config from "@/config";
 import { getUserPermissions, listImpersonableUsers } from "@/services/user";
-import { constructResponseSchema } from "@/types";
+import { ApiError, constructResponseSchema } from "@/types";
 
 const ImpersonableUserSchema = z.object({
   id: z.string(),
@@ -43,6 +44,12 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
+      if (config.auth.disableImpersonation) {
+        throw new ApiError(
+          403,
+          "User impersonation is disabled on this deployment",
+        );
+      }
       const candidates = await listImpersonableUsers({
         organizationId,
         currentUserId: user.id,

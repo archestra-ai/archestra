@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -86,7 +86,7 @@ function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading…
+        <span>Loading…</span>
       </div>
     );
   }
@@ -158,9 +158,9 @@ function CreateLinkPanel({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        Snapshot {totalSkills} skill{totalSkills === 1 ? "" : "s"} into a single
-        marketplace URL. New skills added later won't appear until you refresh
-        the link.
+        Snapshot {totalSkills} skill
+        {totalSkills === 1 ? null : <span>s</span>} into a single marketplace
+        URL. New skills added later won't appear until you refresh the link.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <label className="text-sm font-medium" htmlFor="skill-marketplace-ttl">
@@ -502,15 +502,18 @@ function firstActiveLink(links: SkillShareLink[]): SkillShareLink | null {
   return links.find((l) => l.status === "active") ?? null;
 }
 
-/** The slice of a skill the connection flow needs to list and share it. */
-export interface ConnectSkill {
-  id: string;
-  name: string;
-}
+/**
+ * The slice of a skill the connection flow needs to list, attribute, and share
+ * it. Derived from the API response so the fields can't drift from it.
+ */
+export type ConnectSkill = Pick<
+  archestraApiTypes.GetSkillsResponses["200"]["data"][number],
+  "id" | "name" | "scope" | "authorId" | "authorName" | "teams" | "users"
+>;
 
 /**
- * Query over the org's full skill set (id + name), for the connect-command
- * step's per-skill picker. Soft-fails to an empty list (with the API-error
+ * Query over the org's full skill set, for the connect-command step's
+ * per-skill picker. Soft-fails to an empty list (with the API-error
  * toast) so a skills outage degrades to "no skills ride along" instead of
  * blocking command generation.
  *
@@ -547,7 +550,15 @@ async function fetchAllSkills(
     }
     if (!data) break;
     for (const skill of data.data) {
-      skills.push({ id: skill.id, name: skill.name });
+      skills.push({
+        id: skill.id,
+        name: skill.name,
+        scope: skill.scope,
+        authorId: skill.authorId,
+        authorName: skill.authorName,
+        teams: skill.teams,
+        users: skill.users,
+      });
     }
     if (data.data.length < limit) break;
     offset += limit;

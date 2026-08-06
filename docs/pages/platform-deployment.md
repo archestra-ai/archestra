@@ -493,13 +493,13 @@ Archestra protects every MCP server pod from Server-Side Request Forgery (SSRF) 
 
 Each pod gets one policy, chosen by its environment's egress mode:
 
-- **Unrestricted** (the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
-- **Restricted** — only the CIDRs and domains the environment allow-lists, plus DNS.
-- **Off** — all egress is denied.
+- **Allow all** (`unrestricted`, the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
+- **Allowlist** (`restricted`) — only the CIDRs and domains the environment allow-lists, plus DNS.
+- **Block all** (`off`) — all egress is denied.
 
 A namespace-wide default-deny baseline also selects every MCP pod, so a pod that is still starting up is denied by default rather than left open.
 
-**Blocked reserved ranges** (the unrestricted floor):
+**Blocked reserved ranges** (the Allow all floor):
 
 - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
@@ -511,7 +511,7 @@ A namespace-wide default-deny baseline also selects every MCP pod, so a pod that
 
 **Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
 
-To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's network policy to `restricted` and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
+To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's egress mode to **Allowlist** (`restricted`) and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
 
 ### Accessing the Platform
 
@@ -561,7 +561,7 @@ MCP server pods are protected from SSRF automatically: each pod's egress is conf
 
 ## Infrastructure as Code
 
-Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section on Your Account (click your name in the sidebar) (see [API Reference](/docs/platform-api-reference#authentication)).
+Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section in Personal Settings (click your name in the sidebar) (see [API Reference](/docs/platform-api-reference#authentication)).
 
 ### Terraform
 
@@ -703,8 +703,8 @@ The following environment variables can be used to configure Archestra Platform.
 
 - **`ARCHESTRA_API_BASE_URL`** - Archestra API Base URL(s) for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway.
 
-  This URL is displayed in the UI connection instructions to help users configure their agents. It doesn\'t affect internal routing (Archestra frontend communicates with backend via `http://localhost:9000`).
-  - Default: Falls back to `http://localhost:9000`
+  This URL is displayed in the UI connection instructions to help users configure their agents. It doesn\'t affect internal routing (Archestra frontend communicates with backend via `http://127.0.0.1:9000`).
+  - Default: Falls back to `http://127.0.0.1:9000`
   - Supports multiple comma-separated URLs for different connection options (e.g., internal K8s URL and external ingress)
   - Single URL example: `https://api.archestra.com`
   - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`
@@ -723,9 +723,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Example: `ARCHESTRA_TRUST_PROXY=true`
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
-  - Default: `50MB` (52428800 bytes)
-  - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
-  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
+  - Default: `70MB` (73400320 bytes)
+  - Format: Numeric bytes (e.g., `73400320`) or human-readable (e.g., `70MB`, `100KB`, `1GB`)
+  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat. The default carries a max-size chat attachment as base64 plus room for history; raising `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT` requires raising this too.
+  - All attachments of one chat message travel in a single request, so this also bounds their combined size. The chat composer blocks a message whose attachments exceed it and asks the user to send them separately.
 
 - **`ARCHESTRA_FRONTEND_URL`** - Setting this variable enables origin validation for CORS and authentication. When set, only requests from this origin (and any in `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`) are allowed. When not set, all origins are accepted.
   - Example: `https://frontend.example.com`
@@ -764,7 +765,12 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
   - Use this to point at a custom Debian-based image or a pre-baked sandbox base.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE`** - Resources for an engine Archestra creates. Lower them for a small cluster. They apply to new engines only; delete an engine to resize it.
-  - Defaults: `2`, `8Gi`, `16Gi`, `50Gi`
+  - The memory limit covers the engine itself, not the code it sandboxes. Use `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX` for that. The memory request reserves node capacity for both.
+  - Defaults: `2`, `6Gi`, `6Gi`, `50Gi`
+  - Values: Kubernetes quantity strings
+
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX`** - Limits the memory an engine's sandboxes use at once. A run that goes past it is killed; the engine and other runs keep going. Raise it and the memory request together for heavy concurrent work, or lower `ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`.
+  - Default: `5Gi`. Keep it below `ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST`.
   - Values: Kubernetes quantity strings
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS`** - Extra IPv4 ranges an engine cannot reach. An engine with no [network policy](./platform-environments) already blocks private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges, so sandboxed code cannot reach in-cluster services. An entry that is not a valid IPv4 CIDR is ignored, and the backend logs which ones.
@@ -783,8 +789,9 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
   - Default: `120`
 - **`ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT`** - Maximum captured stdout/stderr per command; output beyond this is truncated.
   - Default: `262144` (256 KiB)
-- **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel.
-  - Default: `16777216` (16 MiB)
+- **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel, and of a chat attachment it can stage for the agent to read.
+  - Default: `52428800` (50 MiB), matching `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT` so every stored attachment can be staged.
+  - Lowering it does not cap what chat can upload. An attachment over this limit skips sandbox staging and is still stored.
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands the shared Dagger session runs at once, deployment-wide. Raise it with the engine's CPU and memory.
   - Default: `10`
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands allowed to wait for a free slot. Past this, a command fails with a runtime-at-capacity error instead of queueing.
@@ -867,6 +874,14 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Startup verifies this key against previously encrypted secrets and aborts on a mismatch (see `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`).
   - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets on startup, decrypting each with the previous key and re-encrypting with the new one (idempotent, and a no-op when the key is unchanged). You can also run it explicitly with `pnpm --filter backend db:reencrypt-secrets`. Vault-managed secrets are unaffected.
 
+- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Enables enterprise content encryption at rest: LLM interaction payloads, chat message content, and MCP tool call arguments/results are encrypted in the database with a key derived from this secret, separate from the stored-secrets key.
+  - Default: not set (disabled). Operator-supplied only — never auto-generated.
+  - Requires an enterprise license; startup fails when set without one.
+  - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
+  - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
+  - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
+- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
+
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
 
   > When using an external `authSecret.existingSecretName`, that Secret must include `session-secret` and `secrets-encryption-secret` keys (add them before upgrading). Rotate by updating a key in your own secret manager.
@@ -901,6 +916,11 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `false`
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
   - Note: Configure at least one Identity Provider before enabling this option. See [Identity Providers](/docs/platform-identity-providers) for SSO configuration.
+
+- **`ARCHESTRA_AUTH_DISABLE_IMPERSONATION`** - Disables user impersonation ("View as user" role debugging).
+  - Default: `false`
+  - Set to `true` to hide the impersonation pickers and refuse new impersonated sessions
+  - Leaving it `false` does not grant impersonation to everyone — it still requires the `member:impersonate` permission (see [Available Permissions](/docs/platform-access-control#available-permissions))
 
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
   - Default: `false`
@@ -1178,25 +1198,28 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 Active chat run wake-ups use Postgres `LISTEN/NOTIFY` by default. This gives fast reconnect replay and Stop handling without waiting for the fallback poll interval. Poll intervals still exist in this mode as a safety net, so missed notifications or broken listener connections do not block progress forever.
 
-Enable polling compatibility only when your database endpoint cannot keep session-stable listener connections, such as PgBouncer transaction pooling or some managed/serverless database proxies. In that mode, active run replay and Stop handling rely on periodic database reads. Lower intervals react faster but create more reads; higher intervals reduce database load but make replay and Stop slower.
+Chat streams and A2A task streams are woken by Postgres `LISTEN/NOTIFY`, which works across replicas. You do not have to tell the platform whether your database endpoint supports it: on connect, it sends itself a notification and checks whether it arrives. Until one does, it polls more often so Stop and replay stay responsive. Streams read from the database either way, so a missed notification costs latency, never correctness.
+
+Set the variables below only to tune load or to skip the listener entirely.
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Fallback/poll interval for replaying active chat runs after reconnect.
   - Default: `500`
   - Load model: roughly one replay-check read per reconnecting client per interval while waiting for new events
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Interval for checking whether a running chat stream has been explicitly stopped.
-  - With Postgres `LISTEN/NOTIFY`, Stop requests normally wake streams immediately; this interval is only a safety fallback if notification wake-up is missed
-  - With polling compatibility enabled, this is the primary polling interval
-  - Default: `30000` with Postgres `LISTEN/NOTIFY`, `500` when polling compatibility is enabled
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Fallback interval for checking whether a running chat stream has been stopped.
+  - Default: `30000`
+  - Stop requests normally wake streams immediately, so this is the safety net for a missed notification. When notifications are not arriving, the platform ignores this value and checks every 500ms instead
   - Load model: roughly one stop-check read per running chat stream per interval
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling only instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Skips the listener connection entirely and relies on polling.
   - Default: `false`
-  - Keep disabled when direct Postgres or session pooling is available
+  - You rarely need this. The platform detects an endpoint that cannot deliver notifications and adjusts on its own; set it only to avoid holding a listener connection you know will never work
+  - Also covers A2A task streams, which share the same wake-up mechanism
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`** - Optional Postgres connection string for active chat run `LISTEN/NOTIFY`.
   - Default: Uses `ARCHESTRA_DATABASE_URL`
   - Set this when regular database traffic goes through PgBouncer transaction pooling but notifications can use a direct or session-pooled connection
+  - A2A task streams use this connection too
 
 - **`ARCHESTRA_CHAT_SECRET_SCAN_ENABLED`** - Enables client-side pre-send scanning of chat messages for secrets and high-entropy tokens.
   - Default: `true`
@@ -1205,10 +1228,26 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
   - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
   - Values: `true`, `false`
 
+- **`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`** - Largest single file a chat upload may store as a conversation attachment.
+  - Default: `52428800` (50 MiB)
+  - This is the only size gate on a chat upload. A file the model cannot read, one too big for the sandbox, or one over `ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT` is not rejected: it is stored in the conversation's Files panel, where the user can download it, and the agent is told it is there.
+  - Raise `ARCHESTRA_API_BODY_LIMIT` alongside this. Uploads arrive base64-encoded (about 4/3 the byte size) in the same request as the conversation history, so the body limit must exceed this value by a comfortable margin.
+
+- **`ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT`** - Largest single attachment that may be embedded in a request to the LLM provider.
+  - Default: `16777216` (16 MiB)
+  - Storing a file and sending it to a model are separate decisions. A file above this is still stored and downloadable; it just never reaches the model, so a large upload cannot inflate a request past what the provider accepts.
+  - The effective ceiling is the lower of this value and the provider's own documented request limit (Anthropic 32 MiB, Bedrock 20 MiB).
+
 - **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper bound on the output tokens an agent turn (interactive chat and A2A/headless) may generate.
   - Default: `32768`
   - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`, and unsynced models fall back to `8192`.
   - Lower it to constrain spend; raise it for models whose useful outputs exceed 32768 tokens.
+
+- **`ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS`** - Output-token cap applied only to providers that charge a request's `max_tokens` reservation against a per-minute token bucket (currently Groq).
+  - Default: `4096`
+  - These providers bill the prompt plus the reserved output budget up front, so requesting a model's real output ceiling can exceed the entire per-minute allowance on an entry tier. The request is then rejected with a 413 before generating a token, and because the reservation is constant, shortening the conversation or starting a new chat does not help.
+  - The turn uses `min(ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS, this value, the model's real output ceiling)` for affected providers; every other provider is unchanged.
+  - Raise it on higher provider tiers, whose larger buckets leave room for longer generations. The cost of this cap is truncated long outputs; the cost of removing it on a small tier is that every request fails.
 
 ### MCP Apps Sandbox
 
@@ -1254,11 +1293,22 @@ Each MCP server automatically gets a unique hash-based subdomain (e.g., `a1b2c3d
 
 The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS` (the same variables that control CORS). When set, only those origins can embed the sandbox iframe. When neither is set (local dev), all origins are accepted.
 
+### A2A Gateway
+
+A2A task streams work across replicas. A client can subscribe on one replica while the task runs on another — the stream reads the task's event log from the database, and Postgres `LISTEN/NOTIFY` wakes it as soon as the running replica writes. If a notification is missed, the stream falls back to a periodic read, so it stays correct either way. Behind a connection pooler that cannot hold a listener, set `ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`.
+
+- **`ARCHESTRA_A2A_TASK_RETENTION_DAYS`** - How long a finished A2A task is kept before it is deleted, along with its artifacts and stream events.
+  - Default: `90`. Set to `0` to keep tasks forever.
+  - Only terminal tasks (completed, failed, canceled, rejected) are eligible; a task still running is never deleted.
+  - The task's messages are detached before it goes, so the conversation history they belong to is untouched — only the task-scoped view of them is lost. The agent's answer also stays in that history.
+  - Deletion runs in bounded batches on the same background sweep that reaps orphaned tasks, so a large backlog is worked down over several passes.
+
 ### MCP Gateway
 
 - **`ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS`** - Per-request timeout, in milliseconds, for an upstream MCP tool call made through the gateway.
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
+- The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
 
 ### MCP Servers
 
@@ -1326,7 +1376,7 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Example: `your-bearer-token`
 
 - **`ARCHESTRA_OTEL_CAPTURE_CONTENT`** - Enable or disable prompt/completion content capture in trace spans.
-  - Default: `true` (enabled)
+  - Default: `true` (enabled) — **unless [content encryption at rest](/docs/platform-content-encryption) is configured, in which case the default flips to `false`**: exporting the same content in plaintext to a telemetry backend would bypass the at-rest guarantee. Setting `true` explicitly still enables capture (for telemetry pipelines protected to the same standard) and logs a startup warning.
   - Set to `false` to disable content capture for privacy or to reduce span sizes
 
 - **`ARCHESTRA_OTEL_CONTENT_MAX_LENGTH`** - Maximum character length for captured content in span events (prompt messages, completions, tool arguments, tool results).
@@ -1351,6 +1401,11 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
   - Default: `archestra-metrics-secret`
   - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`
+
+- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often, in milliseconds, to recompute the `llm_active_users` gauge.
+  - Default: `300000` (5 minutes)
+  - Set to `0` to disable collection entirely
+  - Values below `30000` are raised to that floor: the gauge is a distinct count over the interactions table, so a short interval turns into steady background load for a number that changes slowly
 
 ### Incoming Email Configuration
 
@@ -1390,6 +1445,12 @@ These environment variables configure the Incoming Email feature, which allows e
 ### ChatOps Configuration
 
 These environment variables configure the ChatOps feature, which allows users to interact with agents through messaging platforms like Microsoft Teams. See [Agents - ChatOps: Microsoft Teams](/docs/platform-agents#chatops-microsoft-teams) for setup instructions.
+
+- **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Opt-out switch for the welcome message sent to auto-provisioned chatops users.
+  - Default: `true`
+  - `false` skips the welcome entirely. Use it when your chatops users don't get web app access. Users are still auto-provisioned.
+  - When an SSO identity provider is configured, the welcome carries a sign-in link instead of the finish-signup link.
+  - Without SSO, the welcome is skipped automatically when the finish-signup flow is unavailable — `ARCHESTRA_AUTH_DISABLE_INVITATIONS` or `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH` set to `true`.
 
 #### Microsoft Teams
 
@@ -1522,15 +1583,23 @@ Permission sync for connectors using [auto-sync permissions](/docs/platform-know
   - Default: `1`
   - This lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so permission sync never competes with content sync for slots.
 
-### Audit Log Configuration
+### Data Retention
 
-The audit log records administrative actions (mutations via `/api/*` and auth events) across your organization. Automatic retention is **disabled by default** - audit rows are kept indefinitely unless an org admin opts in by setting a positive retention window.
+> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
 
-- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Number of days to retain audit log records before they are automatically deleted by the daily retention sweep.
-  - Default: `0` (disabled — audit rows are never auto-deleted).
-  - Set to a positive integer (e.g. `90`, `180`) to opt in to automatic purging after that many days.
-  - Must be a non-negative integer; invalid values fall back to the default (disabled).
-  - When enabled, the sweep runs once every 24 hours as a background task.
+Automatic deletion of content-bearing records after a configurable number of days. All windows are **disabled by default** — records are kept indefinitely until an operator opts in. Startup fails when a window is configured without an active enterprise license, so a deployment relying on retention can never run with it silently disabled. When enabled, a sweep runs once every 24 hours as a background task and deletes in small batches.
+
+- **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to retain LLM proxy logs (the `interactions` records behind the LLM Logs page) before automatic deletion.
+  - Default: `0` (disabled).
+  - Rows that newer records still depend on for request reconstruction are retained until those newer records expire too.
+  - A window shorter than 32 days logs a startup warning: monthly cost-limit periods aggregate these records, so deleting inside that horizon can under-count usage against limits. All-time cost statistics reflect retained records only.
+- **`ARCHESTRA_MCP_LOGS_RETENTION_DAYS`** - Days to retain MCP gateway tool-call logs before automatic deletion.
+  - Default: `0` (disabled).
+- **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days after a conversation's last message activity before the conversation is automatically deleted, together with its messages, attachments, and conversation files.
+  - Default: `0` (disabled).
+  - Any new message resets the clock — only genuinely idle conversations expire.
+- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to retain audit log records (administrative actions — mutations via `/api/*` and auth events) before automatic deletion.
+  - Default: `0` (disabled — audit rows are kept indefinitely).
 
 ### Maintenance Mode
 

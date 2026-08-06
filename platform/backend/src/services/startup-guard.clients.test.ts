@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -12,9 +19,11 @@ import {
   type StartupGuardContext,
 } from "@/services/startup-guard";
 import {
+  CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
 } from "@/services/startup-guard.clients";
+import { renderStartupGuardPowerShell } from "@/services/startup-guard.windows";
 
 const execFileAsync = promisify(execFile);
 
@@ -128,9 +137,11 @@ describe.each([
 });
 
 describe("Codex-specific disconnect", () => {
-  test("strips the archestra provider block it wrote to ~/.codex/config.toml", () => {
+  test("strips the archestra provider block it wrote to Codex's config.toml", () => {
     const script = renderStartupGuardScript(CTX, CODEX_GUARD_CLIENT);
-    expect(script).toContain('CONFIG="$HOME/.codex/config.toml"');
+    expect(script).toContain(
+      'CONFIG="${CODEX_HOME:-$HOME/.codex}/config.toml"',
+    );
     // the awk-delimited block is keyed by the proxy slug connect used
     expect(script).toContain("# >>> archestra:acme_proxy >>>");
     expect(script).toContain("# <<< archestra:acme_proxy <<<");
@@ -139,14 +150,569 @@ describe("Codex-specific disconnect", () => {
   });
 });
 
+/**
+ * Pull one shell function out of the rendered guard so it can be run on its
+ * own. The generator emits every function at column 0 and closes it with a
+ * bare `}`, so the slice is unambiguous.
+ */
+function extractShellFunction(script: string, name: string): string {
+  const lines = script.split("\n");
+  // The opening line may carry a trailing `# $1 kind` comment.
+  const start = lines.findIndex((line) => line.startsWith(`${name}() {`));
+  if (start === -1) throw new Error(`no ${name}() in the rendered guard`);
+  const end = lines.indexOf("}", start);
+  if (end === -1) throw new Error(`${name}() is never closed`);
+  return lines.slice(start, end + 1).join("\n");
+}
+
+/**
+ * Run rendered guard functions for real against a throwaway home directory,
+ * with a fake client binary on PATH that records its argv. Exercising the
+ * generated shell beats asserting on its text: the defects this pins were all
+ * "the code ran and did nothing", which a string match cannot tell from
+ * success.
+ *
+ * `files` are written relative to the temp home; `env` overlays the spawned
+ * bash's environment (HOME always points at the temp home, so verifiers that
+ * default to `$HOME/...` read the fixture, never this machine's real config).
+ * An `env` value may embed `{HOME}`, replaced with the temp home's absolute
+ * path — the only way a caller can point CODEX_HOME/CLAUDE_CONFIG_DIR at a
+ * directory that does not exist until the harness creates it.
+ */
+async function runGuardSnippet(params: {
+  client: StartupGuardClient;
+  functions: string[];
+  invoke: string;
+  files?: Record<string, string>;
+  env?: Record<string, string>;
+}): Promise<{ code: number; stdout: string; cliArgs: string[] }> {
+  const script = renderStartupGuardScript(CTX, params.client);
+  const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-run-"));
+  try {
+    const home = path.join(dir, "home");
+    const bin = path.join(dir, "bin");
+    const argvLog = path.join(dir, "cli-argv.log");
+    await mkdir(home, { recursive: true });
+    await mkdir(bin, { recursive: true });
+    for (const [relpath, content] of Object.entries(params.files ?? {})) {
+      const target = path.join(home, relpath);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, content, "utf8");
+    }
+    const fakeCli = path.join(bin, params.client.binary);
+    await writeFile(
+      fakeCli,
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(argvLog)}\n`,
+      "utf8",
+    );
+    await chmod(fakeCli, 0o755);
+
+    const harness = path.join(dir, "harness.sh");
+    await writeFile(
+      harness,
+      [
+        "#!/usr/bin/env bash",
+        // Presentation helpers the extracted functions call.
+        "line_reset() { :; }",
+        'C_WARN=""; C_RESET=""; C_DIM=""; C_ERR=""; C_ACCENT=""',
+        `MCP_SERVER_NAME=${JSON.stringify(CTX.mcp?.serverName)}`,
+        `SKILLS_MARKETPLACE_NAME=${JSON.stringify(CTX.skills?.marketplaceName)}`,
+        ...params.functions.map((name) => extractShellFunction(script, name)),
+        params.invoke,
+      ].join("\n"),
+      "utf8",
+    );
+
+    const overlay = Object.fromEntries(
+      Object.entries(params.env ?? {}).map(([key, value]) => [
+        key,
+        value.replaceAll("{HOME}", home),
+      ]),
+    );
+    const result = await execFileAsync("bash", [harness], {
+      env: {
+        ...process.env,
+        HOME: home,
+        // Config-relocation vars exported on the machine running the tests
+        // must not leak into the fixture home. Empty string falls through
+        // `${VAR:-default}` to the default, exactly like unset.
+        CLAUDE_CONFIG_DIR: "",
+        CODEX_HOME: "",
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        ...overlay,
+      },
+    }).then(
+      (r) => ({ code: 0, stdout: r.stdout }),
+      (e: { code?: number; stdout?: string }) => ({
+        code: e.code ?? 1,
+        stdout: e.stdout ?? "",
+      }),
+    );
+
+    let cliArgs: string[] = [];
+    try {
+      cliArgs = (await readFile(argvLog, "utf8")).split("\n").filter(Boolean);
+    } catch {
+      cliArgs = [];
+    }
+    return { ...result, cliArgs };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** Codex flavor of {@link runGuardSnippet}: CODEX_HOME points at the temp home. */
+async function runCodexGuardSnippet(params: {
+  functions: string[];
+  invoke: string;
+  configToml?: string;
+  authJson?: string;
+}): Promise<{ code: number; stdout: string; codexArgs: string[] }> {
+  const files: Record<string, string> = {};
+  if (params.configToml !== undefined) files["config.toml"] = params.configToml;
+  if (params.authJson !== undefined) files["auth.json"] = params.authJson;
+  const { code, stdout, cliArgs } = await runGuardSnippet({
+    client: CODEX_GUARD_CLIENT,
+    functions: params.functions,
+    invoke: params.invoke,
+    files,
+    env: { CODEX_HOME: "{HOME}" },
+  });
+  return { code, stdout, codexArgs: cliArgs };
+}
+
+const GATEWAY_TABLE = [
+  "[mcp_servers.prod_gateway]",
+  'url = "https://archestra.example.com/v1/mcp/prod-gateway"',
+  "",
+  "[mcp_servers.prod_gateway.tools.demo__open]",
+  'approval_mode = "approve"',
+  "",
+].join("\n");
+
+const FOREIGN_TABLES = [
+  "[mcp_servers.node_repl]",
+  'command = "/opt/codex/node"',
+  "",
+  "[marketplaces.openai-bundled]",
+  'source_type = "local"',
+  "",
+].join("\n");
+
+describe("Codex disconnect reports what it could not remove", () => {
+  test("a gateway the CLI failed to remove fails verification and names the fix", async () => {
+    const { code, stdout } = await runCodexGuardSnippet({
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      configToml: `${FOREIGN_TABLES}${GATEWAY_TABLE}`,
+    });
+
+    // Before the fix disconnect_verify did not exist and the caller printed
+    // "✓ Disconnected" unconditionally.
+    expect(code).toBe(7);
+    expect(stdout).toContain("[mcp_servers.prod_gateway] is still in");
+    expect(stdout).toContain("run `codex mcp remove prod_gateway` yourself");
+  });
+
+  test("a marketplace the CLI failed to remove fails verification", async () => {
+    const { code, stdout } = await runCodexGuardSnippet({
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify skills || exit 7\nexit 0\n",
+      configToml: '[marketplaces.acme-skills]\nsource_type = "git"\n',
+    });
+
+    expect(code).toBe(7);
+    expect(stdout).toContain("[marketplaces.acme-skills] is still in");
+  });
+
+  test("verification passes once the entries are gone, ignoring foreign ones", async () => {
+    const { code } = await runCodexGuardSnippet({
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp && disconnect_verify skills\n",
+      // node_repl and openai-bundled are the user's own — they must not read
+      // as our leftovers.
+      configToml: FOREIGN_TABLES,
+    });
+
+    expect(code).toBe(0);
+  });
+
+  test("verification reads the config CODEX_HOME points at", async () => {
+    // Seeded only in CODEX_HOME; a guard hardcoding ~/.codex would see no
+    // leftover here and wrongly report success.
+    const { code } = await runCodexGuardSnippet({
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      configToml: GATEWAY_TABLE,
+    });
+
+    expect(code).toBe(7);
+  });
+});
+
+describe("Codex disconnect reverses the credential it installed", () => {
+  test("signs Codex out of an archestra virtual key", async () => {
+    const { codexArgs, stdout } = await runCodexGuardSnippet({
+      functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],
+      invoke: "codex_logout_if_ours\nproxy_disconnect_notes\n",
+      authJson: '{"OPENAI_API_KEY":"arch_deadbeef","auth_mode":"apikey"}',
+    });
+
+    // Without this the key outlives the base_url that made it routable, and
+    // every plain `codex` run 401s against api.openai.com.
+    expect(codexArgs).toContain("logout");
+    expect(stdout).toContain("Signed Codex out of the Archestra virtual key");
+  });
+
+  test("leaves a user-owned api key alone", async () => {
+    const { codexArgs, stdout } = await runCodexGuardSnippet({
+      functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],
+      invoke: "codex_logout_if_ours\nproxy_disconnect_notes\n",
+      authJson: '{"OPENAI_API_KEY":"sk-useROwnedKey","auth_mode":"apikey"}',
+    });
+
+    expect(codexArgs).not.toContain("logout");
+    expect(stdout).not.toContain("Signed Codex out");
+  });
+
+  test("leaves a ChatGPT session alone even beside our key", async () => {
+    // `codex logout` deletes auth.json wholesale, so it must never run while
+    // the user has an OAuth session Codex would prefer anyway.
+    const { codexArgs } = await runCodexGuardSnippet({
+      functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],
+      invoke: "codex_logout_if_ours\nproxy_disconnect_notes\n",
+      authJson:
+        '{"OPENAI_API_KEY":"arch_deadbeef","auth_mode":"chatgpt","tokens":{"access_token":"x"}}',
+    });
+
+    expect(codexArgs).not.toContain("logout");
+  });
+
+  test("does nothing when Codex holds no credential at all", async () => {
+    const { code, codexArgs } = await runCodexGuardSnippet({
+      functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],
+      invoke: "codex_logout_if_ours\nproxy_disconnect_notes\n",
+    });
+
+    expect(code).toBe(0);
+    expect(codexArgs).toEqual([]);
+  });
+});
+
+describe("an unverified disconnect is not recorded as done", () => {
+  test("bash: the skip file and the guard uninstall both wait on success", () => {
+    const script = renderStartupGuardScript(CTX, CODEX_GUARD_CLIENT);
+    // Recording an unproven removal would skip the resource on every later
+    // launch, and uninstalling the guard would delete the only thing that
+    // could retry.
+    expect(script).toContain(
+      'if disconnect_resource "${GUARD_KINDS[$i]}" "${GUARD_LABELS[$i]}"; then',
+    );
+    expect(script).toContain("DISCONNECT_FAILED=1");
+    expect(script).toContain(
+      '[ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ] && [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard',
+    );
+    expect(script).toContain(
+      '[ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard',
+    );
+  });
+
+  test("windows: the skip file and the guard uninstall both wait on success", () => {
+    const script = renderStartupGuardPowerShell(CTX, CODEX_GUARD_CLIENT);
+    expect(script).toContain("if (Disconnect-ArchRemote $r.Kind $r.Label) {");
+    expect(script).toContain("$Script:ArchDisconnectFailed = $true");
+    expect(script).toContain(
+      "if ($downRemotes.Count -ge $ActiveRemotes.Count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard }",
+    );
+    expect(script).toContain(
+      "if (-not $Script:ArchDisconnectFailed) { Remove-ArchGuard }",
+    );
+    // A missing binary cannot have removed anything.
+    expect(script).toContain("the codex executable could not be found on PATH");
+    // …and Windows reverses the credential too.
+    expect(script).toContain("Invoke-ArchCodexLogoutIfOurs");
+  });
+});
+
+// The menu's cursor/spinner choreography, neutralized: the contract under
+// test is verify → record, not the animation. remember_disconnected is
+// re-declared verbatim because the real one is a one-liner
+// extractShellFunction cannot slice.
+const MENU_ROW_PREAMBLE = [
+  "menu_at_row() { :; }",
+  "menu_leave_row() { :; }",
+  "spin_start() { :; }",
+  "spin_tick() { :; }",
+  'remember_disconnected() { printf "%s\\n" "$1" >> "$SKIP_FILE"; }',
+  "MIN_CHECK_FRAMES=0",
+  "FRAME_SLEEP=0",
+  "GUARD_KINDS=(mcp)",
+  'GUARD_LABELS=("MCP gateway")',
+  'SKIP_FILE="$HOME/guard-skip"',
+  "DISCONNECT_FAILED=0",
+].join("\n");
+
+describe("the reconfigure menu obeys the same verify-before-record contract", () => {
+  test("bash: a removal that cannot be proven paints ✗, records nothing, and stays retryable", async () => {
+    const { code, stdout } = await runCodexGuardSnippet({
+      functions: [
+        "menu_disconnect_row",
+        "disconnect_actions",
+        "disconnect_verify",
+      ],
+      invoke: [
+        MENU_ROW_PREAMBLE,
+        "menu_disconnect_row 1 0 && exit 9",
+        '[ "$DISCONNECT_FAILED" = "1" ] || exit 8',
+        '[ ! -f "$SKIP_FILE" ] || exit 7',
+        "exit 0",
+      ].join("\n"),
+      // The fake CLI removes nothing, so the gateway table survives it.
+      configToml: GATEWAY_TABLE,
+    });
+
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      "✗ Could not disconnect MCP gateway — [1] to retry",
+    );
+    expect(stdout).not.toContain("✓ Disconnected");
+    // The verify hint would corrupt the in-place row; it stays suppressed.
+    expect(stdout).not.toContain("is still in");
+  });
+
+  test("bash: a proven removal lands the check and the skip-file entry", async () => {
+    const { code, stdout } = await runCodexGuardSnippet({
+      functions: [
+        "menu_disconnect_row",
+        "disconnect_actions",
+        "disconnect_verify",
+      ],
+      invoke: [
+        MENU_ROW_PREAMBLE,
+        "menu_disconnect_row 1 0 || exit 9",
+        'grep -qx mcp "$SKIP_FILE" || exit 8',
+        '[ "$DISCONNECT_FAILED" = "0" ] || exit 7',
+        "exit 0",
+      ].join("\n"),
+      // Nothing of ours left behind, so the removal verifies.
+      configToml: FOREIGN_TABLES,
+    });
+
+    expect(code).toBe(0);
+    expect(stdout).toContain("✓ Disconnected MCP gateway");
+  });
+
+  test("bash: the menu's guard uninstall waits on every removal being proven", () => {
+    const script = renderStartupGuardScript(CTX, CODEX_GUARD_CLIENT);
+    expect(script).toContain(
+      'menu_disconnect_row "$key" "$menu_target" || continue',
+    );
+    expect(script).toContain(
+      'if [ "$menu_left" -eq 0 ] && [ "$DISCONNECT_FAILED" = "0" ]; then',
+    );
+  });
+
+  test("windows: same contract — verify, gate the record, gate the uninstall", () => {
+    const script = renderStartupGuardPowerShell(CTX, CODEX_GUARD_CLIENT);
+    expect(script).toContain("$archOk = Invoke-ArchDisconnectActions $r.Kind");
+    expect(script).toContain(
+      "if (-not (Disconnect-ArchMenuRow ($d - 1) $count $baseTop)) { continue }",
+    );
+    expect(script).toContain(
+      "if ($done.Count -ge $count -and -not $Script:ArchDisconnectFailed) { Remove-ArchGuard; break }",
+    );
+  });
+});
+
 describe("Copilot-specific disconnect", () => {
   test("strips the COPILOT_PROVIDER_* export lines from the shell profiles", () => {
     const script = renderStartupGuardScript(CTX, COPILOT_GUARD_CLIENT);
     expect(script).toContain(
-      "export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY)=",
+      "export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=",
     );
     expect(script).toContain('"$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"');
     // Copilot's non-interactive one-shot flag
     expect(script).toContain("-p|--prompt) INTERACTIVE=0");
+  });
+});
+
+describe("Claude Code disconnect reports what it could not remove", () => {
+  const GATEWAY_JSON = JSON.stringify({
+    mcpServers: {
+      prod_gateway: { type: "http", url: "https://archestra.example.com" },
+      "user-own-server": { type: "stdio", command: "/usr/bin/thing" },
+    },
+  });
+
+  test("a gateway the CLI failed to remove fails verification and names the fix", async () => {
+    const { code, stdout } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      files: { ".claude.json": GATEWAY_JSON },
+    });
+
+    // Before the fix the removal was fire-and-forget: `claude mcp remove` ran
+    // silenced with its result discarded, and the guard printed ✓ regardless.
+    expect(code).toBe(7);
+    expect(stdout).toContain("prod_gateway is still registered in");
+    expect(stdout).toContain(
+      "run `claude mcp remove --scope user prod_gateway` yourself",
+    );
+  });
+
+  test("the name appearing in an unrelated value is not a leftover", async () => {
+    // ~/.claude.json holds per-project state where a server name can occur in
+    // ordinary strings — this is why the check parses JSON instead of grepping.
+    const { code } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp\n",
+      files: {
+        ".claude.json": JSON.stringify({
+          mcpServers: {},
+          projects: {
+            "/home/user/repo": { history: ["please debug prod_gateway"] },
+          },
+        }),
+      },
+    });
+
+    expect(code).toBe(0);
+  });
+
+  test("verification reads the config CLAUDE_CONFIG_DIR points at", async () => {
+    // Seeded only under the relocated config dir; a verifier hardcoding
+    // ~/.claude.json would see no leftover and wrongly report success.
+    const { code } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      files: { "claude-cfg/.claude.json": GATEWAY_JSON },
+      env: { CLAUDE_CONFIG_DIR: "{HOME}/claude-cfg" },
+    });
+
+    expect(code).toBe(7);
+  });
+
+  test("a marketplace the CLI failed to remove fails verification; foreign ones never do", async () => {
+    const stillThere = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify skills || exit 7\nexit 0\n",
+      files: {
+        ".claude/plugins/known_marketplaces.json": JSON.stringify({
+          "claude-plugins-official": { source: "github" },
+          "acme-skills": { source: "https://archestra.example.com/repo.git" },
+        }),
+      },
+    });
+    expect(stillThere.code).toBe(7);
+    expect(stillThere.stdout).toContain(
+      "run `claude plugin marketplace remove acme-skills` yourself",
+    );
+
+    const foreignOnly = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify skills\n",
+      files: {
+        ".claude/plugins/known_marketplaces.json": JSON.stringify({
+          "claude-plugins-official": { source: "github" },
+        }),
+      },
+    });
+    expect(foreignOnly.code).toBe(0);
+  });
+
+  test("an unreadable config passes: presence must be proven, not presumed", async () => {
+    const { code } = await runGuardSnippet({
+      client: CLAUDE_CODE_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp && disconnect_verify skills\n",
+      files: { ".claude.json": "{ this is not json" },
+    });
+
+    expect(code).toBe(0);
+  });
+});
+
+describe("Copilot CLI disconnect reports what it could not remove", () => {
+  test("a gateway the CLI failed to remove fails verification and names the fix", async () => {
+    const { code, stdout } = await runGuardSnippet({
+      client: COPILOT_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp || exit 7\nexit 0\n",
+      files: {
+        ".copilot/mcp-config.json": JSON.stringify({
+          mcpServers: {
+            prod_gateway: { url: "https://archestra.example.com" },
+          },
+        }),
+      },
+    });
+
+    expect(code).toBe(7);
+    expect(stdout).toContain("run `copilot mcp remove prod_gateway` yourself");
+  });
+
+  test("a marketplace the CLI failed to remove fails verification", async () => {
+    const { code, stdout } = await runGuardSnippet({
+      client: COPILOT_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify skills || exit 7\nexit 0\n",
+      files: {
+        ".copilot/settings.json": JSON.stringify({
+          extraKnownMarketplaces: {
+            "acme-skills": { source: "https://archestra.example.com/repo.git" },
+          },
+        }),
+      },
+    });
+
+    expect(code).toBe(7);
+    expect(stdout).toContain(
+      "run `copilot plugin marketplace remove acme-skills` yourself",
+    );
+  });
+
+  test("verification passes once the entries are gone or the files are absent", async () => {
+    const clean = await runGuardSnippet({
+      client: COPILOT_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp && disconnect_verify skills\n",
+      files: {
+        ".copilot/mcp-config.json": JSON.stringify({ mcpServers: {} }),
+        ".copilot/settings.json": JSON.stringify({}),
+      },
+    });
+    expect(clean.code).toBe(0);
+
+    const absent = await runGuardSnippet({
+      client: COPILOT_GUARD_CLIENT,
+      functions: ["disconnect_verify"],
+      invoke: "disconnect_verify mcp && disconnect_verify skills\n",
+    });
+    expect(absent.code).toBe(0);
+  });
+});
+
+describe("windows disconnect verification (string pins — no PS runtime in CI)", () => {
+  test("claude: reads the JSON configs the CLI edits, honoring CLAUDE_CONFIG_DIR", () => {
+    const script = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    expect(script).toContain("function Test-ArchDisconnected");
+    expect(script).toContain("ConvertFrom-Json");
+    expect(script).toContain(
+      "$(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { $env:USERPROFILE }) '.claude.json'",
+    );
+    expect(script).toContain("plugins\\known_marketplaces.json");
+    expect(script).toContain("$archParsed.mcpServers");
+  });
+
+  test("copilot: reads mcp-config.json and settings.json", () => {
+    const script = renderStartupGuardPowerShell(CTX, COPILOT_GUARD_CLIENT);
+    expect(script).toContain(".copilot\\mcp-config.json");
+    expect(script).toContain(".copilot\\settings.json");
+    expect(script).toContain("$archParsed.extraKnownMarketplaces");
   });
 });

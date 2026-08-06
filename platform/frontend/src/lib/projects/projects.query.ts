@@ -13,8 +13,10 @@ import {
   type UploadOutcome,
   validateUploadFile,
 } from "@/lib/files/file-upload";
+import { scheduleTriggerKeys } from "@/lib/schedule-trigger.query";
 import {
   getApiErrorMessage,
+  getApiErrorType,
   handleApiError,
   throwOnApiError,
 } from "@/lib/utils";
@@ -29,7 +31,9 @@ const {
   getProjectFiles,
   getProjectInstructions,
   getProjects,
+  permanentlyDeleteProject,
   pinProject,
+  restoreProject,
   setProjectInstructions,
   setProjectShare,
   unpinProject,
@@ -56,6 +60,7 @@ export function useProjects(
   const teamIds = options?.teamIds;
   const authorIds = options?.authorIds;
   const excludeAuthorIds = options?.excludeAuthorIds;
+  const status = options?.status;
   const toastOnError = options?.toastOnError;
   // The endpoint requires project:read; skip the request for users whose role
   // lacks it (e.g. the sidebar mounts this for everyone) instead of 403ing.
@@ -70,12 +75,13 @@ export function useProjects(
         teamIds: teamIds ?? null,
         authorIds: authorIds ?? null,
         excludeAuthorIds: excludeAuthorIds ?? null,
+        status: status ?? null,
       },
     ],
     enabled: (options?.enabled ?? true) && !!canReadProjects,
     queryFn: async () => {
       const { data, error } = await getProjects({
-        query: { scope, search, teamIds, authorIds, excludeAuthorIds },
+        query: { scope, search, teamIds, authorIds, excludeAuthorIds, status },
       });
       throwOnApiError(error, { toastOnError });
       return data;
@@ -272,12 +278,17 @@ export function useSetProjectShare() {
   return useMutation({
     mutationFn: async (params: {
       id: string;
-      visibility: "organization" | "team" | "none";
+      visibility: "organization" | "team" | "user" | "none";
       teamIds: string[];
+      userIds: string[];
     }) => {
       const { error } = await setProjectShare({
         path: { id: params.id },
-        body: { visibility: params.visibility, teamIds: params.teamIds },
+        body: {
+          visibility: params.visibility,
+          teamIds: params.teamIds,
+          userIds: params.userIds,
+        },
       });
       if (error) {
         handleApiError(error);
@@ -315,6 +326,77 @@ export function useDeleteProject() {
       // queries (`["projects", id, …]`), which are still mounted for the instant
       // before we navigate away and would 404 on the now-gone id.
       queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+      // The project's scheduled tasks are retained but hidden (paused) with it,
+      // so drop them from any open scheduled-tasks list. Chats detach rather
+      // than hide, so the conversations list needs no invalidation here.
+      queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
+    },
+  });
+}
+
+/** Restore a soft-deleted project from the trash view (project admins). */
+export function useRestoreProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await restoreProject({
+        path: { id },
+        body: null,
+      });
+      if (error) {
+        // The only 409 this route answers is the name collision: deleting
+        // frees the display name, so the owner may hold an active project
+        // under it by now. The API's own message ends by telling the caller to
+        // pass `name` — an instruction with no UI behind it until restore
+        // grows a rename field, so the remedy that does exist is named here
+        // instead. Everything else keeps the server's wording.
+        if (getApiErrorType(error) === "api_conflict_error") {
+          toast.error(
+            "Its owner already has an active project under this name. " +
+              "Rename that project, then restore this one.",
+            { duration: 12000 },
+          );
+          return null;
+        }
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (project) => {
+      if (!project) return;
+      toast.success(`Project "${project.name}" restored`);
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+      // Its scheduled tasks were retained-but-paused, and resume with it.
+      queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
+    },
+  });
+}
+
+/**
+ * Permanently destroy a soft-deleted project: its files (records and stored
+ * bytes), pins, share configuration, and scheduled tasks. Its chats detached
+ * at soft-delete time and survive as ordinary conversations.
+ */
+export function usePermanentlyDeleteProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await permanentlyDeleteProject({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok, { id }) => {
+      if (!ok) return;
+      toast.success("Project permanently deleted");
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+      // Drop the detail/conversations/files queries for an id that no longer
+      // resolves, rather than letting them refetch into a 404.
+      queryClient.removeQueries({ queryKey: ["projects", id] });
+      queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
     },
   });
 }

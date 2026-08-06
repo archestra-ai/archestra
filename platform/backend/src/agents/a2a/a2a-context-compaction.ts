@@ -16,14 +16,16 @@
  * Failures are non-fatal: the uncompacted view is returned and the per-step
  * guard (agents/step-context-guard.ts) remains the in-run safety net.
  */
-import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  CONTEXT_COMPACTION_AUTO_THRESHOLD,
+} from "@archestra/shared";
 import type { UIMessage } from "ai";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import { A2AContextCompactionModel, AgentModel, ModelModel } from "@/models";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
 import {
-  CONTEXT_COMPACTION_AUTO_THRESHOLD,
   CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
   compactionSummaryText,
   composeCompactionPrompt,
@@ -374,6 +376,7 @@ async function buildSummarizer(params: {
     userId: params.userId ?? undefined,
     sessionId: params.sessionId,
     source: "a2a:compaction",
+    chatApiKeyId: compactionLlm.chatApiKeyId,
   });
 
   // Last-resort flow (no interactive retry affordance): salvage untagged

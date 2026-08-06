@@ -144,6 +144,37 @@ describe("custom role routes", () => {
     expect(createOrgRoleMock).not.toHaveBeenCalled();
   });
 
+  test("rejects updating a role to grant permissions the user does not have", async ({
+    makeUser,
+    makeCustomRole,
+  }) => {
+    const limitedUser = await makeUser();
+    const limitedRole = await makeCustomRole(organizationId, {
+      permission: { ac: ["read", "update"] },
+    });
+    await db.insert(schema.membersTable).values({
+      id: crypto.randomUUID(),
+      userId: limitedUser.id,
+      organizationId,
+      role: limitedRole.role,
+      createdAt: new Date(),
+    });
+    const targetRole = await makeCustomRole(organizationId, {
+      permission: { ac: ["read"] },
+    });
+
+    authenticatedUser = limitedUser;
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/roles/${targetRole.id}`,
+      payload: { permission: { ac: ["read"], auditLog: ["read"] } },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("auditLog:read");
+    expect(updateOrgRoleMock).not.toHaveBeenCalled();
+  });
+
   test("rejects updates to predefined roles", async () => {
     const response = await app.inject({
       method: "PUT",
@@ -232,6 +263,68 @@ describe("custom role routes", () => {
 
     expect(deleteResponse.statusCode).toBe(200);
     expect(deleteResponse.json()).toEqual({ success: true });
+  });
+
+  test("permission edits resync holders' system-level user.role", async ({
+    makeCustomRole,
+    makeUser,
+    makeMember,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      role: "sec_auditor",
+      name: "Security Auditor",
+      permission: { member: ["read"] },
+    });
+    const holder = await makeUser();
+    await makeMember(holder.id, organizationId, { role: role.role });
+
+    // The route delegates the write to better-auth; mirror it onto the DB row
+    // so the post-update resync (which reads the row) sees the new grant.
+    updateOrgRoleMock.mockImplementation(
+      async ({ body }: { body: { data: { permission: unknown } } }) => {
+        await db
+          .update(schema.organizationRolesTable)
+          .set({ permission: JSON.stringify(body.data.permission) })
+          .where(
+            and(
+              eq(schema.organizationRolesTable.organizationId, organizationId),
+              eq(schema.organizationRolesTable.role, role.role),
+            ),
+          );
+        return {
+          roleData: {
+            ...role,
+            permission: JSON.stringify(body.data.permission),
+          },
+        };
+      },
+    );
+
+    const grantResponse = await app.inject({
+      method: "PUT",
+      url: `/api/roles/${role.id}`,
+      payload: { permission: { member: ["read", "impersonate"] } },
+    });
+    expect(grantResponse.statusCode).toBe(200);
+
+    const [afterGrant] = await db
+      .select({ role: schema.usersTable.role })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, holder.id));
+    expect(afterGrant.role).toBe("admin");
+
+    const revokeResponse = await app.inject({
+      method: "PUT",
+      url: `/api/roles/${role.id}`,
+      payload: { permission: { member: ["read"] } },
+    });
+    expect(revokeResponse.statusCode).toBe(200);
+
+    const [afterRevoke] = await db
+      .select({ role: schema.usersTable.role })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, holder.id));
+    expect(afterRevoke.role).toBeNull();
   });
 
   test("update invalidates cached permissions so the latest role data is visible immediately", async ({
@@ -351,9 +444,9 @@ describe("custom role routes", () => {
     expect(Array.isArray(roles)).toBe(true);
     expect(roles.length).toBeGreaterThanOrEqual(3);
 
-    const adminRole = roles.find((r: { name: string }) => r.name === "admin");
-    const editorRole = roles.find((r: { name: string }) => r.name === "editor");
-    const memberRole = roles.find((r: { name: string }) => r.name === "member");
+    const adminRole = roles.find((r: { role: string }) => r.role === "admin");
+    const editorRole = roles.find((r: { role: string }) => r.role === "editor");
+    const memberRole = roles.find((r: { role: string }) => r.role === "member");
 
     expect(adminRole).toBeDefined();
     expect(adminRole.predefined).toBe(true);
@@ -397,7 +490,7 @@ describe("custom role routes", () => {
     expect(response.statusCode).toBe(200);
     const role = response.json();
     expect(role.id).toBe("admin");
-    expect(role.name).toBe("admin");
+    expect(role.name).toBe("Admin");
     expect(role.predefined).toBe(true);
     expect(role.permission).toBeDefined();
   });
@@ -536,7 +629,7 @@ describe("custom role routes", () => {
       method: "POST",
       url: "/api/roles",
       payload: {
-        name: "admin",
+        name: "Admin",
         permission: { agent: ["read"] },
       },
     });
@@ -769,7 +862,7 @@ describe("custom role routes", () => {
     expect(listResponse.statusCode).toBe(200);
     const roles = listResponse.json().data;
     expect(roles.length).toBeGreaterThanOrEqual(3);
-    const adminRole = roles.find((r: { name: string }) => r.name === "admin");
+    const adminRole = roles.find((r: { role: string }) => r.role === "admin");
     expect(adminRole).toBeDefined();
     expect(adminRole.predefined).toBe(true);
 

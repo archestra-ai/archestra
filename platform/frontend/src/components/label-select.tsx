@@ -180,6 +180,11 @@ export function LabelKeyRowBase({
           {selectedValues.length > 0 && (
             <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
               {selectedValues.length}
+              <span className="sr-only">
+                {selectedValues.length === 1
+                  ? "value selected"
+                  : "values selected"}
+              </span>
             </Badge>
           )}
         </button>

@@ -71,6 +71,28 @@ describe("BedrockClient non-OK error messages", () => {
       expect(err.message).toBe("Bedrock API error (400): prompt is too long");
     });
 
+    it("preserves the token counts in a relayed over-length rejection", async () => {
+      // Claude's own message reaches us verbatim inside AWS's, and the numbers
+      // in it are what lets the chat retry resize itself instead of failing the
+      // turn (parsed by parseContextLengthError in routes/chat/context-trimming).
+      fetchMock.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            message:
+              "The model returned the following errors: prompt is too long: 1000034 tokens > 1000000 maximum",
+            __type: "ValidationException",
+          }),
+          { status: 400 },
+        ),
+      );
+
+      const err = await catchError(makeClient().converse("model", {}));
+
+      expect(err.message).toBe(
+        "Bedrock API error (400): The model returned the following errors: prompt is too long: 1000034 tokens > 1000000 maximum",
+      );
+    });
+
     it("uses a non-JSON body verbatim as the detail", async () => {
       fetchMock.mockResolvedValue(
         new Response("Rate exceeded", { status: 429 }),

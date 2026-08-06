@@ -416,11 +416,14 @@ export function ChatSidebarSection({
                   <AISparkleIcon isAnimating />
                 )}
                 {isRegenerating ? (
-                  <span className="text-muted-foreground text-sm truncate">
+                  <span
+                    key="regenerating"
+                    className="text-muted-foreground text-sm truncate"
+                  >
                     Generating...
                   </span>
                 ) : hasRecentlyGeneratedTitle ? (
-                  <span className="truncate">
+                  <span key="typing" className="truncate">
                     <TypingText
                       text={
                         displayTitle.length > MAX_TITLE_LENGTH

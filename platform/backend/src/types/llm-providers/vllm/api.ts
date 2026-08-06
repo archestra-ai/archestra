@@ -19,22 +19,22 @@ export const ChatCompletionUsageSchema = z
   })
   .describe("Token usage statistics for the completion");
 
-export const FinishReasonSchema = z.enum([
-  "stop",
-  "length",
-  "tool_calls",
-  "content_filter",
-  "function_call",
-]);
+// Persist/read-back must tolerate nonconforming finish_reasons (same as OpenAI).
+export const FinishReasonSchema = z
+  .enum(["stop", "length", "tool_calls", "content_filter", "function_call"])
+  .or(z.string());
 
 const ChoiceSchema = z
   .object({
     finish_reason: FinishReasonSchema,
-    index: z.number(),
+    // Some OpenAI-compatible upstreams omit `index` on choices; without
+    // optional() the response fails serialization (500).
+    index: z.number().optional(),
     logprobs: z.any().nullable(),
     message: z
       .object({
-        content: z.string().nullable(),
+        // Tool-call-only replies often omit `content` entirely.
+        content: z.string().nullable().optional(),
         refusal: z.string().nullable().optional(),
         role: z.enum(["assistant"]),
         // Some OpenAI-compatible upstreams return `annotations: null` instead of
@@ -81,6 +81,12 @@ export const ChatCompletionRequestSchema = z
     best_of: z.number().nullable().optional(),
     logprobs: z.boolean().nullable().optional(),
     top_logprobs: z.number().nullable().optional(),
+    /**
+     * Per-request chat-template variables (e.g. `{enable_thinking: false}` on
+     * Qwen3-style templates, the documented reasoning off-switch). Must be
+     * declared or inbound validation strips it before the adapter.
+     */
+    chat_template_kwargs: z.record(z.string(), z.unknown()).optional(),
   })
   .describe("vLLM chat completion request (OpenAI-compatible)");
 

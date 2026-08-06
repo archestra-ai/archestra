@@ -10,11 +10,14 @@ import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import { getPermissionsForUserContext } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
+import { enterpriseTier } from "@/enterprise-tier";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import logger from "@/logging";
 import {
   AgentModel,
   InteractionModel,
@@ -28,6 +31,7 @@ import {
   MemberModel,
   OrganizationModel,
   OrganizationRoleModel,
+  SessionModel,
   TeamModel,
   ToolModel,
   UserModel,
@@ -41,6 +45,7 @@ import {
   CompleteOnboardingSchema,
   constructResponseSchema,
   type NetworkPolicy,
+  type OrganizationRole,
   SelectOrganizationSchema,
   type TrustedImageRegistries,
   UpdateAgentSettingsSchema,
@@ -550,7 +555,29 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
+    async ({ organizationId, body, user, headers, serviceAccount }, reply) => {
+      // The default role is stamped onto every account provisioned without an
+      // explicit role (self-signup, ChatOps auto-provisioning, role-less
+      // invitation acceptance), so choosing it is member administration rather
+      // than a general organization setting. Gate it on member:create so the
+      // broader organizationSettings:update — which roles like editor hold to
+      // manage appearance and auth options — is not by itself enough to decide
+      // what new accounts are granted.
+      if ("defaultMemberRole" in body) {
+        const { success: canProvisionMembers } = await hasPermission(
+          { member: ["create"] },
+          headers,
+          serviceAccount,
+          { userId: user.id, organizationId },
+        );
+        if (!canProvisionMembers) {
+          throw new ApiError(
+            403,
+            "You are not authorized to change the default role for new members",
+          );
+        }
+      }
+
       // A non-null default role must resolve to a real role in this org
       // (predefined or custom) — otherwise new members would be provisioned
       // with a role that grants no permissions.
@@ -562,12 +589,68 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!role) {
           throw new ApiError(400, "Default role not found");
         }
+
+        // Existence alone is not enough: predefined roles resolve here too, so
+        // without this the field could name a role more privileged than the
+        // caller and have future accounts provisioned into it. Hold the caller
+        // to the same "only grant what you have" rule custom-role authoring
+        // uses.
+        await assertCallerCanGrantRole({
+          role,
+          userId: user.id,
+          organizationId,
+        });
       }
 
+      // Requiring 2FA is enterprise-licensed enforcement (see enterprise-tier
+      // for the small-team allowance). Session caps ride the same gate.
+      if (
+        (body.requireTwoFactor === true ||
+          typeof body.sessionMaxAgeSeconds === "number") &&
+        !enterpriseTier.isCoreActive()
+      ) {
+        throw new ApiError(
+          403,
+          "Requiring two-factor authentication and session lifetime caps " +
+            "are enterprise features. Please contact sales@archestra.ai to " +
+            "enable them.",
+        );
+      }
+
+      // Enrolling in 2FA requires confirming a password (better-auth's
+      // /two-factor/enable mandates it), so on a password-less deployment the
+      // requirement would lock every member out with no way to satisfy it.
+      // SSO deployments enforce MFA at the identity provider instead.
+      if (body.requireTwoFactor === true && config.auth.disableBasicAuth) {
+        throw new ApiError(
+          400,
+          "Two-factor authentication cannot be required while email/password " +
+            "sign-in is disabled: enrolling requires confirming a password. " +
+            "Enforce multi-factor authentication at your identity provider " +
+            "instead.",
+        );
+      }
+
+      const before = await OrganizationModel.getById(organizationId);
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
+      }
+
+      // Flipping require-2FA ON revokes every session belonging to a member
+      // who has not enrolled — their next sign-in lands in mandatory setup.
+      // Enrolled members keep their sessions. (The signed session cookie
+      // cache means revocation can lag by up to its 60s TTL.)
+      if (body.requireTwoFactor === true && !before?.requireTwoFactor) {
+        const revoked =
+          await SessionModel.deleteAllForOrganizationMembersWithoutTwoFactor(
+            organizationId,
+          );
+        logger.info(
+          { organizationId, revoked },
+          "require-2FA enabled — revoked sessions of non-enrolled members",
+        );
       }
 
       return reply.send(organization);
@@ -1169,6 +1252,36 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default organizationRoutes;
 
 // === Internal helpers ===
+
+/**
+ * Refuse a role assignment that would hand out more than the caller holds.
+ * Resolved through `getPermissionsForUserContext` so a service-account caller
+ * is measured against its own role rather than a synthetic user, and compared
+ * with the same `validateRolePermissions` rule custom-role authoring uses —
+ * which deliberately ignores the UI-behavior resources, where the admin role
+ * legitimately holds less than the member role.
+ */
+async function assertCallerCanGrantRole(params: {
+  role: OrganizationRole;
+  userId: string;
+  organizationId: string;
+}) {
+  const callerPermissions = await getPermissionsForUserContext({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const { valid, missingPermissions } =
+    OrganizationRoleModel.validateRolePermissions(
+      callerPermissions,
+      params.role.permission,
+    );
+  if (!valid) {
+    throw new ApiError(
+      403,
+      `You cannot grant permissions you don't have: ${missingPermissions.join(", ")}`,
+    );
+  }
+}
 
 function sameNetworkPolicy(
   a: NetworkPolicy | null,

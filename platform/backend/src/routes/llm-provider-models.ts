@@ -27,6 +27,7 @@ import {
   ModelModel,
   type ModelSyncState,
   ModelTeamModel,
+  ModelUserModel,
   OrganizationModel,
   TeamModel,
 } from "@/models";
@@ -349,9 +350,13 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (model) => !linkedModelIds.has(model.id),
       );
 
-      const teamsByModelId = await ModelTeamModel.getTeamDetailsForModels([
+      const enrichedModelIds = [
         ...modelsWithApiKeys.map((item) => item.model.id),
         ...unlinkedLlmProxyModels.map((model) => model.id),
+      ];
+      const [teamsByModelId, usersByModelId] = await Promise.all([
+        ModelTeamModel.getTeamDetailsForModels(enrichedModelIds),
+        ModelUserModel.getUserDetailsForModels(enrichedModelIds),
       ]);
 
       const response = [
@@ -361,6 +366,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             isBest,
             apiKeys,
             teams: teamsByModelId.get(model.id) ?? [],
+            users: usersByModelId.get(model.id) ?? [],
           }),
         ),
         ...unlinkedLlmProxyModels.map((model) =>
@@ -369,6 +375,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             isBest: false,
             apiKeys: [],
             teams: teamsByModelId.get(model.id) ?? [],
+            users: usersByModelId.get(model.id) ?? [],
           }),
         ),
       ];
@@ -449,7 +456,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const { teamIds, ...modelUpdates } = body;
+      const { teamIds, userIds, ...modelUpdates } = body;
       const updated = await ModelModel.update(id, modelUpdates);
       if (!updated) {
         throw new ApiError(500, "Failed to update model");
@@ -457,6 +464,10 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (teamIds !== undefined) {
         await ModelTeamModel.syncModelTeams(id, teamIds);
+      }
+
+      if (userIds !== undefined) {
+        await ModelUserModel.syncModelUsers(id, userIds);
       }
 
       return reply.send(updated);
@@ -745,14 +756,16 @@ function toModelWithApiKeysResponse(params: {
   isBest: boolean;
   apiKeys: LinkedApiKey[];
   teams: ModelTeamDetail[];
+  users: Array<{ id: string; name: string; email: string }>;
 }) {
-  const { model, isBest, apiKeys, teams } = params;
+  const { model, isBest, apiKeys, teams, users } = params;
   const capabilities = ModelModel.toCapabilities(model);
   return {
     ...model,
     isBest,
     apiKeys,
     teams,
+    users,
     // The spread above carries the architectural `contextLength`, which stays
     // the ceiling for `num_ctx` validation. Displaying it would over-promise
     // when Ollama enforces a smaller window, so the resolved one rides along.

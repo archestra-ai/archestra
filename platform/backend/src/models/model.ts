@@ -1,5 +1,6 @@
 import {
   CACHE_PRICE_MULTIPLIERS,
+  PROVIDERS_BILLING_NO_TOKEN_RATE,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -15,6 +16,7 @@ import {
 import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
 import type {
   CreateModel,
   Model,
@@ -93,13 +95,17 @@ function resolveCacheDirection(params: {
   }
   if (syncedPerToken != null) {
     return {
-      price: formatCachePrice(Number.parseFloat(syncedPerToken) * 1_000_000),
+      price: formatPerMillionPrice(
+        Number.parseFloat(syncedPerToken) * 1_000_000,
+      ),
       source: "models_dev",
     };
   }
   if (multiplierFactor !== undefined) {
     return {
-      price: formatCachePrice(effectivePricePerMillionInput * multiplierFactor),
+      price: formatPerMillionPrice(
+        effectivePricePerMillionInput * multiplierFactor,
+      ),
       source: "derived_multiplier",
     };
   }
@@ -130,11 +136,14 @@ function combineCacheSource(
 }
 
 /**
- * Format a per-million cache price as a precise, trailing-zero-free string.
- * Cache prices are often sub-cent per million, so the 2-decimal rounding used
- * for the larger input/output magnitudes would be materially lossy here.
+ * Format a per-million price as a precise, trailing-zero-free string.
+ *
+ * Callers compute cost by parsing this back, so rounding it to the cent quietly
+ * becomes a billing error: $0.035/M reads as $0.04, a 14% overstatement, and
+ * anything under $0.005/M reads as free. Padding for display is the reading
+ * end's job.
  */
-function formatCachePrice(perMillion: number): string {
+function formatPerMillionPrice(perMillion: number): string {
   return Number.parseFloat(perMillion.toFixed(8)).toString();
 }
 
@@ -630,8 +639,12 @@ class ModelModel {
   static async ensureModelExists(
     modelId: string,
     provider: SupportedProvider,
-  ): Promise<void> {
-    await db
+  ): Promise<Model | null> {
+    // RETURNING yields a row only when this call did the insert, which is what
+    // tells the caller a model was seen for the first time and still needs its
+    // registry data. On conflict it yields nothing, so a repeat sighting costs
+    // one statement and leaves the existing row untouched.
+    const [inserted] = await db
       .insert(schema.modelsTable)
       .values({
         externalId: `${provider}/${modelId}`,
@@ -640,7 +653,32 @@ class ModelModel {
         discoveredViaLlmProxy: true,
         lastSyncedAt: new Date(),
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning();
+
+    return inserted ?? null;
+  }
+
+  /**
+   * Write registry-sourced price and limits onto a model, leaving every other
+   * column (custom prices, team links, provenance) as it is.
+   */
+  static async applyRegistryCapabilities(
+    id: string,
+    capabilities: {
+      promptPricePerToken: string | null;
+      completionPricePerToken: string | null;
+      cacheReadPricePerToken: string | null;
+      cacheWritePricePerToken: string | null;
+      contextLength: number | null;
+      outputLength: number | null;
+      supportsToolCalling: boolean | null;
+    },
+  ): Promise<void> {
+    await db
+      .update(schema.modelsTable)
+      .set({ ...capabilities, lastSyncedAt: new Date() })
+      .where(eq(schema.modelsTable.id, id));
   }
 
   /**
@@ -666,7 +704,7 @@ class ModelModel {
     provider?: SupportedProvider,
   ): EffectivePricing {
     const { pricePerMillionInput, pricePerMillionOutput, source } =
-      ModelModel.getEffectiveBasePricing(model, modelId);
+      ModelModel.getEffectiveBasePricing(model, modelId, provider);
     const cache = ModelModel.getEffectiveCachePricing(
       model,
       pricePerMillionInput,
@@ -687,6 +725,7 @@ class ModelModel {
   private static getEffectiveBasePricing(
     model: Model | null,
     modelId?: string,
+    provider?: SupportedProvider,
   ): {
     pricePerMillionInput: string;
     pricePerMillionOutput: string;
@@ -704,23 +743,70 @@ class ModelModel {
       };
     }
 
-    // Tier 2: models.dev synced price (convert per-token to per-million)
+    // Tier 2: registry-synced price (convert per-token to per-million). The
+    // stored columns do not record which registry supplied them, so the source
+    // is re-derived by re-running the AWS snapshot lookup. AWS only fills what
+    // models.dev omits, so matching the stored value is what identifies it as
+    // the source; a mismatch means the registry won. When both agree the
+    // attribution is ambiguous and either label describes the same number.
     if (
       model?.promptPricePerToken != null &&
       model?.completionPricePerToken != null
     ) {
+      const awsPrices = resolveBedrockAwsPrices({
+        provider: model.provider,
+        modelId: model.modelId,
+      });
+      // Compared as numbers: both sides are decimal strings, but the stored one
+      // has been through Postgres numeric and carries its scale's trailing
+      // zeros, so "0.0000033" and "0.00000330" are the same price.
+      const samePrice = (a: string | null, b: string) =>
+        a != null && Number.parseFloat(a) === Number.parseFloat(b);
+      const syncedSource: PriceSource =
+        samePrice(
+          awsPrices?.promptPricePerToken ?? null,
+          model.promptPricePerToken,
+        ) &&
+        samePrice(
+          awsPrices?.completionPricePerToken ?? null,
+          model.completionPricePerToken,
+        )
+          ? "aws"
+          : "models_dev";
       return {
-        pricePerMillionInput: (
-          Number.parseFloat(model.promptPricePerToken) * 1_000_000
-        ).toFixed(2),
-        pricePerMillionOutput: (
-          Number.parseFloat(model.completionPricePerToken) * 1_000_000
-        ).toFixed(2),
-        source: "models_dev",
+        pricePerMillionInput: formatPerMillionPrice(
+          Number.parseFloat(model.promptPricePerToken) * 1_000_000,
+        ),
+        pricePerMillionOutput: formatPerMillionPrice(
+          Number.parseFloat(model.completionPricePerToken) * 1_000_000,
+        ),
+        source: syncedSource,
       };
     }
 
-    // Tier 3: Default fallback
+    // Tier 3: Default fallback. The generic estimate below assumes an unknown
+    // price exists to be approximated; for these providers none does, so it
+    // fabricates one — inflating recorded spend and burning cost limits against
+    // tokens nobody is billed for. vLLM is an inference server the operator
+    // runs. Ollama bills no per-token rate on either transport: a self-hosted
+    // server charges nothing, and its cloud offering is a flat monthly
+    // subscription metered on GPU time rather than tokens.
+    //
+    // Listed explicitly rather than derived from the self-hosted-provider set
+    // it currently matches, so that adding a keyless provider that does bill
+    // per token cannot silently make its traffic free.
+    const resolvedProvider = model?.provider ?? provider;
+    if (
+      resolvedProvider &&
+      PROVIDERS_BILLING_NO_TOKEN_RATE.has(resolvedProvider)
+    ) {
+      return {
+        pricePerMillionInput: "0.00",
+        pricePerMillionOutput: "0.00",
+        source: "default",
+      };
+    }
+
     const nameForDefault = model?.modelId ?? modelId ?? "";
     return {
       ...getDefaultModelPrice(nameForDefault),

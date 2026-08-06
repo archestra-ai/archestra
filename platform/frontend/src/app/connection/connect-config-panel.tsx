@@ -234,15 +234,16 @@ export function ConnectConfigPanel({
               }
             >
               {includeSkills ? (
-                <>
+                <span key="skills">
                   Install{" "}
                   <ResourceLink href="/skills">
-                    {skills.length} shared skill{skills.length === 1 ? "" : "s"}
+                    {skills.length} shared skill
+                    {skills.length === 1 ? null : <span>s</span>}
                   </ResourceLink>{" "}
                   as a marketplace
-                </>
+                </span>
               ) : (
-                "Shared skills not installed"
+                <span key="none">Shared skills not installed</span>
               )}
             </SummaryRow>
           )}
@@ -594,12 +595,13 @@ function ConfigDownloadStep({
     return (
       <p className="text-sm text-muted-foreground">
         You don't have permission to create virtual keys. Ask an admin to
-        generate a configuration profile, or create the keys on the{" "}
+        generate a configuration profile, or open a proxy&apos;s Connect dialog
+        from the{" "}
         <Link
-          href="/credentials/virtual-keys"
+          href="/llm/proxies"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          Virtual API Keys
+          LLM Proxies
         </Link>{" "}
         page.
       </p>
@@ -660,7 +662,7 @@ function ConfigDownloadStep({
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" />
-        Provisioning your keys…
+        <span>Provisioning your keys…</span>
       </div>
     );
   }
@@ -820,7 +822,7 @@ function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
   return (
     <p className="text-xs text-muted-foreground/80">
       {shown.map((s) => s.name).join(", ")}
-      {more > 0 ? ` and ${more} more` : ""}
+      {more > 0 ? <span> and {more} more</span> : null}
     </p>
   );
 }

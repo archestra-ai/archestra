@@ -7,7 +7,11 @@ import { vi } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
 import { describe, expect, test } from "@/test";
-import type { EffectiveNetworkPolicy, McpServer } from "@/types";
+import type {
+  EffectiveNetworkPolicy,
+  K8sNetworkPolicyCapabilities,
+  McpServer,
+} from "@/types";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -3927,20 +3931,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     customObjectsApi?: Partial<k8s.CustomObjectsApi>;
     coreApi?: Partial<k8s.CoreV1Api>;
     effectiveNetworkPolicy: EffectiveNetworkPolicy;
-    networkPolicyCapabilities: {
-      kubernetesNetworkPolicy: boolean;
-      ciliumNetworkPolicy: boolean;
-      gkeFqdnNetworkPolicy: boolean;
-      awsApplicationNetworkPolicy: boolean;
-      provider:
-        | "kubernetes"
-        | "cilium"
-        | "gke-fqdn"
-        | "aws-application-network-policy";
-      supportsFqdn: boolean;
-      supportsHttpMethods: boolean;
-      message: string | null;
-    };
+    networkPolicyCapabilities: K8sNetworkPolicyCapabilities;
     multitenant?: boolean;
   }): K8sDeployment {
     return new K8sDeployment({
@@ -4191,6 +4182,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4249,6 +4244,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: false,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4287,6 +4286,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: false,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4323,6 +4326,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4369,6 +4376,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4429,6 +4440,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4455,7 +4470,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
   test("updates an existing Kubernetes NetworkPolicy and cleans up stale duplicate managed policies", async () => {
     const policyName = "mcp-egress-mcp-mcp-test-server";
     const { api, policies } = makeStatefulNetworkingApi();
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
       gkeFqdnNetworkPolicy: false,
@@ -4464,6 +4479,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: false,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
+      probe: "absent",
+      probedAt: null,
     };
 
     await makeNetworkPolicyDeployment({
@@ -4516,7 +4535,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         spec: { clusterIP: "172.20.0.10", clusterIPs: ["172.20.0.10"] },
       })),
     };
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
       gkeFqdnNetworkPolicy: false,
@@ -4525,6 +4544,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: true,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
+      probe: "absent",
+      probedAt: null,
     };
 
     await makeNetworkPolicyDeployment({
@@ -4613,7 +4636,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         plural: "ciliumnetworkpolicies",
       },
     });
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: true,
       gkeFqdnNetworkPolicy: false,
@@ -4622,6 +4645,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: true,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
+      probe: "absent",
+      probedAt: null,
     };
 
     await makeNetworkPolicyDeployment({
@@ -4679,7 +4706,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
           plural: "fqdnnetworkpolicies",
         },
       });
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
       gkeFqdnNetworkPolicy: true,
@@ -4688,6 +4715,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: true,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
+      probe: "absent",
+      probedAt: null,
     };
 
     await makeNetworkPolicyDeployment({
@@ -4761,7 +4792,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
   test("deleting managed network policy also cleans up stale duplicate managed policies", async () => {
     const policyName = "mcp-egress-mcp-mcp-test-server";
     const { api: networkingApi, policies } = makeStatefulNetworkingApi();
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
       gkeFqdnNetworkPolicy: false,
@@ -4770,6 +4801,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: false,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      enforcementStatus: "unknown",
+      probe: "absent",
+      probedAt: null,
     };
 
     const deployment = makeNetworkPolicyDeployment({
@@ -4800,7 +4835,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     });
   });
 
-  const PLAIN_CAPS = {
+  const PLAIN_CAPS: K8sNetworkPolicyCapabilities = {
     kubernetesNetworkPolicy: true,
     ciliumNetworkPolicy: false,
     gkeFqdnNetworkPolicy: false,
@@ -4809,8 +4844,12 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsFqdn: false,
     supportsHttpMethods: false,
     message: null,
+    enforcementSource: "api-discovery",
+    enforcementStatus: "unknown",
+    probe: "absent",
+    probedAt: null,
   };
-  const AWS_CAPS = {
+  const AWS_CAPS: K8sNetworkPolicyCapabilities = {
     kubernetesNetworkPolicy: true,
     ciliumNetworkPolicy: false,
     gkeFqdnNetworkPolicy: false,
@@ -4819,8 +4858,12 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsFqdn: true,
     supportsHttpMethods: false,
     message: null,
+    enforcementSource: "api-discovery",
+    enforcementStatus: "unknown",
+    probe: "absent",
+    probedAt: null,
   };
-  const CILIUM_CAPS = {
+  const CILIUM_CAPS: K8sNetworkPolicyCapabilities = {
     kubernetesNetworkPolicy: true,
     ciliumNetworkPolicy: true,
     gkeFqdnNetworkPolicy: false,
@@ -4829,6 +4872,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsFqdn: true,
     supportsHttpMethods: false,
     message: null,
+    enforcementSource: "api-discovery",
+    enforcementStatus: "unknown",
+    probe: "absent",
+    probedAt: null,
   };
   const POLICY_NAME = "mcp-egress-mcp-mcp-test-server";
   const DNS_PORTS = [
@@ -7253,5 +7300,194 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
         deployment.waitForDeploymentAbsent(2, 1),
       ).rejects.toThrow(/was not deleted after 2 attempts/);
     });
+  });
+});
+
+describe("K8sDeployment transient API-server errors (429/5xx)", () => {
+  function createDeployment(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+    mockK8sAppsApi: Partial<k8s.AppsV1Api>,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      // No catalogId: startOrCreateDeployment must not depend on a catalog
+      // row existing for these state-machine tests.
+      catalogId: null,
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: mockK8sAppsApi as k8s.AppsV1Api,
+      k8sNetworkingApi: {} as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  // Shaped like the client's ApiException: an Error carrying `code` and the
+  // API server's Priority & Fairness response headers.
+  const throttledError = Object.assign(
+    new Error(
+      'HTTP-Code: 429 Message: Unknown API Status Code! Body: "Too many requests, please try again later.\\n"',
+    ),
+    { code: 429, headers: { "retry-after": "0.001" } },
+  );
+
+  test("a throttled reconcile leaves state pending (retryable), not failed", async () => {
+    const readDeployment = vi.fn().mockRejectedValue(throttledError);
+    const deployment = createDeployment(
+      { readNamespacedPod: vi.fn().mockRejectedValue({ statusCode: 404 }) },
+      { readNamespacedDeployment: readDeployment },
+    );
+
+    await expect(deployment.startOrCreateDeployment()).rejects.toEqual(
+      throttledError,
+    );
+
+    // The initial read is retried before giving up...
+    expect(readDeployment).toHaveBeenCalledTimes(3);
+    // ...and a still-throttled reconcile must not latch a terminal "failed":
+    // the pod may be perfectly healthy — status polling re-reads the truth.
+    expect(deployment.statusSummary.state).toBe("pending");
+    expect(deployment.statusSummary.error).toContain("Too many requests");
+  });
+
+  test("a non-transient reconcile error still fails the deployment", async () => {
+    const forbidden = { code: 403, message: "forbidden" };
+    const deployment = createDeployment(
+      { readNamespacedPod: vi.fn().mockRejectedValue({ statusCode: 404 }) },
+      { readNamespacedDeployment: vi.fn().mockRejectedValue(forbidden) },
+    );
+
+    await expect(deployment.startOrCreateDeployment()).rejects.toEqual(
+      forbidden,
+    );
+    expect(deployment.statusSummary.state).toBe("failed");
+  });
+});
+
+describe("K8sDeployment.refreshState failed-state recovery", () => {
+  const crashLoopPod: k8s.V1Pod = {
+    metadata: {
+      name: "mcp-test-server-abc12",
+      creationTimestamp: new Date(),
+    },
+    status: {
+      phase: "Running",
+      containerStatuses: [
+        {
+          name: "mcp-server",
+          restartCount: 3,
+          state: {
+            waiting: {
+              reason: "CrashLoopBackOff",
+              message: "back-off 5m0s restarting failed container",
+            },
+          },
+        } as k8s.V1ContainerStatus,
+      ],
+    },
+  };
+
+  const healthyPod: k8s.V1Pod = {
+    metadata: {
+      name: "mcp-test-server-abc12",
+      creationTimestamp: new Date(),
+    },
+    status: {
+      phase: "Running",
+      containerStatuses: [
+        {
+          name: "mcp-server",
+          restartCount: 3,
+          state: { running: { startedAt: new Date() } },
+        } as k8s.V1ContainerStatus,
+      ],
+    },
+  };
+
+  function createDeployment(scenario: { healthy: boolean }): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      catalogId: null,
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as McpServer;
+
+    const mockK8sApi = {
+      listNamespacedPod: vi.fn().mockImplementation(async () => ({
+        items: [scenario.healthy ? healthyPod : crashLoopPod],
+      })),
+    } as unknown as k8s.CoreV1Api;
+
+    const mockK8sAppsApi = {
+      readNamespacedDeployment: vi.fn().mockImplementation(async () => ({
+        status: { availableReplicas: scenario.healthy ? 1 : 0 },
+      })),
+    } as unknown as k8s.AppsV1Api;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi,
+      k8sAppsApi: mockK8sAppsApi,
+      k8sNetworkingApi: {} as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  test("a failed deployment that is verifiably available again flips back to running", async () => {
+    const scenario = { healthy: false };
+    const deployment = createDeployment(scenario);
+
+    // Drive the deployment into "failed" through the public refresh path:
+    // a crashlooping pod with no available replicas.
+    // @ts-expect-error - seeding an active state so refreshState evaluates it
+    deployment.state = "running";
+    await deployment.refreshState();
+    expect(deployment.statusSummary.state).toBe("failed");
+    expect(deployment.statusSummary.error).toContain("back-off");
+
+    // The pod recovers (e.g. the failure was transient); the next poll must
+    // self-heal instead of leaving the server red until a manual restart.
+    scenario.healthy = true;
+    await deployment.refreshState();
+    expect(deployment.statusSummary.state).toBe("running");
+    expect(deployment.statusSummary.error).toBeNull();
+  });
+
+  test("a genuinely broken deployment stays failed across refreshes", async () => {
+    const scenario = { healthy: false };
+    const deployment = createDeployment(scenario);
+
+    // @ts-expect-error - seeding an active state so refreshState evaluates it
+    deployment.state = "running";
+    await deployment.refreshState();
+    expect(deployment.statusSummary.state).toBe("failed");
+
+    await deployment.refreshState();
+    expect(deployment.statusSummary.state).toBe("failed");
+    expect(deployment.statusSummary.error).toContain("back-off");
   });
 });

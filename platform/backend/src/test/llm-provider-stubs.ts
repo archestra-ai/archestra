@@ -6,6 +6,14 @@ export interface OpenAiStubOptions {
   interruptAtChunk?: number;
   /** Reject streaming requests with this error message before any chunk arrives (e.g. a provider 400). */
   failStreamWithError?: string;
+  /**
+   * Throw from the stream iterator at this chunk index, after earlier chunks have
+   * already been yielded — a mid-stream failure once SSE headers and content are
+   * on the wire, but before the usage-bearing final chunk arrives.
+   */
+  throwAtChunk?: number;
+  /** Stream a `get_weather` tool call, closing the turn as `tool_calls`. */
+  includeToolCalls?: boolean;
 }
 
 export interface AnthropicStubOptions {
@@ -17,6 +25,25 @@ export interface AnthropicStubOptions {
   zeroOutputTokens?: boolean;
   /** Report this many `cache_read_input_tokens` to exercise the fallback's cache guard. */
   cacheReadInputTokens?: number;
+  /** Terminal `message_delta` stop reason. A real turn carrying tool_use ends as `tool_use`. */
+  streamStopReason?: "end_turn" | "tool_use" | "max_tokens" | "stop_sequence";
+  /**
+   * Stream text, then a tool_use, then more text. Withholding the middle block
+   * is what exposes whether the indices the client receives stay contiguous.
+   */
+  toolUseBetweenText?: boolean;
+  /**
+   * Return a tool_use block from the buffered (non-streaming) response. Separate
+   * from `includeToolUse`, which existing tests set while making buffered calls
+   * that expect text.
+   */
+  includeToolUseNonStreaming?: boolean;
+  /**
+   * Emit this tool_use block (instead of the fixed `get_weather` one) from the
+   * buffered (non-streaming) response, e.g. a gateway `run_tool` dispatch with
+   * a client-decorated name. Implies a `tool_use` stop reason.
+   */
+  nonStreamingToolUse?: { name: string; input: Record<string, unknown> };
 }
 
 export interface GeminiStubOptions {
@@ -110,15 +137,35 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
           type: "message",
           container: null,
           role: "assistant",
-          content: [
-            {
-              type: "text",
-              text: "Hello! How can I help you today?",
-              citations: [],
-            },
-          ],
+          content:
+            options.includeToolUseNonStreaming || options.nonStreamingToolUse
+              ? [
+                  {
+                    type: "text",
+                    text: "Checking the weather.",
+                    citations: [],
+                  },
+                  {
+                    type: "tool_use",
+                    id: "toolu_test_weather",
+                    name: options.nonStreamingToolUse?.name ?? "get_weather",
+                    input: options.nonStreamingToolUse?.input ?? {
+                      location: "SF",
+                    },
+                  },
+                ]
+              : [
+                  {
+                    type: "text",
+                    text: "Hello! How can I help you today?",
+                    citations: [],
+                  },
+                ],
           model: "claude-3-5-sonnet-20241022",
-          stop_reason: "end_turn",
+          stop_reason:
+            options.includeToolUseNonStreaming || options.nonStreamingToolUse
+              ? "tool_use"
+              : "end_turn",
           stop_sequence: null,
           usage: {
             input_tokens: options.zeroInputTokens ? 0 : 12,
@@ -176,7 +223,100 @@ export function createGeminiTestClient(options: GeminiStubOptions = {}) {
   };
 }
 
+/** Same iteration semantics (throwAtChunk / interruptAtChunk) over any chunk list. */
+function openAiStreamOver(
+  chunks: OpenAI.Chat.Completions.ChatCompletionChunk[],
+  options: OpenAiStubOptions,
+) {
+  return {
+    [Symbol.asyncIterator]() {
+      let index = 0;
+      return {
+        async next() {
+          if (
+            options.throwAtChunk !== undefined &&
+            index === options.throwAtChunk
+          ) {
+            throw new Error("Simulated OpenAI stream failure before usage");
+          }
+          if (
+            options.interruptAtChunk !== undefined &&
+            index === options.interruptAtChunk
+          ) {
+            return { done: true, value: undefined };
+          }
+          if (index < chunks.length) {
+            return { done: false, value: chunks[index++] };
+          }
+          return { done: true, value: undefined };
+        },
+      };
+    },
+  };
+}
+
 function createOpenAiStream(options: OpenAiStubOptions) {
+  if (options.includeToolCalls) {
+    return openAiStreamOver(
+      [
+        {
+          id: "chatcmpl-test-openai",
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model: "gpt-4o",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                role: "assistant",
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_test_weather",
+                    type: "function",
+                    function: { name: "get_weather", arguments: "" },
+                  },
+                ],
+              },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+        },
+        {
+          id: "chatcmpl-test-openai",
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model: "gpt-4o",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    function: { arguments: '{"location":"SF"}' },
+                  },
+                ],
+              },
+              finish_reason: null,
+              logprobs: null,
+            },
+          ],
+        },
+        {
+          id: "chatcmpl-test-openai",
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model: "gpt-4o",
+          choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
+          usage: { prompt_tokens: 12, completion_tokens: 10, total_tokens: 22 },
+        },
+      ] as OpenAI.Chat.Completions.ChatCompletionChunk[],
+      options,
+    );
+  }
+
   const chunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = [
     {
       id: "chatcmpl-test-openai",
@@ -248,6 +388,13 @@ function createOpenAiStream(options: OpenAiStubOptions) {
       return {
         async next() {
           if (
+            options.throwAtChunk !== undefined &&
+            index === options.throwAtChunk
+          ) {
+            throw new Error("Simulated OpenAI stream failure before usage");
+          }
+
+          if (
             options.interruptAtChunk !== undefined &&
             index === options.interruptAtChunk
           ) {
@@ -288,7 +435,49 @@ function createAnthropicStream(options: AnthropicStubOptions) {
     },
   ];
 
-  if (options.includeToolUse) {
+  if (options.toolUseBetweenText) {
+    chunks.push(
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "", citations: [] },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Let me check." },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 1,
+        content_block: {
+          type: "tool_use",
+          id: "toolu_test_weather",
+          caller: { type: "direct" },
+          name: "get_weather",
+          input: {},
+        },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '{"location":"SF"}' },
+      },
+      { type: "content_block_stop", index: 1 },
+      {
+        type: "content_block_start",
+        index: 2,
+        content_block: { type: "text", text: "", citations: [] },
+      },
+      {
+        type: "content_block_delta",
+        index: 2,
+        delta: { type: "text_delta", text: "Then I will summarise." },
+      },
+      { type: "content_block_stop", index: 2 },
+    );
+  } else if (options.includeToolUse) {
     chunks.push(
       {
         type: "content_block_start",
@@ -366,7 +555,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
       type: "message_delta",
       delta: {
         container: null,
-        stop_reason: "end_turn",
+        stop_reason: options.streamStopReason ?? "end_turn",
         stop_sequence: null,
       },
       usage: {

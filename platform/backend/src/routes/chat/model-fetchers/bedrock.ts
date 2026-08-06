@@ -11,7 +11,7 @@ import {
 } from "@/knowledge-base/embedding-clients/bedrock-models";
 import logger from "@/logging";
 import { joinBaseUrl } from "@/utils/base-url";
-import type { ModelInfo } from "./types";
+import { type ModelInfo, modelFetchError } from "./types";
 
 export async function fetchBedrockModels(
   apiKey: string,
@@ -30,20 +30,16 @@ export async function fetchBedrockModels(
   const sigV4 = decodeBedrockSigV4Marker(apiKey);
   if (sigV4) {
     const region = getBedrockRegion(baseUrl);
-    const profiles = await fetchAllBedrockInferenceProfiles(
-      controlPlaneUrl,
-      extraHeaders ?? {},
-      { region, creds: sigV4 },
-    );
-    return mergeStaticEmbeddingModels(mapInferenceProfilesToModels(profiles));
+    return discoverBedrockModels(controlPlaneUrl, extraHeaders ?? {}, {
+      region,
+      creds: sigV4,
+    });
   }
 
-  const profiles = await fetchAllBedrockInferenceProfiles(controlPlaneUrl, {
+  return discoverBedrockModels(controlPlaneUrl, {
     ...(extraHeaders ?? {}),
     Authorization: `Bearer ${apiKey}`,
   });
-
-  return mergeStaticEmbeddingModels(mapInferenceProfilesToModels(profiles));
 }
 
 export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
@@ -57,13 +53,39 @@ export async function fetchBedrockModelsViaIam(): Promise<ModelInfo[]> {
   const region = getBedrockRegion(baseUrl);
   const creds = await getBedrockCredentialProvider()();
 
+  return discoverBedrockModels(controlPlaneUrl, {}, { region, creds });
+}
+
+/**
+ * The models a Bedrock credential can actually run: cross-region and application
+ * inference profiles, plus on-demand foundation models that have no profile, plus
+ * the profile-less static embedding models.
+ */
+async function discoverBedrockModels(
+  controlPlaneUrl: string,
+  headers: Record<string, string>,
+  iamParams?: BedrockIamSigningParams,
+): Promise<ModelInfo[]> {
+  // Sequential, not Promise.all: the profile listing paginates, so racing a
+  // second endpoint against it interleaves requests for no real gain on what is
+  // a background model sync.
   const profiles = await fetchAllBedrockInferenceProfiles(
     controlPlaneUrl,
-    {},
-    { region, creds },
+    headers,
+    iamParams,
+  );
+  const foundationModels = await fetchBedrockFoundationModels(
+    controlPlaneUrl,
+    headers,
+    iamParams,
   );
 
-  return mergeStaticEmbeddingModels(mapInferenceProfilesToModels(profiles));
+  return mergeStaticEmbeddingModels(
+    mergeOnDemandFoundationModels(
+      mapInferenceProfilesToModels(profiles),
+      foundationModels,
+    ),
+  );
 }
 
 interface BedrockInferenceProfile {
@@ -106,36 +128,12 @@ async function fetchAllBedrockInferenceProfiles(
       `/inference-profiles?${params.toString()}`,
     );
 
-    let response: Response;
-    if (iamParams) {
-      const signer = new AwsV4Signer({
-        url,
-        method: "GET",
-        region: iamParams.region,
-        accessKeyId: iamParams.creds.accessKeyId,
-        secretAccessKey: iamParams.creds.secretAccessKey,
-        sessionToken: iamParams.creds.sessionToken,
-        service: "bedrock",
-      });
-      const signed = await signer.sign();
-      response = await fetch(signed.url, { headers: signed.headers });
-    } else {
-      response = await fetch(url, { headers });
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      const authType = iamParams ? "IAM" : "API key";
-      logger.error(
-        { status: response.status, error: errorText },
-        `Failed to fetch Bedrock inference profiles via ${authType}`,
-      );
-      throw new Error(
-        `Failed to fetch Bedrock inference profiles: ${response.status}`,
-      );
-    }
-
-    const data = (await response.json()) as {
+    const data = (await bedrockControlPlaneGet({
+      url,
+      headers,
+      iamParams,
+      resource: "inference profiles",
+    })) as {
       inferenceProfileSummaries?: BedrockInferenceProfile[];
       nextToken?: string;
     };
@@ -153,6 +151,99 @@ async function fetchAllBedrockInferenceProfiles(
   );
 
   return allProfiles;
+}
+
+/**
+ * A foundation model as returned by ListFoundationModels.
+ * @see https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListFoundationModels.html
+ */
+interface BedrockFoundationModel {
+  modelId?: string;
+  modelName?: string;
+  providerName?: string;
+  outputModalities?: string[];
+  inferenceTypesSupported?: string[];
+  modelLifecycle?: { status?: string };
+}
+
+async function fetchBedrockFoundationModels(
+  controlPlaneUrl: string,
+  headers: Record<string, string>,
+  iamParams?: BedrockIamSigningParams,
+): Promise<BedrockFoundationModel[]> {
+  // ListFoundationModels returns the whole catalog in one response — it takes no
+  // pagination token, unlike /inference-profiles above.
+  const url = joinBaseUrl(controlPlaneUrl, "/foundation-models");
+
+  // Fails soft, unlike the inference-profile call. This is a second control-plane
+  // permission (bedrock:ListFoundationModels) that credentials predating this
+  // fallback may not carry, and it only ever *adds* models — so a denial must
+  // leave the profile-derived list intact rather than break model sync outright.
+  try {
+    const data = (await bedrockControlPlaneGet({
+      url,
+      headers,
+      iamParams,
+      resource: "foundation models",
+    })) as { modelSummaries?: BedrockFoundationModel[] };
+    return data.modelSummaries ?? [];
+  } catch (error) {
+    logger.warn(
+      { error },
+      "[fetchBedrockModels] could not list foundation models; on-demand models without an inference profile will not be offered",
+    );
+    return [];
+  }
+}
+
+/**
+ * Add on-demand chat models that have no inference profile. AWS publishes system
+ * inference profiles only for part of the catalog, so a model that is invocable
+ * by its bare id (openai.gpt-oss-*, and other on-demand-only families) is absent
+ * from /inference-profiles entirely and was therefore unselectable.
+ *
+ * Restricted to ON_DEMAND models because that is exactly the set callable by bare
+ * model id; anything offered solely via INFERENCE_PROFILE is already covered by
+ * the profile list, and listing its raw id would produce a model that 400s on use.
+ */
+function mergeOnDemandFoundationModels(
+  discovered: ModelInfo[],
+  foundationModels: BedrockFoundationModel[],
+): ModelInfo[] {
+  const allowedProviders = config.llm.bedrock.allowedProviders;
+  const seen = new Set(discovered.map((model) => model.id));
+
+  const injected = foundationModels
+    .filter((model) => Boolean(model.modelId))
+    .filter((model) => !seen.has(model.modelId as string))
+    .filter((model) => (model.modelLifecycle?.status ?? "ACTIVE") === "ACTIVE")
+    .filter((model) => model.inferenceTypesSupported?.includes("ON_DEMAND"))
+    // ListFoundationModels carries the authoritative modality, so unlike the
+    // profile path this needs no name-pattern guessing to exclude embedding,
+    // image, and video models.
+    .filter((model) => model.outputModalities?.includes("TEXT"))
+    .filter((model) => {
+      if (allowedProviders.length === 0) return true;
+      return allowedProviders.some((provider) =>
+        (model.modelId as string).startsWith(`${provider}.`),
+      );
+    })
+    .map((model) => ({
+      id: model.modelId as string,
+      displayName: model.modelName
+        ? `${model.modelName}${model.providerName ? ` (${model.providerName})` : ""}`
+        : (model.modelId as string),
+      provider: "bedrock" as const,
+    }));
+
+  if (injected.length > 0) {
+    logger.info(
+      { modelIds: injected.map((model) => model.id) },
+      "[fetchBedrockModels] added on-demand foundation models with no inference profile",
+    );
+  }
+
+  return injected.length > 0 ? [...discovered, ...injected] : discovered;
 }
 
 function mapInferenceProfilesToModels(
@@ -311,4 +402,46 @@ function bedrockStaticEmbeddingModels(): ModelInfo[] {
       provider: "bedrock" as const,
       capabilities: { embeddingDimensions: model.dimensions },
     }));
+}
+
+/**
+ * GET a Bedrock control-plane resource, signing with SigV4 when IAM credentials
+ * are supplied and falling back to the caller's headers (bearer API key) otherwise.
+ */
+async function bedrockControlPlaneGet(params: {
+  url: string;
+  headers: Record<string, string>;
+  iamParams?: BedrockIamSigningParams;
+  resource: string;
+}): Promise<unknown> {
+  const { url, headers, iamParams, resource } = params;
+
+  let response: Response;
+  if (iamParams) {
+    const signer = new AwsV4Signer({
+      url,
+      method: "GET",
+      region: iamParams.region,
+      accessKeyId: iamParams.creds.accessKeyId,
+      secretAccessKey: iamParams.creds.secretAccessKey,
+      sessionToken: iamParams.creds.sessionToken,
+      service: "bedrock",
+    });
+    const signed = await signer.sign();
+    response = await fetch(signed.url, { headers: signed.headers });
+  } else {
+    response = await fetch(url, { headers });
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    const authType = iamParams ? "IAM" : "API key";
+    logger.error(
+      { status: response.status, error: errorText },
+      `Failed to fetch Bedrock ${resource} via ${authType}`,
+    );
+    throw modelFetchError(`Bedrock ${resource}`, response.status);
+  }
+
+  return response.json();
 }

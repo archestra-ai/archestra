@@ -35,11 +35,15 @@ export const FinishReasonSchema = z
 const ChoiceSchema = z
   .object({
     finish_reason: FinishReasonSchema,
-    index: z.number(),
+    // Some OpenAI-compatible upstreams omit `index` on choices; without
+    // optional() the response fails serialization (500).
+    index: z.number().optional(),
     logprobs: z.any().nullable(),
     message: z
       .object({
-        content: z.string().nullable(),
+        // Tool-call-only replies often omit `content` entirely; requiring the
+        // key fails Fastify response serialization (500). Match Cerebras.
+        content: z.string().nullable().optional(),
         refusal: z.string().nullable().optional(),
         role: z.enum(["assistant"]),
         // Some OpenAI-compatible upstreams return `annotations: null` instead of
@@ -78,6 +82,17 @@ export const ChatCompletionRequestSchema = z
     tool_choice: ToolChoiceOptionSchema.optional(),
     temperature: z.number().nullable().optional(),
     max_tokens: z.number().nullable().optional(),
+    // Fastify's zod validation replaces the body with the parsed value, so a
+    // field must be declared here to reach the adapter. Reasoning models
+    // reject `max_tokens` and take `max_completion_tokens` instead (the
+    // AI-SDK converts automatically), and `reasoning_effort` is how callers
+    // bound or disable reasoning — the dual LLM guardrail calls depend on
+    // both surviving this schema.
+    max_completion_tokens: z.number().int().positive().nullable().optional(),
+    reasoning_effort: z
+      .enum(["none", "minimal", "low", "medium", "high", "xhigh"])
+      .nullable()
+      .optional(),
     stream: z.boolean().nullable().optional(),
   })
   .describe(
@@ -258,7 +273,11 @@ export const EmbeddingResponseSchema = z.object({
     z.object({
       object: z.literal("embedding"),
       embedding: z.array(z.number()),
-      index: z.number(),
+      // OpenAI itself always sends `index`, but the openai routes also front
+      // arbitrary OpenAI-compatible upstreams via custom base URLs, and a
+      // deviating upstream that omits it would fail response serialization
+      // (500). Tolerated like ChoiceSchema.index above.
+      index: z.number().optional(),
     }),
   ),
   model: z.string(),

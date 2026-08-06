@@ -54,6 +54,10 @@ vi.mock("@kubernetes/client-node", () => {
     Attach: vi.fn(),
     Log: vi.fn(),
     Exec: vi.fn(),
+    // A regular function so `new Watch(...)` works (arrows aren't constructable)
+    Watch: vi.fn(function mockWatch() {
+      return { watch: vi.fn().mockResolvedValue(new AbortController()) };
+    }),
   };
 });
 
@@ -2791,5 +2795,117 @@ describe("McpServerRuntimeManager.start — adopt gate settling", () => {
     // start() still rethrows (behavior unchanged); the gate now settles too.
     await expect(manager.start()).rejects.toThrow("k8s boot blip");
     await expect(adopted).rejects.toThrow("k8s boot blip");
+  });
+});
+
+describe("McpServerRuntimeManager deployment-state watch layer", () => {
+  type ManagerInternals = {
+    mcpServerIdToDeploymentMap: Map<
+      string,
+      { refreshState: () => Promise<void>; k8sNamespace: string }
+    >;
+    startDeploymentStateWatchers: () => void;
+    stopDeploymentStateWatchers: () => void;
+    scheduleWatchTriggeredRefresh: () => void;
+    onWatchStreamClosed: (
+      namespace: string,
+      kind: "pods" | "deployments",
+      error: unknown,
+    ) => void;
+  };
+
+  async function makeManager() {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+    return {
+      manager,
+      internals: manager as unknown as ManagerInternals,
+    };
+  }
+
+  test("refreshAllStates is single-flight: concurrent callers coalesce onto one sweep", async () => {
+    const { manager, internals } = await makeManager();
+
+    let resolveRefresh!: () => void;
+    const refreshState = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    internals.mcpServerIdToDeploymentMap.set("server-1", {
+      refreshState,
+      k8sNamespace: "default",
+    });
+
+    const first = manager.refreshAllStates();
+    const second = manager.refreshAllStates();
+    resolveRefresh();
+    await Promise.all([first, second]);
+
+    expect(refreshState).toHaveBeenCalledTimes(1);
+
+    // A later call (no sweep in flight) starts a fresh one.
+    const third = manager.refreshAllStates();
+    resolveRefresh();
+    await third;
+    expect(refreshState).toHaveBeenCalledTimes(2);
+  });
+
+  test("bursts of watch events coalesce into one refresh and notify listeners once", async () => {
+    vi.useFakeTimers();
+    try {
+      const { manager, internals } = await makeManager();
+      const refreshState = vi.fn().mockResolvedValue(undefined);
+      internals.mcpServerIdToDeploymentMap.set("server-1", {
+        refreshState,
+        k8sNamespace: "default",
+      });
+
+      const listener = vi.fn();
+      const unsubscribe = manager.onDeploymentStatesRefreshed(listener);
+
+      // A rollout emits many events in quick succession.
+      internals.scheduleWatchTriggeredRefresh();
+      internals.scheduleWatchTriggeredRefresh();
+      internals.scheduleWatchTriggeredRefresh();
+
+      await vi.advanceTimersByTimeAsync(1_500);
+
+      expect(refreshState).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      unsubscribe();
+      internals.scheduleWatchTriggeredRefresh();
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(listener).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("deploymentStateWatchersActive tracks stream health so pollers can fall back", async () => {
+    const { manager, internals } = await makeManager();
+    try {
+      expect(manager.deploymentStateWatchersActive).toBe(false);
+
+      internals.startDeploymentStateWatchers();
+      // Stream opening is async (watch() resolves an AbortController).
+      await vi.waitFor(() =>
+        expect(manager.deploymentStateWatchersActive).toBe(true),
+      );
+
+      // One stream drops (API-server close, RBAC, connectivity): report
+      // inactive so the websocket poller falls back to its fast interval.
+      internals.onWatchStreamClosed(
+        "test-namespace",
+        "pods",
+        new Error("boom"),
+      );
+      expect(manager.deploymentStateWatchersActive).toBe(false);
+    } finally {
+      internals.stopDeploymentStateWatchers();
+    }
+    expect(manager.deploymentStateWatchersActive).toBe(false);
   });
 });

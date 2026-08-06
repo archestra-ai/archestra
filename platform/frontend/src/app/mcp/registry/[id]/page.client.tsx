@@ -20,8 +20,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { PageLayout } from "@/components/page-layout";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +48,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
 import {
@@ -70,15 +71,19 @@ import {
   DeploymentStatusDot,
   getDeploymentLabel,
 } from "../_parts/deployment-status";
+import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
+import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem } from "../_parts/mcp-server-card";
+import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
 import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 
 type DetailTab =
   | "overview"
+  | "usage"
   | "credentials"
   | "logs"
   | "inspector"
@@ -117,23 +122,25 @@ export function McpCatalogItemPage({ id }: { id: string }) {
   const { data: catalogItems, isPending } = useInternalMcpCatalog({});
   const item = catalogItems?.find((catalogItem) => catalogItem.id === id);
 
-  return (
-    <div className="mx-auto max-w-6xl space-y-4">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="-ml-2 text-muted-foreground"
-        asChild
+  if (isPending) {
+    return (
+      <PageLayout
+        title="MCP Server"
+        description=""
+        backLink={<BackToRegistryLink />}
       >
-        <Link href="/mcp/registry">
-          <ArrowLeft className="h-4 w-4" />
-          MCP Registry
-        </Link>
-      </Button>
-
-      {isPending ? (
         <ItemPageSkeleton />
-      ) : !item ? (
+      </PageLayout>
+    );
+  }
+
+  if (!item) {
+    return (
+      <PageLayout
+        title="MCP Server"
+        description=""
+        backLink={<BackToRegistryLink />}
+      >
         <Empty className="border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -145,10 +152,26 @@ export function McpCatalogItemPage({ id }: { id: string }) {
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
-      ) : (
-        <CatalogItemDetails item={item} />
-      )}
-    </div>
+      </PageLayout>
+    );
+  }
+
+  return <CatalogItemDetails item={item} />;
+}
+
+function BackToRegistryLink() {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="-ml-2 text-muted-foreground"
+      asChild
+    >
+      <Link href="/mcp/registry">
+        <ArrowLeft className="h-4 w-4" />
+        MCP Registry
+      </Link>
+    </Button>
   );
 }
 
@@ -248,87 +271,71 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   );
   // Diagnostics need at least one install to read from.
   const diagnosticTabs = allInstalls.length > 0 ? diagnosticPanels : [];
-  // Credentials get their own tab for every non-builtin server (built-ins need
-  // none), mirroring the old settings dialog's Connections nav item.
+  // Remote servers manage credentials; local servers manage hosted
+  // installations. Built-ins need neither.
   const showConnectionsTab = variant !== "builtin";
 
-  // Every tab beyond the always-present Overview dashboard.
+  // Every tab beyond the always-present Overview dashboard. Usage is always
+  // present: "nothing uses this yet" is itself an answer, and it keeps the
+  // ?tab=usage deep link from the registry card's hover card always resolvable.
   const tabIds: DetailTab[] = [
+    "usage",
     ...(showConnectionsTab ? (["credentials"] as DetailTab[]) : []),
     ...diagnosticTabs.map((panel) => panel.id),
   ];
-  const showTabs = tabIds.length > 0;
 
   // Deep links: ?tab=credentials|logs|inspector|shell|yaml opens that tab,
   // ?server=<installId> pre-selects the install in the logs view.
   const tabParam = searchParams.get("tab");
   const serverParam = searchParams.get("server");
-  const [activeTab, setActiveTab] = useState<DetailTab>(
+
+  // The URL is the single source of truth for the selected tab — the tab bar
+  // renders links, so a click, a shared deep link and the back button all take
+  // the same path. A ?tab= naming a tab that isn't available yet (diagnostics
+  // appear only once an install loads) falls back to Overview and resolves on
+  // its own when the tab shows up.
+  const effectiveTab: DetailTab =
     tabParam && tabIds.includes(tabParam as DetailTab)
       ? (tabParam as DetailTab)
-      : "overview",
-  );
+      : "overview";
+
   const [logsServerId, setLogsServerId] = useState<string | null>(serverParam);
 
-  // Diagnostic deep links (?tab=logs|inspector|shell|yaml) resolve only after
-  // the install list loads: the useState initializer above runs while tabIds
-  // is still empty, so it falls back to Overview. Adopt the pending tabParam
-  // once its tab appears — once only, so a subsequent user click wins.
-  const tabParamAdopted = useRef(false);
-  // `tabIds` is a fresh array every render, so it can't be a hook dependency.
-  // Derive a stable boolean here instead: whether the pending ?tab= now maps to
-  // a real tab. It flips false -> true once the install list loads, which is the
-  // exact moment the effect should adopt it.
-  const tabParamMatchesTab = tabParam
-    ? tabIds.includes(tabParam as DetailTab)
-    : false;
-  useEffect(() => {
-    if (tabParamAdopted.current) return;
-    if (tabParam && tabParamMatchesTab) {
-      tabParamAdopted.current = true;
-      setActiveTab(tabParam as DetailTab);
-    }
-  }, [tabParam, tabParamMatchesTab]);
-
-  // Write the selection back to the URL so the current tab (and targeted
-  // install) stays shareable. Overview is the default, so it carries no param.
-  const syncTabParams = ({
-    tab,
-    server,
-  }: {
-    tab: DetailTab;
-    server?: string;
-  }) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (tab === "overview") {
-      params.delete("tab");
-    } else {
-      params.set("tab", tab);
-    }
-    // `server` only targets the logs-family view; carry an explicit pick when
-    // given, otherwise drop it when leaving those tabs so a stale ?server=
-    // doesn't linger on Overview/Credentials/YAML.
-    const isLogsFamilyTab =
-      tab === "logs" || tab === "inspector" || tab === "shell";
-    if (server) {
-      params.set("server", server);
-    } else if (!isLogsFamilyTab) {
-      params.delete("server");
-    }
-    const queryString = params.toString();
-    router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
-      scroll: false,
+  const tabHref = (tab: DetailTab) =>
+    buildDetailTabHref({
+      tab,
+      pathname,
+      searchParams: new URLSearchParams(searchParams.toString()),
     });
-  };
 
-  const selectTab = (tab: DetailTab) => {
-    setActiveTab(tab);
-    syncTabParams({ tab });
-  };
+  const connectionsCount = allServersForCatalog.length;
+  const agentUsageCount = deriveAgentUsage(allServersForCatalog).total;
 
-  const effectiveTab: DetailTab = tabIds.includes(activeTab)
-    ? activeTab
-    : "overview";
+  const tabs: { label: React.ReactNode; href: string; testId?: string }[] = [
+    { label: "Overview", href: tabHref("overview") },
+    {
+      label: <TabLabel title="Usage" count={agentUsageCount} />,
+      href: tabHref("usage"),
+    },
+    ...(showConnectionsTab
+      ? [
+          {
+            label: (
+              <TabLabel
+                title={variant === "local" ? "Installations" : "Credentials"}
+                count={connectionsCount}
+              />
+            ),
+            href: tabHref("credentials"),
+            testId: E2eTestId.McpServerSettingsConnectionsNavButton,
+          },
+        ]
+      : []),
+    ...diagnosticTabs.map((panel) => ({
+      label: panel.title,
+      href: tabHref(panel.id),
+    })),
+  ];
   const isLogsTab =
     effectiveTab === "logs" ||
     effectiveTab === "inspector" ||
@@ -337,8 +344,10 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   // Jump to the logs tab pre-targeting a specific pod (from the credentials list).
   const openPodLogs = (serverId: string) => {
     setLogsServerId(serverId);
-    setActiveTab("logs");
-    syncTabParams({ tab: "logs", server: serverId });
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "logs");
+    params.set("server", serverId);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   // Install inline on this page (no navigation). The dialog lets the user pick
@@ -365,7 +374,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   const canRestartPods =
     canModify && variant === "local" && deploymentServerIds.length > 0;
 
-  const connectionsCount = allServersForCatalog.length;
   const statusText =
     variant === "local"
       ? deploymentSummary
@@ -387,30 +395,23 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
         : null;
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={36} />
+    <PageLayout
+      title={
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
+            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />
           </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {item.name}
-              </h1>
-              <Badge variant="secondary" className="capitalize">
-                {item.serverType}
-              </Badge>
-            </div>
-            {item.description && (
-              <p className="mt-1 max-w-2xl text-sm text-muted-foreground line-clamp-2">
-                {item.description}
-              </p>
-            )}
-          </div>
+          <span className="min-w-0 truncate">{item.name}</span>
+          <Badge variant="secondary" className="capitalize font-normal">
+            {item.serverType}
+          </Badge>
         </div>
-
+      }
+      documentTitle={item.name}
+      backLink={<BackToRegistryLink />}
+      description={item.description ?? ""}
+      tabs={tabs}
+      actionButton={
         <div className="flex shrink-0 items-center gap-2">
           {!hasPersonalConnection && variant !== "builtin" && (
             <Button variant="outline" onClick={openInstall}>
@@ -489,235 +490,232 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
             </DropdownMenu>
           )}
         </div>
-      </div>
+      }
+    >
+      <div className="space-y-4">
+        {effectiveTab === "usage" && (
+          <McpServerUsageTab serversForCatalog={allServersForCatalog} />
+        )}
 
-      {/* Tabs — Overview dashboard + diagnostics, shown once installed */}
-      {showTabs && (
-        <Tabs
-          value={effectiveTab}
-          onValueChange={(value) => selectTab(value as DetailTab)}
-        >
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            {showConnectionsTab && (
-              <TabsTrigger
-                value="credentials"
-                data-testid={E2eTestId.McpServerSettingsConnectionsNavButton}
-              >
-                Credentials
-                {connectionsCount > 0 && (
-                  <span className="ml-1 text-xs text-muted-foreground tabular-nums">
-                    {connectionsCount}
-                  </span>
-                )}
-              </TabsTrigger>
-            )}
-            {diagnosticTabs.map((panel) => (
-              <TabsTrigger key={panel.id} value={panel.id}>
-                {panel.title}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      )}
-
-      {effectiveTab === "overview" && (
-        <div className="space-y-4">
-          {/* Capabilities + details */}
-          <div className="grid items-start gap-4 lg:grid-cols-3">
-            {/* Tools the server exposes */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1.5">
-                    <CardTitle>
-                      Tools
-                      {!!(tools.length || item.toolCount) && (
-                        <span className="ml-2 text-sm font-normal text-muted-foreground tabular-nums">
-                          {tools.length || item.toolCount}
-                        </span>
-                      )}
-                    </CardTitle>
-                    <CardDescription>
-                      Capabilities this server exposes to agents.
-                    </CardDescription>
-                  </div>
-                  {tools.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      asChild
-                      className="-mr-2 shrink-0 text-muted-foreground"
-                    >
-                      <Link href={`/mcp/registry/${item.id}/edit?step=tools`}>
-                        <ShieldCheck className="h-4 w-4" />
-                        Guardrails
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {tools.length === 0 ? (
-                  <Empty className="border-0 py-8">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <ShieldCheck />
-                      </EmptyMedia>
-                      <EmptyTitle>No tools discovered yet</EmptyTitle>
-                      <EmptyDescription>
-                        Tools appear once the server is connected and reachable.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                ) : (
-                  <>
-                    <ul className="divide-y divide-border">
-                      {tools.slice(0, TOOLS_PREVIEW_LIMIT).map((tool) => (
-                        <li
-                          key={tool.name}
-                          className="py-2.5 first:pt-0 last:pb-0"
-                        >
-                          <code className="font-mono text-sm font-medium">
-                            {parseFullToolName(tool.name).toolName || tool.name}
-                          </code>
-                          {tool.description && (
-                            <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-                              {tool.description}
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    {tools.length > TOOLS_PREVIEW_LIMIT && (
-                      <Link
-                        href={`/mcp/registry/${item.id}/edit?step=tools`}
-                        className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
-                      >
-                        View all {tools.length} tools
-                      </Link>
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Server details — operational summary */}
-            <Card>
-              <CardContent className="space-y-4 text-sm">
-                <OverviewField label="Status">
-                  <span className="inline-flex items-center gap-2">
-                    {deploymentSummary ? (
-                      <DeploymentStatusDot
-                        state={deploymentSummary.overallState}
-                      />
-                    ) : connectionsCount > 0 ? (
-                      <DeploymentStatusDot state="running" />
-                    ) : null}
-                    {statusText}
-                  </span>
-                </OverviewField>
-                {variant !== "builtin" && (
-                  <OverviewField label="Environment">
-                    {environmentLabel ?? defaultEnvironment.name}
-                  </OverviewField>
-                )}
-                {endpoint && (
-                  <OverviewField
-                    label={variant === "remote" ? "Server URL" : "Command"}
-                  >
-                    <code className="block overflow-x-auto whitespace-nowrap rounded bg-muted px-2 py-1.5 font-mono text-xs">
-                      {endpoint}
-                    </code>
-                  </OverviewField>
-                )}
-                <OverviewField label="Created">
-                  {formatDate({ date: item.createdAt, dateFormat: "PP" })}
-                </OverviewField>
-                {item.labels.length > 0 && (
-                  <OverviewField label="Labels">
-                    <div className="flex flex-wrap gap-1.5">
-                      {item.labels.map((label) => (
-                        <Badge
-                          key={`${label.key}-${label.value}`}
-                          variant="outline"
-                          className="font-normal"
-                        >
-                          {label.key}: {label.value}
-                        </Badge>
-                      ))}
+        {effectiveTab === "overview" && (
+          <div className="space-y-4">
+            {/* Capabilities + details */}
+            <div className="grid items-start gap-4 lg:grid-cols-3">
+              {/* Tools the server exposes */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1.5">
+                      <CardTitle>
+                        Tools
+                        {!!(tools.length || item.toolCount) && (
+                          <span className="ml-2 text-sm font-normal text-muted-foreground tabular-nums">
+                            {tools.length || item.toolCount}
+                          </span>
+                        )}
+                      </CardTitle>
+                      <CardDescription>
+                        Capabilities this server exposes to agents.
+                      </CardDescription>
                     </div>
+                    {tools.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                        className="-mr-2 shrink-0 text-muted-foreground"
+                      >
+                        <Link href={`/mcp/registry/${item.id}/edit?step=tools`}>
+                          <ShieldCheck className="h-4 w-4" />
+                          Guardrails
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {tools.length === 0 ? (
+                    <Empty className="border-0 py-8">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <ShieldCheck />
+                        </EmptyMedia>
+                        <EmptyTitle>No tools discovered yet</EmptyTitle>
+                        <EmptyDescription>
+                          Tools appear once the server is connected and
+                          reachable.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  ) : (
+                    <>
+                      <ul className="divide-y divide-border">
+                        {tools.slice(0, TOOLS_PREVIEW_LIMIT).map((tool) => (
+                          <li
+                            key={tool.name}
+                            className="py-2.5 first:pt-0 last:pb-0"
+                          >
+                            <code className="font-mono text-sm font-medium">
+                              {parseFullToolName(tool.name).toolName ||
+                                tool.name}
+                            </code>
+                            {tool.description && (
+                              <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                                {tool.description}
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {tools.length > TOOLS_PREVIEW_LIMIT && (
+                        <Link
+                          href={`/mcp/registry/${item.id}/edit?step=tools`}
+                          className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
+                        >
+                          View all {tools.length} tools
+                        </Link>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Server details — operational summary */}
+              <Card>
+                <CardContent className="space-y-4 text-sm">
+                  <OverviewField label="Status">
+                    <span className="inline-flex items-center gap-2">
+                      {deploymentSummary ? (
+                        <DeploymentStatusDot
+                          state={deploymentSummary.overallState}
+                        />
+                      ) : connectionsCount > 0 ? (
+                        <DeploymentStatusDot state="running" />
+                      ) : null}
+                      <span>{statusText}</span>
+                    </span>
                   </OverviewField>
-                )}
-              </CardContent>
-            </Card>
+                  {variant !== "builtin" && (
+                    <OverviewField label="Environment">
+                      {environmentLabel ?? defaultEnvironment.name}
+                    </OverviewField>
+                  )}
+                  <OverviewField label="Accessible to">
+                    {/*
+                      `showSelfAsMe` because this is a labelled field rather
+                      than one badge among many in a list: the viewer's own
+                      personal server must still say "Me" instead of leaving
+                      the field blank.
+                    */}
+                    <ResourceVisibilityBadge
+                      scope={item.scope}
+                      teams={item.teams}
+                      authorId={item.authorId}
+                      authorName={item.authorName}
+                      currentUserId={currentUserId}
+                      showSelfAsMe
+                    />
+                  </OverviewField>
+                  {endpoint && (
+                    <OverviewField
+                      label={variant === "remote" ? "Server URL" : "Command"}
+                    >
+                      <code className="block overflow-x-auto whitespace-nowrap rounded bg-muted px-2 py-1.5 font-mono text-xs">
+                        {endpoint}
+                      </code>
+                    </OverviewField>
+                  )}
+                  <OverviewField label="Created">
+                    {formatDate({ date: item.createdAt, dateFormat: "PP" })}
+                  </OverviewField>
+                  {item.labels.length > 0 && (
+                    <OverviewField label="Labels">
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.labels.map((label) => (
+                          <Badge
+                            key={`${label.key}-${label.value}`}
+                            variant="outline"
+                            className="font-normal"
+                          >
+                            {label.key}: {label.value}
+                          </Badge>
+                        ))}
+                      </div>
+                    </OverviewField>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {effectiveTab === "credentials" && showConnectionsTab && (
-        <Card>
-          <CardHeader>
-            <h2 className="text-base font-semibold">Credentials</h2>
-          </CardHeader>
-          <CardContent>
-            <ManageUsersContent
-              isActive
-              onClose={() => {}}
-              label={item.name}
-              catalogId={item.id}
-              onAddPersonalConnection={() =>
-                install.addPersonalConnection(item)
-              }
-              onAddSharedConnection={(teamId) =>
-                install.addSharedConnection(item, teamId)
-              }
-              onAddOrgConnection={() => install.addOrgConnection(item)}
-              deploymentStatuses={deploymentStatuses}
-              hideHeader
-              bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
-              onOpenPodLogs={variant === "local" ? openPodLogs : undefined}
-            />
-          </CardContent>
-        </Card>
-      )}
+        {effectiveTab === "credentials" && showConnectionsTab && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-base font-semibold">
+                {variant === "local" ? "Installations" : "Credentials"}
+              </h2>
+            </CardHeader>
+            <CardContent>
+              <ManageUsersContent
+                isActive
+                onClose={() => {}}
+                label={item.name}
+                catalogId={item.id}
+                onAddPersonalConnection={() =>
+                  install.addPersonalConnection(item)
+                }
+                onAddSharedConnection={(teamId) =>
+                  install.addSharedConnection(item, teamId)
+                }
+                onAddOrgConnection={() => install.addOrgConnection(item)}
+                deploymentStatuses={deploymentStatuses}
+                hideHeader
+                bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
+                isInstalling={install.installingItemId === item.id}
+                onOpenPodLogs={variant === "local" ? openPodLogs : undefined}
+              />
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Diagnostics — Logs / Inspector / Shell share one mounted panel so the
+        {/* Diagnostics — Logs / Inspector / Shell share one mounted panel so the
           pod selector and live stream survive switching between them. */}
-      {isLogsTab && (
-        <Card className="py-0">
-          <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
-            <McpLogsContent
-              isActive={isLogsTab}
-              serverName={item.name}
-              installs={debugInstalls}
-              deploymentStatuses={deploymentStatuses}
-              hideHeader
-              hideTabBar
-              controlledTab={LOGS_TAB_BY_ID[effectiveTab]}
-              initialServerId={logsServerId}
-            />
-          </div>
-        </Card>
-      )}
+        {isLogsTab && (
+          <Card className="py-0">
+            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
+              <McpLogsContent
+                isActive={isLogsTab}
+                serverName={item.name}
+                installs={debugInstalls}
+                deploymentStatuses={deploymentStatuses}
+                hideHeader
+                hideTabBar
+                controlledTab={LOGS_TAB_BY_ID[effectiveTab]}
+                initialServerId={logsServerId}
+              />
+            </div>
+          </Card>
+        )}
 
-      {effectiveTab === "yaml" && (
-        <Card className="py-0">
-          <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
-            <YamlConfigContent item={item} onClose={() => {}} hideHeader />
-          </div>
-        </Card>
-      )}
+        {effectiveTab === "yaml" && (
+          <Card className="py-0">
+            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
+              <YamlConfigContent item={item} onClose={() => {}} hideHeader />
+            </div>
+          </Card>
+        )}
 
-      {/* Inline install flow (remote/local/no-auth/OAuth) — no navigation. */}
-      {install.dialogs}
+        {/* Inline install flow (remote/local/no-auth/OAuth) — no navigation. */}
+        {install.dialogs}
 
-      <DeleteCatalogDialog
-        item={deleteRequested ? item : null}
-        onClose={() => setDeleteRequested(false)}
-        onDeleted={() => router.push("/mcp/registry")}
-      />
-    </div>
+        <DeleteCatalogDialog
+          item={deleteRequested ? item : null}
+          onClose={() => setDeleteRequested(false)}
+          onDeleted={() => router.push("/mcp/registry")}
+        />
+      </div>
+    </PageLayout>
   );
 }
 
@@ -755,5 +753,24 @@ function ItemPageSkeleton() {
         <Skeleton className="h-64 rounded-xl" />
       </div>
     </div>
+  );
+}
+
+/**
+ * Tab label with an optional count. The e2e hook belongs on the tab's `testId`
+ * rather than here — PageLayout renders each label in its desktop row, its
+ * mobile row and possibly an overflow popover, so a test id on the label
+ * resolves to several elements at once.
+ */
+function TabLabel({ title, count }: { title: string; count: number }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span>{title}</span>
+      {count > 0 && (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {count}
+        </span>
+      )}
+    </span>
   );
 }

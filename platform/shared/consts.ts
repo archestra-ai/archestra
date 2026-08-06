@@ -1,3 +1,41 @@
+/**
+ * Loopback host every self-directed dial names — the frontend server reaching
+ * the backend in the same container, and the backend reaching its own LLM
+ * proxy and MCP gateway.
+ *
+ * It is an address literal, not `localhost`, on purpose. In production the API
+ * binds IPv4 only (`api.host = "0.0.0.0"` in the backend config), so it never
+ * has an IPv6 listener — while `localhost` resolves to `::1` FIRST:
+ * getaddrinfo applies RFC 6724 precedence no matter how /etc/hosts is ordered,
+ * and musl (the Alpine runtime image) compiles that table in with no
+ * /etc/gai.conf to retune it. Dialing the name therefore always targets a dead
+ * address first. Clients with Happy Eyeballs recover on the second attempt but
+ * pay for the refused one (~57ms per new connection, measured in the quickstart
+ * image) and log `ECONNREFUSED ::1:9000`; clients without it — busybox wget, or
+ * Node started with `--no-network-family-autoselection` — simply fail. That is
+ * the `::1` noise reported in issues #4917 and #6933.
+ *
+ * Name the address, not the name: it is unambiguous in every environment the
+ * platform runs in and no resolver can reorder it.
+ */
+export const LOOPBACK_HOST = "127.0.0.1";
+
+/**
+ * Where the backend API is reachable from the frontend server when
+ * `ARCHESTRA_INTERNAL_API_BASE_URL` is not set. Both processes always share a
+ * container — the unified image runs them under one supervisord, and the Helm
+ * chart exposes ports 3000 and 9000 on a single container — so the loopback
+ * literal is correct everywhere.
+ *
+ * That variable moves the runtime consumers (the frontend proxy, the generated
+ * API client, lib/config). It does NOT move the Next.js `rewrites()`
+ * destination, which this constant governs alone: with `output: "standalone"`
+ * the config is evaluated during `next build` and the resolved destination is
+ * frozen into `.next/routes-manifest.json`, where no runtime environment can
+ * reach it.
+ */
+export const DEFAULT_INTERNAL_API_BASE_URL = `http://${LOOPBACK_HOST}:9000`;
+
 /** Default app name used as fallback when organization.appName is not configured */
 export const DEFAULT_APP_NAME = "Archestra";
 export const DEFAULT_APP_FULL_NAME = "Archestra.AI";
@@ -49,6 +87,21 @@ export const DEFAULT_ADMIN_PASSWORD = "password";
 export const DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME = "ARCHESTRA_AUTH_ADMIN_EMAIL";
 export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
+
+/**
+ * Max length (characters) of a `search` filter on the tool / agent-tool list
+ * endpoints. Those filters travel in the QUERY STRING, and Node counts the
+ * request line against `maxHeaderSize` — so an unbounded search term is not
+ * merely a wasteful query, it is refused by the HTTP parser with a 431 before
+ * any handler or schema runs, which surfaces as an opaque "API request failed"
+ * with nothing in the server logs.
+ *
+ * Generous next to any real tool name (`<catalogName>__<rawName>`) while
+ * staying far below the parser's limit, so callers that pass a name through —
+ * the policy editors look a tool up by name — cannot turn a malformed name
+ * into a transport-layer error.
+ */
+export const TOOL_SEARCH_MAX_LENGTH = 512;
 
 /**
  * Max length (characters) of a project's display name. Kept short so project
@@ -106,6 +159,9 @@ export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
 
+export const SESSION_MAX_AGE_MIN_SECONDS = 3600;
+export const SESSION_MAX_AGE_MAX_SECONDS = 31_536_000;
+
 export const OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
 export const OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
 export const DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
@@ -161,6 +217,28 @@ export const CLAUDE_CODE_PROXY_ENV_KEYS = {
 
 /** Claude Code custom-headers env key (line-wise merged/stripped, see above). */
 export const CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY = "ANTHROPIC_CUSTOM_HEADERS";
+
+/**
+ * The env vars the Copilot CLI reads to route inference through a custom
+ * OpenAI-compatible provider. Both connect setup script renderers configure
+ * them: PowerShell applies them directly (`irm | iex` runs in the caller's
+ * session, and User scope persists them), bash prints ready-to-paste export
+ * lines (a piped script cannot export into the caller's shell). One list so
+ * the renderers can't drift.
+ */
+export const COPILOT_PROVIDER_ENV_KEYS = {
+  type: "COPILOT_PROVIDER_TYPE",
+  baseUrl: "COPILOT_PROVIDER_BASE_URL",
+  apiKey: "COPILOT_PROVIDER_API_KEY",
+  model: "COPILOT_MODEL",
+  /**
+   * Custom headers the CLI sends only to the BYOK provider endpoint —
+   * carries the Archestra attribution headers (client id, and in passthrough
+   * mode the personal passthrough key). Newline-separated `Name: Value`
+   * pairs; a literal `\n` also separates entries.
+   */
+  headers: "COPILOT_PROVIDER_HEADERS",
+} as const;
 
 /**
  * Per-client startup-guard ("pre-loader") install locations, one entry per
@@ -289,6 +367,32 @@ export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
  * clients from spoofing arbitrary key IDs.
  */
 export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
+
+/**
+ * Requests the strongest thinking-off configuration the Anthropic model
+ * supports: `thinking: {type: "disabled"}` where accepted (Opus 5, Sonnet 5),
+ * or an `output_config.effort` floor on the Fable/Mythos class, which thinks
+ * unconditionally. Set per call (dual LLM interrogation); consumed and
+ * removed by the backend's Anthropic fetch wrapper before the request is
+ * sent. A header rather than a providerOptions value because the installed
+ * @ai-sdk/anthropic serializes `thinking` only for the enabled/adaptive
+ * variants, so no providerOptions value can carry a disable to the wire.
+ */
+export const ANTHROPIC_THINKING_OFF_HEADER =
+  "x-archestra-anthropic-thinking-off";
+
+/**
+ * Header used to pass a per-turn dual LLM progress channel id from chat → LLM
+ * proxy (loopback). When present, the proxy publishes structured dual LLM
+ * analysis events (start / Q&A / complete / failure) on the in-process
+ * progress bus under this channel instead of injecting narration text into
+ * the response stream — injected narration is indistinguishable from model
+ * output on chat-completions streams and fuses into the assistant's answer.
+ * Clients without the header receive protocol-level SSE keep-alive comments
+ * while an analysis holds the stream idle.
+ */
+export const DUAL_LLM_PROGRESS_CHANNEL_HEADER =
+  "X-Archestra-Dual-Llm-Progress-Channel";
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 

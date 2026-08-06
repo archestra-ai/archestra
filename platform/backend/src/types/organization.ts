@@ -4,6 +4,8 @@ import {
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
+  SESSION_MAX_AGE_MAX_SECONDS,
+  SESSION_MAX_AGE_MIN_SECONDS,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -331,7 +333,8 @@ const extendedFields = {
   slimChatErrorUi: z.boolean(),
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
-  showTwoFactor: z.boolean(),
+  requireTwoFactor: z.boolean(),
+  sessionMaxAgeSeconds: z.number().int().nullable(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
@@ -378,6 +381,27 @@ export const InsertOrganizationSchema = createInsertSchema(
   presetEntityDefaultLabel: true,
   presetEntityDefaultValidationRegex: true,
 });
+/**
+ * The white-label app name is not only shown in the UI: it is substituted into
+ * the built-in skills' stored name, description, and body, which are later
+ * served through the skill catalog and read as model context. A free-form
+ * string would therefore let the substitution introduce line breaks, markdown
+ * structure, or imperative text into that context, so the name is held to a
+ * single line of ordinary label characters: it must start with a letter or
+ * digit, and may then contain letters, digits, spaces, and the punctuation that
+ * appears in real product names. Newlines, control characters, and markdown
+ * syntax (`#`, `*`, backticks, brackets, angle brackets, pipes) are rejected.
+ * Clearing the name is done with `null`, not an empty string.
+ */
+const AppNameSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .regex(
+    /^[\p{L}\p{N}][\p{L}\p{N} .,'’\-&()+:!?_/]*$/u,
+    "App name must be a single line starting with a letter or digit, and may only contain letters, digits, spaces, and the punctuation . , ' - & ( ) + : ! ? _ /",
+  );
+
 export const UpdateAppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema.optional(),
   customFont: OrganizationCustomFontSchema.optional(),
@@ -386,7 +410,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
   favicon: Base64PngSchema.optional(),
   iconLogo: Base64LogoSchema.optional(),
   iconLogoDark: Base64LogoSchema.optional(),
-  appName: z.string().max(100).nullable().optional(),
+  appName: AppNameSchema.nullable().optional(),
   ogDescription: z.string().max(500).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),
   chatLinks: z.array(OrganizationChatLinkSchema).max(3).nullable().optional(),
@@ -404,6 +428,8 @@ export const UpdateSecuritySettingsSchema = z.object({
     TrustedData.TrustedDataPolicyActionSchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
   appsHackathonRecorderEnabled: z.boolean().optional(),
+  newAppsDisabledByDefault: z.boolean().optional(),
+  newAppsLockedByDefault: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
   allowToolAutoAssignment: z.boolean().optional(),
 });
@@ -437,7 +463,15 @@ export const UpdateKnowledgeSettingsSchema = z.object({
 export const UpdateAuthSettingsSchema = z.object({
   oauthAccessTokenLifetimeSeconds:
     OAuthAccessTokenLifetimeSecondsSchema.optional(),
-  showTwoFactor: z.boolean().optional(),
+  requireTwoFactor: z.boolean().optional(),
+  // Absolute session lifetime cap in seconds; null = no cap.
+  sessionMaxAgeSeconds: z
+    .number()
+    .int()
+    .min(SESSION_MAX_AGE_MIN_SECONDS)
+    .max(SESSION_MAX_AGE_MAX_SECONDS)
+    .nullable()
+    .optional(),
   // Role slug (predefined or custom) assigned to new self-signup / ChatOps
   // members. `null` clears it back to the built-in "member" fallback.
   defaultMemberRole: z.string().min(1).nullable().optional(),

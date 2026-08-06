@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
 /**
  * Executes the REAL static SDK file (static/archestra-app-sdk.js) in this
@@ -12,24 +12,55 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 type StubCall = { name: string; arguments: Record<string, unknown> };
 type StubResult = Record<string, unknown>;
+type StubApp = {
+  fallbackNotificationHandler?: (notification: unknown) => Promise<void>;
+};
 
 const calls: StubCall[] = [];
 const results: StubResult[] = [];
+const modelContextCalls: StubResult[] = [];
 
 declare global {
   var __sdkTestCalls: StubCall[];
   var __sdkTestResults: StubResult[];
+  var __sdkTestApp: StubApp;
+  var __sdkTestModelContext: StubResult[];
 }
 
 const GUEST_MODULE = `
 export class App {
-  constructor() {}
+  constructor() {
+    globalThis.__sdkTestApp = this;
+  }
   async connect() {}
-  async callServerTool(params) {
+  async updateModelContext(params) {
+    globalThis.__sdkTestModelContext.push(params);
+  }
+  async callServerTool(params, options) {
     globalThis.__sdkTestCalls.push(params);
-    const result = globalThis.__sdkTestResults.shift();
-    if (!result) throw new Error("sdk test: no stub result queued");
-    return result;
+    const queued = globalThis.__sdkTestResults.shift();
+    if (!queued) throw new Error("sdk test: no stub result queued");
+    if (!queued.__slow) return queued;
+    // Slow-result path mirrors the request-timeout contract of
+    // @modelcontextprotocol/sdk shared/protocol.js for a host that emits no
+    // progress notifications: the per-request timer is options.timeout
+    // (60s when the caller passes none), and firing it rejects with the
+    // RequestTimeout McpError (-32001).
+    const timeout =
+      options && options.timeout != null ? options.timeout : 60000;
+    return await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          Object.assign(new Error("MCP error -32001: Request timed out"), {
+            code: -32001,
+          }),
+        );
+      }, timeout);
+      setTimeout(() => {
+        clearTimeout(timer);
+        resolve(queued.result);
+      }, queued.delayMs);
+    });
   }
 }
 export class PostMessageTransport {
@@ -41,9 +72,16 @@ export class PostMessageTransport {
 let archestra: any;
 const originalConsoleError = console.error;
 
+// The SDK reports model context fire-and-forget: it hops the (already
+// resolved) connect promise before calling the guest, so give the microtask
+// queue a beat before asserting a report did — or did not — land.
+const settleModelContextReports = () =>
+  new Promise((resolve) => setTimeout(resolve, 0));
+
 beforeAll(async () => {
   globalThis.__sdkTestCalls = calls;
   globalThis.__sdkTestResults = results;
+  globalThis.__sdkTestModelContext = modelContextCalls;
   // biome-ignore lint/suspicious/noExplicitAny: minimal browser-shaped global
   (globalThis as any).window = {
     addEventListener: () => {},
@@ -436,6 +474,50 @@ describe("Apps SDK runtime", () => {
     });
   });
 
+  test("llm.complete resolves for a completion that outlasts the MCP SDK's 60s default request timeout (reasoning models think for minutes)", async () => {
+    vi.useFakeTimers();
+    try {
+      const reasoningLatencyMs = 3 * 60_000;
+      results.push({
+        __slow: true,
+        delayMs: reasoningLatencyMs,
+        result: {
+          content: [{ type: "text", text: "a slowly reasoned answer" }],
+          structuredContent: { text: "a slowly reasoned answer" },
+        },
+      });
+      const pending = archestra.llm.complete("prove it step by step");
+      const settled = expect(pending).resolves.toBe("a slowly reasoned answer");
+      await vi.advanceTimersByTimeAsync(reasoningLatencyMs);
+      await settled;
+      calls.pop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("llm.complete stays bounded: a completion beyond the 10-minute tool-call ceiling still times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const ceilingMs = 10 * 60_000;
+      results.push({
+        __slow: true,
+        delayMs: ceilingMs + 60_000,
+        result: {
+          content: [{ type: "text", text: "too late" }],
+          structuredContent: { text: "too late" },
+        },
+      });
+      const pending = archestra.llm.complete("run forever");
+      const settled = expect(pending).rejects.toThrow("MCP error -32001");
+      await vi.advanceTimersByTimeAsync(ceilingMs + 60_000);
+      await settled;
+      calls.pop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("llm.prompt builds a string with no host round-trip", () => {
     const before = calls.length;
     const built = archestra.llm.prompt`Hello ${"world"} (${42})`;
@@ -443,5 +525,306 @@ describe("Apps SDK runtime", () => {
     // a template with no interpolations returns the literal unchanged
     expect(archestra.llm.prompt`just text`).toBe("just text");
     expect(calls.length).toBe(before);
+  });
+
+  test("files.list wires through search_files, with and without a query", async () => {
+    const entries = [
+      {
+        id: "f1",
+        ref: "file:f1",
+        filename: "model.stl",
+        mimeType: "model/stl",
+        sizeBytes: 10,
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    ];
+    results.push({ structuredContent: { files: entries } });
+    expect(await archestra.files.list()).toEqual(entries);
+    expect(calls.pop()).toEqual({
+      name: "archestra__search_files",
+      arguments: {},
+    });
+
+    results.push({ structuredContent: { files: [] } });
+    expect(await archestra.files.list("stl")).toEqual([]);
+    expect(calls.pop()).toEqual({
+      name: "archestra__search_files",
+      arguments: { query: "stl" },
+    });
+  });
+
+  test("files.read resolves a browser File carrying the exact decoded bytes", async () => {
+    const bytes = new Uint8Array([0x73, 0x6f, 0x6c, 0x69, 0x64, 0x00, 0xff]);
+    results.push({
+      structuredContent: {
+        fileId: "f1",
+        filename: "model.stl",
+        mimeType: "model/stl",
+        sizeBytes: bytes.length,
+        contentBase64: Buffer.from(bytes).toString("base64"),
+      },
+    });
+    const file = await archestra.files.read("model.stl");
+    expect(calls.pop()).toEqual({
+      name: "archestra__read_file_raw",
+      arguments: { filename: "model.stl" },
+    });
+    expect(file).toBeInstanceOf(File);
+    expect(file.name).toBe("model.stl");
+    expect(file.type).toBe("model/stl");
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(bytes);
+  });
+
+  test("files.read accepts an {id} selector and rejects an empty one", async () => {
+    results.push({
+      structuredContent: {
+        fileId: "f2",
+        filename: "notes.txt",
+        mimeType: "text/plain",
+        sizeBytes: 2,
+        contentBase64: Buffer.from("hi").toString("base64"),
+      },
+    });
+    expect(await (await archestra.files.read({ id: "f2" })).text()).toBe("hi");
+    expect(calls.pop()).toEqual({
+      name: "archestra__read_file_raw",
+      arguments: { id: "f2" },
+    });
+
+    await expect(archestra.files.read({})).rejects.toBeInstanceOf(TypeError);
+    await expect(archestra.files.read("")).rejects.toBeInstanceOf(TypeError);
+  });
+
+  test("files.save sends text as content and upserts by default", async () => {
+    results.push({
+      structuredContent: {
+        fileId: "f3",
+        filename: "notes.txt",
+        mimeType: "text/plain",
+        sizeBytes: 5,
+        overwritten: true,
+      },
+    });
+    expect(await archestra.files.save("notes.txt", "hello")).toEqual({
+      id: "f3",
+      filename: "notes.txt",
+      mimeType: "text/plain",
+      sizeBytes: 5,
+      overwritten: true,
+    });
+    expect(calls.pop()).toEqual({
+      name: "archestra__save_file",
+      arguments: { filename: "notes.txt", content: "hello", overwrite: true },
+    });
+  });
+
+  test("files.save base64-encodes binary data and takes the mime type from a Blob", async () => {
+    const bytes = new Uint8Array([1, 2, 3, 250]);
+    results.push({
+      structuredContent: {
+        fileId: "f4",
+        filename: "a.bin",
+        mimeType: "application/x-thing",
+        sizeBytes: 4,
+        overwritten: false,
+      },
+    });
+    await archestra.files.save(
+      "a.bin",
+      new Blob([bytes], { type: "application/x-thing" }),
+      { overwrite: false },
+    );
+    expect(calls.pop()).toEqual({
+      name: "archestra__save_file",
+      arguments: {
+        filename: "a.bin",
+        contentBase64: Buffer.from(bytes).toString("base64"),
+        mimeType: "application/x-thing",
+        overwrite: false,
+      },
+    });
+
+    // a typed array views only its own window of the underlying buffer
+    const window = new Uint8Array(new Uint8Array([9, 8, 7, 6]).buffer, 1, 2);
+    results.push({
+      structuredContent: {
+        fileId: "f5",
+        filename: "b.bin",
+        mimeType: "application/octet-stream",
+        sizeBytes: 2,
+        overwritten: false,
+      },
+    });
+    await archestra.files.save("b.bin", window);
+    expect(calls.pop()).toEqual({
+      name: "archestra__save_file",
+      arguments: {
+        filename: "b.bin",
+        contentBase64: Buffer.from([8, 7]).toString("base64"),
+        overwrite: true,
+      },
+    });
+
+    await expect(archestra.files.save("c.bin", 42)).rejects.toBeInstanceOf(
+      TypeError,
+    );
+  });
+
+  test("files.delete wires the selector through delete_file", async () => {
+    results.push({
+      structuredContent: { fileId: "f1", filename: "model.stl", deleted: true },
+    });
+    await expect(archestra.files.delete("model.stl")).resolves.toBeUndefined();
+    expect(calls.pop()).toEqual({
+      name: "archestra__delete_file",
+      arguments: { filename: "model.stl" },
+    });
+  });
+
+  test("files.onChange echoes save and delete locally to every listener, even past one that throws, until unsubscribed", async () => {
+    const seen: string[] = [];
+    const unsubscribeThrowing = archestra.files.onChange(() => {
+      seen.push("thrower");
+      throw new Error("listener boom");
+    });
+    const unsubscribeQuiet = archestra.files.onChange(() => {
+      seen.push("quiet");
+    });
+
+    results.push({
+      structuredContent: {
+        fileId: "f6",
+        filename: "echo.txt",
+        mimeType: "text/plain",
+        sizeBytes: 2,
+        overwritten: false,
+      },
+    });
+    await archestra.files.save("echo.txt", "hi");
+    calls.pop();
+    // the throwing listener is contained and does not starve the next one
+    expect(seen).toEqual(["thrower", "quiet"]);
+
+    results.push({
+      structuredContent: { fileId: "f6", filename: "echo.txt", deleted: true },
+    });
+    await archestra.files.delete("echo.txt");
+    calls.pop();
+    expect(seen).toEqual(["thrower", "quiet", "thrower", "quiet"]);
+
+    unsubscribeThrowing();
+    unsubscribeQuiet();
+
+    results.push({
+      structuredContent: {
+        fileId: "f6",
+        filename: "echo.txt",
+        mimeType: "text/plain",
+        sizeBytes: 2,
+        overwritten: true,
+      },
+    });
+    await archestra.files.save("echo.txt", "hi");
+    calls.pop();
+    expect(seen).toHaveLength(4);
+  });
+
+  test("the host's resources/list_changed notification fires onChange listeners; other methods do not", async () => {
+    const app = globalThis.__sdkTestApp;
+    expect(typeof app.fallbackNotificationHandler).toBe("function");
+
+    const seen: string[] = [];
+    const unsubscribe = archestra.files.onChange(() => {
+      seen.push("changed");
+    });
+    try {
+      await app.fallbackNotificationHandler?.({
+        method: "notifications/resources/list_changed",
+      });
+      expect(seen).toEqual(["changed"]);
+
+      await app.fallbackNotificationHandler?.({
+        method: "notifications/progress",
+      });
+      expect(seen).toEqual(["changed"]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test("a successful envelope without its structured payload is a tool_error: read without contentBase64, save without fileId", async () => {
+    results.push({ content: [{ type: "text", text: "ok but empty" }] });
+    await expect(archestra.files.read("ghost.txt")).rejects.toMatchObject({
+      code: "tool_error",
+      message: "archestra.files.read: the file tool returned no content",
+    });
+    calls.pop();
+
+    results.push({ structuredContent: { filename: "ghost.txt" } });
+    await expect(archestra.files.save("ghost.txt", "x")).rejects.toMatchObject({
+      code: "tool_error",
+      message: "archestra.files.save: the file tool returned no result",
+    });
+    calls.pop();
+  });
+
+  // One test on purpose: the suite shares a single SDK instance and vitest
+  // shuffles test order, so the auto-report assertion must run before the
+  // explicit report permanently disables it — only intra-test order is
+  // guaranteed.
+  test("files.read auto-reports the shown file as model context until ui.updateModelContext reports explicitly (explicit wins, permanently)", async () => {
+    modelContextCalls.length = 0;
+    results.push({
+      structuredContent: {
+        fileId: "f7",
+        filename: "invoice.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 3,
+        contentBase64: Buffer.from("pdf").toString("base64"),
+      },
+    });
+    await archestra.files.read("invoice.pdf");
+    calls.pop();
+    await settleModelContextReports();
+    expect(modelContextCalls).toEqual([
+      {
+        content: [
+          {
+            type: "text",
+            text: 'The app is showing the file "invoice.pdf" (application/pdf, 3 bytes) from its file store.',
+          },
+        ],
+      },
+    ]);
+
+    archestra.ui.updateModelContext("Comparing invoice.pdf against the ledger");
+    await settleModelContextReports();
+    expect(modelContextCalls[1]).toEqual({
+      content: [
+        { type: "text", text: "Comparing invoice.pdf against the ledger" },
+      ],
+    });
+
+    // a later read no longer auto-reports — the explicit report won
+    results.push({
+      structuredContent: {
+        fileId: "f8",
+        filename: "ledger.csv",
+        mimeType: "text/csv",
+        sizeBytes: 2,
+        contentBase64: Buffer.from("a,").toString("base64"),
+      },
+    });
+    await archestra.files.read("ledger.csv");
+    calls.pop();
+    await settleModelContextReports();
+    expect(modelContextCalls).toHaveLength(2);
+
+    expect(() => archestra.ui.updateModelContext("")).toThrow(TypeError);
+    expect(() => archestra.ui.updateModelContext("   ")).toThrow(TypeError);
+    // biome-ignore lint/suspicious/noExplicitAny: exercising the non-string guard
+    expect(() => (archestra.ui.updateModelContext as any)(42)).toThrow(
+      TypeError,
+    );
   });
 });

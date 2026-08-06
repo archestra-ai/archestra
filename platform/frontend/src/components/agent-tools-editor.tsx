@@ -50,10 +50,12 @@ import { cn } from "@/lib/utils";
 import {
   computeMcpEnvConflicts,
   computeSharedPersonalPins,
+  filterDefaultArchestraToolIds,
   getCatalogAssignmentGate,
   getDefaultArchestraToolIds,
   isCatalogInEnvironment,
   type SharedPersonalPin,
+  setsEqual,
   shouldResetCredentialPin,
   sortAndFilterTools,
   sortCatalogItems,
@@ -89,6 +91,12 @@ interface PendingCatalogChanges {
   catalogItem: InternalMcpCatalogItem;
   /** When true, all tools should be selected once they load */
   selectAll?: boolean;
+  /**
+   * When true, the creation-default subset should be selected once tools load.
+   * Used when re-adding the built-in Archestra catalog so it lands on its
+   * default tools (what a new agent gets), not all ~100+ tools.
+   */
+  selectDefaults?: boolean;
   /** Whether the catalog pill should remain visible. Only set to false when explicitly toggled off via combobox. */
   isActive?: boolean;
 }
@@ -779,21 +787,36 @@ const AgentToolsEditorContent = forwardRef<
           isActive: false,
         });
       } else {
-        // Toggle ON: pre-select all tools using cached data
+        // Toggle ON: pre-select the catalog's tools using cached data.
         const toolIdx = catalogItems.findIndex((c) => c.id === catalogId);
         const toolQuery = toolCountQueries[toolIdx];
         const tools = (toolQuery?.data as CatalogTool[] | undefined) ?? [];
         const allToolIds = new Set(tools.map((t) => t.id));
 
+        // The built-in Archestra catalog re-adds to its creation-default subset
+        // (what a new agent gets), not all its tools; every other server has no
+        // default subset, so it still selects all. When the tool cache is cold
+        // `tools` is empty and the parent can't pre-compute — the pill fills the
+        // selection reactively from its own authoritative list via the
+        // selectAll / selectDefaults flags. We never set selectAll for
+        // Archestra, since that backstop would expand to all tools.
+        const isArchestra = catalogId === ARCHESTRA_MCP_CATALOG_ID;
+
         registerPendingChanges(catalogId, {
-          selectedToolIds: allToolIds,
+          selectedToolIds: isArchestra
+            ? filterDefaultArchestraToolIds(tools, {
+                skillsEnabled: skillToolsEnabled,
+                sandboxEnabled,
+              })
+            : allToolIds,
           // Newly assigned tools default to resolve-at-call-time, which follows
           // the server's default credential setting; pinning a static
           // credential is an explicit per-assignment choice.
           credentialSourceId:
             pending?.credentialSourceId ?? DYNAMIC_CREDENTIAL_VALUE,
           catalogItem: catalog,
-          selectAll: true,
+          selectAll: !isArchestra,
+          selectDefaults: isArchestra,
           isActive: true,
         });
       }
@@ -803,6 +826,8 @@ const AgentToolsEditorContent = forwardRef<
       assignedToolsByCatalog,
       toolCountQueries,
       registerPendingChanges,
+      skillToolsEnabled,
+      sandboxEnabled,
     ],
   );
 
@@ -1064,6 +1089,29 @@ function McpServerPill({
     catalogItem.id,
   );
 
+  // Org/deployment flags that compose the Archestra creation-default set. Read
+  // here (not prop-drilled) so the selectDefaults backstop below can compute
+  // defaults from this pill's own authoritative tool list. Cached by TanStack
+  // Query, so this shares the parent's fetch.
+  const { data: organization } = useOrganization();
+  const skillToolsEnabled = organization?.skillToolsEnabled === true;
+  const sandboxEnabled = useFeature("sandbox") === true;
+
+  // Creation-default subset for the built-in catalog: powers the checklist's
+  // "Reset to defaults" action, so restoring a drifted selection no longer
+  // requires removing and re-adding the server. Undefined for every other
+  // server — they have no default subset, so the action is hidden.
+  const defaultToolIds = useMemo(
+    () =>
+      catalogItem.id === ARCHESTRA_MCP_CATALOG_ID
+        ? filterDefaultArchestraToolIds(allTools, {
+            skillsEnabled: skillToolsEnabled,
+            sandboxEnabled,
+          })
+        : undefined,
+    [catalogItem.id, allTools, skillToolsEnabled, sandboxEnabled],
+  );
+
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({
     catalogId: catalogItem.id,
@@ -1148,6 +1196,32 @@ function McpServerPill({
     // whether the selection is empty, and the ref guard prevents re-firing anyway.
   }, [selectedToolIds.size, allTools]);
 
+  // Auto-select the creation-default subset when selectDefaults is set and tools
+  // finish loading. Mirrors pendingSelectAllRef, but pre-selects only the
+  // default Archestra tools — the backstop for re-adding the built-in catalog
+  // when the parent's tool cache was cold at click time. Fires once at mount.
+  const pendingSelectDefaultsRef = useRef(
+    initialPendingChanges?.selectDefaults ?? false,
+  );
+  useEffect(() => {
+    if (!pendingSelectDefaultsRef.current || allTools.length === 0) return;
+
+    if (selectedToolIds.size === 0) {
+      const defaults = filterDefaultArchestraToolIds(allTools, {
+        skillsEnabled: skillToolsEnabled,
+        sandboxEnabled,
+      });
+      // Fall back to all tools only if nothing matched, so a naming mismatch
+      // never strands the user on zero tools.
+      setSelectedToolIds(
+        defaults.size > 0 ? defaults : new Set(allTools.map((t) => t.id)),
+      );
+    }
+    // Clear the flag regardless so we don't fight user deselections.
+    pendingSelectDefaultsRef.current = false;
+    // Depend on .size (not the full set) — see pendingSelectAllRef above.
+  }, [selectedToolIds.size, allTools, skillToolsEnabled, sandboxEnabled]);
+
   // Report pending changes to parent whenever local state changes.
   // The pill can only be rendered when isActive !== false, so always report as active
   // to avoid overwriting the parent's isActive flag with undefined.
@@ -1230,7 +1304,7 @@ function McpServerPill({
         </div>
       ) : totalCount === 0 ? (
         <div className="p-4 text-sm text-muted-foreground">
-          No tools available for this server.
+          <span>No tools available for this server.</span>
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -1241,6 +1315,7 @@ function McpServerPill({
               setSelectedToolIds(ids);
               setChangedInSession(true);
             }}
+            defaultToolIds={defaultToolIds}
           />
         </div>
       )}
@@ -1267,6 +1342,14 @@ export interface ToolChecklistProps {
    * styling all say so.
    */
   variant?: "assign" | "disable";
+  /**
+   * The creation-default tool IDs for servers that have such a subset (the
+   * built-in Archestra catalog). When provided and non-empty, the header gains
+   * a "Reset to defaults" action that replaces the whole selection with
+   * exactly this set — unlike Select All/Deselect All it ignores any active
+   * search filter, since a partial reset is not a reset.
+   */
+  defaultToolIds?: Set<string>;
 }
 
 function formatToolName(toolName: string) {
@@ -1452,9 +1535,15 @@ export function ToolChecklist({
   selectedToolIds,
   onSelectionChange,
   variant = "assign",
+  defaultToolIds,
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const disableVariant = variant === "disable";
+
+  // Hidden when the set is empty so the action can never reset to zero tools.
+  const showResetToDefaults = defaultToolIds != null && defaultToolIds.size > 0;
+  const selectionAtDefaults =
+    defaultToolIds != null && setsEqual(selectedToolIds, defaultToolIds);
 
   // Snapshot the initial selection for sort order so tools don't jump
   // around as the user toggles checkboxes. Updates synchronously during
@@ -1585,6 +1674,18 @@ export function ToolChecklist({
           >
             {disableVariant ? "Enable all" : "Deselect All"}
           </Button>
+          {showResetToDefaults && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-6 px-2"
+              onClick={() => onSelectionChange(new Set(defaultToolIds))}
+              disabled={selectionAtDefaults}
+              title="Replace the selection with the default set assigned at creation"
+            >
+              Reset to defaults
+            </Button>
+          )}
         </div>
       </div>
       {tools.length > 5 && (

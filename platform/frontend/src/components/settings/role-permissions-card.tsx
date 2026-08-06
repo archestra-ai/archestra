@@ -40,10 +40,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
 import { useAllPermissions, useSession } from "@/lib/auth/auth.query";
-import {
-  useActiveMemberRole,
-  useActiveOrganization,
-} from "@/lib/organization.query";
+import { useActiveMemberRole } from "@/lib/organization.query";
 
 const NameFormSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -64,20 +61,26 @@ const actionLabels: Record<Action, string> = {
   execute: "Execute",
   "deploy-to-restricted": "Deploy to Restricted",
   manage: "Manage",
+  "manage-deleted": "Manage Deleted",
   "read-all": "Read All Chats",
   "share-org": "Share Org-Wide",
+  impersonate: "Impersonate",
 };
 
 export function RolePermissionsCard() {
-  const { data: session } = useSession();
-  const { data: activeOrg } = useActiveOrganization();
-  const { data: role, isLoading: isRoleLoading } = useActiveMemberRole(
-    activeOrg?.id,
-  );
+  const { data: session, isPending: isSessionPending } = useSession();
+  const hasActiveOrganization = !!session?.session?.activeOrganizationId;
+  const { data: role, isPending: isRolePending } = useActiveMemberRole();
   const { data: permissions, isLoading: isPermissionsLoading } =
     useAllPermissions();
 
-  const isLoading = isRoleLoading || isPermissionsLoading;
+  // The role query stays pending forever for a user with no active
+  // organization (it never enables), so its wait only counts when the session
+  // says there is an organization to have a role in.
+  const isLoading =
+    isSessionPending ||
+    (hasActiveOrganization && isRolePending) ||
+    isPermissionsLoading;
 
   if (isLoading) {
     return (
@@ -279,7 +282,8 @@ function CategorySection({
         )}
         <span className="font-semibold text-sm">{category}</span>
         <span className="ml-auto text-xs text-muted-foreground">
-          {resources.length} resource{resources.length !== 1 ? "s" : ""}
+          {resources.length} resource
+          {resources.length !== 1 ? <span>s</span> : null}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>

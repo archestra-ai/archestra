@@ -50,6 +50,67 @@ export function toolInEnvironmentPredicate(
 }
 
 /**
+ * SQL predicate selecting `internal_mcp_catalog` rows visible from
+ * `agentEnvironmentId`'s environment: strict equality (null = Default), with the
+ * built-in catalogs exempt for the same reason {@link toolInEnvironmentPredicate}
+ * exempts them — their tools are callable from every environment, so hiding the
+ * server that owns them would be incoherent.
+ *
+ * This is the catalog-row counterpart of the tool predicate: use it on surfaces
+ * that list or resolve MCP *servers* for an agent, so registry discovery agrees
+ * with the tool discovery that follows it.
+ *
+ * @param catalog pass an aliased catalog table when the query aliases it.
+ */
+export function catalogInEnvironmentPredicate(
+  agentEnvironmentId: string | null,
+  catalog = schema.internalMcpCatalogTable,
+): SQL {
+  return or(
+    inArray(catalog.id, ENVIRONMENT_EXEMPT_CATALOG_IDS),
+    sql`${catalog.environmentId} is not distinct from ${agentEnvironmentId}`,
+  ) as SQL;
+}
+
+/**
+ * JS counterpart of {@link catalogInEnvironmentPredicate} for callers that
+ * already hold the catalog row — the by-id fences, which must treat a
+ * cross-environment server as if it did not exist.
+ */
+export function catalogVisibleInEnvironment(
+  catalog: { id: string; environmentId: string | null },
+  agentEnvironmentId: string | null,
+): boolean {
+  return (
+    ENVIRONMENT_EXEMPT_CATALOG_IDS.includes(catalog.id) ||
+    catalog.environmentId === agentEnvironmentId
+  );
+}
+
+/**
+ * App-surface variant of {@link toolInEnvironmentPredicate}: a tool matches when
+ * it belongs to `environmentId` OR to the Default environment (catalog
+ * `environment_id` null) — Default is the org-wide baseline every app may draw
+ * from, so an app bound to a non-default environment accepts that environment's
+ * tools plus Default's. Non-default environments stay isolated from each other.
+ * Agent/gateway discovery keeps the strict predicate; only the app fences
+ * (assignment resolution, the REST assign validation, and the app runtime gate)
+ * use this one, together, so they cannot drift apart.
+ */
+export function toolInEnvironmentOrDefaultPredicate(
+  environmentId: string | null,
+  tools = schema.toolsTable,
+): SQL {
+  if (environmentId === null) {
+    return toolInEnvironmentPredicate(null, tools);
+  }
+  return or(
+    toolInEnvironmentPredicate(null, tools),
+    toolInEnvironmentPredicate(environmentId, tools),
+  ) as SQL;
+}
+
+/**
  * SQL predicate selecting `knowledge_base_connectors` rows that belong to
  * `agentEnvironmentId`'s environment (strict equality, null = Default). There are
  * no built-in connectors, so there are no exemptions.

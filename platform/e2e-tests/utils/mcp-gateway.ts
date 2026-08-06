@@ -274,7 +274,10 @@ export async function callMcpTool(
     arguments?: Record<string, unknown>;
     timeoutMs?: number;
   },
-): Promise<{ content: Array<{ type: string; text?: string }> }> {
+): Promise<{
+  content: Array<{ type: string; text?: string }>;
+  _meta?: Record<string, unknown>;
+}> {
   const callToolResponse = await makeApiRequest({
     request,
     method: "post",
@@ -302,7 +305,7 @@ export async function callMcpTool(
   return callResult.result;
 }
 
-async function getTeamTokenForProfile(
+export async function getTeamTokenForProfile(
   request: APIRequestContext,
   teamName: string,
 ): Promise<string> {
@@ -401,6 +404,29 @@ export async function waitForMcpGatewayJwtReady(params: {
       lastError = error;
       const msg = error instanceof Error ? error.message : String(error);
       seenErrors.set(msg, (seenErrors.get(msg) ?? 0) + 1);
+
+      // A deleted provider row is unrecoverable within this poll: the FK
+      // ON DELETE SET NULL nulls the agent binding and every further attempt
+      // 401s identically. Fail fast with the actual cause instead of burning
+      // the full ~162s backoff — in CI run 30107797407 this state came from
+      // another worker deleting providers it did not own, which the give-up
+      // probe only surfaced after the whole window elapsed.
+      if (params.identityProviderId) {
+        const idpResp = await makeApiRequest({
+          request: params.request,
+          method: "get",
+          urlSuffix: `/api/identity-providers/${params.identityProviderId}`,
+          ignoreStatusCheck: true,
+        }).catch(() => null);
+        if (idpResp?.status() === 404) {
+          throw new Error(
+            `Identity provider ${params.identityProviderId} was deleted while waiting for MCP Gateway JWT auth ` +
+              `(agent binding is FK-nulled, so JWT auth can never succeed). ` +
+              `Another test deleting identity providers it does not own is the usual cause. ` +
+              `Last auth error: ${msg}`,
+          );
+        }
+      }
     }
   }
 
@@ -650,6 +676,16 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
 export async function getVisibleStaticCredentials(
   page: Page,
 ): Promise<string[]> {
+  // allTextContents() does not auto-wait: read at the wrong instant it
+  // answers [] for a dialog that is still rendering its options — which is
+  // exactly how this helper hard-failed two merge-queue runs in a row. Its
+  // only caller asserts a non-empty list, so wait for the first option to
+  // exist before reading the set.
+  await page
+    .getByTestId(E2eTestId.StaticCredentialToUse)
+    .first()
+    .waitFor({ state: "visible", timeout: 15_000 });
+
   const credentialLabels = await page
     .getByTestId(E2eTestId.StaticCredentialToUse)
     .allTextContents();

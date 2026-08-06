@@ -3,6 +3,10 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CODEX_CLIENT_ID,
+  COPILOT_CLI_CLIENT_ID,
+  COPILOT_PROVIDER_ENV_KEYS,
+  DEFAULT_APP_NAME,
+  DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
   type SupportedProvider,
@@ -76,6 +80,13 @@ export interface SetupScriptProxySection {
    */
   passthroughVirtualKey: string | null;
   /**
+   * Model the wizard's review step selected for the Copilot CLI (applied as
+   * COPILOT_MODEL — the CLI refuses to launch a BYOK provider without one).
+   * Null: the script falls back to the provider default only when the
+   * machine has no COPILOT_MODEL set.
+   */
+  model: string | null;
+  /**
    * GitHub OAuth endpoints for the in-script device flow. Required when
    * provider is "github-copilot" in passthrough mode: Copilot has no static
    * API keys, so the script obtains the user's GitHub OAuth token locally
@@ -129,6 +140,26 @@ export function buildSetupCommand(params: {
 /** Strips the /v1 suffix the connection base URLs carry. */
 export function proxyBaseUrlToOrigin(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+}
+
+/**
+ * Value of the COPILOT_PROVIDER_HEADERS env var, shared by the bash and
+ * PowerShell renderers: attribution headers the Copilot CLI sends only to its
+ * BYOK provider endpoint (the LLM proxy), never to GitHub's own services.
+ * Entries are joined with a literal `\n` — the CLI's documented separator —
+ * so the value stays a single line in shell profiles and the Windows
+ * registry. Always carries the client id; in passthrough mode also the
+ * personal passthrough key that attributes the request to the user (the
+ * Copilot analog of Claude Code's ANTHROPIC_CUSTOM_HEADERS injection).
+ */
+export function copilotAttributionHeadersValue(
+  proxy: SetupScriptProxySection,
+): string {
+  const lines = [`${EXTERNAL_AGENT_ID_HEADER}: ${COPILOT_CLI_CLIENT_ID}`];
+  if (proxy.passthroughVirtualKey) {
+    lines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
+  }
+  return lines.join("\\n");
 }
 
 /**
@@ -205,7 +236,7 @@ function psq(value: string): string {
 /** Collapse control characters so appName is safe in comments and bare echoes. */
 function sanitizeAppName(appName: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
-  return appName.replace(/[\x00-\x1f\x7f]+/g, " ").trim() || "Archestra";
+  return appName.replace(/[\x00-\x1f\x7f]+/g, " ").trim() || DEFAULT_APP_NAME;
 }
 
 /**
@@ -737,6 +768,19 @@ function codexSections(ctx: SetupScriptContext): string[] {
 
   startupGuardUnshadowSection(ctx, CODEX_GUARD_CLIENT, sections);
 
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    // Codex owns config.toml wherever CODEX_HOME points (default ~/.codex),
+    // and every action below edits that file — the mcp/skills registrations
+    // through the codex CLI just as much as the provider block this script
+    // appends itself. The one-time backup must therefore be taken before the
+    // FIRST of them, or "pristine pre-Archestra config" would already contain
+    // the gateway the CLI registered a moment earlier.
+    sections.push(`CONFIG="\${CODEX_HOME:-$HOME/.codex}/config.toml"
+if [ -f "$CONFIG" ] && [ ! -f "$CONFIG.archestra-backup" ]; then
+  cp "$CONFIG" "$CONFIG.archestra-backup"
+fi`);
+  }
+
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
@@ -756,12 +800,10 @@ requires_openai_auth = true
 ${codexAttributionHeaderLines(ctx.proxy)}
 # <<< ${marker} <<<`;
 
-    sections.push(`say ${sh(`Adding the "${ctx.proxy.proxyName}" provider to ~/.codex/config.toml`)}
-mkdir -p "$HOME/.codex"
-CONFIG="$HOME/.codex/config.toml"
+    sections.push(`say ${sh(`Adding the "${ctx.proxy.proxyName}" provider to Codex's config.toml`)}
+CONFIG="\${CODEX_HOME:-$HOME/.codex}/config.toml"
+mkdir -p "$(dirname "$CONFIG")"
 if [ -f "$CONFIG" ]; then
-  # Back up once so re-runs preserve the pristine pre-Archestra config.
-  [ -f "$CONFIG.archestra-backup" ] || cp "$CONFIG" "$CONFIG.archestra-backup"
   # drop any previous archestra-managed block for this provider (idempotent)
   awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
     $0 == start {skip=1; next}
@@ -820,15 +862,16 @@ cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
       sections.push(`say ${sh(`Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
 cat <<'ARCHESTRA_COPILOT'
 
-Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:
-  export COPILOT_PROVIDER_TYPE="openai"
-  export COPILOT_PROVIDER_BASE_URL=${sh(ctx.proxy.url)}
-  export COPILOT_PROVIDER_API_KEY=${
+Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER_ENV_KEYS.model} if you use a different model:
+  export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"
+  export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}=${sh(ctx.proxy.url)}
+  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}=${
     ctx.proxy.virtualKey
       ? sh(ctx.proxy.virtualKey)
       : `"<your-${ctx.proxy.provider}-api-key>"`
   }
-  export COPILOT_MODEL="<model-name>"
+  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${ctx.proxy.model ?? DEFAULT_MODELS[ctx.proxy.provider]}"
+  export ${COPILOT_PROVIDER_ENV_KEYS.headers}="${copilotAttributionHeadersValue(ctx.proxy)}"
 ARCHESTRA_COPILOT`);
     }
   }
@@ -984,15 +1027,16 @@ fi
 
 say 'Copilot provider settings (GitHub Copilot via OpenAI-compatible protocol)'
 echo
-echo 'Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:'
-printf '  export COPILOT_PROVIDER_TYPE="openai"\\n'
-printf '  export COPILOT_PROVIDER_BASE_URL="%s"\\n' ${sh(proxy.url)}
+echo 'Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER_ENV_KEYS.model} if you use a different model:'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"\\n'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}="%s"\\n' ${sh(proxy.url)}
 if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
-  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' "$ARCHESTRA_GHCP_TOKEN"
+  printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' "$ARCHESTRA_GHCP_TOKEN"
 else
-  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' '<your-github-oauth-token>'
+  printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' '<your-github-oauth-token>'
 fi
-printf '  export COPILOT_MODEL="<model-name>"\\n'`;
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${proxy.model ?? DEFAULT_MODELS["github-copilot"]}"\\n'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.headers}="%s"\\n' ${sh(copilotAttributionHeadersValue(proxy))}`;
 }
 
 // ===================================================================

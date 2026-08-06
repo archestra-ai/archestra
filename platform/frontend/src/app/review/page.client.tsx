@@ -148,7 +148,7 @@ export default function ReviewPage({
               pull request
             </a>
           ) : (
-            "pull request"
+            <span>pull request</span>
           )}{" "}
           / Slack card.
         </p>

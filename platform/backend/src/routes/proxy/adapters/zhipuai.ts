@@ -25,8 +25,13 @@ import type {
   UsageView,
   Zhipuai,
 } from "@/types";
-import { extractCommonMessageText } from "@/types";
+import {
+  extractCommonMessageText,
+  extractCommonToolCallArguments,
+} from "@/types";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { toOpenAiStreamUsage } from "./openai-sse-chunk";
+import { upstreamHttpError } from "./upstream-http-error";
 
 // =============================================================================
 // TYPE ALIASES
@@ -93,7 +98,7 @@ class ZhipuaiClient {
         errorMessage += ` - ${errorText}`;
       }
 
-      throw new Error(errorMessage);
+      throw upstreamHttpError(errorMessage, response.status);
     }
 
     return response.json() as Promise<ZhipuaiResponse>;
@@ -137,7 +142,7 @@ class ZhipuaiClient {
         errorMessage += ` - ${errorText}`;
       }
 
-      throw new Error(errorMessage);
+      throw upstreamHttpError(errorMessage, response.status);
     }
 
     return this.parseSSEStream(response);
@@ -246,7 +251,7 @@ class ZhipuaiRequestAdapter
 
     for (const message of this.request.messages) {
       if (message.role === "tool") {
-        const toolName = this.findToolNameInMessages(
+        const toolCall = this.findToolCallInMessages(
           this.request.messages,
           message.tool_call_id,
         );
@@ -264,7 +269,8 @@ class ZhipuaiRequestAdapter
 
         results.push({
           id: message.tool_call_id,
-          name: toolName ?? "unknown",
+          name: toolCall?.name ?? "unknown",
+          arguments: toolCall?.arguments,
           content,
           isError: false,
         });
@@ -356,10 +362,10 @@ class ZhipuaiRequestAdapter
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private findToolNameInMessages(
+  private findToolCallInMessages(
     messages: ZhipuaiMessages,
     toolCallId: string,
-  ): string | null {
+  ): { name: string; arguments?: Record<string, unknown> } | null {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
 
@@ -367,7 +373,12 @@ class ZhipuaiRequestAdapter
         for (const toolCall of message.tool_calls) {
           if (toolCall.id === toolCallId) {
             if (toolCall.type === "function") {
-              return toolCall.function.name;
+              return {
+                name: toolCall.function.name,
+                arguments: extractCommonToolCallArguments(
+                  toolCall.function.arguments,
+                ),
+              };
             }
           }
         }
@@ -391,14 +402,14 @@ class ZhipuaiRequestAdapter
       };
 
       if (message.role === "tool") {
-        const toolName = this.findToolNameInMessages(
+        const toolCall = this.findToolCallInMessages(
           messages,
           message.tool_call_id,
         );
 
-        if (toolName) {
+        if (toolCall) {
           logger.debug(
-            { toolCallId: message.tool_call_id, toolName },
+            { toolCallId: message.tool_call_id, toolName: toolCall.name },
             "[ZhipuaiAdapter] toCommonFormat: found tool message",
           );
           let toolResult: unknown;
@@ -415,7 +426,8 @@ class ZhipuaiRequestAdapter
           commonMessage.toolCalls = [
             {
               id: message.tool_call_id,
-              name: toolName,
+              name: toolCall.name,
+              arguments: toolCall.arguments,
               content: toolResult,
               isError: false,
             },
@@ -624,9 +636,21 @@ class ZhipuaiStreamAdapter
     this.state.responseId = chunk.id;
     this.state.model = chunk.model;
 
-    const choice = chunk.choices[0];
+    // Capture usage BEFORE the `choices` guard below. Zhipu itself rides usage
+    // on the finish chunk, but an OpenAI-compatible upstream answering an
+    // `include_usage` request sends it on a trailing chunk with `choices: []` —
+    // returning early on that chunk would drop the token counts entirely.
+    if (chunk.usage) {
+      this.state.usage = {
+        inputTokens: chunk.usage.prompt_tokens ?? 0,
+        outputTokens: chunk.usage.completion_tokens ?? 0,
+      };
+    }
+
+    // `choices` is optional-chained for the same reason: some OpenAI-compatible
+    // upstreams omit it entirely on usage-only and error chunks.
+    const choice = chunk.choices?.[0];
     if (!choice) {
-      // Empty chunk (shouldn't happen with Zhipu, but handle it)
       return {
         sseData: null,
         isToolCallChunk: false,
@@ -686,13 +710,6 @@ class ZhipuaiStreamAdapter
     if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
       isFinal = true;
-    }
-
-    if (chunk.usage) {
-      this.state.usage = {
-        inputTokens: chunk.usage.prompt_tokens ?? 0,
-        outputTokens: chunk.usage.completion_tokens ?? 0,
-      };
     }
 
     return { sseData, isToolCallChunk, isFinal };
@@ -769,6 +786,14 @@ class ZhipuaiStreamAdapter
         },
       ],
     };
+    // Zhipu reports usage on its finish chunk, which we never forward (it
+    // carries no streamable content), so without this the synthesized final
+    // chunk is the client's last chance to learn the token counts and it
+    // arrives empty. Shape mirrors `toProviderResponse()` below.
+    const usage = toOpenAiStreamUsage(this.state.usage);
+    if (usage) {
+      finalChunk.usage = usage;
+    }
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 

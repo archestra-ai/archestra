@@ -3,7 +3,7 @@ title: "Secrets Management"
 category: Administration
 description: "Configure external secrets storage for sensitive data"
 order: 4
-lastUpdated: 2026-07-20
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -36,6 +36,10 @@ On every startup, Archestra verifies that the current `ARCHESTRA_SECRETS_ENCRYPT
 To accept a rotation without re-encrypting, set `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY=true` for one boot, then unset it; secrets encrypted with the previous key stay unreadable and must be re-entered.
 
 See [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](./platform-deployment#authentication--security) for more info.
+
+## Content Encryption at Rest (Enterprise)
+
+Beyond stored secrets, Archestra can encrypt conversation and tool content at rest: LLM Logs records, chat message bodies, and MCP tool call arguments and results. See [Content Encryption at Rest](./platform-content-encryption) for coverage, enablement, and key rotation.
 
 ## HashiCorp Vault
 

@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-07-21
+lastUpdated: 2026-08-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -67,7 +67,13 @@ Installations can be personal or team-scoped.
 - **Personal installations** are owned by one user and are useful when each person needs their own upstream account.
 - **Team installations** are shared with a team and are useful for shared service accounts or team-owned integrations.
 
-When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time resolves deterministically from the caller identity and the available personal or team-scoped credentials. If no credential can be resolved, Archestra returns an error with an install link.
+A personal installation is a hard usage boundary: its credential can only ever authenticate calls made by the person who added it. It cannot be assigned, pinned, or borrowed by another user — not even by an Admin. Predefined Admins can see limited connection metadata and revoke a connection for operational oversight, but cannot use its credential.
+
+If a static credential is intended to be shared, add it explicitly as a **team or organization service account**. This makes the shared intent and audience visible instead of turning a person's identity into an implicit service account.
+
+Personal installations are removed — credentials included — when their owner is deleted or leaves the organization. Team and organization installations survive their installer.
+
+When assigning tools to an Agent or MCP Gateway, you can pin a team or organization service account, or use **Resolve at call time**. Personal installations are available only through resolve-at-call-time, which resolves deterministically from the caller identity and never exposes a person's credential as a reusable static option. If no credential can be resolved, Archestra returns an error with an install link.
 
 See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for the resolution order and missing credential behavior.
 
@@ -87,7 +93,7 @@ The registry does not expose tools to clients by itself. After a server is insta
 
 For external MCP clients, create or edit an [MCP Gateway](/docs/platform-mcp-gateway), assign tools from installed registry entries (or use Automatic tool assignment mode to derive them from labels), then connect the client to the gateway endpoint. For built-in Archestra agents, assign the same tools from the agent's tool configuration.
 
-Each registry card shows which agents and gateways have tools assigned from the server. The uninstall dialog lists them too, so you can see who is affected before removing a connection. The count covers explicit assignments only — Automatic tool assignment mode is not included.
+Each registry card shows how many agents and gateways can reach the server. Hover the count to list them, grouped by how they get access — an explicit tool assignment, or Automatic tool assignment mode. The server's **Usage** tab shows the same list as a read-only table. Personal agents all share a name, so each one is labelled with its owner. The uninstall dialog lists them too, so you can see who is affected before removing a connection.
 
 ## Refreshing Tools
 
@@ -96,6 +102,25 @@ Archestra stores the tool list discovered at install time. When the upstream ser
 - **Inspector**: open the server's Inspector tab and click **Refresh Tools**.
 - **API**: `POST /api/mcp_server/:id/reload-tools`.
 - **Automatic**: set `ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES` to re-sync every installed server on an interval. See [Deployment](/docs/platform-deployment).
+
+## Uninstalling and Restoring
+
+Uninstalling an installation is a recoverable delete. Archestra tears down the running server and its Kubernetes secret, but keeps the installation row and its stored credentials. Nothing is erased.
+
+The name is freed immediately. You can create a new registry entry with the name an uninstalled one used — an uninstalled entry never blocks the name.
+
+Restoring brings the installation back marked for reinstall. It does not reconnect on its own: the credentials are still stored, so you click **Reinstall** to bring the server back up with them. You never re-enter a secret to restore.
+
+Deleting a registry entry cascades. Archestra uninstalls every installation created from it and hides that entry's tools in one action. Restoring the entry brings back exactly the installations and tools that were removed with it, each marked for reinstall. An installation you uninstalled on its own earlier stays uninstalled — only the ones removed by this delete come back.
+
+Viewing and restoring uninstalled entries requires the **Manage Deleted** permission (`mcpRegistry:manage-deleted` for registry entries, `mcpServerInstallation:manage-deleted` for installations). Of the predefined roles, only admins hold it; grant it to a custom role to delegate recovery.
+
+Restore is an API action today. List uninstalled entries with `GET /api/internal_mcp_catalog?status=deleted` or uninstalled installations with `GET /api/mcp_server?status=deleted`, then restore one:
+
+- **Installation**: `POST /api/mcp_server/:id/restore`.
+- **Registry entry**: `POST /api/internal_mcp_catalog/:id/restore`.
+
+Restoring an installation whose registry entry is still deleted is rejected — restore the entry first. Restoring is blocked when an active installation or entry already occupies the same scope or name.
 
 ## Renaming a Server
 

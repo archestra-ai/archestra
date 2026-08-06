@@ -7,6 +7,7 @@ import {
   getIdpRoleMappingRuleRowTestId,
   KEYCLOAK_OIDC,
   KEYCLOAK_SAML,
+  MEMBER_EMAIL,
   SSO_DOMAIN,
   UI_BASE_URL,
 } from "../consts";
@@ -127,31 +128,6 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
   await expect(
     page.getByRole("heading", { name: "Identity Providers" }),
   ).toBeVisible({ timeout: 10000 });
-}
-
-/**
- * Fill in the standard OIDC provider form fields.
- */
-async function fillOidcProviderForm(
-  page: Page,
-  providerName: string,
-): Promise<void> {
-  await page.getByLabel("Provider ID").fill(providerName);
-  await page.getByLabel("Issuer").fill(KEYCLOAK_OIDC.issuer);
-  const allowedDomainsInput = page.getByLabel("Allowed Email Domains");
-  if (await allowedDomainsInput.isVisible().catch(() => false)) {
-    await allowedDomainsInput.fill(SSO_DOMAIN);
-  }
-  await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC.clientId);
-  await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC.clientSecret);
-  await page
-    .getByLabel("Discovery Endpoint")
-    .fill(KEYCLOAK_OIDC.discoveryEndpoint);
-  await page
-    .getByLabel("Authorization Endpoint")
-    .fill(KEYCLOAK_OIDC.authorizationEndpoint);
-  await page.getByLabel("Token Endpoint").fill(KEYCLOAK_OIDC.tokenEndpoint);
-  await page.getByLabel("JWKS Endpoint").fill(KEYCLOAK_OIDC.jwksEndpoint);
 }
 
 async function createOidcProviderViaApi(
@@ -328,6 +304,68 @@ async function getTeamIdByNameViaApi(
   return team?.id ?? "";
 }
 
+/**
+ * Hand team administration to {@link MEMBER_EMAIL} and drop the admin's own
+ * membership, leaving the admin outside the team.
+ *
+ * Creating a team makes the creator one of its admins, and SSO team sync skips
+ * anyone who is already a member — it never claims or removes a manual
+ * membership. A team-sync test signing in as the creator would therefore have
+ * nothing to observe. Promoting a successor first is required: removing a
+ * team's last admin is rejected.
+ */
+async function handTeamOverAndLeave(
+  page: Page,
+  teamName: string,
+): Promise<void> {
+  const teamId = await getTeamIdByNameViaApi(page, teamName);
+
+  const membersResponse = await page.request.get(
+    `${UI_BASE_URL}/api/teams/${teamId}/members`,
+  );
+  await expectApiResponseOk(membersResponse, "get team members");
+  const members = (await membersResponse.json()) as Array<{
+    userId: string;
+    email: string;
+  }>;
+  const creatorMembership = members.find(
+    (member) => member.email === ADMIN_EMAIL,
+  );
+  expect(
+    creatorMembership,
+    `Expected ${ADMIN_EMAIL} to be a member of "${teamName}" after creating it`,
+  ).toBeDefined();
+
+  const orgMembersResponse = await page.request.get(
+    `${UI_BASE_URL}/api/auth/organization/list-members`,
+  );
+  await expectApiResponseOk(orgMembersResponse, "list organization members");
+  const orgMembers =
+    (
+      (await orgMembersResponse.json()) as {
+        members?: Array<{ userId: string; user: { email: string } }>;
+      }
+    ).members ?? [];
+  const successor = orgMembers.find(
+    (member) => member.user.email === MEMBER_EMAIL,
+  );
+  expect(
+    successor,
+    `Expected organization member ${MEMBER_EMAIL} to exist`,
+  ).toBeDefined();
+
+  const addResponse = await page.request.post(
+    `${UI_BASE_URL}/api/teams/${teamId}/members`,
+    { data: { userId: successor?.userId, role: "admin" } },
+  );
+  await expectApiResponseOk(addResponse, "promote successor team admin");
+
+  const removeResponse = await page.request.delete(
+    `${UI_BASE_URL}/api/teams/${teamId}/members/${creatorMembership?.userId}`,
+  );
+  await expectApiResponseOk(removeResponse, "remove creator membership");
+}
+
 function getRoleMappingRuleRow(page: Page, index: number) {
   return page.getByTestId(getIdpRoleMappingRuleRowTestId(index));
 }
@@ -408,6 +446,37 @@ async function expectIdentityProviderToExistViaApi(
     expect(
       providers.some((provider) => provider.providerId === providerName),
     ).toBe(true);
+  }).toPass({ timeout: 15_000, intervals: [500, 1000, 2000] });
+}
+
+/**
+ * Poll until the provider's persisted role mapping has the expected number of
+ * rules. Used after saving role mapping in the dialog: the dialog closing does
+ * not prove the PUT landed, and the SSO login that follows depends on it.
+ */
+async function expectIdentityProviderRoleMappingRulesViaApi(
+  page: Page,
+  providerName: string,
+  expectedRuleCount: number,
+): Promise<void> {
+  await expect(async () => {
+    const response = await page.request.get(
+      `${UI_BASE_URL}/api/identity-providers`,
+    );
+    await expectApiResponseOk(response, "list identity providers");
+
+    const providers = (await response.json()) as Array<{
+      providerId: string;
+      roleMapping?: { rules?: unknown[] } | string | null;
+    }>;
+    const provider = providers.find((item) => item.providerId === providerName);
+    expect(provider, `provider ${providerName} not found`).toBeDefined();
+
+    const roleMapping =
+      typeof provider?.roleMapping === "string"
+        ? (JSON.parse(provider.roleMapping) as { rules?: unknown[] })
+        : provider?.roleMapping;
+    expect(roleMapping?.rules).toHaveLength(expectedRuleCount);
   }).toPass({ timeout: 15_000, intervals: [500, 1000, 2000] });
 }
 
@@ -682,6 +751,11 @@ test.describe("Identity Provider Team Sync E2E", () => {
     });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
 
+    // STEP 3.5: Leave the team the admin just created. Creating a team makes
+    // the creator one of its admins, and sync skips existing members, so the
+    // admin has to be outside the team for the SSO login below to add them.
+    await handTeamOverAndLeave(page, teamName);
+
     // STEP 4: Test SSO login with admin user (in archestra-admins group)
     const { context: ssoContext } = await signInViaIdentityProvider({
       browser,
@@ -903,17 +977,28 @@ test.describe("Identity Provider Role Mapping E2E", () => {
   test("should evaluate second rule when first rule does not match", async ({
     page,
     browser,
-    goToPage,
   }) => {
     test.slow();
     const providerName = `MultiRuleOIDC${Date.now()}`;
 
-    // STEP 1: Authenticate and clean up any existing provider
+    // STEP 1: Authenticate and clean up THIS spec's leftovers from earlier
+    // attempts, scoped to our own name prefix. The old
+    // deleteExistingProviderIfExists loop deleted every non-trusted OIDC
+    // provider it could open — including providers the api project's parallel
+    // JWKS specs had just created and bound to their gateways (seen in CI as
+    // their provider GETs 404ing mid-test with the agent binding FK-nulled).
     await ensureAdminAuthenticated(page);
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
+    await deleteLeftoverProvidersByPrefixViaApi(page, ["MultiRuleOIDC"]);
 
-    // STEP 2: Fill in OIDC provider form
-    await fillOidcProviderForm(page, providerName);
+    // STEP 2: Create the provider via API, then configure role mapping through
+    // the dialog opened by the ?edit=<id> deep link. Creating through the
+    // "Generic OIDC" type card is inherently racy under parallel workers: the
+    // card only offers a create dialog when no non-trusted OIDC provider
+    // exists, which is why the old flow had to delete foreign providers first.
+    const providerDbId = await createOidcProviderViaApi(page, providerName, {
+      teamSync: false,
+    });
+    await openIdentityProviderDialogById(page, providerDbId);
 
     // STEP 3: Configure Role Mapping with TWO rules
     // The first rule will NOT match (looks for a non-existent group)
@@ -941,7 +1026,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     await getRoleMappingRuleRow(page, 1)
       .getByTestId(E2eTestId.IdpRoleMappingRuleRole)
       .click();
-    await page.getByRole("option", { name: "Admin" }).click();
+    await page.getByRole("option", { name: "Admin", exact: true }).click();
 
     // Set default role to member (so we can verify role mapping works, not just fallback)
     const defaultRoleSelect = page.getByTestId(
@@ -952,9 +1037,12 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       await page.getByRole("option", { name: "Member" }).click();
     }
 
-    // Submit the form
-    await page.getByTestId(E2eTestId.IdentityProviderCreateButton).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    // Submit the changes and wait for the role mapping to be persisted before
+    // the SSO login below relies on it — dialog close alone doesn't confirm
+    // the PUT landed.
+    await page.getByTestId(E2eTestId.IdentityProviderUpdateButton).click();
+    await expectIdentityProviderRoleMappingRulesViaApi(page, providerName, 2);
+    await settleIdentityProviderDialog(page);
 
     // STEP 4: Test SSO login with admin user (in archestra-admins group)
     // The first rule should NOT match, but the second rule SHOULD match
@@ -963,27 +1051,31 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     // the whole fresh-context login flow before considering this a real failure.
     await expectRolesPageAfterSsoLogin(browser, providerName);
 
-    // STEP 6: Cleanup - delete the provider
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-    await openIdentityProviderDialog(page, "Generic OIDC");
-    await deleteProviderViaDialog(page);
+    // STEP 6: Cleanup - delete OUR provider via the API (deterministic; the
+    // "Generic OIDC" card binds to whichever provider is listed first)
+    await deleteProviderByProviderIdViaApi(page, providerName);
   });
 
   test("should map admin group to admin role via OIDC", async ({
     page,
     browser,
-    goToPage,
   }) => {
     test.slow();
     const providerName = `RoleMappingOIDC${Date.now()}`;
 
-    // STEP 1: Authenticate and clean up any existing provider
+    // STEP 1: Authenticate and clean up THIS spec's leftovers from earlier
+    // attempts, scoped to our own name prefix (see the multi-rule test above
+    // for why the unscoped delete-every-OIDC-card loop is not safe alongside
+    // the api project's parallel JWKS specs).
     await ensureAdminAuthenticated(page);
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
+    await deleteLeftoverProvidersByPrefixViaApi(page, ["RoleMappingOIDC"]);
 
-    // STEP 2: Fill in OIDC provider form
-    await fillOidcProviderForm(page, providerName);
+    // STEP 2: Create the provider via API and configure role mapping through
+    // the ?edit=<id> deep-linked dialog (deterministic under parallel workers).
+    const providerDbId = await createOidcProviderViaApi(page, providerName, {
+      teamSync: false,
+    });
+    await openIdentityProviderDialogById(page, providerDbId);
 
     // STEP 2: Configure Role Mapping
     await openIdentityProviderDialogSection(page, "role-mapping");
@@ -1004,7 +1096,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     // Select admin role using data-testid
     const roleSelect = page.getByTestId(E2eTestId.IdpRoleMappingRuleRole);
     await roleSelect.click();
-    await page.getByRole("option", { name: "Admin" }).click();
+    await page.getByRole("option", { name: "Admin", exact: true }).click();
 
     // Set default role to member (so we can verify role mapping works)
     const defaultRoleSelect = page.getByTestId(
@@ -1015,9 +1107,11 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       await page.getByRole("option", { name: "Member" }).click();
     }
 
-    // Submit the form
-    await page.getByTestId(E2eTestId.IdentityProviderCreateButton).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    // Submit the changes and wait for the role mapping to be persisted before
+    // the SSO login below relies on it.
+    await page.getByTestId(E2eTestId.IdentityProviderUpdateButton).click();
+    await expectIdentityProviderRoleMappingRulesViaApi(page, providerName, 1);
+    await settleIdentityProviderDialog(page);
 
     // STEP 3: Test SSO login with admin user (in archestra-admins group)
     // The admin user is configured in Keycloak with the archestra-admins group
@@ -1066,11 +1160,9 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       await ssoContext.close();
     }
 
-    // STEP 4: Cleanup - delete the provider
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-    await openIdentityProviderDialog(page, "Generic OIDC");
-    await deleteProviderViaDialog(page);
+    // STEP 4: Cleanup - delete OUR provider via the API (deterministic; the
+    // "Generic OIDC" card binds to whichever provider is listed first)
+    await deleteProviderByProviderIdViaApi(page, providerName);
   });
 });
 

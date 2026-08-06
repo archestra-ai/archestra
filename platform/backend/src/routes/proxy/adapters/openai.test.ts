@@ -498,6 +498,7 @@ describe("OpenAIRequestAdapter", () => {
         {
           id: "call_123",
           name: "get_weather",
+          arguments: { location: "NYC" },
           content: { temperature: 72, unit: "fahrenheit" },
           isError: false,
         },

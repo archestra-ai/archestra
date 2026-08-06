@@ -51,8 +51,13 @@ import {
 } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  RequirePendingTwoFactorChallenge,
+  RequireSession,
+} from "./auth-route-guard";
 import { RecoverAccountView } from "./recover-account-view";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
+import { TwoFactorSetupView } from "./two-factor-setup-view";
 import { TwoFactorView } from "./two-factor-view";
 
 const IdentityProviderSelector = dynamic(() =>
@@ -279,11 +284,27 @@ export function AuthViewWithErrorHandling({
   }
 
   if (path === "two-factor") {
-    return <TwoFactorView />;
+    return (
+      <RequirePendingTwoFactorChallenge>
+        <TwoFactorView />
+      </RequirePendingTwoFactorChallenge>
+    );
+  }
+
+  if (path === "two-factor-setup") {
+    return (
+      <RequireSession>
+        <TwoFactorSetupView />
+      </RequireSession>
+    );
   }
 
   if (path === "recover-account") {
-    return <RecoverAccountView />;
+    return (
+      <RequirePendingTwoFactorChallenge>
+        <RecoverAccountView />
+      </RequirePendingTwoFactorChallenge>
+    );
   }
 
   // Only sign-in remains: sign-up is handled upstream (blocked without an
@@ -379,15 +400,16 @@ export function AuthViewWithErrorHandling({
   }
 
   const originErrorAlert = originError && isSignInPage && (
-    <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950 max-w-sm">
+    <Alert className="mb-4 w-full border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
       <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
       <AlertTitle className="text-amber-900 dark:text-amber-100">
         Origin Not Allowed
       </AlertTitle>
       <AlertDescription className="text-amber-700 dark:text-amber-300">
         <p className="text-sm mb-2">
-          You are accessing {appName} from <code>{originError}</code>, which is
-          not in the list of trusted origins.
+          You are accessing {appName} from{" "}
+          <code className="break-all">{originError}</code>, which is not in the
+          list of trusted origins.
         </p>
         <p className="text-sm mb-2">
           To fix this, set the environment variable:
@@ -397,7 +419,10 @@ export function AuthViewWithErrorHandling({
         </pre>
         <p className="text-sm">
           For multiple origins, use{" "}
-          <code>ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS</code>.
+          <code className="break-all">
+            ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS
+          </code>
+          .
         </p>
         <Button
           size="sm"
@@ -516,9 +541,9 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
     setFailedAttempts(0);
 
     if (result.twoFactorRedirect) {
-      // Forward only the computed callback target (not the raw query string,
-      // which could carry an attacker-supplied totpURI) so the two-factor
-      // view can complete the original navigation after verification.
+      // Forward only the computed callback target, not the raw query string,
+      // so the two-factor view completes the original navigation after
+      // verification without inheriting attacker-supplied params.
       redirectAfterSignIn(
         callbackURL
           ? `/auth/two-factor?redirectTo=${encodeURIComponent(callbackURL)}`
@@ -552,7 +577,7 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
                 Learn how to reset admin password.
               </ExternalDocsLink>
             ) : (
-              "Ask your administrator to reset it."
+              <span>Ask your administrator to reset it.</span>
             )}
           </AlertDescription>
         </Alert>
@@ -615,7 +640,7 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
                 {signIn.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Sign In
+                <span>Sign In</span>
               </Button>
             </form>
           </Form>

@@ -9,6 +9,7 @@ type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   source: "owned",
   id: "owned-1",
+  slug: "my-owned-app",
   name: "My Owned App",
   description: "An owned app",
   scope: "org",
@@ -17,10 +18,13 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   viewerRole: "owner",
   latestVersion: 1,
   enabled: true,
+  locked: false,
   teams: [],
+  users: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
   pinnedAt: null,
+  labels: [],
 };
 
 const externalApp: Extract<AppListItem, { source: "external" }> = {
@@ -35,6 +39,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
   pinnedAt: null,
+  labels: [],
   icon: null,
   requiresInput: false,
 };

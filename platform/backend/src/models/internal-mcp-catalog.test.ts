@@ -529,7 +529,7 @@ describe("InternalMcpCatalogModel", () => {
       expect(updated?.labels[0].value).toBe("me");
     });
 
-    test("delete cascades labels", async () => {
+    test("labels survive soft delete and cascade away on hard delete", async () => {
       const catalog = await InternalMcpCatalogModel.create({
         name: "catalog-delete-cascade",
         serverType: "remote",
@@ -542,13 +542,17 @@ describe("InternalMcpCatalogModel", () => {
       );
       expect(labelsBefore).toHaveLength(1);
 
+      // Soft delete retains the label rows so restore revives the item intact.
       await InternalMcpCatalogModel.delete(catalog.id);
+      const labelsAfterSoftDelete =
+        await McpCatalogLabelModel.getLabelsForCatalogItem(catalog.id);
+      expect(labelsAfterSoftDelete).toHaveLength(1);
 
-      // Labels should be gone (cascade delete)
-      const labelsAfter = await McpCatalogLabelModel.getLabelsForCatalogItem(
-        catalog.id,
-      );
-      expect(labelsAfter).toHaveLength(0);
+      // Hard delete (purge) cascades the label rows away.
+      await InternalMcpCatalogModel.hardDelete(catalog.id);
+      const labelsAfterHardDelete =
+        await McpCatalogLabelModel.getLabelsForCatalogItem(catalog.id);
+      expect(labelsAfterHardDelete).toHaveLength(0);
     });
   });
 
@@ -771,7 +775,7 @@ describe("InternalMcpCatalogModel", () => {
       expect(fetched?.clonedFrom).toBe(source.id);
     });
 
-    test("nulls clonedFrom when the source is deleted (ON DELETE SET NULL)", async ({
+    test("nulls clonedFrom when the source is hard-deleted (ON DELETE SET NULL)", async ({
       makeOrganization,
       makeInternalMcpCatalog,
     }) => {
@@ -782,13 +786,19 @@ describe("InternalMcpCatalogModel", () => {
         clonedFrom: source.id,
       });
 
+      // Soft delete keeps the lineage pointer — the source may be restored.
       const deleted = await InternalMcpCatalogModel.delete(source.id);
       expect(deleted).toBe(true);
+      const afterSoftDelete = await InternalMcpCatalogModel.findById(clone.id, {
+        expandSecrets: false,
+      });
+      expect(afterSoftDelete?.clonedFrom).toBe(source.id);
 
+      // Hard delete fires the FK; the clone survives with the pointer cleared.
+      await InternalMcpCatalogModel.hardDelete(source.id);
       const fetched = await InternalMcpCatalogModel.findById(clone.id, {
         expandSecrets: false,
       });
-      // The clone survives; only the lineage pointer is cleared.
       expect(fetched).not.toBeNull();
       expect(fetched?.clonedFrom).toBeNull();
     });

@@ -38,6 +38,10 @@ function caps(
     supportsFqdn: false,
     supportsHttpMethods: false,
     message: null,
+    enforcementSource: "api-discovery",
+    enforcementStatus: "unknown",
+    probe: "absent",
+    probedAt: null,
     ...overrides,
   };
 }

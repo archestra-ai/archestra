@@ -2,6 +2,7 @@ import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  PLATFORM_ADMIN_ROLE_NAME,
 } from "@archestra/shared";
 import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { describe, expect, test, vi } from "@/test";
@@ -108,7 +109,7 @@ describe("OrganizationRoleModel", () => {
 
       expect(result).toMatchObject({
         id: ADMIN_ROLE_NAME,
-        name: ADMIN_ROLE_NAME,
+        name: "Admin",
         organizationId: org.id,
         permission: predefinedPermissionsMap[ADMIN_ROLE_NAME],
         predefined: true,
@@ -128,7 +129,7 @@ describe("OrganizationRoleModel", () => {
 
       expect(result).toMatchObject({
         id: EDITOR_ROLE_NAME,
-        name: EDITOR_ROLE_NAME,
+        name: "Editor",
         organizationId: org.id,
         permission: predefinedPermissionsMap[EDITOR_ROLE_NAME],
         predefined: true,
@@ -146,7 +147,7 @@ describe("OrganizationRoleModel", () => {
 
       expect(result).toMatchObject({
         id: MEMBER_ROLE_NAME,
-        name: MEMBER_ROLE_NAME,
+        name: "Member",
         organizationId: org.id,
         permission: predefinedPermissionsMap[MEMBER_ROLE_NAME],
         predefined: true,
@@ -295,24 +296,16 @@ describe("OrganizationRoleModel", () => {
 
       const result = await OrganizationRoleModel.getAll(org.id);
 
-      expect(result).toHaveLength(5); // 3 predefined + 2 custom
+      expect(result).toHaveLength(6); // 4 predefined + 2 custom
 
       // Check predefined roles
-      expect(result[0]).toMatchObject({
-        id: ADMIN_ROLE_NAME,
-        name: ADMIN_ROLE_NAME,
-        predefined: true,
-      });
-      expect(result[1]).toMatchObject({
-        id: EDITOR_ROLE_NAME,
-        name: EDITOR_ROLE_NAME,
-        predefined: true,
-      });
-      expect(result[2]).toMatchObject({
-        id: MEMBER_ROLE_NAME,
-        name: MEMBER_ROLE_NAME,
-        predefined: true,
-      });
+      expect(result.slice(0, 4).map((r) => r.id)).toEqual([
+        ADMIN_ROLE_NAME,
+        PLATFORM_ADMIN_ROLE_NAME,
+        EDITOR_ROLE_NAME,
+        MEMBER_ROLE_NAME,
+      ]);
+      expect(result.slice(0, 4).every((r) => r.predefined)).toBe(true);
 
       // Check custom roles (should be sorted by name)
       const customRoles = result.filter((r) => !r.predefined);
@@ -331,10 +324,13 @@ describe("OrganizationRoleModel", () => {
       const org = await makeOrganization();
       const result = await OrganizationRoleModel.getAll(org.id);
 
-      expect(result).toHaveLength(3);
-      expect(result[0].role).toBe(ADMIN_ROLE_NAME);
-      expect(result[1].role).toBe(EDITOR_ROLE_NAME);
-      expect(result[2].role).toBe(MEMBER_ROLE_NAME);
+      expect(result).toHaveLength(4);
+      expect(result.map((r) => r.role)).toEqual([
+        ADMIN_ROLE_NAME,
+        PLATFORM_ADMIN_ROLE_NAME,
+        EDITOR_ROLE_NAME,
+        MEMBER_ROLE_NAME,
+      ]);
     });
   });
 

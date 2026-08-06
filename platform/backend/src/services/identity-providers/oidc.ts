@@ -22,6 +22,12 @@ export interface ExternalIdentityProviderOidcConfig {
     | "client_secret_basic"
     | "private_key_jwt";
   enterpriseManagedCredentials?: IdentityProviderOidcConfig["enterpriseManagedCredentials"];
+  /**
+   * Attribute mapping. Gateway JWKS auth reads `mapping.email` to find the
+   * claim carrying the caller's email — IdPs that namespace custom claims
+   * leave the standard `email` claim unset.
+   */
+  mapping?: IdentityProviderOidcConfig["mapping"];
 }
 
 export async function findExternalIdentityProviderById(

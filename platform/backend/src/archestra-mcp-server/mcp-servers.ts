@@ -1,6 +1,5 @@
 import {
   TOOL_CREATE_AGENT_SHORT_NAME,
-  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_SHORT_NAME,
   TOOL_DEPLOY_MCP_SERVER_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
@@ -26,13 +25,16 @@ import { userHasPermission } from "@/auth/utils";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
+  AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
   TeamModel,
   ToolModel,
 } from "@/models";
+import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
 import {
@@ -495,17 +497,10 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME,
     title: "Reload MCP Server Tools",
+    // white-label-ok: shipped tool text; branded by getArchestraMcpTools before a model sees it
     description: `Re-discover a deployed MCP server's tools from the live server and refresh Archestra's tool catalog for it — picks up added, removed, and changed tools (names, descriptions, and input schemas) without reinstalling or restarting the server. Use when an MCP server's tools have changed and agents are seeing a stale list. Use ${TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME} to find the server ID. Note: tools are shared per catalog item, so this refreshes the tool list for every deployment of the same server.`,
     schema: ReloadMcpServerToolsToolArgsSchema,
     handler: ({ args, context }) => handleReloadMcpServerTools(args, context),
-  }),
-  defineArchestraTool({
-    shortName: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
-    title: "Create MCP Server Installation Request",
-    description:
-      "Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. This will open a dialog for the user to submit an installation request. When you trigger this tool, just tell the user to go through the dialog to submit the request. Do not provider any additional information",
-    schema: EmptyToolArgsSchema,
-    handler: ({ context }) => handleCreateMcpServerInstallationRequest(context),
   }),
 ] as const);
 
@@ -537,6 +532,9 @@ async function handleSearchPrivateMcpRegistry(
       "admin",
     );
     const query = args.query;
+    // Environment isolation: the registry an agent searches must match the
+    // tools it can actually call, so scope to the agent's own environment.
+    const environmentId = await AgentModel.findEnvironmentId(contextAgent.id);
 
     let catalogItems: InternalMcpCatalog[];
 
@@ -546,6 +544,7 @@ async function handleSearchPrivateMcpRegistry(
         userId: context.userId,
         isAdmin,
         organizationId,
+        environmentId,
       });
     } else {
       catalogItems = await InternalMcpCatalogModel.findAll({
@@ -553,6 +552,7 @@ async function handleSearchPrivateMcpRegistry(
         userId: context.userId,
         isAdmin,
         organizationId,
+        environmentId,
       });
     }
 
@@ -617,11 +617,14 @@ async function handleGetMcpServers(
       "mcpServerInstallation",
       "admin",
     );
+    // Environment isolation: only list servers from the agent's environment.
+    const environmentId = await AgentModel.findEnvironmentId(contextAgent.id);
     const catalogItems = await InternalMcpCatalogModel.findAll({
       expandSecrets: false,
       userId: context.userId,
       isAdmin,
       organizationId,
+      environmentId,
     });
 
     const items = catalogItems.map((c) => ({
@@ -670,7 +673,13 @@ async function handleGetMcpServerTools(
         organizationId,
       },
     );
-    if (!catalogItem) {
+    if (
+      !catalogItem ||
+      !(await catalogReachableByAgent({
+        catalogItem,
+        agentId: contextAgent.id,
+      }))
+    ) {
       const getMcpServersName = archestraMcpBranding.getToolName(
         TOOL_GET_MCP_SERVERS_SHORT_NAME,
       );
@@ -712,7 +721,13 @@ async function handleEditMcpDescription(
       isAdmin: checker.isAdmin,
       organizationId,
     });
-    if (!existing) {
+    if (
+      !existing ||
+      !(await catalogReachableByAgent({
+        catalogItem: existing,
+        agentId: contextAgent.id,
+      }))
+    ) {
       return errorResult("MCP server not found.");
     }
 
@@ -861,7 +876,13 @@ async function handleEditMcpConfig(
       isAdmin: checker.isAdmin,
       organizationId,
     });
-    if (!existing) {
+    if (
+      !existing ||
+      !(await catalogReachableByAgent({
+        catalogItem: existing,
+        agentId: contextAgent.id,
+      }))
+    ) {
       return errorResult("MCP server not found.");
     }
     // App-backed catalogs have no deployable config and are managed through the
@@ -1002,6 +1023,14 @@ async function handleCreateMcpServer(
       return errorResult("user/organization context not available.");
     }
 
+    // A server created by an agent lands in that agent's environment unless the
+    // caller names one explicitly, so the creator can still see it through the
+    // environment-scoped registry tools (mirrors `scaffold_app`).
+    const targetEnvironmentId =
+      args.environmentId !== undefined
+        ? args.environmentId
+        : await AgentModel.findEnvironmentId(contextAgent.id);
+
     try {
       // Deploying a catalog item to a restricted environment requires
       // mcpRegistry:deploy-to-restricted.
@@ -1012,7 +1041,7 @@ async function handleCreateMcpServer(
         "deploy-to-restricted",
       );
       await assertCanAssignEnvironment({
-        environmentId: args.environmentId ?? null,
+        environmentId: targetEnvironmentId,
         organizationId,
         canDeployToRestricted: hasDeploy,
       });
@@ -1121,8 +1150,7 @@ async function handleCreateMcpServer(
     }
     if (args.userConfig !== undefined)
       createParams.userConfig = args.userConfig;
-    if (args.environmentId !== undefined)
-      createParams.environmentId = args.environmentId;
+    createParams.environmentId = targetEnvironmentId;
     if (labels) createParams.labels = labels;
     if (teamIdsForScope.length > 0) createParams.teams = teamIdsForScope;
 
@@ -1187,7 +1215,13 @@ async function handleDeployMcpServer(
       isAdmin,
       organizationId,
     });
-    if (!catalogItem) {
+    if (
+      !catalogItem ||
+      !(await catalogReachableByAgent({
+        catalogItem,
+        agentId: contextAgent.id,
+      }))
+    ) {
       return errorResult("catalog item not found.");
     }
 
@@ -1370,13 +1404,25 @@ async function handleListMcpServerDeployments(
       return errorResult("user/organization context not available.");
     }
 
-    const isAdmin = await userHasPermission(
+    const [isAdmin, userIsPredefinedAdmin] = await Promise.all([
+      userHasPermission(
+        context.userId,
+        organizationId,
+        "mcpServerInstallation",
+        "admin",
+      ),
+      isPredefinedAdmin({ userId: context.userId, organizationId }),
+    ]);
+    // Environment isolation: a deployment inherits its environment from its
+    // catalog item, so only the agent's own environment is listed.
+    const environmentId = await AgentModel.findEnvironmentId(contextAgent.id);
+    const servers = await McpServerModel.findAll(
       context.userId,
+      isAdmin,
       organizationId,
-      "mcpServerInstallation",
-      "admin",
+      environmentId,
+      userIsPredefinedAdmin,
     );
-    const servers = await McpServerModel.findAll(context.userId, isAdmin);
 
     if (servers.length === 0) {
       return successResult("No MCP server deployments found.");
@@ -1432,7 +1478,10 @@ async function handleGetMcpServerLogs(
       context.userId,
       isAdmin,
     );
-    if (!server) {
+    if (
+      !server ||
+      !(await serverReachableByAgent({ server, agentId: contextAgent.id }))
+    ) {
       return errorResult("MCP server not found or you don't have access.");
     }
     if (server.serverType !== "local") {
@@ -1490,7 +1539,10 @@ async function handleReloadMcpServerTools(
       context.userId,
       isAdmin,
     );
-    if (!server) {
+    if (
+      !server ||
+      !(await serverReachableByAgent({ server, agentId: contextAgent.id }))
+    ) {
       return errorResult("MCP server not found or you don't have access.");
     }
     // Only local/remote servers have a live upstream to re-discover from.
@@ -1508,25 +1560,6 @@ async function handleReloadMcpServerTools(
     );
   } catch (error) {
     return catchError(error, "reloading MCP server tools");
-  }
-}
-
-async function handleCreateMcpServerInstallationRequest(
-  context: ArchestraContext,
-): Promise<CallToolResult> {
-  const { agent: contextAgent } = context;
-
-  logger.info(
-    { agentId: contextAgent.id },
-    "create_mcp_server_installation_request tool called",
-  );
-
-  try {
-    return successResult(
-      "A dialog for adding or requesting an MCP server should now be visible in the chat. Please review and submit to proceed.",
-    );
-  } catch (error) {
-    return catchError(error, "handling MCP server installation request");
   }
 }
 
@@ -1655,6 +1688,45 @@ async function assignDiscoveredToolsToAgents(params: {
  * Mirrors the canonical rule from routes/mcp-server.ts:validateScopeAndAuthorization.
  * Returns an error message string if rejected, or null if allowed.
  */
+/**
+ * Environment isolation fence for the by-id MCP server tools: an agent may only
+ * reach catalog items in its own environment (built-ins exempt, since their
+ * tools are callable everywhere). Callers report a false result exactly like a
+ * missing item, so the fence never confirms that an out-of-environment server
+ * exists — the same rule `load_skill` applies to cross-environment skills.
+ */
+async function catalogReachableByAgent(params: {
+  catalogItem: { id: string; environmentId: string | null };
+  agentId: string;
+}): Promise<boolean> {
+  const agentEnvironmentId = await AgentModel.findEnvironmentId(params.agentId);
+  return catalogVisibleInEnvironment(params.catalogItem, agentEnvironmentId);
+}
+
+/**
+ * Deployment counterpart of {@link catalogReachableByAgent}. An MCP server has
+ * no environment of its own — it inherits its catalog item's — and a
+ * catalog-less (custom/legacy) deployment counts as the Default environment.
+ */
+async function serverReachableByAgent(params: {
+  server: { catalogId: string | null };
+  agentId: string;
+}): Promise<boolean> {
+  const agentEnvironmentId = await AgentModel.findEnvironmentId(params.agentId);
+  if (!params.server.catalogId) {
+    return agentEnvironmentId === null;
+  }
+  const environmentId = await InternalMcpCatalogModel.findEnvironmentIdById(
+    params.server.catalogId,
+  );
+  // A dangling catalog reference leaves the deployment environment-less, which
+  // is the Default environment — same rule as a catalog-less row above.
+  return catalogVisibleInEnvironment(
+    { id: params.server.catalogId, environmentId: environmentId ?? null },
+    agentEnvironmentId,
+  );
+}
+
 async function authorizeDeployScope(params: {
   scope: ResourceVisibilityScope;
   teamId: string | null;

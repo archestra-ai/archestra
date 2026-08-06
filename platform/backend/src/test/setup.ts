@@ -63,12 +63,21 @@ let pgliteClient: PGlite | null = null;
 // the baseline the way a first-file beforeAll capture could.
 let liveConfig: Record<string, unknown> | null = null;
 let pristineConfig: Record<string, unknown> | null = null;
+// enterpriseTier is a module-level singleton whose userCount is shared across
+// every clean-project file in an isolate:false worker. Nothing resets it
+// between tests (unlike config), so a file that bumps it via
+// setUserCountForTesting leaks its enterprise gate into later files. Captured
+// via deferred import for the same reason as config: a static top-level import
+// would pull config.ts before the env above is set.
+type EnterpriseTierRef = typeof import("../enterprise-tier.js").enterpriseTier;
+let enterpriseTier: EnterpriseTierRef | null = null;
 if (process.env.ARCHESTRA_TEST_SHARED_WORKERS === "true") {
   liveConfig = (await import("../config.js")).default as unknown as Record<
     string,
     unknown
   >;
   pristineConfig = structuredClone(liveConfig);
+  enterpriseTier = (await import("../enterprise-tier.js")).enterpriseTier;
 }
 let testDb: ReturnType<typeof drizzle> | null = null;
 const originalConsoleWarn = console.warn;
@@ -151,6 +160,15 @@ beforeEach(async () => {
   // test or, in shared workers, the next file.
   if (liveConfig && pristineConfig) {
     restoreConfig(liveConfig, structuredClone(pristineConfig));
+  }
+
+  // Reset the enterpriseTier singleton to userCount 0 (small-team => enterprise
+  // active), its pristine default. Nothing else clears it between tests, so a
+  // userCount another clean file left at 9999 would flip the enterprise gate
+  // off here; shuffle makes which test loses the race random => flaky. The gate
+  // is read at request time, so a beforeEach reset closes the whole window.
+  if (enterpriseTier) {
+    enterpriseTier.setUserCountForTesting(0);
   }
 
   // Get all user tables from the database (excluding system tables)

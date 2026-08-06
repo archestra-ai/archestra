@@ -69,6 +69,26 @@ describe("OpenrouterResponseAdapter", () => {
 
     expect(adapter.getText()).toBe("hello");
   });
+
+  test("surfaces an error-shaped payload without choices as a typed upstream failure, not a TypeError", () => {
+    // OpenRouter can return HTTP 200 with an error body and no `choices`
+    // array at all; reading choices[0] off it unguarded crashed with
+    // "Cannot read properties of undefined (reading '0')".
+    const response = {
+      error: { message: "Provider returned error", code: 502 },
+    } as unknown as Openrouter.Types.ChatCompletionsResponse;
+
+    let thrown: unknown;
+    try {
+      openrouterAdapterFactory.createResponseAdapter(response);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect((thrown as ApiError).statusCode).toBe(502);
+    expect((thrown as Error).message).toBe("Provider returned error");
+  });
 });
 
 describe("OpenrouterStreamAdapter", () => {
@@ -91,6 +111,20 @@ describe("OpenrouterStreamAdapter", () => {
     }
 
     expectRetryableEmptyResponseError(thrown);
+  });
+
+  test("tolerates a streamed chunk without a choices array", () => {
+    const adapter = openrouterAdapterFactory.createStreamAdapter();
+
+    const usageOnlyChunk = {
+      id: "chatcmpl-test",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "openrouter/free-model",
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    } as unknown as Openrouter.Types.ChatCompletionChunk;
+
+    expect(() => adapter.processChunk(usageOnlyChunk)).not.toThrow();
   });
 
   test("allows streamed stop responses after text", () => {

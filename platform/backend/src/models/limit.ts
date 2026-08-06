@@ -1,4 +1,5 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
@@ -1475,6 +1476,10 @@ async function getDefaultUserLimitUsage(params: {
 }) {
   const conditions: SQL[] = [
     eq(schema.interactionsTable.userId, params.userId),
+    // Subscription-billed traffic (e.g. Claude Pro/Max, ChatGPT Codex) costs
+    // the organization $0 and must not burn down default user limits — the
+    // same rule updateUsageAfterInteraction applies to explicit limits.
+    eq(schema.interactionsTable.billingMode, "metered"),
     buildUsagePeriodStartCondition(params.cleanupInterval),
   ];
 
@@ -1594,10 +1599,11 @@ function buildLimitViolationResponse(params: {
 <archestra-limit-value>${params.limitValue}</archestra-limit-value>
 <archestra-limit-remaining>${remaining}</archestra-limit-remaining>`;
 
-  // Lead with explicit Archestra attribution: the screenshots in the bug report
-  // showed clients framing this as a provider rate limit ("not your usage
-  // limit"), so the first line must make clear that Archestra enforced it.
-  const header = `This request was blocked by Archestra (not the AI provider): the ${scopeLabel} cost limit has been reached.`;
+  // Lead with explicit platform attribution: clients were framing this as a
+  // provider rate limit ("not your usage limit"), so the first line must make
+  // clear that this platform enforced it — under the deployment's own brand,
+  // since this string is returned straight to the end user.
+  const header = `This request was blocked by ${archestraMcpBranding.appName} (not the AI provider): the ${scopeLabel} cost limit has been reached.`;
   const ruleLine = `Rule: ${scopeLabel} cost limit, applied to ${modelScope}${
     resetWindow ? `, resets ${resetWindow}` : ""
   }.`;

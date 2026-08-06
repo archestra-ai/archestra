@@ -32,7 +32,7 @@ describe("checkModelTeamAccess", () => {
         provider: "anthropic",
         modelId,
         organizationId: org.id,
-        userId: undefined,
+        authenticatedUserId: undefined,
         userTeamIds: [],
       });
       expect(result).toEqual({ allowed: true });
@@ -62,7 +62,7 @@ describe("checkModelTeamAccess", () => {
       provider: "anthropic",
       modelId: "claude-frontier",
       organizationId: org.id,
-      userId: insider.id,
+      authenticatedUserId: insider.id,
       userTeamIds: [devTeam.id],
     });
     expect(insiderResult).toEqual({ allowed: true });
@@ -71,7 +71,7 @@ describe("checkModelTeamAccess", () => {
       provider: "anthropic",
       modelId: "claude-frontier",
       organizationId: org.id,
-      userId: outsider.id,
+      authenticatedUserId: outsider.id,
       userTeamIds: [],
     });
     expect(outsiderResult).toMatchObject({ allowed: false });
@@ -80,10 +80,39 @@ describe("checkModelTeamAccess", () => {
       provider: "anthropic",
       modelId: "claude-frontier",
       organizationId: org.id,
-      userId: undefined,
+      authenticatedUserId: undefined,
       userTeamIds: [],
     });
     expect(anonymousResult).toMatchObject({ allowed: false });
+  });
+
+  test("denies restricted models without an authenticated identity, even when team ids match", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const model = await createModel("claude-frontier");
+
+    const insider = await makeUser();
+    await makeMember(insider.id, org.id);
+    const devTeam = await makeTeam(org.id, insider.id);
+    await makeTeamMember(devTeam.id, insider.id);
+    await ModelTeamModel.syncModelTeams(model.id, [devTeam.id]);
+
+    // Team ids of a genuine member, but no credential proved who is calling.
+    // Membership alone must not unlock the model, otherwise an unauthenticated
+    // caller naming that member in a header would inherit their access.
+    const result = await checkModelTeamAccess({
+      provider: "anthropic",
+      modelId: "claude-frontier",
+      organizationId: org.id,
+      authenticatedUserId: undefined,
+      userTeamIds: [devTeam.id],
+    });
+    expect(result).toMatchObject({ allowed: false });
   });
 
   test("allows restricted models for org admins outside the team", async ({
@@ -108,7 +137,7 @@ describe("checkModelTeamAccess", () => {
       provider: "anthropic",
       modelId: "claude-frontier",
       organizationId: org.id,
-      userId: admin.id,
+      authenticatedUserId: admin.id,
       userTeamIds: [],
     });
     expect(result).toEqual({ allowed: true });

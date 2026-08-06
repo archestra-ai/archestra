@@ -5,6 +5,7 @@ import type {
 } from "@archestra/shared";
 import {
   clientFilterToAgentIds,
+  DynamicInteraction,
   isClaudeSessionSource,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
 } from "@archestra/shared";
@@ -24,6 +25,11 @@ import {
   sql,
   sum,
 } from "drizzle-orm";
+import {
+  decryptInteractionRow,
+  encryptInteractionInsert,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
+} from "@/content-encryption/rows.ee";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -41,6 +47,7 @@ import type {
 } from "@/types";
 import {
   InteractionAuthMethodSchema,
+  LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH,
   normalizeInteractionResponse,
 } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
@@ -345,7 +352,8 @@ class InteractionModel {
     };
 
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
-    // whole conversation on every row (no-op for all other interactions).
+    // whole conversation on every row (no-op for all other interactions, and
+    // disabled entirely under content encryption — see isEligible).
     const { values, tip } =
       await InteractionDeltaManager.encodeOnWrite(sanitized);
 
@@ -353,8 +361,19 @@ class InteractionModel {
       .insert(schema.interactionsTable)
       // Monotonic v7 id: created_at ties happen under load, and the delta
       // manager's "most recent interaction" lookup breaks ties with the id.
-      .values({ id: uuidv7(), ...values })
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      .values({ id: uuidv7(), ...encryptInteractionInsert(values) })
+      // SPDX-SnippetEnd
       .returning();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // The RETURNING row is this method's public return value — decrypt it so
+    // callers never see envelopes.
+    decryptInteractionRow(interaction);
+    // SPDX-SnippetEnd
 
     if (tip) {
       InteractionDeltaManager.commitTip(interaction.id, tip);
@@ -546,11 +565,10 @@ class InteractionModel {
       case "userId":
         return direction(schema.interactionsTable.userId);
       case "model":
-        // Extract model from the JSONB request column
-        // Wrap in parentheses to ensure correct precedence for the JSON operator
-        return direction(
-          sql`(${schema.interactionsTable.request} ->> 'model')`,
-        );
+        // The scalar column, NOT `request ->> 'model'`: the jsonb payload can
+        // be an encrypted envelope under content encryption, and the scalar is
+        // populated for every row anyway.
+        return direction(schema.interactionsTable.model);
       default:
         // Default: newest first
         return desc(schema.interactionsTable.createdAt);
@@ -584,6 +602,11 @@ class InteractionModel {
       ...row.interaction,
       profileId: row.activeProfileId,
     };
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    decryptInteractionRow(interaction);
+    // SPDX-SnippetEnd
 
     // Check access control for non-agent admins
     if (userId && !isAgentAdmin) {
@@ -691,6 +714,79 @@ class InteractionModel {
     return result.total;
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Enterprise data-retention sweep: delete interactions older than the
+   * retention window, leaf-first.
+   *
+   * A row is only deletable when no other row references it as `parent_id`,
+   * so delta chains erode tip-first across iterations and any ancestor of a
+   * fresh surviving row is retained — reconstruction for survivors can never
+   * truncate, and the deployed `ON DELETE RESTRICT` self-FK can never fire by
+   * design. A concurrent insert racing the NOT EXISTS check trips the FK
+   * (23503); that batch is skipped and re-evaluated on the next sweep.
+   *
+   * The cutoff is computed in SQL (`now() - make_interval(...)`): `created_at`
+   * is `timestamp without time zone`, and a JS Date parameter would shift by
+   * the host's UTC offset.
+   */
+  static async deleteExpired(params: {
+    retentionDays: number;
+    batchSize?: number;
+    maxBatches?: number;
+  }): Promise<number> {
+    const batchSize = params.batchSize ?? 1000;
+    const maxBatches = params.maxBatches ?? 500;
+    let totalDeleted = 0;
+
+    for (let batch = 0; batch < maxBatches; batch++) {
+      let deleted: number;
+      try {
+        const result = await db.execute<{ deleted: number }>(sql`
+          WITH fence AS (
+            SELECT i.id
+            FROM ${schema.interactionsTable} AS i
+            WHERE i.created_at < now()::timestamp - make_interval(days => ${params.retentionDays})
+              AND NOT EXISTS (
+                SELECT 1 FROM ${schema.interactionsTable} AS c
+                WHERE c.parent_id = i.id
+              )
+            LIMIT ${batchSize}
+          ),
+          removed AS (
+            DELETE FROM ${schema.interactionsTable}
+            WHERE id IN (SELECT id FROM fence)
+            RETURNING 1
+          )
+          SELECT COUNT(*)::int AS deleted FROM removed
+        `);
+        deleted = Number(result.rows[0]?.deleted ?? 0);
+      } catch (error) {
+        // Most likely the parent_id RESTRICT FK racing a concurrent insert
+        // that chained onto a row selected for deletion. Safe to stop — the
+        // next sweep re-evaluates leaves from scratch.
+        logger.warn(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            totalDeleted,
+          },
+          "interaction retention sweep: batch failed, deferring to next run",
+        );
+        return totalDeleted;
+      }
+
+      totalDeleted += deleted;
+      // Leaf-first must loop even on short batches: deleting tips can expose
+      // their parents as new leaves. Only an empty round means done.
+      if (deleted === 0) break;
+    }
+
+    return totalDeleted;
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Get all unique external agent IDs with display names
    * Used for filtering dropdowns in the UI
@@ -699,11 +795,16 @@ class InteractionModel {
   static async getUniqueExternalAgentIds(
     requestingUserId?: string,
     isAgentAdmin?: boolean,
+    /** Narrow to rows attributed to this user (the own-logs log:read view). */
+    ownUserId?: string,
   ): Promise<{ id: string; displayName: string }[]> {
     // Build where clause for access control
     const conditions: SQL[] = [
       isNotNull(schema.interactionsTable.externalAgentId),
     ];
+    if (ownUserId) {
+      conditions.push(eq(schema.interactionsTable.userId, ownUserId));
+    }
 
     if (requestingUserId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
@@ -802,6 +903,15 @@ class InteractionModel {
     interaction: InsertInteraction & { id: string },
   ): Promise<void> {
     try {
+      // Subscription-billed interactions (e.g. Claude Pro/Max OAuth credentials)
+      // cost the organization $0, so they must not burn down token-cost limits.
+      if (interaction.billingMode === "subscription") {
+        logger.debug(
+          `Interaction ${interaction.id} is subscription-billed - skipping limit update`,
+        );
+        return;
+      }
+
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;
       const outputTokens = interaction.outputTokens || 0;
@@ -1247,8 +1357,8 @@ class InteractionModel {
         authMethods: parseInteractionAuthMethods(s.authMethods),
         authenticatedAppNames: s.authenticatedAppNames ?? [],
         userNames: s.userNames ?? [],
-        lastInteractionRequest: lastInteraction?.request ?? null,
-        lastInteractionType: lastInteraction?.type ?? null,
+        lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
+        lastInteractionType: lastInteraction?.lastInteractionType ?? null,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
       };
@@ -1275,7 +1385,11 @@ class InteractionModel {
   ): Promise<
     Map<
       string,
-      { request: unknown; type: string; claudeCodeTitle: string | null }
+      {
+        lastUserMessagePreview: string | null;
+        lastInteractionType: string | null;
+        claudeCodeTitle: string | null;
+      }
     >
   > {
     if (sessionKeys.length === 0) {
@@ -1340,6 +1454,16 @@ class InteractionModel {
       ORDER BY session_id, created_at DESC
     `);
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Raw-SQL rows bypass the model select paths — decrypt before the JS
+    // content scanning below.
+    for (const row of interactionsResult.rows) {
+      decryptInteractionRow(row);
+    }
+    // SPDX-SnippetEnd
+
     const interactions = interactionsResult.rows.map((row) => ({
       id: row.id,
       sessionId: row.session_id,
@@ -1353,7 +1477,11 @@ class InteractionModel {
     // Group by session and find the "last main interaction" and "title interaction"
     const result = new Map<
       string,
-      { request: unknown; type: string; claudeCodeTitle: string | null }
+      {
+        lastUserMessagePreview: string | null;
+        lastInteractionType: string | null;
+        claudeCodeTitle: string | null;
+      }
     >();
 
     // Group interactions by session key (sessionId or interaction id for single interactions)
@@ -1444,14 +1572,41 @@ class InteractionModel {
         }
 
         result.set(sessionKey, {
-          request: tipRequest,
-          type: lastMainInteraction?.type ?? "",
+          lastUserMessagePreview: lastMainInteraction
+            ? buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
+            : null,
+          lastInteractionType: lastMainInteraction?.type ?? null,
           claudeCodeTitle: claudeCodeTitle ?? null,
         });
       }
     }
 
     return result;
+  }
+
+  /**
+   * Number of distinct users with at least one attributed interaction since
+   * `since`. Backs the `llm_active_users` gauge.
+   *
+   * Deliberately an aggregate: per-user identity is not exported to Prometheus
+   * (a user_id label would multiply every LLM metric's series count by the size
+   * of the org — the same reason external_agent_id is not a label). Per-user
+   * detail belongs to the statistics API, which reads this table directly.
+   */
+  static async countDistinctActiveUsersSince(since: Date): Promise<number> {
+    const [row] = await db
+      .select({
+        activeUsers: sql<number>`CAST(COUNT(DISTINCT ${schema.interactionsTable.userId}) AS INTEGER)`,
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          gte(schema.interactionsTable.createdAt, since),
+          isNotNull(schema.interactionsTable.userId),
+        ),
+      );
+
+    return Number(row?.activeUsers) || 0;
   }
 }
 
@@ -1469,6 +1624,15 @@ function reconstructInteractionRequests(
     processedRequest?: unknown;
   }[],
 ): Promise<Map<string, { request: unknown; processedRequest: unknown }>> {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // Decrypt in place BEFORE delta folding — every list read path funnels
+  // through here, and callers keep using the same row objects afterwards.
+  for (const row of rows) {
+    decryptInteractionRow(row);
+  }
+  // SPDX-SnippetEnd
   return InteractionDeltaManager.reconstructMany(rows);
 }
 
@@ -1495,6 +1659,38 @@ async function withReconstructedRequests<
         }
       : row;
   });
+}
+
+/**
+ * Derive the short last-user-message preview shown by the sessions listing,
+ * using the same provider-aware parsing as the interaction detail view.
+ * Returns null when the request has no extractable user text or an
+ * unsupported provider shape — the listing renders its fallback instead.
+ */
+function buildLastUserMessagePreview(
+  request: unknown,
+  type: string,
+): string | null {
+  try {
+    const interaction = new DynamicInteraction({
+      request,
+      response: {},
+      type,
+    } as never);
+    const message = interaction.getLastUserMessage().trim();
+    if (!message) {
+      return null;
+    }
+    let preview = message.slice(0, LAST_USER_MESSAGE_PREVIEW_MAX_LENGTH);
+    // Don't leave half a surrogate pair at the truncation point.
+    const lastCode = preview.charCodeAt(preview.length - 1);
+    if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+      preview = preview.slice(0, -1);
+    }
+    return preview;
+  } catch {
+    return null;
+  }
 }
 
 function parseInteractionAuthMethods(

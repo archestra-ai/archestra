@@ -350,7 +350,7 @@ describe("chat active-run routes", () => {
     expect(readSsePayloads(response.body)).toContainEqual({ type: "start" });
   });
 
-  test("DELETE removes a conversation with a running active run and cascades its run rows", async () => {
+  test("DELETE hides a conversation with a running active run and asks that run to stop", async () => {
     const run = await ActiveChatRunModel.create({
       conversationId,
       userId: user.id,
@@ -371,10 +371,14 @@ describe("chat active-run routes", () => {
         organizationId,
       }),
     ).toBeNull();
-    expect(await ActiveChatRunModel.findById(run?.id ?? "")).toBeNull();
-    expect(
-      await ActiveChatRunModel.findRunningByConversation(conversationId),
-    ).toBeNull();
+
+    // The run row survives the soft delete — nothing cascades it away — so the
+    // delete asks it to stop instead, and the stream aborts on stopRequestedAt.
+    // Its events stay on disk, which is what makes the delete reversible.
+    const afterDelete = await ActiveChatRunModel.findById(run?.id ?? "");
+    expect(afterDelete).not.toBeNull();
+    expect(afterDelete?.status).toBe("running");
+    expect(afterDelete?.stopRequestedAt).not.toBeNull();
   });
 
   test("DELETE of an inaccessible conversation does not delete or stop another user's running run", async ({

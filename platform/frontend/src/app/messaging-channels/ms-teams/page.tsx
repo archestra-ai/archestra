@@ -25,6 +25,8 @@ const msTeamsProviderConfig: ProviderConfig = {
   providerLabel: "MS Teams",
   providerIcon: "/icons/ms-teams.png",
   webhookPath: "/api/webhooks/chatops/ms-teams",
+  supportsAnswerAll: true,
+  answerAllNeedsConsent: true,
   docsUrl: getFrontendDocsUrl("platform-ms-teams"),
   slashCommand: "/select-agent",
   buildDeepLink: (binding) => {

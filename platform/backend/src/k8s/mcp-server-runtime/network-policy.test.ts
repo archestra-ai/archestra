@@ -351,6 +351,10 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          enforcementStatus: "unknown",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(true);
@@ -366,6 +370,10 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: false,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          enforcementStatus: "unknown",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(false);
@@ -389,6 +397,10 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          enforcementStatus: "unknown",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(true);
@@ -404,6 +416,10 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          enforcementStatus: "unknown",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(false);
@@ -427,6 +443,10 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          enforcementStatus: "unknown",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(true);
@@ -442,6 +462,10 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          enforcementStatus: "unknown",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(false);
@@ -457,6 +481,10 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
       supportsFqdn: true,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery" as const,
+      enforcementStatus: "unknown" as const,
+      probe: "absent" as const,
+      probedAt: null,
     };
     expect(
       shouldUseAwsApplicationNetworkPolicy({

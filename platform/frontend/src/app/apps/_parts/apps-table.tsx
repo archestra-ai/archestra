@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LabelTags } from "@/components/label-tags";
 import { ScopeBadge } from "@/components/scope-badge";
 import {
   type TableRowAction,
@@ -114,6 +115,7 @@ export function AppsTable({
                 icon={app.source === "external" ? app.icon : undefined}
               />
               <span className="truncate font-medium">{app.name}</span>
+              <LabelTags labels={app.labels} />
               {isOpening && (
                 <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
               )}
@@ -145,6 +147,11 @@ export function AppsTable({
               teamNames={
                 app.source === "owned"
                   ? app.teams?.map((team) => team.name)
+                  : undefined
+              }
+              userNames={
+                app.source === "owned"
+                  ? app.users?.map((user) => user.name)
                   : undefined
               }
             />

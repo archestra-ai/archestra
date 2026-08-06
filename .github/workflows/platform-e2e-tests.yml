@@ -88,7 +88,7 @@ jobs:
       matrix:
         include:
           - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: ubuntu-latest
             context: ./platform
             dockerfile: ""
             artifact-name: platform-docker-image
@@ -96,7 +96,7 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
           - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
+            runner: ubuntu-latest
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
             artifact-name: mcp-server-base-docker-image
@@ -104,8 +104,14 @@ jobs:
             local-tag-prefix: mcp-server-base
             use-build-action: false
     steps:
+      # Standard runners ship ~14 GB free with ~25 GB of unused toolchains on
+      # the volume; delete the big ones in the background so the image build
+      # never runs out of disk mid-layer. The rm races nothing it touches.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -127,13 +133,16 @@ jobs:
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # Read-only cache: the buildcache tag is anonymously readable, but
+          # forks have no registry credentials to export back.
+          cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       # Reuse a platform image already built for this exact ./platform tree — by
       # this PR's run-e2e build, a prior merge-queue entry, or the scheduled warm
@@ -215,18 +224,21 @@ jobs:
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # Registry-backed layer cache: ephemeral runners have no persistent
+          # BuildKit state, so warm layers live in a buildcache tag next to
+          # the image (same-region GAR pulls are free).
+          cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=max
 
       # Slim variant for the K8s e2e job: the same image minus the ~352MB
       # Dagger engine tar that only the quickstart job uses. Every layer is already in
       # the builder cache from the full build above, so this push takes
-      # seconds. (blacksmith-build-push directly: the builder is already set
-      # up from the full build.)
+      # seconds.
       - name: Build slim Platform image (K8s job, no Dagger engine tar) and push
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.context }}/Dockerfile
           push: "true"
           target: unified-slim
           # Same dual-tag scheme as the full image: the SHA tag the K8s job
@@ -235,17 +247,18 @@ jobs:
             ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-slim
             ${{ steps.platform-reuse.outputs.slim_tree_tag }}
           provenance: "false"
-          network: host
-          secrets: |
-            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # All slim layers are a subset of the full build just done on this
+          # builder; the registry ref only backstops a same-run builder loss.
+          cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
         uses: ./.github/actions/auth-to-gar
         with:
-          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       # Same tree-based reuse as the Platform image above. This image rarely
       # changes, and the lite/quickstart jobs wait for this job — so on a match, a
@@ -276,24 +289,21 @@ jobs:
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
-      # The builder is only needed for an actual build; the reuse check above
-      # talks straight to the registry. Fork PRs always build.
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) || steps.mcp-base-reuse.outputs.reuse != 'true') }}
-        uses: ./.github/actions/setup-blacksmith-builder
-
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          dockerfile: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           # Non-fork pushes tag both the commit SHA (what the jobs pull) and the
           # tree OID (what the reuse step above checks next time).
           tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.tree_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          cache-from: type=registry,ref=${{ env.MCP_SERVER_BASE_IMAGE_REGISTRY }}/${{ env.MCP_SERVER_BASE_IMAGE_NAME }}:buildcache
+          # Forks have no registry credentials to export the cache back.
+          cache-to: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('type=registry,ref={0}/{1}:buildcache,mode=max', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || '' }}
 
       # Export as artifact for fast co-located downloads in E2E jobs. Fork PRs
       # only: they are the sole consumer (test jobs use source=artifact for forks,
@@ -334,7 +344,7 @@ jobs:
     name: Cancel E2E on build failure
     needs: [platform-e2e-build]
     if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: write # Required to cancel this workflow run.
@@ -353,14 +363,12 @@ jobs:
   # servers, and the Vault K8s-auth boot. Everything else runs in the lite
   # job below against the container harness.
   #
-  # One 8vcpu environment, no sharding: every extra shard pays the full
-  # ~4min environment setup again to split a few minutes of tests, and bigger
-  # runners don't speed the tests up either (the serial spec groups set the
-  # floor). 8vcpu is enough because the job is wait-bound, not compute-bound:
-  # setup blocks on image pulls and pod readiness probes, and the tests are
-  # API-bound Playwright specs. 16vcpu was sized for the old full-suite
-  # sharded runs, and measurements showed 16 vs 32 vcpu made no difference
-  # to test time. The required check is "Merge E2E Test Reports", not this job.
+  # One environment, no sharding: the whole job runs ~4-5 min, so every extra
+  # shard would pay the full environment setup again to split a couple of
+  # minutes of tests. A standard runner suffices because the job is
+  # wait-bound, not compute-bound: setup blocks on image pulls and pod
+  # readiness probes, and the tests are API-bound Playwright specs.
+  # The required check is "Merge E2E Test Reports", not this job.
   platform-e2e-k8s-tests:
     name: Platform E2E Tests (K8s)
     # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
@@ -373,17 +381,23 @@ jobs:
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
-    # hung run instead of letting it burn a runner for the GitHub default.
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    # Worst case = the 25-min image-poll ceiling (cold build, see
+    # image-pull-timeout-seconds below) plus setup and the ~4 min of tests;
+    # 40 caps a hung run instead of letting it burn a runner for the GitHub
+    # default.
+    timeout-minutes: 40
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
       actions: read # Required to poll for build artifacts on fork PRs (wait-timeout-seconds).
     steps:
+      # See the reclaim note in the build job.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -440,7 +454,12 @@ jobs:
           # Fork PRs load a local artifact tag, which must be kind-loaded.
           platform-image-in-cluster-pull: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'false' || 'true' }}
           mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
-          image-pull-timeout-seconds: "900"
+          # Must cover the platform image build this job deliberately does not
+          # `needs`: warm registry-cache builds finish well inside this, but a
+          # fully cold build (empty buildcache after a cache-invalidating
+          # change) measured 20 min on a standard runner. A failed build still
+          # cancels this run early via platform-e2e-cancel-on-build-failure.
+          image-pull-timeout-seconds: "1500"
 
       - name: Run K8s-bound E2E tests
         id: e2e
@@ -460,8 +479,11 @@ jobs:
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
+      # always() so this still runs when a failing setup step aborts the job
+      # (a plain outcome check is implicitly ANDed with success() and gets
+      # skipped exactly when the diagnostics matter most).
       - name: Show logs on failure or flaky tests
-        if: steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true'
+        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true')
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide || true
@@ -543,17 +565,53 @@ jobs:
   # below: this environment seeds chat API keys for the provider matrix, so
   # the org here is never in the "no keys yet" state that job exists to cover.
   platform-e2e-lite-tests:
-    name: Platform E2E Tests (Lite)
+    name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      # A failing leg must not cancel its siblings; we want the full failure
+      # picture in one pass.
+      fail-fast: false
+      matrix:
+        include:
+          # Each leg boots its own full lite stack — on free runners that
+          # duplicated ~4 min setup buys test wall-clock. The nightly
+          # cross-browser projects ride the api leg: they only carry the
+          # small @firefox/@webkit-tagged subset.
+          # The chromium legs cap Playwright at 2 workers: the config's CI
+          # default (90% of cores ≈ 3) oversubscribes a standard runner that
+          # is also hosting the whole lite stack, and the resulting CPU
+          # starvation is what makes the heavy dialog-interaction specs
+          # (static-credentials, chat) miss their interaction windows. The
+          # api leg keeps the default — API-bound specs gain from parallelism
+          # and don't fight for paint time.
+          - name: api
+            projects_default: api --project=identity-providers
+            projects_nightly: api --project=identity-providers --project=firefox --project=webkit
+            shard: ""
+            workers_arg: ""
+          - name: chromium-1of2
+            projects_default: chromium
+            projects_nightly: chromium
+            shard: "--shard=1/2"
+            workers_arg: "--workers=2"
+          - name: chromium-2of2
+            projects_default: chromium
+            projects_nightly: chromium
+            shard: "--shard=2/2"
+            workers_arg: "--workers=2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
+      # See the reclaim note in the build job.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -612,8 +670,9 @@ jobs:
           # Merge queue / on-demand label runs cover chromium only. The nightly
           # schedule (and manual workflow_dispatch) add firefox + webkit, which
           # only carry the @firefox/@webkit-tagged tests.
-          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'chromium --project=firefox --project=webkit --project=api --project=identity-providers' || 'chromium --project=api --project=identity-providers' }}
-          extra_args: "--grep-invert '@quickstart'"
+          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.projects_nightly || matrix.projects_default }}
+          shard: ${{ matrix.shard }}
+          extra_args: "--grep-invert '@quickstart' ${{ matrix.workers_arg }}"
           timeout: "20"
           env_file: /tmp/lite-e2e.env
 
@@ -621,7 +680,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: blob-report-lite
+          name: blob-report-lite-${{ matrix.name }}
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
@@ -649,14 +708,18 @@ jobs:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
+      # See the reclaim note in the build job.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -724,12 +787,18 @@ jobs:
           #
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
           # Provider base URLs point to WireMock so quickstart tests can mock LLM responses
+          # Rate limiting is disabled like in the lite and K8s environments:
+          # the auth setup's sign-in/sign-out churn (amplified by Playwright
+          # retries) trips better-auth's per-IP limiter and fails user setup
+          # with 429s — measured on standard runners, where slower cores
+          # bunch the retries tighter than the old hardware did.
           docker run -d \
             --name archestra-quickstart \
             --network archestra-quickstart-net \
             -p 127.0.0.1:9000:9000 \
             -p 127.0.0.1:3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
+            -e ARCHESTRA_AUTH_RATE_LIMIT_DISABLED=true \
             -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
             -e ARCHESTRA_ANALYTICS=disabled \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \
@@ -784,6 +853,105 @@ jobs:
           fi
 
           echo "All services are ready!"
+
+      # The API and the Next.js server both bind IPv4 only, but `localhost`
+      # resolves to ::1 first — getaddrinfo applies RFC 6724 precedence
+      # whatever the order in /etc/hosts, and musl has no /etc/gai.conf to
+      # retune it (the bundled Postgres is dual-stack; nothing else is). Any URL
+      # naming it starts every connection on an address with no listener:
+      # refused outright for a client without Happy Eyeballs, a wasted round
+      # trip for one with it. That is the `ECONNREFUSED ::1:9000` in issues
+      # #4917 and #6933. The host-side curls above cannot see this — they
+      # exercise Docker's port mapping, not in-container name resolution.
+      - name: Assert the container never dials a dead loopback address
+        run: |
+          # Context only — never the reason the step fails.
+          echo "--- container facts ---"
+          docker exec archestra-quickstart node -e '
+            const listening = (f) => require("fs").readFileSync(f, "utf8").trim().split("\n").slice(1)
+              .map((l) => l.trim().split(/\s+/)).filter((c) => c[3] === "0A")
+              .map((c) => c[1].split(":")).map(([a, p]) => parseInt(p, 16)).sort((a, b) => a - b);
+            console.log("  listening on v4:", listening("/proc/net/tcp").join(" "));
+            console.log("  listening on v6:", listening("/proc/net/tcp6").join(" "));
+            require("dns").lookup("localhost", { all: true }, (_, a) =>
+              console.log("  localhost resolves to:", JSON.stringify(a)));
+          ' || true
+
+          # Each assertion records its own result so one failure still reports
+          # the others, rather than aborting the step on the first.
+          rc=0
+
+          # 1. The runtime knob the SSR paths and the generated API client read.
+          echo "1/3 The image's internal API URL is an address, not a name..."
+          docker exec archestra-quickstart node -e '
+            const base = process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
+            if (!base) { console.error("FAILED: ARCHESTRA_INTERNAL_API_BASE_URL is unset in the image"); process.exit(1); }
+            const { hostname } = new URL(base);
+            console.log(`  ARCHESTRA_INTERNAL_API_BASE_URL=${base}`);
+            if (require("net").isIP(hostname) === 0) {
+              console.error(`FAILED: ${hostname} is a name; it resolves to ::1 first, where nothing listens`);
+              process.exit(1);
+            }
+          ' || rc=1
+
+          # 2. The frontend proxies /api, /v1 and /ws to the backend through
+          #    Next.js rewrites. With output: "standalone" those destinations are
+          #    resolved during `next build` and frozen into routes-manifest.json,
+          #    so no runtime environment can retarget them — the shipped manifest
+          #    IS the dial list, and it is what carried `http://localhost:9000`
+          #    into the proxy errors users reported.
+          echo "2/3 No baked proxy destination names localhost..."
+          docker exec archestra-quickstart node -e '
+            const m = require("/app/frontend/.next/routes-manifest.json").rewrites;
+            // Some destinations carry :params in the host (the Sentry tunnel),
+            // which is not a parseable URL and can never be a loopback dial.
+            const parsed = [...(m.beforeFiles ?? []), ...(m.afterFiles ?? []), ...(m.fallback ?? [])]
+              .map((r) => { try { return new URL(r.destination); } catch { return null; } })
+              .filter((u) => u && /^https?:$/.test(u.protocol));
+            const named = parsed.filter((u) => u.hostname === "localhost");
+            console.log(`  ${parsed.length} absolute destinations, ${named.length} naming localhost`);
+            if (named.length) {
+              console.error(`FAILED: these resolve to ::1 first, where nothing listens: ${JSON.stringify(named.map((u) => u.href))}`);
+              process.exit(1);
+            }
+          ' || rc=1
+
+          # 3. The same destinations, actually dialled — with the resolver pinned
+          #    to verbatim order and Happy Eyeballs off, so Node connects to the
+          #    FIRST address only. That is what a non-Node client in the container
+          #    does, and it is what turns an ambiguous name from "slow" into
+          #    "refused". Both flags are passed on argv, which beats NODE_OPTIONS,
+          #    and NODE_OPTIONS itself is overridden here with something an
+          #    operator plausibly sets: the fix must not live anywhere a user's
+          #    `docker run -e NODE_OPTIONS=...` could replace it.
+          echo "3/3 Every proxy destination answers on its first-resolved address..."
+          docker exec \
+            -e NODE_OPTIONS=--max-old-space-size=4096 \
+            archestra-quickstart \
+            node --dns-result-order=verbatim --no-network-family-autoselection -e '
+              const isLoopback = (h) => h === "localhost" || h === "[::1]" || h.startsWith("127.");
+              const m = require("/app/frontend/.next/routes-manifest.json").rewrites;
+              const origins = [...new Set([...(m.beforeFiles ?? []), ...(m.afterFiles ?? []), ...(m.fallback ?? [])]
+                .map((r) => { try { return new URL(r.destination); } catch { return null; } })
+                .filter((u) => u && /^https?:$/.test(u.protocol) && isLoopback(u.hostname))
+                .map((u) => u.origin))];
+              if (!origins.length) { console.error("FAILED: no loopback proxy destination found to test"); process.exit(1); }
+              Promise.all(origins.map((origin) =>
+                fetch(new URL("/health", origin))
+                  .then((r) => r.json())
+                  .then((j) => console.log(`  ${origin} -> ${JSON.stringify(j)}`))
+                  .catch((e) => {
+                    console.error(`FAILED: ${origin} unreachable on its first-resolved address: ${e.cause?.message ?? e.message}`);
+                    process.exitCode = 1;
+                  })
+              ));
+            ' || rc=1
+
+          if [ "$rc" -ne 0 ]; then
+            echo "The container dials an address it does not listen on — see issues #4917 / #6933."
+            exit 1
+          fi
+          echo "The container dials only addresses it actually listens on."
 
       # Assert the embedded Dagger Engine (skill sandbox / code runtime) actually
       # came up. The entrypoint deploys it and gates on readiness, but that gate
@@ -904,7 +1072,7 @@ jobs:
     # gate; the event guard keeps it running on merge_group / on-demand runs but
     # reporting skipped (and thus satisfying the ruleset) on ordinary PR pushes.
     if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     # No permissions needed: this job only inspects `needs.*.result`.
     permissions: {}
@@ -947,14 +1115,14 @@ jobs:
         platform-quickstart-e2e-tests,
       ]
     if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read # Required to checkout the repository and merge Playwright reports.
       pull-requests: write # Required for playwright-report-summary to comment on PRs.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1

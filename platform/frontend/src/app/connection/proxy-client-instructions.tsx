@@ -47,6 +47,7 @@ import {
   useCreateConnectionPassthroughKey,
   useCreateConnectionVirtualKey,
 } from "@/lib/connection-setup.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
@@ -152,6 +153,7 @@ export function ProxyClientInstructions({
   shownProviders,
   baseUrl,
 }: ProxyClientInstructionsProps) {
+  const appName = useAppName();
   const shownSet = useMemo(
     () => (shownProviders ? new Set(shownProviders) : null),
     [shownProviders],
@@ -239,8 +241,16 @@ export function ProxyClientInstructions({
       url,
       tokenPlaceholder: `<your-${selectedProvider}-api-key>`,
       proxyName: toProxyProviderSlug(profileName),
+      appName,
     });
-  }, [client.proxy, selectedProvider, providerLabel, url, profileName]);
+  }, [
+    client.proxy,
+    selectedProvider,
+    providerLabel,
+    url,
+    profileName,
+    appName,
+  ]);
 
   if (client.proxy.kind === "unsupported") {
     return <UnsupportedPanel reason={client.proxy.reason} />;
@@ -431,7 +441,7 @@ function GenericProxyInstructions({
           <p className="text-xs text-muted-foreground">
             {authMethod === "provider-key" ? (
               canCreateVirtualKey && !providerHasKey ? (
-                <>
+                <span key="needs-provider-key">
                   Passthrough — you keep using your own {providerLabel} key. A
                   virtual key needs a configured {providerLabel} provider key
                   first
@@ -449,14 +459,20 @@ function GenericProxyInstructions({
                       ).
                     </>
                   ) : (
-                    " (ask an admin to add one)."
+                    <span> (ask an admin to add one).</span>
                   )}
-                </>
+                </span>
               ) : (
-                "Passthrough — you keep using your own provider API key; only the base URL changes."
+                <span key="passthrough">
+                  Passthrough — you keep using your own provider API key; only
+                  the base URL changes.
+                </span>
               )
             ) : (
-              "A personal virtual key mapped to your provider key is created automatically and shown below."
+              <span key="virtual">
+                A personal virtual key mapped to your provider key is created
+                automatically and shown below.
+              </span>
             )}
           </p>
           {authMethod === "virtual-key" &&
@@ -477,7 +493,7 @@ function GenericProxyInstructions({
             ) : (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" />
-                Creating your virtual key…
+                <span>Creating your virtual key…</span>
               </div>
             ))}
         </div>
@@ -637,9 +653,9 @@ function ModelRouterInstructions() {
               )}
               <p className="text-xs text-muted-foreground">
                 A personal virtual key mapped to your
-                {mappedProvider
-                  ? ` ${providerDisplayNames[mappedProvider]}`
-                  : ""}{" "}
+                {mappedProvider ? (
+                  <span> {providerDisplayNames[mappedProvider]}</span>
+                ) : null}{" "}
                 provider key is created automatically and shown below. Models
                 from other providers need a key mapped to that provider.
               </p>
@@ -660,7 +676,7 @@ function ModelRouterInstructions() {
               ) : (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="size-3.5 animate-spin" />
-                  Creating your virtual key…
+                  <span>Creating your virtual key…</span>
                 </div>
               )}
             </div>
@@ -928,7 +944,7 @@ function StepList({
  * Inline reveal for the manual attribution step: auto-provisions the caller's
  * personal passthrough virtual key (scoped to this proxy) and shows the header
  * name + copyable value to paste into the client's custom-headers field. Gated
- * on llmVirtualKey:create; otherwise points to the Virtual API Keys page.
+ * on llmVirtualKey:create; otherwise points to the LLM Proxies page.
  */
 type PassthroughKeyState =
   | { status: "loading" }
@@ -981,14 +997,14 @@ function PassthroughKeyField({
   if (canCreate === false) {
     return (
       <p className="text-[12.5px] leading-snug text-muted-foreground">
-        Create a passthrough virtual key on the{" "}
+        Open an LLM Proxy&apos;s Connect dialog from the{" "}
         <Link
-          href="/credentials/virtual-keys"
+          href="/llm/proxies"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          Virtual API Keys
+          LLM Proxies
         </Link>{" "}
-        page, then add a header named{" "}
+        page and create a passthrough key. Then add a header named{" "}
         <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
           {VIRTUAL_KEY_HEADER}
         </code>{" "}
@@ -1008,12 +1024,12 @@ function PassthroughKeyField({
         >
           Retry
         </button>{" "}
-        or create one on the{" "}
+        or open an LLM Proxy&apos;s Connect dialog from the{" "}
         <Link
-          href="/credentials/virtual-keys"
+          href="/llm/proxies"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          Virtual API Keys
+          LLM Proxies
         </Link>{" "}
         page.
       </p>
@@ -1024,7 +1040,7 @@ function PassthroughKeyField({
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" />
-        Creating your passthrough key…
+        <span>Creating your passthrough key…</span>
       </div>
     );
   }
@@ -1078,8 +1094,8 @@ function PassthroughKeyField({
         </>
       )}
       <p className="text-[11px] text-muted-foreground">
-        Revoke any time by deleting the &quot;{key.name}&quot; key on the
-        Virtual API Keys page.
+        Revoke any time from the LLM Proxy&apos;s Connect dialog by deleting the
+        &quot;{key.name}&quot; key.
       </p>
     </div>
   );

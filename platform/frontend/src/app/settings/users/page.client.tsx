@@ -1,9 +1,18 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Eye, Plus, Shield, Trash2, UserCog } from "lucide-react";
+import {
+  Copy,
+  Eye,
+  Plus,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+  UserCog,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -54,6 +63,7 @@ import {
   useActiveOrganization,
   useDeletePendingSignupMember,
   useMemberSignupStatus,
+  useOrganization,
 } from "@/lib/organization.query";
 import { useRoles } from "@/lib/role.query";
 import { cn } from "@/lib/utils";
@@ -103,7 +113,14 @@ function UsersPageContent() {
       loadingFallback={<LoadingSpinner />}
     >
       {activeOrg ? (
-        <div className="space-y-6">
+        <div
+          className="space-y-6"
+          // Single always-mounted panel keeps each tab's aria-controls
+          // pointing at an element that exists (the panel's content swaps).
+          role="tabpanel"
+          id={USERS_TABPANEL_ID}
+          aria-labelledby={`${activeTab}-tab`}
+        >
           {activeTab === "users" ? (
             <MembersTab activeTab={activeTab} onTabChange={setActiveTab} />
           ) : (
@@ -120,6 +137,13 @@ function UsersPageContent() {
   );
 }
 
+const USERS_TABPANEL_ID = "users-tabpanel";
+
+const USER_TABS = [
+  { id: "users", label: "Users" },
+  { id: "invitations", label: "Invitations" },
+] as const;
+
 function TabButtons({
   activeTab,
   onTabChange,
@@ -127,24 +151,47 @@ function TabButtons({
   activeTab: string;
   onTabChange: (tab: string) => void;
 }) {
+  // Switching tabs swaps the whole MembersTab/InvitationsTab subtree —
+  // including this component — so the newly active tab button must be
+  // re-focused after the replacement mounts or keyboard focus drops to <body>.
+  const selectTab = (tabId: string) => {
+    onTabChange(tabId);
+    requestAnimationFrame(() => {
+      document.getElementById(`${tabId}-tab`)?.focus();
+    });
+  };
+
   return (
-    <div className="flex gap-1 rounded-lg bg-muted p-1">
-      <Button
-        variant={activeTab === "users" ? "secondary" : "ghost"}
-        size="sm"
-        onClick={() => onTabChange("users")}
-        className={cn("px-3", activeTab === "users" && "shadow-sm")}
-      >
-        Users
-      </Button>
-      <Button
-        variant={activeTab === "invitations" ? "secondary" : "ghost"}
-        size="sm"
-        onClick={() => onTabChange("invitations")}
-        className={cn("px-3", activeTab === "invitations" && "shadow-sm")}
-      >
-        Invitations
-      </Button>
+    <div
+      role="tablist"
+      aria-label="Users and invitations"
+      className="flex gap-1 rounded-lg bg-muted p-1"
+    >
+      {USER_TABS.map((tab) => {
+        const isActive = activeTab === tab.id;
+        return (
+          <Button
+            key={tab.id}
+            role="tab"
+            id={`${tab.id}-tab`}
+            aria-selected={isActive}
+            aria-controls={USERS_TABPANEL_ID}
+            tabIndex={isActive ? 0 : -1}
+            variant={isActive ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => selectTab(tab.id)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                selectTab(tab.id === "users" ? "invitations" : "users");
+              }
+            }}
+            className={cn("px-3", isActive && "shadow-sm")}
+          >
+            {tab.label}
+          </Button>
+        );
+      })}
     </div>
   );
 }
@@ -194,6 +241,7 @@ function MembersTab({
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const { data: organization } = useOrganization();
 
   const pageFromUrl = searchParams.get("page");
   const limitFromUrl = searchParams.get("limit");
@@ -256,6 +304,15 @@ function MembersTab({
   const tableRows =
     pageIndex === 0 ? [...pendingSignupMembers, ...members] : members;
 
+  // Show the column while the requirement is on, and keep showing it once
+  // anyone is enrolled — turning the requirement off should not blind admins
+  // to who still has 2FA.
+  const showTwoFactorColumn =
+    !!organization?.requireTwoFactor ||
+    members.some(
+      (member) => "twoFactorEnabled" in member && member.twoFactorEnabled,
+    );
+
   const columns: ColumnDef<Member | PendingSignupMember>[] = [
     {
       id: "avatar",
@@ -312,10 +369,38 @@ function MembersTab({
       header: "Role",
       cell: ({ row }) => (
         <Badge variant="outline" className="capitalize">
-          {row.original.role}
+          {getRoleDisplayName(row.original.role)}
         </Badge>
       ),
     },
+    ...(showTwoFactorColumn
+      ? [
+          {
+            id: "twoFactor",
+            header: "2FA",
+            cell: ({ row }) =>
+              "provider" in row.original ? (
+                <span className="text-sm text-muted-foreground">—</span>
+              ) : row.original.twoFactorEnabled ? (
+                <span
+                  className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-500"
+                  title="Two-factor authentication enrolled"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>Enrolled</span>
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500"
+                  title="Not yet enrolled — signed out until they set 2FA up"
+                >
+                  <ShieldAlert className="h-4 w-4" />
+                  <span>Not enrolled</span>
+                </span>
+              ),
+          } satisfies ColumnDef<Member | PendingSignupMember>,
+        ]
+      : []),
     {
       id: "joined",
       header: "Joined",
@@ -390,7 +475,7 @@ function MembersTab({
                     {
                       icon: <Eye className="h-4 w-4" />,
                       label: "View as user",
-                      permissions: { member: ["update"] },
+                      permissions: { member: ["impersonate"] },
                       disabled: isImpersonatingUser,
                       testId: `${E2eTestId.ImpersonationViewAsButton}-${member.userId}`,
                       onClick: () => impersonateUser(member.userId),
@@ -515,19 +600,34 @@ function RoleFilterDropdown() {
 
   return (
     <Select value={currentRole} onValueChange={handleChange}>
-      <SelectTrigger className="w-[180px]">
-        {selectedRole ? (
-          <RoleOptionLabel
-            predefined={selectedRole.predefined}
-            label={selectedRole.name}
-            className="pr-6"
-          />
-        ) : (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Shield className="h-4 w-4" />
-            <SelectValue placeholder="Filter by role" />
-          </div>
-        )}
+      <SelectTrigger
+        className="w-[180px]"
+        data-testid={E2eTestId.UsersRoleFilter}
+      >
+        {/*
+         * SelectValue must stay mounted in every state. Radix positions the
+         * item-aligned dropdown only once it has all of trigger, value node,
+         * content, viewport and selected item; with the value node missing it
+         * silently skips positioning and the list renders unstyled off-screen
+         * while `pointer-events: none` stays on <body> — so the filter looks
+         * dead. Rendering the custom label as SelectValue's children keeps the
+         * node mounted, which is the same shape the other custom-label selects
+         * here use.
+         */}
+        <SelectValue placeholder="Filter by role">
+          {selectedRole ? (
+            <RoleOptionLabel
+              predefined={selectedRole.predefined}
+              label={selectedRole.name}
+              className="pr-6"
+            />
+          ) : (
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <Shield className="h-4 w-4" />
+              Filter by role
+            </span>
+          )}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="all">All Roles</SelectItem>
@@ -658,7 +758,7 @@ function InvitationsTab({
       header: "Role",
       cell: ({ row }) => (
         <Badge variant="outline" className="capitalize">
-          {row.original.role ?? "member"}
+          {getRoleDisplayName(row.original.role ?? "member")}
         </Badge>
       ),
     },

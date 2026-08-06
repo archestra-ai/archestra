@@ -4,6 +4,7 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
+  TimeInMs,
 } from "@archestra/shared";
 import { WebClient } from "@slack/web-api";
 import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
@@ -13,16 +14,14 @@ import { z } from "zod";
 import {
   autoProvisionUser,
   buildWelcomeMessage,
-  isSsoConfigured,
+  resolveSignupWelcomeMode,
 } from "@/agents/chatops/auto-provision";
 import {
+  applyChannelGate,
+  findWorkspacesWithUnmentionedTraffic,
   invalidateChannelAnswerAll,
-  isChannelThreadActive,
-  isThreadMuteCommand,
-  markChannelThreadActive,
-  mightBeAddressedMuteCommand,
   muteChannelThread,
-  resolveChannelGateAction,
+  recordUnmentionedChannelTraffic,
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
@@ -32,8 +31,9 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
-import { EventDedupMap } from "@/agents/chatops/utils";
+import { EventDedupMap, errorMessage } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -220,11 +220,13 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               };
               // Resolve sender email and verify they are a registered Archestra user
               if (
-                !(await resolveAndVerifySenderForMSTeams(
+                !(await resolveAndVerifySenderForMSTeams({
                   context,
                   provider,
-                  cardMessage,
-                ))
+                  message: cardMessage,
+                  // A card submit is a direct interaction with the bot.
+                  announce: true,
+                }))
               ) {
                 return;
               }
@@ -306,53 +308,59 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
             // Team-channel auto-reply gate: in channels the bot stays quiet
             // until @mentioned, then keeps replying to that thread without
-            // further mentions. Group chats and DMs always reply (no gate).
-            // Runs before sender resolution so we don't do Graph lookups for
-            // the many un-mentioned channel messages the bot now receives.
+            // further mentions, unless the channel opted into answering every
+            // message. Group chats and DMs always reply (no gate). Runs before
+            // sender resolution so we don't do Graph lookups for the many
+            // un-mentioned channel messages the bot now receives.
             //
             // A mute command (e.g. "@bot mute") ends the sticky behavior early —
             // honored both when the bot is mentioned and when the thread is
             // already active (so muting needs no re-mention) — after which the
             // bot stays quiet until @mentioned again.
+            let addressed = true;
             if (context.activity.conversation?.conversationType === "channel") {
-              const activation = {
-                provider: "ms-teams" as const,
+              const botMentioned = provider.wasBotMentioned(context.activity);
+              const gate = await applyChannelGate({
+                provider: "ms-teams",
                 channelId: message.channelId,
                 threadId: message.threadId ?? message.channelId,
-              };
-              const botMentioned = provider.wasBotMentioned(context.activity);
-              // "mute" / "shut up" etc., optionally prefixed by a name the bot
-              // answers to ("Archestra shut up") with no explicit @mention. The
-              // app name is DB-backed, so only resolve it when it might matter.
-              let wantsMute = isThreadMuteCommand(message.text);
-              if (!wantsMute && mightBeAddressedMuteCommand(message.text)) {
-                wantsMute = isThreadMuteCommand(message.text, [
-                  await OrganizationModel.getAppName(),
-                ]);
-              }
-              // isActive is only consulted when the bot wasn't mentioned (see
-              // resolveChannelGateAction), so skip the cache read on mentions.
-              const isActive = botMentioned
-                ? false
-                : await isChannelThreadActive(activation);
-              switch (
-                resolveChannelGateAction({
-                  botMentioned,
-                  wantsMute,
-                  isActive,
-                })
-              ) {
-                case "mute":
-                  await muteTeamsThreadAndNotify(context, activation);
-                  return;
-                case "activate":
-                  await markChannelThreadActive(activation);
-                  break;
-                case "ignore":
-                  return;
-                case "process":
-                  break;
-              }
+                botMentioned,
+                text: message.text,
+                // Teams stamps the bot's display name on every activity.
+                botDisplayName: context.activity.recipient?.name,
+                postMutedNotice: async () => {
+                  await context.sendActivity(buildThreadMutedNotice());
+                },
+                resolveAnswerAllWorkspaceId: async () => {
+                  const teamId = await resolveTeamsWorkspaceId(
+                    context,
+                    message,
+                  );
+                  // Teams only delivers an un-mentioned channel message once a
+                  // team owner consented to the channel-message RSC permission,
+                  // so arriving here without a mention proves that consent —
+                  // which is what "answer all messages" silently depends on.
+                  //
+                  // Skipped unless the team id canonicalized: bindings store the
+                  // aadGroupId, so a marker under the thread-format fallback
+                  // would never be found again. And a failure here only costs a
+                  // stale hint, so it must never disturb the gate.
+                  if (!botMentioned && teamId && isUuid(teamId)) {
+                    await recordUnmentionedChannelTraffic({
+                      provider: "ms-teams",
+                      workspaceId: teamId,
+                    }).catch((error) => {
+                      logger.warn(
+                        { error: errorMessage(error), teamId },
+                        "[ChatOps] Could not record un-mentioned channel traffic",
+                      );
+                    });
+                  }
+                  return teamId;
+                },
+              });
+              if (!gate.proceed) return;
+              addressed = gate.addressed;
             }
 
             // Attach TurnContext so the provider can send typing indicators
@@ -364,27 +372,19 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               turnContext: context,
             };
 
-            // Resolve workspaceId to proper UUID (aadGroupId) for team channels.
-            // Bot Framework may provide team.id (thread format) instead of aadGroupId.
-            // TeamsInfo.getTeamDetails() uses RSC permissions — no Azure AD app permissions needed.
-            if (message.workspaceId && !isUuid(message.workspaceId)) {
-              try {
-                const teamDetails = await TeamsInfo.getTeamDetails(context);
-                if (teamDetails?.aadGroupId) {
-                  message.workspaceId = teamDetails.aadGroupId;
-                }
-              } catch {
-                // Non-fatal — group chats don't have team details
-              }
-            }
+            // Bindings are stored under the team's aadGroupId, which Bot
+            // Framework often withholds in favour of the thread-format team.id.
+            // A no-op when the gate above already resolved it.
+            await resolveTeamsWorkspaceId(context, message);
 
             // Resolve sender email and verify they are a registered Archestra user
             if (
-              !(await resolveAndVerifySenderForMSTeams(
+              !(await resolveAndVerifySenderForMSTeams({
                 context,
                 provider,
                 message,
-              ))
+                announce: addressed,
+              }))
             ) {
               return;
             }
@@ -468,7 +468,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           },
                           {
                             type: "TextBlock",
-                            text: `**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @Archestra Sales > what's the status?).`,
+                            text: `**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).`,
                             wrap: true,
                           },
                           {
@@ -569,13 +569,13 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
 
               // If this is a DM and user has a pending auto-provisioned invitation,
-              // send the signup link before the agent selection card.
-              // Skip when SSO is enabled — users just sign in via their IdP.
-              if (
-                isTeamsDm &&
-                message.senderEmail &&
-                !(await isSsoConfigured())
-              ) {
+              // send the signup (or SSO sign-in) link before the agent
+              // selection card.
+              const welcomeMode =
+                isTeamsDm && message.senderEmail
+                  ? await resolveSignupWelcomeMode()
+                  : "none";
+              if (message.senderEmail && welcomeMode !== "none") {
                 const invitations = await InvitationModel.findByEmail(
                   message.senderEmail.toLowerCase(),
                 );
@@ -584,6 +584,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 );
                 if (autoProvInv) {
                   const welcome = await buildWelcomeMessage({
+                    mode: welcomeMode,
                     invitationId: autoProvInv.id,
                     email: message.senderEmail,
                     name: message.senderName,
@@ -596,15 +597,20 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               }
 
-              // Discover channels + show agent selection
+              // Discover channels + show agent selection. The card is a prompt to
+              // pick an agent, so it only makes sense for someone who addressed
+              // the bot — in an answer-all channel with no agent assigned it would
+              // otherwise be posted publicly on every message.
               await awaitDiscovery(provider, context);
-              await sendAgentSelectionCard({
-                provider,
-                message,
-                isWelcome: true,
-                providerContext: context,
-                isDm: isTeamsDm,
-              });
+              if (addressed) {
+                await sendAgentSelectionCard({
+                  provider,
+                  message,
+                  isWelcome: true,
+                  providerContext: context,
+                  isDm: isTeamsDm,
+                });
+              }
               return;
             }
 
@@ -619,6 +625,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               message,
               provider,
               sendReply: true,
+              announceAccessErrors: addressed,
             });
           },
         );
@@ -1034,6 +1041,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             workspaces: z.array(z.object({ id: z.string(), name: z.string() })),
             hasDmBinding: z.boolean(),
+            /**
+             * Workspaces on this page known to deliver un-mentioned channel
+             * messages. Absence means "nothing seen yet", never "consent
+             * missing" — see recordUnmentionedChannelTraffic.
+             */
+            workspacesWithUnmentionedTraffic: z.array(z.string()),
           }),
         ),
       },
@@ -1068,6 +1081,18 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         counts: result.counts,
         workspaces: result.workspaces,
         hasDmBinding: result.hasDmBinding,
+        workspacesWithUnmentionedTraffic: provider
+          ? await findWorkspacesWithUnmentionedTraffic({
+              provider,
+              workspaceIds: [
+                ...new Set(
+                  result.data.flatMap((b) =>
+                    b.workspaceId ? [b.workspaceId] : [],
+                  ),
+                ),
+              ],
+            })
+          : [],
       });
     },
   );
@@ -1100,6 +1125,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!deleted) {
         throw new ApiError(404, "Binding not found");
       }
+
+      // Otherwise a deleted answer-all channel keeps replying to every message
+      // until the cached flag lapses.
+      await invalidateChannelAnswerAll({
+        provider: deleted.provider,
+        channelId: deleted.channelId,
+        workspaceId: deleted.workspaceId,
+      });
 
       return reply.send({ success: true });
     },
@@ -2100,6 +2133,55 @@ function isCommand(text: string): boolean {
 }
 
 /**
+ * Canonicalize a Teams message's workspaceId to the team's aadGroupId — the id
+ * channel bindings are stored under — assigning it onto the message and
+ * returning it.
+ *
+ * Bot Framework frequently delivers the thread-format `team.id` instead, and
+ * only a Bot Framework call can map it. The mapping never changes for a team, so
+ * it is cached: the channel gate consults it for every un-mentioned message, and
+ * a network round trip per message would defeat the point of gating early.
+ * Already-canonical ids and group chats (no team at all) short-circuit.
+ */
+async function resolveTeamsWorkspaceId(
+  context: TurnContext,
+  message: IncomingChatMessage,
+): Promise<string | null> {
+  const raw = message.workspaceId;
+  if (!raw || isUuid(raw)) return raw ?? null;
+
+  const cacheKey: AllowedCacheKey = `${CacheKey.TeamsTeamAadGroupId}-${raw}`;
+  const cached = await cacheManager.get<string>(cacheKey);
+  if (cached) {
+    message.workspaceId = cached;
+    return cached;
+  }
+
+  let resolved = raw;
+  try {
+    // Uses RSC permissions — no Azure AD app permissions needed.
+    const teamDetails = await TeamsInfo.getTeamDetails(context);
+    if (teamDetails?.aadGroupId) resolved = teamDetails.aadGroupId;
+  } catch {
+    // Non-fatal — group chats don't have team details
+  }
+
+  // A team whose details can't be read (RSC consent not granted yet) is cached
+  // too, on a much shorter TTL. Without that it would pay a Bot Framework round
+  // trip on every un-mentioned message; with a short window it still picks up
+  // the real id soon after an owner consents.
+  await cacheManager.set(
+    cacheKey,
+    resolved,
+    resolved === raw
+      ? TEAMS_AAD_GROUP_ID_RETRY_TTL_MS
+      : TEAMS_AAD_GROUP_ID_TTL_MS,
+  );
+  message.workspaceId = resolved;
+  return resolved;
+}
+
+/**
  * Mute a Teams channel thread, confirming ONLY on a real active→muted
  * transition. Redelivered reaction activities / repeat mutes find the key
  * already gone and stay silent, so no duplicate "muted" notices.
@@ -2115,13 +2197,26 @@ async function muteTeamsThreadAndNotify(
 
 /**
  * Resolve sender email (TeamsInfo → Graph API fallback) and verify they are a registered Archestra user.
- * Sets message.senderEmail and returns true if verified, false if rejected (with error sent to Teams).
+ * Sets message.senderEmail and returns true if verified, false if rejected.
+ *
+ * `announce` controls whether a rejection or a first-time auto-provision is
+ * explained in the conversation. It must be false for a message that reached us
+ * only because the channel answers every message: Teams has no ephemeral
+ * messages, so every notice is public, and someone who never addressed the bot
+ * has not asked to be onboarded by it. Provisioning still happens either way —
+ * only the announcements are withheld.
  */
-async function resolveAndVerifySenderForMSTeams(
-  context: TurnContext,
-  provider: { getUserEmail(aadObjectId: string): Promise<string | null> },
-  message: IncomingChatMessage,
-): Promise<boolean> {
+async function resolveAndVerifySenderForMSTeams(params: {
+  context: TurnContext;
+  provider: { getUserEmail(aadObjectId: string): Promise<string | null> };
+  message: IncomingChatMessage;
+  announce: boolean;
+}): Promise<boolean> {
+  const { context, provider, message, announce } = params;
+  const notify = async (text: string) => {
+    if (announce) await context.sendActivity(text);
+  };
+
   // Try Bot Framework first (no Graph API permissions needed)
   try {
     const member = await TeamsInfo.getMember(context, context.activity.from.id);
@@ -2148,7 +2243,7 @@ async function resolveAndVerifySenderForMSTeams(
     logger.warn(
       "[ChatOps] Could not resolve sender email for early auth check",
     );
-    await context.sendActivity(
+    await notify(
       "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.",
     );
     return false;
@@ -2169,7 +2264,7 @@ async function resolveAndVerifySenderForMSTeams(
           { senderEmail: message.senderEmail },
           "[ChatOps] Auto-provisioned user not found after creation",
         );
-        await context.sendActivity(
+        await notify(
           "Something went wrong while setting up your account. Please try again.",
         );
         return false;
@@ -2177,17 +2272,22 @@ async function resolveAndVerifySenderForMSTeams(
 
       // In channels, don't expose the signup link — ask user to DM the bot.
       // In DMs, the signup link is sent later (before the agent selection card).
-      // Skip entirely when SSO is enabled — users just sign in via their IdP.
       const isDm =
         context.activity.conversation?.conversationType === "personal";
-      if (!isDm && !(await isSsoConfigured())) {
+      const welcomeMode =
+        announce && !isDm ? await resolveSignupWelcomeMode() : "none";
+      if (welcomeMode !== "none") {
         const botId = context.activity.recipient.id;
         const dmDeepLink = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(botId)}`;
         const appName = await OrganizationModel.getAppName();
+        const nextStep =
+          welcomeMode === "login"
+            ? `To use the ${appName} web app, send me a direct message and I'll send you a sign-in link.`
+            : `To finish signing up so you can use the ${appName} web app, send me a direct message and I'll send you a link to finish signing up.`;
         await context
           .sendActivity(
             `Hey there 👋 We created a ${appName} user for you (${message.senderEmail}). ` +
-              `To finish signing up so you can use the ${appName} web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
+              `${nextStep}\n\n` +
               `[Open DM with me](${dmDeepLink})`,
           )
           .catch(() => {});
@@ -2202,7 +2302,7 @@ async function resolveAndVerifySenderForMSTeams(
         { error: error instanceof Error ? error.message : String(error) },
         "[ChatOps] Failed to auto-provision user from Teams",
       );
-      await context.sendActivity(
+      await notify(
         "Something went wrong while setting up your account. Please try again.",
       );
       return false;
@@ -2322,11 +2422,13 @@ function getSecurityErrorMessage(error: string): string {
   if (error.includes("Could not resolve user email")) {
     return "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.";
   }
+  // white-label-ok: matches the internal sentinel thrown by the incoming-email
+  // authorizer, not copy — the branded sentence is built on the next line.
   if (error.includes("not a registered Archestra user")) {
     // Extract email from error message if present
     const emailMatch = error.match(/Unauthorized: (.+?) is not/);
     const email = emailMatch?.[1] || "Your email";
-    return `${email} is not a registered Archestra user. Contact your administrator for access.`;
+    return `${email} is not a registered ${archestraMcpBranding.appName} user. Contact your administrator for access.`;
   }
   if (error.includes("does not have access to this agent")) {
     return "You don't have access to this agent. Contact your administrator for access.";
@@ -2349,3 +2451,17 @@ function collectWorkspaceIds(teamData: {
   if (teamData.aadGroupId) ids.add(teamData.aadGroupId);
   return [...ids];
 }
+
+/**
+ * How long a team's resolved aadGroupId stays cached (see
+ * resolveTeamsWorkspaceId). A team's aadGroupId is immutable, so this can be
+ * generous.
+ */
+const TEAMS_AAD_GROUP_ID_TTL_MS = TimeInMs.Day;
+
+/**
+ * How long an UNRESOLVED team id stays cached. Short, because the next attempt
+ * may succeed — it bounds both how often a team with no readable details costs a
+ * Bot Framework round trip and how long it keeps using the fallback id.
+ */
+const TEAMS_AAD_GROUP_ID_RETRY_TTL_MS = 5 * TimeInMs.Minute;

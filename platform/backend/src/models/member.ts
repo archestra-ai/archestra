@@ -1,7 +1,9 @@
 import type { AnyRoleName } from "@archestra/shared";
-import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, count, eq, inArray, or } from "drizzle-orm";
+import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import db, { schema, type Transaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import logger from "@/logging";
 
 class MemberModel {
@@ -31,6 +33,7 @@ class MemberModel {
       { userId, organizationId, memberId: result[0]?.id },
       "MemberModel.create: completed",
     );
+    await syncSystemRoleWithOrgPermissions(userId, organizationId);
     return result;
   }
 
@@ -181,6 +184,9 @@ class MemberModel {
       { userId, organizationId, updated: !!result[0], newRole },
       "MemberModel.updateRole: completed",
     );
+    if (result[0]) {
+      await syncSystemRoleWithOrgPermissions(userId, organizationId);
+    }
     return result[0];
   }
 
@@ -280,19 +286,18 @@ class MemberModel {
     role?: string;
   }) {
     const { organizationId, pagination, name, role } = params;
-    const searchPattern = name ? `%${name}%` : null;
+    // Every token has to land somewhere, but not necessarily in the same
+    // field or the order it was typed — so "Ada Lovelace" still finds a
+    // directory-synced "Lovelace, Ada M.".
+    const searchFilter = buildTokenizedSearchFilter({
+      query: name,
+      columns: [schema.usersTable.name, schema.usersTable.email],
+    });
 
     const filters = [
       eq(schema.membersTable.organizationId, organizationId),
       ...(role ? [eq(schema.membersTable.role, role)] : []),
-      ...(searchPattern
-        ? [
-            or(
-              ilike(schema.usersTable.name, searchPattern),
-              ilike(schema.usersTable.email, searchPattern),
-            ),
-          ]
-        : []),
+      ...(searchFilter ? [searchFilter] : []),
     ];
 
     const [data, totalResult] = await Promise.all([
@@ -305,6 +310,8 @@ class MemberModel {
           name: schema.usersTable.name,
           email: schema.usersTable.email,
           image: schema.usersTable.image,
+          // Nullable in the schema despite the default; coalesced below.
+          twoFactorEnabled: schema.usersTable.twoFactorEnabled,
         })
         .from(schema.membersTable)
         .innerJoin(
@@ -326,7 +333,14 @@ class MemberModel {
     ]);
 
     const total = totalResult[0]?.count ?? 0;
-    return createPaginatedResult(data, total, pagination);
+    return createPaginatedResult(
+      data.map((row) => ({
+        ...row,
+        twoFactorEnabled: row.twoFactorEnabled ?? false,
+      })),
+      total,
+      pagination,
+    );
   }
 
   /**

@@ -13,7 +13,10 @@ import type {
 } from "openai/resources/responses/responses";
 import config from "@/config";
 import { metrics } from "@/observability";
-import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import {
+  decodeOpenAiCodexCredential,
+  isOpenAiCodexCredential,
+} from "@/services/openai-codex-credentials";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -29,8 +32,15 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { ApiError, createStreamAccumulatorState } from "@/types";
+import {
+  ApiError,
+  createStreamAccumulatorState,
+  extractCommonToolCallArguments,
+} from "@/types";
 import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
+import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
+import { fromResponsesUsage, toResponsesUsage } from "./responses-usage";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
 type OpenAiResponsesResponse = OpenAi.Types.ResponsesResponse;
@@ -55,6 +65,10 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   provider: "openai",
   interactionType: "openai:responses",
 
+  // The Responses parser drops a chat-completions-shaped error frame as an
+  // unknown chunk, turning an upstream failure into a blank turn.
+  formatStreamErrorFrame: formatResponsesStreamErrorFrame,
+
   createRequestAdapter(
     request: OpenAiResponsesRequest,
   ): LLMRequestAdapter<OpenAiResponsesRequest, OpenAiResponseInput> {
@@ -75,6 +89,17 @@ export const openAiResponsesAdapterFactory: LLMProvider<
 
   extractApiKey(headers: OpenAiResponsesHeaders): string | undefined {
     return headers.authorization;
+  },
+
+  isSubscriptionCredential(apiKey: string | undefined): boolean {
+    // ChatGPT-subscription (Codex) credentials travel through the proxy as
+    // marker-prefixed encoded strings (`chatgpt-oauth:…`). They are covered by
+    // a flat-rate plan, so they must classify as subscription — the same rule
+    // as Anthropic `sk-ant-oat…` OAuth tokens. `extractApiKey` returns the
+    // authorization header as-is, so strip an optional `Bearer ` prefix before
+    // the format check; plain `sk-…` API keys stay metered.
+    const token = apiKey?.startsWith("Bearer ") ? apiKey.slice(7) : apiKey;
+    return isOpenAiCodexCredential(token);
   },
 
   getBaseUrl(): string | undefined {
@@ -111,6 +136,7 @@ export const openAiResponsesAdapterFactory: LLMProvider<
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: resolvedBaseUrl,
       fetch: customFetch,
@@ -144,6 +170,15 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    // The ChatGPT-subscription (Codex) fetch wrapper reports a dead sign-in
+    // (expired/revoked refresh token) as a synthetic 401 whose body carries the
+    // normalized code; relay it so the chat mapper renders the reconnect card.
+    if (
+      get(error, "error.internal_code") ===
+      ArchestraInternalErrorCode.ProviderAuthRequired
+    ) {
+      return ArchestraInternalErrorCode.ProviderAuthRequired;
     }
     return undefined;
   },
@@ -186,7 +221,16 @@ class OpenAiResponsesRequestAdapter
       return [];
     }
 
-    return this.request.input.flatMap((item) => toCommonMessages(item));
+    // Pair function_call_output items with their function_call by call_id so
+    // tool results surface as CommonMessage.toolCalls — the shape trusted-data
+    // / Dual LLM policy evaluation reads. Without the pairing, Responses-routed
+    // conversations look tool-free to the evaluator and sanitization is
+    // silently bypassed.
+    const toolCallsByCallId = getToolCallsByCallId(this.request.input);
+
+    return this.request.input.flatMap((item) =>
+      toCommonMessages(item, toolCallsByCallId),
+    );
   }
 
   getToolResults(): CommonToolResult[] {
@@ -194,17 +238,19 @@ class OpenAiResponsesRequestAdapter
       return [];
     }
 
-    const toolNamesByCallId = getToolNamesByCallId(this.request.input);
+    const toolCallsByCallId = getToolCallsByCallId(this.request.input);
 
     return this.request.input.flatMap((item) => {
       if (!isFunctionCallOutputItem(item)) {
         return [];
       }
 
+      const toolCall = toolCallsByCallId.get(item.call_id);
       return [
         {
           id: item.call_id,
-          name: toolNamesByCallId.get(item.call_id) ?? "unknown",
+          name: toolCall?.name ?? "unknown",
+          arguments: toolCall?.arguments,
           content: item.output,
           isError: false,
         },
@@ -359,16 +405,7 @@ class OpenAiResponsesResponseAdapter
   }
 
   getUsage(): UsageView {
-    return {
-      inputTokens: this.response.usage?.input_tokens ?? 0,
-      outputTokens: this.response.usage?.output_tokens ?? 0,
-      reasoningTokens:
-        (
-          this.response.usage?.output_tokens_details as
-            | { reasoning_tokens?: number }
-            | undefined
-        )?.reasoning_tokens ?? 0,
-    };
+    return fromResponsesUsage(this.response.usage);
   }
 
   getOriginalResponse(): OpenAiResponsesResponse {
@@ -442,16 +479,7 @@ class OpenAiResponsesStreamAdapter
       this.state.responseId = chunk.response.id;
       this.state.model = chunk.response.model;
       if (chunk.response.usage) {
-        this.state.usage = {
-          inputTokens: chunk.response.usage.input_tokens ?? 0,
-          outputTokens: chunk.response.usage.output_tokens ?? 0,
-          reasoningTokens:
-            (
-              chunk.response.usage.output_tokens_details as
-                | { reasoning_tokens?: number }
-                | undefined
-            )?.reasoning_tokens ?? 0,
-        };
+        this.state.usage = fromResponsesUsage(chunk.response.usage);
       }
     }
 
@@ -615,13 +643,9 @@ class OpenAiResponsesStreamAdapter
               ],
             },
           ],
-          usage: {
-            input_tokens: 0,
-            input_tokens_details: { cached_tokens: 0 },
-            output_tokens: 0,
-            output_tokens_details: { reasoning_tokens: 0 },
-            total_tokens: 0,
-          },
+          // Always numeric, and the tokens actually observed: this is the
+          // client's only usage report for a replaced turn.
+          usage: toResponsesUsage(this.state.usage),
         },
       }),
     ].join("");
@@ -698,16 +722,7 @@ class OpenAiResponsesStreamAdapter
       model: this.state.model,
       status: "completed",
       output: outputItems,
-      usage: this.state.usage
-        ? {
-            input_tokens: this.state.usage.inputTokens,
-            input_tokens_details: { cached_tokens: 0 },
-            output_tokens: this.state.usage.outputTokens,
-            output_tokens_details: { reasoning_tokens: 0 },
-            total_tokens:
-              this.state.usage.inputTokens + this.state.usage.outputTokens,
-          }
-        : undefined,
+      usage: this.state.usage ? toResponsesUsage(this.state.usage) : undefined,
     } as unknown as OpenAiResponsesResponse;
   }
 
@@ -776,7 +791,13 @@ function createEmptyToolCompressionStats(): ToolCompressionStats {
   };
 }
 
-function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
+function toCommonMessages(
+  item: ResponseInputItem,
+  toolCallsByCallId: Map<
+    string,
+    { name: string; arguments?: Record<string, unknown> }
+  >,
+): CommonMessage[] {
   // "easy input message" items carry role/content and omit `type` (it defaults
   // to "message"); the AI SDK emits this shape. Without handling it here,
   // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
@@ -791,13 +812,27 @@ function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
   }
 
   if (item.type === "function_call_output") {
+    const toolCall = toolCallsByCallId.get(item.call_id);
+    const content =
+      typeof item.output === "string"
+        ? item.output
+        : JSON.stringify(item.output);
     return [
       {
         role: "tool",
-        content:
-          typeof item.output === "string"
-            ? item.output
-            : JSON.stringify(item.output),
+        content,
+        // An output whose function_call was pruned from the input still
+        // carries untrusted data — surface it under the "unknown" name so
+        // default trusted-data policies apply rather than nothing.
+        toolCalls: [
+          {
+            id: item.call_id,
+            name: toolCall?.name ?? "unknown",
+            arguments: toolCall?.arguments,
+            content,
+            isError: false,
+          },
+        ],
       },
     ];
   }
@@ -900,14 +935,24 @@ function toSse(event: unknown): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
-function getToolNamesByCallId(input: ResponseInputItem[]): Map<string, string> {
+function getToolCallsByCallId(
+  input: ResponseInputItem[],
+): Map<string, { name: string; arguments?: Record<string, unknown> }> {
   return new Map(
     input.flatMap((item) => {
       if (!isResponseInputFunctionCall(item)) {
         return [];
       }
 
-      return [[item.call_id, item.name] as const];
+      return [
+        [
+          item.call_id,
+          {
+            name: item.name,
+            arguments: extractCommonToolCallArguments(item.arguments),
+          },
+        ] as const,
+      ];
     }),
   );
 }

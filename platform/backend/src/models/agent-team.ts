@@ -4,6 +4,7 @@ import logger from "@/logging";
 import type { AgentAccessContext, AgentLabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
+import AgentUserModel from "./agent-user";
 import TeamLabelModel from "./team-label";
 
 class AgentTeamModel {
@@ -86,9 +87,11 @@ class AgentTeamModel {
       return true;
     }
 
-    // 3. scope = 'personal' → only the author has access
+    // 3. scope = 'personal' → the author, plus anyone it was shared with by name
     if (agent.scope === "personal") {
-      const hasAccess = agent.authorId === userId;
+      const hasAccess =
+        agent.authorId === userId ||
+        (await AgentUserModel.userHasGrant(agentId, userId));
       logger.debug(
         { userId, agentId, hasAccess },
         "AgentTeamModel.userHasAgentAccess: personal agent check",

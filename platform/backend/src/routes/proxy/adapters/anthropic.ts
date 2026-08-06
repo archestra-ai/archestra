@@ -32,7 +32,10 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { extractCommonMessageText } from "@/types";
+import {
+  extractCommonMessageText,
+  extractCommonToolCallArguments,
+} from "@/types";
 import { isAnthropicBillingBlock } from "@/utils/anthropic-billing-error";
 import {
   hasImageContent,
@@ -44,6 +47,7 @@ import {
   type SamplingParam,
   withSamplingParamFallback,
 } from "./sampling-param-fallback";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES
@@ -112,8 +116,11 @@ class AnthropicRequestAdapter
       if (message.role === "user" && Array.isArray(message.content)) {
         for (const contentBlock of message.content) {
           if (contentBlock.type === "tool_result") {
-            // Find tool name from previous assistant messages
-            const toolName = this.findToolName(contentBlock.tool_use_id);
+            // Find the paired tool_use from previous assistant messages
+            const toolUse = this.findToolUse(
+              this.request.messages,
+              contentBlock.tool_use_id,
+            );
 
             let content: unknown;
             if (typeof contentBlock.content === "string") {
@@ -128,7 +135,8 @@ class AnthropicRequestAdapter
 
             results.push({
               id: contentBlock.tool_use_id,
-              name: toolName ?? "unknown",
+              name: toolUse?.name ?? "unknown",
+              arguments: toolUse?.arguments,
               content,
               isError: contentBlock.is_error ?? false,
             });
@@ -165,6 +173,14 @@ class AnthropicRequestAdapter
       }
     }
     return result;
+  }
+
+  getDeclaredToolNames(): string[] {
+    return (this.request.tools ?? [])
+      .map((tool) => (tool as { name?: unknown }).name)
+      .filter(
+        (name): name is string => typeof name === "string" && name !== "",
+      );
   }
 
   hasTools(): boolean {
@@ -268,9 +284,12 @@ class AnthropicRequestAdapter
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private findToolName(toolUseId: string): string | null {
-    for (let i = this.request.messages.length - 1; i >= 0; i--) {
-      const message = this.request.messages[i];
+  private findToolUse(
+    messages: AnthropicMessages,
+    toolUseId: string,
+  ): { name: string; arguments?: Record<string, unknown> } | null {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
       if (
         message.role === "assistant" &&
         Array.isArray(message.content) &&
@@ -278,7 +297,10 @@ class AnthropicRequestAdapter
       ) {
         for (const content of message.content) {
           if (content.type === "tool_use" && content.id === toolUseId) {
-            return content.name;
+            return {
+              name: content.name,
+              arguments: extractCommonToolCallArguments(content.input),
+            };
           }
         }
       }
@@ -308,15 +330,15 @@ class AnthropicRequestAdapter
 
         for (const contentBlock of message.content) {
           if (contentBlock.type === "tool_result") {
-            // Find the tool name from previous assistant messages
-            const toolName = this.findToolNameInMessages(
+            // Find the paired tool_use from previous assistant messages
+            const toolUse = this.findToolUse(
               messages,
               contentBlock.tool_use_id,
             );
 
-            if (toolName) {
+            if (toolUse) {
               logger.debug(
-                { toolUseId: contentBlock.tool_use_id, toolName },
+                { toolUseId: contentBlock.tool_use_id, toolName: toolUse.name },
                 "[AnthropicAdapter] toCommonFormat: found tool result",
               );
               // Parse the tool result
@@ -333,7 +355,8 @@ class AnthropicRequestAdapter
 
               toolCalls.push({
                 id: contentBlock.tool_use_id,
-                name: toolName,
+                name: toolUse.name,
+                arguments: toolUse.arguments,
                 content: toolResult,
                 isError: false,
               });
@@ -358,31 +381,6 @@ class AnthropicRequestAdapter
       "[AnthropicAdapter] toCommonFormat: conversion complete",
     );
     return commonMessages;
-  }
-
-  /**
-   * Extract tool name from messages by finding the assistant message
-   * that contains the tool_use_id
-   */
-  private findToolNameInMessages(
-    messages: AnthropicMessages,
-    toolUseId: string,
-  ): string | null {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (
-        message.role === "assistant" &&
-        Array.isArray(message.content) &&
-        message.content.length > 0
-      ) {
-        for (const content of message.content) {
-          if (content.type === "tool_use" && content.id === toolUseId) {
-            return content.name;
-          }
-        }
-      }
-    }
-    return null;
   }
 
   /**
@@ -614,10 +612,17 @@ class AnthropicStreamAdapter
   readonly state: StreamAccumulatorState;
   private toolUseBlockIndices = new Set<number>();
   private currentToolCallIndex = -1;
-  // Highest content-block index actually forwarded to the client, so a refusal
-  // block appended after a guardrail hit does not collide with (reuse) an index
-  // the client has already seen.
-  private maxStreamedBlockIndex = -1;
+  // Upstream content-block index -> the index the client is given, assigned in
+  // the order blocks are actually emitted. Withholding a tool block, or holding
+  // it back and releasing it after later text, would otherwise leave the client
+  // a gap or a rewind: it applies deltas by index but appends blocks in arrival
+  // order, so either one silently mis-assigns every block that follows.
+  private outIndexByUpstream = new Map<number, number>();
+  private nextOutIndex = 0;
+  // Whether the buffered tool-call events were actually written to the client.
+  // They are held until the gate decides, so a turn that ends before that — an
+  // upstream drop, an abort — delivered none of them.
+  private toolCallsReleased = false;
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal. formatEndSSE then closes the turn as end_turn instead of replaying
   // the upstream tool_use stop reason (which would leave a text-only turn ending
@@ -693,11 +698,9 @@ class AnthropicStreamAdapter
           // unmodified. Thinking blocks in particular must reach the client:
           // it has to replay them (with signature) on the next turn or the
           // upstream API rejects the conversation.
-          this.maxStreamedBlockIndex = Math.max(
-            this.maxStreamedBlockIndex,
-            chunk.index,
-          );
-          sseData = `event: content_block_start\ndata: ${JSON.stringify(chunk)}\n\n`;
+          sseData = `event: content_block_start\ndata: ${JSON.stringify(
+            this.withOutIndex(chunk),
+          )}\n\n`;
         }
         break;
 
@@ -719,13 +722,17 @@ class AnthropicStreamAdapter
           if (chunk.delta.type === "text_delta") {
             this.state.text += chunk.delta.text;
           }
-          sseData = `event: content_block_delta\ndata: ${JSON.stringify(chunk)}\n\n`;
+          sseData = `event: content_block_delta\ndata: ${JSON.stringify(
+            this.withOutIndex(chunk),
+          )}\n\n`;
         }
         break;
 
       case "content_block_stop":
         if (!this.toolUseBlockIndices.has(chunk.index)) {
-          sseData = `event: content_block_stop\ndata: ${JSON.stringify(chunk)}\n\n`;
+          sseData = `event: content_block_stop\ndata: ${JSON.stringify(
+            this.withOutIndex(chunk),
+          )}\n\n`;
         } else {
           // Store raw event for replay after policy approval
           this.state.rawToolCallEvents.push(chunk);
@@ -786,15 +793,22 @@ class AnthropicStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
-    return this.state.rawToolCallEvents.map(
-      (event) =>
-        `event: ${(event as { type: string }).type}\ndata: ${JSON.stringify(event)}\n\n`,
-    );
+    // Reached only when the gate allowed the calls, which is the moment these
+    // blocks become the client's: they earn an index, and the reconstructed
+    // turn may name them. Idempotent — the mapping is memoised, so the
+    // handler's repeated reads stay stable.
+    this.toolCallsReleased = true;
+    return this.state.rawToolCallEvents.map((event) => {
+      const renumbered = this.withOutIndex(
+        event as { type: string; index: number },
+      );
+      return `event: ${renumbered.type}\ndata: ${JSON.stringify(renumbered)}\n\n`;
+    });
   }
 
   formatCompleteTextSSE(text: string): string[] {
     this.replacedText = text;
-    const index = this.maxStreamedBlockIndex + 1;
+    const index = this.nextOutIndex++;
     return [
       `event: content_block_start\ndata: ${JSON.stringify({
         type: "content_block_start",
@@ -870,8 +884,8 @@ class AnthropicStreamAdapter
       });
     }
 
-    // Add tool use blocks
-    for (const toolCall of this.state.toolCalls) {
+    // Only tool calls the client actually received.
+    for (const toolCall of this.toolCallsReleased ? this.state.toolCalls : []) {
       let parsedInput: Record<string, unknown> = {};
       try {
         parsedInput = JSON.parse(toolCall.arguments);
@@ -887,21 +901,44 @@ class AnthropicStreamAdapter
       });
     }
 
+    const upstreamStopReason = this.state
+      .stopReason as AnthropicResponse["stop_reason"];
+    // A turn that delivered no tool call cannot owe a tool result. Upstream may
+    // still have said `tool_use` — it emitted calls that were withheld, or the
+    // stream died after the stop reason — and keeping it would leave a record
+    // that contradicts its own content.
+    const hasToolUse = content.some((block) => block.type === "tool_use");
+    const stopReason =
+      upstreamStopReason === "tool_use" && !hasToolUse
+        ? "end_turn"
+        : (upstreamStopReason ?? "end_turn");
+
     return {
       id: this.state.responseId,
       type: "message",
       role: "assistant",
       content,
       model: this.state.model,
-      stop_reason:
-        (this.state.stopReason as AnthropicResponse["stop_reason"]) ??
-        "end_turn",
+      stop_reason: stopReason,
       stop_sequence: null,
       usage: {
         input_tokens: this.state.usage?.inputTokens ?? 0,
         output_tokens: this.state.usage?.outputTokens ?? 0,
       },
     };
+  }
+
+  /** Rewrite a block event's index to the one the client knows it by. */
+  private withOutIndex<T extends { index: number }>(event: T): T {
+    return { ...event, index: this.outIndexFor(event.index) };
+  }
+
+  private outIndexFor(upstreamIndex: number): number {
+    const existing = this.outIndexByUpstream.get(upstreamIndex);
+    if (existing !== undefined) return existing;
+    const assigned = this.nextOutIndex++;
+    this.outIndexByUpstream.set(upstreamIndex, assigned);
+    return assigned;
   }
 }
 
@@ -1257,6 +1294,7 @@ export const anthropicAdapterFactory: LLMProvider<
 
     if (!apiKey && isAnthropicAzureFoundryEntraIdEnabled()) {
       return new AnthropicProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
         apiKey: null,
         authToken: null,
         baseURL: options.baseUrl,
@@ -1272,6 +1310,7 @@ export const anthropicAdapterFactory: LLMProvider<
 
     if (!apiKey && anthropicWorkloadIdentity.isEnabled()) {
       return new AnthropicProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
         apiKey: null,
         authToken: null,
         baseURL: options.baseUrl,
@@ -1286,6 +1325,7 @@ export const anthropicAdapterFactory: LLMProvider<
     }
 
     return new AnthropicProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: regularApiKey,
       authToken: token,
       baseURL: options.baseUrl,

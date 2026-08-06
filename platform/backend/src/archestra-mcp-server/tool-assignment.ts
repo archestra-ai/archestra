@@ -10,7 +10,12 @@ import {
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
-import { AgentModel, AgentToolModel, TeamModel } from "@/models";
+import {
+  AgentModel,
+  AgentToolModel,
+  AgentVersionModel,
+  TeamModel,
+} from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
@@ -73,7 +78,7 @@ const BulkAgentAssignmentResultSchema = z
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
     errorCode: z
-      .enum(["not_found", "validation_error"])
+      .enum(["not_found", "validation_error", "forbidden"])
       .optional()
       .describe("Structured assignment error code."),
     errorType: z
@@ -89,7 +94,7 @@ const BulkMcpGatewayAssignmentResultSchema = z
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
     errorCode: z
-      .enum(["not_found", "validation_error"])
+      .enum(["not_found", "validation_error", "forbidden"])
       .optional()
       .describe("Structured assignment error code."),
     errorType: z
@@ -246,13 +251,21 @@ async function handleBulkAssignTool(params: {
         assignments.map((assignment) => getBulkAssignmentTargetId(assignment)),
       ),
     ];
-    const [targetAgents, checker] = await Promise.all([
+    const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
       AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
       getAgentTypePermissionChecker({
         userId,
         organizationId,
       }),
+      AgentModel.findEnvironmentId(contextAgent.id),
     ]);
+    // Environment isolation: writing an assignment is a configuration change,
+    // so the TARGET must be in the calling agent's environment — otherwise an
+    // agent in one environment reconfigures another. The tool end is
+    // deliberately not fenced: a cross-environment tool assigned to an
+    // in-environment agent is inert (the call-time gate drops it), so fencing
+    // it would buy no isolation while refusing catalog-less legacy rows, which
+    // no environment predicate matches.
 
     const requiresTeamIds = [...targetAgents.values()].some(
       (target) => target && !checker.isAdmin(target.agentType),
@@ -265,6 +278,11 @@ async function handleBulkAssignTool(params: {
         const targetId = getBulkAssignmentTargetId(assignment);
         const target = targetAgents.get(targetId);
         if (target) {
+          if (target.environmentId !== callerEnvironmentId) {
+            throw new Error(
+              `${bulkAssignType === "agent" ? "Agent" : "MCP gateway"} ${targetId} is in a different environment; you can only assign tools within your own environment.`,
+            );
+          }
           checker.require(target.agentType, "update");
           requireAgentModifyPermission({
             checker,
@@ -282,6 +300,8 @@ async function handleBulkAssignTool(params: {
           toolId: assignment.toolId,
           resolveAtCallTime: assignment.resolveAtCallTime,
           mcpServerId: assignment.mcpServerId ?? undefined,
+          // One version for the whole batch, forked below.
+          deferVersionFork: true,
         });
       }),
     );
@@ -316,6 +336,13 @@ async function handleBulkAssignTool(params: {
       }
     });
 
+    // One config version per agent whose tool surface actually changed, not one
+    // per assignment — this fans out over `assignments`, so the per-assignment
+    // fork was deferred above.
+    await AgentVersionModel.forkAgentsBestEffort(
+      succeeded.map((entry) => entry[idField]),
+    );
+
     const output = { succeeded, failed, duplicates };
     return structuredSuccessResult(output, JSON.stringify(output, null, 2));
   } catch (error) {
@@ -342,9 +369,10 @@ async function handleBulkRemoveTool(params: {
     const { organizationId, userId } = context;
 
     const uniqueAgentIds = [...new Set(removals.map((r) => r.agentId))];
-    const [targetAgents, checker] = await Promise.all([
+    const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
       AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
       getAgentTypePermissionChecker({ userId, organizationId }),
+      AgentModel.findEnvironmentId(contextAgent.id),
     ]);
 
     // Prefetch Auto-tool mode once per agent so the per-removal loop doesn't
@@ -371,6 +399,13 @@ async function handleBulkRemoveTool(params: {
         if (!target) {
           throw new Error(`Agent with ID ${removal.agentId} not found`);
         }
+        // Environment isolation: removing an assignment is a configuration
+        // change on the target, so it stays inside the caller's environment.
+        if (target.environmentId !== callerEnvironmentId) {
+          throw new Error(
+            `Agent ${removal.agentId} is in a different environment; you can only remove tools within your own environment.`,
+          );
+        }
         checker.require(target.agentType, "update");
         requireAgentModifyPermission({
           checker,
@@ -390,6 +425,8 @@ async function handleBulkRemoveTool(params: {
             agentId: removal.agentId,
             organizationId,
             toolIds: [removal.toolId],
+            // One version for the whole batch, forked below.
+            deferVersionFork: true,
           });
           return "removed" as const;
         }
@@ -402,7 +439,12 @@ async function handleBulkRemoveTool(params: {
         if (!wasAssigned) {
           return "not_assigned" as const;
         }
-        await AgentToolModel.delete(removal.agentId, removal.toolId);
+        await AgentToolModel.delete({
+          agentId: removal.agentId,
+          toolId: removal.toolId,
+          // One version for the whole batch, forked below.
+          deferVersionFork: true,
+        });
         return "removed" as const;
       }),
     );
@@ -427,6 +469,11 @@ async function handleBulkRemoveTool(params: {
         failed.push({ agentId, toolId, error });
       }
     });
+
+    // One config version per agent, not one per removal (see bulk assign).
+    await AgentVersionModel.forkAgentsBestEffort(
+      succeeded.map((entry) => entry.agentId),
+    );
 
     const output = { succeeded, notAssigned, failed };
     return structuredSuccessResult(output, JSON.stringify(output, null, 2));

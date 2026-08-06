@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
+  adminPermissions,
   allAvailableActions,
   buildForbiddenErrorMessage,
   editorPermissions,
+  findUngrantablePermissions,
   memberPermissions,
   permissionDescriptions,
   predefinedPermissionsMap,
@@ -71,7 +73,44 @@ describe("access-control", () => {
     });
 
     test("auditLog only exposes the read action", () => {
-      expect(allAvailableActions.auditLog).toEqual(["read"]);
+      expect(allAvailableActions.auditLog).toEqual(["read", "admin"]);
+    });
+  });
+
+  describe("MCP deleted-resource lifecycle (manage-deleted)", () => {
+    // Soft-deleted MCP servers and catalog entries are viewable and restorable
+    // only through the dedicated manage-deleted capability. Of the predefined
+    // roles only admin holds it — delete (which members hold for their own
+    // uninstalls) must not unlock the org-wide tombstone view.
+    test("admin role has manage-deleted on both MCP resources", () => {
+      const admin = predefinedPermissionsMap[ADMIN_ROLE_NAME];
+      expect(admin.mcpServerInstallation).toContain("manage-deleted");
+      expect(admin.mcpRegistry).toContain("manage-deleted");
+    });
+
+    test("editor role does not have manage-deleted", () => {
+      expect(editorPermissions.mcpServerInstallation).not.toContain(
+        "manage-deleted",
+      );
+      expect(editorPermissions.mcpRegistry).not.toContain("manage-deleted");
+    });
+
+    test("member role does not have manage-deleted", () => {
+      expect(memberPermissions.mcpServerInstallation).not.toContain(
+        "manage-deleted",
+      );
+      expect(memberPermissions.mcpRegistry).not.toContain("manage-deleted");
+    });
+
+    test("restore routes require manage-deleted", () => {
+      expect(requiredEndpointPermissionsMap[RouteId.RestoreMcpServer]).toEqual({
+        mcpServerInstallation: ["manage-deleted"],
+      });
+      expect(
+        requiredEndpointPermissionsMap[RouteId.RestoreInternalMcpCatalogItem],
+      ).toEqual({
+        mcpRegistry: ["manage-deleted"],
+      });
     });
   });
 
@@ -144,6 +183,50 @@ describe("access-control", () => {
       for (const permissions of Object.values(predefinedPermissionsMap)) {
         expect(permissions.file).toContain("manage");
       }
+    });
+  });
+
+  describe("conversation soft-delete routes", () => {
+    // Restore is the inverse of delete, and listing the trash is part of the
+    // delete/restore lifecycle — both gate on chat:delete so a chat:read-only
+    // role can see active chats but neither the trash nor the restore action.
+    test("RestoreChatConversation requires chat:delete", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.RestoreChatConversation]?.chat,
+      ).toEqual(["delete"]);
+    });
+
+    test("GetDeletedChatConversations requires chat:delete", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.GetDeletedChatConversations]
+          ?.chat,
+      ).toEqual(["delete"]);
+    });
+
+    test("the member role can restore and view trashed chats (members can delete)", () => {
+      expect(memberPermissions.chat).toContain("delete");
+    });
+
+    // Pin the intended divergence from the active-list sibling: a live 403 for a
+    // chat:read-only caller isn't reachable in the chat route tests (that harness
+    // injects request.user and skips the RBAC middleware), so enforcement is
+    // proven generically in the middleware tests. Here we lock the map contract
+    // that makes it bite — the trash/restore routes must gate on delete, NOT
+    // read, so they never collapse to the same gate as GetChatConversations.
+    test("GetChatConversations (the active list) still gates on chat:read", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.GetChatConversations]?.chat,
+      ).toEqual(["read"]);
+    });
+
+    test("trash/restore routes do NOT gate on chat:read (divergence from the active list)", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.GetDeletedChatConversations]
+          ?.chat,
+      ).not.toContain("read");
+      expect(
+        requiredEndpointPermissionsMap[RouteId.RestoreChatConversation]?.chat,
+      ).not.toContain("read");
     });
   });
 
@@ -224,5 +307,50 @@ describe("buildForbiddenErrorMessage", () => {
     expect(buildForbiddenErrorMessage({})).toBe(
       "You don't have permission to perform this action.",
     );
+  });
+});
+
+describe("own-vs-all log split (log/auditLog read vs admin)", () => {
+  test("read and admin are distinct actions on both resources", () => {
+    expect(allAvailableActions.log).toEqual(["read", "admin"]);
+    expect(permissionDescriptions["log:admin"]).toBeTruthy();
+    expect(permissionDescriptions["auditLog:admin"]).toBeTruthy();
+  });
+
+  test("editor sees only own logs; member has neither log resource", () => {
+    expect(editorPermissions.log).toEqual(["read"]);
+    expect(editorPermissions.auditLog).toEqual([]);
+    expect(memberPermissions.log).toEqual([]);
+    expect(memberPermissions.auditLog).toEqual([]);
+  });
+});
+
+describe("platform_admin predefined role", () => {
+  test("holds everything except log:admin, auditLog:admin, and member:impersonate", () => {
+    const p = predefinedPermissionsMap.platform_admin;
+    expect(p.log).toEqual(["read"]);
+    expect(p.auditLog).toEqual(["read"]);
+    expect(p.member).not.toContain("impersonate");
+    // …and is otherwise the full admin set (modulo the UI-behavior resource).
+    for (const [resource, actions] of Object.entries(allAvailableActions)) {
+      if (["log", "auditLog", "member", "simpleView"].includes(resource)) {
+        continue;
+      }
+      expect(p[resource as keyof typeof p]).toEqual(actions);
+    }
+  });
+
+  test("cannot grant the withheld permissions (no-escalation rule)", () => {
+    const p = predefinedPermissionsMap.platform_admin;
+    expect(findUngrantablePermissions(p, adminPermissions)).toEqual(
+      expect.arrayContaining([
+        "log:admin",
+        "auditLog:admin",
+        "member:impersonate",
+      ]),
+    );
+    // …while granting its own role or member stays possible.
+    expect(findUngrantablePermissions(p, p)).toEqual([]);
+    expect(findUngrantablePermissions(p, memberPermissions)).toEqual([]);
   });
 });

@@ -1,4 +1,10 @@
-import { isSkillRuntimeTool } from "@archestra/shared";
+import {
+  collapseWhitespace,
+  isSkillRuntimeTool,
+  stripWrappingQuotes,
+  truncateChars,
+  truncateCharsWithEllipsis,
+} from "@archestra/shared";
 import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
@@ -53,6 +59,7 @@ export async function suggestSkillDescription(params: {
     agentId: agent.id,
     userId,
     source: "skill:description_generation",
+    chatApiKeyId: llm.chatApiKeyId,
   });
 
   try {
@@ -77,14 +84,16 @@ export async function suggestSkillDescription(params: {
 /**
  * Normalize a generated description into a single clean line: collapse
  * whitespace, drop wrapping quotes/backticks a model may add, and cap length so
- * a runaway response can't overflow the description field.
+ * a runaway response can't overflow the description field. The cap counts code
+ * points, so a description cut mid-emoji keeps whole characters.
  *
  * @public — exported for testability
  */
 export function sanitizeDescription(raw: string): string {
-  const oneLine = raw.replace(/\s+/g, " ").trim();
-  const unquoted = oneLine.replace(/^["'`]+|["'`]+$/g, "").trim();
-  return unquoted.slice(0, MAX_DESCRIPTION_CHARS);
+  return truncateChars(
+    stripWrappingQuotes(collapseWhitespace(raw)),
+    MAX_DESCRIPTION_CHARS,
+  );
 }
 
 /**
@@ -104,7 +113,7 @@ export function buildSkillDescriptionPrompt(agent: DescribableAgent): string {
   const systemPrompt = agent.systemPrompt?.trim();
   if (systemPrompt) {
     sections.push(
-      `System prompt:\n${truncate(systemPrompt, MAX_PROMPT_CHARS)}`,
+      `System prompt:\n${truncateCharsWithEllipsis(systemPrompt, MAX_PROMPT_CHARS)}`,
     );
   }
 
@@ -141,7 +150,3 @@ Rules:
 - Base it only on the provided agent details; do not invent capabilities.`;
 
 const MAX_PROMPT_CHARS = 4000;
-
-function truncate(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max)}…` : value;
-}

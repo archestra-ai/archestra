@@ -38,20 +38,6 @@ function defaultMapModel(
   };
 }
 
-export function mapKeylessModel(
-  model: { id: string; created?: number },
-  provider: SupportedProvider,
-): ModelInfo {
-  return {
-    id: model.id,
-    displayName: model.id,
-    provider,
-    createdAt: model.created
-      ? new Date(model.created * 1000).toISOString()
-      : undefined,
-  };
-}
-
 export function makeBearerFetcher<TRaw extends { id: string } = BearerRawModel>(
   descriptor: BearerFetcherDescriptor<TRaw>,
 ): (

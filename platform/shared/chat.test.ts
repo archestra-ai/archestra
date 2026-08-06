@@ -13,6 +13,8 @@ import {
   isInlineableTextMimeType,
   OUTPUT_MODALITY_OPTIONS,
   parseSandboxCommand,
+  toConversationTitle,
+  toPlaceholderTitle,
 } from "./chat";
 
 const VALID_BREAKDOWN = {
@@ -255,6 +257,8 @@ describe("chatUploadRejectionReason", () => {
     sandboxAvailable: false,
     sandboxByteLimit: 16 * 1024 * 1024,
   };
+  // Deliberately above the sandbox limit — the two caps are independent.
+  const STORAGE_LIMIT = 50 * 1024 * 1024;
 
   test("accepts a model-ingestible type at any size", () => {
     expect(
@@ -327,7 +331,7 @@ describe("chatUploadRejectionReason", () => {
     expect(
       chatUploadRejectionReason({
         ...base,
-        fileStorageFallback: true,
+        fileStorageByteLimit: STORAGE_LIMIT,
         mimeType: "application/zip",
         byteLength: 1_000,
       }),
@@ -338,22 +342,58 @@ describe("chatUploadRejectionReason", () => {
     expect(
       chatUploadRejectionReason({
         ...base,
-        fileStorageFallback: true,
+        fileStorageByteLimit: STORAGE_LIMIT,
         mimeType: "text/csv",
         byteLength: INLINE_TEXT_MAX_BYTES + 1,
       }),
     ).toBeNull();
   });
 
-  test("file-storage fallback still rejects a file over the storage limit", () => {
+  test("file-storage fallback accepts a file over the sandbox limit", () => {
+    // The sandbox is bypassed rather than made the gatekeeper: the file still
+    // lands in the Files panel, so acceptance answers only to the storage cap.
+    for (const sandboxAvailable of [true, false]) {
+      expect(
+        chatUploadRejectionReason({
+          ...base,
+          sandboxAvailable,
+          fileStorageByteLimit: STORAGE_LIMIT,
+          mimeType: "application/zip",
+          byteLength: base.sandboxByteLimit + 1,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  test("file-storage fallback rejects a file over the storage cap", () => {
     expect(
       chatUploadRejectionReason({
         ...base,
-        fileStorageFallback: true,
+        fileStorageByteLimit: STORAGE_LIMIT,
         mimeType: "application/zip",
-        byteLength: base.sandboxByteLimit + 1,
+        byteLength: STORAGE_LIMIT + 1,
       }),
-    ).toBe("too_large_for_sandbox");
+    ).toBe("too_large_to_store");
+  });
+
+  test("the storage cap bounds even a model-ingestible type", () => {
+    // Bytes are persisted for every accepted upload, so the cap applies to
+    // types the model reads natively too — but only when the fallback is on.
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        fileStorageByteLimit: STORAGE_LIMIT,
+        mimeType: "image/png",
+        byteLength: STORAGE_LIMIT + 1,
+      }),
+    ).toBe("too_large_to_store");
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        mimeType: "image/png",
+        byteLength: STORAGE_LIMIT + 1,
+      }),
+    ).toBeNull();
   });
 
   test("size-gates inlineable text even when the model lists it as ingestible", () => {
@@ -496,5 +536,90 @@ describe("parseSandboxCommand", () => {
     expect(parseSandboxCommand("")).toBeNull();
     expect(parseSandboxCommand("/compact")).toBeNull();
     expect(parseSandboxCommand("what does ! mean in bash?")).toBeNull();
+  });
+});
+
+describe("toPlaceholderTitle", () => {
+  test("flattens a multi-line prompt onto one line", () => {
+    expect(toPlaceholderTitle("Review this\n\n- one\n- two")).toBe(
+      "Review this - one - two",
+    );
+  });
+
+  // A sentence terminator is not a title boundary: "1. Fix it" is a list
+  // marker, not a one-word sentence, and "3.5" is not a sentence at all.
+  test("does not stop at the first sentence or list marker", () => {
+    expect(toPlaceholderTitle("1. Fix it. Then test.")).toBe(
+      "1. Fix it. Then test.",
+    );
+    expect(toPlaceholderTitle("Round 3.5 up")).toBe("Round 3.5 up");
+  });
+
+  test("truncates a prompt that runs long", () => {
+    const title = toPlaceholderTitle(`${"word ".repeat(100)}end`);
+
+    // At most 30 characters plus the ellipsis; a trailing space is dropped
+    // before the ellipsis rather than being padded back out.
+    expect(title.length).toBeLessThanOrEqual(31);
+    expect(title.endsWith("…")).toBe(true);
+  });
+
+  test("does not cut an emoji in half", () => {
+    // The odd-length prefix puts the 30th UTF-16 unit inside a surrogate pair,
+    // so a raw slice would leave an unpaired surrogate in the stored title.
+    const title = toPlaceholderTitle(`Debug my ${"🐛".repeat(40)} now`);
+
+    expect(title).toBe(`Debug my ${"🐛".repeat(21)}…`);
+    expect(title).not.toMatch(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+    );
+  });
+
+  test("leaves a short prompt whole, with no ellipsis", () => {
+    expect(toPlaceholderTitle("Short prompt")).toBe("Short prompt");
+  });
+
+  test("returns an empty string for an empty prompt", () => {
+    expect(toPlaceholderTitle("")).toBe("");
+    expect(toPlaceholderTitle("   \n  ")).toBe("");
+  });
+});
+
+describe("toConversationTitle", () => {
+  test("accepts a short line, normalizing quotes and line breaks", () => {
+    expect(toConversationTitle('"React\n  Component   Basics"')).toEqual({
+      title: "React Component Basics",
+    });
+  });
+
+  test("rejects a response with no visible text", () => {
+    expect(toConversationTitle("")).toEqual({
+      title: null,
+      reason: "empty_response",
+    });
+    // Quotes with nothing inside them are equally unusable.
+    expect(toConversationTitle(' " " ')).toEqual({
+      title: null,
+      reason: "empty_response",
+    });
+  });
+
+  test("rejects a paragraph the model wrote instead of a title", () => {
+    expect(toConversationTitle("word ".repeat(500))).toEqual({
+      title: null,
+      reason: "not_a_title",
+    });
+  });
+
+  test("measures the cap in characters, not UTF-16 units", () => {
+    // 80 emoji are 160 UTF-16 units. Capping by `.length` would reject a title
+    // that is exactly as long as the limit allows.
+    expect(toConversationTitle("🐛".repeat(80))).toEqual({
+      title: "🐛".repeat(80),
+    });
+    expect(toConversationTitle("🐛".repeat(81))).toEqual({
+      title: null,
+      reason: "not_a_title",
+    });
   });
 });

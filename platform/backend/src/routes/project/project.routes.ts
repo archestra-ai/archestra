@@ -13,6 +13,7 @@ import {
   constructResponseSchema,
   ProjectConversationItemSchema,
   ProjectDetailSchema,
+  ProjectLifecycleSchema,
   ProjectListItemSchema,
   ProjectListScopeSchema,
   ProjectShareVisibilitySchema,
@@ -57,6 +58,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .nullable()
             .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
+          defaultAgentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
       },
@@ -68,6 +70,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name,
         description: body.description ?? null,
         icon: body.icon ?? null,
+        defaultAgentId: body.defaultAgentId ?? null,
       });
       return {
         id: project.id,
@@ -79,8 +82,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationCount: 0,
         visibility: null,
         shareTeamNames: null,
+        shareUserNames: null,
         pinnedAt: null,
         createdAt: project.createdAt,
+        deletedAt: null,
       };
     },
   );
@@ -128,8 +133,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationCount: 1,
         visibility: null,
         shareTeamNames: null,
+        shareUserNames: null,
         pinnedAt: null,
         createdAt: project.createdAt,
+        deletedAt: null,
       };
     },
   );
@@ -145,7 +152,9 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "with `teamIds`), or `org` (org-wide); omitted = all visible. Admins " +
           "additionally filter `personal` by owner via `authorIds` / " +
           "`excludeAuthorIds` (ignored for non-admins). `search` matches name + " +
-          "description.",
+          "description. `status=deleted` returns the org-wide soft-deleted " +
+          "projects for a project admin (empty for everyone else); the other " +
+          "filters do not apply to that slice.",
         tags: ["Projects"],
         querystring: z.object({
           scope: ProjectListScopeSchema.optional(),
@@ -158,6 +167,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
           excludeAuthorIds: CommaSeparatedIds.optional().describe(
             "Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal.",
+          ),
+          status: ProjectLifecycleSchema.optional().describe(
+            "Lifecycle slice: `active` (default) or `deleted` (project admins " +
+              "only; org-wide soft-deleted projects for the restore view).",
           ),
         }),
         response: constructResponseSchema(z.array(ProjectListItemSchema)),
@@ -180,6 +193,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorIds: isProjectAdmin ? query.authorIds : undefined,
         excludeAuthorIds: isProjectAdmin ? query.excludeAuthorIds : undefined,
         search: query.search,
+        status: query.status,
       });
     },
   );
@@ -211,8 +225,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateProject,
         description:
-          "Update a project's name, description, and/or icon (owner or a " +
-          "project admin). Only the provided fields change.",
+          "Update a project's name, description, icon, and/or default agent " +
+          "(owner or a project admin). Only the provided fields change. The " +
+          "default agent must be an organization-wide chat agent; null clears " +
+          "it.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
@@ -223,6 +239,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .nullable()
             .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
+          defaultAgentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
@@ -235,6 +252,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name,
         description: body.description,
         icon: body.icon,
+        defaultAgentId: body.defaultAgentId,
       });
       return { ok: true as const };
     },
@@ -255,6 +273,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // generated client cannot represent a nullable enum.
           visibility: ProjectShareVisibilitySchema.or(z.literal("none")),
           teamIds: z.array(z.string()).default([]),
+          // People a `user` share names; ignored for other visibilities.
+          userIds: z.array(z.string()).default([]),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
@@ -266,6 +286,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         visibility: body.visibility === "none" ? null : body.visibility,
         teamIds: body.teamIds,
+        userIds: body.userIds,
       });
       return { ok: true as const };
     },
@@ -277,9 +298,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteProject,
         description:
-          "Delete a project (owner or a project admin). Its chats survive as " +
-          "ordinary conversations; its files and scheduled tasks are deleted " +
-          "with it.",
+          "Soft-delete a project (owner or a project admin). Its chats detach " +
+          "and survive as ordinary conversations; its files and scheduled tasks " +
+          "are retained but hidden, and a project admin can restore them. " +
+          "Nothing is purged.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
@@ -287,6 +309,72 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, user }) => {
       await projectService.delete({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.post(
+    "/api/projects/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreProject,
+        description:
+          "Restore a soft-deleted project (project admins only). Brings back " +
+          "its retained files and scheduled tasks (schedules resume forward-" +
+          "only, no catch-up runs); chats do NOT re-attach, so the restored " +
+          "project reports zero chats. 404 if there is no soft-deleted project " +
+          "with that id in the org. Deleting frees the display name, so if the " +
+          "owner has since taken it, pass `name` to restore under a different " +
+          "one; restoring into a name that is still taken is a 409.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        // nullish, not optional: a POST with no payload arrives as `null`, and
+        // restoring without a rename is the common case.
+        body: z
+          .object({
+            name: z
+              .string()
+              .optional()
+              .describe(
+                "Rename the project as it is restored. Use this when its " +
+                  "original name was taken while it was deleted.",
+              ),
+          })
+          .nullish(),
+        response: constructResponseSchema(ProjectDetailSchema),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }) =>
+      projectService.restore({
+        id,
+        organizationId,
+        userId: user.id,
+        name: body?.name,
+      }),
+  );
+
+  fastify.delete(
+    "/api/projects/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeleteProject,
+        description:
+          "Permanently destroy a soft-deleted project (global admins only). " +
+          "Irreversible, with no grace period: the project, its files (records " +
+          "and stored contents), pins, share configuration, and scheduled " +
+          "tasks are all destroyed. Its chats are unaffected — they detached " +
+          "when it was deleted and survive as ordinary conversations. 404 if " +
+          "there is no soft-deleted project with that id in the org, which is " +
+          "also the answer when the project is still live or the caller is not " +
+          "a global admin. Restore wins a race: if a restore commits first, " +
+          "this returns 404 and the project stays.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.purge({ id, organizationId, userId: user.id });
       return { ok: true as const };
     },
   );

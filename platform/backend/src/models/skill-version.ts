@@ -1,8 +1,17 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import type { PaginationQuery } from "@archestra/shared";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
 import type { SkillVersion, SkillVersionFile } from "@/types";
-import type { SkillFileEncoding, SkillFileKind } from "@/types/skill";
+import type {
+  SkillFileEncoding,
+  SkillFileKind,
+  SkillVersionMetadata,
+} from "@/types/skill";
 
 /** Minimal file shape needed to fork and hash a version. */
 export interface VersionFileInput {
@@ -51,6 +60,8 @@ class SkillVersionModel {
       content: string;
       contentHash: string;
       files: VersionFileInput[];
+      /** Commit these bytes were pulled from; only GitHub import/sync sets it. */
+      sourceCommit?: string | null;
     },
   ): Promise<SkillVersion> {
     const [version] = await tx
@@ -60,6 +71,7 @@ class SkillVersionModel {
         version: params.version,
         content: params.content,
         contentHash: params.contentHash,
+        sourceCommit: params.sourceCommit ?? null,
       })
       .returning();
     if (!version) {
@@ -108,6 +120,48 @@ class SkillVersionModel {
     return row ?? null;
   }
 
+  /**
+   * A skill's versions, newest first, as metadata only — no SKILL.md body, no
+   * files — so a long history stays cheap to list. Paginated: synced skills
+   * fork a version per upstream change, so history is unbounded.
+   *
+   * `skill_versions` carries no organization of its own, so the read joins
+   * `skills` and filters on the caller's organization — a skill id alone
+   * must never reach another tenant's history.
+   */
+  static async listForSkill(params: {
+    skillId: string;
+    organizationId: string;
+    pagination: PaginationQuery;
+  }): Promise<PaginatedResult<SkillVersionMetadata>> {
+    const scope = and(
+      eq(schema.skillVersionsTable.skillId, params.skillId),
+      eq(schema.skillsTable.organizationId, params.organizationId),
+    );
+    const [rows, [totals]] = await Promise.all([
+      db
+        .select(skillVersionMetadataColumns)
+        .from(schema.skillVersionsTable)
+        .innerJoin(
+          schema.skillsTable,
+          eq(schema.skillVersionsTable.skillId, schema.skillsTable.id),
+        )
+        .where(scope)
+        .orderBy(desc(schema.skillVersionsTable.version))
+        .limit(params.pagination.limit)
+        .offset(params.pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.skillVersionsTable)
+        .innerJoin(
+          schema.skillsTable,
+          eq(schema.skillVersionsTable.skillId, schema.skillsTable.id),
+        )
+        .where(scope),
+    ]);
+    return createPaginatedResult(rows, totals?.total ?? 0, params.pagination);
+  }
+
   /** A single resource file from a version by its skill-relative path. */
   static async findFileByPath(
     versionId: string,
@@ -133,6 +187,46 @@ class SkillVersionModel {
       .where(eq(schema.skillVersionFilesTable.versionId, versionId))
       .orderBy(asc(schema.skillVersionFilesTable.path));
   }
+
+  /**
+   * Whether any sandbox still mounts a version of this skill.
+   *
+   * `skill_sandbox_skill_mounts.skill_version_id` is `ON DELETE RESTRICT`, so
+   * this is exactly the set of rows that would refuse a permanent delete of the
+   * skill's versions. Matched through the version ids rather than the mount's
+   * denormalized `skill_id` so the check tests the constraint that actually
+   * fires, not a copy of the identity beside it.
+   *
+   * Advisory only: a mount can be created between this check and the delete, so
+   * the caller must still map the resulting FK violation to the same 409.
+   */
+  static async hasSandboxMountsForSkill(skillId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.skillSandboxSkillMountsTable.id })
+      .from(schema.skillSandboxSkillMountsTable)
+      .innerJoin(
+        schema.skillVersionsTable,
+        eq(
+          schema.skillSandboxSkillMountsTable.skillVersionId,
+          schema.skillVersionsTable.id,
+        ),
+      )
+      .where(eq(schema.skillVersionsTable.skillId, skillId))
+      .limit(1);
+    return row !== undefined;
+  }
 }
 
 export default SkillVersionModel;
+
+// === Internal helpers ===
+
+/** List projection: everything but the SKILL.md body. */
+const skillVersionMetadataColumns = {
+  id: schema.skillVersionsTable.id,
+  skillId: schema.skillVersionsTable.skillId,
+  version: schema.skillVersionsTable.version,
+  contentHash: schema.skillVersionsTable.contentHash,
+  sourceCommit: schema.skillVersionsTable.sourceCommit,
+  createdAt: schema.skillVersionsTable.createdAt,
+};

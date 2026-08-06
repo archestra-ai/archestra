@@ -15,6 +15,13 @@ import {
   useOwnAppSessionRecorder,
 } from "./use-app-session-recorder";
 
+// The recorder hard-disables outside the Apps Hackathon date window, so this
+// suite would start failing wholesale the moment the real window closes. Pin
+// the gate open — the suite tests the recorder's behavior, not the calendar.
+vi.mock("@archestra/shared", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@archestra/shared")>()),
+  isAppsHackathonOpen: () => true,
+}));
 // The recorder assembles a bundle and writes it to the client-side store (an
 // in-memory store here, since jsdom has no IndexedDB). Mock the surrounding
 // query/app/session hooks so the surface renders without a QueryClient.
@@ -28,6 +35,8 @@ vi.mock("@/lib/organization.query", () => ({
 }));
 vi.mock("@/lib/app-session-recording/app-recording.query", () => ({
   useInvalidateAppRecording: () => vi.fn(),
+  // Capture runs to a multiple of this; the final cut is bounded by it.
+  useMaxFinalCutMs: () => 60_000,
 }));
 // The recorder is off on small screens; stubbed to a desktop viewport by
 // default (jsdom has no real matchMedia), flipped per test where it matters.

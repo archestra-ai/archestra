@@ -3,6 +3,7 @@
 import {
   AGENT_TOOL_PREFIX,
   type archestraApiTypes,
+  ClientFilterSchema,
   isAgentTool,
   parseFullToolName,
 } from "@archestra/shared";
@@ -11,17 +12,8 @@ import type {
   RowSelectionState,
   SortingState,
 } from "@tanstack/react-table";
-import {
-  Bot,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Network,
-  Pencil,
-  Wand2,
-} from "lucide-react";
+import { Bot, ChevronDown, ChevronUp, Network, Pencil } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import { LoadingSpinner } from "@/components/loading";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -29,20 +21,13 @@ import { ResultPolicyToggle } from "@/components/result-policy-toggle";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
+import { ToolPolicyBulkActionsBar } from "@/components/tool-policy-bulk-actions";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
-import { PermissionButton } from "@/components/ui/permission-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -50,16 +35,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  ClientFilterSelect,
+  UserFilterSelect,
+} from "@/components/user-client-filter-selects";
+import {
   DEFAULT_FILTER_ALL,
   DEFAULT_SORT_BY,
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
-import { useAutoConfigurePolicies } from "@/lib/agent-tools.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
-  useBulkCallPolicyMutation,
-  useBulkResultPolicyMutation,
   useCallPolicyMutation,
   useResultPolicyMutation,
   useToolInvocationPolicies,
@@ -69,11 +55,11 @@ import {
   type CallPolicyAction,
   getCallPolicyActionFromPolicies,
   getResultPolicyActionFromPolicies,
-  RESULT_POLICY_ACTION_OPTIONS,
   type ResultPolicyAction,
 } from "@/lib/policy.utils";
 import {
   type ToolWithAssignmentsData,
+  useToolObservers,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
 import { isMcpToolByProperties } from "@/lib/tools/tool.utils";
@@ -123,9 +109,6 @@ export function AssignedToolsTable({
 }: AssignedToolsTableProps) {
   const callPolicyMutation = useCallPolicyMutation();
   const resultPolicyMutation = useResultPolicyMutation();
-  const bulkCallPolicyMutation = useBulkCallPolicyMutation();
-  const bulkResultPolicyMutation = useBulkResultPolicyMutation();
-  const autoConfigureMutation = useAutoConfigurePolicies();
   const { data: invocationPolicies } = useToolInvocationPolicies(
     initialData?.toolInvocationPolicies,
   );
@@ -147,6 +130,8 @@ export function AssignedToolsTable({
   // Get URL params
   const searchFromUrl = searchParams.get("search");
   const originFromUrl = searchParams.get("origin");
+  const observedByFromUrl = searchParams.get("observedBy");
+  const clientFromUrl = searchParams.get("client");
   const sortByFromUrl = searchParams.get("sortBy") as ToolsSortByValues;
   const sortDirectionFromUrl = searchParams.get(
     "sortDirection",
@@ -155,6 +140,12 @@ export function AssignedToolsTable({
   // State
   const [originFilter, setOriginFilter] = useState(
     originFromUrl || DEFAULT_FILTER_ALL,
+  );
+  const [observedByFilter, setObservedByFilter] = useState(
+    observedByFromUrl || DEFAULT_FILTER_ALL,
+  );
+  const [clientFilter, setClientFilter] = useState(
+    clientFromUrl || DEFAULT_FILTER_ALL,
   );
   const [sorting, setSorting] = useState<SortingState>([
     {
@@ -169,10 +160,16 @@ export function AssignedToolsTable({
   const [updatingRows, setUpdatingRows] = useState<
     Set<{ id: string; field: string }>
   >(new Set());
-  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
-  const [bulkCallPolicyValue, setBulkCallPolicyValue] = useState<string>("");
-  const [bulkResultPolicyValue, setBulkResultPolicyValue] =
-    useState<string>("");
+
+  // The user/client attribution filters only make sense for observed tools —
+  // MCP-server-sourced tools never appear in LLM proxy requests under their
+  // catalog names, so they carry no observations. Both filters are shown and
+  // applied only while the source filter is "Observed tools".
+  const observationFiltersActive = originFilter === "llm-proxy";
+
+  // The observed-by client filter only accepts known client families; anything
+  // else in the URL is treated as unset.
+  const parsedClientFilter = ClientFilterSchema.safeParse(clientFilter);
 
   // Fetch tools with assignments with server-side pagination, filtering, and sorting
   // Only use initialData for first page with default sorting and no filters
@@ -181,6 +178,8 @@ export function AssignedToolsTable({
     pageSize === DEFAULT_TABLE_LIMIT &&
     !searchFromUrl &&
     originFilter === DEFAULT_FILTER_ALL &&
+    observedByFilter === DEFAULT_FILTER_ALL &&
+    clientFilter === DEFAULT_FILTER_ALL &&
     (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
     sorting[0]?.desc !== false;
 
@@ -197,10 +196,20 @@ export function AssignedToolsTable({
     filters: {
       search: searchFromUrl || undefined,
       origin: originFilter !== "all" ? originFilter : undefined,
+      observedByUserId:
+        observationFiltersActive && observedByFilter !== DEFAULT_FILTER_ALL
+          ? observedByFilter
+          : undefined,
+      observedByClient:
+        observationFiltersActive && parsedClientFilter.success
+          ? parsedClientFilter.data
+          : undefined,
       excludeArchestraTools: true,
       includeKnowledgeSourcesTool: true,
     },
   });
+
+  const { data: toolObservers } = useToolObservers();
 
   const tools = toolsData?.data ?? [];
 
@@ -209,8 +218,6 @@ export function AssignedToolsTable({
     (newPagination: { pageIndex: number; pageSize: number }) => {
       setRowSelection({});
       setSelectedTools([]);
-      setBulkCallPolicyValue("");
-      setBulkResultPolicyValue("");
 
       setPagination(newPagination);
     },
@@ -220,8 +227,6 @@ export function AssignedToolsTable({
   const handleRowSelectionChange = useCallback(
     (newRowSelection: RowSelectionState) => {
       setRowSelection(newRowSelection);
-      setBulkCallPolicyValue("");
-      setBulkResultPolicyValue("");
 
       const newSelectedTools = Object.keys(newRowSelection)
         .map((rowId) => tools.find((tool) => tool.id === rowId))
@@ -235,21 +240,51 @@ export function AssignedToolsTable({
   const handleSearchChange = useCallback(() => {
     setRowSelection({});
     setSelectedTools([]);
-    setBulkCallPolicyValue("");
-    setBulkResultPolicyValue("");
   }, []);
 
   const handleOriginFilterChange = useCallback(
     (value: string) => {
       setOriginFilter(value);
+      // Leaving "Observed tools" hides the attribution filters, so clear them
+      // too — a hidden filter must not keep narrowing the list.
+      const leavingObservedTools = value !== "llm-proxy";
+      if (leavingObservedTools) {
+        setObservedByFilter(DEFAULT_FILTER_ALL);
+        setClientFilter(DEFAULT_FILTER_ALL);
+      }
       updateQueryParams({
         origin: value === "all" ? null : value,
+        ...(leavingObservedTools && { observedBy: null, client: null }),
         page: "1", // Reset to first page
       });
       setRowSelection({});
       setSelectedTools([]);
-      setBulkCallPolicyValue("");
-      setBulkResultPolicyValue("");
+    },
+    [updateQueryParams],
+  );
+
+  const handleObservedByFilterChange = useCallback(
+    (value: string) => {
+      setObservedByFilter(value);
+      updateQueryParams({
+        observedBy: value === DEFAULT_FILTER_ALL ? null : value,
+        page: "1", // Reset to first page
+      });
+      setRowSelection({});
+      setSelectedTools([]);
+    },
+    [updateQueryParams],
+  );
+
+  const handleClientFilterChange = useCallback(
+    (value: string) => {
+      setClientFilter(value);
+      updateQueryParams({
+        client: value === DEFAULT_FILTER_ALL ? null : value,
+        page: "1", // Reset to first page
+      });
+      setRowSelection({});
+      setSelectedTools([]);
     },
     [updateQueryParams],
   );
@@ -286,108 +321,16 @@ export function AssignedToolsTable({
     [updateQueryParams, rowSelection, tools],
   );
 
-  const handleBulkAction = useCallback(
-    async (
-      field: "callPolicy" | "resultPolicyAction",
-      value: CallPolicyAction | ResultPolicyAction,
-    ) => {
-      // Filter out tools with custom policies (non-empty conditions)
-      const toolIds = selectedTools
-        .filter((tool) => {
-          const policies =
-            field === "callPolicy"
-              ? invocationPolicies?.byProfileToolId[tool.id] || []
-              : resultPolicies?.byProfileToolId[tool.id] || [];
-
-          // Check if tool has custom policies (non-empty conditions array)
-          const hasCustomPolicy = policies.some(
-            (policy) => policy.conditions.length > 0,
-          );
-
-          return !hasCustomPolicy;
-        })
-        .map((tool) => tool.id);
-
-      if (toolIds.length === 0) {
-        return;
-      }
-      try {
-        setIsBulkUpdating(true);
-
-        if (field === "callPolicy") {
-          await bulkCallPolicyMutation.mutateAsync({
-            toolIds,
-            action: value as CallPolicyAction,
-          });
-        } else {
-          await bulkResultPolicyMutation.mutateAsync({
-            toolIds,
-            action: value as ResultPolicyAction,
-          });
-        }
-      } finally {
-        setIsBulkUpdating(false);
-        setBulkCallPolicyValue("");
-        setBulkResultPolicyValue("");
-      }
-    },
-    [
-      selectedTools,
-      bulkCallPolicyMutation,
-      bulkResultPolicyMutation,
-      invocationPolicies,
-      resultPolicies,
-    ],
-  );
-
-  const handleAutoConfigurePolicies = useCallback(async () => {
-    // Get tool IDs from selected tools (policies are per tool)
-    const toolIds = selectedTools.map((tool) => tool.id);
-
-    if (toolIds.length === 0) {
-      toast.error("No tools selected to configure");
-      return;
-    }
-
-    try {
-      const result = await autoConfigureMutation.mutateAsync(toolIds);
-      if (!result) return;
-
-      const successCount = result.results.filter(
-        (r: { success: boolean }) => r.success,
-      ).length;
-      const failureCount = result.results.filter(
-        (r: { success: boolean }) => !r.success,
-      ).length;
-
-      if (failureCount === 0) {
-        toast.success(
-          `Default policies configured for ${successCount} tool(s). Custom policies are preserved.`,
-        );
-      } else {
-        toast.warning(
-          `Default policies configured for ${successCount} tool(s), failed ${failureCount}. Custom policies are preserved.`,
-        );
-      }
-
-      // Reset bulk action dropdowns to placeholder
-      setBulkCallPolicyValue("");
-      setBulkResultPolicyValue("");
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to auto-configure policies";
-      toast.error(errorMessage);
-    }
-  }, [selectedTools, autoConfigureMutation]);
-
   const clearFilters = useCallback(() => {
     setOriginFilter(DEFAULT_FILTER_ALL);
+    setObservedByFilter(DEFAULT_FILTER_ALL);
+    setClientFilter(DEFAULT_FILTER_ALL);
     handleSearchChange();
     updateQueryParams({
       search: null,
       origin: null,
+      observedBy: null,
+      client: null,
       page: "1",
     });
   }, [handleSearchChange, updateQueryParams]);
@@ -765,8 +708,6 @@ export function AssignedToolsTable({
     ],
   );
 
-  const hasSelection = selectedTools.length > 0;
-
   const visibleCatalogSources = useMemo(
     () => getVisibleCatalogSources(internalMcpCatalogItems),
     [internalMcpCatalogItems],
@@ -845,293 +786,34 @@ export function AssignedToolsTable({
               ),
             })),
           ]}
-          className="w-[200px]"
+          className="w-full sm:w-[200px]"
         />
-      </div>
 
-      {/* Bulk actions - Desktop */}
-      <div className="hidden lg:flex flex-wrap items-center gap-4 p-4 bg-muted/50 border border-border rounded-lg">
-        <div className="flex items-center gap-3">
-          {hasSelection ? (
-            <>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-sm font-semibold text-primary">
-                  {selectedTools.length}
-                </span>
-              </div>
-              <span className="text-sm font-medium whitespace-nowrap">
-                {selectedTools.length === 1
-                  ? "tool selected"
-                  : "tools selected"}
-              </span>
-              {isBulkUpdating && (
-                <LoadingSpinner className="h-4 w-4 text-muted-foreground" />
-              )}
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground whitespace-nowrap">
-              Select tools to apply bulk actions
-            </span>
+        {/* Observed-tool attribution filters: narrow the list to tools seen in
+            one user's LLM proxy traffic, from one client app family. Only
+            shown while the source filter is "Observed tools" — MCP-sourced
+            tools carry no observations — and once someone has observed tools. */}
+        {observationFiltersActive && (toolObservers?.users.length ?? 0) > 0 && (
+          <UserFilterSelect
+            value={observedByFilter}
+            onValueChange={handleObservedByFilterChange}
+            users={toolObservers?.users}
+          />
+        )}
+
+        {observationFiltersActive &&
+          (toolObservers?.clients.length ?? 0) > 0 && (
+            <ClientFilterSelect
+              value={clientFilter}
+              onValueChange={handleClientFilterChange}
+              clients={toolObservers?.clients}
+            />
           )}
-        </div>
-        <div className="ml-auto flex flex-wrap items-end gap-4">
-          <WithPermissions
-            permissions={{ toolPolicy: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Call Policy:
-                </span>
-                <Select
-                  disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                  value={bulkCallPolicyValue}
-                  onValueChange={(value: CallPolicyAction) => {
-                    setBulkCallPolicyValue(value);
-                    handleBulkAction("callPolicy", value);
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Bulk call policy action"
-                    className="h-8 w-[168px] text-sm"
-                    size="sm"
-                  >
-                    <SelectValue placeholder="Select action" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="allow_when_context_is_untrusted">
-                      Allow always
-                    </SelectItem>
-                    <SelectItem value="block_when_context_is_untrusted">
-                      Block in sensitive context
-                    </SelectItem>
-                    <SelectItem
-                      value="require_approval"
-                      description="Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked."
-                    >
-                      Require approval
-                    </SelectItem>
-                    <SelectItem value="block_always">Block always</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </WithPermissions>
-          <WithPermissions
-            permissions={{ toolPolicy: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Results are:
-                </span>
-                <Select
-                  disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                  value={bulkResultPolicyValue}
-                  onValueChange={(value: ResultPolicyAction) => {
-                    setBulkResultPolicyValue(value);
-                    handleBulkAction("resultPolicyAction", value);
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Bulk result policy action"
-                    className="h-8 w-[150px] text-sm"
-                    size="sm"
-                  >
-                    <SelectValue placeholder="Select action" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </WithPermissions>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <PermissionButton
-                permissions={{ agent: ["update"], toolPolicy: ["update"] }}
-                size="sm"
-                variant="outline"
-                onClick={handleAutoConfigurePolicies}
-                disabled={
-                  !hasSelection ||
-                  isBulkUpdating ||
-                  autoConfigureMutation.isPending
-                }
-              >
-                {autoConfigureMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Configuring...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="h-4 w-4" />
-                    Configure with Subagent
-                  </>
-                )}
-              </PermissionButton>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Automatically configure default policies using AI analysis</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
       </div>
 
-      {/* Bulk actions - Mobile */}
-      <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/50 p-3 lg:hidden">
-        {/* Title / selection info */}
-        <div className="flex items-center gap-2">
-          {hasSelection ? (
-            <>
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-xs font-semibold text-primary">
-                  {selectedTools.length}
-                </span>
-              </div>
-              <span className="text-sm font-medium">
-                {selectedTools.length === 1
-                  ? "tool selected"
-                  : "tools selected"}
-              </span>
-              {isBulkUpdating && (
-                <LoadingSpinner className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              Select tools to apply bulk actions
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-3">
-          {/* Call Policy */}
-          <WithPermissions
-            permissions={{ toolPolicy: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Call Policy
-                </span>
-                <Select
-                  disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                  value={bulkCallPolicyValue}
-                  onValueChange={(value: CallPolicyAction) => {
-                    setBulkCallPolicyValue(value);
-                    handleBulkAction("callPolicy", value);
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Bulk call policy action"
-                    className="h-9 w-full text-sm"
-                    size="sm"
-                  >
-                    <SelectValue placeholder="Select action" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="allow_when_context_is_untrusted">
-                      Allow always
-                    </SelectItem>
-                    <SelectItem value="block_when_context_is_untrusted">
-                      Block in sensitive context
-                    </SelectItem>
-                    <SelectItem
-                      value="require_approval"
-                      description="Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked."
-                    >
-                      Require approval
-                    </SelectItem>
-                    <SelectItem value="block_always">Block always</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </WithPermissions>
-
-          {/* Results are */}
-          <WithPermissions
-            permissions={{ toolPolicy: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Results are
-                </span>
-                <Select
-                  disabled={!hasSelection || isBulkUpdating || !hasPermission}
-                  value={bulkResultPolicyValue}
-                  onValueChange={(value: ResultPolicyAction) => {
-                    setBulkResultPolicyValue(value);
-                    handleBulkAction("resultPolicyAction", value);
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Bulk result policy action"
-                    className="h-9 w-full text-sm"
-                    size="sm"
-                  >
-                    <SelectValue placeholder="Select action" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RESULT_POLICY_ACTION_OPTIONS.map(({ value, label }) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </WithPermissions>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex flex-col gap-2 pt-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <PermissionButton
-                permissions={{ agent: ["update"], toolPolicy: ["update"] }}
-                size="sm"
-                variant="outline"
-                className="w-full justify-center"
-                onClick={handleAutoConfigurePolicies}
-                disabled={
-                  !hasSelection ||
-                  isBulkUpdating ||
-                  autoConfigureMutation.isPending
-                }
-              >
-                {autoConfigureMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Configuring...
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="h-4 w-4" />
-                    Configure with Subagent
-                  </>
-                )}
-              </PermissionButton>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Automatically configure default policies using AI analysis</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
+      <ToolPolicyBulkActionsBar
+        selectedToolIds={selectedTools.map((tool) => tool.id)}
+      />
 
       <DataTable
         columns={columns}
@@ -1151,7 +833,10 @@ export function AssignedToolsTable({
         getRowId={(row) => row.id}
         isLoading={isLoading}
         hasActiveFilters={
-          !!searchFromUrl || originFilter !== DEFAULT_FILTER_ALL
+          !!searchFromUrl ||
+          originFilter !== DEFAULT_FILTER_ALL ||
+          observedByFilter !== DEFAULT_FILTER_ALL ||
+          clientFilter !== DEFAULT_FILTER_ALL
         }
         emptyMessage="No tools have been assigned yet."
         filteredEmptyMessage="No tools match your filters. Try adjusting your search."

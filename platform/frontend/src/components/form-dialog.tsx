@@ -78,9 +78,26 @@ export function FormDialog({
         >
           <DialogDismissProvider requestClose={guard.requestClose}>
             <DialogHeader className={headerClassName}>
-              <DialogTitle>{title}</DialogTitle>
+              {/* The DialogTitle/DialogDescription elements persist across
+                  wizard steps, so a title that switches between a string and
+                  an element would delete a bare text node in place — which
+                  crashes React once Chrome page-translate has re-parented it
+                  into a <font> wrapper (facebook/react#11538). Keying the
+                  wrapper span by the string content swaps a whole element on
+                  every string<->element or string<->string change instead. */}
+              <DialogTitle>
+                <span key={typeof title === "string" ? title : "node"}>
+                  {title}
+                </span>
+              </DialogTitle>
               {description && (
-                <DialogDescription>{description}</DialogDescription>
+                <DialogDescription>
+                  <span
+                    key={typeof description === "string" ? description : "node"}
+                  >
+                    {description}
+                  </span>
+                </DialogDescription>
               )}
             </DialogHeader>
             {children}

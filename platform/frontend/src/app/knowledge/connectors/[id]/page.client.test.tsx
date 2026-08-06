@@ -769,7 +769,11 @@ describe("ConnectorDetailPage", () => {
 
       expect(screen.getByText("Permissions Coverage")).toBeInTheDocument();
       expect(
-        screen.getByText(/40 documents awaiting permission sync/),
+        screen.getAllByText(
+          (_, el) =>
+            el?.tagName === "DIV" &&
+            el.textContent === "40 documents awaiting permission sync",
+        )[0],
       ).toBeInTheDocument();
       // The permissions row mirrors the content row's Last/cadence items.
       expect(screen.getByText("Last Permissions Sync")).toBeInTheDocument();

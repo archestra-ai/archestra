@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  collapseWhitespace,
+  exceedsCharLimit,
+  stripWrappingQuotes,
+  truncateCharsWithEllipsis,
+} from "./utils";
 
 // ============================================================================
 // Token Usage Types
@@ -33,6 +39,16 @@ export interface ContextWindowEstimate {
  */
 export const CONTEXT_WINDOW_BREAKDOWN_EVENT =
   "data-context-window-breakdown" as const;
+
+/**
+ * Share of the model's context window at which auto-compaction fires.
+ *
+ * Owned here rather than in the backend because the chat UI quotes it: the
+ * context indicator tells the user how much headroom is left *before*
+ * auto-compaction, not before the window is full, so both sides must gate on
+ * exactly the same number.
+ */
+export const CONTEXT_COMPACTION_AUTO_THRESHOLD = 0.8;
 
 /**
  * Canonical display order of context window categories, matching the
@@ -140,6 +156,74 @@ export type ContextWindowBreakdown = z.infer<
 >;
 
 // ============================================================================
+// Conversation Titles
+// ============================================================================
+
+/**
+ * Longest title generation may return. A response longer than this is a model
+ * answering the conversation rather than naming it, so it is discarded instead
+ * of truncated and the conversation falls back to a placeholder.
+ */
+const CONVERSATION_TITLE_MAX_CHARS = 80;
+
+/** Longest placeholder title, before the ellipsis that marks the cut. */
+const PLACEHOLDER_TITLE_MAX_CHARS = 30;
+
+/**
+ * Shape a user's opening prompt into something title-like: a single line,
+ * capped. A new conversation is created with this as its title until the server
+ * generates a real one, and the server settles on it when the model declines to
+ * name the conversation.
+ *
+ * Shared deliberately: the client decides whether a stored title is still a
+ * placeholder by comparing against this exact string, so a second
+ * implementation that shaped even one character differently would leave those
+ * conversations asking to be retitled forever.
+ */
+export function toPlaceholderTitle(raw: string): string {
+  return truncateCharsWithEllipsis(
+    collapseWhitespace(raw),
+    PLACEHOLDER_TITLE_MAX_CHARS,
+  );
+}
+
+/** Why a title generation response could not be used as a title. */
+export type TitleRejectionReason = "empty_response" | "not_a_title";
+
+export type ConversationTitleResult =
+  | { title: string; reason?: never }
+  | { title: null; reason: TitleRejectionReason };
+
+/**
+ * Read a title generation response as a conversation title, or say why it is
+ * not one.
+ *
+ * A model that followed the 3-6 word instruction returns one short line, which
+ * some wrap in quotes. Anything else is not a title: no visible text (a
+ * reasoning model that spent its whole output ceiling thinking) or a paragraph
+ * (a model that answered the conversation instead of naming it). Those are
+ * rejected rather than truncated, so the caller can settle on a placeholder
+ * taken from the user's own opening prompt — a better sidebar entry than half
+ * an answer. The reason is carried out so the caller can log which happened.
+ *
+ * Lives here next to {@link toPlaceholderTitle} because the two together define
+ * what a conversation title may be; the cap is meaningless apart from them.
+ */
+export function toConversationTitle(raw: string): ConversationTitleResult {
+  const candidate = stripWrappingQuotes(collapseWhitespace(raw));
+
+  if (!candidate) {
+    return { title: null, reason: "empty_response" };
+  }
+
+  if (exceedsCharLimit(candidate, CONVERSATION_TITLE_MAX_CHARS)) {
+    return { title: null, reason: "not_a_title" };
+  }
+
+  return { title: candidate };
+}
+
+// ============================================================================
 // Chat Message Part Types
 // ============================================================================
 
@@ -207,6 +291,85 @@ export interface SubagentToolCallPartData {
   /** Result, capped. Absent on error. */
   output?: unknown;
   /** Error text when the child call failed. */
+  errorText?: string;
+}
+
+/**
+ * Type of the inline dual-LLM-analysis part. A `data-*` part: persisted and
+ * rendered in the chat thread as the guardrail's analysis block, but dropped
+ * from the model conversion (`convertToModelMessages`), so the analysis
+ * narrative never re-enters model context — same class as
+ * `data-subagent-tool-call`. Replaces the proxy's former narration text
+ * injection, which rode the same implicit text stream as the model's answer
+ * on chat-completions transports and fused into it. Shared so the backend
+ * (emit) and frontend (render) agree on the wire string.
+ */
+export const DUAL_LLM_ANALYSIS_PART_TYPE = "data-dual-llm-analysis";
+
+/** One interrogation round of a dual LLM analysis, as the chat UI renders it. */
+export interface DualLlmAnalysisRound {
+  question: string;
+  options: string[];
+  answer: string;
+}
+
+/**
+ * The `data` payload of a {@link DUAL_LLM_ANALYSIS_PART_TYPE} part: the live
+ * (then persisted) state of one tool result's dual LLM sanitization.
+ * `toolCallId` links it to the tool call whose result is under analysis; the
+ * part streams with that id as its chunk id, so progress updates reconcile in
+ * place. A `cached` analysis was reused from the sanitize-once cache and
+ * carries `questionCount` instead of replayable `rounds`.
+ */
+export interface DualLlmAnalysisPartData {
+  toolCallId: string;
+  toolName: string;
+  status: "analyzing" | "done" | "failed";
+  rounds: DualLlmAnalysisRound[];
+  /** Sanitized summary that replaced the raw tool result (status `done`). */
+  summary?: string;
+  /** Why the analysis failed — the request then failed closed (status `failed`). */
+  failureMessage?: string;
+  /** True when reused from the sanitize-once cache (no live rounds to show). */
+  cached?: boolean;
+  /** Interrogation round count when `rounds` is empty (cached reuse). */
+  questionCount?: number;
+}
+
+/**
+ * Type of the inline MCP-task part. A `data-*` part: persisted and rendered in
+ * the chat thread, but dropped from the model conversion
+ * (`convertToModelMessages`), so the LLM never sees it — same class as
+ * `data-subagent-tool-call`. The model still receives the tool's real result
+ * when the task settles; this part exists purely so the user can watch a
+ * long-running call and cancel it. Shared so the backend (emit) and frontend
+ * (render) agree on the wire string.
+ */
+export const MCP_TASK_PART_TYPE = "data-mcp-task";
+
+/** Lifecycle of a gateway-minted MCP task, as the chat UI sees it. */
+export type McpTaskStatus = "working" | "completed" | "failed" | "cancelled";
+
+/**
+ * The `data` payload of a {@link MCP_TASK_PART_TYPE} part: one tool call that
+ * outlived the synchronous threshold and detached into a durable task.
+ *
+ * `toolCallId` links the card to the tool call it belongs to, so the UI can
+ * render it against that call rather than floating loose. `startedAt` is the
+ * absolute epoch the call began — carried explicitly so a card that mounts
+ * late (a reload part-way through a long task) still shows a correct elapsed
+ * time instead of counting from mount.
+ */
+export interface McpTaskPartData {
+  /** Gateway task id — the handle `tasks/get` and cancellation are keyed on. */
+  taskId: string;
+  /** The tool call this task backs. */
+  toolCallId: string;
+  toolName: string;
+  status: McpTaskStatus;
+  /** Epoch milliseconds when the underlying call started. */
+  startedAt: number;
+  /** Why the task ended, when it did not complete cleanly. */
   errorText?: string;
 }
 
@@ -332,6 +495,13 @@ export function hasPersistableAssistantContent(message: {
       return true;
     }
 
+    // a dual-LLM analysis block is standalone renderable content — a turn
+    // that failed closed during sanitization may carry only the failed
+    // analysis, which must survive persistence to explain the stop.
+    if (part.type === DUAL_LLM_ANALYSIS_PART_TYPE) {
+      return true;
+    }
+
     if (isTerminalToolPart(part)) {
       return true;
     }
@@ -419,7 +589,16 @@ export type ChatAppDiagnosticsMetadata = z.infer<
  * id can only ever surface an app the caller could already see.
  */
 export const ChatOpenedAppMetadataSchema = z.union([
-  z.object({ appId: z.string().uuid() }),
+  z.object({
+    appId: z.string().uuid(),
+    /**
+     * State the running app last reported for the model via the MCP-Apps
+     * `ui/update-model-context` request (e.g. which file it is displaying).
+     * App-authored free text — untrusted; the backend sanitizes and quotes it
+     * as data before it reaches the prompt.
+     */
+    modelContext: z.string().max(2000).optional(),
+  }),
   z.object({ appMcpServerId: z.string().uuid() }),
 ]);
 
@@ -582,17 +761,36 @@ export function isInlineableTextMimeType(mimeType: string): boolean {
 export const INLINE_TEXT_MAX_BYTES = 256 * 1024;
 
 /**
+ * Default cap on what a single chat upload may store as a conversation
+ * attachment. Deliberately independent of the sandbox artifact limit: a file
+ * too big for the sandbox still has the Files panel to land in, so the sandbox
+ * is bypassed rather than made the gatekeeper. Shared so the backend default
+ * and the frontend's pre-`/api/config` fallback can never drift.
+ */
+export const DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Default ceiling on what a single attachment may contribute to a provider
+ * request. Storing a file and sending it to a model are separate questions:
+ * anything heavier than this stays in the Files panel (and the sandbox, when it
+ * fits) rather than being embedded in the prompt, so a large upload can never
+ * inflate a request past what the provider accepts.
+ */
+export const DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES = 16 * 1024 * 1024;
+
+/**
  * Why an upload is not acceptable, or `null` when it is. Single source of truth
  * for the attachment policy shared by the backend ingest gate (authoritative)
  * and the frontend composer (mirrors it for UX). A file is acceptable when the
  * model can ingest its type, OR it is a small inlineable text document, OR a
  * sandbox is available to stage it within the sandbox artifact size limit, OR
- * (with `fileStorageFallback`) it fits the same byte limit and is stored as a
- * conversation file the user can reach from the chat Files panel.
+ * (with `fileStorageByteLimit`) it is stored as a conversation file the user can
+ * reach from the chat Files panel.
  */
 export type ChatUploadRejectionReason =
   | "text_too_large"
   | "too_large_for_sandbox"
+  | "too_large_to_store"
   | "unsupported_type";
 
 export function chatUploadRejectionReason(params: {
@@ -602,12 +800,13 @@ export function chatUploadRejectionReason(params: {
   sandboxAvailable: boolean;
   sandboxByteLimit: number;
   /**
-   * Whether a file the model can't read (and the sandbox can't take) is still
-   * accepted and kept as a conversation attachment surfaced in the chat Files
-   * panel. The chat upload path has that surface, so it passes true; A2A has no
-   * per-conversation Files panel for its callers and keeps rejecting.
+   * Cap on what may be stored as a conversation attachment surfaced in the chat
+   * Files panel, enabling that fallback for files the model can't read and the
+   * sandbox can't take. The chat upload path has that surface, so it passes its
+   * configured cap; A2A has no per-conversation Files panel for its callers, so
+   * it omits this and keeps rejecting.
    */
-  fileStorageFallback?: boolean;
+  fileStorageByteLimit?: number;
 }): ChatUploadRejectionReason | null {
   const {
     mimeType,
@@ -615,36 +814,41 @@ export function chatUploadRejectionReason(params: {
     ingestibleMimeTypes,
     sandboxAvailable,
     sandboxByteLimit,
-    fileStorageFallback = false,
+    fileStorageByteLimit,
   } = params;
 
-  // The sandbox artifact limit doubles as the storage cap for Files-panel-only
-  // attachments: both paths persist the same conversation_attachments row, so
-  // one knob bounds what a chat turn may store.
-  const fitsStorage = byteLength <= sandboxByteLimit;
-  const fitsSandbox = sandboxAvailable && fitsStorage;
-  const fitsFileStorage = fileStorageFallback && fitsStorage;
+  // Every accepted upload is persisted as a conversation attachment — the Files
+  // panel and sandbox staging both read that one row — so when the fallback is
+  // active its cap bounds the turn, including types the model reads natively.
+  const fileStorageFallback = fileStorageByteLimit != null;
+  if (fileStorageFallback && byteLength > fileStorageByteLimit) {
+    return "too_large_to_store";
+  }
+
+  // Under the storage cap, the sandbox limit only decides whether the file can
+  // additionally be staged for the model — never whether it is accepted.
+  const fitsSandbox = sandboxAvailable && byteLength <= sandboxByteLimit;
 
   // Inlineable text is size-gated even though a text-capable model lists these
   // MIMEs as readable: a large text file would otherwise blow the context
   // window. Checked before the generic ingestible short-circuit for that reason.
   if (isInlineableTextMimeType(mimeType)) {
-    if (byteLength <= INLINE_TEXT_MAX_BYTES || fitsSandbox || fitsFileStorage) {
+    if (
+      byteLength <= INLINE_TEXT_MAX_BYTES ||
+      fitsSandbox ||
+      fileStorageFallback
+    ) {
       return null;
     }
-    return sandboxAvailable || fileStorageFallback
-      ? "too_large_for_sandbox"
-      : "text_too_large";
+    return sandboxAvailable ? "too_large_for_sandbox" : "text_too_large";
   }
 
   // Non-text types the model can ingest natively (images, PDFs, …) carry no
-  // inline-text budget; the request body limit is the only size bound.
+  // inline-text budget; only the storage cap above bounds them.
   if (ingestibleMimeTypes.has(mimeType)) return null;
 
-  if (fitsSandbox || fitsFileStorage) return null;
-  return sandboxAvailable || fileStorageFallback
-    ? "too_large_for_sandbox"
-    : "unsupported_type";
+  if (fitsSandbox || fileStorageFallback) return null;
+  return sandboxAvailable ? "too_large_for_sandbox" : "unsupported_type";
 }
 
 /**

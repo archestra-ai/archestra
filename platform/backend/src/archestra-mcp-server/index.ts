@@ -1,5 +1,4 @@
 import {
-  ARCHESTRA_TOOL_PREFIX,
   type ArchestraToolFullName,
   type ArchestraToolShortName,
   getArchestraToolFullName,
@@ -167,19 +166,24 @@ export function getArchestraMcpTools() {
     ...appLlmTools,
   ];
 
-  if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
-    return tools;
-  }
-
+  // Descriptions are shipped strings frozen at module load, so they cannot read
+  // the branding singleton inline — it is only synced once an organization has
+  // been loaded. Rebranding them here, where the tool list is built per
+  // reconcile, is what lets a white-labeled deployment advertise built-ins under
+  // its own name. `brandBuiltInText` is a no-op for non-branded orgs.
   return tools.map((tool) => {
     const shortName = getArchestraToolShortName(tool.name);
-    if (!shortName) {
-      return tool;
-    }
+    const description =
+      typeof tool.description === "string"
+        ? archestraMcpBranding.brandBuiltInText(tool.description)
+        : tool.description;
 
     return {
       ...tool,
-      name: archestraMcpBranding.getToolName(shortName),
+      description,
+      ...(shortName
+        ? { name: archestraMcpBranding.getToolName(shortName) }
+        : {}),
     };
   });
 }
@@ -455,9 +459,57 @@ function validateToolArgs(
     return { value: parsed.data as Record<string, unknown> };
   }
 
+  // Some models JSON-encode a nested object argument as a string —
+  // `{"from": "{\"type\":…}"}` — most often on union-typed parameters
+  // (copy_file's `from`, upload_file's `source`). Reparse exactly the keys the
+  // validation error names and re-validate once; only touching failing keys
+  // means a legitimately-string parameter that happens to hold JSON can never
+  // be rewritten. When the repaired call STILL fails, report the post-repair
+  // error: it names the actual semantic problem (a refine, a bad union
+  // variant), where the pre-repair "expected object, received string" would
+  // send a model that always stringifies into an unwinnable retry loop.
+  const repaired = reparseStringifiedObjectArgs(args, parsed.error);
+  if (repaired) {
+    const reparsed = schema.safeParse(repaired);
+    if (reparsed.success) {
+      return { value: reparsed.data as Record<string, unknown> };
+    }
+    return {
+      error: zodValidationErrorResult({
+        toolName,
+        error: reparsed.error,
+        schema,
+      }),
+    };
+  }
+
   return {
     error: zodValidationErrorResult({ toolName, error: parsed.error, schema }),
   };
+}
+
+function reparseStringifiedObjectArgs(
+  args: Record<string, unknown> | undefined,
+  error: ZodError,
+): Record<string, unknown> | null {
+  if (!args) return null;
+  let repaired: Record<string, unknown> | null = null;
+  for (const issue of error.issues) {
+    const key = issue.path[0];
+    if (typeof key !== "string") continue;
+    const value = (repaired ?? args)[key];
+    if (typeof value !== "string") continue;
+    const text = value.trim();
+    if (!text.startsWith("{") && !text.startsWith("[")) continue;
+    try {
+      const parsedValue: unknown = JSON.parse(text);
+      if (typeof parsedValue !== "object" || parsedValue === null) continue;
+      repaired = { ...(repaired ?? args), [key]: parsedValue };
+    } catch {
+      // Not JSON after all — leave the value (and the original error) as is.
+    }
+  }
+  return repaired;
 }
 
 /**

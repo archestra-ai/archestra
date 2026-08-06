@@ -6,9 +6,14 @@
  * 2. recordBlockedToolSpans is called when tool invocation policies block tool calls
  */
 
+import { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream";
 import {
   CHAT_API_KEY_ID_HEADER,
+  DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   PROVIDER_BASE_URL_HEADER,
+  SESSION_ID_HEADER,
+  SOURCE_HEADER,
+  UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -19,8 +24,13 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import {
+  type DualLlmProgressEvent,
+  dualLlmProgressBus,
+} from "@/guardrails/dual-llm-progress-bus";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import {
+  InteractionModel,
   LlmProviderApiKeyModel,
   ModelModel,
   ModelTeamModel,
@@ -28,13 +38,14 @@ import {
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
+  type AnthropicStubOptions,
   createAnthropicTestClient,
   createGeminiTestClient,
   createOpenAiTestClient,
   type OpenAiStubOptions,
 } from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
-import { ApiError } from "@/types";
+import { ApiError, DUAL_LLM_KEEPALIVE_SSE_COMMENT } from "@/types";
 
 // Mock prom-client at module level (like llm-metrics.test.ts)
 const counterInc = vi.fn();
@@ -61,14 +72,36 @@ vi.mock("prom-client", () => ({
 // Mock tool-invocation to control policy evaluation results.
 // Default: evaluatePolicies → null (allow), matching the real behavior when no
 // policies exist in the DB.
-const mockEvaluatePolicies = vi.fn<() => Promise<PolicyBlockResult | null>>();
+// Args are forwarded so tests can assert what the handler computed and passed
+// in (notably the availability set), not just that evaluation happened.
+const mockEvaluatePolicies =
+  vi.fn<(...args: unknown[]) => Promise<PolicyBlockResult | null>>();
 
 vi.mock("@/guardrails/tool-invocation", async (importOriginal) => {
   const original =
     await importOriginal<typeof import("@/guardrails/tool-invocation")>();
   return {
     ...original,
-    evaluatePolicies: (..._args: unknown[]) => mockEvaluatePolicies(),
+    evaluatePolicies: (...args: unknown[]) => mockEvaluatePolicies(...args),
+  };
+});
+
+// Wraps trusted-data so the dual-LLM progress suite can take over
+// evaluateIfContextIsTrusted and drive its callbacks. Without an
+// implementation set, calls flow through to the real function, which every
+// other suite depends on for the no-policies path.
+const mockEvaluateIfContextIsTrusted = vi.fn();
+vi.mock("@/guardrails/trusted-data", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/guardrails/trusted-data")>();
+  return {
+    ...original,
+    evaluateIfContextIsTrusted: (
+      ...args: Parameters<typeof original.evaluateIfContextIsTrusted>
+    ) =>
+      mockEvaluateIfContextIsTrusted.getMockImplementation()
+        ? mockEvaluateIfContextIsTrusted(...args)
+        : original.evaluateIfContextIsTrusted(...args),
   };
 });
 
@@ -109,6 +142,30 @@ import bedrockProxyRoutes from "./routes/bedrock";
 import geminiProxyRoutes from "./routes/gemini";
 import githubCopilotProxyRoutes from "./routes/github-copilot";
 import openAiProxyRoutes from "./routes/openai";
+
+/**
+ * Reconstruct a streamed turn the way a client does, using the SDK's own
+ * accumulator rather than a model of it: it appends content blocks in arrival
+ * order while applying deltas by index, so anything that disturbs the index
+ * sequence shows up here and nowhere in the raw SSE.
+ *
+ * `fromReadableStream` consumes newline-delimited events, so the SSE `data:`
+ * payloads are lifted out and handed over — the framing is not under test.
+ */
+async function reconstructWithSdk(sseBody: string) {
+  const events = sseBody
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice("data: ".length))
+    .join("\n");
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(events));
+      controller.close();
+    },
+  });
+  return MessageStream.fromReadableStream(stream).finalMessage();
+}
 
 describe("LLM Proxy Handler Prometheus Metrics", () => {
   let app: FastifyInstance;
@@ -462,6 +519,133 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(rows[0].inputTokens).toBe(0);
       expect(rows[0].outputTokens).toBe(0);
     });
+
+    test("streaming failure after SSE headers and content persists an error interaction", async () => {
+      // The provider fails mid-stream: SSE headers and content chunks are already
+      // on the wire, but the usage-bearing final chunk never arrives. The
+      // finally-block persist is gated on usage, so this must be covered by the
+      // catch path or the failure leaves no trace in LLM logs / session history.
+      openAiStubOptions.throwAtChunk = 2;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      // Headers were already committed, so the failure surfaces as an SSE error
+      // event on a 200 response rather than an HTTP error status.
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain("event: error");
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].response).toMatchObject({
+        error: expect.stringContaining("Simulated OpenAI stream failure"),
+      });
+      expect(rows[0].inputTokens).toBe(0);
+      expect(rows[0].outputTokens).toBe(0);
+    });
+
+    test("stream ending early without usage persists a partial interaction", async () => {
+      // The provider closes the stream cleanly mid-way (no throw) before the
+      // usage chunk. Nothing raises, so the catch path never runs and the
+      // finally-block persist is gated on usage — the call must still be
+      // recorded rather than vanishing from interaction history.
+      openAiStubOptions.interruptAtChunk = 2;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+    });
+
+    test("a Slack ChatOps stream without usage keeps its source and shows up in the sessions listing", async () => {
+      // T-953: Slack ChatOps runs reach the proxy as streams tagged
+      // `chatops:slack`, and their upstream (frequently another Archestra,
+      // whose own SSE omits the trailing usage chunk) reports no usage. The
+      // usage-gated persist made those runs vanish from LLM Logs entirely.
+      // Recording the row is not enough — it has to keep `source`, or the
+      // "Slack" entry of the Source filter can never find it again.
+      openAiStubOptions.interruptAtChunk = 2;
+
+      const sessionId = "slack-C0B2AGC0AFQ-1784887557";
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          [SOURCE_HEADER]: "chatops:slack",
+          [SESSION_ID_HEADER]: sessionId,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello from Slack!" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].source).toBe("chatops:slack");
+      expect(rows[0].sessionId).toBe(sessionId);
+
+      // The unfiltered listing is the view the bug report screenshotted.
+      const unfiltered = await InteractionModel.getSessions(
+        { limit: 10, offset: 0 },
+        undefined,
+        true,
+        { sessionId },
+      );
+      expect(unfiltered.pagination.total).toBe(1);
+      expect(unfiltered.data[0].source).toBe("chatops:slack");
+      expect(unfiltered.data[0].sources).toContain("chatops:slack");
+
+      // ...and the Source filter's "Slack" entry must keep it.
+      const filtered = await InteractionModel.getSessions(
+        { limit: 10, offset: 0 },
+        undefined,
+        true,
+        { sessionId, source: "chatops:slack" },
+      );
+      expect(filtered.pagination.total).toBe(1);
+    });
   });
 
   describe("Anthropic", () => {
@@ -584,6 +768,65 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           value: expect.any(Number),
         }),
       );
+    });
+
+    test("records a context-variant id as the model it names, and forwards it unchanged", async () => {
+      const forwarded: string[] = [];
+      vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+        () =>
+          ({
+            messages: {
+              create: async (...args: unknown[]) => {
+                const [params] = args as [{ model: string }];
+                forwarded.push(params.model);
+                return (
+                  createAnthropicTestClient(anthropicStubOptions).messages
+                    .create as (...a: unknown[]) => unknown
+                )(...args);
+              },
+            },
+          }) as never,
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          // A client asking for the long-context variant of a model that is
+          // already priced under its plain id.
+          model: "claude-3-5-sonnet-20241022[1m]",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "Hello!" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // The marker names the same model, so usage is attributed to the priced
+      // record rather than to a second one no catalog can describe.
+      expect(counterInc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            provider: "anthropic",
+            model: "claude-3-5-sonnet-20241022",
+          }),
+        }),
+      );
+      await expect(
+        ModelModel.findByProviderAndModelId(
+          "anthropic",
+          "claude-3-5-sonnet-20241022[1m]",
+        ),
+      ).resolves.toBeNull();
+
+      // The provider still receives the id the client asked for.
+      expect(forwarded).toEqual(["claude-3-5-sonnet-20241022[1m]"]);
     });
   });
 
@@ -827,10 +1070,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
   let openAiStubOptions: OpenAiStubOptions;
-  let anthropicStubOptions: {
-    includeToolUse?: boolean;
-    interruptAtChunk?: number;
-  };
+  let anthropicStubOptions: AnthropicStubOptions;
 
   beforeEach(async ({ makeAgent }) => {
     vi.clearAllMocks();
@@ -877,6 +1117,166 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         customPricePerMillionOutput: "10.00",
         lastSyncedAt: new Date(),
       });
+    });
+
+    // Same refusal condition as the Anthropic streaming case, on the other axis
+    // of the matrix: OpenAI forces `stop` through the same replaced-response
+    // path, so the turn reads as finished while a tool_call is on the wire.
+    test("a refusal leaves no tool call on the wire", async () => {
+      openAiStubOptions.includeToolCalls = true;
+
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Tool get_weather is not enabled here",
+        contentMessage: "Tool get_weather is not enabled here",
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolName: "get_weather",
+        toolInput: {},
+        allToolCallNames: ["get_weather"],
+      } satisfies PolicyBlockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Nothing is released before the gate, so a refusal leaves no call on the
+      // wire and the turn is genuinely finished.
+      expect(response.body).not.toContain("call_test_weather");
+      expect(response.body).toContain("Tool get_weather is not enabled here");
+      expect(response.body).toContain('"finish_reason":"stop"');
+      expect(response.body).not.toContain('"finish_reason":"tool_calls"');
+    });
+
+    // Only the Anthropic adapter names its declared tools; every other one
+    // falls back to getTools(). The fallback is what keeps the availability
+    // check running for those providers, and a regression that yielded an empty
+    // set here would disable filtering rather than fail loudly.
+    test("a provider that cannot name its declared tools falls back to getTools", async () => {
+      openAiStubOptions.includeToolCalls = true;
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "get_weather",
+                description: "weather",
+                parameters: { type: "object", properties: {} },
+              },
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const enabledToolNames = mockEvaluatePolicies.mock
+        .calls[0][4] as Set<string>;
+      expect([...enabledToolNames]).toEqual(["get_weather"]);
+    });
+
+    // The refusal sibling above only pins that a refused call is absent, which
+    // stays true if allowed calls are dropped too, so the release needs its own
+    // test: id, arguments and finish_reason all have to survive the wait, or a
+    // client can neither run the tool nor know one is owed.
+    test("an allowed tool call still reaches the client after the gate", async () => {
+      openAiStubOptions.includeToolCalls = true;
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Reassemble the way a client does: ids and argument fragments arrive as
+      // separate deltas keyed by index.
+      const deltas = response.body
+        .split("\n")
+        .filter((line) => line.startsWith("data: ") && !line.includes("[DONE]"))
+        .map((line) => JSON.parse(line.slice("data: ".length)));
+      const call = deltas.reduce<{ id?: string; name?: string; args: string }>(
+        (acc, chunk) => {
+          for (const tc of chunk.choices?.[0]?.delta?.tool_calls ?? []) {
+            if (tc.id) acc.id = tc.id;
+            if (tc.function?.name) acc.name = tc.function.name;
+            if (tc.function?.arguments) acc.args += tc.function.arguments;
+          }
+          return acc;
+        },
+        { args: "" },
+      );
+
+      expect(call).toEqual({
+        id: "call_test_weather",
+        name: "get_weather",
+        args: '{"location":"SF"}',
+      });
+      expect(response.body).toContain('"finish_reason":"tool_calls"');
+    });
+
+    // Buffered turns can still be edited when the refusal lands, and the whole
+    // message is replaced: the model's text and every tool call go with it.
+    test("a refusal replaces the entire buffered message", async () => {
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Tool list_files is not enabled here",
+        contentMessage: "Tool list_files is not enabled here",
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolName: "list_files",
+        toolInput: {},
+        allToolCallNames: ["list_files"],
+      } satisfies PolicyBlockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "List the files" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const choice = response.json().choices[0];
+      expect(choice.message.content).toBe(
+        "Tool list_files is not enabled here",
+      );
+      expect(choice.message.tool_calls).toBeUndefined();
+      expect(choice.finish_reason).toBe("stop");
     });
 
     test("calls recordBlockedToolSpans when policy blocks tool calls", async () => {
@@ -992,6 +1392,429 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         customPricePerMillionOutput: "15.00",
         lastSyncedAt: new Date(),
       });
+    });
+
+    // Driven through the real SDK accumulator, not a hand-rolled one: it pushes
+    // content blocks in arrival order while applying deltas by index, so a gap
+    // in the indices silently empties every block after it — invisible in the
+    // raw SSE.
+    test("the SDK reconstructs every block when a tool call is withheld", async () => {
+      anthropicStubOptions.toolUseBetweenText = true;
+      anthropicStubOptions.streamStopReason = "tool_use";
+
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Tool get_weather is not enabled here",
+        contentMessage: "Tool get_weather is not enabled here",
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolName: "get_weather",
+        toolInput: {},
+        allToolCallNames: ["get_weather"],
+      } satisfies PolicyBlockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      const final = await reconstructWithSdk(response.body);
+
+      const texts = final.content.flatMap((block) =>
+        block.type === "text" ? [block.text] : [],
+      );
+
+      // The withheld call must not cost the client the blocks around it.
+      expect(texts).toEqual([
+        "Let me check.",
+        "Then I will summarise.",
+        "Tool get_weather is not enabled here",
+      ]);
+      expect(final.content.some((block) => block.type === "tool_use")).toBe(
+        false,
+      );
+    });
+
+    // A refusal replaces the recorded turn with the refusal text alone, so the
+    // text the client already saw streaming is not in the record. Pinned as the
+    // existing behaviour: withholding tool calls does not change it either way.
+    test("a streamed refusal records the refusal text alone", async () => {
+      anthropicStubOptions.toolUseBetweenText = true;
+      anthropicStubOptions.streamStopReason = "tool_use";
+
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Tool get_weather is not enabled here",
+        contentMessage: "Tool get_weather is not enabled here",
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolName: "get_weather",
+        toolInput: {},
+        allToolCallNames: ["get_weather"],
+      } satisfies PolicyBlockResult);
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      const [interaction] = await InteractionModel.getAllInteractionsForProfile(
+        testAgent.id,
+      );
+      const logged = interaction.response as {
+        content: { type: string; text?: string }[];
+      };
+      expect(logged.content.map((block) => block.text)).toEqual([
+        "Tool get_weather is not enabled here",
+      ]);
+    });
+
+    // Holding tool calls until the gate decides moves them behind any text that
+    // streamed while they waited, so the client sees them in a different order
+    // than the model produced. Pinned because it is a real, deliberate cost of
+    // the design, not an accident to be silently changed back.
+    test("the SDK sees released tool calls after the text they were interleaved with", async () => {
+      anthropicStubOptions.toolUseBetweenText = true;
+      anthropicStubOptions.streamStopReason = "tool_use";
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      const final = await reconstructWithSdk(response.body);
+
+      // Upstream order was text, tool_use, text.
+      expect(final.content.map((block) => block.type)).toEqual([
+        "text",
+        "text",
+        "tool_use",
+      ]);
+    });
+
+    // A released call has to survive reassembly whole: the id the client answers
+    // with, and the arguments it runs. Those arrive as deltas keyed by index, so
+    // they are exactly what a disturbed index sequence corrupts.
+    test("the SDK reconstructs a released tool call's id and arguments intact", async () => {
+      anthropicStubOptions.toolUseBetweenText = true;
+      anthropicStubOptions.streamStopReason = "tool_use";
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      const final = await reconstructWithSdk(response.body);
+      const toolUse = final.content.find((block) => block.type === "tool_use");
+
+      expect(toolUse).toMatchObject({
+        id: "toolu_test_weather",
+        name: "get_weather",
+        input: { location: "SF" },
+      });
+      // The client owes a tool_result, and the turn has to say so.
+      expect(final.stop_reason).toBe("tool_use");
+    });
+
+    // Billed spend is derived by filtering on billing_mode, so the value the
+    // handler stamps on the interaction decides whether a call is charged.
+    // It is classified from the credential format alone.
+    test.for([
+      ["sk-ant-oat-token", "subscription"],
+      ["sk-ant-api-token", "metered"],
+    ])("a %s credential persists billing_mode %s", async ([key, expected]) => {
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+
+      const interactions = await InteractionModel.getAllInteractionsForProfile(
+        testAgent.id,
+      );
+      expect(interactions).toHaveLength(1);
+      expect(interactions[0].billingMode).toBe(expected);
+    });
+
+    test("a refusal replaces the entire buffered message", async () => {
+      anthropicStubOptions.includeToolUseNonStreaming = true;
+
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Tool get_weather is not enabled here",
+        contentMessage: "Tool get_weather is not enabled here",
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolName: "get_weather",
+        toolInput: {},
+        allToolCallNames: ["get_weather"],
+      } satisfies PolicyBlockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.content).toEqual([
+        {
+          type: "text",
+          text: "Tool get_weather is not enabled here",
+          citations: null,
+        },
+      ]);
+      expect(
+        body.content.some((b: { type: string }) => b.type === "tool_use"),
+      ).toBe(false);
+      expect(body.stop_reason).toBe("end_turn");
+    });
+
+    // The set the handler hands to evaluatePolicies decides which model tool
+    // calls count as available. Provider built-ins carry no input schema, so
+    // sourcing it from getTools() would leave them out and refuse every call a
+    // caller makes to its own `bash`.
+    test("the availability set passed to evaluatePolicies includes declared built-ins", async () => {
+      anthropicStubOptions.includeToolUse = true;
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+          tools: [
+            {
+              name: "get_weather",
+              description: "weather",
+              input_schema: { type: "object", properties: {} },
+            },
+            { type: "bash_20250124", name: "bash" },
+          ],
+        },
+      });
+
+      expect(mockEvaluatePolicies).toHaveBeenCalled();
+      const enabledToolNames = mockEvaluatePolicies.mock
+        .calls[0][4] as Set<string>;
+      expect([...enabledToolNames]).toEqual(["get_weather", "bash"]);
+    });
+
+    // A caller that declares only built-ins still has an availability set — it
+    // is those built-ins — so the check runs and admits exactly what was
+    // declared, rather than seeing an empty set and skipping entirely.
+    test("declaring only built-ins still yields an availability set", async () => {
+      anthropicStubOptions.includeToolUse = true;
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "run it" }],
+          stream: true,
+          tools: [{ type: "bash_20250124", name: "bash" }],
+        },
+      });
+
+      const enabledToolNames = mockEvaluatePolicies.mock
+        .calls[0][4] as Set<string>;
+      expect([...enabledToolNames]).toEqual(["bash"]);
+    });
+
+    // A request with no tools at all is a different case: there is nothing to
+    // filter against, and forcing a check would refuse calls on providers whose
+    // adapters surface tools some other way.
+    test("declaring no tools leaves the availability set untouched", async () => {
+      anthropicStubOptions.includeToolUse = true;
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "hello" }],
+          stream: true,
+        },
+      });
+
+      const enabledToolNames = mockEvaluatePolicies.mock
+        .calls[0][4] as Set<string>;
+      expect([...enabledToolNames]).toEqual([]);
+    });
+
+    // No tool call is released before the gate decides, so a refusal cannot
+    // leave one stranded: there is nothing on the wire to owe a tool_result
+    // for, and the turn is genuinely finished.
+    test("a refusal leaves no tool call on the wire", async () => {
+      anthropicStubOptions.includeToolUse = true;
+      anthropicStubOptions.streamStopReason = "tool_use";
+
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Tool get_weather is not enabled here",
+        contentMessage: "Tool get_weather is not enabled here",
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolName: "get_weather",
+        toolInput: {},
+        allToolCallNames: ["get_weather"],
+      } satisfies PolicyBlockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toContain("toolu_test_weather");
+      expect(response.body).toContain("Tool get_weather is not enabled here");
+      expect(response.body).toContain('"stop_reason":"end_turn"');
+      expect(response.body).not.toContain('"stop_reason":"tool_use"');
+
+      const [interaction] = await InteractionModel.getAllInteractionsForProfile(
+        testAgent.id,
+      );
+      const logged = interaction.response as {
+        content: { type: string }[];
+        stop_reason: string;
+      };
+      expect(logged.stop_reason).toBe("end_turn");
+      expect(logged.content.some((b) => b.type === "tool_use")).toBe(false);
+    });
+
+    // The caller's untrusted marking has to survive the handler and arrive as
+    // the `contextIsTrusted` argument, or the gate evaluates the wrong turn.
+    test("an untrusted request reaches the gate marked untrusted", async () => {
+      anthropicStubOptions.includeToolUse = true;
+      anthropicStubOptions.streamStopReason = "tool_use";
+
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Blocked: sensitive context",
+        contentMessage: "Blocked: sensitive context",
+        reason: "Tool invocation blocked: sensitive context",
+        blockedToolName: "get_weather",
+        toolInput: {},
+        allToolCallNames: ["get_weather"],
+      } satisfies PolicyBlockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+          [UNTRUSTED_CONTEXT_HEADER]: "true",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Arg 3 is `contextIsTrusted`; the header must have flipped it.
+      expect(mockEvaluatePolicies.mock.calls[0][3]).toBe(false);
+      expect(response.body).not.toContain("toolu_test_weather");
+      expect(response.body).toContain("Blocked: sensitive context");
+      // Nothing is owed, so the turn is genuinely finished.
+      expect(response.body).toContain('"stop_reason":"end_turn"');
+      expect(response.body).not.toContain('"stop_reason":"tool_use"');
     });
 
     test("calls recordBlockedToolSpans when streaming response contains blocked tool calls", async () => {
@@ -1652,5 +2475,142 @@ describe("LLM Proxy Handler — team-restricted models", () => {
     });
     const allowed = await injectChatCompletionAs(insiderToken);
     expect(allowed.statusCode).toBe(200);
+  });
+});
+
+describe("LLM Proxy Handler — dual LLM progress delivery", () => {
+  let app: FastifyInstance;
+  let testAgent: Agent;
+
+  type DualLlmCallbackArgs = Parameters<
+    typeof import("@/guardrails/trusted-data")["evaluateIfContextIsTrusted"]
+  >;
+
+  // Simulates one full analysis (start → one Q&A round → completion) through
+  // whichever callbacks the handler wired up.
+  const runDualLlmCallbacks = (args: DualLlmCallbackArgs) => {
+    const [{ onDualLlmStart, onDualLlmProgress, onDualLlmComplete }] = args;
+    onDualLlmStart?.({ toolCallId: "call_1", toolName: "web_fetch" });
+    onDualLlmProgress?.({
+      toolCallId: "call_1",
+      toolName: "web_fetch",
+      question: "Primary topic?",
+      options: ["security", "recipes"],
+      answer: "0",
+    });
+    onDualLlmComplete?.(
+      {
+        toolCallId: "call_1",
+        conversations: [
+          { role: "assistant", content: "Primary topic?" },
+          { role: "user", content: "0" },
+        ],
+        result: "A security article.",
+      },
+      { toolName: "web_fetch", cached: false },
+    );
+  };
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    mockEvaluateIfContextIsTrusted.mockImplementation(async (...args) => {
+      runDualLlmCallbacks(args as DualLlmCallbackArgs);
+      return {
+        toolResultUpdates: {},
+        contextIsTrusted: true,
+        dualLlmAnalyses: [],
+        unsafeContextBoundary: undefined,
+      };
+    });
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient({}) as never,
+    );
+
+    testAgent = await makeAgent({ name: "Dual LLM Progress Agent" });
+    metrics.llm.initializeMetrics([]);
+    mockEvaluatePolicies.mockResolvedValue(null);
+
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
+  });
+
+  afterEach(async () => {
+    mockEvaluateIfContextIsTrusted.mockReset();
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  const injectStreaming = (extraHeaders: Record<string, string> = {}) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        ...extraHeaders,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Summarize the fetched page" }],
+        stream: true,
+      },
+    });
+
+  test("without a progress channel, analyses hold the stream open with SSE comments and never inject narration", async () => {
+    const response = await injectStreaming();
+
+    expect(response.statusCode).toBe(200);
+    // Two keep-alive comments: one per callback (start, Q&A round).
+    expect(response.body).toContain(DUAL_LLM_KEEPALIVE_SSE_COMMENT);
+    // The analysis narrative must never ride the content stream — on
+    // chat-completions it fuses into the model's answer.
+    expect(response.body).not.toContain("Analyzing with Dual LLM");
+    expect(response.body).not.toContain("Primary topic?");
+  });
+
+  test("with a progress channel, analyses publish structured events on the bus and write nothing into the stream", async () => {
+    const events: DualLlmProgressEvent[] = [];
+    const unsubscribe = dualLlmProgressBus.subscribe("chan-test-1", (event) =>
+      events.push(event),
+    );
+
+    const response = await injectStreaming({
+      [DUAL_LLM_PROGRESS_CHANNEL_HEADER]: "chan-test-1",
+    });
+    unsubscribe();
+
+    expect(response.statusCode).toBe(200);
+    expect(events.map((event) => event.kind)).toEqual([
+      "start",
+      "qa",
+      "complete",
+    ]);
+    expect(events[1]).toMatchObject({
+      toolCallId: "call_1",
+      toolName: "web_fetch",
+      question: "Primary topic?",
+      answer: "0",
+    });
+    expect(events[2]).toMatchObject({
+      cached: false,
+      analysis: { result: "A security article." },
+    });
+    // Nothing analysis-related reaches the wire — no comments, no narration.
+    expect(response.body).not.toContain("archestra dual-llm");
+    expect(response.body).not.toContain("Primary topic?");
   });
 });

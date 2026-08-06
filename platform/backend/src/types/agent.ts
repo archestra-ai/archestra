@@ -38,6 +38,16 @@ export const AgentTypeSchema = z.enum([
 ]);
 export type AgentType = z.infer<typeof AgentTypeSchema>;
 
+/**
+ * Agent types that can serve as an MCP gateway — the agents external MCP
+ * clients register via the connect page (legacy `profile` agents serve both
+ * gateway and proxy surfaces).
+ */
+export const GATEWAY_CAPABLE_AGENT_TYPES = [
+  "mcp_gateway",
+  "profile",
+] as const satisfies readonly AgentType[];
+
 export const AgentScopeSchema = ResourceVisibilityScopeSchema;
 export type AgentScope = ResourceVisibilityScope;
 
@@ -80,6 +90,10 @@ const AppRuntimeAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.APP_RUNTIME),
 });
 
+const AdvisorAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.ADVISOR),
+});
+
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   PolicyConfigAgentConfigSchema,
@@ -88,6 +102,7 @@ export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   ContextCompactionAgentConfigSchema,
   ChatTitleGenerationAgentConfigSchema,
   AppRuntimeAgentConfigSchema,
+  AdvisorAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
@@ -221,6 +236,14 @@ export type GatewayAgent = z.infer<typeof GatewayAgentSchema>;
 export const SelectAgentSchema = AgentRowSchema.extend({
   tools: z.array(SelectToolSchema),
   teams: z.array(AgentTeamInfoSchema),
+  // People the agent is shared with individually. A personal-scoped agent with
+  // a non-empty list is shared, not private — the settings form reads the pair
+  // as its Users choice.
+  // Optional like authorName: only the read paths that surface sharing
+  // populate it, so the many internal Agent assemblies stay unchanged.
+  users: z
+    .array(z.object({ id: z.string(), name: z.string(), email: z.string() }))
+    .optional(),
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
   authorEmail: z.string().nullable().optional(),
@@ -276,6 +299,9 @@ export const InsertAgentSchemaBase = createInsertSchema(
 )
   .extend({
     teams: z.array(z.string()).default([]),
+    // Individuals the agent is shared with by name. Additive to the scope,
+    // so a personal agent can reach a colleague without going team-wide.
+    users: z.array(z.string()).default([]),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     // Make organizationId optional - model will auto-assign if not provided
     organizationId: z.string().optional(),
@@ -294,6 +320,10 @@ export const InsertAgentSchemaBase = createInsertSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
+    // Server-managed head pointer into agent_versions — forked by
+    // AgentVersionModel, never client-settable (a supplied value would corrupt
+    // the version counter and can collide on the (agent_id, version) index).
+    latestVersion: true,
   });
 
 // Full schema with validation refinement
@@ -308,6 +338,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
 )
   .extend({
     teams: z.array(z.string()).optional(),
+    users: z.array(z.string()).optional(),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     scope: AgentScopeSchema.optional(),
     knowledgeBaseIds: z.array(z.string()).optional(),
@@ -324,6 +355,10 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
+    // Server-managed head pointer into agent_versions — forked by
+    // AgentVersionModel, never client-settable (a supplied value would corrupt
+    // the version counter and can collide on the (agent_id, version) index).
+    latestVersion: true,
   });
 
 // Full schema with validation refinement

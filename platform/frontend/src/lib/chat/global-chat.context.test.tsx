@@ -1078,9 +1078,14 @@ describe("ChatProvider retries", () => {
     // regenerate({messageId}) synchronously truncates it up to and including
     // the user anchor before requesting (AbstractChat.regenerate slices
     // state.messages in the same task).
-    mocks.setMessages.mockImplementation((next: UIMessage[]) => {
-      liveMessages.current = next;
-    });
+    mocks.setMessages.mockImplementation(
+      (next: UIMessage[] | ((current: UIMessage[]) => UIMessage[])) => {
+        // Both forms, like the SDK: callers pass a list or an updater run
+        // against the live list.
+        liveMessages.current =
+          typeof next === "function" ? next(liveMessages.current) : next;
+      },
+    );
     mocks.regenerate.mockImplementation(
       async ({ messageId }: { messageId: string }) => {
         const index = liveMessages.current.findIndex((m) => m.id === messageId);
@@ -1335,6 +1340,96 @@ describe("ChatProvider auto title generation", () => {
         expect.any(Object),
       ),
     );
+  });
+
+  it("titles an app chat still carrying its seeded app name", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages: toolOnlyMessages,
+        regenerate: mocks.regenerate,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+    // An app chat is created titled with the app's name, which is neither empty
+    // nor the first user message — only the flag marks it as replaceable.
+    mocks.getQueryData.mockReturnValue({
+      title: "Expense Tracker",
+      titleIsPlaceholder: true,
+    });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    act(() => {
+      chatOptions?.onFinish?.({
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
+    await waitFor(() =>
+      expect(mocks.mutate).toHaveBeenCalledWith(
+        { id: "conversation-1", regenerate: false },
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it("leaves a renamed app chat alone", async () => {
+    let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages: toolOnlyMessages,
+        regenerate: mocks.regenerate,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+    // Renaming clears the flag, so the app chat is no longer replaceable.
+    mocks.getQueryData.mockReturnValue({
+      title: "Q3 budget planning",
+      titleIsPlaceholder: false,
+    });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    // Awaited: the title decision sits behind the cache invalidations onFinish
+    // awaits, so asserting synchronously would pass before it is even reached.
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: toolOnlyMessages[toolOnlyMessages.length - 1],
+        isAbort: false,
+      });
+    });
+
+    expect(mocks.mutate).not.toHaveBeenCalled();
   });
 
   it("does not regenerate a title the conversation already has", async () => {

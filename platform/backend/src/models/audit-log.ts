@@ -4,6 +4,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   gte,
   ilike,
   lt,
@@ -11,6 +12,7 @@ import {
   or,
   type SQL,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -20,6 +22,7 @@ import type {
   AuditActorType,
   AuditEventName,
   AuditLog,
+  AuditLogWithImpersonator,
   AuditOutcome,
   InsertAuditLog,
   SortDirection,
@@ -42,6 +45,9 @@ function buildSearchCondition(search: string) {
   );
 }
 
+/** Self-join alias: resolve the impersonator's email for display. */
+const impersonatorUsers = alias(schema.usersTable, "impersonator_users");
+
 class AuditLogModel {
   static async create(input: InsertAuditLog): Promise<AuditLog> {
     const [row] = await db
@@ -54,10 +60,17 @@ class AuditLogModel {
   static async findById(
     id: string,
     organizationId: string,
-  ): Promise<AuditLog | null> {
+  ): Promise<AuditLogWithImpersonator | null> {
     const [row] = await db
-      .select()
+      .select({
+        ...getTableColumns(schema.auditLogsTable),
+        impersonatedByEmail: impersonatorUsers.email,
+      })
       .from(schema.auditLogsTable)
+      .leftJoin(
+        impersonatorUsers,
+        eq(schema.auditLogsTable.impersonatedBy, impersonatorUsers.id),
+      )
       .where(
         and(
           eq(schema.auditLogsTable.id, id),
@@ -66,7 +79,7 @@ class AuditLogModel {
       )
       .limit(1);
 
-    return (row as AuditLog | undefined) ?? null;
+    return (row as AuditLogWithImpersonator | undefined) ?? null;
   }
 
   static async findPaginated(opts: {
@@ -83,7 +96,7 @@ class AuditLogModel {
     resourceType?: string;
     resourceId?: string;
     search?: string;
-  }): Promise<PaginatedResult<AuditLog>> {
+  }): Promise<PaginatedResult<AuditLogWithImpersonator>> {
     const {
       organizationId,
       limit,
@@ -152,8 +165,18 @@ class AuditLogModel {
 
     const [data, [{ total }]] = await Promise.all([
       db
-        .select()
+        .select({
+          ...getTableColumns(schema.auditLogsTable),
+          // Human-readable attribution for rows written during impersonation
+          // (impersonatedBy alone is an opaque user id). Null when the row is
+          // not impersonation-attributed or the impersonator was deleted.
+          impersonatedByEmail: impersonatorUsers.email,
+        })
         .from(schema.auditLogsTable)
+        .leftJoin(
+          impersonatorUsers,
+          eq(schema.auditLogsTable.impersonatedBy, impersonatorUsers.id),
+        )
         .where(whereClause)
         .orderBy(...orderBy)
         .limit(limit)
@@ -164,10 +187,14 @@ class AuditLogModel {
         .where(whereClause),
     ]);
 
-    return createPaginatedResult(data as AuditLog[], Number(total), {
-      limit,
-      offset,
-    });
+    return createPaginatedResult(
+      data as AuditLogWithImpersonator[],
+      Number(total),
+      {
+        limit,
+        offset,
+      },
+    );
   }
 
   static async deleteOlderThan(opts: {

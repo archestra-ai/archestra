@@ -9,8 +9,10 @@ import {
   hasArchestraTokenPrefix,
   isSupportedProvider,
   LLM_PROXY_OAUTH_SCOPE,
+  type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -24,7 +26,7 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
+import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import {
@@ -38,6 +40,7 @@ import {
 } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackAddress } from "@/utils/network";
+import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 // =========================================================================
 // Agent Resolution
@@ -281,7 +284,7 @@ export function assertConsistentUserCredentials(
   if (distinct.size > 1) {
     throw new ApiError(
       401,
-      "Conflicting Archestra user credentials: the request's credentials identify different users.",
+      `Conflicting ${archestraMcpBranding.appName} user credentials: the request's credentials identify different users.`,
     );
   }
 }
@@ -454,19 +457,130 @@ export async function attemptJwksAuth(
  *
  * Internal requests from localhost (chat route → proxy) are allowed.
  */
-export function assertAuthenticatedForKeylessProvider(
-  apiKey: string | undefined,
-  wasVirtualKeyResolved: boolean,
-  wasJwksAuthenticated: boolean,
-  requestIp: string,
-): void {
-  if (apiKey || wasVirtualKeyResolved || wasJwksAuthenticated) return;
+export function assertAuthenticatedForKeylessProvider(params: {
+  apiKey: string | undefined;
+  wasVirtualKeyResolved: boolean;
+  wasJwksAuthenticated: boolean;
+  requestIp: string;
+  /**
+   * True when the backend authenticates upstream with its OWN credentials and
+   * discards whatever the caller sent (Gemini in Vertex AI mode). A
+   * caller-supplied Authorization value then proves nothing about who is
+   * calling — it is never forwarded and never validated by anyone — so it must
+   * not stand in for authentication. Defaults to false: for every other
+   * provider the caller's key is forwarded upstream, which validates it.
+   */
+  providerSuppliesServerCredential?: boolean;
+}): void {
+  const {
+    apiKey,
+    wasVirtualKeyResolved,
+    wasJwksAuthenticated,
+    requestIp,
+    providerSuppliesServerCredential = false,
+  } = params;
+
+  if (wasVirtualKeyResolved || wasJwksAuthenticated) return;
+  if (apiKey && !providerSuppliesServerCredential) return;
 
   if (!isLoopbackAddress(requestIp)) {
     throw new ApiError(
       401,
-      "Authentication required. Use a platform virtual API key or pass a provider API key.",
+      providerSuppliesServerCredential
+        ? "Authentication required. This provider is configured to use the server's own credentials, so requests must present a platform virtual API key or an identity provider token."
+        : "Authentication required. Use a platform virtual API key or pass a provider API key.",
     );
+  }
+}
+
+// =========================================================================
+// Pass-through Proxy Authentication
+// =========================================================================
+
+/**
+ * Authenticate a request that is forwarded straight upstream by a catch-all
+ * pass-through proxy, where no adapter-based handler runs.
+ *
+ * Global session/RBAC auth stands down for `/v1/<provider>` paths because the
+ * instrumented chat routes authenticate inside `handleLLMProxy`. The
+ * pass-through routes registered alongside them never reach that handler, so
+ * they authenticate here instead.
+ *
+ * Accepts the same platform credentials the instrumented handler does — a
+ * passthrough virtual key, a standard virtual key, an external-IdP JWT, or an
+ * LLM OAuth access token — and fails closed with 401 when none resolve. A raw
+ * provider key is deliberately NOT accepted: these routes exist for providers
+ * whose upstream needs no key, so any string would otherwise pass.
+ */
+export async function authenticatePassthroughProxyRequest(params: {
+  request: FastifyRequest;
+  provider: SupportedProvider;
+  agentId?: string;
+}): Promise<void> {
+  const { request, provider, agentId } = params;
+
+  // Internal loopback callers (in-app chat → proxy) are trusted, matching the
+  // keyless-provider allowance in the instrumented handler.
+  if (isLoopbackAddress(request.ip)) return;
+
+  const unauthenticated = new ApiError(
+    401,
+    "Authentication required. Use a platform virtual API key, an LLM OAuth access token, or a configured identity provider token.",
+  );
+
+  const headers = request.headers as Record<
+    string,
+    string | string[] | undefined
+  >;
+  const passthroughToken = getPassthroughVirtualKeyToken(headers);
+  // Read from the raw headers so a route-level schema transform cannot strip
+  // the "Bearer " prefix out from under us (same reasoning as attemptJwksAuth).
+  const bearerToken =
+    request.raw.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
+
+  if (!passthroughToken && !bearerToken) {
+    throw unauthenticated;
+  }
+
+  await virtualKeyRateLimiter.check(request.ip);
+  try {
+    if (passthroughToken) {
+      await validatePassthroughVirtualKey({
+        tokenValue: passthroughToken,
+        agent: await resolveAgent(agentId),
+      });
+      return;
+    }
+    if (!bearerToken) {
+      throw unauthenticated;
+    }
+
+    if (hasArchestraTokenPrefix(bearerToken)) {
+      // Token validity and expiry are the whole bar here. The provider-mapping
+      // check that validateVirtualApiKey adds decides WHICH upstream credential
+      // to use, and a pass-through forwards none — so requiring it would reject
+      // otherwise-valid platform credentials for no security gain.
+      await validateVirtualApiKeyToken(bearerToken);
+      return;
+    }
+
+    const agent = await resolveAgent(agentId);
+    if (await attemptJwksAuth(request, agent, provider)) return;
+    if (
+      await validateLlmOAuthAccessToken({
+        tokenValue: bearerToken,
+        expectedProvider: provider,
+        agent,
+      })
+    ) {
+      return;
+    }
+    throw unauthenticated;
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode === 401) {
+      await virtualKeyRateLimiter.recordFailure(request.ip);
+    }
+    throw error;
   }
 }
 

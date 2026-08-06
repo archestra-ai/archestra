@@ -21,6 +21,10 @@ export default defineConfig({
         __dirname,
         "../shared/api-error.ts",
       ),
+      "@archestra/shared/consts": path.resolve(
+        __dirname,
+        "../shared/consts.ts",
+      ),
       "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },

@@ -44,8 +44,10 @@ const actionLabels: Record<Action, string> = {
   execute: "Execute",
   "deploy-to-restricted": "Deploy to Restricted",
   manage: "Manage",
+  "manage-deleted": "Manage Deleted",
   "read-all": "Read All Chats",
   "share-org": "Share Org-Wide",
+  impersonate: "Impersonate",
 };
 
 const UNGRANTABLE_PERMISSION_TOOLTIP =
@@ -246,9 +248,9 @@ export function RolePermissionBuilder({
             <p className="text-sm font-medium">Selected Permissions</p>
             <p className="text-xs text-muted-foreground">
               {getTotalPermissionCount()} permission
-              {getTotalPermissionCount() !== 1 ? "s" : ""} across{" "}
+              {getTotalPermissionCount() !== 1 ? <span>s</span> : null} across{" "}
               {Object.keys(permission).length} resource
-              {Object.keys(permission).length !== 1 ? "s" : ""}
+              {Object.keys(permission).length !== 1 ? <span>s</span> : null}
             </p>
           </div>
           <Tooltip>

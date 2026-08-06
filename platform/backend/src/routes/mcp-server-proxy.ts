@@ -11,7 +11,7 @@ import { ApiError, type McpServer, UuidIdSchema } from "@/types";
 import {
   createStatelessTransport,
   ensureRequestSocketDestroySoon,
-} from "./mcp-gateway.utils";
+} from "./mcp-gateway/utils";
 import { createServerScopedServer } from "./mcp-server-gateway.utils";
 
 /**

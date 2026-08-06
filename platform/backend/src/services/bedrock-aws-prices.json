@@ -1,0 +1,475 @@
+{
+  "Amazon Bedrock": {
+    "in": 0.135
+  },
+  "Claude": {
+    "in": 8,
+    "out": 24
+  },
+  "Claude (100K)": {
+    "in": 22.04,
+    "out": 65.36
+  },
+  "Claude 2.0": {
+    "in": 8
+  },
+  "Claude 2.1": {
+    "in": 8
+  },
+  "Claude 3 Haiku": {
+    "in": 0.25,
+    "out": 1.25
+  },
+  "Claude 3 Opus": {
+    "out": 75,
+    "in": 15
+  },
+  "Claude 3 Sonnet": {
+    "in": 3,
+    "out": 15
+  },
+  "Claude 3.5 Haiku": {
+    "out": 4,
+    "in": 0.8
+  },
+  "Claude 3.5 Sonnet": {
+    "in": 3,
+    "out": 15
+  },
+  "Claude 3.5 Sonnet v2": {
+    "out": 15,
+    "in": 3
+  },
+  "Claude 3.7 Sonnet": {
+    "out": 15,
+    "in": 3
+  },
+  "Claude Haiku 4.5": {
+    "in": 1.1,
+    "out": 5.5
+  },
+  "Claude Haiku 4.5|global": {
+    "out": 5,
+    "in": 1
+  },
+  "Claude Instant": {
+    "in": 0.8,
+    "out": 2.4
+  },
+  "Claude Instant (100K)": {
+    "out": 11.02,
+    "in": 3.26
+  },
+  "Claude Opus 4": {
+    "out": 75,
+    "in": 15
+  },
+  "Claude Opus 4.1": {
+    "out": 75,
+    "in": 15
+  },
+  "Claude Opus 4.5": {
+    "out": 27.5,
+    "in": 5.5
+  },
+  "Claude Opus 4.5|global": {
+    "in": 5,
+    "out": 25
+  },
+  "Claude Opus 4.6": {
+    "in": 5.5,
+    "out": 27.5
+  },
+  "Claude Opus 4.6|global": {
+    "in": 5,
+    "out": 25
+  },
+  "Claude Sonnet 4": {
+    "out": 15,
+    "in": 3
+  },
+  "Claude Sonnet 4.5": {
+    "in": 3.3,
+    "out": 16.5
+  },
+  "Claude Sonnet 4.5|global": {
+    "out": 15,
+    "in": 3
+  },
+  "Claude Sonnet 4.6": {
+    "out": 16.5,
+    "in": 3.3
+  },
+  "Claude Sonnet 4.6|global": {
+    "in": 3,
+    "out": 15
+  },
+  "Claude Sonnet 4|global": {
+    "in": 3,
+    "out": 15
+  },
+  "Cohere Command R": {
+    "in": 0.5,
+    "out": 1.5
+  },
+  "Cohere Command R+": {
+    "out": 15,
+    "in": 3
+  },
+  "Cohere Embed 3 Model - English": {
+    "in": 0.1
+  },
+  "Cohere Embed 4 Model": {
+    "in": 0.12
+  },
+  "Cohere Embed Model 3 - Multilingual": {
+    "in": 0.1
+  },
+  "Cohere Generate Model - Command": {
+    "out": 2,
+    "in": 1
+  },
+  "Cohere Generate Model - Command-Light": {
+    "in": 0.3,
+    "out": 0.6
+  },
+  "DeepSeek V3.1": {
+    "in": 0.58,
+    "out": 1.68
+  },
+  "DeepSeek v3.2": {
+    "in": 0.62,
+    "out": 1.85
+  },
+  "Devstral": {
+    "out": 2,
+    "in": 0.4
+  },
+  "Gemma 3 12B": {
+    "out": 0.29,
+    "in": 0.09
+  },
+  "Gemma 3 27B": {
+    "out": 0.38,
+    "in": 0.23
+  },
+  "Gemma 3 4B": {
+    "out": 0.08,
+    "in": 0.04
+  },
+  "GLM 4.7": {
+    "out": 2.2,
+    "in": 0.6
+  },
+  "GLM 4.7 Flash": {
+    "in": 0.07,
+    "out": 0.4
+  },
+  "GLM 5": {
+    "in": 1,
+    "out": 3.2
+  },
+  "google.gemma-4-26b-a4b": {
+    "in": 0.13,
+    "out": 0.4
+  },
+  "google.gemma-4-31b": {
+    "in": 0.14,
+    "out": 0.4
+  },
+  "google.gemma-4-e2b": {
+    "in": 0.04,
+    "out": 0.08
+  },
+  "GPT OSS Safeguard 120B": {
+    "in": 0.15,
+    "out": 0.6
+  },
+  "GPT OSS Safeguard 20B": {
+    "in": 0.07,
+    "out": 0.2
+  },
+  "gpt-oss-120b": {
+    "in": 0.15,
+    "out": 0.6
+  },
+  "gpt-oss-20b": {
+    "out": 0.3,
+    "in": 0.07
+  },
+  "Jamba 1.5 Large": {
+    "in": 2,
+    "out": 8
+  },
+  "Jamba 1.5 Mini": {
+    "out": 0.4,
+    "in": 0.2
+  },
+  "Jamba-Instruct": {
+    "in": 0.5,
+    "out": 0.7
+  },
+  "Jurassic-2 Mid": {
+    "out": 12.5,
+    "in": 12.5
+  },
+  "Jurassic-2 Ultra": {
+    "out": 18.8,
+    "in": 18.8
+  },
+  "Kimi K2 Thinking": {
+    "in": 0.6,
+    "out": 2.5
+  },
+  "Kimi K2.5": {
+    "out": 3,
+    "in": 0.6
+  },
+  "Llama 3 70B": {
+    "in": 2.65,
+    "out": 3.5
+  },
+  "Llama 3 8B": {
+    "out": 0.6,
+    "in": 0.3
+  },
+  "Llama 3.1 70B": {
+    "in": 0.72,
+    "out": 0.72
+  },
+  "Llama 3.1 8B": {
+    "in": 0.22,
+    "out": 0.22
+  },
+  "Llama 3.2 11B": {
+    "in": 0.16,
+    "out": 0.16
+  },
+  "Llama 3.2 1B": {
+    "out": 0.1,
+    "in": 0.1
+  },
+  "Llama 3.2 3B": {
+    "out": 0.15,
+    "in": 0.15
+  },
+  "Llama 3.2 90B": {
+    "out": 0.72,
+    "in": 0.72
+  },
+  "Llama 3.3 70B": {
+    "in": 0.72,
+    "out": 0.72
+  },
+  "Llama 4 Maverick 17B": {
+    "in": 0.24,
+    "out": 0.97
+  },
+  "Llama 4 Scout 17B": {
+    "out": 0.66,
+    "in": 0.17
+  },
+  "Magistral Small 1.2": {
+    "in": 0.5,
+    "out": 1.5
+  },
+  "Meta Llama 2 Chat 13B": {
+    "in": 0.75,
+    "out": 1
+  },
+  "Meta Llama 2 Chat 70B": {
+    "in": 1.95,
+    "out": 2.56
+  },
+  "Minimax M2": {
+    "out": 1.2,
+    "in": 0.3
+  },
+  "Minimax M2.1": {
+    "out": 1.2,
+    "in": 0.3
+  },
+  "MiniMax M2.5": {
+    "out": 1.2,
+    "in": 0.3
+  },
+  "Ministral 14B 3.0": {
+    "in": 0.2,
+    "out": 0.2
+  },
+  "Ministral 3B 3.0": {
+    "in": 0.1,
+    "out": 0.1
+  },
+  "Ministral 8B 3.0": {
+    "in": 0.15,
+    "out": 0.15
+  },
+  "Mistral 7B": {
+    "in": 0.15,
+    "out": 0.2
+  },
+  "Mistral Large": {
+    "in": 4,
+    "out": 12
+  },
+  "Mistral Large 3": {
+    "in": 0.5,
+    "out": 1.5
+  },
+  "Mistral Small": {
+    "in": 1,
+    "out": 3
+  },
+  "Mixtral 8x7B": {
+    "out": 0.7,
+    "in": 0.45
+  },
+  "Nemotron Nano 3 30B": {
+    "in": 0.06,
+    "out": 0.24
+  },
+  "Nova 2.0 Lite": {
+    "in": 0.33,
+    "out": 2.75
+  },
+  "Nova 2.0 Lite|global": {
+    "in": 0.3,
+    "out": 2.5
+  },
+  "Nova 2.0 Omni": {
+    "in": 0.3,
+    "out": 2.8
+  },
+  "Nova 2.0 Omni|global": {
+    "in": 0.3,
+    "out": 2.5
+  },
+  "Nova 2.0 Pro": {
+    "in": 1.375,
+    "out": 11
+  },
+  "Nova 2.0 Pro|global": {
+    "in": 1.25,
+    "out": 10
+  },
+  "Nova Lite": {
+    "in": 0.06,
+    "out": 0.24
+  },
+  "Nova Micro": {
+    "in": 0.035,
+    "out": 0.14
+  },
+  "Nova Premier": {
+    "in": 2.5,
+    "out": 12.5
+  },
+  "Nova Pro": {
+    "out": 3.2,
+    "in": 0.8
+  },
+  "Nova Sonic": {
+    "out": 0.24,
+    "in": 0.06
+  },
+  "Nova Sonic 2.0": {
+    "in": 0.33,
+    "out": 2.75
+  },
+  "NVIDIA Nemotron 3 Super 120B A12B": {
+    "out": 0.65,
+    "in": 0.15
+  },
+  "NVIDIA Nemotron Nano 2": {
+    "out": 0.23,
+    "in": 0.06
+  },
+  "NVIDIA Nemotron Nano 2 VL": {
+    "out": 0.6,
+    "in": 0.2
+  },
+  "Palmyra X4": {
+    "out": 10,
+    "in": 2.5
+  },
+  "Palmyra X5": {
+    "out": 6,
+    "in": 0.6
+  },
+  "Pixtral Large 25.02": {
+    "out": 6,
+    "in": 2
+  },
+  "Qwen3 235B A22B 2507": {
+    "out": 0.88,
+    "in": 0.22
+  },
+  "Qwen3 32B": {
+    "out": 0.6,
+    "in": 0.15
+  },
+  "Qwen3 Coder 30B A3B": {
+    "in": 0.15,
+    "out": 0.6
+  },
+  "Qwen3 Coder 480B A35B": {
+    "in": 0.45,
+    "out": 1.8
+  },
+  "Qwen3 Coder Next": {
+    "in": 0.5,
+    "out": 1.2
+  },
+  "Qwen3 Next 80B A3B": {
+    "out": 1.2,
+    "in": 0.14
+  },
+  "Qwen3 VL 235B A22B": {
+    "in": 0.53,
+    "out": 2.66
+  },
+  "R1": {
+    "in": 1.35,
+    "out": 5.4
+  },
+  "Titan Embeddings G1 Image": {
+    "in": 0.8
+  },
+  "Titan Embeddings G1 Text": {
+    "in": 0.1
+  },
+  "Titan Text G1 Express": {
+    "in": 0.2,
+    "out": 0.6
+  },
+  "Titan Text G1 Lite": {
+    "in": 0.15,
+    "out": 0.2
+  },
+  "Titan Text G1 Premier": {
+    "out": 1.5,
+    "in": 0.5
+  },
+  "TitanEmbeddingsV2-Text-input": {
+    "in": 0.02
+  },
+  "TwelveLabs Pegasus 1.2": {
+    "out": 7.5
+  },
+  "TwelveLabs Pegasus 1.2|global": {
+    "out": 7.5
+  },
+  "Voxtral Mini 1.0": {
+    "out": 0.04,
+    "in": 0.04
+  },
+  "Voxtral Small 1.0": {
+    "in": 0.1,
+    "out": 0.3
+  },
+  "Writer Palmyra Vision 7B": {
+    "in": 0.15,
+    "out": 0.6
+  }
+}

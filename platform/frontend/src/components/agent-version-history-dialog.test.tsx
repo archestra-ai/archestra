@@ -1,0 +1,613 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useProfile } from "@/lib/agent.query";
+import {
+  type AgentConfigSnapshot,
+  useAgentVersion,
+  useAgentVersions,
+  useRestoreAgentVersion,
+} from "@/lib/agent-version.query";
+import { AgentVersionHistoryDialog } from "./agent-version-history-dialog";
+
+vi.mock("@/lib/auth/auth.query");
+
+vi.mock("@/lib/agent.query", () => ({
+  useProfile: vi.fn(),
+}));
+
+vi.mock("@/lib/agent-version.query", () => ({
+  useAgentVersions: vi.fn(),
+  useAgentVersion: vi.fn(),
+  useRestoreAgentVersion: vi.fn(),
+}));
+
+// Monaco needs a real browser layout engine, so both editors stand in as plain
+// nodes that still expose the text each side of the diff was given.
+vi.mock("@/components/diff-editor", () => ({
+  DiffEditor: ({
+    original,
+    modified,
+  }: {
+    original: string;
+    modified: string;
+  }) => (
+    <div data-testid="diff">
+      <span data-testid="diff-original">{original}</span>
+      <span data-testid="diff-modified">{modified}</span>
+    </div>
+  ),
+}));
+
+vi.mock("@/components/editor", () => ({
+  Editor: ({ value }: { value: string }) => (
+    <div data-testid="editor">{value}</div>
+  ),
+}));
+
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+
+const snapshot = (
+  overrides: Partial<AgentConfigSnapshot> = {},
+): AgentConfigSnapshot => ({
+  agentType: "agent",
+  name: "Support bot",
+  description: null,
+  icon: null,
+  systemPrompt: "be helpful",
+  considerContextUntrusted: false,
+  toolExposureMode: "full",
+  accessAllTools: false,
+  accessAllSubagents: false,
+  passthroughHeaders: [],
+  incomingEmailEnabled: false,
+  incomingEmailSecurityMode: "disabled",
+  incomingEmailAllowedDomain: null,
+  builtInAgentConfig: null,
+  model: null,
+  llmApiKey: null,
+  identityProviderId: null,
+  environmentId: null,
+  tools: [],
+  excludedTools: [],
+  excludedSubagents: [],
+  suggestedPrompts: [],
+  hooks: [],
+  knowledgeBases: [],
+  connectors: [],
+  ...overrides,
+});
+
+const versionRow = (version: number, contentHash: string) => ({
+  id: `version-${version}`,
+  agentId: "agent-1",
+  version,
+  contentHash,
+  createdAt: "2026-08-03T10:00:00.000Z",
+});
+
+const versionDetail = (version: number, contentHash: string) => ({
+  id: `version-${version}`,
+  agentId: "agent-1",
+  version,
+  snapshot: snapshot({ systemPrompt: `prompt v${version}` }),
+  contentHash,
+  createdAt: "2026-08-03T10:00:00.000Z",
+});
+
+const mutateAsync = vi.fn();
+
+function mockAgent(overrides: Record<string, unknown> = {}) {
+  vi.mocked(useProfile).mockReturnValue({
+    data: {
+      id: "agent-1",
+      name: "Support bot",
+      agentType: "agent",
+      builtIn: false,
+      latestVersion: 3,
+      ...overrides,
+    },
+    isPending: false,
+    refetch: vi.fn(),
+    // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+  } as any);
+}
+
+/** Head is v3; v2 and v1 are the history behind it. */
+function mockVersions(
+  rows: ReturnType<typeof versionRow>[] = [
+    versionRow(3, "hash-head"),
+    versionRow(2, "hash-two"),
+    versionRow(1, "hash-one"),
+  ],
+) {
+  vi.mocked(useAgentVersions).mockReturnValue({
+    data: { pages: [{ data: rows }] },
+    isPending: false,
+    isSuccess: true,
+    isError: false,
+    refetch: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: vi.fn(),
+    // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+  } as any);
+}
+
+/**
+ * Versions listed here have settled: a detail object is a hit, `null` is the
+ * 404 a pruned version answers. Anything absent is still in flight.
+ */
+function mockVersionDetails(
+  details: Record<number, ReturnType<typeof versionDetail> | null>,
+) {
+  vi.mocked(useAgentVersion).mockImplementation(((
+    _id: string | null,
+    version: number | null,
+  ) => {
+    const entry = version === null ? null : details[version];
+    const settled = version !== null && version in details;
+    return {
+      data: entry ?? null,
+      isPending: !settled,
+      isSuccess: settled,
+      isError: false,
+      refetch: vi.fn(),
+    };
+  }) as never);
+}
+
+/**
+ * The hook's held-over reading: a version whose read is still in flight is
+ * served whichever snapshot was read before it, as `keepPreviousData` does, so
+ * the preview keeps something on screen across a selection.
+ */
+function mockHeldOverDetails(
+  settled: Record<number, ReturnType<typeof versionDetail>>,
+  heldOver: ReturnType<typeof versionDetail>,
+) {
+  vi.mocked(useAgentVersion).mockImplementation(((
+    _id: string | null,
+    version: number | null,
+  ) => {
+    const entry = version === null ? undefined : settled[version];
+    return {
+      data: entry ?? heldOver,
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isPlaceholderData: !entry,
+      refetch: vi.fn(),
+    };
+  }) as never);
+}
+
+function renderDialog({ canModify = true }: { canModify?: boolean } = {}) {
+  return render(
+    <AgentVersionHistoryDialog
+      agentId="agent-1"
+      canModify={canModify}
+      onOpenChange={() => {}}
+    />,
+  );
+}
+
+describe("AgentVersionHistoryDialog", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // `clearAllMocks` leaves implementations in place, so the mutation is
+    // re-stubbed here rather than inheriting whatever the last test set. Null
+    // is the "nothing was written" resolution; success cases override it.
+    mutateAsync.mockResolvedValue(null);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
+    } as any);
+    vi.mocked(useMissingPermissions).mockReturnValue({});
+    vi.mocked(useRestoreAgentVersion).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+      // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
+    } as any);
+    mockAgent();
+    mockVersions();
+    mockVersionDetails({
+      3: versionDetail(3, "hash-head"),
+      2: versionDetail(2, "hash-two"),
+    });
+  });
+
+  it("opens on the head version and marks it as current", () => {
+    renderDialog();
+
+    expect(
+      screen.getByRole("heading", { name: "Version 3" }),
+    ).toBeInTheDocument();
+    const headRow = screen.getByRole("button", { name: /v3/ });
+    expect(within(headRow).getByText("Current")).toBeInTheDocument();
+  });
+
+  it("cannot restore the version the agent is already on", () => {
+    renderDialog();
+
+    expect(
+      screen.getByRole("button", { name: "Restore this version" }),
+    ).toBeDisabled();
+  });
+
+  it("trusts the fresh timeline over a stale profile for where the head is", () => {
+    // The profile cache lags a concurrent edit: it still says v2 while the
+    // freshly-fetched timeline already lists v3. Believing the profile would
+    // badge the wrong row and offer to "restore" the actual head.
+    mockAgent({ latestVersion: 2 });
+    renderDialog();
+
+    const headRow = screen.getByRole("button", { name: /v3/ });
+    expect(within(headRow).getByText("Current")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Restore this version" }),
+    ).toBeDisabled();
+  });
+
+  it("passes the previewed head to the mutation so a concurrent edit is caught", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 2" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      agentId: "agent-1",
+      version: 2,
+      baseVersion: 3,
+    });
+  });
+
+  it("closes the confirmation when the restore does not go through", async () => {
+    const user = userEvent.setup();
+    // A handled failure resolves to null. The conflict is the one that matters:
+    // settling refetches the timeline, so a confirmation left open would let
+    // the same button succeed on a second click against a head that moved
+    // underneath it — compare-and-set reduced to clicking twice. The retry has
+    // to start from a preview rendered against the head that actually won.
+    mutateAsync.mockResolvedValue(null);
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 2" }));
+
+    expect(
+      screen.queryByRole("button", { name: "Restore version 2" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("refuses a restore the reader has no scope to make", async () => {
+    const user = userEvent.setup();
+    // RBAC is not the whole check: the pages also gate their mutating row
+    // buttons on being an admin, a team admin of the team it is scoped to, or
+    // the owner of a personal one. Without it a member with the update
+    // permission but no scope over this entity gets an enabled button and a
+    // server refusal that reads as "not found".
+    renderDialog({ canModify: false });
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+
+    const restoreButton = screen.getByRole("button", {
+      name: "Restore this version",
+    });
+    expect(restoreButton).toBeDisabled();
+    await user.hover(restoreButton.parentElement as HTMLElement);
+    // radix renders the content and a screen-reader copy of it
+    expect(
+      await screen.findAllByText(
+        "You do not have permission to modify this agent.",
+      ),
+    ).not.toHaveLength(0);
+  });
+
+  it("jumps the selection to the version a restore just created", async () => {
+    const user = userEvent.setup();
+    // A restore lands as a new head the timeline does not list yet; the
+    // preview must follow it rather than keep showing the source version.
+    mutateAsync.mockResolvedValue({ id: "agent-1", latestVersion: 4 });
+    mockVersionDetails({
+      4: versionDetail(4, "hash-four"),
+      3: versionDetail(3, "hash-head"),
+      2: versionDetail(2, "hash-two"),
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 2" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Version 4" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Restore version 2" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("treats a version a restore just created as the head before the timeline lists it", async () => {
+    const user = userEvent.setup();
+    // Settling invalidates the timeline, but until that refetch lands the row
+    // at the top is the superseded head: it would keep the Current badge while
+    // the footer offered to restore what the agent already is — a click that
+    // 409s or comes back "identical". A restore only ever appends, so the
+    // version it minted is the head until something reports a higher one.
+    mutateAsync.mockResolvedValue({ id: "agent-1", latestVersion: 4 });
+    mockVersionDetails({
+      4: versionDetail(4, "hash-four"),
+      3: versionDetail(3, "hash-head"),
+      2: versionDetail(2, "hash-two"),
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 2" }));
+
+    // The timeline mock is static — it still lists v3 as the newest row,
+    // exactly the "before the refetch lands" window this guards.
+    const supersededRow = await screen.findByRole("button", { name: /v3/ });
+    expect(
+      within(supersededRow).queryByText("Current"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Version 4" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Restore this version" }),
+    ).toBeDisabled();
+  });
+
+  it("keeps the first restore's head after a second restore in the same session settles", async () => {
+    const user = userEvent.setup();
+    // A shared mutation instance's `data` reflects only its *latest* call, so
+    // reading `restoredHead` off it directly would forget the first restore
+    // the moment a second one settles — including a second restore that
+    // itself fails (a deleted referent, a conflict): the badge the first
+    // restore earned would be lost to an unrelated later failure.
+    mutateAsync.mockImplementation(
+      async (input: { agentId: string; version: number }) => {
+        const result =
+          input.version === 2 ? { id: "agent-1", latestVersion: 4 } : null;
+        vi.mocked(useRestoreAgentVersion).mockReturnValue({
+          mutateAsync,
+          isPending: false,
+          data: result,
+          // biome-ignore lint/suspicious/noExplicitAny: partial mutation is enough
+        } as any);
+        return result;
+      },
+    );
+    mockVersionDetails({
+      4: versionDetail(4, "hash-four"),
+      3: versionDetail(3, "hash-head"),
+      2: versionDetail(2, "hash-two"),
+      1: versionDetail(1, "hash-one"),
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 2" }));
+    await screen.findByRole("heading", { name: "Version 4" });
+
+    // A second restore, of a version the server refuses — a handled failure,
+    // resolving to null rather than throwing.
+    await user.click(screen.getByRole("button", { name: /v1/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Restore version 1" }));
+
+    // Still the "before the refetch lands" window for both restores: if the
+    // head fell back to the stale timeline read once the mutation settled on
+    // the second call's null, this row would wear the badge again.
+    const staleHeadRow = await screen.findByRole("button", { name: /v3/ });
+    expect(within(staleHeadRow).queryByText("Current")).not.toBeInTheDocument();
+  });
+
+  it("explains a pruned predecessor instead of claiming to load it", async () => {
+    const user = userEvent.setup();
+    // v1 has settled as null — the 404 retention answers for a pruned
+    // version — so v2 has no baseline and never will. The disabled Changes
+    // button must say that, not promise a load that cannot arrive.
+    mockVersionDetails({
+      3: versionDetail(3, "hash-head"),
+      2: versionDetail(2, "hash-two"),
+      1: null,
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+
+    const changesButton = screen.getByRole("button", { name: "Changes" });
+    expect(changesButton).toBeDisabled();
+    await user.hover(changesButton.parentElement as HTMLElement);
+    // radix renders the content and a screen-reader copy of it
+    expect(
+      await screen.findAllByText(
+        "Version 1 is no longer available, so there is nothing to compare against.",
+      ),
+    ).not.toHaveLength(0);
+    expect(screen.queryByText("Loading version 1...")).not.toBeInTheDocument();
+  });
+
+  it("shows an empty preview for a config that never recorded a version", () => {
+    // `latestVersion: 0` is the column default for an agent created before
+    // versioning shipped, not a head. Reading it as one pointed the detail
+    // query at version 0 — which the hook refuses to fetch — and left the
+    // pane on "Loading version..." forever.
+    mockAgent({ latestVersion: 0 });
+    mockVersions([]);
+    renderDialog();
+
+    expect(screen.queryByText("Loading version...")).not.toBeInTheDocument();
+    expect(screen.getByText(/Nothing to preview yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No versions yet\. The next configuration change/),
+    ).toBeInTheDocument();
+  });
+
+  it("states what a restore writes without predicting what it changes", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+
+    expect(
+      screen.getByText(/Version 2's configuration becomes the agent's/),
+    ).toBeVisible();
+    // The caveat is unconditional: whether a referent was deleted since is a
+    // question only the write can answer.
+    expect(screen.getByText(/the restore is refused/)).toBeVisible();
+  });
+
+  it("makes no claim about how a version differs from the current one", async () => {
+    const user = userEvent.setup();
+    // Answering that needs a comparison covering the whole snapshot. Getting
+    // it wrong walks the reader through a whole-configuration rewrite as
+    // though it were a no-op, so the confirmation does not attempt it.
+    mockVersionDetails({
+      3: versionDetail(3, "hash-head"),
+      2: {
+        ...versionDetail(2, "hash-head"),
+        snapshot: snapshot({ systemPrompt: "prompt v3" }),
+      },
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+
+    expect(screen.queryByText(/Nothing changes/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/This changes:/)).not.toBeInTheDocument();
+  });
+
+  it("does not wait on a head it never reads before allowing a restore", async () => {
+    const user = userEvent.setup();
+    // Only the previewed version has settled. Nothing else is needed to say
+    // what a restore writes, so the confirmation goes through.
+    mockVersionDetails({ 2: versionDetail(2, "hash-two") });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Restore version 2" }),
+    ).toBeEnabled();
+  });
+
+  it("explains why a pruned version cannot be restored", async () => {
+    const user = userEvent.setup();
+    mockVersionDetails({ 3: versionDetail(3, "hash-head"), 2: null });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+
+    const restoreButton = screen.getByRole("button", {
+      name: "Restore this version",
+    });
+    expect(restoreButton).toBeDisabled();
+    await user.hover(restoreButton.parentElement as HTMLElement);
+    // radix renders the content and a screen-reader copy of it
+    expect(
+      await screen.findAllByText(
+        "Version 2 is no longer available, so there is nothing to restore.",
+      ),
+    ).not.toHaveLength(0);
+  });
+
+  it("keeps the preview on the version it is showing while the next one loads", async () => {
+    const user = userEvent.setup();
+    // Selecting v1 holds v2 on screen until v1 arrives. Everything the pane
+    // says — the heading, and which version a restore would write — has to
+    // stay with the snapshot the reader can actually see, not the click.
+    mockHeldOverDetails(
+      { 3: versionDetail(3, "hash-head"), 2: versionDetail(2, "hash-two") },
+      versionDetail(2, "hash-two"),
+    );
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(screen.getByRole("button", { name: /v1/ }));
+
+    expect(
+      screen.getByRole("heading", { name: "Version 2" }),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Restore this version" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Restore version 2" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not diff the shown version against a held-over baseline", async () => {
+    const user = userEvent.setup();
+    // v1's read is in flight, so the baseline query is serving v2's snapshot
+    // too. Pairing them would diff v2 against itself and report an empty
+    // change set as fact; the pane must wait for the real predecessor.
+    mockHeldOverDetails(
+      { 3: versionDetail(3, "hash-head"), 2: versionDetail(2, "hash-two") },
+      versionDetail(2, "hash-two"),
+    );
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+    await user.click(screen.getByRole("button", { name: /v1/ }));
+
+    const changesButton = screen.getByRole("button", { name: "Changes" });
+    expect(changesButton).toBeDisabled();
+    await user.hover(changesButton.parentElement as HTMLElement);
+    expect(await screen.findAllByText("Loading version 1...")).not.toHaveLength(
+      0,
+    );
+  });
+
+  it("stamps each timeline row with the time it was recorded", () => {
+    renderDialog();
+
+    expect(screen.getByRole("button", { name: /v3/ }).textContent).toMatch(
+      /\d{2}:\d{2}/,
+    );
+  });
+
+  it("blocks restoring a built-in agent", async () => {
+    const user = userEvent.setup();
+    mockAgent({ builtIn: true });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v2/ }));
+
+    expect(
+      screen.getByRole("button", { name: "Restore this version" }),
+    ).toBeDisabled();
+  });
+});

@@ -18,7 +18,7 @@ import {
   requireSkillModifyPermission,
   type SkillPermissionChecker,
 } from "@/auth/skill-permissions";
-import { userHasPermission } from "@/auth/utils";
+import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -30,6 +30,8 @@ import {
   SkillModel,
   SkillTeamModel,
   SkillUsageEventModel,
+  SkillUserModel,
+  SkillVersionModel,
   TaskModel,
   TeamModel,
   ToolModel,
@@ -74,15 +76,21 @@ import {
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
   SelectSkillSchema,
+  SelectSkillVersionFileSchema,
+  SelectSkillVersionSchema,
   type Skill,
   SkillFileEncodingSchema,
   SkillGithubSyncIntervalSchema,
   SkillSortBy,
   SkillUsageStatisticsSchema,
+  SkillVersionMetadataSchema,
   SkillWithFilesSchema,
   UuidIdSchema,
 } from "@/types";
-import { isForeignKeyConstraintError } from "@/utils/db";
+import {
+  isForeignKeyConstraintError,
+  isUniqueConstraintError,
+} from "@/utils/db";
 
 /**
  * Shared fields identifying a GitHub skill source. Authentication is optional
@@ -126,6 +134,17 @@ const GithubSkillSourceSchema = z
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
 
+/**
+ * Someone a personal skill has been shared with by name. Such a skill stays
+ * `scope = 'personal'` and carries grants beside it, so this is what tells a
+ * shared skill apart from a private one.
+ */
+const SkillUserSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+});
+
 /** An environment a skill is restricted to (empty = every environment). */
 const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 
@@ -133,6 +152,7 @@ const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 const SkillListItemSchema = SelectSkillSchema.extend({
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
+  users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
   authorName: z.string().nullable(),
   /**
@@ -145,7 +165,13 @@ const SkillListItemSchema = SelectSkillSchema.extend({
 /** A skill with its resource files, team, and environment assignments. */
 const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
+  users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
+});
+
+/** One immutable version with its resource-file snapshots. */
+const SkillVersionDetailSchema = SelectSkillVersionSchema.extend({
+  files: z.array(SelectSkillVersionFileSchema),
 });
 
 /** One crawled public-GitHub skill returned by a catalog search. */
@@ -204,30 +230,64 @@ const ConvertAgentToSkillInputSchema = z.object({
  * files untouched; passing `[]` clears them. `scope` defaults to `personal`;
  * `teamIds` is only meaningful for `scope = 'team'`.
  */
-const SkillManifestInputSchema = z
-  .object({
-    content: SkillManifestContentSchema,
-    files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
-    scope: ResourceVisibilityScopeSchema.optional(),
-    teamIds: z.array(z.string()).optional(),
-    environmentIds: z
-      .array(UuidIdSchema)
-      .optional()
-      .describe(
-        "Environments the skill is restricted to. Empty (or omitted on " +
-          "create) makes the skill available to agents in every " +
-          "environment; otherwise only agents in one of the listed " +
-          "environments see it.",
-      ),
-    allowedTools: z
-      .array(z.string())
-      .optional()
-      .describe(
-        "Tools the skill expects, overriding the SKILL.md `allowed-tools` " +
-          "frontmatter. Omit to use the frontmatter; pass [] to clear.",
-      ),
-  })
-  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
+const SkillManifestFieldsSchema = z.object({
+  content: SkillManifestContentSchema,
+  files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
+  scope: ResourceVisibilityScopeSchema.optional(),
+  teamIds: z.array(z.string()).optional(),
+  /** Only meaningful for `scope = 'personal'`; ignored for team/org skills. */
+  userIds: z.array(z.string()).optional(),
+  environmentIds: z
+    .array(UuidIdSchema)
+    .optional()
+    .describe(
+      "Environments the skill is restricted to. Empty (or omitted on " +
+        "create) makes the skill available to agents in every " +
+        "environment; otherwise only agents in one of the listed " +
+        "environments see it.",
+    ),
+  allowedTools: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Tools the skill expects, overriding the SKILL.md `allowed-tools` " +
+        "frontmatter. Omit to use the frontmatter; pass [] to clear.",
+    ),
+});
+
+const SkillManifestInputSchema = SkillManifestFieldsSchema.superRefine(
+  (data, ctx) => refineUniqueFilePaths(data.files, ctx),
+);
+
+/**
+ * Update payload: the manifest fields plus `baseVersion`, the compare-and-set
+ * the `edit_skill` MCP tool already takes under the same name. The skill editor
+ * sends the head its form was seeded from, so a write landing between that read
+ * and the save is rejected (409) rather than silently buried. Optional, for
+ * callers composing a payload that owes nothing to a prior read of the skill.
+ *
+ * Split from {@link SkillManifestInputSchema} because `.superRefine()` yields a
+ * `ZodEffects`, which cannot be `.extend()`ed — the shared fields have to live
+ * in a plain object for the update schema to add to them.
+ */
+const SkillManifestUpdateSchema = SkillManifestFieldsSchema.extend({
+  baseVersion: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "The skill's `latestVersion` when this edit was composed. Rejected " +
+        "with 409 if the skill has moved past it. Omit only when the payload " +
+        "owes nothing to a prior read of the skill.",
+    ),
+}).superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
+
+/** A comma-separated query param parsed into a string[] (mirrors the agents list). */
+const CommaSeparatedIds = z.preprocess(
+  (val) => (typeof val === "string" ? val.split(",").filter(Boolean) : val),
+  z.array(z.string()),
+);
 
 const DiscoveredSkillSchema = z.object({
   skillPath: z.string(),
@@ -255,6 +315,35 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "environment (skills with no environment assignments and " +
               "built-in skills are visible everywhere).",
           ),
+          scope: ResourceVisibilityScopeSchema.optional().describe(
+            "Filter by visibility scope: personal, team, or org.",
+          ),
+          teamIds: CommaSeparatedIds.optional().describe(
+            "Team IDs (comma-separated); only used when scope=team.",
+          ),
+          authorIds: CommaSeparatedIds.optional().describe(
+            "Author user IDs (comma-separated). Admin-only; used with scope=personal.",
+          ),
+          excludeAuthorIds: CommaSeparatedIds.optional().describe(
+            "Exclude author user IDs (comma-separated). Admin-only; used with scope=personal.",
+          ),
+          excludeOtherPersonalSkills: z
+            .preprocess(
+              (val) => (typeof val === "string" ? val === "true" : val),
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Hide personal skills owned by other users. Admin-only; no-op for non-admins.",
+            ),
+          status: z
+            .enum(["active", "deleted"])
+            .optional()
+            .default("active")
+            .describe(
+              "Which skills to list: active (default) or the soft-deleted " +
+                "trash. `deleted` is restricted to admins and team-admins.",
+            ),
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -263,7 +352,20 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, search, sourceRepo, forAgentId, ...sorting },
+        query: {
+          limit,
+          offset,
+          search,
+          sourceRepo,
+          forAgentId,
+          scope,
+          teamIds,
+          authorIds,
+          excludeAuthorIds,
+          excludeOtherPersonalSkills,
+          status,
+          ...sorting
+        },
         organizationId,
         user,
       },
@@ -273,6 +375,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+
+      // Viewing the trash is an admin/team-admin surface. Skills have no
+      // checker-level delete capability (delete is authorized per-skill), so
+      // this gates on the broader manage roles rather than a `skill:delete`.
+      if (status === "deleted" && !(checker.isAdmin || checker.isTeamAdmin)) {
+        throw new ApiError(403, "Forbidden");
+      }
 
       // Skills are environment-scoped; `forAgentId` narrows the list to what
       // that agent can actually see (used by the chat slash-command menu).
@@ -292,6 +401,18 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
           });
 
+      // Author filters are an admin oversight surface (mirrors the agents
+      // list); non-admins are already restricted to their own scope.
+      const scopeFilters = {
+        scope,
+        teamIds,
+        authorIds: checker.isAdmin ? authorIds : undefined,
+        excludeAuthorIds: checker.isAdmin ? excludeAuthorIds : undefined,
+        excludeOtherPersonalForUserId:
+          checker.isAdmin && excludeOtherPersonalSkills ? user.id : undefined,
+        status,
+      };
+
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
           organizationId,
@@ -301,6 +422,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           environmentId,
+          ...scopeFilters,
           sorting,
         }),
         SkillModel.countByOrganization({
@@ -309,11 +431,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           environmentId,
+          ...scopeFilters,
         }),
       ]);
 
       const skillIds = skills.map((skill) => skill.id);
-      const authorIds = [
+      const skillAuthorIds = [
         ...new Set(
           skills
             .map((skill) => skill.authorId)
@@ -323,14 +446,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const [
         fileCounts,
         teamsBySkill,
+        usersBySkill,
         environmentsBySkill,
         authorNames,
         usageUserCounts,
       ] = await Promise.all([
         SkillFileModel.countBySkillIds(skillIds),
         SkillTeamModel.getTeamDetailsForSkills(skillIds),
+        SkillUserModel.getUserDetailsForSkills(skillIds),
         SkillEnvironmentModel.getEnvironmentDetailsForSkills(skillIds),
-        UserModel.getNamesByIds(authorIds),
+        UserModel.getNamesByIds(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
       ]);
 
@@ -341,6 +466,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SKILL.md (stored in the skills row) so the count matches the catalog.
           fileCount: (fileCounts.get(skill.id) ?? 0) + 1,
           teams: teamsBySkill.get(skill.id) ?? [],
+          users: usersBySkill.get(skill.id) ?? [],
           environments: environmentsBySkill.get(skill.id) ?? [],
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
@@ -367,6 +493,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const parsed = parseManifestOrThrow(body.content);
       const scope = body.scope ?? "personal";
       const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
+      // Sharing with named people keeps the skill personal, so grants only
+      // apply to that scope; a team/org skill is already reachable more widely.
+      const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
 
       const environmentIds = dedupe(body.environmentIds ?? []);
 
@@ -403,6 +532,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       if (!skill) {
         throw skillNameConflict(parsed.name);
+      }
+      if (userIds.length > 0) {
+        await SkillUserModel.syncSkillUsers(skill.id, userIds);
       }
 
       return reply.send(await loadSkillDetail(skill));
@@ -590,21 +722,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      const skill = await findSkillOrThrow(id, organizationId);
-      const checker = await getSkillPermissionChecker({
+      const skill = await requireReadableSkill({
+        id,
         userId: user.id,
         organizationId,
       });
-      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
       return reply.send(await loadSkillDetail(skill));
     },
   );
@@ -622,21 +744,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      const skill = await findSkillOrThrow(id, organizationId);
-      const checker = await getSkillPermissionChecker({
+      const skill = await requireReadableSkill({
+        id,
         userId: user.id,
         organizationId,
       });
-      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
       const since = new Date(Date.now() - USAGE_STATISTICS_WINDOW_MS);
       return reply.send(
         await SkillUsageEventModel.getUsageStatistics({
@@ -644,6 +756,77 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           since,
         }),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/skills/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetSkillVersions,
+        description:
+          "List a skill's version history, newest first, as metadata only " +
+          "(no SKILL.md body). Version numbers are contiguous from 1. " +
+          "Paginated.",
+        tags: ["Skills"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: PaginationQuerySchema,
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SkillVersionMetadataSchema),
+        ),
+      },
+    },
+    async ({ params: { id }, query, organizationId, user }, reply) => {
+      const skill = await requireReadableSkill({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(
+        await SkillVersionModel.listForSkill({
+          skillId: skill.id,
+          organizationId,
+          pagination: query,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/skills/:id/versions/:version",
+    {
+      schema: {
+        operationId: RouteId.GetSkillVersion,
+        description:
+          "Get one immutable skill version: the SKILL.md body it captured " +
+          "plus its resource-file snapshots.",
+        tags: ["Skills"],
+        params: z.object({
+          id: UuidIdSchema,
+          // capped at int4 max so impossible versions 400 instead of
+          // reaching Postgres as an out-of-range bind
+          version: z.coerce.number().int().positive().max(2_147_483_647),
+        }),
+        response: constructResponseSchema(SkillVersionDetailSchema),
+      },
+    },
+    async ({ params: { id, version }, organizationId, user }, reply) => {
+      const skill = await requireReadableSkill({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      const row = await SkillVersionModel.findBySkillAndVersion(
+        skill.id,
+        version,
+      );
+      if (!row) {
+        throw new ApiError(404, `Skill has no version ${version}`);
+      }
+      return reply.send({
+        ...row,
+        files: await SkillVersionModel.findFiles(row.id),
+      });
     },
   );
 
@@ -655,7 +838,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update a skill's SKILL.md, resource files, and scope",
         tags: ["Skills"],
         params: z.object({ id: z.string() }),
-        body: SkillManifestInputSchema,
+        body: SkillManifestUpdateSchema,
         response: constructResponseSchema(SkillDetailSchema),
       },
     },
@@ -706,6 +889,18 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Sharing with named people keeps the skill personal, so grants live only
+      // on that scope; widening to team or org clears them rather than leaving
+      // grants stranded on a skill whose visibility now says something else.
+      const existingGrantees =
+        (await SkillUserModel.getUserDetailsForSkills([existing.id])).get(
+          existing.id,
+        ) ?? [];
+      const existingUserIds = existingGrantees.map((grantee) => grantee.id);
+      const newUserIds =
+        newScope === "personal" ? dedupe(body.userIds ?? existingUserIds) : [];
+      const usersChanged = !sameIdSet(newUserIds, existingUserIds);
+
       // Changing a skill's environment assignments is gated like assigning
       // them: every environment in the new set must be assignable by this user.
       const existingEnvironmentIds =
@@ -746,11 +941,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               body.files === undefined ? undefined : toSkillFiles(body.files),
             teamIds: scopeChanged || teamsChanged ? newTeamIds : undefined,
             environmentIds: environmentsChanged ? newEnvironmentIds : undefined,
+            // Compare-and-set against the head the caller composed from; the
+            // transaction rejects (409) rather than burying a concurrent edit.
+            expectedLatestVersion: body.baseVersion,
           }),
         );
       } catch (error) {
         // Name conflict within the skill's visibility namespace — not a team FK
         // (mapped above) or a duplicate resource-file path (rejected at input).
+        // The version-conflict 409 raised inside the transaction is an ApiError,
+        // not a unique violation, so it passes through this check untouched.
         if (isSkillNameConflict(error)) {
           throw skillNameConflict(parsed.name);
         }
@@ -759,6 +959,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!updated) {
         throw new ApiError(404, "Skill not found");
+      }
+      if (usersChanged) {
+        await SkillUserModel.syncSkillUsers(id, newUserIds);
       }
 
       return reply.send(await loadSkillDetail(updated));
@@ -816,6 +1019,135 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const success = await SkillModel.delete(id);
       if (!success) {
+        throw new ApiError(404, "Skill not found");
+      }
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/skills/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreSkill,
+        description: "Restore a soft-deleted skill",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(SkillDetailSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      // The soft-deleted row: findById/findSkillOrThrow filter deleted rows and
+      // would 404 every restore. Authorize this object directly — junction
+      // rows survive soft-delete, so its scope/team lookups still resolve.
+      const skill = await SkillModel.findDeletedById(id, organizationId);
+      if (!skill) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      await authorizeSkillModify({ skill, userId: user.id, organizationId });
+
+      const conflictMessage = await SkillModel.getRestoreConflictMessage(skill);
+      if (conflictMessage) {
+        throw new ApiError(409, conflictMessage);
+      }
+
+      let success: boolean;
+      try {
+        success = await SkillModel.restore(id);
+      } catch (error) {
+        // The pre-check is advisory; the partial unique index is the real
+        // guard. A create can claim the freed name between the check and this
+        // UPDATE — map that violation to a 409 rather than a 500.
+        if (
+          isUniqueConstraintError(error, "skills_org_personal_name_idx") ||
+          isUniqueConstraintError(error, "skills_org_shared_name_idx")
+        ) {
+          throw skillNameConflict(skill.name);
+        }
+        throw error;
+      }
+      if (!success) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      // The row is active again, so the normal detail path is safe.
+      const restored = await findSkillOrThrow(id, organizationId);
+      return reply.send(await loadSkillDetail(restored));
+    },
+  );
+
+  fastify.delete(
+    "/api/skills/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeleteSkill,
+        description:
+          "Permanently destroy a soft-deleted skill (global admins only). " +
+          "Irreversible, with no grace period: every version and resource file " +
+          "is destroyed, along with the skill's team and user grants, " +
+          "environment assignments, usage events, and share links — so any " +
+          "public share URL for it stops working. 404 if there is no " +
+          "soft-deleted skill with that id in the org, which is also the " +
+          "answer when the skill is still live or the caller is not a global " +
+          "admin. 409 while a sandbox still has the skill mounted; that is " +
+          "retryable, but note nothing clears a mount on its own — it lasts as " +
+          "long as the sandbox does. Built-in skills cannot be purged: their " +
+          "soft-deleted row is what stops the seeder recreating them on the " +
+          "next restart. Restore wins a race.",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      // Checked before the skill is read: a caller who is not a global admin
+      // gets the same 404 whatever the id, so the endpoint never confirms the
+      // skill exists. `skill:admin` deliberately does not reach here — it is an
+      // oversight grant, and this destroys the bytes for good.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      const skill = await SkillModel.findDeletedById(id, organizationId);
+      if (!skill) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      // A built-in's soft-deleted row IS the opt-out: `SkillModel.findBuiltIn`
+      // includes deleted rows precisely so the startup seeder sees one and
+      // skips it. Destroying the row would hand the skill back on the next
+      // boot, making "permanent" deletion both untrue and silently
+      // opt-out-reverting. 403 rather than 404 — the skill is visibly in the
+      // trash to anyone who can list it, so there is nothing to conceal.
+      if (skill.sourceType === "built_in") {
+        throw new ApiError(
+          403,
+          "Built-in skills cannot be permanently deleted. Deleting one already " +
+            "removes it for good — its retained record is what stops it being " +
+            "recreated on the next restart.",
+        );
+      }
+
+      if (await SkillVersionModel.hasSandboxMountsForSkill(id)) {
+        throw skillStillMounted();
+      }
+
+      let purged: boolean;
+      try {
+        purged = await SkillModel.purge({ id, organizationId });
+      } catch (error) {
+        // The pre-check above is advisory; the RESTRICT foreign key is the real
+        // guard, and a sandbox can mount the skill between the two. Map that to
+        // the same 409 rather than a 500. Caught HERE, outside the model's
+        // transaction: a foreign-key violation aborts the whole Postgres
+        // transaction, so nothing inside it could have recovered.
+        if (isForeignKeyConstraintError(error)) {
+          throw skillStillMounted();
+        }
+        throw error;
+      }
+      if (!purged) {
         throw new ApiError(404, "Skill not found");
       }
       return reply.send({ success: true });
@@ -1170,6 +1502,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skillPaths: z.array(z.string()).min(1),
             scope: ResourceVisibilityScopeSchema.optional(),
             teamIds: z.array(z.string()).optional(),
+            /** Only meaningful for `scope = 'personal'`. */
+            userIds: z.array(z.string()).optional(),
             sync: z
               .object({ interval: SkillGithubSyncIntervalSchema })
               .default({ interval: "1d" })
@@ -1213,6 +1547,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // silently published org-wide.
       const scope = body.scope ?? "personal";
       const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
+      // Sharing with named people keeps a skill personal, so grants only apply
+      // to that scope; every skill in this import gets the same set.
+      const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
 
       await authorizeSkillCreate({
         userId: user.id,
@@ -1261,11 +1598,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
             files: item.files,
             teamIds,
+            // version 1 is exactly what the repo held at this commit.
+            versionSourceCommit: item.sourceCommit,
           }),
         );
         if (!skill) {
           skipped.push(item.parsed.name);
           continue;
+        }
+        if (userIds.length > 0) {
+          await SkillUserModel.syncSkillUsers(skill.id, userIds);
         }
         created.push(skill);
         if (item.skippedFiles.length > 0) {
@@ -1422,17 +1764,49 @@ async function findSkillOrThrow(id: string, organizationId: string) {
   return skill;
 }
 
+/**
+ * Resolve a live skill and enforce the full read-access path: org scoping
+ * plus scope/team/author visibility. Every failure is a 404 so existence is
+ * never leaked to users who cannot see the skill. Version reads don't filter
+ * soft-deletes themselves, so resolving the live skill here (findSkillOrThrow
+ * excludes deleted rows) is what keeps a deleted skill's history unreachable.
+ */
+async function requireReadableSkill(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}): Promise<Skill> {
+  const skill = await findSkillOrThrow(params.id, params.organizationId);
+  const checker = await getSkillPermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    skill,
+    isSkillAdmin: checker.isAdmin,
+  });
+  if (!hasAccess) {
+    throw new ApiError(404, "Skill not found");
+  }
+  return skill;
+}
+
 /** A skill with its files, team, and environment assignments, for detail responses. */
 async function loadSkillDetail(skill: Skill) {
-  const [files, teamsBySkill, environmentsBySkill] = await Promise.all([
-    SkillFileModel.findBySkillId(skill.id),
-    SkillTeamModel.getTeamDetailsForSkills([skill.id]),
-    SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
-  ]);
+  const [files, teamsBySkill, usersBySkill, environmentsBySkill] =
+    await Promise.all([
+      SkillFileModel.findBySkillId(skill.id),
+      SkillTeamModel.getTeamDetailsForSkills([skill.id]),
+      SkillUserModel.getUserDetailsForSkills([skill.id]),
+      SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
+    ]);
   return {
     ...skill,
     files,
     teams: teamsBySkill.get(skill.id) ?? [],
+    users: usersBySkill.get(skill.id) ?? [],
     environments: environmentsBySkill.get(skill.id) ?? [],
   };
 }
@@ -1686,6 +2060,21 @@ function parseManifestOrThrow(raw: string) {
 
 function skillNameConflict(name: string): ApiError {
   return new ApiError(409, `A skill named "${name}" already exists`);
+}
+
+/**
+ * A sandbox still mounts one of the skill's versions, and the mount pins those
+ * bytes (`ON DELETE RESTRICT`), so they cannot be destroyed yet. Says plainly
+ * that retrying is the remedy AND that nothing clears a mount on its own — a
+ * bare "try again later" would imply a wait that may never end.
+ */
+function skillStillMounted(): ApiError {
+  return new ApiError(
+    409,
+    "This skill is still mounted in a code sandbox, which pins the version " +
+      "files being deleted. Retry once those sandboxes are gone; note that a " +
+      "mount lasts as long as its sandbox, which is not cleaned up on a timer.",
+  );
 }
 
 /** Run a GitHub operation, converting import/parse failures into 400s. */

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, type Mock, test, vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 
 // The canonical Map-backed fake from src/__mocks__/cache-manager.ts stands in
@@ -12,13 +12,20 @@ vi.mock("@/models/chatops-channel-binding", () => ({
   default: { findByChannel: vi.fn() },
 }));
 
+// applyChannelGate resolves the app name to match "<app name> mute" commands.
+vi.mock("@/models/organization", () => ({
+  default: { getAppName: vi.fn(async () => "Archestra") },
+}));
+
 const setSpy = vi.spyOn(cacheManager, "set");
 
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import {
+  applyChannelGate,
   claimThreadMuteHint,
   clearChannelThreadActive,
   clearChannelThreadMuted,
+  findWorkspacesWithUnmentionedTraffic,
   getThreadMuteMarker,
   invalidateChannelAnswerAll,
   isChannelAnswerAllEnabled,
@@ -30,6 +37,7 @@ import {
   markChannelThreadMuted,
   mightBeAddressedMuteCommand,
   muteChannelThread,
+  recordUnmentionedChannelTraffic,
   resolveChannelGateAction,
 } from "./channel-activation";
 import { chatOpsRunRegistry } from "./chatops-run-registry";
@@ -182,6 +190,24 @@ describe("muteChannelThread (mute side-effects)", () => {
       await getThreadMuteMarker({ ...TEAMS, provider: "slack" }),
     ).toBeNull();
   });
+
+  test("persists the answer-all mute marker, so a mute survives in a channel with no activation to clear", async () => {
+    expect(await isChannelThreadMuted(TEAMS)).toBe(false);
+
+    // No prior activation — the case an answer-all channel is always in.
+    expect(await muteChannelThread(TEAMS)).toBe(false);
+
+    // Without this the thread would resume replying on the very next message.
+    expect(await isChannelThreadMuted(TEAMS)).toBe(true);
+  });
+
+  test("a re-mention lifts the mute", async () => {
+    await muteChannelThread(TEAMS);
+
+    await clearChannelThreadMuted(TEAMS);
+
+    expect(await isChannelThreadMuted(TEAMS)).toBe(false);
+  });
 });
 
 describe("claimThreadMuteHint", () => {
@@ -310,7 +336,7 @@ describe("isThreadMuteCommand", () => {
     });
 
     test.each([
-      "joey shut up", // aimed at a person, not the bot
+      "everyone shut up", // aimed at the room, not the bot
       "Archestra shut up the alerts channel", // not an exact command after the name
       "Archestra what's the status", // addressed, but not a mute
       "shut up Archestra", // name not a leading prefix
@@ -498,5 +524,268 @@ describe("isChannelAnswerAllEnabled", () => {
     } as never);
     expect(await isChannelAnswerAllEnabled(CHANNEL_PARAMS)).toBe(true);
     expect(ChatOpsChannelBindingModel.findByChannel).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("un-mentioned channel traffic markers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // The per-pod write throttle is module-level and outlives clearAllMocks, so
+  // each test needs its own workspace id or a sibling's throttle entry would
+  // suppress its write and leave the (per-test) fake cache store empty.
+  test("only reports workspaces that actually delivered an un-mentioned message", async () => {
+    await recordUnmentionedChannelTraffic({
+      provider: "ms-teams",
+      workspaceId: "team-reported",
+    });
+
+    expect(
+      await findWorkspacesWithUnmentionedTraffic({
+        provider: "ms-teams",
+        workspaceIds: ["team-reported", "team-silent"],
+      }),
+    ).toEqual(["team-reported"]);
+  });
+
+  test("is scoped per provider", async () => {
+    await recordUnmentionedChannelTraffic({
+      provider: "ms-teams",
+      workspaceId: "team-scoped",
+    });
+
+    expect(
+      await findWorkspacesWithUnmentionedTraffic({
+        provider: "slack",
+        workspaceIds: ["team-scoped"],
+      }),
+    ).toEqual([]);
+  });
+
+  test("reports nothing when asked about no workspaces", async () => {
+    expect(
+      await findWorkspacesWithUnmentionedTraffic({
+        provider: "ms-teams",
+        workspaceIds: [],
+      }),
+    ).toEqual([]);
+  });
+
+  test("writes once per workspace instead of once per message", async () => {
+    // The per-pod dedupe is module-level and outlives clearAllMocks, so this
+    // workspace id must not be reused by another test.
+    const params = {
+      provider: "ms-teams",
+      workspaceId: "team-write-once",
+    } as const;
+
+    await recordUnmentionedChannelTraffic(params);
+    await recordUnmentionedChannelTraffic(params);
+    await recordUnmentionedChannelTraffic(params);
+
+    // Every un-mentioned channel message calls this; without the dedupe each one
+    // would upsert the same Postgres-backed row.
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    expect(
+      await findWorkspacesWithUnmentionedTraffic({
+        provider: "ms-teams",
+        workspaceIds: ["team-write-once"],
+      }),
+    ).toEqual(["team-write-once"]);
+  });
+
+  test("a failed write is retried by the next message, not throttled away", async () => {
+    const params = {
+      provider: "ms-teams",
+      workspaceId: "team-write-fails",
+    } as const;
+    setSpy.mockRejectedValueOnce(new Error("cache unavailable"));
+
+    await expect(recordUnmentionedChannelTraffic(params)).rejects.toThrow();
+
+    // Throttling on a failed write would hide the workspace for the whole
+    // window; the next message has to be able to record it.
+    await recordUnmentionedChannelTraffic(params);
+    expect(
+      await findWorkspacesWithUnmentionedTraffic({
+        provider: "ms-teams",
+        workspaceIds: ["team-write-fails"],
+      }),
+    ).toEqual(["team-write-fails"]);
+  });
+});
+
+describe.each([
+  "slack",
+  "ms-teams",
+] as const)("applyChannelGate (%s)", (provider) => {
+  const activation = { ...TEAMS, provider };
+  let postMutedNotice: Mock<() => Promise<void>>;
+  let resolveAnswerAllWorkspaceId: Mock<() => Promise<string | null>>;
+
+  const gate = (overrides: Record<string, unknown> = {}) =>
+    applyChannelGate({
+      ...activation,
+      botMentioned: false,
+      text: "how do I deploy this?",
+      postMutedNotice,
+      resolveAnswerAllWorkspaceId,
+      ...overrides,
+    });
+
+  const enableAnswerAll = (enabled: boolean) =>
+    vi
+      .mocked(ChatOpsChannelBindingModel.findByChannel)
+      .mockResolvedValue(
+        enabled ? ({ answerAllMessages: true } as never) : null,
+      );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    postMutedNotice = vi.fn(async () => {});
+    resolveAnswerAllWorkspaceId = vi.fn(async () => "T123");
+    enableAnswerAll(false);
+  });
+
+  test("a mention activates the thread and is treated as addressed", async () => {
+    expect(await gate({ botMentioned: true })).toEqual({
+      proceed: true,
+      addressed: true,
+    });
+    expect(await isChannelThreadActive(activation)).toBe(true);
+  });
+
+  test("an un-mentioned message in an inactive mentions-only channel is ignored", async () => {
+    expect(await gate()).toEqual({ proceed: false, addressed: false });
+  });
+
+  test("an un-mentioned message in an active thread is processed as addressed", async () => {
+    await markChannelThreadActive(activation);
+
+    expect(await gate()).toEqual({ proceed: true, addressed: true });
+  });
+
+  test("an un-mentioned message in an answer-all channel is processed but NOT addressed", async () => {
+    enableAnswerAll(true);
+
+    // `addressed: false` is what keeps the bot from announcing itself to
+    // someone who never spoke to it (see the Teams webhook route).
+    expect(await gate()).toEqual({ proceed: true, addressed: false });
+  });
+
+  test("an answer-all thread that was muted stays ignored until re-mentioned", async () => {
+    enableAnswerAll(true);
+    await markChannelThreadMuted(activation);
+
+    expect(await gate()).toEqual({ proceed: false, addressed: false });
+
+    // A fresh mention lifts the mute, and the next un-mentioned message flows.
+    expect(await gate({ botMentioned: true })).toEqual({
+      proceed: true,
+      addressed: true,
+    });
+    expect(await isChannelThreadMuted(activation)).toBe(false);
+  });
+
+  test("a mute command silences the thread and confirms exactly once", async () => {
+    enableAnswerAll(true);
+
+    expect(await gate({ text: "mute" })).toEqual({
+      proceed: false,
+      addressed: false,
+    });
+    expect(postMutedNotice).toHaveBeenCalledTimes(1);
+    expect(await isChannelThreadMuted(activation)).toBe(true);
+
+    // A redelivered / repeated mute must not spam the thread.
+    await gate({ text: "mute" });
+    expect(postMutedNotice).toHaveBeenCalledTimes(1);
+  });
+
+  test("a mute command in an inactive mentions-only channel stays silent", async () => {
+    // The bot was not talking, so there is nothing to confirm.
+    expect(await gate({ text: "mute" })).toEqual({
+      proceed: false,
+      addressed: false,
+    });
+    expect(postMutedNotice).not.toHaveBeenCalled();
+  });
+
+  test("a mute addressed by the bot's display name is honored", async () => {
+    await markChannelThreadActive(activation);
+
+    // The org app name is white-labelled to something else entirely — people
+    // still address the bot by the name their chat client shows them.
+    expect(
+      await gate({ text: "SupportBot mute", botDisplayName: "SupportBot" }),
+    ).toEqual({ proceed: false, addressed: false });
+    expect(postMutedNotice).toHaveBeenCalledTimes(1);
+  });
+
+  test("an unrelated name before a mute command is not a mute", async () => {
+    await markChannelThreadActive(activation);
+
+    // Only the names the bot answers to are stripped — "everyone mute" is aimed
+    // at the room, and must reach the agent rather than silencing the thread.
+    expect(
+      await gate({ text: "everyone mute", botDisplayName: "SupportBot" }),
+    ).toEqual({ proceed: true, addressed: true });
+    expect(postMutedNotice).not.toHaveBeenCalled();
+  });
+
+  test("a mute addressed by app name rather than @mention is honored", async () => {
+    await markChannelThreadActive(activation);
+
+    expect(await gate({ text: "Archestra shut up" })).toEqual({
+      proceed: false,
+      addressed: false,
+    });
+    expect(postMutedNotice).toHaveBeenCalledTimes(1);
+  });
+
+  test("still mutes when the answer-all setting cannot be read", async () => {
+    resolveAnswerAllWorkspaceId.mockRejectedValue(
+      new Error("TeamsInfo unavailable"),
+    );
+    await markChannelThreadActive(activation);
+    const run = chatOpsRunRegistry.register(activation);
+
+    expect(await gate({ text: "mute" })).toEqual({
+      proceed: false,
+      addressed: false,
+    });
+
+    // Silencing the bot must survive a failed lookup — otherwise an in-flight
+    // reply lands after the user asked for quiet.
+    expect(run.signal.aborted).toBe(true);
+    expect(await isChannelThreadActive(activation)).toBe(false);
+    run.unregister();
+  });
+
+  test("falls back to mentions-only when the answer-all setting cannot be read", async () => {
+    vi.mocked(ChatOpsChannelBindingModel.findByChannel).mockRejectedValue(
+      new Error("database unavailable"),
+    );
+
+    // Quiet is the safe default: a failed read must not make the bot answer
+    // messages it would otherwise ignore.
+    expect(await gate()).toEqual({ proceed: false, addressed: false });
+  });
+
+  test("does not resolve the answer-all workspace id when the outcome cannot change", async () => {
+    // Mentioned: resolves to "activate" regardless of the setting.
+    await gate({ botMentioned: true });
+    expect(resolveAnswerAllWorkspaceId).not.toHaveBeenCalled();
+
+    // Already active: resolves to "process" regardless of the setting.
+    await gate();
+    expect(resolveAnswerAllWorkspaceId).not.toHaveBeenCalled();
+
+    // Un-mentioned and inactive is the only case the setting decides — and
+    // for Teams resolving it costs a Bot Framework round trip.
+    await clearChannelThreadActive(activation);
+    await gate();
+    expect(resolveAnswerAllWorkspaceId).toHaveBeenCalledTimes(1);
   });
 });

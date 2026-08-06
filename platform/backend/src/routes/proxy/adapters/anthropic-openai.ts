@@ -14,6 +14,7 @@ import {
   anthropicResponseToOpenai,
   mapStopReason,
 } from "./anthropic-openai-translator";
+import { formatOpenAiChunkSse, toOpenAiStreamUsage } from "./openai-sse-chunk";
 
 type AnthropicRequest = Anthropic.Types.MessagesRequest;
 type AnthropicResponse = Anthropic.Types.MessagesResponse;
@@ -159,12 +160,16 @@ class AnthropicOpenaiStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
-    // Snapshot, never drain: the proxy handler calls this repeatedly and
-    // dedupes replayed events by array index, so indices must stay stable
-    // across calls (the base anthropic adapter behaves the same way).
-    // Draining here re-based later tool calls to index 0, so with parallel
-    // tool calls the second call's start chunk (id + name) was skipped as
-    // already streamed and the client received a dangling tool call.
+    // Snapshot, never drain (the base anthropic adapter behaves the same way).
+    // Draining re-based later tool calls to index 0, so with parallel tool
+    // calls the second call's start chunk lost its id and name and the client
+    // received a dangling tool call.
+    //
+    // The inner read is for its side effect only — the events themselves are
+    // the OpenAI-shaped ones below. toProviderResponse() delegates to that
+    // inner adapter, which names tool calls in the reconstructed turn only
+    // once it has handed them over, and this is that moment.
+    this.inner.getRawToolCallEvents();
     return [...this.pendingToolCallEvents];
   }
 
@@ -190,6 +195,7 @@ class AnthropicOpenaiStreamAdapter
     return `${this.formatChunk({
       delta: {},
       finishReason,
+      usage: this.state.usage,
     })}data: [DONE]\n\n`;
   }
 
@@ -270,21 +276,17 @@ class AnthropicOpenaiStreamAdapter
   private formatChunk(params: {
     delta: Record<string, unknown>;
     finishReason: string | null;
+    /** Only the final chunk passes this; delta chunks must stay usage-free. */
+    usage?: UsageView | null;
   }): string {
-    return `data: ${JSON.stringify({
+    return formatOpenAiChunkSse({
       id: this.ctx.chatcmplId,
-      object: "chat.completion.chunk",
       created: this.ctx.createdUnix,
       model: this.ctx.requestedModel,
-      choices: [
-        {
-          index: 0,
-          delta: params.delta,
-          finish_reason: params.finishReason,
-          logprobs: null,
-        },
-      ],
-    })}\n\n`;
+      delta: params.delta,
+      finishReason: params.finishReason,
+      usage: toOpenAiStreamUsage(params.usage),
+    });
   }
 }
 

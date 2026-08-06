@@ -16,12 +16,12 @@ import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
-import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
+import ProjectModel from "@/models/project";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -103,10 +103,6 @@ export const AUDIT_DECISIONS = {
   limitsTable: { audited: true, model: LimitModel },
   llmProviderApiKeysTable: { audited: true, model: LlmProviderApiKeyModel },
   mcpServersTable: { audited: true, model: McpServerModel },
-  mcpServerInstallationRequestsTable: {
-    audited: true,
-    model: McpServerInstallationRequestModel,
-  },
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
   // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
@@ -124,6 +120,11 @@ export const AUDIT_DECISIONS = {
   toolInvocationPoliciesTable: {
     audited: true,
     model: ToolInvocationPolicyModel,
+  },
+  toolObservationsTable: {
+    audited: false,
+    reason:
+      "runtime attribution metadata written by the LLM proxy (who observed a tool, via which client); not admin-mutable state",
   },
   trustedDataPoliciesTable: { audited: true, model: TrustedDataPolicyModel },
   userTokensTable: { audited: true, model: UserTokenModel },
@@ -179,17 +180,17 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "chat share metadata; surfaced via /llm/logs",
   },
-  projectsTable: {
-    audited: false,
-    reason: "user's chat-project grouping; same family as conversations",
-  },
+  // Soft-deleted rather than removed, and restorable org-wide by a project
+  // admin — so delete and restore are cross-user administrative actions on
+  // someone else's data, not the personal grouping this table started as.
+  projectsTable: { audited: true, model: ProjectModel },
   projectSharesTable: {
     audited: false,
-    reason: "project share metadata; same family as conversation shares",
+    reason: "project share metadata; parent (project) audited",
   },
   projectShareTeamsTable: {
     audited: false,
-    reason: "join: project share × team",
+    reason: "join: project share × team; parent (project) audited",
   },
   projectPinsTable: {
     audited: false,
@@ -230,6 +231,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "MCP tool call log; surfaced via /mcp/logs",
   },
+  mcpGatewayTasksTable: {
+    audited: false,
+    reason:
+      "Ephemeral task handles for in-flight tool calls; the calls themselves are logged in mcp_tool_calls",
+  },
   mcpHttpSessionsTable: {
     audited: false,
     reason: "MCP session-level transport state",
@@ -248,6 +254,18 @@ export const AUDIT_DECISIONS = {
   },
   a2aMessagesTable: { audited: false, reason: "A2A protocol message log" },
   a2aTasksTable: { audited: false, reason: "A2A protocol task state" },
+  a2aTaskEventsTable: {
+    audited: false,
+    reason: "A2A protocol task stream-event log (runtime state)",
+  },
+  a2aArtifactsTable: {
+    audited: false,
+    reason: "A2A protocol task artifact output (runtime state)",
+  },
+  a2aPushNotificationConfigsTable: {
+    audited: false,
+    reason: "A2A protocol per-task webhook config (runtime state)",
+  },
   a2aTaskApprovalRequestsTable: {
     audited: false,
     reason: "A2A protocol approval state",
@@ -324,6 +342,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × team; parent (agent) audited",
   },
+  agentVersionsTable: {
+    audited: false,
+    reason: "child of agent; immutable version snapshot, parent audited",
+  },
   // Apps are a resource-shaped table with admin-facing CRUD via /api/apps.
   appsTable: { audited: true, model: AppModel },
   appVersionsTable: {
@@ -333,6 +355,10 @@ export const AUDIT_DECISIONS = {
   appToolsTable: {
     audited: false,
     reason: "tools attached to an app; parent (app) carries the signal",
+  },
+  appLabelsTable: {
+    audited: false,
+    reason: "join: app × label; parent (app) audited",
   },
   appDataTable: {
     audited: false,
@@ -374,6 +400,26 @@ export const AUDIT_DECISIONS = {
   mcpCatalogTeamsTable: {
     audited: false,
     reason: "join: catalog × team; parent (catalog) audited",
+  },
+  agentUsersTable: {
+    audited: false,
+    reason: "join: agent × user; parent (agent) audited",
+  },
+  skillUsersTable: {
+    audited: false,
+    reason: "join: skill × user; parent (skill) audited",
+  },
+  modelUsersTable: {
+    audited: false,
+    reason: "join: model × user; parent (model) audited",
+  },
+  projectShareUsersTable: {
+    audited: false,
+    reason: "join: project share × user; parent (project) audited",
+  },
+  mcpCatalogUsersTable: {
+    audited: false,
+    reason: "join: catalog × user; parent (catalog) audited",
   },
   modelTeamsTable: {
     audited: false,
@@ -576,6 +622,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "secret material; presence audited via parent resource hasSecret flag",
+  },
+  contentEncryptionStateTable: {
+    audited: false,
+    reason: "internal backfill progress bookkeeping, no user-facing state",
   },
   encryptionKeyCanariesTable: {
     audited: false,

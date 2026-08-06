@@ -22,6 +22,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   formatOriginalError,
   mapClientError,
@@ -62,7 +63,8 @@ export function InlineChatError({
   const { data: isAdmin } = useHasPermissions({
     organizationSettings: ["read"],
   });
-  const chatError = parseErrorResponse(error) ?? mapClientError(error);
+  const appName = useAppName();
+  const chatError = parseErrorResponse(error) ?? mapClientError(error, appName);
 
   // A per-user provider the user hasn't linked yet → an inline "connect your
   // account" card instead of a generic error.
@@ -293,7 +295,7 @@ export function InlineChatError({
                     ) : (
                       <ChevronRight className="h-3 w-3 mr-1" />
                     )}
-                    Error Details
+                    <span>Error Details</span>
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-2 mt-1">
@@ -314,9 +316,19 @@ export function InlineChatError({
                     </p>
                   )}
                   {chatError.originalError && (
-                    <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground">
-                      {formatOriginalError(chatError.originalError)}
-                    </pre>
+                    <>
+                      {/* biome-ignore-start lint/a11y/noNoninteractiveTabindex: scrollable error detail must be keyboard focusable (WCAG 2.1.1) */}
+                      <section
+                        tabIndex={0}
+                        aria-label="Error details"
+                        className="max-h-48 overflow-auto rounded-md bg-muted/50"
+                      >
+                        {/* biome-ignore-end lint/a11y/noNoninteractiveTabindex: scrollable error detail must be keyboard focusable (WCAG 2.1.1) */}
+                        <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground">
+                          {formatOriginalError(chatError.originalError)}
+                        </pre>
+                      </section>
+                    </>
                   )}
                 </CollapsibleContent>
               </Collapsible>

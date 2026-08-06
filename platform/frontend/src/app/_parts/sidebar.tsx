@@ -20,7 +20,6 @@ import {
   FolderKanban,
   Github,
   Inbox,
-  KeyRound,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -324,17 +323,6 @@ const contentNavGroups: NavGroup[] = [
         dotKey: "nav:model-providers",
       },
       {
-        title: "Client Credentials",
-        url: "/credentials",
-        icon: KeyRound,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/credentials"),
-        permissionUrls: [
-          "/credentials/virtual-keys",
-          "/credentials/oauth-clients",
-        ],
-      },
-      {
         title: "Costs & Limits",
         url: "/llm/costs",
         icon: CircleDollarSign,
@@ -367,7 +355,8 @@ const contentNavGroups: NavGroup[] = [
         // /settings is a landing page that forwards to the first permitted
         // tab; show the item when the user can see any settings page.
         permissionUrls: [
-          "/settings/organization",
+          "/settings/appearance",
+          "/settings/auth",
           "/settings/service-accounts",
           "/settings/agents",
           "/settings/security",
@@ -735,7 +724,11 @@ export function AppSidebar() {
                     together within this region, while the nav above stays
                     pinned. The fade hints there is more content below. */}
               <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
-                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
+                {/* group-data-[collapsible=icon]:overflow-hidden keeps this
+                    scroller out of the tab order while collapsed — Chrome makes
+                    scrollable containers keyboard-focusable, which otherwise
+                    leaves an invisible tab stop on the icon rail (WCAG 2.4.3). */}
+                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
                   <ChatSidebarSection slots={15} flat fadeIn={chatListFadeIn} />
                   <NavSecondary
                     items={[]}

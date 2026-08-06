@@ -8,9 +8,10 @@ import {
   type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
+  MCP_TASK_PART_TYPE,
+  type McpTaskPartData,
   stripDanglingToolCalls,
   TOOL_CREATE_AGENT_SHORT_NAME,
-  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   type TokenUsage,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -52,12 +53,13 @@ import {
 } from "@/lib/chat/chat-retry.utils";
 import {
   pruneEmptyTrailingAssistantMessage,
+  pruneStrandedAssistantMessages,
   restoreRenderableAssistantParts,
   shouldFreezeChatMessages,
 } from "@/lib/chat/chat-session-utils";
 import {
   getChatExternalAgentId,
-  getConversationDisplayTitle,
+  isPlaceholderTitle,
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import appConfig from "@/lib/config/config";
@@ -135,11 +137,17 @@ interface ChatSession {
   addToolApprovalResponse: ReturnType<
     typeof useChat
   >["addToolApprovalResponse"];
-  pendingCustomServerToolCall: {
-    toolCallId: string;
-    toolName: string;
-  } | null;
   pendingMcpElicitation: ChatMcpElicitationRequest | null;
+  /**
+   * Background MCP tasks for the running turn, keyed by task id.
+   *
+   * Held as state rather than read off message parts because the backend
+   * streams them transiently: a non-transient data part written mid-stream
+   * makes the AI SDK open a second assistant message, which renders the whole
+   * tool group twice for as long as the call runs. History still comes from
+   * the persisted parts the backend splices in at the end of the turn.
+   */
+  mcpTasks: Record<string, McpTaskPartData>;
   /**
    * True while the session is auto-recovering from a transient stream failure
    * (auto-retry scheduled or reattaching to the still-running response).
@@ -152,9 +160,6 @@ interface ChatSession {
     toolName: string;
     input: unknown;
   }>;
-  setPendingCustomServerToolCall: (
-    value: { toolCallId: string; toolName: string } | null,
-  ) => void;
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
   contextTokensUsed: number | null;
@@ -427,10 +432,9 @@ function ChatSessionHook({
 }) {
   const queryClient = useQueryClient();
   const appName = useAppName();
-  const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
-    useState<{ toolCallId: string; toolName: string } | null>(null);
   const [pendingMcpElicitation, setPendingMcpElicitation] =
     useState<ChatMcpElicitationRequest | null>(null);
+  const [mcpTasks, setMcpTasks] = useState<Record<string, McpTaskPartData>>({});
   const [optimisticToolCalls, setOptimisticToolCalls] = useState<
     Array<{
       toolCallId: string;
@@ -681,22 +685,38 @@ function ChatSessionHook({
       ]);
 
       // Auto-generate title after the first settled exchange if still untitled
-      const cachedTitle = queryClient.getQueryData<{ title?: string | null }>([
-        "conversation",
-        conversationId,
-      ])?.title;
-      const firstUserText = getConversationDisplayTitle(null, stableMessages);
+      const cachedConversation = queryClient.getQueryData<{
+        title?: string | null;
+        titleIsPlaceholder?: boolean;
+      }>(["conversation", conversationId]);
+      const cachedTitle = cachedConversation?.title;
+      // Two kinds of stand-in title, and neither is proof the server ever
+      // titled this chat. An app chat carries the durable flag, set when the
+      // row was seeded with the app's name. An ordinary chat carries none — the
+      // client wrote the opening prompt as its title — so that one is only
+      // recognisable by shape, and only here: the server's "already titled"
+      // gate sees an ordinary non-empty title and would skip, which is why
+      // this kind alone has to ask for a regeneration.
+      const hasInferredPlaceholderTitle = isPlaceholderTitle(
+        cachedTitle,
+        stableMessages,
+      );
+      const hasPlaceholderTitle =
+        cachedConversation?.titleIsPlaceholder === true ||
+        hasInferredPlaceholderTitle;
 
+      // A placeholder title counts as untitled. The server re-reads the flag
+      // and skips if it's stale, so this only decides whether to ask.
       const shouldGenerateTitle =
         !titleGenerationAttemptedRef.current &&
-        (!cachedTitle || cachedTitle === firstUserText);
+        (!cachedTitle || hasPlaceholderTitle);
 
       if (shouldGenerateTitle) {
         titleGenerationAttemptedRef.current = true;
         generateTitleMutation.mutate(
           {
             id: conversationId,
-            regenerate: cachedTitle === firstUserText,
+            regenerate: hasInferredPlaceholderTitle,
           },
           {
             onSuccess: (data) => {
@@ -864,12 +884,6 @@ function ChatSessionHook({
         ];
       });
 
-      if (
-        toolShortName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME
-      ) {
-        setPendingCustomServerToolCall(toolCall);
-      }
-
       // Agents created through chat tool calls bypass the normal frontend
       // create-agent mutations, so the cached useInternalAgents() list can stay
       // stale unless we invalidate it here. Without this, the prompt input's
@@ -981,6 +995,13 @@ function ChatSessionHook({
           setPendingMcpElicitation(data);
         }
       }
+
+      if (customData.type === MCP_TASK_PART_TYPE) {
+        const data = customData.data as McpTaskPartData | undefined;
+        if (data?.taskId) {
+          setMcpTasks((current) => ({ ...current, [data.taskId]: data }));
+        }
+      }
     },
     sendAutomaticallyWhen: ({ messages: msgs }) =>
       lastAssistantMessageIsCompleteWithApprovalResponses({
@@ -1009,6 +1030,31 @@ function ChatSessionHook({
       recordResponseProgress();
     }
   }, [messages, status, recordResponseProgress]);
+
+  // A content-free assistant message the SDK opened to hold a data part that
+  // arrived before the stream's `start` chunk must not outlive the turn: left in
+  // chat state it becomes what the next request sends as its trailing message
+  // and what a recovery's regenerate() anchors on, and the backend then reuses
+  // its id — streaming the whole turn into a second message beside the first
+  // (see pruneStrandedAssistantMessages). Pruning only once the stream has
+  // settled keeps this off the live stream's back: nothing is writing to the
+  // message list then, so it cannot fight the turn in flight.
+  useEffect(() => {
+    if (status === "submitted" || status === "streaming") {
+      return;
+    }
+    setMessages((current) => {
+      const pruned = pruneStrandedAssistantMessages(current);
+      if (pruned === current) {
+        return current;
+      }
+      // restoreRenderableAssistantParts reads previousMessagesRef to spot a
+      // streaming regression; sync it so this deliberate shrink is not mistaken
+      // for one and resurrected on the next render.
+      previousMessagesRef.current = pruned;
+      return pruned;
+    });
+  }, [status, setMessages]);
 
   const resumeAttemptedRef = useRef(false);
   useEffect(() => {
@@ -1114,7 +1160,6 @@ function ChatSessionHook({
       recoveringRef.current ||
       hasPendingApprovalRequest ||
       pendingMcpElicitation ||
-      pendingCustomServerToolCall ||
       contextCompaction.isCompacting
     ) {
       return;
@@ -1142,7 +1187,6 @@ function ChatSessionHook({
     resumeSettled,
     hasPendingApprovalRequest,
     pendingMcpElicitation,
-    pendingCustomServerToolCall,
     contextCompaction.isCompacting,
     conversationId,
   ]);
@@ -1243,8 +1287,8 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     addToolApprovalResponse,
-    pendingCustomServerToolCall,
     pendingMcpElicitation,
+    mcpTasks,
     // Computed, not stored: the page paints the SDK error before onError has
     // run (so no flag set inside onError can suppress the first frame), and
     // consumers read the session from a map refreshed an effect-cycle later.
@@ -1266,7 +1310,6 @@ function ChatSessionHook({
       );
     },
     optimisticToolCalls,
-    setPendingCustomServerToolCall,
     tokenUsage,
     contextTokensUsed,
     contextWindow,
@@ -1294,8 +1337,8 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     addToolApprovalResponse,
-    pendingCustomServerToolCall,
     pendingMcpElicitation,
+    mcpTasks,
     isRecoveringState,
     optimisticToolCalls,
     tokenUsage,

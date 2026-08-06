@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { EnvironmentModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -208,6 +209,69 @@ describe("tool assignment tool execution", () => {
         errorType: "not_found",
       },
     ]);
+  });
+
+  test("binding a personal connection fails with a validation entry", async ({
+    makeAgent,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    // Editors hold agent/tool management permissions, so credential scope is
+    // the only thing blocking this assignment.
+    const editor = await makeUser();
+    await makeMember(editor.id, org.id, { role: "editor" });
+    const colleague = await makeUser();
+    await makeMember(colleague.id, org.id, { role: "member" });
+
+    // The editor's own personal agent, so every agent-modify check passes and
+    // the credential gate is the only thing the assignment can trip on.
+    const agent = await makeAgent({
+      name: "Editor Agent",
+      organizationId: org.id,
+      scope: "personal",
+      authorId: editor.id,
+    });
+    const tool = await makeTool({ name: "forbidden-test-tool" });
+    const theirConnection = await makeMcpServer({
+      scope: "personal",
+      ownerId: colleague.id,
+      serverType: "remote",
+    });
+
+    const result = await executeArchestraTool(
+      AGENTS_TOOL,
+      {
+        assignments: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            mcpServerId: theirConnection.id,
+          },
+        ],
+      },
+      {
+        agent: { id: agent.id, name: agent.name },
+        userId: editor.id,
+        organizationId: org.id,
+      },
+    );
+
+    // isError false means the structured failure passed output validation.
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.failed).toMatchObject([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        errorCode: "validation_error",
+        errorType: "validation_error",
+      },
+    ]);
+    expect(parsed.failed[0].error).toContain("dynamic credential resolution");
   });
 });
 
@@ -627,5 +691,201 @@ describe("tool assignment with late-bound resolution", () => {
         ),
       );
     expect(updated.credentialResolutionMode).toBe("dynamic");
+  });
+});
+
+/**
+ * Environment isolation on the assignment writes: assigning or removing a tool
+ * is a configuration change on the target, so it must stay inside the calling
+ * agent's environment. Otherwise an agent in one environment rewrites another
+ * environment's toolset — and unlike a cross-environment tool, that assignment
+ * is fully effective, because the target and the tool then agree.
+ */
+describe("tool assignment respects the agent's environment", () => {
+  let orgId: string;
+  let userId: string;
+  let stagingEnvId: string;
+  let prodEnvId: string;
+  let stagingContext: ArchestraContext;
+
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    orgId = org.id;
+    const user = await makeUser();
+    userId = user.id;
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const staging = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "staging",
+    });
+    const prod = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    stagingEnvId = staging.id;
+    prodEnvId = prod.id;
+
+    const caller = await makeAgent({
+      name: "Staging Caller",
+      organizationId: org.id,
+      environmentId: staging.id,
+    });
+    stagingContext = {
+      agent: { id: caller.id, name: caller.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+  });
+
+  test("bulk_assign_tools_to_agents refuses a target in another environment", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const prodAgent = await makeAgent({
+      name: "Production Target",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+    const tool = await makeTool({ name: "prod_target_tool" });
+
+    const result = await executeArchestraTool(
+      AGENTS_TOOL,
+      { assignments: [{ agentId: prodAgent.id, toolId: tool.id }] },
+      stagingContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.succeeded).toEqual([]);
+    expect(parsed.failed[0].error).toContain("different environment");
+
+    // The write must not have landed.
+    const rows = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, prodAgent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toHaveLength(0);
+  });
+
+  test("bulk_assign_tools_to_agents allows a target in the same environment", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const peer = await makeAgent({
+      name: "Staging Peer",
+      organizationId: orgId,
+      environmentId: stagingEnvId,
+    });
+    const tool = await makeTool({ name: "staging_peer_tool" });
+
+    const result = await executeArchestraTool(
+      AGENTS_TOOL,
+      { assignments: [{ agentId: peer.id, toolId: tool.id }] },
+      stagingContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.failed).toEqual([]);
+    expect(parsed.succeeded).toEqual([{ agentId: peer.id, toolId: tool.id }]);
+  });
+
+  test("bulk_remove_tools_from_agents refuses a target in another environment", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const prodAgent = await makeAgent({
+      name: "Production Removal Target",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+    const tool = await makeTool({ name: "prod_removal_tool" });
+    await makeAgentTool(prodAgent.id, tool.id);
+
+    const result = await executeArchestraTool(
+      REMOVE_TOOL,
+      { removals: [{ agentId: prodAgent.id, toolId: tool.id }] },
+      stagingContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.succeeded).toEqual([]);
+    expect(parsed.failed[0].error).toContain("different environment");
+
+    // The existing assignment must survive.
+    const rows = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, prodAgent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+  });
+
+  test("bulk_assign_tools_to_mcp_gateways refuses a gateway in another environment", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const prodGateway = await makeAgent({
+      name: "Production Gateway",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+      agentType: "mcp_gateway",
+    });
+    const tool = await makeTool({ name: "prod_gateway_tool" });
+
+    const result = await executeArchestraTool(
+      GATEWAYS_TOOL,
+      { assignments: [{ mcpGatewayId: prodGateway.id, toolId: tool.id }] },
+      stagingContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.succeeded).toEqual([]);
+    expect(parsed.failed[0].error).toContain("different environment");
+  });
+
+  test("a Default-environment agent cannot assign into a named environment", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const defaultAgent = await makeAgent({
+      name: "Default Caller",
+      organizationId: orgId,
+      environmentId: null,
+    });
+    const prodAgent = await makeAgent({
+      name: "Production Peer",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+    const tool = await makeTool({ name: "default_caller_tool" });
+
+    const result = await executeArchestraTool(
+      AGENTS_TOOL,
+      { assignments: [{ agentId: prodAgent.id, toolId: tool.id }] },
+      {
+        agent: { id: defaultAgent.id, name: defaultAgent.name },
+        userId,
+        organizationId: orgId,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.succeeded).toEqual([]);
+    expect(parsed.failed[0].error).toContain("different environment");
   });
 });

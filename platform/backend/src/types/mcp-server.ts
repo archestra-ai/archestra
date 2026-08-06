@@ -6,8 +6,30 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AgentTypeSchema } from "./agent";
 import { InternalMcpCatalogServerTypeSchema } from "./mcp-catalog";
 import { ResourceVisibilityScopeSchema } from "./visibility";
+
+/**
+ * An agent (chat agent, MCP gateway, LLM proxy) that can reach an MCP server,
+ * as surfaced on the registry card's "used by" tooltip and the server's Usage
+ * tab.
+ *
+ * Personal agents are auto-seeded one per member and every member's copy
+ * carries the same name ("My Assistant", "My Gateway"), so a bare name list
+ * reads as duplicates. `scope` and `ownerEmail` are carried alongside so the
+ * UI can attribute each one to its owner. `ownerEmail` is null when the author
+ * has been deleted (the FK nulls out) or for agents with no author.
+ */
+export const McpServerAgentUsageSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  agentType: AgentTypeSchema,
+  scope: ResourceVisibilityScopeSchema,
+  ownerEmail: z.string().nullable(),
+});
+
+export type McpServerAgentUsage = z.infer<typeof McpServerAgentUsageSchema>;
 
 export const LocalMcpServerInstallationStatusSchema = z.enum(
   LOCAL_MCP_INSTALLATION_STATES,
@@ -66,28 +88,14 @@ export const SelectMcpServerSchema = createSelectSchema(
    * Agents (profiles / MCP gateways) with tools explicitly assigned from this
    * server — statically pinned to it, or unpinned on a tool of its catalog.
    */
-  assignedAgents: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-      }),
-    )
-    .optional(),
+  assignedAgents: z.array(McpServerAgentUsageSchema).optional(),
   /**
    * Auto-mode agents (implicit access to all tools) in this server's
    * organization. They reach every server without an explicit tool assignment,
    * so they are listed separately from `assignedAgents` — the same org-wide set
    * appears on every server.
    */
-  autoModeAgents: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-      }),
-    )
-    .optional(),
+  autoModeAgents: z.array(McpServerAgentUsageSchema).optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
   secretStorageType: SecretStorageTypeSchema.optional(),
 });
@@ -105,6 +113,8 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     id: true,
     createdAt: true,
     updatedAt: true,
+    // Soft-delete bookkeeping, written only by delete/restore, never from input.
+    deletedAt: true,
     // Frozen K8s deployment identity — computed by McpServerModel.create /
     // the startup adopt pass, never accepted from input.
     deploymentName: true,
@@ -127,6 +137,8 @@ export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
     scope: true, // scope is install-time only; to change scope, uninstall + reinstall
     // Frozen at creation/adopt time — renames must never touch it
     deploymentName: true,
+    // Soft-delete bookkeeping, written only by delete/restore, never from input.
+    deletedAt: true,
   })
   .extend({
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),

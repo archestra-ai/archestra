@@ -45,6 +45,7 @@ interface MaterializerOptions {
 }
 
 const DEFAULT_IDENTITY = {
+  // white-label-ok: names the vendor's own hosted marketplace, not this deployment
   name: "Archestra Marketplace",
   email: "marketplace@archestra.local",
 };

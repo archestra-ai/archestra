@@ -5,6 +5,7 @@ import {
   FileModel,
   SkillModel,
   SkillSandboxConversationGoneError,
+  SkillSandboxFileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
   SkillVersionModel,
@@ -107,6 +108,62 @@ describe("SkillSandboxModel", () => {
       conversationId: conversation.id,
     });
     expect(found?.id).toBe(first.id);
+  });
+
+  // An MCP App runtime has no conversation, so its default is keyed by app.
+  // This is the "one sandbox per (app, viewer), always" invariant: every
+  // sandbox-backed capability an app uses must land on this single row.
+  test("findOrCreateAppDefault returns one sandbox per app and viewer", async ({
+    makeOrganization,
+    makeUser,
+    makeApp,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const otherUser = await makeUser();
+    const app = await makeApp({ organizationId: org.id });
+    const otherApp = await makeApp({ organizationId: org.id });
+
+    const params = {
+      organizationId: org.id,
+      userId: user.id,
+      appId: app.id,
+      defaultCwd: "/home/sandbox",
+    };
+    const first = await SkillSandboxModel.findOrCreateAppDefault(params);
+    const second = await SkillSandboxModel.findOrCreateAppDefault(params);
+
+    expect(first.isDefault).toBe(true);
+    expect(first.conversationId).toBeNull();
+    expect(first.appId).toBe(app.id);
+    expect(second.id).toBe(first.id);
+
+    // Concurrent first calls race on the partial unique index; both must land
+    // on the same row rather than minting a second default.
+    const raced = await Promise.all([
+      SkillSandboxModel.findOrCreateAppDefault(params),
+      SkillSandboxModel.findOrCreateAppDefault(params),
+      SkillSandboxModel.findOrCreateAppDefault(params),
+    ]);
+    expect(new Set(raced.map((s) => s.id))).toEqual(new Set([first.id]));
+
+    // Another app, and another viewer of the same app, each get their own.
+    const forOtherApp = await SkillSandboxModel.findOrCreateAppDefault({
+      ...params,
+      appId: otherApp.id,
+    });
+    const forOtherUser = await SkillSandboxModel.findOrCreateAppDefault({
+      ...params,
+      userId: otherUser.id,
+    });
+    expect(forOtherApp.id).not.toBe(first.id);
+    expect(forOtherUser.id).not.toBe(first.id);
+
+    const rows = await db
+      .select()
+      .from(schema.skillSandboxesTable)
+      .where(eq(schema.skillSandboxesTable.appId, app.id));
+    expect(rows).toHaveLength(2); // one per viewer, none duplicated
   });
 
   test("create and findOrCreateDefault surface a typed error for a deleted conversation", async ({
@@ -270,7 +327,11 @@ describe("SkillSandboxReplayEventModel", () => {
     }
     expect(a.command.id).toBe(commandA.id);
     expect(u.upload.id).toBe(upload.id);
-    expect(u.upload.data?.toString("utf8")).toBe("a,b");
+    expect(
+      (await SkillSandboxFileModel.findUploadDataById(u.upload.id))?.toString(
+        "utf8",
+      ),
+    ).toBe("a,b");
     expect(m.mount.skillName).toBe("alpha");
     // SKILL.md is carried as the version body; requirements.txt as a version file.
     expect(m.content).toBe("# alpha");

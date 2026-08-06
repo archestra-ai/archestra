@@ -17,6 +17,7 @@ import type {
   ResponseCreateParamsStreaming,
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import {
   OPENAI_CODEX_INSTRUCTIONS,
@@ -24,6 +25,7 @@ import {
 } from "@/services/openai-codex-credentials";
 import { createOpenAiCodexFetch } from "@/services/openai-codex-token";
 import { ApiError, type CreateClientOptions, type OpenAi } from "@/types";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type ResponsesRequest = OpenAi.Types.ResponsesRequest;
 type ResponsesResponse = OpenAi.Types.ResponsesResponse;
@@ -65,6 +67,7 @@ class OpenAiCodexResponsesClient {
   }) {
     const { credential, options, innerFetch } = params;
     this.openai = new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       // The Codex backend authenticates via the fetch wrapper's OAuth bearer;
       // the SDK still needs a non-empty key.
       apiKey: "chatgpt-oauth",
@@ -125,7 +128,9 @@ function applyCodexResponsesTransforms(
     include: Array.from(
       new Set([...existingInclude, "reasoning.encrypted_content"]),
     ),
-    instructions: loose.instructions ?? OPENAI_CODEX_INSTRUCTIONS,
+    instructions:
+      loose.instructions ??
+      archestraMcpBranding.brandBuiltInText(OPENAI_CODEX_INSTRUCTIONS),
   } as unknown as ResponseCreateParamsStreaming;
 }
 

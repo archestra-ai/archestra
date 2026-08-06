@@ -98,6 +98,41 @@ export function supportsGeminiThoughtSummaries(modelId: string): boolean {
   );
 }
 
+/**
+ * The strongest thinking-off `thinkingConfig` a Gemini-family chat model
+ * accepts, for guardrail/utility calls where reasoning is pure latency:
+ * `{thinkingBudget: 0}` is a true disable on the 2.5 flash family; 2.5 pro
+ * cannot disable and floors at its documented 128-token minimum; 3.x+
+ * generations replace budgets with levels and floor at `"low"`. Returns null
+ * when there is nothing to send — `gemma-*` (no thinking support) and
+ * `flash-lite` variants (thinking already off), where any thinkingConfig
+ * risks a 400.
+ */
+export function geminiMinimalThinkingConfig(
+  modelId: string,
+): { thinkingBudget: number } | { thinkingLevel: "low" } | null {
+  const id = modelId.toLowerCase();
+
+  if (!id.startsWith("gemini-") || id.includes("flash-lite")) {
+    return null;
+  }
+  if (NON_TEXT_GEMINI_PATTERNS.some((pattern) => id.includes(pattern))) {
+    return null;
+  }
+
+  const version = parseGeminiFamilyVersion(id);
+  if (
+    version === null ||
+    compareVersion(version, GEMINI_THINKING_MIN_VERSION) < 0
+  ) {
+    return null;
+  }
+  if (compareVersion(version, [3, 0]) >= 0) {
+    return { thinkingLevel: "low" };
+  }
+  return id.includes("pro") ? { thinkingBudget: 128 } : { thinkingBudget: 0 };
+}
+
 // ===========================================================================
 // Internal helpers
 // ===========================================================================

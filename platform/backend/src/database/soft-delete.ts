@@ -16,6 +16,11 @@ export async function softDelete<T extends SoftDeletablePgTable>(
   executor: Executor,
   table: T,
   where: SQL | undefined,
+  // Optional explicit timestamp. A cascade (catalog + its installs + its tools)
+  // passes one shared `at` so every stamped row shares an identical `deletedAt`,
+  // which the corresponding restore uses as the correlation key to revive
+  // exactly the rows this delete cascaded (and not rows deleted earlier).
+  at: Date = new Date(),
 ): Promise<number> {
   // Reject undefined so callers can use `and(...)` without a non-null
   // assertion: a missing predicate would soft-delete every active row.
@@ -23,7 +28,7 @@ export async function softDelete<T extends SoftDeletablePgTable>(
 
   const rows = await executor
     .update(table)
-    .set({ deletedAt: new Date() } as PgUpdateSetSource<T>)
+    .set({ deletedAt: at } as PgUpdateSetSource<T>)
     .where(and(where, isNull(table.deletedAt)))
     .returning({ deletedAt: table.deletedAt });
 

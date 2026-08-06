@@ -1,7 +1,9 @@
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   APP_RECORDING_RENDER_FPS,
   archestraApiSdk,
-  pruneTrailingTrimEvents,
+  type archestraApiTypes,
+  pruneCutEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
 import {
@@ -21,6 +23,7 @@ import {
   recordingStore,
   subscribeToRecordingChanges,
 } from "@/lib/app-session-recording/app-recording-store";
+import { useFeature } from "@/lib/config/config.query";
 import { handleApiError, toApiError } from "@/lib/utils";
 
 const {
@@ -187,11 +190,11 @@ export function useRenderAppRecordingVideo() {
 
       try {
         const started = await renderAppRecordingVideo({
-          // Ship the trimmed recording without its cut-away tail: a size
-          // optimization that renders byte-for-byte the same (see
-          // pruneTrailingTrimEvents). Nothing else about the bundle changes.
+          // Ship the recording without what its cuts put out of view: a size
+          // optimization that renders identically (see pruneCutEvents).
+          // Nothing else about the bundle changes.
           body: {
-            bundle: pruneTrailingTrimEvents(validation.bundle),
+            bundle: pruneCutEvents(validation.bundle),
             title: params.title,
           },
         });
@@ -367,8 +370,56 @@ export function useIsRenderingAppRecordingVideo(): boolean {
 const RENDER_VIDEO_MUTATION_KEY = ["app-recording", "render-video"] as const;
 
 /** The description used when AI generation is unavailable or still pending. */
+/**
+ * The longest final cut this deployment accepts, in ms.
+ *
+ * ONE source for every length surface — the submit button and the submission's
+ * own backstop, the video export, the editor's trim-to-limit control, the
+ * timeline's limit mark and the tour's "keep it under" note — so raising the
+ * deployment's limit raises all of them together and no surface can quote a
+ * number the checks disagree with.
+ *
+ * Falls back to the shared default while the config is still loading, and in
+ * the offline renderer, which drives the replay page with no session and so
+ * never resolves the authenticated config. Nothing is gated there (it renders,
+ * it does not offer buttons) and the render route enforces the real configured
+ * limit server-side, so the fallback cannot let an over-length cut through.
+ */
+export function useMaxFinalCutMs(): number {
+  return (
+    useFeature("hackathonMaxFinalCutMs") ??
+    APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS
+  );
+}
+
 export function fallbackRecordingDescription(appName: string): string {
   return `${appName} — an interactive app built in chat.`;
+}
+
+/** Why a draft carries no build prompt, as the enhance endpoint reports it. */
+export type EnhancementFailureReason = NonNullable<
+  archestraApiTypes.EnhanceAppRecordingResponses["200"]["reason"]
+>;
+
+/**
+ * What the builder is told when a draft comes back with no build prompt.
+ *
+ * The endpoint answers 200 with nulls, and the remedy for that is to fall back
+ * — an app-name description, the opening chat message as the prompt — which
+ * looks from the outside like the platform simply chose to write a poor gallery
+ * card. Naming the cause is the difference between that and an accurate "this
+ * failed, here is what to do": an empty transcript is nothing to draft FROM and
+ * no amount of retrying will fix it, whereas a model that returned nothing is
+ * worth one more click (or a switch to a funded provider in chat).
+ */
+export function enhancementFailureMessage(
+  reason: EnhancementFailureReason | null | undefined,
+): string {
+  const cause =
+    reason === "empty_transcript"
+      ? "This session has no chat text to draft a build prompt from"
+      : "Couldn't draft a build prompt automatically";
+  return `${cause} — write one here. (Your first chat message is used for the submission if you skip it.)`;
 }
 
 /**

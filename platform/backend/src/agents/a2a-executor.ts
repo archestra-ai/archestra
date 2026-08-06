@@ -53,6 +53,7 @@ import {
 } from "@/routes/chat/errors";
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
+import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
@@ -429,6 +430,7 @@ export async function executeA2AMessage(
     const maxOutputTokens = resolveAgentMaxOutputTokens({
       outputLength: modelRow?.outputLength ?? null,
       ceiling: config.chat.maxOutputTokensCeiling,
+      rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
       provider,
       contextLength: modelRow
         ? ModelModel.resolveEffectiveContextLength(modelRow)
@@ -484,6 +486,32 @@ export async function executeA2AMessage(
       onStepFinish: (step: StepResult<ToolSet>) =>
         recordUnavailableToolCallStep(repeatTracker, step),
       abortSignal,
+      // A malformed tool call is a model mistake, not a caller mistake, so it
+      // must not end the run. Headless surfaces (ChatOps, scheduled runs,
+      // direct A2A) have no one to retry by hand, which makes recovering here
+      // matter more than it does in chat.
+      experimental_repairToolCall: createToolCallRepair({
+        toolNames: Object.keys(mcpTools),
+        logContext: { agentId: agent.id, sessionId },
+        ...(abortSignal && { abortSignal }),
+        // Its own interaction source, so a re-ask stays distinguishable from
+        // the turn that provoked it.
+        createRepairModel: async () =>
+          (
+            await createLLMModelForAgent({
+              organizationId,
+              userId,
+              agentId: agent.id,
+              model: selectedModel,
+              provider,
+              sessionId,
+              source: "a2a:tool_call_repair",
+              externalAgentId: delegationChain,
+              agentLlmApiKeyId: agent.llmApiKeyId,
+              contextIsTrusted: parentContextIsTrusted,
+            })
+          ).model,
+      }),
       // Per-transport shape for the output budget resolved above.
       // - Native Ollama discards the top-level `maxOutputTokens` and reads the
       //   cap from `options.num_predict`, so it rides along in providerOptions.
@@ -1061,6 +1089,10 @@ function rejectionText(reason: ChatUploadRejectionReason): string {
       return "text too large to inline";
     case "too_large_for_sandbox":
       return "exceeds the sandbox size limit";
+    // Unreachable here: A2A has no Files panel for its callers, so it never
+    // opts into the file-storage fallback that produces this reason.
+    case "too_large_to_store":
+      return "too large to store";
     case "unsupported_type":
       return "type not supported by this model";
   }

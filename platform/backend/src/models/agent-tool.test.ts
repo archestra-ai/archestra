@@ -158,8 +158,8 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
     ]);
 
     expect(result.get(server.id)).toEqual([
-      { id: agentAda.id, name: "Ada Agent" },
-      { id: agentZed.id, name: "Zed Agent" },
+      expect.objectContaining({ id: agentAda.id, name: "Ada Agent" }),
+      expect.objectContaining({ id: agentZed.id, name: "Zed Agent" }),
     ]);
   });
 
@@ -188,11 +188,11 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
     ]);
 
     expect(result.get(serverOne.id)).toEqual([
-      { id: dynamicAgent.id, name: "Dynamic Agent" },
-      { id: pinnedAgent.id, name: "Pinned Agent" },
+      expect.objectContaining({ id: dynamicAgent.id, name: "Dynamic Agent" }),
+      expect.objectContaining({ id: pinnedAgent.id, name: "Pinned Agent" }),
     ]);
     expect(result.get(serverTwo.id)).toEqual([
-      { id: dynamicAgent.id, name: "Dynamic Agent" },
+      expect.objectContaining({ id: dynamicAgent.id, name: "Dynamic Agent" }),
     ]);
   });
 

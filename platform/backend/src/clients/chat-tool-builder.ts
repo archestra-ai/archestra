@@ -4,10 +4,14 @@
 // execution). Must not import chat-mcp-client.ts (cycle).
 import { randomUUID } from "node:crypto";
 import {
+  extractMcpExecutedAs,
   extractMcpToolError,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
+  MCP_EXECUTED_AS_META_KEY,
   parseFullToolName,
+  platformExecutedAs,
+  stripReservedPlatformMeta,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
@@ -29,14 +33,19 @@ import {
   executeArchestraTool,
 } from "@/archestra-mcp-server";
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
-import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
+import {
+  resolveRunToolDispatch,
+  resolveRunToolTarget,
+} from "@/archestra-mcp-server/run-tool-target";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
+import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import type {
   RepeatSeverity,
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import { sensitiveContextOriginFromBoundary } from "@/guardrails/trusted-data";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
@@ -49,6 +58,7 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import type {
   Tool as CatalogTool,
   ChatToolExecutionClaim,
@@ -79,6 +89,12 @@ export interface ChatToolContext {
   conversationId?: string;
   /** Per-conversation/per-execution scope key (isolationKey ?? conversationId). */
   scopeKey?: string;
+  /**
+   * The owned app the chat UI has open this turn, access-verified by
+   * resolveOpenedApp. Threaded into ArchestraContext so copy_file can address
+   * the app's file namespace; absent when no app is open.
+   */
+  openedAppId?: string;
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
   sessionId?: string;
@@ -103,6 +119,12 @@ export interface ChatToolContext {
    * delegation call that spawned them.
    */
   subagentToolStream?: SubagentToolStreamBridge;
+  /**
+   * Bridge that detaches a long-running tool call into a durable, cancellable
+   * MCP task and surfaces it as a live card (chat path only). Absent in
+   * headless runs, where there is no one to watch or cancel it.
+   */
+  taskBridge?: ChatTaskBridge;
   mcpGwToken: McpGatewayToken;
   considerContextUntrusted: boolean;
   /**
@@ -213,6 +235,7 @@ export function buildMcpGatewayTool(params: {
                 agent: { id: ctx.agentId, name: ctx.agentName },
                 conversationId: ctx.conversationId,
                 isolationKey: ctx.scopeKey,
+                openedAppId: ctx.openedAppId,
                 chatOpsBindingId: ctx.chatOpsBindingId,
                 chatOpsThreadId: ctx.chatOpsThreadId,
                 userId: ctx.userId,
@@ -222,7 +245,14 @@ export function buildMcpGatewayTool(params: {
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
+                taskBridge: ctx.taskBridge,
+                // Lets a task minted inside run_tool attach its card to the
+                // run_tool call the user sees, not the synthetic inner id.
+                currentToolCallId: options.toolCallId,
                 contextIsTrusted: toolExecutionContext.contextIsTrusted,
+                sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
+                  toolExecutionContext.unsafeContextBoundary,
+                ),
                 // `run_tool` can dispatch a delegation tool, so this context
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
@@ -277,6 +307,26 @@ export function buildMcpGatewayTool(params: {
                 userId: ctx.userId,
               }),
             });
+
+            // A run_tool dispatch result is the target tool's output, so its
+            // trusted-data boundary must be evaluated exactly like the direct
+            // path (executeMcpTool) does — otherwise a "sensitive" result
+            // policy never flips the session (and the divider never shows)
+            // under progressive tool loading. Built-in targets auto-trust
+            // inside the evaluation, so only real external data attaches one.
+            const dispatch = resolveRunToolDispatch(
+              mcpTool.name,
+              toolArguments,
+            );
+            if (dispatch.kind === "target") {
+              toolResult = await attachDispatchUnsafeContextBoundary({
+                toolResult,
+                toolCallId: options.toolCallId,
+                targetToolName: dispatch.toolName,
+                agentId: ctx.agentId,
+                considerContextUntrusted: ctx.considerContextUntrusted,
+              });
+            }
           } else {
             // Execute non-Archestra tools via shared helper with browser sync
             toolResult = await executeMcpTool({
@@ -291,6 +341,8 @@ export function buildMcpGatewayTool(params: {
               considerContextUntrusted: ctx.considerContextUntrusted,
               abortSignal: ctx.abortSignal,
               elicitation: ctx.elicitation,
+              taskBridge: ctx.taskBridge,
+              toolCallId: options.toolCallId,
               isUiProvidingTool,
             });
           }
@@ -392,6 +444,9 @@ export function buildAgentDelegationTool(params: {
           const response = await executeArchestraTool(agentTool.name, args, {
             ...archestraContext,
             contextIsTrusted: toolExecutionContext.contextIsTrusted,
+            sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
+              toolExecutionContext.unsafeContextBoundary,
+            ),
             // Surface the child's tool calls on the caller's conversation,
             // attributed to this delegation call (options.toolCallId).
             subagentToolStream: ctx.subagentToolStream,
@@ -538,6 +593,13 @@ export async function buildArchestraToolOutput(params: {
     organizationId,
     tokenAuth,
   } = params;
+  // A dispatched third-party tool already carries the identity whose
+  // credential served it. Everything else here Archestra ran itself, with the
+  // caller's own permissions — say so rather than leaving the card unable to
+  // answer "as who did this run?".
+  const executedAs =
+    extractMcpExecutedAs(response) ?? platformExecutedAs(userId);
+  const executedAsMeta = { [MCP_EXECUTED_AS_META_KEY]: executedAs };
   // Never stringify an image block into the text summary — its base64 would
   // bloat context and evade the history image-stripper. Images ride rawContent
   // and reach the model as bounded media parts via toModelOutput instead.
@@ -555,7 +617,14 @@ export async function buildArchestraToolOutput(params: {
   // through so the model can see them — toModelOutput turns them into media
   // parts, bounded by size/count there. Image-free results are unaffected.
   if (!response.isError && response.content.some((c) => c.type === "image")) {
-    return { content: text, rawContent: response.content as ContentBlock[] };
+    return {
+      content: text,
+      _meta: {
+        ...(response._meta as Record<string, unknown>),
+        ...executedAsMeta,
+      },
+      rawContent: response.content as ContentBlock[],
+    };
   }
 
   const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
@@ -579,14 +648,16 @@ export async function buildArchestraToolOutput(params: {
   ) {
     return {
       content: text,
+      _meta: executedAsMeta,
       structuredContent: response.structuredContent,
       rawContent: response.content as ContentBlock[],
     };
   }
 
   if (targetToolName === toolName) {
-    // Not a run_tool dispatch — no UI resource to attach.
-    return text;
+    // Not a run_tool dispatch — no UI resource to attach, but the card still
+    // names who the platform ran this for.
+    return { content: text, _meta: executedAsMeta };
   }
 
   let resourceUri: string | undefined;
@@ -625,24 +696,26 @@ export async function buildArchestraToolOutput(params: {
     resourceUri = undefined;
   }
   if (!resourceUri) {
-    // A dispatched third-party tool with no MCP-App UI. If it returned a
-    // structured Archestra error (e.g. the expired-auth re-auth payload),
-    // preserve `_meta`/`structuredContent` so chat renders the same rich card
-    // as a direct call. The bare-text fallback below strips
-    // `_meta.archestraError`/`structuredContent.archestraError`, degrading the
-    // card to a text-parsed one (which loses e.g. the credential scope). Mirrors
-    // the direct path (executeMcpTool), which keeps these fields on error.
-    if (response.isError && extractMcpToolError(response)) {
-      return {
-        content: text,
-        _meta: response._meta as Record<string, unknown> | undefined,
-        structuredContent: response.structuredContent as
-          | Record<string, unknown>
-          | undefined,
-        rawContent: response.content as ContentBlock[],
-      };
-    }
-    return text;
+    // A dispatched third-party tool with no MCP-App UI. If it carries platform
+    // metadata — a structured Archestra error (e.g. the expired-auth re-auth
+    // payload) or the identity the upstream call ran as — preserve
+    // `_meta`/`structuredContent` so chat renders the same rich card as a
+    // direct call. The bare-text fallback below drops them, degrading the card
+    // to a text-parsed one (losing e.g. the credential scope or the "ran as"
+    // badge). Mirrors the direct path (executeMcpTool), which keeps these
+    // fields. In-process Archestra tools carry neither and stay plain text, so
+    // plain-output parsing (e.g. knowledge-source citations) is unaffected.
+    return {
+      content: text,
+      _meta: {
+        ...(response._meta as Record<string, unknown>),
+        ...executedAsMeta,
+      },
+      structuredContent: response.structuredContent as
+        | Record<string, unknown>
+        | undefined,
+      rawContent: response.content as ContentBlock[],
+    };
   }
 
   // Bind the app's callbacks to the concrete install so its SDK `callServerTool`
@@ -659,6 +732,7 @@ export async function buildArchestraToolOutput(params: {
     content: text,
     _meta: {
       ...response._meta,
+      ...executedAsMeta,
       ui: { resourceUri, ...(mcpServerId ? { mcpServerId } : {}) },
     },
     structuredContent: response.structuredContent as
@@ -876,7 +950,14 @@ async function executeWithToolSpan<R>(params: {
   }
 
   logger.info(
-    { agentId: ctx.agentId, userId: ctx.userId, toolName, arguments: args },
+    {
+      agentId: ctx.agentId,
+      userId: ctx.userId,
+      toolName,
+      // Argument values are user/LLM content — log only shape, never payload.
+      argumentKeys: args ? Object.keys(args) : [],
+      argumentsSize: JSON.stringify(args ?? {}).length,
+    },
     entryLogMessage,
   );
 
@@ -970,6 +1051,10 @@ interface ToolExecutionContext {
   considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
   elicitation?: ChatMcpElicitationBridge;
+  /** Detaches this call into a cancellable task if it runs long (chat only). */
+  taskBridge?: ChatTaskBridge;
+  /** The model's id for this call, linking a task card to the call it backs. */
+  toolCallId?: string;
   /**
    * Set when the tool's gateway-listed definition carries a `ui://` resource,
    * i.e. it may be advertised top-level while unassigned. Gates the dynamic
@@ -1007,6 +1092,8 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     mcpGwToken,
     abortSignal,
     elicitation,
+    taskBridge,
+    toolCallId,
     isUiProvidingTool,
   } = ctx;
   throwIfAborted(abortSignal);
@@ -1084,9 +1171,11 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       }
     : undefined;
 
-  let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
-  try {
-    result = await mcpClient.executeToolCallForOwner(
+  // Run the upstream call under `signal`, which is the chat run's signal on the
+  // ordinary path and additionally carries task cancellation when this call has
+  // detached into a task.
+  const callUpstream = (signal: AbortSignal | undefined, detachable: boolean) =>
+    mcpClient.executeToolCallForOwner(
       toolCall,
       agentOwner(agentId),
       tokenAuthContext,
@@ -1098,12 +1187,30 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         // Cancels the in-flight upstream call when the chat run is stopped,
         // instead of letting it run to completion past the post-call
         // throwIfAborted below. Covers subagents too (shared builder).
-        abortSignal,
+        abortSignal: signal,
+        // A detached call outlives the synchronous timeout by design; without
+        // this it would still be killed at that bound and the task could never
+        // outlast it.
+        ...(detachable ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
         ...(elicitation
           ? { elicitationHandler: elicitation.createHandler({ toolName }) }
           : {}),
       },
     );
+
+  let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
+  try {
+    result =
+      taskBridge && toolCallId
+        ? await taskBridge.runMaybeTask({
+            agentId,
+            userId,
+            toolCallId,
+            toolName,
+            abortSignal,
+            execute: (signal) => callUpstream(signal, true),
+          })
+        : await callUpstream(abortSignal, false);
     reportToolMetrics({
       toolName,
       agentId,
@@ -1228,8 +1335,14 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     const toolDef = await ToolModel.findByNameForAgent(toolName, agentId);
     if (toolDef?.meta) {
       // Extract _meta from the stored structure: { _meta: {...}, annotations: {...} }
-      toolDefinitionMeta = (toolDef.meta as { _meta?: ToolDefinitionMeta })
-        ?._meta;
+      // A tool definition is authored upstream and synced by tools/list, and it
+      // is merged over the result's own metadata below — so strip the
+      // platform-reserved keys here too, or a hostile server could declare a
+      // forged error, seeded-render marker or executed-as identity in its tool
+      // definition and override the platform's value on every card.
+      toolDefinitionMeta = stripReservedPlatformMeta(
+        (toolDef.meta as { _meta?: ToolDefinitionMeta })?._meta,
+      ) as ToolDefinitionMeta | undefined;
     }
   } catch (error) {
     logger.debug(
@@ -1391,10 +1504,49 @@ function toolProvidesUiResource(tool: CatalogTool): boolean {
   return metaProvidesUiResource(meta);
 }
 
+/**
+ * Evaluate and attach the unsafe-context boundary for a `run_tool` dispatch
+ * result, against the dispatched *target* tool. Mirrors what the direct path
+ * (executeMcpTool) does for ordinary tool calls: the boundary lands both
+ * top-level on the result (the chat stream/persisted part the divider reads)
+ * and inside `_meta`. A result that stays trusted is returned unchanged.
+ */
+async function attachDispatchUnsafeContextBoundary(params: {
+  toolResult: string | { content: string; [key: string]: unknown };
+  toolCallId: string;
+  targetToolName: string;
+  agentId: string;
+  considerContextUntrusted: boolean;
+}): Promise<string | { content: string; [key: string]: unknown }> {
+  const result =
+    typeof params.toolResult === "string"
+      ? { content: params.toolResult }
+      : params.toolResult;
+
+  const boundaryResult = await buildUnsafeContextBoundaryResult({
+    resultMeta: result._meta as Record<string, unknown> | undefined,
+    toolCallId: params.toolCallId,
+    toolName: params.targetToolName,
+    isRunToolDispatchTarget: true,
+    toolOutput:
+      (result.structuredContent as Record<string, unknown> | undefined) ??
+      result.content,
+    agentId: params.agentId,
+    considerContextUntrusted: params.considerContextUntrusted,
+  });
+
+  if (!boundaryResult.unsafeContextBoundary) {
+    return params.toolResult;
+  }
+  return { ...result, ...boundaryResult };
+}
+
 async function buildUnsafeContextBoundaryResult(params: {
   resultMeta?: Record<string, unknown>;
   toolCallId: string;
   toolName: string;
+  /** True when toolName is a run_tool dispatch target (see evaluateBulk). */
+  isRunToolDispatchTarget?: boolean;
   toolOutput: unknown;
   agentId: string;
   considerContextUntrusted: boolean;
@@ -1438,6 +1590,7 @@ async function buildUnsafeContextBoundaryResult(params: {
 async function evaluateUnsafeContextBoundaryForToolResult(params: {
   toolCallId: string;
   toolName: string;
+  isRunToolDispatchTarget?: boolean;
   toolOutput: unknown;
   agentId: string;
   considerContextUntrusted: boolean;
@@ -1453,6 +1606,7 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
       {
         toolName: params.toolName,
         toolOutput: params.toolOutput,
+        isRunToolDispatchTarget: params.isRunToolDispatchTarget,
       },
     ],
     {

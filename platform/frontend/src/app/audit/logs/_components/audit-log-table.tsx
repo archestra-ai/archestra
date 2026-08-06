@@ -29,11 +29,12 @@ import {
   useAuditLog,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { useMembersPaginated } from "@/lib/member.query";
+import { useMemberSearch } from "@/lib/member.query";
 import { useRolesPaginated } from "@/lib/role.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -254,9 +255,19 @@ export function AuditLogTable() {
     search: searchFromUrl ?? undefined,
   });
 
-  const { data: membersResponse } = useMembersPaginated({
+  // Server-side search rather than a client filter over the first N members:
+  // an org larger than one page would otherwise silently hide every actor
+  // whose name sorts past the cut-off.
+  const { data: canSeeAllAuditLogs } = useHasPermissions({
+    auditLog: ["admin"],
+  });
+  const {
+    users: actorUsers,
+    onSearchQueryChange: onActorSearchChange,
+    emptyMessage: actorEmptyMessage,
+  } = useMemberSearch({
     limit: ACTOR_FILTER_LIMIT,
-    offset: 0,
+    selectedUserIds: actorId ? [actorId] : [],
   });
 
   // Two lifecycle buckets: agents are soft-deleted, so a deleted agent's
@@ -297,15 +308,15 @@ export function AuditLogTable() {
   const rows = response?.data ?? [];
   const paginationMeta = response?.pagination;
 
-  const memberOptions = useMemo(() => {
-    const items =
-      membersResponse?.data?.map((m) => ({
-        value: m.userId,
-        label: m.name || m.email || "Unknown",
-        description: m.name ? m.email : undefined,
-      })) ?? [];
-    return [{ value: ALL_VALUE, label: "All actors" }, ...items];
-  }, [membersResponse]);
+  const memberOptions = useMemo(
+    () =>
+      actorUsers.map((user) => ({
+        value: user.userId,
+        label: user.name || user.email || "Unknown",
+        description: user.name ? (user.email ?? undefined) : undefined,
+      })),
+    [actorUsers],
+  );
 
   const entityOptions = useMemo(() => {
     // The type goes into `description`: SearchableSelect renders it as a
@@ -422,13 +433,24 @@ export function AuditLogTable() {
         id: "actor",
         header: "Actor",
         cell: ({ row }) => {
-          const { actorName, actorEmail } = row.original;
+          const { actorName, actorEmail, impersonatedBy, impersonatedByEmail } =
+            row.original;
           const label = actorName ?? actorEmail ?? "Deleted user";
           return (
-            <Badge variant="outline" className="text-xs">
-              <User className="mr-1 h-3 w-3 shrink-0" />
-              <TruncatedText message={label} maxLength={24} />
-            </Badge>
+            <div className="flex flex-col items-start gap-0.5">
+              <Badge variant="outline" className="text-xs">
+                <User className="mr-1 h-3 w-3 shrink-0" />
+                <TruncatedText message={label} maxLength={24} />
+              </Badge>
+              {impersonatedBy && (
+                <span
+                  className="text-[10px] text-amber-600 dark:text-amber-500"
+                  title="This action ran in an impersonated session; the named actor was being impersonated by this admin."
+                >
+                  via {impersonatedByEmail ?? "deleted user"}
+                </span>
+              )}
+            </div>
           );
         },
       },
@@ -490,7 +512,7 @@ export function AuditLogTable() {
                     {formatResourceType(rt)}
                   </span>
                 )}
-                {rt && name ? ": " : ""}
+                {rt && name ? <span>: </span> : null}
                 {name && <span title={name}>{displayName}</span>}
               </span>
             </Badge>
@@ -610,13 +632,20 @@ export function AuditLogTable() {
           items={entityOptions}
           className="w-[220px]"
         />
-        <SearchableSelect
-          value={actorId ?? ALL_VALUE}
-          onValueChange={handleActorChange}
-          placeholder="Filter by actor"
-          items={memberOptions}
-          className="w-[220px]"
-        />
+        {canSeeAllAuditLogs ? (
+          // Without auditLog:admin the server scopes the trail to the
+          // caller's own actions, so an actor filter would be pointless.
+          <SearchableSelect
+            value={actorId ?? ALL_VALUE}
+            onValueChange={handleActorChange}
+            placeholder="Filter by actor"
+            items={memberOptions}
+            pinnedItems={[{ value: ALL_VALUE, label: "All actors" }]}
+            onSearchQueryChange={onActorSearchChange}
+            emptyMessage={actorEmptyMessage}
+            className="w-[220px]"
+          />
+        ) : null}
         <DateTimeRangePicker
           startDate={dateTimePicker.startDate}
           endDate={dateTimePicker.endDate}

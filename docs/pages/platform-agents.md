@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-07-19
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -108,6 +108,38 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 - assigned tools are carried into the skill's [`allowed-tools`](https://agentskills.io/specification#allowed-tools-field) frontmatter (the skill-runtime tools are dropped as noise), so the activating agent knows which tools to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
 - suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
 - removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
+
+## Deleting an Agent
+
+Deleting an agent hides it everywhere and stops its scheduled runs. The agent is not destroyed — it moves to a trash. Switch the status filter to **Deleted** to see what is there, and **Restore** to bring one back.
+
+Global admins can also delete an agent from the trash for good, with **Delete permanently**. This destroys its configuration, version history, hooks, and scheduled tasks. Nothing brings it back.
+
+What the agent produced stays. Its chats and its LLM usage records survive the deletion and simply stop pointing at it, so your history and cost reporting stay intact.
+
+Deleting an agent for good also clears it from anywhere it was set as a default — the organization default, the **/connection** defaults, and each member's personal default. Those fall back to unset, so pick a replacement afterwards.
+
+Purging a busy LLM proxy has millions of usage records to detach and can take a few minutes. Past five it stops and leaves the agent in the trash, unharmed. Try again during a quieter period.
+
+## Version History
+
+Archestra snapshots an agent's configuration every time it changes — prompt, tools, hooks, knowledge, or settings. A save that changes nothing does not create a version. MCP gateways and LLM proxies keep the same history.
+
+Open **Version history** from the agent's row menu to browse the snapshots. Pick one to read its configuration. **All settings** shows the whole configuration; **Changes** shows only what moved since the version before.
+
+The history is available through the API. `GET /api/agents/:id/versions` lists versions as metadata, newest first. `GET /api/agents/:id/versions/:version` returns one full configuration snapshot. Key material is never captured, so you can review what changed without exposing secrets.
+
+Each agent keeps its last 100 versions. The oldest listed version can therefore be greater than 1.
+
+### Restoring a Version
+
+**Restore this version** returns an agent to an earlier configuration. The restore forks forward: the old configuration becomes a new version. Nothing in the history is overwritten.
+
+If someone else edits the agent while you preview it, the restore is refused.
+
+A restore is all-or-nothing. If the version points at something that no longer exists — a deleted tool, for example — the restore fails and the agent is left exactly as it was. Recreate the missing piece, or restore a later version instead.
+
+Over the API, `POST /api/agents/:id/versions/:version/restore` does the same. Send the agent's current `latestVersion` as `baseVersion` to anchor the restore. A 409 then tells you someone else changed the agent first. Built-in agents cannot be restored.
 
 ## System Prompt Templating
 

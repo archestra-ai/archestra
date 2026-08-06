@@ -57,6 +57,11 @@ export interface ReadArtifactInput {
    * sandbox ran on; omit (null) for the process-default engine.
    */
   environment?: EnvironmentTarget
+  /**
+   * Client-local directory every host-synced upload path must resolve
+   * under. A request whose entries carry `hostPath` fails without it.
+   */
+  spoolRoot?: string
 }
 
 export interface ReplayCommand {
@@ -88,6 +93,14 @@ export interface ReplayInputFile {
   path: string
   encoding: string
   content: string
+  /**
+   * when set, the file's bytes come from this client-host path via BuildKit
+   * filesync instead of `content` (which must then be empty, with
+   * `encoding: "binary"`) — the recipe carries a reference, never the
+   * payload. must resolve under the request's `spoolRoot`; validated at the
+   * boundary before any engine work.
+   */
+  hostPath?: string
 }
 
 /**
@@ -114,6 +127,11 @@ export interface RunSandboxInput {
    * engine. The Dagger address is built in the backend from this.
    */
   environment?: EnvironmentTarget
+  /**
+   * Client-local directory every host-synced upload path must resolve
+   * under. A request whose entries carry `hostPath` fails without it.
+   */
+  spoolRoot?: string
 }
 
 export interface SnapshotFile {

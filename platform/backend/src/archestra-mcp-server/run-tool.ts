@@ -11,6 +11,7 @@ import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocat
 import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
 import { ConversationEnabledToolModel } from "@/models";
+import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
@@ -19,15 +20,14 @@ import {
   dynamicAccessContext,
   getUnassignedDiscoverableTools,
   resolveDynamicTool,
-  resolveRunToolTargetName,
 } from "./dynamic-tools";
 import {
   defineArchestraTool,
   defineArchestraTools,
-  errorResult,
   structuredToolErrorResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
+import { resolveRunToolTargetName } from "./run-tool-target";
 import { placeholderForSchema, safeJsonStringify } from "./tool-args-skeleton";
 import {
   ambiguousShortNameMessage,
@@ -95,9 +95,11 @@ async function runToolHandler({
   const requestedName = args.tool_name;
   const recovery = await resolveShortName({ requestedName, context });
   if (recovery.kind === "ambiguous") {
-    return errorResult(
-      ambiguousShortNameMessage(requestedName, recovery.candidates),
-    );
+    return dispatchRefusalResult({
+      code: "ambiguous_tool",
+      message: ambiguousShortNameMessage(requestedName, recovery.candidates),
+      toolName: requestedName,
+    });
   }
 
   // Built-in recovery keeps the original short name as the effective name:
@@ -286,9 +288,11 @@ async function dispatchTool({
 
   const runToolFullName = getArchestraToolFullName(TOOL_RUN_TOOL_SHORT_NAME);
   if (resolvedName === runToolFullName) {
-    return errorResult(
-      `${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself. Call ${TOOL_RUN_TOOL_SHORT_NAME} once, with tool_name set to the target tool's exact name (from search_tools) and the target's arguments in tool_args — never set tool_name to ${TOOL_RUN_TOOL_SHORT_NAME}.`,
-    );
+    return dispatchRefusalResult({
+      code: "invalid_target",
+      message: `${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself. Call ${TOOL_RUN_TOOL_SHORT_NAME} once, with tool_name set to the target tool's exact name (from search_tools) and the target's arguments in tool_args — never set tool_name to ${TOOL_RUN_TOOL_SHORT_NAME}.`,
+      toolName: resolvedName,
+    });
   }
 
   // Per-conversation enabled-tool gate: in a chat with a custom tool
@@ -317,7 +321,11 @@ async function dispatchTool({
       { agentId: context.agentId, requestedName, resolvedName: name },
       `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to a tool disabled for this conversation`,
     );
-    return errorResult(toolNotEnabledForConversationMessage(name));
+    return dispatchRefusalResult({
+      code: "tool_disabled",
+      message: toolNotEnabledForConversationMessage(name),
+      toolName: name,
+    });
   };
 
   if (route === "archestra") {
@@ -355,9 +363,11 @@ async function dispatchTool({
   // bogus agent-<id> delegations are handled by the "archestra" route above
   // (executeArchestraTool / checkToolAssignedToAgent), not this check.
   if (!context.agentId) {
-    return errorResult(
-      `${TOOL_RUN_TOOL_SHORT_NAME} requires agent context to dispatch to third-party MCP tools`,
-    );
+    return dispatchRefusalResult({
+      code: "missing_agent_context",
+      message: `${TOOL_RUN_TOOL_SHORT_NAME} requires agent context to dispatch to third-party MCP tools`,
+      toolName: resolvedName,
+    });
   }
 
   // Gate dispatch on the assigned-tool set, then fall back to dynamic
@@ -380,7 +390,11 @@ async function dispatchTool({
     // agent's assigned tools, so an unassigned tool can never be enabled in
     // it — return the same unavailable recovery search_tools shows.
     if (await checkConversationGate(resolvedName)) {
-      return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+      return dispatchRefusalResult({
+        code: "unknown_tool",
+        message: unavailableThirdPartyToolMessage(resolvedName),
+        toolName: resolvedName,
+      });
     }
     availableTool = await resolveDynamicTool({
       toolName: resolvedName,
@@ -399,7 +413,11 @@ async function dispatchTool({
       `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unassigned tool`,
     );
     if (!availableTool) {
-      return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+      return dispatchRefusalResult({
+        code: "unknown_tool",
+        message: unavailableThirdPartyToolMessage(resolvedName),
+        toolName: resolvedName,
+      });
     }
   } else {
     // The tool is assigned — enforce the per-conversation selection.
@@ -442,6 +460,7 @@ async function dispatchTool({
     toolInput,
     organizationId: context.organizationId,
     contextIsTrusted: context.contextIsTrusted ?? true,
+    sensitiveContextOrigin: context.sensitiveContextOrigin,
     enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
     enabledToolNames: availableTool
       ? new Set([...assignedToolNames, resolvedName])
@@ -491,28 +510,51 @@ async function dispatchTool({
   const toolCallId = `run-tool-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 9)}`;
-  const result = await mcpClient.executeToolCallForOwner(
-    {
-      id: toolCallId,
-      name: resolvedName,
-      arguments: toolInput,
-    },
-    agentOwner(context.agentId),
-    context.tokenAuth,
-    // mcp-client scopes per-conversation sessions (e.g. browser contexts)
-    // by this key; headless executions use their isolation key so
-    // concurrent runs never share a session and cleanup can close it.
-    // availableTool lets a tool the agent has no assignment for execute in
-    // "Auto" mode; it is only ever set after the dynamic-access gates
-    // above passed, and the MCP server's connection policy still decides
-    // which credential the call uses.
-    {
-      conversationId: context.isolationKey ?? context.conversationId,
-      availableTool: availableTool ?? undefined,
-      // Cancel the in-flight upstream call when the chat run is stopped.
-      abortSignal: context.abortSignal,
-    },
-  );
+  // Captured before the closure: narrowing on a context property does not
+  // survive into one.
+  const ownerAgentId = context.agentId;
+  const dispatch = (signal: AbortSignal | undefined, detachable: boolean) =>
+    mcpClient.executeToolCallForOwner(
+      {
+        id: toolCallId,
+        name: resolvedName,
+        arguments: toolInput,
+      },
+      agentOwner(ownerAgentId),
+      context.tokenAuth,
+      // mcp-client scopes per-conversation sessions (e.g. browser contexts)
+      // by this key; headless executions use their isolation key so
+      // concurrent runs never share a session and cleanup can close it.
+      // availableTool lets a tool the agent has no assignment for execute in
+      // "Auto" mode; it is only ever set after the dynamic-access gates
+      // above passed, and the MCP server's connection policy still decides
+      // which credential the call uses.
+      {
+        conversationId: context.isolationKey ?? context.conversationId,
+        availableTool: availableTool ?? undefined,
+        // Cancel the in-flight upstream call when the chat run is stopped.
+        abortSignal: signal,
+        // A detached call outlives the synchronous timeout by design.
+        ...(detachable ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
+      },
+    );
+
+  // In `search_and_run_only` mode every third-party tool call arrives here, so
+  // this is the path that decides whether those agents get task behavior at
+  // all. The card is attached to the visible `run_tool` call rather than the
+  // synthetic inner id above.
+  const { taskBridge, currentToolCallId, userId, agentId } = context;
+  const result =
+    taskBridge && currentToolCallId && userId && agentId
+      ? await taskBridge.runMaybeTask({
+          agentId,
+          userId,
+          toolCallId: currentToolCallId,
+          toolName: resolvedName,
+          abortSignal: context.abortSignal,
+          execute: (signal) => dispatch(signal, true),
+        })
+      : await dispatch(context.abortSignal, false);
 
   return appendEnvelopeRepairNote(
     {
@@ -621,7 +663,33 @@ function checkThirdPartyToolArgs(params: {
   messageLines.push(
     `The tool's full input schema is:\n${safeJsonStringify(schema, 2)}`,
   );
-  return errorResult(messageLines.join("\n"));
+  return dispatchRefusalResult({
+    code: "invalid_arguments",
+    message: messageLines.join("\n"),
+    toolName,
+  });
+}
+
+/**
+ * A dispatch refusal the platform authored before any upstream tool ran.
+ * Same prose an errorResult would carry, plus the `tool_state` envelope in
+ * `_meta`/`structuredContent` so trust evaluation can tell "no upstream data"
+ * apart from a real tool error — a refused dispatch must not flip the session
+ * to sensitive.
+ */
+function dispatchRefusalResult(params: {
+  code: string;
+  message: string;
+  toolName?: string;
+}): CallToolResult {
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: params.code,
+      message: params.message,
+      toolName: params.toolName,
+    },
+  });
 }
 
 /** Param types the repair may unwrap to — a literal declared `type` only. */

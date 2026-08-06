@@ -18,6 +18,8 @@ import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata"
 import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentToolModel from "./agent-tool";
 import OrganizationModel from "./organization";
 import TeamModel from "./team";
@@ -549,6 +551,15 @@ describe("ToolModel", () => {
         catalogName: "github-mcp-server",
         credentialResolutionMode: "static",
         meta: null,
+        // Input schema now rides the assignment so the call path can read
+        // x-mcp-header annotations without a second lookup.
+        parameters: {
+          type: "object",
+          properties: {
+            repo: { type: "string" },
+            count: { type: "number" },
+          },
+        },
       });
     });
 
@@ -2005,6 +2016,45 @@ describe("ToolModel", () => {
       expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     });
 
+    test("reflects knowledge-source assignment changes immediately despite the presence cache", async ({
+      makeAgent,
+      makeOrganization,
+      makeKnowledgeBase,
+      seedAndAssignArchestraTools,
+    }) => {
+      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+      await seedAndAssignArchestraTools(tempAgent.id);
+
+      const org = await makeOrganization();
+      const kg = await makeKnowledgeBase(org.id);
+      const agent = await makeAgent({
+        name: "Cache Invalidation Agent",
+        organizationId: org.id,
+      });
+      await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
+
+      // The first listing caches "no knowledge sources" for the agent.
+      let toolNames = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+
+      // Assigning through the model invalidates the cached presence, so the
+      // next listing surfaces the knowledge tool without waiting out a TTL.
+      await AgentKnowledgeBaseModel.assign(agent.id, kg.id);
+      toolNames = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+
+      // Unassigning invalidates again.
+      await AgentKnowledgeBaseModel.unassign(agent.id, kg.id);
+      toolNames = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
+    });
+
     test("is idempotent - does not create duplicates", async ({
       makeAgent,
       seedAndAssignArchestraTools,
@@ -2267,9 +2317,10 @@ describe("ToolModel", () => {
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
       const agent = await makeAgent({ organizationId: org.id });
-      await db
-        .insert(schema.agentConnectorAssignmentsTable)
-        .values({ agentId: agent.id, connectorId: connector.id });
+      // Through the model (not a raw insert/delete): production only writes
+      // assignments via the model, whose writes invalidate the cached
+      // knowledge-source presence read by getMcpToolsByAgent.
+      await AgentConnectorAssignmentModel.assign(agent.id, connector.id);
       await seedAndAssignArchestraTools(agent.id);
 
       // Verify tool is present
@@ -2279,14 +2330,7 @@ describe("ToolModel", () => {
       );
 
       // Unassign the connector
-      await db
-        .delete(schema.agentConnectorAssignmentsTable)
-        .where(
-          and(
-            eq(schema.agentConnectorAssignmentsTable.agentId, agent.id),
-            eq(schema.agentConnectorAssignmentsTable.connectorId, connector.id),
-          ),
-        );
+      await AgentConnectorAssignmentModel.unassign(agent.id, connector.id);
 
       // Tool should no longer appear
       tools = await ToolModel.getMcpToolsByAgent(agent.id);
@@ -3785,8 +3829,10 @@ describe("ToolModel", () => {
           agentId: null,
         })
         .onConflictDoUpdate({
+          // Mirror the partial index predicate exactly (now gated on
+          // deleted_at is null) so Postgres can infer the arbiter index.
           target: [schema.toolsTable.catalogId, schema.toolsTable.name],
-          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null`,
+          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null and ${schema.toolsTable.deletedAt} is null`,
           set: { description: sql`excluded.description` },
         })
         .returning({ inserted: sql<boolean>`(xmax = 0)` });

@@ -122,6 +122,44 @@ export function shouldFreezeChatMessages(params: {
 }
 
 /**
+ * Drops assistant messages that carry no renderable content and can no longer be
+ * the turn in flight.
+ *
+ * The AI SDK opens an assistant message to hold any non-transient data part that
+ * arrives before a stream's `start` chunk, keyed by a client-generated id. When
+ * `start` then names the real message, the SDK renames its streaming state and
+ * pushes a *second* message, abandoning the first — which is left holding only
+ * telemetry parts (context-window estimate/breakdown, compaction events, token
+ * usage). It renders nothing, so the turn still looks right, but it stays in
+ * chat state as a real message: the next request sends it as the trailing
+ * message and a recovery's `regenerate()` anchors on it, so the backend reuses
+ * its id (`getResponseUIMessageId` reuses a trailing assistant's id) and streams
+ * the whole turn into a second message beside the first. Every further attach
+ * adds another, which is how one turn ends up rendered twice over.
+ *
+ * The backend never persists a content-free assistant message, which is why a
+ * reload clears the duplicates; this keeps the live list on that same rule. The
+ * last message is exempt — a turn that is still streaming legitimately has no
+ * renderable content yet.
+ */
+export function pruneStrandedAssistantMessages(
+  messages: UIMessage[],
+): UIMessage[] {
+  const isStranded = (message: UIMessage, index: number) =>
+    index < messages.length - 1 &&
+    message.role === "assistant" &&
+    !hasRenderableAssistantContent(message);
+
+  // Returning the same reference when nothing is stranded keeps the caller's
+  // message identity stable, so this never churns a render on its own.
+  if (!messages.some(isStranded)) {
+    return messages;
+  }
+
+  return messages.filter((message, index) => !isStranded(message, index));
+}
+
+/**
  * Drops a trailing assistant message left with no renderable content. Mirrors the
  * backend's persist behavior (an empty last message is not stored), keeping the live
  * view consistent with what a reload would show — used after stripping dangling tool

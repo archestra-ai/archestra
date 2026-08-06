@@ -68,6 +68,10 @@ describe("k8s capabilities routes", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: "CiliumNetworkPolicy API detected.",
+        enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
+        probe: "absent",
+        probedAt: null,
       },
     });
     const user = await makeUser();
@@ -90,6 +94,10 @@ describe("k8s capabilities routes", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: "CiliumNetworkPolicy API detected.",
+        enforcementSource: "api-discovery",
+        enforcementStatus: "unknown",
+        probe: "absent",
+        probedAt: null,
       },
     });
   });

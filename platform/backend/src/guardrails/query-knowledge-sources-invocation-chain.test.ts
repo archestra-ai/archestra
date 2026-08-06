@@ -5,7 +5,10 @@ import {
 import { ToolInvocationPolicyModel, ToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import type { CommonMessage } from "@/types";
-import { evaluateIfContextIsTrusted } from "./trusted-data";
+import {
+  evaluateIfContextIsTrusted,
+  sensitiveContextOriginFromBoundary,
+} from "./trusted-data";
 
 // End-to-end regression test for the prompt-injection escalation in #4348:
 // a query_knowledge_sources result must poison context trust so that a
@@ -57,14 +60,13 @@ describe("guardrails: KB query -> subsequent restricted tool invocation is block
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(false);
 
@@ -80,6 +82,77 @@ describe("guardrails: KB query -> subsequent restricted tool invocation is block
     expect(invocationEval.toolCallName).toBe("exfiltrate_data");
     expect(invocationEval.reason).toBe(
       TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+    );
+  });
+
+  test("block reason names the tool whose result flipped the session when the boundary is threaded through", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+
+    // A discovered client-side tool whose result is marked sensitive by its
+    // default trusted-data policy, exactly like tools the LLM proxy
+    // auto-discovers from coding-CLI requests.
+    const clientTool = await makeTool({
+      agentId: agent.id,
+      name: "run_shell_command",
+    });
+    await makeAgentTool(agent.id, clientTool.id);
+
+    const guardedTool = await makeTool({
+      agentId: agent.id,
+      name: "exfiltrate_data",
+    });
+    await makeAgentTool(agent.id, guardedTool.id);
+
+    const commonMessages: CommonMessage[] = [
+      { role: "user", content: "List my repo files" },
+      {
+        role: "tool",
+        toolCalls: [
+          {
+            id: "call_shell_1",
+            name: "run_shell_command",
+            content: { output: "…" },
+            isError: false,
+          },
+        ],
+      },
+    ];
+
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
+
+    expect(trustEval.contextIsTrusted).toBe(false);
+    expect(trustEval.unsafeContextBoundary).toMatchObject({
+      kind: "tool_result",
+      toolName: "run_shell_command",
+    });
+
+    // The proxy threads the tracked boundary into policy evaluation so the
+    // refusal names what made the session sensitive.
+    const invocationEval = await ToolInvocationPolicyModel.evaluateBatch(
+      agent.id,
+      [{ toolCallName: "exfiltrate_data", toolInput: {} }],
+      {
+        teamIds: [],
+        sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
+          trustEval.unsafeContextBoundary,
+        ),
+      },
+      trustEval.contextIsTrusted,
+    );
+
+    expect(invocationEval.isAllowed).toBe(false);
+    expect(invocationEval.reason).toBe(
+      '"Block in sensitive context" tool call policy violated: this session contains sensitive data, introduced by an earlier "run_shell_command" tool result',
     );
   });
 });

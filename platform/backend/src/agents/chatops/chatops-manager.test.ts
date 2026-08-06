@@ -35,6 +35,7 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
+import { RouteCategory } from "@/observability/tracing";
 import { ProviderError } from "@/routes/chat/errors";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
@@ -356,6 +357,107 @@ describe("ChatOpsManager security validation", () => {
         text: expect.stringContaining("Access Denied"),
       }),
     );
+  });
+
+  /**
+   * A sender who lacks access to the channel's agent normally gets told so. In a
+   * channel that answers every message that reply would land in a conversation
+   * the sender never addressed to the bot, so the caller can ask for a silent
+   * denial. Access itself is unaffected either way.
+   */
+  async function denyAccessFor(params: {
+    org: { id: string };
+    agentId: string;
+    senderEmail: string;
+  }) {
+    await ChatOpsChannelBindingModel.create({
+      organizationId: params.org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: params.agentId,
+    });
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const provider = createMockProvider({
+      getUserEmail: async () => params.senderEmail,
+      sendReply: sendReplySpy,
+    });
+    return { provider, sendReplySpy };
+  }
+
+  test("announces an access denial by default", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser({ email: "owner@example.com" });
+    const team = await makeTeam(org.id, owner.id);
+    await makeTeamMember(team.id, owner.id);
+    // Team-scoped: an org-scoped agent is open to everyone, so it could never
+    // reach the denial branch.
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      scope: "team",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    // The sender is not on the agent's team.
+    await makeUser({ email: "outsider@example.com" });
+    const { provider, sendReplySpy } = await denyAccessFor({
+      org,
+      agentId: agent.id,
+      senderEmail: "outsider@example.com",
+    });
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage({ senderEmail: "outsider@example.com" }),
+      provider,
+    });
+
+    expect(result.success).toBe(false);
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Access Denied"),
+      }),
+    );
+  });
+
+  test("denies silently when the sender never addressed the bot", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser({ email: "owner2@example.com" });
+    const team = await makeTeam(org.id, owner.id);
+    await makeTeamMember(team.id, owner.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      scope: "team",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await makeUser({ email: "outsider2@example.com" });
+    const { provider, sendReplySpy } = await denyAccessFor({
+      org,
+      agentId: agent.id,
+      senderEmail: "outsider2@example.com",
+    });
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage({ senderEmail: "outsider2@example.com" }),
+      provider,
+      announceAccessErrors: false,
+    });
+
+    // Still denied — only the public explanation is withheld.
+    expect(result.success).toBe(false);
+    expect(sendReplySpy).not.toHaveBeenCalled();
   });
 
   test("per-user provider not connected - replies with a connect link", async ({
@@ -1560,6 +1662,127 @@ describe("ChatOpsManager security validation", () => {
         userId: user.id, // Real user ID, not "chatops-ms-teams-xxx"
       }),
     );
+  });
+
+  // Both ChatOps entry points must tag their run with the ChatOps route
+  // category. `sendMessage` falls back to RouteCategory.A2A when the key is
+  // absent, so a misspelled or omitted key is silently swallowed and every
+  // ChatOps run gets traced as plain A2A. That is exactly what happened: the
+  // initial send passed `route:` (a key nothing reads) and the approval-resume
+  // path passed no route category at all.
+  test("a ChatOps message is routed with the ChatOps route category", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const sendMessageSpy = vi
+      .spyOn(A2AManager.prototype, "sendMessage")
+      .mockResolvedValue({});
+
+    const user = await makeUser({ email: "verified@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "verified@example.com",
+    });
+    const manager = makeManagerWith(mockProvider);
+
+    try {
+      await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+
+      expect(sendMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          systemParams: expect.objectContaining({
+            routeCategory: RouteCategory.CHATOPS,
+          }),
+        }),
+      );
+    } finally {
+      sendMessageSpy.mockRestore();
+    }
+  });
+
+  test("resuming after an approval decision keeps the ChatOps route category", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const sendMessageSpy = vi
+      .spyOn(A2AManager.prototype, "sendMessage")
+      .mockResolvedValue({});
+
+    const user = await makeUser({ email: "approver@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider();
+    const manager = new ChatOpsManager();
+
+    const decision: ChatOpsApprovalDecision = {
+      taskId: "task-1",
+      approvalId: "approval-1",
+      approved: true,
+      toolName: "some_tool",
+      messageTs: "msg-ts",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      userId: "teams-aad-id",
+      userName: "Approver",
+      responseUrl: "",
+      approverEmail: "approver@example.com",
+      originalMessage: createMockMessage({
+        senderEmail: "approver@example.com",
+      }),
+    };
+
+    try {
+      await manager.handleInteractiveApprovalDecision(mockProvider, decision);
+
+      expect(sendMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          systemParams: expect.objectContaining({
+            routeCategory: RouteCategory.CHATOPS,
+          }),
+        }),
+      );
+    } finally {
+      sendMessageSpy.mockRestore();
+    }
   });
 
   test("Teams approver mixed-case email is accepted", async ({

@@ -450,7 +450,7 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
     });
   });
 
-  test("deletes the backing secret when deleting a catalog item with secret-backed local config", async ({
+  test("retains the backing secret when soft-deleting a catalog item with secret-backed local config", async ({
     makeSecret,
   }) => {
     const existingSecret = await makeSecret({
@@ -488,8 +488,10 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ success: true });
 
-    const deletedSecret = await secretManager().getSecret(existingSecret.id);
-    expect(deletedSecret).toBeNull();
+    // Soft delete retains the secret bag so a restore recovers the stored
+    // credentials; only a hard delete (purge) removes it.
+    const retainedSecret = await secretManager().getSecret(existingSecret.id);
+    expect(retainedSecret).not.toBeNull();
 
     const deletedCatalog = await InternalMcpCatalogModel.findById(catalog.id, {
       expandSecrets: false,

@@ -2295,13 +2295,21 @@ describe("cleanupLimitsIfNeeded", () => {
       500,
     );
 
-    const previousMonth = new Date();
-    previousMonth.setMonth(previousMonth.getMonth() - 1, 15);
-    const currentMonth = new Date();
-    currentMonth.setDate(1);
-    currentMonth.setHours(12, 0, 0, 0);
-    await LimitModel.patch(dueLimit.id, { lastCleanup: previousMonth });
-    await LimitModel.patch(currentMonthLimit.id, { lastCleanup: currentMonth });
+    // Straddle the month boundary the cleanup query itself computes. That
+    // boundary is `date_trunc('month', now())` evaluated in the database's
+    // timezone, so timestamps derived from the JS local calendar disagree with
+    // it whenever the runner's timezone and the database's sit on opposite
+    // sides of a month boundary — the two are hours apart around midnight on
+    // the 1st, which used to flip both assertions.
+    const monthStart = sql`date_trunc('month', now())`;
+    await db
+      .update(schema.limitsTable)
+      .set({ lastCleanup: sql`${monthStart} - interval '1 second'` })
+      .where(eq(schema.limitsTable.id, dueLimit.id));
+    await db
+      .update(schema.limitsTable)
+      .set({ lastCleanup: monthStart })
+      .where(eq(schema.limitsTable.id, currentMonthLimit.id));
 
     await LimitModel.cleanupLimitsIfNeeded({
       allForOrganizationId: org.id,
@@ -2420,6 +2428,67 @@ describe("cleanupLimitsIfNeeded", () => {
     });
     expect(result).not.toBeNull();
     expect(result?.[1]).toContain("user-level cost limit");
+  });
+
+  test("subscription-billed interactions do not count toward default user limits", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: ["gpt-4o"],
+      cleanupInterval: "1w",
+    });
+
+    // Subscription usage costs the org $0 and must not burn the default limit,
+    // even when its list-price estimate is far over the cap.
+    const subscriptionInteraction = await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 100,
+      cost: "5",
+      billingMode: "subscription",
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id })
+      .where(eq(schema.interactionsTable.id, subscriptionInteraction.id));
+
+    const allowed = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+    });
+    expect(allowed).toBeNull();
+
+    // A metered interaction over the cap still trips the limit.
+    const meteredInteraction = await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 100,
+      cost: "2",
+      billingMode: "metered",
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id })
+      .where(eq(schema.interactionsTable.id, meteredInteraction.id));
+
+    const blocked = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+    });
+    expect(blocked).not.toBeNull();
+    expect(blocked?.[1]).toContain("user-level cost limit");
   });
 
   test("custom user limits override the inherited default user limit", async ({

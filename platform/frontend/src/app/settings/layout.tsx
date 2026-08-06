@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { useSettingsTabs } from "./settings-tabs";
 
-const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
+const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/service-accounts": {
     title: "Service Accounts",
     description:
@@ -54,15 +56,32 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     title: "Skills",
     description: "Configure how skills are discovered and added.",
   },
-  "/settings/organization": {
-    title: "Organization",
+  "/settings/appearance": {
+    title: "Appearance",
     description:
-      "Manage organization-wide appearance and authentication settings",
+      "Customize your organization's branding — logos, favicon, theme, and site-wide notifications.",
+  },
+  "/settings/auth": {
+    title: "Auth",
+    description:
+      "Authentication policies — token and session lifetimes, two-factor enforcement, and the default role for new users.",
   },
   "/settings/roles": {
     title: "Roles",
-    description:
-      "Manage predefined and custom roles, permissions, and access control.",
+    description: (
+      <>
+        Manage predefined and custom roles, permissions, and access control. New
+        users who join via email/password self-signup or ChatOps
+        auto-provisioning are assigned a default role. Change it in{" "}
+        <Link
+          href="/settings/auth"
+          className="font-medium underline underline-offset-4"
+        >
+          Settings → Auth
+        </Link>
+        .
+      </>
+    ),
   },
   "/settings/secrets": {
     title: "Secrets",

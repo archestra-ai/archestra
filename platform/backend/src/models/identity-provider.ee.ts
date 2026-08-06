@@ -30,9 +30,10 @@ import type {
   UpdateIdentityProvider,
 } from "@/types";
 import { ApiError } from "@/types";
-import { isPrivateOrLoopbackHostname } from "@/utils/network";
+import { validateOutboundUrl } from "@/utils/outbound-url";
 import AccountModel from "./account";
 import MemberModel from "./member";
+import OrganizationModel from "./organization";
 
 interface RoleMappingContext {
   token?: Record<string, unknown>;
@@ -66,6 +67,21 @@ class IdentityProviderModel {
    */
   private static readonly trustedProviderIdsCache = registerProcessLocalCache(
     new LRUCacheManager<string[]>({
+      maxSize: 1,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
+
+  /**
+   * Process-local cache for {@link findAllPublic}. Backs the unauthenticated
+   * SSO-provider list the login page fetches on every render, so without a
+   * cache each login-page view costs a database query for a list that only
+   * changes when an admin edits identity providers. Same invalidation story
+   * as {@link trustedProviderIdsCache}: writes in this process clear it
+   * immediately; other pods converge within the TTL.
+   */
+  private static readonly publicProvidersCache = registerProcessLocalCache(
+    new LRUCacheManager<PublicIdentityProvider[]>({
       maxSize: 1,
       defaultTtl: TimeInMs.Minute,
     }),
@@ -221,6 +237,10 @@ class IdentityProviderModel {
       );
     }
 
+    // Captured outside the try so the terminal fallback below can still resolve
+    // the organization's default role after an evaluation error.
+    let idpOrganizationId: string | null = null;
+
     try {
       // Fetch the identity provider configuration to get role mapping rules
       logger.debug(
@@ -230,6 +250,7 @@ class IdentityProviderModel {
       const idpProvider = await IdentityProviderModel.findByProviderId(
         provider.providerId,
       );
+      idpOrganizationId = idpProvider?.organizationId ?? null;
 
       logger.debug(
         {
@@ -344,7 +365,9 @@ class IdentityProviderModel {
               providerId: provider.providerId,
             },
           },
-          MEMBER_ROLE_NAME,
+          await IdentityProviderModel.resolveDefaultRole(
+            idpProvider.organizationId,
+          ),
         );
 
         logger.debug(
@@ -459,14 +482,16 @@ class IdentityProviderModel {
     }
 
     // Fallback to default role when no role mapping is configured
+    const fallbackRole =
+      await IdentityProviderModel.resolveDefaultRole(idpOrganizationId);
     logger.debug(
       {
         providerId: provider?.providerId,
-        fallbackRole: MEMBER_ROLE_NAME,
+        fallbackRole,
       },
       "[resolveSsoRole] Using fallback role because no mapping was configured or evaluation failed",
     );
-    return MEMBER_ROLE_NAME;
+    return fallbackRole;
   }
 
   /**
@@ -475,6 +500,13 @@ class IdentityProviderModel {
    * Does NOT expose any sensitive configuration data.
    */
   static async findAllPublic(): Promise<PublicIdentityProvider[]> {
+    const cached = IdentityProviderModel.publicProvidersCache.get(
+      PUBLIC_PROVIDERS_CACHE_KEY,
+    );
+    if (cached) {
+      return cached;
+    }
+
     const idpProviders = await db
       .select({
         id: schema.identityProvidersTable.id,
@@ -483,6 +515,10 @@ class IdentityProviderModel {
       .from(schema.identityProvidersTable)
       .where(eq(schema.identityProvidersTable.ssoLoginEnabled, true));
 
+    IdentityProviderModel.publicProvidersCache.set(
+      PUBLIC_PROVIDERS_CACHE_KEY,
+      idpProviders,
+    );
     return idpProviders;
   }
 
@@ -744,6 +780,7 @@ class IdentityProviderModel {
     }
 
     IdentityProviderModel.trustedProviderIdsCache.clear();
+    IdentityProviderModel.publicProvidersCache.clear();
 
     return {
       ...updatedProvider,
@@ -825,6 +862,7 @@ class IdentityProviderModel {
     if (!updatedProvider) return null;
 
     IdentityProviderModel.trustedProviderIdsCache.clear();
+    IdentityProviderModel.publicProvidersCache.clear();
 
     return {
       ...updatedProvider,
@@ -889,6 +927,7 @@ class IdentityProviderModel {
     });
 
     IdentityProviderModel.trustedProviderIdsCache.clear();
+    IdentityProviderModel.publicProvidersCache.clear();
 
     return true;
   }
@@ -947,6 +986,38 @@ class IdentityProviderModel {
       ssoLoginEnabled: row.ssoLoginEnabled,
     };
   }
+
+  /**
+   * Terminal fallback role for a first-time SSO login: the organization's
+   * configured default role for new users, which itself falls back to
+   * "member". This keeps SSO in step with the other provisioning paths —
+   * invitation acceptance and ChatOps auto-provisioning both already honour
+   * the org setting.
+   *
+   * Only reached when the IdP has no role mapping at all, or its rules
+   * produced no match and it defines no `defaultRole` of its own; an explicit
+   * per-IdP default still wins over the org-wide one.
+   *
+   * Never throws: a failure to read the setting degrades to "member" rather
+   * than blocking the login.
+   */
+  private static async resolveDefaultRole(
+    organizationId: string | null,
+  ): Promise<string> {
+    if (!organizationId) {
+      return MEMBER_ROLE_NAME;
+    }
+
+    try {
+      return await OrganizationModel.getDefaultMemberRole(organizationId);
+    } catch (error) {
+      logger.error(
+        { err: error, organizationId },
+        "[resolveSsoRole] Failed to read the organization default role, falling back to the member role",
+      );
+      return MEMBER_ROLE_NAME;
+    }
+  }
 }
 
 export default IdentityProviderModel;
@@ -954,6 +1025,7 @@ export default IdentityProviderModel;
 const OIDC_DISCOVERY_TIMEOUT_MS = 10_000;
 const SSO_REGISTRATION_PLACEHOLDER_DOMAIN = "sso-placeholder.example.com";
 const TRUSTED_PROVIDER_IDS_CACHE_KEY = "trusted-provider-ids";
+const PUBLIC_PROVIDERS_CACHE_KEY = "public-providers";
 
 function serializeConfigValue(
   value: string | object | null | undefined,
@@ -1142,35 +1214,21 @@ function selectTokenEndpointAuthentication(
 }
 
 function assertValidOidcDiscoveryEndpoint(discoveryEndpoint: string): void {
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(discoveryEndpoint);
-  } catch {
-    throw new ApiError(
-      400,
-      `OIDC discovery endpoint "${discoveryEndpoint}" is not a valid URL.`,
-    );
+  const validated = validateOutboundUrl(discoveryEndpoint);
+  if (validated.ok) {
+    return;
   }
 
-  const allowLocalDevelopmentDiscovery = !config.production;
-
-  if (
-    !config.test.enableE2eTestEndpoints &&
-    !allowLocalDevelopmentDiscovery &&
-    parsedUrl.protocol !== "https:"
-  ) {
-    throw new ApiError(400, "OIDC discovery endpoint must use HTTPS.");
-  }
-
-  if (
-    !config.test.enableE2eTestEndpoints &&
-    !allowLocalDevelopmentDiscovery &&
-    isPrivateOrLoopbackHostname(parsedUrl.hostname)
-  ) {
-    throw new ApiError(
-      400,
-      `OIDC discovery endpoint host "${parsedUrl.hostname}" is not allowed.`,
-    );
+  switch (validated.reason) {
+    case "not_a_url":
+      throw new ApiError(
+        400,
+        `OIDC discovery endpoint "${discoveryEndpoint}" is not a valid URL.`,
+      );
+    case "scheme_not_https":
+      throw new ApiError(400, "OIDC discovery endpoint must use HTTPS.");
+    case "private_or_loopback_host":
+      throw new ApiError(400, `OIDC discovery endpoint host is not allowed.`);
   }
 }
 

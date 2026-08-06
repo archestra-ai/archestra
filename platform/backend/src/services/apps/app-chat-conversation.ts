@@ -11,6 +11,7 @@ import {
   McpServerModel,
   MemberModel,
   MessageModel,
+  OrganizationModel,
 } from "@/models";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
 import {
@@ -50,7 +51,11 @@ export async function createSeededAppConversation(params: {
     userId,
     isAppAdmin: await callerIsAppAdmin(userId, organizationId),
   });
-  if (!app) {
+  // A disabled app does not exist for chat (T-980) — deep-link seeding
+  // included, or the seeded render would hand the model the very app every
+  // chat tool refuses to acknowledge. Its author previews it from the Apps
+  // page instead.
+  if (!app || !app.enabled) {
     throw new ApiError(404, `No app found with id ${appId}.`);
   }
 
@@ -212,6 +217,10 @@ async function createAppChatConversation(params: {
     // user writes a message (see ConversationModel.findAll), so clicking
     // through apps doesn't pile unused chats into the sidebar.
     origin: "app_open",
+    // The app's name above is a stand-in so the header and sidebar have
+    // something to show before the first exchange; title generation replaces it
+    // once there is a real conversation to title.
+    titleIsPlaceholder: true,
   });
 
   return { conversationId: conversation.id };
@@ -272,11 +281,34 @@ async function resolveDefaultChatAgentId(params: {
   organizationId: string;
 }): Promise<string> {
   const { userId, organizationId } = params;
+
+  // The org default outranks the member's personal default, mirroring the /chat
+  // page chain (resolveInitialAgentSelection). It only wins when it would appear
+  // in that page's picker for this caller: an internal (non-built-in) chat agent
+  // the caller can access — findById with a userId runs the access check and
+  // excludes soft-deleted rows. Anything else falls through.
+  const organization = await OrganizationModel.getById(organizationId);
+  if (organization?.defaultAgentId) {
+    const orgDefault = await AgentModel.findById(
+      organization.defaultAgentId,
+      userId,
+      false,
+    );
+    if (
+      orgDefault &&
+      orgDefault.organizationId === organizationId &&
+      orgDefault.agentType === "agent" &&
+      !orgDefault.builtIn
+    ) {
+      return orgDefault.id;
+    }
+  }
+
   const existing = await MemberModel.getDefaultAgentId(userId, organizationId);
   if (existing) return existing;
 
-  // No default yet (e.g. the member's first chat): bootstrap their personal chat
-  // agent, mirroring how the chat page resolves a default agent.
+  // No default anywhere (e.g. the member's first chat): bootstrap their
+  // personal chat agent.
   await AgentModel.ensurePersonalChatAgent({ userId, organizationId });
   const created = await MemberModel.getDefaultAgentId(userId, organizationId);
   if (!created) {

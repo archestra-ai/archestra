@@ -4,6 +4,14 @@ export interface CommonDualLlmParams {
   toolCallId: string;
   userRequest: string;
   toolResult: unknown;
+  /**
+   * Name and arguments of the tool call that produced the result under
+   * analysis. Both were authored by the privileged calling agent (not by the
+   * untrusted result), so they are safe to show to the main agent and anchor
+   * its questioning to the right domain.
+   */
+  toolName: string;
+  toolArguments?: Record<string, unknown>;
 }
 
 export const DualLlmMessageSchema = z

@@ -36,7 +36,7 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
       {availableKeys.map((key) => (
         <button key={key.id} type="button" onClick={() => onSelectKey(key.id)}>
           {key.name} {key.connectRequired ? "Connect" : "Connected"}
-          {selectedApiKeyId === key.id ? " Selected" : ""}
+          {selectedApiKeyId === key.id ? <span> Selected</span> : null}
         </button>
       ))}
     </div>
@@ -47,14 +47,17 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   CreateLlmProviderApiKeyDialog: ({
     title,
     defaultValues,
+    reconnectKeyId,
   }: {
     title: string;
     defaultValues: { provider?: string; openaiAuthMethod?: string };
+    reconnectKeyId?: string;
   }) => (
     <div>
       <span>{title}</span>
       <span>{defaultValues.provider}</span>
       <span>{defaultValues.openaiAuthMethod}</span>
+      {reconnectKeyId && <span>{`reconnect:${reconnectKeyId}`}</span>}
     </div>
   ),
 }));
@@ -174,7 +177,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "GitHub Copilot Connect Selected",
+        name: /^GitHub Copilot Connect\s*Selected$/,
       }),
     ).toBeInTheDocument();
     expect(
@@ -212,12 +215,12 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "ChatGPT Subscription Connect Selected",
+        name: /^ChatGPT Subscription Connect\s*Selected$/,
       }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", {
-        name: "ChatGPT Subscription Connected Selected",
+        name: /^ChatGPT Subscription Connected\s*Selected$/,
       }),
     ).not.toBeInTheDocument();
   });
@@ -248,10 +251,46 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Connect ChatGPT Subscription"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
+  });
+
+  it("re-opens the sign-in flow to reconnect a connected subscription that is already selected", async () => {
+    const user = userEvent.setup();
+    const chatgptKey = {
+      id: "chatgpt-key",
+      name: "ChatGPT Subscription",
+      provider: "openai",
+      scope: "personal",
+      userId: "current-user",
+      isChatgptSubscription: true,
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [chatgptKey],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    render(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId="chatgpt-key"
+        currentProvider="openai"
+        onApiKeyChange={() => {}}
+        suppressAutoSelect
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /^ChatGPT Subscription Connected\s*Selected$/,
+      }),
+    );
+
+    // The dialog opens in reconnect mode, targeting the existing credential
+    // so the sign-in rotates its secret instead of creating a duplicate.
+    expect(
+      screen.getByText("Reconnect ChatGPT Subscription"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("reconnect:chatgpt-key")).toBeInTheDocument();
   });
 
   it("opens the provider-specific subscription flow", async () => {
@@ -262,9 +301,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       screen.getByRole("button", { name: "ChatGPT Subscription Connect" }),
     );
 
-    expect(
-      screen.getByText("Connect ChatGPT Subscription"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
     expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
   });

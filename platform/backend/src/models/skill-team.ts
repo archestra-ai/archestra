@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import SkillUserModel from "./skill-user";
 
 /**
  * Team assignments and scope-based access for skills.
@@ -40,6 +41,13 @@ class SkillTeamModel {
         WHERE author_id = ${userId} AND scope = 'personal'
           AND organization_id = ${organizationId}
       UNION
+      -- Shared with this person by name. The grant sits beside the scope, so a
+      -- personal skill can reach a colleague without being published wider.
+      SELECT su.skill_id AS id
+        FROM skill_user su
+        INNER JOIN skills s ON su.skill_id = s.id
+        WHERE su.user_id = ${userId} AND s.organization_id = ${organizationId}
+      UNION
       SELECT st.skill_id AS id
         FROM skill_team st
         INNER JOIN skills s ON st.skill_id = s.id
@@ -78,8 +86,11 @@ class SkillTeamModel {
     switch (skill.scope) {
       case "org":
         return true;
-      case "personal":
-        return userId !== undefined && skill.authorId === userId;
+      case "personal": {
+        if (userId === undefined) return false;
+        if (skill.authorId === userId) return true;
+        return SkillUserModel.userHasGrant(skill.id, userId);
+      }
       case "team": {
         if (userId === undefined) return false;
         const [match] = await db

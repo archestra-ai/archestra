@@ -646,7 +646,7 @@ function HookEditorPanel({
           disabled={saving}
         >
           {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-          {initial ? "Save hook" : "Add hook"}
+          <span>{initial ? "Save hook" : "Add hook"}</span>
         </Button>
       </div>
     </div>

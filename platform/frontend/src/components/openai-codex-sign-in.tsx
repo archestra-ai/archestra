@@ -224,7 +224,7 @@ export function OpenaiCodexSignIn({
         ) : (
           <OpenAiLogo className="mr-2 h-4 w-4" />
         )}
-        Sign in with ChatGPT
+        <span>Sign in with ChatGPT</span>
       </Button>
       <div className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />

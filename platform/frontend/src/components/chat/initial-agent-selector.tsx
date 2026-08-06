@@ -346,8 +346,14 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                         <AgentIcon icon={agent.icon} size={14} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">
-                          {agent.name}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm font-medium truncate">
+                            {agent.name}
+                          </span>
+                          <AgentBadge
+                            type={agent.scope}
+                            className="text-[10px] px-1.5 py-0 shrink-0"
+                          />
                         </div>
                         {agent.description && (
                           <div className="text-[11px] text-muted-foreground truncate">
@@ -722,7 +728,7 @@ function AgentSettingsView({
   if (!agent) {
     return (
       <div className="p-6 text-center text-muted-foreground">
-        No agent selected
+        <span>No agent selected</span>
       </div>
     );
   }
@@ -813,15 +819,14 @@ function AgentSettingsView({
       </div>
 
       <div className="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
-        {agent.scope === "org" ||
-          (agent.scope === "team" && (
-            <Alert variant="info" className="border-0 py-2 text-xs">
-              <Info className="size-3.5" />
-              <AlertDescription className="text-xs">
-                You are editing a shared agent
-              </AlertDescription>
-            </Alert>
-          ))}
+        {(agent.scope === "org" || agent.scope === "team") && (
+          <Alert variant="info" className="border-0 py-2 text-xs">
+            <Info className="size-3.5" />
+            <AlertDescription className="text-xs">
+              You are editing a shared agent
+            </AlertDescription>
+          </Alert>
+        )}
         <SystemPromptEditor
           value={instructions}
           onChange={setInstructions}
@@ -971,7 +976,7 @@ function AgentSettingsView({
             disabled={isSaving}
           >
             {isSaving && <Loader2 className="size-3 animate-spin mr-1.5" />}
-            Save
+            <span>Save</span>
           </Button>
         )}
       </div>
@@ -1274,7 +1279,7 @@ function AddToolView({
         {isPending ? (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading...
+            <span>Loading...</span>
           </div>
         ) : filteredCatalogs.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
@@ -1541,6 +1546,11 @@ function ConfigureToolView({
   const newToolCount = useMemo(() => {
     return [...selectedToolIds].filter((id) => !assignedToolIds.has(id)).length;
   }, [selectedToolIds, assignedToolIds]);
+  const saveButtonLabel = isEditing
+    ? `Save (${selectedToolIds.size} tool${selectedToolIds.size !== 1 ? "s" : ""})`
+    : newToolCount === 0
+      ? "Add"
+      : `Add ${newToolCount} tool${newToolCount !== 1 ? "s" : ""}`;
   return (
     <div className="flex flex-col h-full">
       <DialogHeader
@@ -1581,11 +1591,11 @@ function ConfigureToolView({
         {isLoading ? (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading tools...
+            <span>Loading tools...</span>
           </div>
         ) : allTools.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground text-center">
-            No tools available.
+            <span>No tools available.</span>
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -1608,11 +1618,7 @@ function ConfigureToolView({
             }
           >
             {isSaving ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
-            {isEditing
-              ? `Save (${selectedToolIds.size} tool${selectedToolIds.size !== 1 ? "s" : ""})`
-              : newToolCount === 0
-                ? "Add"
-                : `Add ${newToolCount} tool${newToolCount !== 1 ? "s" : ""}`}
+            <span>{saveButtonLabel}</span>
           </Button>
         </div>
       </div>
@@ -1905,7 +1911,8 @@ function EditKnowledgeSourcesView({
               />
             </div>
             <div className="text-xs text-muted-foreground">
-              {totalSelected} source{totalSelected !== 1 ? "s" : ""} selected
+              {totalSelected} source
+              {totalSelected !== 1 ? <span>s</span> : null} selected
             </div>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-1">

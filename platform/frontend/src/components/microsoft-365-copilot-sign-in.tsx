@@ -198,7 +198,7 @@ export function Microsoft365CopilotSignIn({
         ) : (
           <MicrosoftLogo className="mr-2 h-4 w-4" />
         )}
-        Sign in with Microsoft
+        <span>Sign in with Microsoft</span>
       </Button>
       {expired && (
         <p className="text-xs text-destructive">

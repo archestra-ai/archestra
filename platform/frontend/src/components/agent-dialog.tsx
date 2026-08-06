@@ -9,6 +9,7 @@ import {
   BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
+  DUAL_LLM_DEFAULT_MAX_ROUNDS,
   E2eTestId,
   getDocsUrl,
   getResourceForAgentType,
@@ -28,6 +29,7 @@ import {
   CheckIcon,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   Globe,
   InfoIcon,
   Loader2,
@@ -62,7 +64,6 @@ import {
   type AgentToolsEditorRef,
   type McpEnvConflict,
 } from "@/components/agent-tools-editor";
-import type { SharedPersonalPin } from "@/components/agent-tools-editor.utils";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -71,7 +72,6 @@ import {
   formatPermissionRequirement,
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
-import { SharePersonalCredentialsDialog } from "@/components/share-personal-credentials-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -133,13 +133,25 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
+  UserShareField,
+  useUserShareChoice,
+  useUserShareOption,
+} from "@/components/user-share-field";
+import {
   VisibilitySelector as SharedVisibilitySelector,
   type VisibilityOption,
 } from "@/components/visibility-selector";
+
+/**
+ * What the agent visibility control offers. Wider than the stored scope: an
+ * agent shared with named people persists as `personal` plus grants.
+ */
+type AgentVisibilityChoice = AgentScope | "user";
+
 import {
   useCreateProfile,
+  useDelegationTargetAgents,
   useDeleteProfile,
-  useInternalAgents,
   useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
@@ -244,6 +256,10 @@ function getBuiltInAgentConfigForSave(params: {
     case BUILT_IN_AGENT_IDS.APP_RUNTIME:
       return {
         name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
+      };
+    case BUILT_IN_AGENT_IDS.ADVISOR:
+      return {
+        name: BUILT_IN_AGENT_IDS.ADVISOR,
       };
     default: {
       // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
@@ -364,8 +380,15 @@ function SubagentsEditor({
   showCreateAction = true,
   tone = "delegate",
 }: SubagentsEditorProps) {
-  // Filter out current agent from available agents
-  const filteredAgents = availableAgents.filter((a) => a.id !== currentAgentId);
+  // Filter out the current agent, and the advisor: its own switch below owns
+  // that decision, and listing it here would offer a second way to change the
+  // same thing — one that reads as the opposite in Auto mode, where this list
+  // is what an agent may *not* delegate to.
+  const filteredAgents = availableAgents.filter(
+    (a) =>
+      a.id !== currentAgentId &&
+      a.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR,
+  );
 
   const handleToggle = (agentId: string) => {
     if (selectedAgentIds.includes(agentId)) {
@@ -489,6 +512,8 @@ export function AccessLevelSelector({
   agentType,
   teams,
   assignedTeamIds,
+  assignedUserIds = [],
+  onUserIdsChange,
   onTeamIdsChange,
   hasNoAvailableTeams,
   showTeamRequired,
@@ -502,17 +527,38 @@ export function AccessLevelSelector({
   agentType: AgentType;
   teams: Array<{ id: string; name: string }> | undefined;
   assignedTeamIds: string[];
+  /**
+   * Per-user sharing. Omitted by surfaces that cannot persist grants (the
+   * clone dialog), which then simply do not offer the option — better than
+   * showing a control whose selection would be silently dropped.
+   */
+  assignedUserIds?: string[];
+  onUserIdsChange?: (ids: string[]) => void;
   onTeamIdsChange: (ids: string[]) => void;
   hasNoAvailableTeams: boolean;
   showTeamRequired: boolean;
 }) {
   const scopeOptions = getScopeOptions(agentType);
   const canShareWithTeams = isAdmin || isTeamAdmin;
+  const userOption = useUserShareOption<AgentVisibilityChoice>("user");
+  // An agent shared with named people stays `personal` in storage and carries
+  // grants beside it, so "user" is a synthetic choice rather than a scope.
+  const { isUserChoice, selectChoice } = useUserShareChoice<AgentScope>({
+    scope,
+    personalScope: "personal",
+    userIds: assignedUserIds,
+    onScopeChange,
+    onUserIdsChange,
+  });
+  const choice: AgentVisibilityChoice = isUserChoice ? "user" : scope;
 
   const isOptionDisabled = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return true;
     if (value === "team" && (!canShareWithTeams || !canReadTeams)) return true;
+    // Nothing to share with: keep the option visible but inert and explained,
+    // rather than offering a choice that cannot be completed.
+    if (value === "team" && hasNoAvailableTeams) return true;
     if (value === "org" && !isAdmin) return true;
     return false;
   };
@@ -532,31 +578,78 @@ export function AccessLevelSelector({
       return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
     if (value === "team" && !canShareWithTeams)
       return `You need ${resourceName}:team-admin permission to share with teams`;
+    if (value === "team" && hasNoAvailableTeams)
+      return "There are no teams to share with yet. Create one from Settings → Teams.";
     if (value === "org" && !isAdmin)
       return `You need ${resourceName}:admin permission to make this available org-wide`;
     return "";
   };
 
-  const options: VisibilityOption<AgentScope>[] = scopeOptions.map(
-    (option) => ({
+  /** The short note beside the label; the reason itself sits under it. */
+  const getDisabledLabel = (value: string) => {
+    if (value === "personal") return "Unavailable";
+    if (value === "team" && (!canReadTeams || !canShareWithTeams))
+      return "Requires permission";
+    if (value === "team" && hasNoAvailableTeams) return "No teams available";
+    if (value === "org") return "Requires permission";
+    return undefined;
+  };
+
+  const scopedOptions: VisibilityOption<AgentVisibilityChoice>[] =
+    scopeOptions.map((option) => ({
       ...option,
       disabled: isOptionDisabled(option.value),
+      disabledLabel: isOptionDisabled(option.value)
+        ? getDisabledLabel(option.value)
+        : undefined,
       disabledReason: isOptionDisabled(option.value)
         ? getDisabledReason(option.value)
         : undefined,
-    }),
+    }));
+  // Users sits next to Personal: both keep the agent out of team/org reach.
+  const personalIndex = scopedOptions.findIndex(
+    (option) => option.value === "personal",
   );
+  // Sharing with named people is stored as `personal` plus grants, so it is
+  // bound by whatever bars Personal itself. Without this an already-shared
+  // agent offered the option and then refused the save.
+  const personalLocked = isOptionDisabled("personal");
+  const userChoiceOption: VisibilityOption<AgentVisibilityChoice> =
+    personalLocked
+      ? {
+          ...userOption,
+          disabled: true,
+          disabledLabel: "Unavailable",
+          disabledReason:
+            "Sharing with named people keeps this personal, and a shared agent cannot be made personal again.",
+        }
+      : userOption;
+  const options: VisibilityOption<AgentVisibilityChoice>[] =
+    personalIndex === -1 || !onUserIdsChange
+      ? scopedOptions
+      : [
+          ...scopedOptions.slice(0, personalIndex + 1),
+          userChoiceOption,
+          ...scopedOptions.slice(personalIndex + 1),
+        ];
 
   return (
     <SharedVisibilitySelector
       heading={`Who can use this ${agentTypeDisplayName[agentType] || "agent"}`}
-      value={scope}
+      value={choice}
       options={options}
-      onValueChange={onScopeChange}
+      onValueChange={selectChoice}
     >
-      {scope === "team" && (
+      {choice === "user" && onUserIdsChange && (
+        <UserShareField
+          value={assignedUserIds}
+          onValueChange={onUserIdsChange}
+        />
+      )}
+
+      {choice === "team" && (
         <div className="space-y-2">
-          <Label>Teams{showTeamRequired && " *"}</Label>
+          <Label>Teams{showTeamRequired && <span> *</span>}</Label>
           <MultiSelectCombobox
             disabled={
               !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
@@ -627,7 +720,7 @@ export function AgentDialog({
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
-  const { data: allInternalAgents = [] } = useInternalAgents({
+  const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: shouldLoadInternalAgents && !!canReadAgents,
   });
   const createAgent = useCreateProfile();
@@ -730,6 +823,9 @@ export function AgentDialog({
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
     useState<string[]>([]);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
+  // People the agent is shared with by name. Stored beside the `personal`
+  // scope, so the control below reads (scope, userIds) as a fourth choice.
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
@@ -752,18 +848,14 @@ export function AgentDialog({
   const agentEnvironmentName =
     environments.find((env) => env.id === environmentId)?.name ?? null;
   const [mcpEnvConflicts, setMcpEnvConflicts] = useState<McpEnvConflict[]>([]);
-  // Active tools pinned to a personal connection that would be shared with every
-  // caller once this agent is team/org scope. Reported live by the tools editor.
-  const [sharedPersonalPins, setSharedPersonalPins] = useState<
-    SharedPersonalPin[]
-  >([]);
-  const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
     useState(false);
-  const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
+  const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState(
+    String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
+  );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
@@ -821,6 +913,7 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN;
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
+  const isAdvisorBuiltIn = builtInAgentName === BUILT_IN_AGENT_IDS.ADVISOR;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "mcp_gateway" ||
@@ -837,7 +930,10 @@ export function AgentDialog({
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
     isPolicyConfigBuiltIn ||
-    isDualLlmMainBuiltIn;
+    isDualLlmMainBuiltIn ||
+    // The advisor is the one built-in that exists per environment, so which one
+    // you are editing is not otherwise visible on the form.
+    isAdvisorBuiltIn;
   const showToolsAndSubagents =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
@@ -865,6 +961,7 @@ export function AgentDialog({
             systemPrompt: agentData.systemPrompt || "",
             suggestedPrompts: agentData.suggestedPrompts,
             assignedTeamIds: agentData.teams.map((t) => t.id),
+            assignedUserIds: agentData.users?.map((u) => u.id) ?? [],
             labels: agentData.labels,
             considerContextUntrusted: agentData.considerContextUntrusted,
             llmApiKeyId: agentData.llmApiKeyId,
@@ -883,7 +980,7 @@ export function AgentDialog({
               agentData.builtInAgentConfig?.name ===
               BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN
                 ? String(agentData.builtInAgentConfig.maxRounds)
-                : "5",
+                : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
             toolExposureMode: agentData.toolExposureMode ?? "full",
             accessAllTools: agentData.accessAllTools ?? false,
@@ -899,6 +996,7 @@ export function AgentDialog({
             systemPrompt: isInternalAgent ? DEFAULT_AGENT_SYSTEM_PROMPT : "",
             suggestedPrompts: [],
             assignedTeamIds: [],
+            assignedUserIds: [],
             labels: [],
             considerContextUntrusted: false,
             llmApiKeyId: null,
@@ -909,7 +1007,7 @@ export function AgentDialog({
             connectorIds: [],
             scope: "personal",
             autoConfigureOnToolDiscovery: false,
-            dualLlmMaxRounds: "5",
+            dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
@@ -927,6 +1025,7 @@ export function AgentDialog({
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
       setAssignedTeamIds(nextValues.assignedTeamIds);
+      setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
       setConsiderContextUntrusted(nextValues.considerContextUntrusted);
       setIdentityProviderId(nextValues.identityProviderId);
@@ -938,10 +1037,6 @@ export function AgentDialog({
       setToolExposureMode(nextValues.toolExposureMode);
       setAccessAllTools(nextValues.accessAllTools);
       setAccessAllSubagents(nextValues.accessAllSubagents);
-      // Clear cross-agent leftovers; the tools editor re-reports this agent's
-      // pins once its credentials load.
-      setSharedPersonalPins([]);
-      setShowShareConfirm(false);
       setAutoConfigureOnToolDiscovery(nextValues.autoConfigureOnToolDiscovery);
       setDualLlmMaxRounds(nextValues.dualLlmMaxRounds);
       if (!agentData) {
@@ -986,6 +1081,134 @@ export function AgentDialog({
       );
     }
   }, [open, agentId, currentExcludedSubagentIds, subagentExclusionsFetched]);
+
+  // One advisor per environment, because delegation never crosses environments:
+  // the switch has to target the one this agent could actually reach.
+  const advisorAgentId = allInternalAgents.find(
+    (a) =>
+      a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
+      (a.environmentId ?? null) === (environmentId ?? null),
+  )?.id;
+
+  // Consulting the advisor is off until someone turns it on, and a new agent
+  // starts in Auto mode where every accessible agent is reachable. Seeding the
+  // disabled set is what makes the switch's "off" true rather than decorative.
+  const advisorSeededRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      advisorSeededRef.current = false;
+      return;
+    }
+    if (agentId || !advisorAgentId || advisorSeededRef.current) return;
+    advisorSeededRef.current = true;
+    setDisabledSubagentIds((ids) =>
+      ids.includes(advisorAgentId) ? ids : [...ids, advisorAgentId],
+    );
+  }, [open, agentId, advisorAgentId]);
+
+  // One switch over two representations: Auto mode reaches every agent unless
+  // excluded, Custom mode reaches only what is listed. The reader should not
+  // have to know which is in play to decide whether the advisor is on.
+  const advisorEnabled = advisorAgentId
+    ? accessAllSubagents
+      ? !disabledSubagentIds.includes(advisorAgentId)
+      : selectedDelegationTargetIds.includes(advisorAgentId)
+    : false;
+
+  // The advisor is kept out of both lists, so it must be kept out of their
+  // counts too — a count that includes something invisible reads as a bug.
+  const delegationTargetCount = selectedDelegationTargetIds.filter(
+    (id) => id !== advisorAgentId,
+  ).length;
+  const disabledSubagentCount = disabledSubagentIds.filter(
+    (id) => id !== advisorAgentId,
+  ).length;
+
+  const listedWhen = (
+    ids: string[],
+    agentId: string | undefined,
+    listed: boolean,
+  ) => {
+    if (!agentId) return ids;
+    if (listed) {
+      return ids.includes(agentId) ? ids : [...ids, agentId];
+    }
+    return ids.filter((id) => id !== agentId);
+  };
+
+  const advisorListedWhen = (ids: string[], listed: boolean) =>
+    listedWhen(ids, advisorAgentId, listed);
+
+  // Save writes both sets whatever the mode, and an Auto-mode agent driven by a
+  // system or token flow resolves its targets from the explicit set rather than
+  // the Auto surface. So the advisor has to match the switch in both sets, not
+  // just the one the current mode reads — a grant stranded in the other set is
+  // a live consultation nothing in the dialog can show or clear.
+  // Another environment's advisor can only have been left by an earlier
+  // configuration: it is undispatchable from here, invisible in the dialog, and
+  // would come alive the moment this agent moved to that environment.
+  const foreignAdvisorIds = allInternalAgents
+    .filter(
+      (a) =>
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
+        a.id !== advisorAgentId,
+    )
+    .map((a) => a.id);
+  const withoutForeignAdvisors = (ids: string[]) =>
+    ids.filter((id) => !foreignAdvisorIds.includes(id));
+
+  const delegationTargetIdsToSave = advisorListedWhen(
+    withoutForeignAdvisors(selectedDelegationTargetIds),
+    advisorEnabled,
+  );
+  const disabledSubagentIdsToSave = advisorListedWhen(
+    withoutForeignAdvisors(disabledSubagentIds),
+    !advisorEnabled,
+  );
+
+  const writeAdvisorEnabled = (enabled: boolean) => {
+    if (!advisorAgentId) return;
+    setDisabledSubagentIds((ids) => advisorListedWhen(ids, !enabled));
+    setSelectedDelegationTargetIds((ids) => advisorListedWhen(ids, enabled));
+  };
+
+  // Each mode reads the advisor from its own set, so a mode change would
+  // otherwise surface an unrelated value and appear to flip the switch on its
+  // own. Carry the current setting across instead.
+  const handleSubagentModeChange = (value: string) => {
+    setAccessAllSubagents(value === "auto");
+    writeAdvisorEnabled(advisorEnabled);
+  };
+
+  // Each environment has its own advisor, so moving the agent has to move the
+  // setting onto that environment's row and retire the old one from both sets
+  // — a grant left pointing at another environment's advisor can never be
+  // dispatched, and nothing in the dialog would show it.
+  const handleEnvironmentChange = (nextEnvironmentId: string | null) => {
+    const enabled = advisorEnabled;
+    const previousAdvisorId = advisorAgentId;
+    const nextAdvisorId = allInternalAgents.find(
+      (a) =>
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
+        (a.environmentId ?? null) === nextEnvironmentId,
+    )?.id;
+
+    setEnvironmentId(nextEnvironmentId);
+    setDisabledSubagentIds((ids) =>
+      listedWhen(
+        listedWhen(ids, previousAdvisorId, false),
+        nextAdvisorId,
+        !enabled,
+      ),
+    );
+    setSelectedDelegationTargetIds((ids) =>
+      listedWhen(
+        listedWhen(ids, previousAdvisorId, false),
+        nextAdvisorId,
+        enabled,
+      ),
+    );
+  };
 
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
@@ -1196,6 +1419,7 @@ export function AgentDialog({
               accessAllSubagents,
             }),
             teams: assignedTeamIds,
+            users: assignedUserIds,
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
@@ -1245,6 +1469,7 @@ export function AgentDialog({
             accessAllSubagents,
           }),
           teams: assignedTeamIds,
+          users: assignedUserIds,
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
@@ -1297,12 +1522,12 @@ export function AgentDialog({
         savedAgentId &&
         hasUnsavedChanges(
           [...currentDelegations.map((d) => d.id)].sort(),
-          [...selectedDelegationTargetIds].sort(),
+          [...delegationTargetIdsToSave].sort(),
         )
       ) {
         await syncDelegations.mutateAsync({
           agentId: savedAgentId,
-          targetAgentIds: selectedDelegationTargetIds,
+          targetAgentIds: delegationTargetIdsToSave,
         });
       }
 
@@ -1313,12 +1538,12 @@ export function AgentDialog({
         savedAgentId &&
         hasUnsavedChanges(
           [...(currentSubagentExclusions?.excludedSubagentIds ?? [])].sort(),
-          [...disabledSubagentIds].sort(),
+          [...disabledSubagentIdsToSave].sort(),
         )
       ) {
         await syncSubagentExclusions.mutateAsync({
           agentId: savedAgentId,
-          exclusions: { excludedSubagentIds: disabledSubagentIds },
+          exclusions: { excludedSubagentIds: disabledSubagentIdsToSave },
         });
       }
 
@@ -1338,6 +1563,7 @@ export function AgentDialog({
     systemPrompt,
     suggestedPrompts,
     assignedTeamIds,
+    assignedUserIds,
     labels,
     considerContextUntrusted,
     llmApiKeyId,
@@ -1356,10 +1582,10 @@ export function AgentDialog({
     isInternalAgent,
     builtInAgentName,
     showSecurity,
-    selectedDelegationTargetIds,
+    delegationTargetIdsToSave,
     currentDelegations,
     currentSubagentExclusions,
-    disabledSubagentIds,
+    disabledSubagentIdsToSave,
     updateAgent,
     createAgent,
     syncDelegations,
@@ -1384,35 +1610,8 @@ export function AgentDialog({
       toast.error("Please select at least one team");
       return;
     }
-    // Scoping a personal agent up to team/org shares any personal static pins
-    // with every caller; confirm (defaulting to resolve-at-call-time) first.
-    // Gated to the actual personal→shared transition (an already-shared agent's
-    // pins were confirmed when set) and to Custom mode (Auto resolves per caller).
-    const isScopingUpFromPersonal =
-      agent?.scope === "personal" && scope !== "personal";
-    if (isScopingUpFromPersonal && !accessAllTools) {
-      // Fail closed while the pin set is still loading — an incomplete "no
-      // personal pins" must not silently ship a shared personal credential.
-      if (agentToolsEditorRef.current?.isCredentialClassificationLoading()) {
-        toast.error("Still loading connections — try saving again.");
-        return;
-      }
-      if (sharedPersonalPins.length > 0) {
-        setShowShareConfirm(true);
-        return;
-      }
-    }
     await performSave();
-  }, [
-    name,
-    isAdmin,
-    scope,
-    agent,
-    accessAllTools,
-    assignedTeamIds,
-    sharedPersonalPins,
-    performSave,
-  ]);
+  }, [name, isAdmin, scope, assignedTeamIds, performSave]);
 
   // Detect unsaved edits so any close path (Esc, backdrop, the X button, or the
   // Cancel button) prompts before discarding. Covers every form field held here
@@ -1426,6 +1625,7 @@ export function AgentDialog({
     systemPrompt,
     suggestedPrompts,
     assignedTeamIds,
+    assignedUserIds,
     labels,
     considerContextUntrusted,
     llmApiKeyId,
@@ -1518,7 +1718,7 @@ export function AgentDialog({
             onSubmit={handleSave}
           >
             <fieldset disabled={readOnly} className="contents">
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-4">
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 pb-4 space-y-4">
                 {agentType === "profile" && (
                   <Alert variant="warning">
                     <AlertTriangle className="h-4 w-4" />
@@ -1579,9 +1779,15 @@ export function AgentDialog({
                       agentType === "mcp_gateway") && (
                       <EnvironmentSelector
                         value={environmentId ?? null}
-                        onChange={setEnvironmentId}
+                        onChange={handleEnvironmentChange}
                         resource={getResourceForAgentType(agentType)}
-                        helpText={environmentHelpText}
+                        helpText={
+                          isAdvisorBuiltIn
+                            ? "Each environment has its own advisor, reachable only by the agents in that environment. Set a model on each one you want consulted."
+                            : environmentHelpText
+                        }
+                        // Moving it would strand every agent that consults it.
+                        disabled={isAdvisorBuiltIn}
                       />
                     )}
 
@@ -1965,59 +2171,11 @@ export function AgentDialog({
                             agentEnvironmentId={environmentId ?? null}
                             agentEnvironmentName={agentEnvironmentName}
                             onConflictsChange={setMcpEnvConflicts}
-                            onSharedPersonalPinsChange={setSharedPersonalPins}
                             openComboboxOnMount={openToolsCombobox}
                             includeAppCatalogs={shouldOfferAppCatalogs(
                               agentType,
                             )}
                           />
-                          {agent?.scope === "personal" &&
-                            scope !== "personal" &&
-                            !accessAllTools &&
-                            sharedPersonalPins.length > 0 && (
-                              <Alert variant="warning" className="mt-3">
-                                <AlertTriangle className="h-4 w-4" />
-                                <AlertTitle>
-                                  {sharedPersonalPins.length === 1
-                                    ? "1 connection"
-                                    : `${sharedPersonalPins.length} connections`}{" "}
-                                  will be shared with everyone
-                                </AlertTitle>
-                                <AlertDescription>
-                                  <p>
-                                    Every user of this agent will connect as the
-                                    owner shown, no matter who is calling:{" "}
-                                    <span className="font-medium text-foreground">
-                                      {sharedPersonalPins
-                                        .map(
-                                          (pin) =>
-                                            `${pin.mcpName} (${pin.isCurrentUser ? "you" : pin.ownerEmail})`,
-                                        )
-                                        .join(", ")}
-                                    </span>
-                                  </p>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="mt-2"
-                                    onClick={() =>
-                                      agentToolsEditorRef.current?.convertPersonalPinsToDynamic(
-                                        Array.from(
-                                          new Set(
-                                            sharedPersonalPins.map(
-                                              (pin) => pin.catalogId,
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    }
-                                  >
-                                    Resolve at call time
-                                  </Button>
-                                </AlertDescription>
-                              </Alert>
-                            )}
                         </div>
                         <div className="space-y-2">
                           <p className="text-sm text-muted-foreground">
@@ -2040,8 +2198,8 @@ export function AgentDialog({
                                 <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                               </Button>
                               <p className="text-xs text-muted-foreground">
-                                Configure embedding and reranking to use
-                                knowledge sources.
+                                Configure an embedding model to use knowledge
+                                sources.
                                 {canAccessKnowledgeSettings && (
                                   <>
                                     {" "}
@@ -2088,9 +2246,19 @@ export function AgentDialog({
                                     const totalSelected =
                                       knowledgeBaseIds.length +
                                       connectorIds.length;
-                                    return totalSelected === 0
-                                      ? "Select connectors or knowledge bases"
-                                      : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
+                                    return totalSelected === 0 ? (
+                                      <span>
+                                        Select connectors or knowledge bases
+                                      </span>
+                                    ) : (
+                                      <span>
+                                        {totalSelected} source
+                                        {totalSelected > 1 ? (
+                                          <span>s</span>
+                                        ) : null}{" "}
+                                        selected
+                                      </span>
+                                    );
                                   })()}
                                   <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                                 </Button>
@@ -2217,15 +2385,19 @@ export function AgentDialog({
                                                   {connector.name}
                                                 </div>
                                                 <div className="truncate text-xs text-muted-foreground">
-                                                  {isEnvIncompatible
-                                                    ? "Different environment"
-                                                    : connector.description || (
-                                                        <span className="capitalize">
-                                                          {
-                                                            connector.connectorType
-                                                          }
-                                                        </span>
-                                                      )}
+                                                  {isEnvIncompatible ? (
+                                                    <span>
+                                                      Different environment
+                                                    </span>
+                                                  ) : connector.description ? (
+                                                    <span>
+                                                      {connector.description}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="capitalize">
+                                                      {connector.connectorType}
+                                                    </span>
+                                                  )}
                                                 </div>
                                               </div>
                                               <div className="ml-2 shrink-0">
@@ -2290,9 +2462,7 @@ export function AgentDialog({
                     <div className="space-y-2">
                       <Tabs
                         value={accessAllSubagents ? "auto" : "custom"}
-                        onValueChange={(value) =>
-                          setAccessAllSubagents(value === "auto")
-                        }
+                        onValueChange={handleSubagentModeChange}
                       >
                         <TabsList className="grid w-full grid-cols-2">
                           <TabsTrigger value="auto">Auto</TabsTrigger>
@@ -2317,7 +2487,7 @@ export function AgentDialog({
                           </ul>
                           <div className="space-y-1.5">
                             <p className="text-sm text-muted-foreground">
-                              Disabled subagents ({disabledSubagentIds.length})
+                              Disabled subagents ({disabledSubagentCount})
                             </p>
                             <SubagentsEditor
                               availableAgents={allInternalAgents}
@@ -2338,13 +2508,54 @@ export function AgentDialog({
                             {agentTypeDisplayName[agentType] || "agent"}.
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Subagents ({selectedDelegationTargetIds.length})
+                            Subagents ({delegationTargetCount})
                           </p>
                           <SubagentsEditor
                             availableAgents={allInternalAgents}
                             selectedAgentIds={selectedDelegationTargetIds}
                             onSelectionChange={setSelectedDelegationTargetIds}
                             currentAgentId={agent?.id}
+                          />
+                        </div>
+                      )}
+                      {/* Outside the Auto/Custom split on purpose: whether this
+                        agent can consult the advisor is one decision, even
+                        though the two modes record it differently. */}
+                      {advisorAgentId && (
+                        <div className="flex items-center justify-between gap-4 border-t pt-4">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="consult-advisor">
+                              Enable Advisor
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Pairs this{" "}
+                              {agentTypeDisplayName[agentType] || "agent"} with
+                              a stronger model it consults at key moments. Those
+                              calls are billed at the advisor model&apos;s
+                              rates, and usually cost less than running the
+                              stronger model throughout.{" "}
+                              {/* New tab: this dialog holds unsaved edits that
+                                navigating away would discard. */}
+                              <Link
+                                href={`/agents?edit=${advisorAgentId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 underline underline-offset-4"
+                              >
+                                Edit the Advisor agent
+                                <span className="sr-only">
+                                  (opens in new tab)
+                                </span>
+                                <ExternalLink aria-hidden className="h-3 w-3" />
+                              </Link>
+                              .
+                            </p>
+                          </div>
+                          <Switch
+                            id="consult-advisor"
+                            checked={advisorEnabled}
+                            onCheckedChange={writeAdvisorEnabled}
+                            data-testid={E2eTestId.ConsultAdvisorSwitch}
                           />
                         </div>
                       )}
@@ -2384,6 +2595,8 @@ export function AgentDialog({
                         canReadTeams={!!canReadTeams}
                         assignedTeamIds={assignedTeamIds}
                         onTeamIdsChange={setAssignedTeamIds}
+                        assignedUserIds={assignedUserIds}
+                        onUserIdsChange={setAssignedUserIds}
                         hasNoAvailableTeams={hasNoAvailableTeams}
                         showTeamRequired={true}
                       />
@@ -2417,9 +2630,12 @@ export function AgentDialog({
                             ) : (
                               <p className="text-sm text-muted-foreground">
                                 {selectedApiKey &&
-                                selectedApiKey.scope !== "org"
-                                  ? "Selected key will be available to everyone who has access to this agent."
-                                  : null}
+                                selectedApiKey.scope !== "org" ? (
+                                  <span>
+                                    Selected key will be available to everyone
+                                    who has access to this agent.
+                                  </span>
+                                ) : null}
                               </p>
                             )}
                             <div className="flex flex-wrap items-center gap-2">
@@ -2726,8 +2942,8 @@ export function AgentDialog({
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>
                   {mcpEnvConflicts.length} MCP server
-                  {mcpEnvConflicts.length === 1 ? "" : "s"} not in this
-                  environment
+                  {mcpEnvConflicts.length === 1 ? null : <span>s</span>} not in
+                  this environment
                 </AlertTitle>
                 <AlertDescription>
                   <p>
@@ -2773,7 +2989,7 @@ export function AgentDialog({
                     updateAgent.isPending) && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  {agent ? "Update" : "Create"}
+                  <span>{agent ? "Update" : "Create"}</span>
                 </Button>
               )}
             </DialogStickyFooter>
@@ -2784,26 +3000,6 @@ export function AgentDialog({
         open={guard.confirmOpen}
         onKeepEditing={guard.keepEditing}
         onDiscard={guard.discardChanges}
-      />
-      <SharePersonalCredentialsDialog
-        open={showShareConfirm}
-        pins={sharedPersonalPins.map((pin) => ({
-          mcpName: pin.mcpName,
-          ownerEmail: pin.ownerEmail,
-          isCurrentUser: pin.isCurrentUser,
-        }))}
-        onResolveDynamic={() => {
-          setShowShareConfirm(false);
-          agentToolsEditorRef.current?.convertPersonalPinsToDynamic(
-            Array.from(new Set(sharedPersonalPins.map((pin) => pin.catalogId))),
-          );
-          void performSave();
-        }}
-        onShareAsIs={() => {
-          setShowShareConfirm(false);
-          void performSave();
-        }}
-        onCancel={() => setShowShareConfirm(false)}
       />
     </>
   );
@@ -2816,6 +3012,7 @@ type AgentFormFields = {
   systemPrompt: string;
   suggestedPrompts: Array<{ summaryTitle: string; prompt: string }>;
   assignedTeamIds: string[];
+  assignedUserIds: string[];
   labels: ProfileLabel[];
   considerContextUntrusted: boolean;
   llmApiKeyId: string | null;

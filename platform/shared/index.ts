@@ -23,6 +23,7 @@ export * from "./interactions";
 export * from "./knowledge-base";
 export * from "./labels";
 export * from "./linked-idp-auth";
+export * from "./mcp-executed-as";
 export * from "./mcp-extensions";
 export * from "./mcp-orchestrator";
 export * from "./mcp-server-config";

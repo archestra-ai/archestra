@@ -1363,6 +1363,15 @@ describe("run_tool", () => {
     expect(text).toContain("search_tools");
     expect(text).not.toContain("not enabled for this conversation");
     expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    // A refusal never reached an upstream tool: the tool_state envelope tells
+    // trusted-data evaluation not to flip the session over platform text.
+    expect(result._meta).toMatchObject({
+      archestraError: {
+        type: "tool_state",
+        code: "unknown_tool",
+        toolName: "giphy__image_search_tool",
+      },
+    });
   });
 
   test("recovery message wins over the policy refusal when the agent has other tools", async ({

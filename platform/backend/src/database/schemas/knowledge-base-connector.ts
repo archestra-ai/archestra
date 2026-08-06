@@ -1,4 +1,5 @@
 import { DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -21,8 +22,9 @@ import type { KnowledgeSourceVisibility } from "@/types/knowledge-base";
 import environmentsTable from "./environment";
 import knowledgeBasesTable from "./knowledge-base";
 import secretTable from "./secret";
+import { softDeletablePgTable } from "./soft-deletable-table";
 
-const knowledgeBaseConnectorsTable = pgTable(
+const knowledgeBaseConnectorsTable = softDeletablePgTable(
   "knowledge_base_connectors",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -93,12 +95,14 @@ const knowledgeBaseConnectorsTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    index("knowledge_base_connectors_organization_id_idx").on(
-      table.organizationId,
-    ),
-    index("knowledge_base_connectors_environment_id_idx").on(
-      table.environmentId,
-    ),
+    // Partial: every read of this table filters `deleted_at IS NULL`, so both
+    // indexes only ever need the active rows.
+    index("knowledge_base_connectors_organization_id_idx")
+      .on(table.organizationId)
+      .where(sql`deleted_at IS NULL`),
+    index("knowledge_base_connectors_environment_id_idx")
+      .on(table.environmentId)
+      .where(sql`deleted_at IS NULL`),
   ],
 );
 

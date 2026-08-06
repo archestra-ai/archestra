@@ -1,4 +1,8 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+  type archestraApiTypes,
+  DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+} from "@archestra/shared";
 
 type Config = archestraApiTypes.GetConfigResponses["200"];
 
@@ -29,7 +33,9 @@ export function makeConfig(
       betaEnabled: false,
       orchestratorK8sRuntime: false,
       sandbox: false,
-      sandboxArtifactBytesLimit: 16 * 1024 * 1024,
+      sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+      chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+      apiBodyLimitBytes: 70 * 1024 * 1024,
       byosEnabled: false,
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,
@@ -49,7 +55,9 @@ export function makeConfig(
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,
       hackathonRecorderEnabled: true,
-      hackathonRecorderOverrideActive: false,
+      // Off by default, exactly as a real deployment has it.
+      hackathonVideoDownloadEnabled: false,
+      hackathonMaxFinalCutMs: APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
       hackathonGalleryRepo: null,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
@@ -68,6 +76,7 @@ export function makePublicConfig(
   return {
     disableBasicAuth: false,
     disableInvitations: false,
+    disableImpersonation: false,
     devAutoLoginEnabled: false,
     enterpriseCoreActive: false,
     mcpSandboxDomain: null,

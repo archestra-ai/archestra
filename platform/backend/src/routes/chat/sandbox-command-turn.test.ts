@@ -202,7 +202,11 @@ describe("POST /api/chat sandbox command turn", () => {
     expect(toolParts).toHaveLength(1);
     expect(toolParts[0].state).toBe("output-available");
     expect(toolParts[0].input).toEqual({ command: "echo hi" });
-    expect(typeof toolParts[0].output).toBe("string");
+    // Tool output carries the identity the call ran as alongside its text, so
+    // it is the same { content, _meta } shape every MCP tool result has.
+    expect(toolParts[0].output).toMatchObject({
+      content: expect.stringContaining("hi"),
+    });
     expect(mockRunSandboxCommand).toHaveBeenCalledTimes(1);
     expect(mockRunSandboxCommand.mock.calls[0][0].command).toBe("echo hi");
   });
@@ -280,7 +284,9 @@ describe("POST /api/chat sandbox command turn", () => {
     const toolParts = toolPartsOf(assistant as ChatMessage);
     expect(toolParts).toHaveLength(1);
     expect(toolParts[0].state).toBe("output-available");
-    expect(typeof toolParts[0].output).toBe("string");
+    expect(toolParts[0].output).toMatchObject({
+      content: expect.stringContaining("engine unreachable"),
+    });
   });
 
   test("a marked message with multiple text parts is not executed", async () => {

@@ -1,6 +1,9 @@
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
+import db, { schema } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
@@ -21,10 +24,14 @@ describe("organization routes", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    // The default-role field decides what future accounts are provisioned as,
+    // so the route holds the caller to the roles they could grant themselves.
+    // That reads the caller's role off their member record.
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -157,6 +164,30 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects a default role more privileged than the caller", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      // An editor holds organizationSettings:update, which is what gates this
+      // route — but not the member/invitation/access-control permissions that
+      // make up admin. Naming admin here would provision every future account
+      // as an administrator, so it has to be refused.
+      const editor = await makeUser();
+      await makeMember(editor.id, organizationId, { role: "editor" });
+      user = editor;
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { defaultMemberRole: "admin" },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(
+        await OrganizationModel.getDefaultMemberRole(organizationId),
+      ).not.toBe("admin");
     });
   });
 
@@ -1124,15 +1155,167 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/auth-settings", () => {
-    test("updates showTwoFactor toggle", async () => {
+    test("updates the requireTwoFactor toggle (enterprise active)", async () => {
+      enterpriseTier.setUserCountForTesting(0); // small-team tier = licensed
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/auth-settings",
-        payload: { showTwoFactor: true },
+        payload: { requireTwoFactor: true },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().showTwoFactor).toBe(true);
+      expect(response.json().requireTwoFactor).toBe(true);
+    });
+
+    test("refuses requireTwoFactor and session caps without an enterprise license", async () => {
+      const originalEnvFlag = config.enterpriseFeatures.core;
+      Object.defineProperty(config.enterpriseFeatures, "core", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(9999); // over the free threshold
+      try {
+        const requireResponse = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/auth-settings",
+          payload: { requireTwoFactor: true },
+        });
+        expect(requireResponse.statusCode).toBe(403);
+        expect(requireResponse.json().error.message).toContain("enterprise");
+
+        const capResponse = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/auth-settings",
+          payload: { sessionMaxAgeSeconds: 86_400 },
+        });
+        expect(capResponse.statusCode).toBe(403);
+
+        // Turning the requirement OFF stays possible without a license.
+        const disableResponse = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/auth-settings",
+          payload: { requireTwoFactor: false },
+        });
+        expect(disableResponse.statusCode).toBe(200);
+      } finally {
+        enterpriseTier.setUserCountForTesting(0);
+        Object.defineProperty(config.enterpriseFeatures, "core", {
+          value: originalEnvFlag,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
+
+    test("refuses to require 2FA when email/password sign-in is disabled", async () => {
+      // Enrollment confirms a password; on an SSO-only deployment the
+      // requirement would be unsatisfiable and lock every member out.
+      enterpriseTier.setUserCountForTesting(0);
+      const original = config.auth.disableBasicAuth;
+      Object.defineProperty(config.auth, "disableBasicAuth", {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+      try {
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/auth-settings",
+          payload: { requireTwoFactor: true },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.message).toContain("identity provider");
+      } finally {
+        Object.defineProperty(config.auth, "disableBasicAuth", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
+
+    test("turning requireTwoFactor off revokes nothing", async ({
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      enterpriseTier.setUserCountForTesting(0);
+      const notEnrolled = await makeUser();
+      await makeMember(notEnrolled.id, organizationId, { role: "member" });
+      const session = await makeSession(notEnrolled.id);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { requireTwoFactor: false },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const [row] = await db
+        .select()
+        .from(schema.sessionsTable)
+        .where(eq(schema.sessionsTable.id, session.id));
+      expect(row).toBeDefined();
+    });
+
+    test("rejects out-of-range session lifetimes and accepts null (no cap)", async () => {
+      enterpriseTier.setUserCountForTesting(0);
+      const tooShort = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { sessionMaxAgeSeconds: 60 },
+      });
+      expect(tooShort.statusCode).toBe(400);
+
+      const ok = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { sessionMaxAgeSeconds: 86_400 },
+      });
+      expect(ok.statusCode).toBe(200);
+      expect(ok.json().sessionMaxAgeSeconds).toBe(86_400);
+
+      const cleared = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { sessionMaxAgeSeconds: null },
+      });
+      expect(cleared.statusCode).toBe(200);
+      expect(cleared.json().sessionMaxAgeSeconds).toBeNull();
+    });
+
+    test("turning requireTwoFactor on revokes sessions of non-enrolled members only", async ({
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      enterpriseTier.setUserCountForTesting(0);
+      const enrolled = await makeUser({ twoFactorEnabled: true });
+      const notEnrolled = await makeUser();
+      await makeMember(enrolled.id, organizationId, { role: "member" });
+      await makeMember(notEnrolled.id, organizationId, { role: "member" });
+      const enrolledSession = await makeSession(enrolled.id);
+      const notEnrolledSession = await makeSession(notEnrolled.id);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { requireTwoFactor: true },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const [enrolledRow] = await db
+        .select()
+        .from(schema.sessionsTable)
+        .where(eq(schema.sessionsTable.id, enrolledSession.id));
+      const [notEnrolledRow] = await db
+        .select()
+        .from(schema.sessionsTable)
+        .where(eq(schema.sessionsTable.id, notEnrolledSession.id));
+      expect(enrolledRow).toBeDefined();
+      expect(notEnrolledRow).toBeUndefined();
     });
 
     test("updates the OAuth access token lifetime", async () => {

@@ -46,22 +46,27 @@ jobs:
       matrix:
         include:
           - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: ubuntu-latest
             context: ./platform
             dockerfile: ./platform/Dockerfile
             local-tag-prefix: archestra-platform
             use-build-action: true
             scan-exit-code: "true"
           - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
+            runner: ubuntu-latest
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
             local-tag-prefix: mcp-server-base
             use-build-action: false
             scan-exit-code: "true"
     steps:
+      # Standard runners ship ~14 GB free; drop the unused preinstalled
+      # toolchains so the image build + scan never run out of disk.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -82,21 +87,20 @@ jobs:
           tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/setup-blacksmith-builder
+          # Read-only: the e2e build job owns cache export for this image.
+          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          dockerfile: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          push: false
-          load: true
+          push: "false"
+          load: "true"
           tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:buildcache
 
       - name: Scan image for CVEs
         uses: ./.github/actions/scan-docker-image

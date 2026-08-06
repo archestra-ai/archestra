@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   ChatRequestSchema,
+  ChatResponseSchema,
   MAX_KEEP_ALIVE_SECONDS,
   OptionsSchema,
 } from "./api";
@@ -196,5 +197,26 @@ describe("ChatRequestSchema", () => {
       expect(parsed.logprobs).toBe(true);
       expect(parsed._debug_render_only).toBe(true);
     });
+  });
+});
+
+describe("ChatResponseSchema", () => {
+  test("accepts a tool-call reply that omits message.content", () => {
+    const result = ChatResponseSchema.safeParse({
+      model: "llama3.2",
+      message: {
+        role: "assistant",
+        tool_calls: [
+          {
+            function: {
+              name: "search",
+              arguments: { q: "hi" },
+            },
+          },
+        ],
+      },
+      done: true,
+    });
+    expect(result.success).toBe(true);
   });
 });

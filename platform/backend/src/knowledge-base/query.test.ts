@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { beforeEach, vi } from "vitest";
 import { useMswServer } from "@/test/msw";
@@ -79,6 +80,7 @@ vi.mock("@/config", async () =>
   }),
 );
 
+import db, { schema } from "@/database";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import { describe, expect, test } from "@/test";
@@ -104,6 +106,20 @@ function setupSingleQueryExpansion() {
   mockExpandQuery.mockImplementation(({ queryText }: { queryText: string }) =>
     Promise.resolve([{ queryText, weight: 1.0, type: "semantic" }]),
   );
+}
+
+/** Embedding interactions are recorded fire-and-forget, so poll for them. */
+async function waitForKbInteractions(expectedCount: number) {
+  const read = () =>
+    db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.source, "knowledge:embedding"));
+
+  await vi.waitFor(async () =>
+    expect(await read()).toHaveLength(expectedCount),
+  );
+  return read();
 }
 
 describe("QueryService", () => {
@@ -548,6 +564,7 @@ describe("QueryService", () => {
       queryText: "test query",
       chunks: expect.any(Array),
       organizationId: org.id,
+      connectorId: connector.id,
     });
     expect(results[0].content).toBe("Second result");
     expect(results[1].content).toBe("First result");
@@ -680,6 +697,58 @@ describe("QueryService", () => {
 
     vectorSearchSpy.mockRestore();
     fullTextSearchSpy.mockRestore();
+  });
+
+  test("attributes the query embedding to the connector when the query targets one", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    embeddingQueue.push(makeFakeEmbedding(1));
+
+    await queryService.query({
+      connectorIds: [connector.id],
+      organizationId: org.id,
+      queryText: "test query",
+      userAcl: ["org:*"],
+    });
+
+    const [interaction] = await waitForKbInteractions(1);
+    expect(interaction.connectorId).toBe(connector.id);
+    expect(mockExpandQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ connectorId: connector.id }),
+    );
+  });
+
+  test("leaves the query embedding unattributed when the query spans several connectors", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connectorA = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const connectorB = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    embeddingQueue.push(makeFakeEmbedding(1));
+
+    await queryService.query({
+      connectorIds: [connectorA.id, connectorB.id],
+      organizationId: org.id,
+      queryText: "test query",
+      userAcl: ["org:*"],
+    });
+
+    const [interaction] = await waitForKbInteractions(1);
+    expect(interaction.connectorId).toBeNull();
   });
 });
 

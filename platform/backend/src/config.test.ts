@@ -1,4 +1,5 @@
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
 } from "@archestra/shared";
@@ -24,11 +25,13 @@ import config, {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   isCodeRuntimeEnabled,
+  k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
+  parseActiveUsersRefreshIntervalMs,
   parseAnthropicWifConfig,
-  parseAuditLogRetentionDays,
   parseBodyLimit,
   parseChatMaxOutputTokens,
+  parseChatRateMeteredMaxOutputTokens,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
@@ -41,13 +44,18 @@ import config, {
   parseFileStorageS3Config,
   parseHackathonGalleryRepo,
   parseHackathonRecorderEnabled,
+  parseHackathonRecorderMaxFinalCutMs,
   parseK8sResourceQuantity,
   parseLogFormat,
   parseMetricsPort,
+  parseNonNegativeInt,
   parseOptionalPort,
+  parseOtelCaptureContent,
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
+  parseRetentionDays,
   parseSampleRate,
+  parseSandboxMemoryMaxBytes,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
   resolveRenderBaseUrl,
@@ -914,6 +922,30 @@ describe("parseChatMaxOutputTokens", () => {
   });
 });
 
+describe("parseChatRateMeteredMaxOutputTokens", () => {
+  test("should return default 4096 when no value provided", () => {
+    expect(parseChatRateMeteredMaxOutputTokens(undefined)).toBe(4096);
+  });
+
+  test("should parse and trim a valid value", () => {
+    expect(parseChatRateMeteredMaxOutputTokens("  16000  ")).toBe(16000);
+  });
+
+  test("should return default and warn naming its own env var", () => {
+    expect(parseChatRateMeteredMaxOutputTokens("abc")).toBe(4096);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS value "abc", using default 4096',
+    );
+  });
+
+  test("should reject fractional, out-of-range and trailing-garbage values", () => {
+    expect(parseChatRateMeteredMaxOutputTokens("1.5")).toBe(4096);
+    expect(parseChatRateMeteredMaxOutputTokens("4096abc")).toBe(4096);
+    expect(parseChatRateMeteredMaxOutputTokens("0")).toBe(4096);
+    expect(parseChatRateMeteredMaxOutputTokens("1000001")).toBe(4096);
+  });
+});
+
 describe("parseDatabasePoolMax", () => {
   test("should return default 50 when no value provided", () => {
     expect(parseDatabasePoolMax(undefined)).toBe(50);
@@ -1005,6 +1037,41 @@ describe("parseDatabaseStatementTimeoutMillis", () => {
     expect(parseDatabaseStatementTimeoutMillis("-1")).toBe(30000);
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS value "-1", using default 30000',
+    );
+  });
+});
+
+describe("parseActiveUsersRefreshIntervalMs", () => {
+  const DEFAULT = 5 * 60 * 1000;
+  const FLOOR = 30 * 1000;
+
+  test("returns the default when no value provided", () => {
+    expect(parseActiveUsersRefreshIntervalMs(undefined)).toBe(DEFAULT);
+    expect(parseActiveUsersRefreshIntervalMs("")).toBe(DEFAULT);
+    expect(parseActiveUsersRefreshIntervalMs("   ")).toBe(DEFAULT);
+  });
+
+  test("parses a valid interval", () => {
+    expect(parseActiveUsersRefreshIntervalMs("600000")).toBe(600000);
+    expect(parseActiveUsersRefreshIntervalMs("  120000  ")).toBe(120000);
+  });
+
+  test("treats 0 as explicitly disabled rather than falling back to the default", () => {
+    expect(parseActiveUsersRefreshIntervalMs("0")).toBe(0);
+  });
+
+  test("raises sub-floor intervals to the floor so the DISTINCT count is not run continuously", () => {
+    expect(parseActiveUsersRefreshIntervalMs("1000")).toBe(FLOOR);
+    expect(logger.warn).toHaveBeenCalledWith(
+      `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "1000" is below the ${FLOOR}ms floor, using the floor`,
+    );
+  });
+
+  test("returns the default and warns for non-numeric or negative values", () => {
+    expect(parseActiveUsersRefreshIntervalMs("abc")).toBe(DEFAULT);
+    expect(parseActiveUsersRefreshIntervalMs("-1")).toBe(DEFAULT);
+    expect(logger.warn).toHaveBeenCalledWith(
+      `Invalid ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "-1", using default ${DEFAULT}`,
     );
   });
 });
@@ -1262,14 +1329,18 @@ describe("chat active run config", () => {
     expect(cfg.chat.activeRun.pollingCompatibilityEnabled).toBe(false);
   });
 
-  test("uses short stop polling default in polling compatibility mode", async () => {
+  test("keeps one stop polling default regardless of compatibility mode", async () => {
+    // The interval no longer encodes whether notifications work. It is the
+    // fallback a stream wants when they do; the notify hub tightens its own
+    // fallback when they do not, so an operator does not tune this to match
+    // their database endpoint.
     delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS;
     process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED =
       "true";
 
     const { default: cfg } = await import("./config");
 
-    expect(cfg.chat.activeRun.stopPollIntervalMs).toBe(500);
+    expect(cfg.chat.activeRun.stopPollIntervalMs).toBe(30_000);
   });
 });
 
@@ -1977,6 +2048,76 @@ describe("isCodeRuntimeEnabled", () => {
   });
 });
 
+describe("k8sMemoryQuantityToBytes", () => {
+  test("converts binary and decimal suffixes", () => {
+    expect(k8sMemoryQuantityToBytes("4Gi")).toBe(4 * 1024 ** 3);
+    expect(k8sMemoryQuantityToBytes("512Mi")).toBe(512 * 1024 ** 2);
+    expect(k8sMemoryQuantityToBytes("1536Mi")).toBe(1536 * 1024 ** 2);
+    // Decimal suffixes are a different size from their binary namesakes, so
+    // treating `G` as `Gi` would compare the ceiling against the wrong number.
+    expect(k8sMemoryQuantityToBytes("1G")).toBe(1000 ** 3);
+    expect(k8sMemoryQuantityToBytes("1048576")).toBe(1048576);
+  });
+
+  test("returns undefined for anything that is not a quantity", () => {
+    expect(k8sMemoryQuantityToBytes("4GB")).toBeUndefined();
+    expect(k8sMemoryQuantityToBytes("lots")).toBeUndefined();
+    expect(k8sMemoryQuantityToBytes("")).toBeUndefined();
+  });
+});
+
+describe("parseSandboxMemoryMaxBytes", () => {
+  test("defaults to 5Gi and resolves a quantity to bytes", () => {
+    expect(parseSandboxMemoryMaxBytes(undefined, "6Gi")).toBe(5 * 1024 ** 3);
+    expect(parseSandboxMemoryMaxBytes("1Gi", "6Gi")).toBe(1024 ** 3);
+    expect(parseSandboxMemoryMaxBytes("512Mi", "6Gi")).toBe(512 * 1024 ** 2);
+  });
+
+  // The value lands in a cgroup's memory.max. Read as a bare number, "5Gi"
+  // would become a 5-byte ceiling and kill every run that allocated anything,
+  // so an unparseable value has to fall back rather than be honoured.
+  test("falls back and reports a value that is not a quantity", () => {
+    const logged = vi.mocked(logger.error);
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("5 gigabytes", "6Gi")).toBe(
+      5 * 1024 ** 3,
+    );
+    expect(logged).toHaveBeenCalledTimes(1);
+
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("0", "6Gi")).toBe(5 * 1024 ** 3);
+    expect(logged).toHaveBeenCalledTimes(1);
+  });
+
+  // The ceiling bounds a cgroup the scheduler cannot see, so the request is the
+  // only thing reserving node capacity for it. At or above the request the
+  // engine can hold more than it reserved, and the shortfall is charged to
+  // whatever else the node runs — the value still applies, but it is flagged.
+  test("flags a ceiling that is not below the engine's memory request", () => {
+    const logged = vi.mocked(logger.error);
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("4Gi", "4Gi")).toBe(4 * 1024 ** 3);
+    expect(logged).toHaveBeenCalledTimes(1);
+
+    logged.mockClear();
+    parseSandboxMemoryMaxBytes("1Gi", "512Mi");
+    expect(logged).toHaveBeenCalledTimes(1);
+
+    logged.mockClear();
+    parseSandboxMemoryMaxBytes("1Gi", "4Gi");
+    expect(logged).not.toHaveBeenCalled();
+  });
+
+  test("does not flag when the request is not a parseable quantity", () => {
+    const logged = vi.mocked(logger.error);
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("4Gi", "not-a-quantity")).toBe(
+      4 * 1024 ** 3,
+    );
+    expect(logged).not.toHaveBeenCalled();
+  });
+});
+
 describe("parseEngineDeniedCidrs", () => {
   test("returns an empty list when unset or empty", () => {
     expect(parseEngineDeniedCidrs(undefined)).toEqual([]);
@@ -2313,36 +2454,50 @@ describe("getAppAssetBaseOrigin", () => {
   });
 });
 
-describe("parseAuditLogRetentionDays", () => {
+describe("parseRetentionDays", () => {
+  const parse = (value: string | undefined) =>
+    parseRetentionDays("ARCHESTRA_AUDIT_LOG_RETENTION_DAYS", value);
+
   test("returns 0 (disabled) when env var is not set", () => {
-    expect(parseAuditLogRetentionDays(undefined)).toBe(0);
+    expect(parse(undefined)).toBe(0);
   });
 
   test("returns 0 (disabled) when env var is empty string", () => {
-    expect(parseAuditLogRetentionDays("")).toBe(0);
+    expect(parse("")).toBe(0);
   });
 
   test("returns 0 to keep the sweep disabled", () => {
-    expect(parseAuditLogRetentionDays("0")).toBe(0);
+    expect(parse("0")).toBe(0);
   });
 
   test("returns a valid positive integer (opt-in)", () => {
-    expect(parseAuditLogRetentionDays("90")).toBe(90);
-    expect(parseAuditLogRetentionDays("365")).toBe(365);
+    expect(parse("90")).toBe(90);
+    expect(parse("365")).toBe(365);
   });
 
   test("trims whitespace before parsing", () => {
-    expect(parseAuditLogRetentionDays("  30  ")).toBe(30);
+    expect(parse("  30  ")).toBe(30);
   });
 
-  test("returns default and warns on non-numeric value", () => {
-    expect(parseAuditLogRetentionDays("abc")).toBe(0);
+  test("returns default and warns on non-numeric value, naming the env var", () => {
+    expect(parse("abc")).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("abc"));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("ARCHESTRA_AUDIT_LOG_RETENTION_DAYS"),
+    );
   });
 
   test("returns default and warns on negative value", () => {
-    expect(parseAuditLogRetentionDays("-1")).toBe(0);
+    expect(parse("-1")).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("-1"));
+  });
+
+  test("rejects partially numeric values instead of truncating them", () => {
+    // parseInt would read "30days" as 30 and "1.5" as 1 — for a value that
+    // drives deletion, a typo must disable the sweep, not shrink the window.
+    expect(parse("30days")).toBe(0);
+    expect(parse("1.5")).toBe(0);
+    expect(logger.warn).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -2661,5 +2816,97 @@ describe("deriveOllamaNativeBaseUrl", () => {
         ollamaBaseUrl: undefined,
       }),
     ).toBe("http://proxy.internal/v1/ollama");
+  });
+});
+
+describe("parseHackathonRecorderMaxFinalCutMs", () => {
+  test("defaults to the shared limit when unset", () => {
+    expect(parseHackathonRecorderMaxFinalCutMs(undefined)).toBe(60_000);
+    expect(parseHackathonRecorderMaxFinalCutMs("")).toBe(
+      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+    );
+    expect(parseHackathonRecorderMaxFinalCutMs("   ")).toBe(
+      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+    );
+  });
+
+  test("takes a deployment's own limit", () => {
+    expect(parseHackathonRecorderMaxFinalCutMs("30000")).toBe(30_000);
+    expect(parseHackathonRecorderMaxFinalCutMs(" 600000 ")).toBe(600_000);
+  });
+
+  test("refuses a value it cannot honour rather than silently defaulting", () => {
+    // Falling back would read as the platform ignoring the operator's limit —
+    // the one failure mode a length cap must not have.
+    expect(() => parseHackathonRecorderMaxFinalCutMs("abc")).toThrow(
+      /whole number of milliseconds/,
+    );
+    expect(() => parseHackathonRecorderMaxFinalCutMs("60.5")).toThrow();
+    expect(() => parseHackathonRecorderMaxFinalCutMs("-1000")).toThrow();
+  });
+
+  test("refuses a limit so small nothing could ever be submitted", () => {
+    expect(() => parseHackathonRecorderMaxFinalCutMs("10")).toThrow();
+    expect(parseHackathonRecorderMaxFinalCutMs("5000")).toBe(5_000);
+  });
+});
+
+describe("parseNonNegativeInt", () => {
+  test("falls back when unset or unparseable", () => {
+    expect(parseNonNegativeInt(undefined, 90)).toBe(90);
+    expect(parseNonNegativeInt("", 90)).toBe(90);
+    expect(parseNonNegativeInt("not-a-number", 90)).toBe(90);
+  });
+
+  test("accepts zero, which parsePositiveInt would reject", () => {
+    // 0 is a real setting here — a retention window of zero means "keep
+    // forever" — so it must not collapse to the default.
+    expect(parseNonNegativeInt("0", 90)).toBe(0);
+  });
+
+  test("accepts positive values and rejects negative ones", () => {
+    expect(parseNonNegativeInt("30", 90)).toBe(30);
+    expect(parseNonNegativeInt("-5", 90)).toBe(90);
+  });
+});
+
+describe("parseOtelCaptureContent", () => {
+  test("defaults on without content encryption, off with it", () => {
+    expect(
+      parseOtelCaptureContent({
+        envValue: undefined,
+        contentEncryptionConfigured: false,
+      }),
+    ).toBe(true);
+    expect(
+      parseOtelCaptureContent({
+        envValue: undefined,
+        contentEncryptionConfigured: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("an explicit value always wins over the encryption default", () => {
+    expect(
+      parseOtelCaptureContent({
+        envValue: "true",
+        contentEncryptionConfigured: true,
+      }),
+    ).toBe(true);
+    expect(
+      parseOtelCaptureContent({
+        envValue: "false",
+        contentEncryptionConfigured: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("junk values take the default path, not the explicit one", () => {
+    expect(
+      parseOtelCaptureContent({
+        envValue: "yes",
+        contentEncryptionConfigured: true,
+      }),
+    ).toBe(false);
   });
 });

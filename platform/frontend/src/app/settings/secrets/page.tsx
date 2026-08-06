@@ -39,7 +39,7 @@ export default function SecretsSettingsPage() {
         {checkConnectivityMutation.isPending && (
           <RefreshCw className="h-4 w-4 animate-spin" />
         )}
-        Check Vault Connectivity
+        <span>Check Vault Connectivity</span>
       </PermissionButton>,
     );
 
@@ -100,7 +100,10 @@ export default function SecretsSettingsPage() {
                 <AlertTitle>Connection Successful</AlertTitle>
                 <AlertDescription>
                   Found {checkConnectivityMutation.data.secretCount} secret
-                  {checkConnectivityMutation.data.secretCount === 1 ? "" : "s"}.
+                  {checkConnectivityMutation.data.secretCount === 1 ? null : (
+                    <span>s</span>
+                  )}
+                  .
                 </AlertDescription>
               </Alert>
             )}

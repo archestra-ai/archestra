@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import {
   ChatErrorCode,
+  DEFAULT_APP_NAME,
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
-import { A2AManager } from "@/agents/a2a/a2a-manager";
+import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -53,7 +55,7 @@ import type {
 import {
   buildWelcomeMessage,
   ensureProvisionedUser,
-  isSsoConfigured,
+  resolveSignupWelcomeMode,
 } from "./auto-provision";
 import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
 import { chatOpsRunRegistry } from "./chatops-run-registry";
@@ -659,8 +661,20 @@ export class ChatOpsManager {
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     sendReply?: boolean;
+    /**
+     * Whether an access failure is explained in the conversation. Pass false for
+     * a message the sender never addressed to the bot — it reached us only
+     * because the channel answers every message, so a public "Access Denied"
+     * would be the bot interrupting a conversation it wasn't part of.
+     */
+    announceAccessErrors?: boolean;
   }): Promise<ChatOpsProcessingResult> {
-    const { message, provider, sendReply = true } = params;
+    const {
+      message,
+      provider,
+      sendReply = true,
+      announceAccessErrors = true,
+    } = params;
 
     // Deduplication check
     const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
@@ -736,6 +750,7 @@ export class ChatOpsManager {
       agentId: agentToUse.id,
       agentName: agentToUse.name,
       organizationId: agent.organizationId,
+      announceAccessErrors,
     });
 
     if (!authResult.success) {
@@ -793,7 +808,7 @@ export class ChatOpsManager {
       // a task"), which matches neither the agent nor the chat display name.
       const platformName =
         (await OrganizationModel.getById(agent.organizationId))?.appName ||
-        "Archestra";
+        DEFAULT_APP_NAME;
       const botMentioned = message.metadata?.botMentioned === true;
       const mentionedOthers = Array.isArray(message.metadata?.mentionedOthers)
         ? (message.metadata.mentionedOthers as string[])
@@ -890,10 +905,11 @@ export class ChatOpsManager {
   }): Promise<void> {
     const { provider, message, invitationId, displayName } = params;
     try {
-      // Skip welcome message when SSO is enabled — users just sign in via their IdP
-      if (await isSsoConfigured()) return;
+      const welcomeMode = await resolveSignupWelcomeMode();
+      if (welcomeMode === "none") return;
 
       const welcome = await buildWelcomeMessage({
+        mode: welcomeMode,
         invitationId,
         email: message.senderEmail || "",
         name: displayName,
@@ -935,7 +951,7 @@ export class ChatOpsManager {
           text: [
             welcome.text,
             "",
-            "💡 To send me a direct message in Teams, you first need to install the Archestra app personally — click **Add** when Teams prompts you.",
+            `💡 To send me a direct message in Teams, you first need to install the ${archestraMcpBranding.appName} app personally — click **Add** when Teams prompts you.`,
             "",
             "Once installed, send me a direct message and I'll send you back a signup link.",
           ].join("\n"),
@@ -1175,7 +1191,9 @@ export class ChatOpsManager {
 
       const contextMessages = history.map((msg) => {
         const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;
-        const sender = msg.isFromBot ? "You (Archestra)" : msg.senderName;
+        const sender = msg.isFromBot
+          ? `You (${archestraMcpBranding.appName})`
+          : msg.senderName;
         // A file-only turn has no text; name its attachments so the turn is
         // meaningful (the file arrives separately or gets a skip note below).
         if (!text.trim() && msg.files?.length) {
@@ -1307,10 +1325,19 @@ export class ChatOpsManager {
     agentId: string;
     agentName: string;
     organizationId: string;
+    announceAccessErrors: boolean;
   }): Promise<
     { success: true; userId: string } | { success: false; error: string }
   > {
-    const { message, provider, agentId, agentName, organizationId } = params;
+    const {
+      message,
+      provider,
+      agentId,
+      agentName,
+      organizationId,
+      announceAccessErrors,
+    } = params;
+    const denyQuietly = !announceAccessErrors;
 
     // Try pre-resolved email first (from Bot Framework TeamsInfo, no Graph API needed)
     let userEmail = message.senderEmail || null;
@@ -1332,11 +1359,13 @@ export class ChatOpsManager {
         { senderId: message.senderId },
         "[ChatOps] Could not resolve user email via TeamsInfo or Graph API",
       );
-      await this.sendSecurityErrorReply(
-        provider,
-        message,
-        "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.",
-      );
+      if (!denyQuietly) {
+        await this.sendSecurityErrorReply(
+          provider,
+          message,
+          "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.",
+        );
+      }
       return {
         success: false,
         error: "Could not resolve user email for security validation",
@@ -1399,11 +1428,13 @@ export class ChatOpsManager {
         },
         "[ChatOps] User does not have access to agent",
       );
-      await this.sendSecurityErrorReply(
-        provider,
-        message,
-        `You don't have access to the agent "${agentName}". Contact your administrator for access.`,
-      );
+      if (!denyQuietly) {
+        await this.sendSecurityErrorReply(
+          provider,
+          message,
+          `You don't have access to the agent "${agentName}". Contact your administrator for access.`,
+        );
+      }
       return {
         success: false,
         error: "Unauthorized: user does not have access to this agent",
@@ -2185,10 +2216,10 @@ export class ChatOpsManager {
     });
     const source: InteractionSource =
       CHATOPS_PROVIDER_SOURCES[provider.providerId];
-    const systemParams = {
+    const systemParams: A2ASystemParams = {
       sessionId,
       source,
-      route: RouteCategory.CHATOPS,
+      routeCategory: RouteCategory.CHATOPS,
       chatOpsBindingId: binding.id,
       chatOpsThreadId: effectiveThreadId,
       ephemeralExecutionPrefix,
@@ -2371,6 +2402,9 @@ export class ChatOpsManager {
             originalMessage.threadId,
           ),
           source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
+          // Resuming after an approval is still a ChatOps run; without this it
+          // would fall back to the A2A route category like the initial send did.
+          routeCategory: RouteCategory.CHATOPS,
         },
       });
 

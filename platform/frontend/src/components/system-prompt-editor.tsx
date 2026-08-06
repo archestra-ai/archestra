@@ -70,19 +70,18 @@ export function SystemPromptEditor({
             templating
             {docsUrl ? (
               <>
-                {" "}
-                — see{" "}
+                <span>{" — see "}</span>
                 <ExternalDocsLink
                   href={docsUrl}
                   className="underline hover:text-foreground"
                   showIcon={false}
                 >
                   docs
-                </ExternalDocsLink>{" "}
-                for available variables.
+                </ExternalDocsLink>
+                <span>{" for available variables."}</span>
               </>
             ) : (
-              "."
+              <span>.</span>
             )}
           </p>
         </div>

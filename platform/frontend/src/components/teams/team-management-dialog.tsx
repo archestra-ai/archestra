@@ -7,7 +7,6 @@ import {
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useDebounce } from "@uidotdev/usehooks";
 import { Check, Copy, Key, RefreshCw, Trash2, Users } from "lucide-react";
 import {
   type ComponentType,
@@ -41,7 +40,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
-import { useMembersPaginated } from "@/lib/member.query";
+import { useMemberSearch } from "@/lib/member.query";
 import { useActiveOrganization } from "@/lib/organization.query";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 import { cn } from "@/lib/utils";
@@ -503,8 +502,12 @@ function MembersSection({
   onChangesChange: (changes: StagedMemberChanges) => void;
 }) {
   const { data: activeOrg } = useActiveOrganization();
-  const [memberSearch, setMemberSearch] = useState("");
-  const debouncedMemberSearch = useDebounce(memberSearch, 300);
+  const {
+    users: userOptions,
+    isSearching: isMembersPending,
+    onSearchQueryChange: setMemberSearch,
+    emptyMessage: membersEmptyMessage,
+  } = useMemberSearch({ limit: 20, enabled: open });
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ["teamMembers", team.id],
@@ -517,19 +520,7 @@ function MembersSection({
     enabled: open,
   });
 
-  const { data: membersResponse, isPending: isMembersPending } =
-    useMembersPaginated({
-      limit: 20,
-      offset: 0,
-      name: debouncedMemberSearch || undefined,
-    });
-
   const orgMembers = activeOrg?.members ?? [];
-  const userOptions = (membersResponse?.data ?? []).map((member) => ({
-    userId: member.userId,
-    name: member.name,
-    email: member.email,
-  }));
 
   const setChange = (userId: string, change: StagedMemberChange | null) => {
     const next = new Map(changes);
@@ -637,7 +628,7 @@ function MembersSection({
           searchPlaceholder="Search users by name or email"
           className="w-full"
           onSearchQueryChange={setMemberSearch}
-          emptyMessage="No matching users found."
+          emptyMessage={membersEmptyMessage}
           hint={
             canAddAnyMember || isMembersPending
               ? undefined
@@ -761,7 +752,7 @@ function TokenSection({ token }: { token?: TeamToken }) {
   if (!token) {
     return (
       <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-        No token found for this team.
+        <span>No token found for this team.</span>
       </div>
     );
   }

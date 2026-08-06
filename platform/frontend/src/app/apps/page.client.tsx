@@ -3,7 +3,14 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { AppWindow, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  LabelFilterBadges,
+  LabelKeyRowBase,
+  LabelSelect,
+  parseLabelsParam,
+  serializeLabels,
+} from "@/components/label-select";
 import {
   type ListViewMode,
   ListViewToggle,
@@ -13,6 +20,10 @@ import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -22,12 +33,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useApps } from "@/lib/app.query";
+import { useAppLabelKeys, useAppLabelValues, useApps } from "@/lib/app.query";
 import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
-import { AppsScopeFilter } from "./_parts/apps-scope-filter";
 import { AppsTable } from "./_parts/apps-table";
 
 const PAGE_SIZE = 100;
@@ -43,21 +53,23 @@ export default function AppsPage() {
   // Scope/owner filtering is server-side (mirroring the Projects list) so an
   // app admin's "Personal → Other users" view can reach apps that aren't in the
   // default page. The scope filter component owns these URL params.
-  const scope = searchParams.get("scope") ?? undefined;
-  const authorIdsParam = searchParams.get("authorIds");
-  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+  const { scope, authorIds, excludeAuthorIds } = useScopeFilterParams();
   const settingsId = searchParams.get("settings");
+  // Label filtering is server-side too: an owned app matches its own labels, an
+  // external one its backing MCP server's, so both halves of the list filter.
+  const labelsFromUrl = searchParams.get("labels");
+  const parsedLabels = parseLabelsParam(labelsFromUrl);
+  const { data: labelKeys } = useAppLabelKeys();
 
   const { data, isPending, isLoadingError, refetch } = useApps(
     {
       limit: PAGE_SIZE,
       offset: 0,
       search: search || undefined,
-      scope: (scope as "personal" | "team" | "org" | undefined) ?? undefined,
-      authorIds: authorIdsParam ? authorIdsParam.split(",") : undefined,
-      excludeAuthorIds: excludeAuthorIdsParam
-        ? excludeAuthorIdsParam.split(",")
-        : undefined,
+      scope,
+      authorIds,
+      excludeAuthorIds,
+      labels: labelsFromUrl || undefined,
     },
     { toastOnError: false },
   );
@@ -94,6 +106,26 @@ export default function AppsPage() {
   // authored here vs UIs that came with installed MCP servers.
   const ownedApps = unpinnedApps.filter((app) => app.source === "owned");
   const externalApps = unpinnedApps.filter((app) => app.source === "external");
+
+  const handleRemoveLabel = useCallback(
+    (key: string, value: string) => {
+      if (!parsedLabels) return;
+      const updated = { ...parsedLabels };
+      updated[key] = (updated[key] ?? []).filter((v) => v !== value);
+      if (updated[key].length === 0) {
+        delete updated[key];
+      }
+      const params = new URLSearchParams(searchParams.toString());
+      const serialized = serializeLabels(updated);
+      if (serialized) {
+        params.set("labels", serialized);
+      } else {
+        params.delete("labels");
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [parsedLabels, searchParams, router, pathname],
+  );
 
   const setParam = (name: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -137,11 +169,26 @@ export default function AppsPage() {
             <SelectItem value="external">MCP Server Apps</SelectItem>
           </SelectContent>
         </Select>
-        <AppsScopeFilter />
+        <ResourceScopeFilter
+          ownerLabelPlural="apps"
+          allLabel="All apps"
+          adminPermission={{ app: ["admin"] }}
+          showTeamSelect={false}
+        />
+        <LabelSelect
+          labelKeys={labelKeys}
+          LabelKeyRowComponent={AppLabelKeyRow}
+        />
         <span className="ml-auto">
           <ListViewToggle value={viewMode} onChange={setViewMode} />
         </span>
       </div>
+
+      {parsedLabels && (
+        <div className="mb-6">
+          <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+        </div>
+      )}
 
       <LoadingWrapper isPending={isPending && !data}>
         {isLoadingError ? (
@@ -203,6 +250,34 @@ export default function AppsPage() {
 // Mirrors the Projects page's ProjectSection: an uppercase header over the
 // card grid (or table, in table view). Renders nothing when the group is
 // empty, so only sections with entries appear.
+/**
+ * One key's row in the label filter popover. Values are fetched lazily, only
+ * once its sub-popover opens.
+ */
+function AppLabelKeyRow({
+  labelKey,
+  selectedValues,
+  onToggleValue,
+}: {
+  labelKey: string;
+  selectedValues: string[];
+  onToggleValue: (key: string, value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: values } = useAppLabelValues({
+    key: open ? labelKey : undefined,
+  });
+  return (
+    <LabelKeyRowBase
+      labelKey={labelKey}
+      selectedValues={selectedValues}
+      onToggleValue={onToggleValue}
+      values={values}
+      onOpenChange={setOpen}
+    />
+  );
+}
+
 function AppSection({
   title,
   apps,

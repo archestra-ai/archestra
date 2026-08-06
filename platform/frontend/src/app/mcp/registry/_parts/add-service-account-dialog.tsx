@@ -32,6 +32,7 @@ interface AddServiceAccountDialogProps {
   availableTeams: Array<{ id: string; name: string }>;
   /** Whether an organization-wide service account can still be added. */
   canAddOrg: boolean;
+  resourceKind?: "installation" | "service-account";
   onConfirm: (target: ServiceAccountTarget) => void;
 }
 
@@ -40,6 +41,7 @@ export function AddServiceAccountDialog({
   onOpenChange,
   availableTeams,
   canAddOrg,
+  resourceKind = "service-account",
   onConfirm,
 }: AddServiceAccountDialogProps) {
   const defaultValue = canAddOrg
@@ -73,46 +75,58 @@ export function AddServiceAccountDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
-            Add a service account
+            {resourceKind === "installation"
+              ? "Add a shared installation"
+              : "Add a service account"}
           </DialogTitle>
         </DialogHeader>
 
         <DialogBody className="space-y-4">
-          <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">
-              This connection is shared. Use it with care.
-            </p>
-            <p>It gets used in two ways:</p>
-            <ul className="list-disc space-y-1 pl-4">
-              <li>
-                <span className="font-medium text-foreground">Static key</span>{" "}
-                — when it's pinned as the server's single account, every call
-                uses it no matter who is chatting.
-              </li>
-              <li>
-                <span className="font-medium text-foreground">Fallback</span> —
-                during on-behalf-of, when someone chatting has no connection of
-                their own.
-              </li>
-            </ul>
-            <p>
-              Treat the credential like a shared secret.{" "}
-              <ExternalDocsLink
-                href={getDocsUrl(
-                  DocsPage.McpAuthentication,
-                  "resolve-at-call-time",
-                )}
-                className="underline"
-                showIcon={false}
-              >
-                Learn more
-              </ExternalDocsLink>
-            </p>
-          </div>
+          {resourceKind === "service-account" && (
+            <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">
+                This connection is shared. Use it with care.
+              </p>
+              <p>It gets used in two ways:</p>
+              <ul className="list-disc space-y-1 pl-4">
+                <li>
+                  <span className="font-medium text-foreground">
+                    Static key
+                  </span>{" "}
+                  — when it's pinned as the server's single account, every call
+                  uses it no matter who is chatting.
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">Fallback</span>{" "}
+                  — during on-behalf-of, when someone chatting has no connection
+                  of their own.
+                </li>
+              </ul>
+              <p>
+                Treat the credential like a shared secret.{" "}
+                <ExternalDocsLink
+                  href={getDocsUrl(
+                    DocsPage.McpAuthentication,
+                    "resolve-at-call-time",
+                  )}
+                  className="underline"
+                  showIcon={false}
+                >
+                  Learn more
+                </ExternalDocsLink>
+              </p>
+            </div>
+          )}
 
           {(availableTeams.length > 0 || canAddOrg) && (
             <div className="space-y-2">
-              <Label>Who should own this service account?</Label>
+              <Label>
+                Who should own this{" "}
+                {resourceKind === "installation"
+                  ? "installation"
+                  : "service account"}
+                ?
+              </Label>
               <RadioGroup
                 value={selected ?? ""}
                 onValueChange={setSelected}
@@ -177,7 +191,9 @@ export function AddServiceAccountDialog({
             onClick={handleConfirm}
             data-testid={E2eTestId.AddServiceAccountConfirmButton}
           >
-            Add service account
+            {resourceKind === "installation"
+              ? "Add shared installation"
+              : "Add service account"}
           </Button>
         </DialogFooter>
       </DialogContent>

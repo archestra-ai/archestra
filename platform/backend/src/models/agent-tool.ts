@@ -32,10 +32,12 @@ import type {
   AgentToolSortBy,
   CredentialResolutionMode,
   InsertAgentTool,
+  McpServerAgentUsage,
   SortDirection,
   UpdateAgentTool,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
+import AgentVersionModel from "./agent-version";
 import McpServerUserModel from "./mcp-server-user";
 
 class AgentToolModel {
@@ -96,6 +98,9 @@ class AgentToolModel {
 
     // Assign the tool to the source agent
     await AgentToolModel.createIfNotExists(agentId, tool.id);
+
+    // Delegation assignment changes the agent's tool surface — fork a version.
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
   }
 
   /**
@@ -113,7 +118,7 @@ class AgentToolModel {
       return false;
     }
 
-    return AgentToolModel.delete(agentId, tool.id);
+    return AgentToolModel.delete({ agentId, toolId: tool.id });
   }
 
   /**
@@ -293,7 +298,13 @@ class AgentToolModel {
         schema.teamMembersTable,
         eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
       )
-      .where(eq(schema.teamMembersTable.userId, userId));
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          // Active installs only — a soft-deleted install grants no access.
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
 
     const teamAccessibleIds = teamAccessibleServers.map((s) => s.mcpServerId);
 
@@ -316,6 +327,8 @@ class AgentToolModel {
             and(
               eq(schema.mcpServersTable.scope, "org"),
               eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+              // Active installs only — a soft-deleted install grants no access.
+              notDeleted(schema.mcpServersTable),
             ),
           )
           .then((rows) => rows.map((s) => s.mcpServerId))
@@ -384,16 +397,31 @@ class AgentToolModel {
     return rows;
   }
 
-  static async delete(agentId: string, toolId: string): Promise<boolean> {
-    const result = await db
+  static async delete(params: {
+    agentId: string;
+    toolId: string;
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
+  }): Promise<boolean> {
+    const { agentId, toolId } = params;
+    // RETURNING (not rowCount) so the deleted flag is reliable — the fork below
+    // and callers key off it, and rowCount is not dependable under PGlite.
+    const rows = await db
       .delete(schema.agentToolsTable)
       .where(
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.agentToolsTable.toolId, toolId),
         ),
-      );
-    return result.rowCount !== null && result.rowCount > 0;
+      )
+      .returning({ toolId: schema.agentToolsTable.toolId });
+    const deleted = rows.length > 0;
+    if (deleted && !params.deferVersionFork) {
+      // Tool surface changed — fork a version. Covers unassign via REST, the
+      // MCP sync tool, and removeDelegation.
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
+    return deleted;
   }
 
   static async deleteAllForAgent(agentId: string): Promise<number> {
@@ -432,6 +460,31 @@ class AgentToolModel {
     return results.map((r) => r.toolId);
   }
 
+  /**
+   * Full assignment identity per tool, not just the tool id. The version
+   * restore compares live assignments against a snapshot's, and the credential
+   * binding is part of what a version records: two rows with the same toolId
+   * but a different server or resolution mode are different configurations, so
+   * an id-only read would report "unchanged" and silently skip restoring them.
+   */
+  static async findAssignmentsByAgent(agentId: string): Promise<
+    {
+      toolId: string;
+      mcpServerId: string | null;
+      credentialResolutionMode: CredentialResolutionMode;
+    }[]
+  > {
+    return db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, agentId));
+  }
+
   static async findCatalogToolIdsByAgent(agentId: string): Promise<string[]> {
     const results = await db
       .select({ toolId: schema.agentToolsTable.toolId })
@@ -445,6 +498,8 @@ class AgentToolModel {
           eq(schema.agentToolsTable.agentId, agentId),
           isNotNull(schema.toolsTable.catalogId),
           isNull(schema.toolsTable.delegateToAgentId),
+          // A soft-deleted catalog's tools are not resolvable for the agent.
+          notDeleted(schema.toolsTable),
         ),
       );
     return results.map((r) => r.toolId);
@@ -476,8 +531,8 @@ class AgentToolModel {
    */
   static async getAssignedAgentDetailsForMcpServers(
     mcpServerIds: string[],
-  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
-    const agentsMap = new Map<string, Array<{ id: string; name: string }>>();
+  ): Promise<Map<string, McpServerAgentUsage[]>> {
+    const agentsMap = new Map<string, McpServerAgentUsage[]>();
     for (const mcpServerId of mcpServerIds) {
       agentsMap.set(mcpServerId, []);
     }
@@ -490,6 +545,9 @@ class AgentToolModel {
         mcpServerId: schema.mcpServersTable.id,
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+        scope: schema.agentsTable.scope,
+        ownerEmail: schema.usersTable.email,
       })
       .from(schema.agentToolsTable)
       .innerJoin(
@@ -499,6 +557,13 @@ class AgentToolModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      // Personal agents share a name across members, so the owner is what
+      // tells them apart in the UI. LEFT JOIN: `author_id` is nullable and
+      // nulls out when the author is deleted.
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.agentsTable.authorId, schema.usersTable.id),
       )
       .innerJoin(
         schema.mcpServersTable,
@@ -518,8 +583,12 @@ class AgentToolModel {
       )
       .orderBy(asc(schema.agentsTable.name), asc(schema.agentsTable.id));
 
-    for (const { mcpServerId, agentId, agentName } of assignments) {
-      agentsMap.get(mcpServerId)?.push({ id: agentId, name: agentName });
+    for (const { mcpServerId, agentId, agentName, ...agent } of assignments) {
+      agentsMap.get(mcpServerId)?.push({
+        id: agentId,
+        name: agentName,
+        ...agent,
+      });
     }
 
     return agentsMap;

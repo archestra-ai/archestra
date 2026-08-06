@@ -6,6 +6,7 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  MCP_EXECUTED_AS_META_KEY,
   OAUTH_TOKEN_TYPE,
   SEEDED_APP_RENDER_META_KEY,
 } from "@archestra/shared";
@@ -90,6 +91,15 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
     getOrLoadDeployment: mockGetOrLoadDeployment,
   },
 }));
+
+// The shared fixture connection below is personal-scope with no owner (as a
+// connection looks once its owning user is deleted), so calls through it run
+// as an unattributed personal connection.
+const OWNERLESS_PERSONAL_CONNECTION = {
+  kind: "personal",
+  ownerUserId: null,
+  ownerName: null,
+};
 
 describe("McpClient", () => {
   let agentId: string;
@@ -351,6 +361,22 @@ describe("McpClient", () => {
 
     expect(mockCallTool).toHaveBeenCalledTimes(1);
     expect(mockClose).not.toHaveBeenCalled();
+
+    // The cancelled call must not vanish from the tool-call log: a row is
+    // persisted carrying the structured `cancelled` marker (not isError —
+    // a user-initiated stop is not a tool failure), which the log surfaces
+    // render as their distinct Cancelled state.
+    const [logged] = await db
+      .select()
+      .from(schema.mcpToolCallsTable)
+      .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+    expect(logged).toBeDefined();
+    const loggedResult = logged.toolResult as {
+      isError?: boolean;
+      _meta?: { archestraError?: { type?: string } };
+    };
+    expect(loggedResult.isError).toBe(false);
+    expect(loggedResult._meta?.archestraError?.type).toBe("cancelled");
   });
 
   test("returns an error result (does not throw) for a non-abort failure", async () => {
@@ -375,6 +401,46 @@ describe("McpClient", () => {
 
     expect(result.isError).toBe(true);
     expect(mockCallTool).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression: inspectServer built its transport without the enterprise
+  // credential, so an enterprise-managed catalog was inspected with no auth
+  // header at all and the configured injection mode was never applied.
+  test("inspectServer puts the enterprise credential on the outgoing request", async () => {
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    mockListTools.mockResolvedValueOnce({ tools: [] });
+    mockClose.mockResolvedValueOnce(undefined);
+
+    await mcpClient.inspectServer({
+      catalogItem: {
+        ...catalogItem,
+        serverType: "remote",
+        serverUrl: "https://internal.example.com/mcp",
+      },
+      mcpServerId,
+      secrets: {},
+      method: "tools/list",
+      enterpriseTransportCredential: {
+        headerName: "x-provider-api-token",
+        headerValue: "exchanged-inspect-token",
+        expiresInSeconds: null,
+      },
+    });
+
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+    const [, options] =
+      vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+    const headers =
+      options?.requestInit?.headers instanceof Headers
+        ? options.requestInit.headers
+        : new Headers(options?.requestInit?.headers);
+
+    expect(headers.get("x-provider-api-token")).toBe("exchanged-inspect-token");
+    expect(headers.get("authorization")).toBeNull();
   });
 
   test("connectAndGetTools synthesizes read-resource tools when upstream has no tools/list", async () => {
@@ -1022,7 +1088,10 @@ describe("McpClient", () => {
         url: {},
       });
       expect(mockSetRequestHandler).toHaveBeenCalledOnce();
-      expect(mockSetNotificationHandler).toHaveBeenCalledOnce();
+      // No notification handler: 2026-07-28 removes
+      // `notifications/elicitation/complete`, since under MRTR the client
+      // learns the outcome by retrying the original request.
+      expect(mockSetNotificationHandler).not.toHaveBeenCalled();
     });
 
     describe("Secrets caching (N+1 prevention)", () => {
@@ -1829,6 +1898,10 @@ describe("McpClient", () => {
             content: [{ type: "text", text: "Limiter http" }],
             isError: false,
             name: "github-mcp-server__limiter_http",
+            structuredContent: undefined,
+            _meta: {
+              [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
+            },
           });
         } finally {
           runWithLimitSpy.mockRestore();
@@ -1936,6 +2009,10 @@ describe("McpClient", () => {
           content: [{ type: "text", text: "Success from HTTP transport" }],
           isError: false,
           name: "local-streamable-http-server__test_tool",
+          structuredContent: undefined,
+          _meta: {
+            [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
+          },
         });
       });
 
@@ -1985,6 +2062,7 @@ describe("McpClient", () => {
               type: "generic",
               message: expect.stringContaining("No HTTP endpoint URL found"),
             },
+            [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
           },
           structuredContent: {
             archestraError: {
@@ -3417,6 +3495,12 @@ describe("McpClient", () => {
         );
 
         expect(result.isError).toBe(false);
+        // The credential was minted for this caller, so the call ran as them —
+        // not as the owner of the installation it was routed through.
+        expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+          kind: "idp_exchange",
+          callerUserId: user.id,
+        });
 
         const { StreamableHTTPClientTransport } = await import(
           "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -3428,6 +3512,131 @@ describe("McpClient", () => {
             ? options.requestInit.headers
             : new Headers(options?.requestInit?.headers);
         expect(headers.get("Authorization")).toBe("Bearer ghu_managed_token");
+
+        fetchMock.mockRestore();
+      });
+
+      // Regression: a catalog configured to inject into a custom header must
+      // send the brokered credential under that header only. Emitting it as
+      // `Authorization: Bearer` — or letting a leftover install secret add an
+      // `Authorization` alongside it — hands the upstream a credential it never
+      // asked for and drops the one it did.
+      test("injects the brokered managed credential into the configured custom header", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "managed-header@example.com" });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "header" as const,
+          headerName: "x-provider-api-token",
+          responseFieldPath: "token",
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-header",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              exchangeStrategy: "okta_managed",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        // A leftover static credential from before the catalog moved to
+        // enterprise-managed mode. It must not ride along on the request.
+        const staleSecret = await secretManager().createSecret(
+          { access_token: "stale-install-token" },
+          "managed-header-stale-secret",
+        );
+        await McpServerModel.update(mcpServerId, { secretId: staleSecret.id });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__managed_header_tool",
+          description: "Managed credential tool using a custom header",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-managed-header",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_header_token" },
+              expires_in: 300,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed header result" }],
+          isError: false,
+        });
+
+        const headerResult = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_enterprise_managed_header",
+            name: "github-mcp-server__managed_header_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-header-conv" },
+        );
+
+        expect(headerResult.isError).toBe(false);
+
+        const { StreamableHTTPClientTransport: HeaderModeTransport } =
+          await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
+        const [, headerOptions] =
+          vi.mocked(HeaderModeTransport).mock.calls.at(-1) ?? [];
+        const outgoingHeaders =
+          headerOptions?.requestInit?.headers instanceof Headers
+            ? headerOptions.requestInit.headers
+            : new Headers(headerOptions?.requestInit?.headers);
+
+        // The exchanged credential goes to the configured header, bare — the
+        // upstream expects the token itself, not a `Bearer `-prefixed value.
+        expect(outgoingHeaders.get("x-provider-api-token")).toBe(
+          "ghu_managed_header_token",
+        );
+        expect(outgoingHeaders.get("authorization")).toBeNull();
 
         fetchMock.mockRestore();
       });
@@ -6066,6 +6275,171 @@ describe("McpClient", () => {
         );
       });
 
+      // Regression: a connection whose only credential is a custom userConfig
+      // field mapped to the `Authorization` header (common for hand-configured
+      // remote servers) does not populate the canonical access_token secret
+      // fields. The external-IdP fallback used to read that as "no stored
+      // authorization" and overwrite the working header with the caller's JWT,
+      // so every JWKS-authenticated gateway call failed upstream auth while
+      // the same connection kept working for session-authenticated callers.
+      test("JWKS auth with a custom-field Authorization credential uses the stored header, not the JWT (remote server)", async () => {
+        const customAuthCatalog = await InternalMcpCatalogModel.create({
+          name: "custom-auth-field-server",
+          serverType: "remote",
+          serverUrl: "https://custom-auth-field.example.com/mcp",
+          userConfig: {
+            api_token: {
+              type: "string",
+              title: "Authorization",
+              description: 'Sent as Authorization with a "Bearer " prefix',
+              required: true,
+              sensitive: true,
+              headerName: "Authorization",
+              valuePrefix: "Bearer ",
+            },
+          },
+        });
+
+        const customAuthSecret = await secretManager().createSecret(
+          { api_token: "stored-custom-field-key" },
+          "custom-auth-field-secret",
+        );
+
+        const customAuthServer = await McpServerModel.create({
+          name: "custom-auth-field-server",
+          secretId: customAuthSecret.id,
+          catalogId: customAuthCatalog.id,
+          serverType: "remote",
+          scope: "org",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "custom-auth-field-server__query",
+          description: "Query with a custom auth field",
+          parameters: {},
+          catalogId: customAuthCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: customAuthServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "upstream ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_custom_auth_field",
+            name: "custom-auth-field-server__query",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "ext-token",
+            teamId: null,
+            isOrganizationToken: false,
+            isExternalIdp: true,
+            rawToken: "caller-jwt-must-not-be-sent",
+            userId: "ext-user-custom-field",
+          },
+        );
+
+        expect(result.isError).toBe(false);
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const lastCall = vi
+          .mocked(StreamableHTTPClientTransport)
+          .mock.calls.at(-1);
+        const headers = lastCall?.[1]?.requestInit?.headers as Headers;
+        expect(headers.get("authorization")).toBe(
+          "Bearer stored-custom-field-key",
+        );
+        // The call ran under the org connection's stored credential, so the
+        // executed-as identity names the connection — not IdP passthrough.
+        expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+          kind: "org",
+        });
+      });
+
+      // The canonical token fields also cover non-Authorization header names;
+      // an external-IdP caller's JWT must not ride along as an extra
+      // Authorization header next to such a credential.
+      test("JWKS auth does not add the JWT alongside a canonical credential bound to a non-Authorization header", async () => {
+        const apiKeyCatalog = await InternalMcpCatalogModel.create({
+          name: "api-key-header-server",
+          serverType: "remote",
+          serverUrl: "https://api-key-header.example.com/mcp",
+          userConfig: {
+            access_token: {
+              type: "string",
+              title: "Access Token",
+              description: "API key",
+              required: true,
+              sensitive: true,
+              headerName: "x-api-key",
+            },
+          },
+        });
+
+        const apiKeySecret = await secretManager().createSecret(
+          { access_token: "api-key-secret-value" },
+          "api-key-header-secret",
+        );
+
+        const apiKeyServer = await McpServerModel.create({
+          name: "api-key-header-server",
+          secretId: apiKeySecret.id,
+          catalogId: apiKeyCatalog.id,
+          serverType: "remote",
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "api-key-header-server__list_items",
+          description: "List items with API key auth",
+          parameters: {},
+          catalogId: apiKeyCatalog.id,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: apiKeyServer.id,
+        });
+
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "api key response" }],
+          isError: false,
+        });
+
+        await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_api_key_jwks",
+            name: "api-key-header-server__list_items",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "ext-token",
+            teamId: null,
+            isOrganizationToken: false,
+            isExternalIdp: true,
+            rawToken: "caller-jwt-must-not-ride-along",
+            userId: "ext-user-api-key",
+          },
+        );
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const lastCall = vi
+          .mocked(StreamableHTTPClientTransport)
+          .mock.calls.at(-1);
+        const headers = lastCall?.[1]?.requestInit?.headers as Headers;
+        expect(headers.get("x-api-key")).toBe("api-key-secret-value");
+        expect(headers.get("authorization")).toBeNull();
+      });
+
       test("uses a custom header name for static bearer credentials", async () => {
         const customHeaderCatalog = await InternalMcpCatalogModel.create({
           name: "custom-header-server",
@@ -7665,7 +8039,12 @@ describe("McpClient", () => {
         );
 
         expect(result.isError).toBe(false);
-        expect(result._meta).toEqual(toolMeta);
+        // The upstream tool's own metadata passes through, alongside the
+        // identity the platform resolved for the call.
+        expect(result._meta).toEqual({
+          ...toolMeta,
+          [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
+        });
       });
 
       test("passes structuredContent from callTool result into CommonToolResult", async () => {
@@ -8197,5 +8576,699 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
       ),
     ).rejects.toThrow(/Resource not found/);
     expect(mockReadResource).not.toHaveBeenCalled();
+  });
+});
+
+// Every upstream call runs under some credential the gateway resolves — the
+// caller's own connection, a team or organization connection, a connection an
+// admin pinned as a service account, or a token minted for the caller. The
+// result and its log row name that identity so a tool call can answer "on
+// whose behalf did this run?".
+describe("executed-as identity", () => {
+  beforeEach(() => {
+    // This block sits outside the main describe, so it owns its mock state:
+    // a queued result left over from an earlier test would otherwise be handed
+    // to the next call instead of the one that test set up.
+    mockCallTool.mockReset();
+    mockConnect.mockReset();
+    mockListTools.mockReset();
+  });
+
+  const userToken = (
+    userId: string,
+    organizationId: string,
+    overrides: Partial<TokenAuthContext> = {},
+  ): TokenAuthContext => ({
+    tokenId: randomUUID(),
+    teamId: null,
+    isOrganizationToken: false,
+    isUserToken: true,
+    userId,
+    organizationId,
+    ...overrides,
+  });
+
+  async function makeRemoteCatalogTool(agentId: string) {
+    const catalogItem = await InternalMcpCatalogModel.create({
+      name: `executed-as-${randomUUID().slice(0, 8)}`,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+    });
+    const tool = await ToolModel.createToolIfNotExists({
+      name: `${catalogItem.name}__do_thing`,
+      description: "Executed-as tool",
+      parameters: {},
+      catalogId: catalogItem.id,
+    });
+    await AgentToolModel.create(agentId, tool.id, {
+      credentialResolutionMode: "dynamic",
+    });
+    return { catalogItem, tool };
+  }
+
+  async function makeConnection(params: {
+    catalogId: string;
+    ownerId?: string;
+    teamId?: string;
+    scope?: "personal" | "team" | "org";
+    withStoredCredential?: boolean;
+  }) {
+    const secret = params.withStoredCredential
+      ? await secretManager().createSecret(
+          { access_token: "stored-upstream-token" },
+          `executed-as-${randomUUID().slice(0, 8)}`,
+        )
+      : null;
+    return await McpServerModel.create({
+      name: `connection-${randomUUID().slice(0, 8)}`,
+      catalogId: params.catalogId,
+      serverType: "remote",
+      secretId: secret?.id,
+      ownerId: params.ownerId,
+      teamId: params.teamId,
+      scope: params.scope,
+    });
+  }
+
+  async function callTool(params: {
+    agentId: string;
+    toolName: string;
+    tokenAuth: TokenAuthContext;
+    upstreamResult?: Record<string, unknown>;
+  }) {
+    mockConnect.mockResolvedValue(undefined);
+    mockListTools.mockResolvedValue({ tools: [] });
+    mockCallTool.mockResolvedValueOnce(
+      params.upstreamResult ?? {
+        content: [{ type: "text", text: "upstream ok" }],
+        isError: false,
+      },
+    );
+    return await mcpClient.executeToolCallForOwner(
+      {
+        id: `call_${randomUUID().slice(0, 8)}`,
+        name: params.toolName,
+        arguments: {},
+      },
+      agentOwner(params.agentId),
+      params.tokenAuth,
+    );
+  }
+
+  test("names the caller's own connection", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: caller.id,
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "personal",
+      ownerUserId: caller.id,
+      ownerName: "Ada Lovelace",
+    });
+  });
+
+  test("names the owner of a connection pinned as the catalog's service account", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser({ name: "Grace Hopper" });
+    const caller = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(owner.id, org.id, { role: "admin" });
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    // The caller has their own connection, but the catalog pins everyone to the
+    // owner's — so the call runs as the owner, not as the caller.
+    await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: caller.id,
+      withStoredCredential: true,
+    });
+    const serviceAccount = await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: owner.id,
+      withStoredCredential: true,
+    });
+    await InternalMcpCatalogModel.update(catalogItem.id, {
+      dynamicConnectionMcpServerId: serviceAccount.id,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "personal",
+      ownerUserId: owner.id,
+      ownerName: "Grace Hopper",
+    });
+  });
+
+  test("names the owning team for a team connection", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, caller.id, { name: "Platform Team" });
+    const { TeamModel } = await import("@/models");
+    await TeamModel.addMember(team.id, caller.id, "member");
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      teamId: team.id,
+      scope: "team",
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "team",
+      teamId: team.id,
+      teamName: "Platform Team",
+    });
+  });
+
+  test("reports an organization connection", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      scope: "org",
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({ kind: "org" });
+  });
+
+  test("reports the caller's own token when the connection stores no credential of its own", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    // No stored credential, so the transport forwards the caller's own JWT and
+    // the upstream server sees the caller, not the connection's owner.
+    await makeConnection({ catalogId: catalogItem.id, scope: "org" });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id, {
+        isExternalIdp: true,
+        rawToken: "caller-jwt",
+      }),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "idp_passthrough",
+      callerUserId: caller.id,
+    });
+  });
+
+  test("reports the connection's identity when it has a stored credential the caller's token cannot displace", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      scope: "org",
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id, {
+        isExternalIdp: true,
+        rawToken: "caller-jwt",
+      }),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({ kind: "org" });
+  });
+
+  test("reports an authorization header the caller supplied", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({ catalogId: catalogItem.id, scope: "org" });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id, {
+        passthroughHeaders: { Authorization: "Bearer caller-supplied" },
+      }),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "caller_headers",
+      callerUserId: caller.id,
+    });
+  });
+
+  test("replaces an identity the upstream server tried to forge", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: caller.id,
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+      upstreamResult: {
+        content: [{ type: "text", text: "upstream ok" }],
+        isError: false,
+        _meta: {
+          [MCP_EXECUTED_AS_META_KEY]: { kind: "org" },
+          upstreamOwn: "kept",
+        },
+      },
+    });
+
+    expect(result._meta).toMatchObject({
+      upstreamOwn: "kept",
+      [MCP_EXECUTED_AS_META_KEY]: {
+        kind: "personal",
+        ownerUserId: caller.id,
+        ownerName: "Ada Lovelace",
+      },
+    });
+  });
+
+  test("records the identity on the tool call log row", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: caller.id,
+      withStoredCredential: true,
+    });
+
+    await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    const [logRow] = await db
+      .select()
+      .from(schema.mcpToolCallsTable)
+      .where(eq(schema.mcpToolCallsTable.agentId, agent.id));
+
+    // The caller is recorded alongside the identity the call ran as, so the log
+    // reads "ran as X on behalf of Y".
+    expect(logRow?.userId).toBe(caller.id);
+    expect(
+      (logRow?.toolResult as { _meta?: Record<string, unknown> })?._meta?.[
+        MCP_EXECUTED_AS_META_KEY
+      ],
+    ).toEqual({
+      kind: "personal",
+      ownerUserId: caller.id,
+      ownerName: "Ada Lovelace",
+    });
+  });
+
+  test("keeps the identity on a result the upstream server flagged as an error", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      scope: "org",
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+      upstreamResult: {
+        content: [{ type: "text", text: "rate limited" }],
+        isError: true,
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({ kind: "org" });
+  });
+
+  test("attributes a call the platform refused to the caller", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { tool } = await makeRemoteCatalogTool(agent.id);
+    // No connection exists, so the call is refused before any credential is
+    // chosen — but the platform still ran it on the caller's behalf.
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "platform",
+      callerUserId: caller.id,
+    });
+  });
+});
+
+describe("task-mode upstream timeout", () => {
+  test("an explicit upstreamTimeoutMs reaches the SDK call in place of the sync window", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser({ email: "tt-admin@example.com" });
+    const caller = await makeUser({ email: "tt-caller@example.com" });
+    await makeMember(caller.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+
+    const catalog = await InternalMcpCatalogModel.create({
+      name: "timeout-lab",
+      serverType: "remote",
+      serverUrl: "https://mcp.timeout.example/mcp",
+    });
+    const secret = await secretManager().createSecret(
+      { access_token: "tl-token" },
+      "tl-secret",
+    );
+    const server = await McpServerModel.create({
+      name: "timeout-lab",
+      catalogId: catalog.id,
+      secretId: secret.id,
+      serverType: "remote",
+      ownerId: admin.id,
+      scope: "org",
+    });
+    await InternalMcpCatalogModel.update(catalog.id, {
+      dynamicConnectionMcpServerId: server.id,
+    });
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "timeout-lab__slow",
+      description: "slow",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    await AgentToolModel.createOrUpdateCredentials(
+      agent.id,
+      tool.id,
+      null,
+      "dynamic",
+    );
+
+    mockCallTool.mockResolvedValueOnce({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    await mcpClient.executeToolCallForOwner(
+      { id: "call_tt", name: "timeout-lab__slow", arguments: {} },
+      agentOwner(agent.id),
+      {
+        tokenId: "tt-token",
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+        userId: caller.id,
+        organizationId: org.id,
+      },
+      { upstreamTimeoutMs: 1_800_000 },
+    );
+
+    const lastOptions = mockCallTool.mock.calls.at(-1)?.[2] as {
+      timeout?: number;
+    };
+    // A detached task is bounded by the task TTL, not the synchronous
+    // patience window — without this, a task outliving the sync timeout dies
+    // even though nobody is waiting on it.
+    expect(lastOptions?.timeout).toBe(1_800_000);
+  });
+});
+
+describe("x-mcp-header mirroring (SEP-2243)", () => {
+  async function seedAnnotatedTool({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }: {
+    makeOrganization: () => Promise<{ id: string }>;
+    makeUser: (a?: object) => Promise<{ id: string }>;
+    makeMember: (u: string, o: string) => Promise<unknown>;
+    makeAgent: (a?: object) => Promise<{ id: string }>;
+  }) {
+    const org = await makeOrganization();
+    const admin = await makeUser({ email: "xh-admin@example.com" });
+    const caller = await makeUser({ email: "xh-caller@example.com" });
+    await makeMember(caller.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+
+    const catalog = await InternalMcpCatalogModel.create({
+      name: "spanner",
+      serverType: "remote",
+      serverUrl: "https://mcp.spanner.example/mcp",
+    });
+    const secret = await secretManager().createSecret(
+      { access_token: "spanner-token" },
+      "spanner-secret",
+    );
+    const server = await McpServerModel.create({
+      name: "spanner",
+      catalogId: catalog.id,
+      secretId: secret.id,
+      serverType: "remote",
+      ownerId: admin.id,
+      scope: "org",
+    });
+    await InternalMcpCatalogModel.update(catalog.id, {
+      dynamicConnectionMcpServerId: server.id,
+    });
+
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "spanner__execute_sql",
+      description: "Execute SQL",
+      parameters: {
+        type: "object",
+        properties: {
+          region: { type: "string", "x-mcp-header": "Region" },
+          query: { type: "string" },
+        },
+        required: ["region", "query"],
+      },
+      catalogId: catalog.id,
+    });
+    await AgentToolModel.createOrUpdateCredentials(
+      agent.id,
+      tool.id,
+      null,
+      "dynamic",
+    );
+
+    const tokenAuth = {
+      tokenId: "xh-token",
+      teamId: null,
+      isOrganizationToken: false,
+      isUserToken: true,
+      userId: caller.id,
+      organizationId: org.id,
+    };
+
+    return { agent, tokenAuth };
+  }
+
+  async function lastTransportHeaders(): Promise<Headers> {
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+    const calls = vi.mocked(StreamableHTTPClientTransport).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    return calls[calls.length - 1][1]?.requestInit?.headers as Headers;
+  }
+
+  test("annotated argument values reach the upstream transport as Mcp-Param headers", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { agent, tokenAuth } = await seedAnnotatedTool({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    mockCallTool.mockResolvedValueOnce({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const result = await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_xh_1",
+        name: "spanner__execute_sql",
+        arguments: { region: "us-west1", query: "SELECT 1" },
+      },
+      agentOwner(agent.id),
+      tokenAuth,
+    );
+
+    expect(result).toMatchObject({ isError: false });
+    const headers = await lastTransportHeaders();
+    expect(headers.get("mcp-param-region")).toBe("us-west1");
+    // Only annotated params are mirrored — the body-only param stays put.
+    expect(headers.get("mcp-param-query")).toBeNull();
+  });
+
+  test("a second call with a different value gets its own headers, not the first call's", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    // The leakage this guards: connections are pooled, and a header baked at
+    // connection creation must not survive onto a call that supplied a
+    // different value. The credential-fingerprint check rebuilds the
+    // connection when the header set changes.
+    const { agent, tokenAuth } = await seedAnnotatedTool({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_xh_2",
+        name: "spanner__execute_sql",
+        arguments: { region: "us-west1", query: "SELECT 1" },
+      },
+      agentOwner(agent.id),
+      tokenAuth,
+    );
+    await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_xh_3",
+        name: "spanner__execute_sql",
+        arguments: { region: "eu-central1", query: "SELECT 2" },
+      },
+      agentOwner(agent.id),
+      tokenAuth,
+    );
+
+    const headers = await lastTransportHeaders();
+    expect(headers.get("mcp-param-region")).toBe("eu-central1");
   });
 });

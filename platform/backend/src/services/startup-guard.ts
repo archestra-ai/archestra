@@ -152,6 +152,21 @@ export interface StartupGuardClient {
    */
   skillsDisconnectCommands: string;
   /**
+   * Optional proof that the `mcp)` removal actually took effect, run in the
+   * foreground after the silenced commands above.
+   *
+   * The removals delegate to the vendor CLI, whose exit status cannot answer
+   * "is it gone?": `codex mcp remove <missing>` exits 0 while
+   * `codex plugin marketplace remove <missing>` exits 1, so a zero exit proves
+   * nothing and a non-zero one may just mean "already absent". These snippets
+   * therefore check the client's config on disk instead. They must print their
+   * own reason and `return 1` when the entry survived; a client that omits
+   * them keeps the previous assume-success behaviour.
+   */
+  mcpDisconnectVerify?: string;
+  /** As `mcpDisconnectVerify`, for the `skills)` case. */
+  skillsDisconnectVerify?: string;
+  /**
    * The `disconnect_proxy()` and `proxy_disconnect_notes()` shell function
    * definitions, fully client-specific (settings.json strip / TOML block strip
    * / shell-profile export strip). Only emitted when a proxy is covered.
@@ -179,6 +194,16 @@ export interface StartupGuardWindowsClient {
    * and `$SkillsMarketplaceName`.
    */
   skillsDisconnect: string;
+  /**
+   * PowerShell body proving the `'mcp'` removal landed, for
+   * `Test-ArchDisconnected`. Must `return $false` (after setting
+   * `$Script:ArchDisconnectReason`) when the entry survived. See
+   * {@link StartupGuardClient.mcpDisconnectVerify} for why the vendor CLI's
+   * exit status cannot be used instead.
+   */
+  mcpDisconnectVerify?: string;
+  /** As `mcpDisconnectVerify`, for the `'skills'` case. */
+  skillsDisconnectVerify?: string;
   /**
    * Defines `function Disconnect-ArchProxy { … }` — the client-specific proxy
    * reversal (settings.json strip / config.toml block strip / env removal).
@@ -473,6 +498,31 @@ ${client.skillsDisconnectCommands}
   esac
 }
 
+# Proof that a removal landed. The vendor CLIs are delegated to with their
+# output silenced and their exit status is not a reliable signal, so the check
+# reads the client's config instead. Runs in the FOREGROUND (unlike
+# disconnect_actions) so a failing check can print why. Default: assume success,
+# which is every client that ships no verifier.
+disconnect_verify() { # $1 kind
+  case "$1" in${
+    ctx.mcp && client.mcpDisconnectVerify
+      ? `
+    mcp)
+${client.mcpDisconnectVerify}
+      ;;`
+      : ""
+  }${
+    ctx.skills && client.skillsDisconnectVerify
+      ? `
+    skills)
+${client.skillsDisconnectVerify}
+      ;;`
+      : ""
+  }
+  esac
+  return 0
+}
+
 # Reversing a connect step animates the same way the probes do: the commands
 # run in the background while the dots grow, then the row lands on a check.
 disconnect_resource() { # $1 kind, $2 label
@@ -487,6 +537,10 @@ disconnect_resource() { # $1 kind, $2 label
   done
   wait "$arch_dp" 2>/dev/null || true
   line_reset
+  if ! disconnect_verify "$1"; then
+    printf '%s✗ Could not disconnect %s%s\\n' "$C_ERR" "$2" "$C_RESET"
+    return 1
+  fi
   printf '%s✓%s Disconnected %s\\n' "$C_ACCENT" "$C_RESET" "$2"${
     ctx.proxy
       ? `
@@ -513,10 +567,20 @@ ${client.renderProxyDisconnect(ctx)}`
       : ""
   }
 
+# Set when any resource failed to disconnect, so the caller keeps the guard
+# installed instead of deleting the only thing that could retry.
+DISCONNECT_FAILED=0
+
 disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on later launches
   for i in "$@"; do
-    disconnect_resource "\${GUARD_KINDS[$i]}" "\${GUARD_LABELS[$i]}"
-    remember_disconnected "\${GUARD_KINDS[$i]}"
+    # Only a removal we could prove is recorded as done — remembering an
+    # unverified one would skip the resource on every later launch and strand
+    # the leftover permanently.
+    if disconnect_resource "\${GUARD_KINDS[$i]}" "\${GUARD_LABELS[$i]}"; then
+      remember_disconnected "\${GUARD_KINDS[$i]}"
+    else
+      DISCONNECT_FAILED=1
+    fi
   done
 }
 
@@ -524,10 +588,12 @@ disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on
 # Opened with [C] from the prompt under the rows. Every remote is already on
 # screen in a stable block, so the menu just re-decorates those rows in place
 # ([n] label) and reads number keys — no redraw, no layout jump. Pressing a
-# number disconnects that remote (reverse-of-connect, then remembered) and
-# lands its row on the purple check; Esc or Enter leaves and lets claude
-# start. Removing the last connected remote takes the guard with it. Rows
-# list every active remote regardless of reachability.
+# number disconnects that remote (reverse-of-connect, verified, then
+# remembered) and lands its row on the purple check — or on ✗ with its number
+# still live when the removal cannot be proven; Esc or Enter leaves and lets
+# claude start. Removing the last connected remote takes the guard with it,
+# but only when every removal was proven. Rows list every active remote
+# regardless of reachability.
 MENU_DONE=' '
 menu_at_row()    { printf '\\033[%dA\\r\\033[2K' "$((ACTIVE_TOTAL - $1 + 1))"; }
 menu_leave_row() { printf '\\033[%dB\\r' "$((ACTIVE_TOTAL - $1 + 1))"; }
@@ -552,9 +618,20 @@ menu_disconnect_row() { # $1 pos, $2 idx — animate the reversal on its own row
   done
   wait "$arch_dp" 2>/dev/null || true
   line_reset
+  # Same contract as disconnect_resource: only a removal we can prove lands
+  # the check and the skip-file entry. Verify output is suppressed because
+  # this line is repainted in place — the row itself carries the verdict,
+  # and an unproven removal keeps its number so it can be retried.
+  if ! disconnect_verify "\${GUARD_KINDS[$2]}" >/dev/null 2>&1; then
+    DISCONNECT_FAILED=1
+    printf '%s✗ Could not disconnect %s — [%s] to retry%s' "$C_ERR" "\${GUARD_LABELS[$2]}" "$1" "$C_RESET"
+    menu_leave_row "$1"
+    return 1
+  fi
   printf '%s✓%s Disconnected %s' "$C_ACCENT" "$C_RESET" "\${GUARD_LABELS[$2]}"
   menu_leave_row "$1"
   remember_disconnected "\${GUARD_KINDS[$2]}"
+  return 0
 }
 reconfigure_menu() {
   GUARD_DWELL=1
@@ -578,13 +655,13 @@ reconfigure_menu() {
         done
         [ -z "$menu_target" ] && continue
         case "$MENU_DONE" in *" $menu_target "*) continue ;; esac
-        menu_disconnect_row "$key" "$menu_target"
+        menu_disconnect_row "$key" "$menu_target" || continue
         MENU_DONE="$MENU_DONE$menu_target "
         menu_left=0
         for menu_idx in $ACTIVE_IDXS; do
           case "$MENU_DONE" in *" $menu_idx "*) ;; *) menu_left=$((menu_left + 1)) ;; esac
         done
-        if [ "$menu_left" -eq 0 ]; then
+        if [ "$menu_left" -eq 0 ] && [ "$DISCONNECT_FAILED" = "0" ]; then
           uninstall_guard
           break
         fi
@@ -654,7 +731,7 @@ prompt_down_all() {
     y|Y|'')
       GUARD_DWELL=1
       disconnect_and_forget $DOWN_IDXS
-      [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ] && uninstall_guard
+      [ "$DOWN_COUNT" -ge "$ACTIVE_TOTAL" ] && [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard
       ;;
     *)
       line_reset
@@ -798,7 +875,7 @@ if [ "$DISC_ALL" = "1" ]; then
   line_reset
   GUARD_DWELL=1
   disconnect_and_forget $ACTIVE_IDXS
-  uninstall_guard
+  [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard
   finish_guard
 fi
 if [ "$SKIP_ALL" = "1" ]; then

@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 
 /**
  * The listing identity of an external app: one tool tile of one install. The
@@ -137,10 +138,19 @@ class AppPinModel {
         pinnedAt: schema.appPinsTable.pinnedAt,
       })
       .from(schema.appPinsTable)
+      // Join the server so a pin on a soft-deleted (uninstalled) install stops
+      // surfacing: the pin row is retained — like the agent ↔ tool bindings —
+      // so restoring the install resurfaces the pin. Hard deletes still clear
+      // the row via the FK cascade.
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.appPinsTable.mcpServerId, schema.mcpServersTable.id),
+      )
       .where(
         and(
           eq(schema.appPinsTable.userId, params.userId),
           isNotNull(schema.appPinsTable.mcpServerId),
+          notDeleted(schema.mcpServersTable),
         ),
       );
     const wanted = new Set(params.refs.map(externalKey));

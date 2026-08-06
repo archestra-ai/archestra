@@ -7,13 +7,20 @@ import {
   ilike,
   inArray,
   isNotNull,
+  isNull,
   like,
+  ne,
+  notInArray,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
+import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
 import type {
   InsertSkill,
   InsertSkillFile,
@@ -47,6 +54,20 @@ class SkillModel {
      * Omit for management surfaces that list every environment.
      */
     environmentId?: string | null;
+    scope?: ResourceVisibilityScope;
+    /** Restrict team-scoped results to skills assigned to these teams. */
+    teamIds?: string[];
+    /** Restrict personal-scoped results to these authors. */
+    authorIds?: string[];
+    /** Hide skills authored by these users (authorless rows are kept). */
+    excludeAuthorIds?: string[];
+    /**
+     * When set, hides personal skills owned by other users (the admin
+     * default view; mirrors the agents list).
+     */
+    excludeOtherPersonalForUserId?: string;
+    /** Active rows (default) or the soft-deleted trash. */
+    status?: SkillRecordStatus;
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
@@ -73,6 +94,13 @@ class SkillModel {
     accessibleSkillIds?: string[];
     /** Same environment-visibility filter as `findByOrganization`. */
     environmentId?: string | null;
+    scope?: ResourceVisibilityScope;
+    teamIds?: string[];
+    authorIds?: string[];
+    excludeAuthorIds?: string[];
+    excludeOtherPersonalForUserId?: string;
+    /** Active rows (default) or the soft-deleted trash. */
+    status?: SkillRecordStatus;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -86,6 +114,12 @@ class SkillModel {
    * Distinct `owner/repo` strings across the org's imported skills, derived
    * from the `source_ref` provenance column (formatted as
    * `owner/repo@ref:path`).
+   *
+   * Built-in skills also carry a `source_ref`, but it is a `builtin:<id>`
+   * identity token rather than a repository — and one that embeds the
+   * unbranded product id, which would leak into the white-labeled repository
+   * filter. They are excluded, matching how the skills table suppresses the
+   * same refs in favor of the app-name badge.
    */
   static async findDistinctSourceRepos(params: {
     organizationId: string;
@@ -105,6 +139,7 @@ class SkillModel {
     const repos = new Set<string>();
     for (const { sourceRef } of rows) {
       if (!sourceRef) continue;
+      if (isBuiltInSkillSourceRef(sourceRef)) continue;
       const atIdx = sourceRef.indexOf("@");
       const repo = atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
       if (repo) repos.add(repo);
@@ -116,7 +151,9 @@ class SkillModel {
     const [result] = await db
       .select()
       .from(schema.skillsTable)
-      .where(eq(schema.skillsTable.id, id));
+      .where(
+        and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)),
+      );
 
     return result ?? null;
   }
@@ -126,10 +163,22 @@ class SkillModel {
     return await db
       .select()
       .from(schema.skillsTable)
-      .where(inArray(schema.skillsTable.id, ids));
+      .where(
+        and(
+          inArray(schema.skillsTable.id, ids),
+          notDeleted(schema.skillsTable),
+        ),
+      );
   }
 
-  /** Locate a shipped built-in skill by its stable `source_ref` within an org. */
+  /**
+   * Locate a shipped built-in skill by its stable `source_ref` within an org.
+   *
+   * Deliberately includes soft-deleted rows: the startup seeder uses this to
+   * reconcile shipped definitions, and a soft-deleted built-in must be seen
+   * (and skipped) there — otherwise every boot would resurrect it as a fresh
+   * copy. Deleting a built-in skill is a durable opt-out.
+   */
   static async findBuiltIn(params: {
     organizationId: string;
     sourceRef: string;
@@ -167,6 +216,7 @@ class SkillModel {
         and(
           eq(schema.skillsTable.organizationId, organizationId),
           eq(schema.skillsTable.name, name),
+          notDeleted(schema.skillsTable),
         ),
       )
       .orderBy(desc(schema.skillsTable.createdAt));
@@ -194,6 +244,9 @@ class SkillModel {
         and(
           eq(schema.skillsTable.organizationId, params.organizationId),
           inArray(schema.skillsTable.name, params.names),
+          // mirrors the partial unique indexes, which exclude soft-deleted
+          // rows — a deleted skill's name is free for re-use.
+          notDeleted(schema.skillsTable),
           or(
             inArray(schema.skillsTable.scope, sharedScopes),
             and(
@@ -226,6 +279,11 @@ class SkillModel {
       teamIds?: string[];
       /** Environments the skill is restricted to; empty/omitted = every environment. */
       environmentIds?: string[];
+      /**
+       * Git commit the initial bytes came from, stamped on version 1. Passed
+       * only by the GitHub import; see `skill_versions.source_commit`.
+       */
+      versionSourceCommit?: string;
     },
     tx?: Transaction,
   ): Promise<Skill | null> {
@@ -272,6 +330,7 @@ class SkillModel {
           files: versionFiles,
         }),
         files: versionFiles,
+        sourceCommit: params.versionSourceCommit,
       });
 
       return skill;
@@ -293,11 +352,13 @@ class SkillModel {
    * change can never be committed with a team set that leaves the skill
    * orphaned.
    *
-   * When `expectedLatestVersion` is set, the update is a compare-and-set: it
-   * throws `ApiError(409)` (rolling back) if the skill's head has already moved
-   * past that version, so an edit computed from a stale snapshot cannot clobber
-   * a concurrent update. Omit it to keep last-write-wins (the full-manifest
-   * `update_skill` path, whose payload is self-contained).
+   * `expectedLatestVersion` anchors the edit to the head it was computed from:
+   * the update is a compare-and-set that throws `ApiError(409)` (rolling back)
+   * if the skill has already moved past it, so a stale snapshot cannot clobber
+   * a concurrent write. It is opt-in per caller: `edit_skill` always passes one
+   * (its schema requires `baseVersion`), the REST update route forwards one only
+   * when the client sends it, and `update_skill` never does — it composes a whole
+   * manifest from its arguments and owes nothing to a prior read.
    */
   static async updateWithFiles(params: {
     id: string;
@@ -307,12 +368,23 @@ class SkillModel {
     /** Replaces the environment assignments; [] clears them (every environment). */
     environmentIds?: string[];
     expectedLatestVersion?: number;
+    /**
+     * Git commit the new bytes came from, stamped on the forked version and
+     * dropped when the payload is unchanged and nothing forks. Passed only by
+     * the GitHub sync; see `skill_versions.source_commit`.
+     */
+    versionSourceCommit?: string;
   }): Promise<Skill | null> {
     return await withDbTransaction(async (tx) => {
       const [skill] = await tx
         .update(schema.skillsTable)
         .set(params.skill)
-        .where(eq(schema.skillsTable.id, params.id))
+        .where(
+          and(
+            eq(schema.skillsTable.id, params.id),
+            notDeleted(schema.skillsTable),
+          ),
+        )
         .returning();
 
       if (!skill) return null;
@@ -324,9 +396,16 @@ class SkillModel {
         params.expectedLatestVersion !== undefined &&
         skill.latestVersion !== params.expectedLatestVersion
       ) {
+        // Carries an internal code because the update route raises other 409s
+        // (a name collision, a read-only GitHub-synced skill) and a client that
+        // has to offer a reload cannot tell them apart on the status alone.
+        // The message stays client-neutral: it reaches both the REST route and
+        // `edit_skill`, so the caller appends its own way back rather than
+        // being named here.
         throw new ApiError(
           409,
-          `Skill "${skill.name}" has moved to version ${skill.latestVersion}; the edit was based on version ${params.expectedLatestVersion}. Reload the skill with load_skill and retry.`,
+          `Skill "${skill.name}" has moved to version ${skill.latestVersion}; the edit was based on version ${params.expectedLatestVersion}.`,
+          "skill_version_conflict",
         );
       }
 
@@ -399,6 +478,7 @@ class SkillModel {
           content: skill.content,
           contentHash,
           files: versionFiles,
+          sourceCommit: params.versionSourceCommit,
         });
         const [bumped] = await tx
           .update(schema.skillsTable)
@@ -424,6 +504,7 @@ class SkillModel {
       .where(
         and(
           isNotNull(schema.skillsTable.githubSyncInterval),
+          notDeleted(schema.skillsTable),
           sql`(${schema.skillsTable.lastSyncedAt} IS NULL OR ${schema.skillsTable.lastSyncedAt} <= now() - CASE ${schema.skillsTable.githubSyncInterval}
             WHEN '15m' THEN interval '15 minutes'
             WHEN '1h' THEN interval '1 hour'
@@ -435,7 +516,9 @@ class SkillModel {
 
   /**
    * Synced skills whose scheduled pulls authenticate with this stored PAT.
-   * Deleting the PAT is blocked while this is non-zero.
+   * Deleting the PAT is blocked while this is non-zero. Soft-deleted skills
+   * don't count — they no longer sync, so they must not block credential
+   * deletion (their FK is ON DELETE SET NULL).
    */
   static async countSyncedReferencingGithubPat(
     githubPatId: string,
@@ -447,6 +530,7 @@ class SkillModel {
         and(
           eq(schema.skillsTable.githubPatId, githubPatId),
           isNotNull(schema.skillsTable.githubSyncInterval),
+          notDeleted(schema.skillsTable),
         ),
       );
     return result?.count ?? 0;
@@ -463,6 +547,7 @@ class SkillModel {
         and(
           eq(schema.skillsTable.githubAppConfigId, githubAppConfigId),
           isNotNull(schema.skillsTable.githubSyncInterval),
+          notDeleted(schema.skillsTable),
         ),
       );
     return result?.count ?? 0;
@@ -485,7 +570,9 @@ class SkillModel {
         lastSyncError: error,
         updatedAt: sql`${schema.skillsTable.updatedAt}`,
       })
-      .where(eq(schema.skillsTable.id, id));
+      .where(
+        and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)),
+      );
   }
 
   /**
@@ -510,7 +597,7 @@ class SkillModel {
               lastSyncError: null,
             },
       )
-      .where(eq(schema.skillsTable.id, id))
+      .where(and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)))
       .returning();
     return updated ?? null;
   }
@@ -534,7 +621,9 @@ class SkillModel {
         lastUsedAt: usedAt,
         updatedAt: sql`${schema.skillsTable.updatedAt}`,
       })
-      .where(eq(schema.skillsTable.id, skillId));
+      .where(
+        and(eq(schema.skillsTable.id, skillId), notDeleted(schema.skillsTable)),
+      );
     const eventWrite = db
       .insert(schema.skillUsageEventsTable)
       .values({ skillId, userId, createdAt: usedAt });
@@ -552,15 +641,192 @@ class SkillModel {
     );
   }
 
+  /**
+   * Soft-delete a skill (frees its name for re-use via the partial unique
+   * indexes). Junction rows, files, and versions are kept — reads are
+   * filtered instead.
+   */
   static async delete(id: string): Promise<boolean> {
-    const rows = await db
-      .delete(schema.skillsTable)
-      .where(eq(schema.skillsTable.id, id))
-      .returning({ id: schema.skillsTable.id });
-
-    return rows.length > 0;
+    const count = await softDelete(
+      db,
+      schema.skillsTable,
+      eq(schema.skillsTable.id, id),
+    );
+    return count > 0;
   }
 
+  /**
+   * Restore a soft-deleted skill by clearing `deletedAt`. A pure un-delete:
+   * no other column is touched. The GitHub sync config and credentials are
+   * left as-is — if the skill's credential was nulled (FK `ON DELETE SET
+   * NULL`) while it was deleted, the sync handler simply falls back to an
+   * unauthenticated (public) pull and, for a now-private repo, records a
+   * `lastSyncError` without crashing. Returns whether a soft-deleted row
+   * transitioned back to active.
+   */
+  static async restore(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await restore(
+      tx ?? db,
+      schema.skillsTable,
+      eq(schema.skillsTable.id, id),
+    );
+    return count > 0;
+  }
+
+  /**
+   * Permanently destroy a soft-deleted skill: every version (and, by cascade,
+   * every version file), then the skill row itself — which cascades its files,
+   * team/user grants, environment assignments, usage events, share links, and
+   * connection-setup links. Irreversible.
+   *
+   * Versions must go FIRST and explicitly. `skill_versions.skill_id` is
+   * `ON DELETE SET NULL`, so deleting the skill alone would silently ORPHAN the
+   * version rows and their file contents — leaving the skill's actual bytes
+   * behind, unreachable and undeletable, which is the opposite of what a purge
+   * is for.
+   *
+   * That delete can fail: `skill_sandbox_skill_mounts.skill_version_id` is
+   * `ON DELETE RESTRICT`, so a sandbox still holding this skill blocks it. The
+   * violation is deliberately NOT caught here — an aborted Postgres transaction
+   * cannot be continued from the inside, so the caller catches it outside this
+   * transaction and answers 409.
+   *
+   * Returns false if there was no soft-deleted row to take, which is how a
+   * restore that won the race reports itself.
+   */
+  static async purge(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    return withDbTransaction(async (tx) => {
+      // The row lock is the race guard: a concurrent restore either commits
+      // first (leaving no soft-deleted row for us to find) or blocks until this
+      // transaction commits and then finds no row at all.
+      const [locked] = await tx
+        .select({ id: schema.skillsTable.id })
+        .from(schema.skillsTable)
+        .where(
+          and(
+            eq(schema.skillsTable.id, params.id),
+            eq(schema.skillsTable.organizationId, params.organizationId),
+            isNotNull(schema.skillsTable.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!locked) return false;
+
+      await tx
+        .delete(schema.skillVersionsTable)
+        .where(eq(schema.skillVersionsTable.skillId, params.id));
+      await hardDelete(
+        tx,
+        schema.skillsTable,
+        eq(schema.skillsTable.id, params.id),
+      );
+      return true;
+    });
+  }
+
+  /**
+   * The soft-deleted row scoped to its org — the restore route's lookup, used
+   * to authorize and conflict-check before un-deleting. `findById`/`findByIds`
+   * filter deleted rows, so they cannot serve this path.
+   */
+  static async findDeletedById(
+    id: string,
+    organizationId: string,
+  ): Promise<Skill | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          eq(schema.skillsTable.organizationId, organizationId),
+          isNotNull(schema.skillsTable.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Whether restoring `skill` would collide with an active skill on either
+   * partial name-uniqueness index. Returns a 409 message, or null when clear.
+   * Advisory only: the partial unique index is the real guard, so the restore
+   * route also maps its violation to a 409 in case a create races this check.
+   */
+  static async getRestoreConflictMessage(skill: Skill): Promise<string | null> {
+    if (skill.scope === "personal") {
+      // The personal index is (org, authorId, name); NULLs are distinct in a
+      // unique index, so an authorless row can never collide — skip the check.
+      if (!skill.authorId) return null;
+      const [conflict] = await db
+        .select({ id: schema.skillsTable.id })
+        .from(schema.skillsTable)
+        .where(
+          and(
+            eq(schema.skillsTable.organizationId, skill.organizationId),
+            eq(schema.skillsTable.authorId, skill.authorId),
+            eq(schema.skillsTable.name, skill.name),
+            eq(schema.skillsTable.scope, "personal"),
+            ne(schema.skillsTable.id, skill.id),
+            notDeleted(schema.skillsTable),
+          ),
+        )
+        .limit(1);
+      return conflict
+        ? `Cannot restore: a personal skill named "${skill.name}" already exists.`
+        : null;
+    }
+
+    // team + org share the (org, name) partial index over scope in team/org.
+    const [conflict] = await db
+      .select({ id: schema.skillsTable.id })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, skill.organizationId),
+          eq(schema.skillsTable.name, skill.name),
+          inArray(schema.skillsTable.scope, ["team", "org"]),
+          ne(schema.skillsTable.id, skill.id),
+          notDeleted(schema.skillsTable),
+        ),
+      )
+      .limit(1);
+    return conflict
+      ? `Cannot restore: a shared skill named "${skill.name}" already exists.`
+      : null;
+  }
+
+  /**
+   * Identity of a skill for the audit trail, and nothing else. The
+   * permanent-delete route uses this rather than {@link findByIdForAudit}: a
+   * purge is audited by identity only, never by keeping a copy of the content
+   * it destroyed. Includes soft-deleted rows — the purge target is always one.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.skillsTable.id,
+        name: schema.skillsTable.name,
+      })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          eq(schema.skillsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /** Audit lookup: the raw row scoped to an org, including soft-deleted. */
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -635,16 +901,59 @@ function buildOrgFilters(params: {
   sourceRepo?: string;
   accessibleSkillIds?: string[];
   environmentId?: string | null;
+  scope?: ResourceVisibilityScope;
+  teamIds?: string[];
+  authorIds?: string[];
+  excludeAuthorIds?: string[];
+  excludeOtherPersonalForUserId?: string;
+  status?: SkillRecordStatus;
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
   return [
     eq(schema.skillsTable.organizationId, params.organizationId),
+    // Only the org list/count methods pass `status`; every other caller
+    // (source-repo scan, name lookups, etc.) omits it and stays active-only.
+    getSkillStatusCondition(params.status ?? "active"),
     ...(params.accessibleSkillIds !== undefined
       ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
       : []),
     ...(params.environmentId !== undefined
       ? [skillInEnvironmentPredicate(params.environmentId)]
+      : []),
+    ...(params.scope ? [eq(schema.skillsTable.scope, params.scope)] : []),
+    ...(params.teamIds?.length
+      ? [
+          inArray(
+            schema.skillsTable.id,
+            db
+              .select({ skillId: schema.skillTeamsTable.skillId })
+              .from(schema.skillTeamsTable)
+              .where(inArray(schema.skillTeamsTable.teamId, params.teamIds)),
+          ),
+        ]
+      : []),
+    ...(params.authorIds?.length
+      ? [inArray(schema.skillsTable.authorId, params.authorIds)]
+      : []),
+    ...(params.excludeAuthorIds?.length
+      ? [
+          or(
+            isNull(schema.skillsTable.authorId),
+            notInArray(schema.skillsTable.authorId, params.excludeAuthorIds),
+          ),
+        ]
+      : []),
+    ...(params.excludeOtherPersonalForUserId
+      ? [
+          or(
+            ne(schema.skillsTable.scope, "personal"),
+            eq(
+              schema.skillsTable.authorId,
+              params.excludeOtherPersonalForUserId,
+            ),
+          ),
+        ]
       : []),
     ...(normalizedSearch
       ? [
@@ -658,6 +967,15 @@ function buildOrgFilters(params: {
       ? [like(schema.skillsTable.sourceRef, `${normalizedSourceRepo}@%`)]
       : []),
   ];
+}
+
+type SkillRecordStatus = "active" | "deleted";
+
+/** Active rows vs the soft-deleted trash, for the list `status` filter. */
+function getSkillStatusCondition(status: SkillRecordStatus): SQL {
+  return status === "deleted"
+    ? isNotNull(schema.skillsTable.deletedAt)
+    : notDeleted(schema.skillsTable);
 }
 
 export default SkillModel;

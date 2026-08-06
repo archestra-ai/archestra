@@ -106,6 +106,94 @@ describe("member routes", () => {
       },
     });
   });
+
+  test("matches search tokens regardless of the order they are stored in", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    // Directory syncs commonly store "Last, First M." while people search
+    // "First Last".
+    const targetUser = await makeUser({
+      name: "Lovelace, Ada M.",
+      email: "ada.lovelace@example.com",
+    });
+    await makeMember(targetUser.id, organizationId, { role: "member" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/members?limit=10&offset=0&name=Ada%20Lovelace",
+    });
+    const payload = response.json();
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.data).toMatchObject([{ name: "Lovelace, Ada M." }]);
+  });
+
+  test("matches when tokens are spread across name and email", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const targetUser = await makeUser({
+      name: "Ada Lovelace",
+      email: "analytical.engine@example.com",
+    });
+    await makeMember(targetUser.id, organizationId, { role: "member" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/members?limit=10&offset=0&name=Lovelace%20analytical",
+    });
+    const payload = response.json();
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.data).toMatchObject([{ name: "Ada Lovelace" }]);
+  });
+
+  test("requires every token to match, so extra words still narrow results", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const ada = await makeUser({
+      name: "Ada Lovelace",
+      email: "ada@example.com",
+    });
+    const charles = await makeUser({
+      name: "Charles Babbage",
+      email: "charles@example.com",
+    });
+    await makeMember(ada.id, organizationId, { role: "member" });
+    await makeMember(charles.id, organizationId, { role: "member" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/members?limit=10&offset=0&name=Ada%20Babbage",
+    });
+    const payload = response.json();
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.data).toEqual([]);
+    expect(payload.pagination.total).toBe(0);
+  });
+
+  test("treats LIKE wildcards in the query as literal characters", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const targetUser = await makeUser({
+      name: "Ada Lovelace",
+      email: "ada@example.com",
+    });
+    await makeMember(targetUser.id, organizationId, { role: "member" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/members?limit=10&offset=0&name=%25",
+    });
+    const payload = response.json();
+
+    expect(response.statusCode).toBe(200);
+    expect(payload.data).toEqual([]);
+  });
 });
 
 describe("GET /api/organization/members/:idOrEmail", () => {

@@ -22,21 +22,22 @@ export const ChatCompletionUsageSchema = z
     `https://platform.minimax.io/docs/api-reference/text-openai-api#usage`,
   );
 
-export const FinishReasonSchema = z.enum([
-  "stop",
-  "length",
-  "tool_calls",
-  "content_filter",
-]);
+// Persist/read-back must tolerate nonconforming finish_reasons (same as OpenAI).
+export const FinishReasonSchema = z
+  .enum(["stop", "length", "tool_calls", "content_filter"])
+  .or(z.string());
 
 const ChoiceSchema = z
   .object({
     finish_reason: FinishReasonSchema,
-    index: z.number(),
+    // Some OpenAI-compatible upstreams omit `index` on choices; without
+    // optional() the response fails serialization (500).
+    index: z.number().optional(),
     logprobs: z.any().nullable().optional(),
     message: z
       .object({
-        content: z.string().nullable(),
+        // Tool-call-only replies often omit `content` entirely.
+        content: z.string().nullable().optional(),
         role: z.enum(["assistant"]),
         /**
          * Array of reasoning details (thinking content)
@@ -65,10 +66,12 @@ export const ChatCompletionRequestSchema = z
     tool_choice: ToolChoiceOptionSchema.optional(),
     stream: z.boolean().optional(),
     /**
-     * Temperature range: (0.0, 1.0] (exclusive of 0.0)
+     * Temperature range: [0.0, 1.0]. MiniMax accepts 0 (deterministic
+     * callers like the dual LLM guardrail send it); rejecting it here failed
+     * those requests at the proxy before MiniMax was ever reached.
      * Recommended value: 1.0
      */
-    temperature: z.number().gt(0).max(1).nullable().optional(),
+    temperature: z.number().min(0).max(1).nullable().optional(),
     top_p: z.number().min(0).max(1).nullable().optional(),
     max_tokens: z.number().nullable().optional(),
     /**
@@ -94,6 +97,16 @@ export const ChatCompletionRequestSchema = z
      * sent top-level or the server sees an unknown key and ignores it.
      */
     reasoning_split: z.boolean().optional(),
+    /**
+     * Thinking toggle (M3+; M2.x models think unconditionally and reject the
+     * disable). Must be declared or inbound validation strips it before the
+     * adapter.
+     */
+    thinking: z
+      .object({
+        type: z.enum(["enabled", "disabled"]),
+      })
+      .optional(),
     /**
      * Accepted for compatibility with clients written against MiniMax's Python
      * examples; the adapter unwraps it into the top-level body before sending.

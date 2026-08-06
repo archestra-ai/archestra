@@ -12,22 +12,25 @@ archestra:
   replicaCount: 1
 
   # Override the chart's production CPU requests (2 vCPU per pod) for CI.
-  # On the resource-constrained E2E runners, 1 platform + 2 workers at 2 vCPU
-  # each reserves 6 vCPU before PostgreSQL and the e2e dependency pods are
-  # scheduled — which intermittently leaves no room, so PostgreSQL or the
-  # platform pod gets FailedScheduling ("Insufficient cpu") and the deploy
-  # stalls until the Helm timeout. CPU requests are only a scheduling
-  # reservation (there is no CPU limit), so a smaller request still lets the
-  # pods burst as needed while letting everything fit on the node.
+  # The standard 4vcpu runner has ~3.9 vCPU allocatable, and the Kind
+  # control-plane pods (~950m) plus the e2e dependency chart (~700m) are
+  # already on the node — production-sized requests leave no room, so
+  # PostgreSQL or the platform pod gets FailedScheduling ("Insufficient
+  # cpu") and the deploy stalls until the wait timeout. CPU requests are
+  # only a scheduling reservation (there is no CPU limit), so a smaller
+  # request still lets the pods burst as needed while letting everything
+  # fit on the node. (The matching PostgreSQL override is under
+  # postgresql: below — the chart's production default requests a full
+  # vCPU.)
   resources:
     requests:
-      cpu: "500m"
+      cpu: "250m"
 
   worker:
     replicaCount: 2
     resources:
       requests:
-        cpu: "500m"
+        cpu: "250m"
 
   # CI-only probe tuning. `helm install --atomic --wait` blocks until the platform
   # pod reports Ready, which is gated by the startup probe completing and then the
@@ -164,6 +167,15 @@ postgresql:
     username: archestra
     password: vault_e2e_custom_pw
   primary:
+    # CI-sized scheduling reservation: the chart's production default
+    # requests a full vCPU, which cannot fit on the 4vcpu e2e runner next
+    # to the platform, workers, control-plane and dependency pods (see the
+    # archestra.resources comment above). Helm deep-merges this with the
+    # chart values, so the production memory limits stay in place.
+    resources:
+      requests:
+        cpu: "150m"
+        memory: "256Mi"
     initdb:
       scripts:
         grant-superuser.sql: |

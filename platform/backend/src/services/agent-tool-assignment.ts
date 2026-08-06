@@ -2,6 +2,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   AgentModel,
   AgentToolModel,
+  AgentVersionModel,
   AppAccessModel,
   AppModel,
   AppToolModel,
@@ -22,7 +23,7 @@ import type {
 } from "@/types";
 
 export type ToolAssignmentError = {
-  code: "not_found" | "validation_error";
+  code: "not_found" | "validation_error" | "forbidden";
   error: { message: string; type: string };
 };
 
@@ -32,6 +33,7 @@ export type PrefetchedMcpServer = {
   catalogId: string | null;
   teamId?: string | null;
   scope: ResourceVisibilityScope;
+  serverType?: "app" | "builtin" | "local" | "remote";
 };
 
 type AgentToolAssignmentPrefetchedData = {
@@ -56,6 +58,25 @@ interface AgentToolAssignmentRequest {
   mcpServerId?: string | null;
   /** Optional prefetched lookup data used to avoid N+1 validation queries. */
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
+  /**
+   * Skip this assignment's config version fork. Set by bulk callers, which
+   * fork once per agent for the whole batch via
+   * `AgentVersionModel.forkAgentsBestEffort` — one user action should produce
+   * one version, not one per tool.
+   */
+  deferVersionFork?: boolean;
+}
+
+/** Whether the user holds the exact predefined Admin role. */
+export async function isPredefinedAdmin(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const membership = await MemberModel.getByUserId(
+    params.userId,
+    params.organizationId,
+  );
+  return membership?.role === "admin";
 }
 
 export async function assignToolToAgent(
@@ -84,6 +105,13 @@ export async function assignToolToAgent(
 
   if (result.status === "unchanged") {
     return "duplicate";
+  }
+
+  // The tool surface changed — snapshot a new agent config version. Shared
+  // choke point for every single-tool assign (REST, MCP tools, agent import),
+  // so those paths need no fork of their own.
+  if (!params.deferVersionFork) {
+    await AgentVersionModel.forkIfChangedBestEffort(params.agentId);
   }
 
   if (result.status === "updated") {
@@ -184,8 +212,9 @@ export async function resolveAppToolsByName(params: {
   userId: string;
   organizationId: string;
   toolNames: readonly string[];
-  /** Environment to resolve tools within (the app's bound environment; the org
-   * default for scaffold_app, where env selection is deferred). */
+  /** Environment to resolve tools within (the app's bound environment; for
+   * scaffold_app the authoring agent's, which is where the app gets bound).
+   * The Default baseline always matches on top. */
   environmentId: string | null;
 }): Promise<
   { tools: Array<{ id: string; name: string }> } | ToolAssignmentError
@@ -293,9 +322,10 @@ export async function assignToolToApp(params: {
   }
 
   // Environment fence: a tool whose catalog is outside the app's bound
-  // environment is not assignable. This is a same-org, wrong-environment tool —
+  // environment (and outside the Default baseline, which every app may draw
+  // from) is not assignable. This is a same-org, wrong-environment tool —
   // distinct from the foreign-org not_found above — so it gets a clear 400.
-  const inEnvironment = await ToolModel.isToolInEnvironment(
+  const inEnvironment = await ToolModel.isToolInEnvironmentOrDefault(
     params.toolId,
     app.environmentId,
   );
@@ -442,7 +472,7 @@ async function validateAssignedMcpServer(params: {
   tool: Tool;
   preFetchedServer?: Pick<
     PrefetchedMcpServer,
-    "id" | "ownerId" | "catalogId" | "teamId" | "scope"
+    "id" | "ownerId" | "catalogId" | "serverType" | "teamId" | "scope"
   > | null;
 }): Promise<ToolAssignmentError | null> {
   const { getOwnerContext, mcpServerId, tool, preFetchedServer } = params;
@@ -468,6 +498,19 @@ async function validateAssignedMcpServer(params: {
       error: {
         message:
           "Assigned MCP server must come from the same catalog item as the tool",
+        type: "validation_error",
+      },
+    };
+  }
+
+  // Personal installations are always caller-bound, regardless of whether
+  // they represent remote credentials or a hosted local runtime.
+  if (mcpServer.scope === "personal") {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Personal connections cannot be assigned statically. Use dynamic credential resolution instead.",
         type: "validation_error",
       },
     };
@@ -537,7 +580,10 @@ async function isOrgAdmin(
 
 /** @public — exported for testability */
 export async function isMcpServerAssignableToTarget(params: {
-  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
+  mcpServer: Pick<
+    PrefetchedMcpServer,
+    "ownerId" | "serverType" | "teamId" | "scope"
+  >;
   target: {
     organizationId: string;
     scope: AgentScope;
@@ -546,6 +592,9 @@ export async function isMcpServerAssignableToTarget(params: {
   };
 }): Promise<boolean> {
   const { mcpServer, target } = params;
+  if (mcpServer.scope === "personal") {
+    return false;
+  }
 
   if (mcpServer.scope === "org") {
     return true;
@@ -589,7 +638,10 @@ export async function isMcpServerAssignableToTarget(params: {
 }
 
 export async function filterMcpServersAssignableToTarget<
-  TMcpServer extends Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">,
+  TMcpServer extends Pick<
+    PrefetchedMcpServer,
+    "ownerId" | "serverType" | "teamId" | "scope"
+  >,
 >(params: {
   mcpServers: TMcpServer[];
   target: {
@@ -599,7 +651,12 @@ export async function filterMcpServersAssignableToTarget<
     teamIds: string[];
   };
 }): Promise<TMcpServer[]> {
-  const { mcpServers, target } = params;
+  const { target } = params;
+  // Personal connections always resolve from the caller at runtime. They are
+  // never valid static choices, including for their owner or an Admin.
+  const mcpServers = params.mcpServers.filter(
+    (mcpServer) => mcpServer.scope !== "personal",
+  );
   if (mcpServers.length === 0) {
     return [];
   }
@@ -694,6 +751,10 @@ function isMcpServerAssignableToPrefetchedTarget(params: {
     target,
     targetTeamMemberOwnerIdSet,
   } = params;
+
+  if (mcpServer.scope === "personal") {
+    return false;
+  }
 
   if (mcpServer.scope === "org") {
     return true;

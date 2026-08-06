@@ -1,6 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import ModelUserModel from "./model-user";
 
 interface ModelTeamDetail {
   id: string;
@@ -107,17 +108,28 @@ class ModelTeamModel {
   static async filterAllowedModelIds(params: {
     modelIds: string[];
     principalTeamIds: string[];
+    /**
+     * The acting user, when there is one. A model restricted to teams is also
+     * allowed for someone it was shared with by name — the finer-grained
+     * counterpart to a team restriction, resolved in one batch query rather
+     * than per model.
+     */
+    userId?: string;
   }): Promise<Set<string>> {
-    const { modelIds, principalTeamIds } = params;
+    const { modelIds, principalTeamIds, userId } = params;
     const restrictions = await ModelTeamModel.getTeamIdsForModels(modelIds);
     const principalTeams = new Set(principalTeamIds);
+    const grantedIds = userId
+      ? await ModelUserModel.filterGrantedIds(modelIds, userId)
+      : new Set<string>();
 
     const allowed = new Set<string>();
     for (const modelId of modelIds) {
       const restrictedTo = restrictions.get(modelId);
       if (
         !restrictedTo ||
-        restrictedTo.some((teamId) => principalTeams.has(teamId))
+        restrictedTo.some((teamId) => principalTeams.has(teamId)) ||
+        grantedIds.has(modelId)
       ) {
         allowed.add(modelId);
       }

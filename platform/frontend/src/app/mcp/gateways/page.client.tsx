@@ -10,19 +10,22 @@ import { McpGatewayConnectInstructionsDialog } from "@/components/agent-connect-
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
-import {
-  ActiveFilterBadges,
-  AgentDeletedStatusFilter,
-  AgentScopeFilter,
-} from "@/components/agent-scope-filter";
+import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  ActiveFilterBadges,
+  ResourceDeletedStatusFilter,
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +41,7 @@ import {
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
+  usePermanentlyDeleteProfile,
   useProfile,
   useProfilesPaginated,
   useRestoreProfile,
@@ -120,15 +124,7 @@ function McpGateways({
     | "asc"
     | "desc"
     | null;
-  const scopeFromUrl = searchParams.get("scope") as
-    | "personal"
-    | "team"
-    | "org"
-    | "built_in"
-    | null;
-  const teamIdsFromUrl = searchParams.get("teamIds");
-  const authorIdsFromUrl = searchParams.get("authorIds");
-  const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
+  const scopeFilter = useScopeFilterParams({ includeBuiltIn: true });
   const labelsFromUrl = searchParams.get("labels");
   const statusFromUrl = searchParams.get("status") as
     | "active"
@@ -159,18 +155,11 @@ function McpGateways({
     sortDirection,
     name: nameFilter || undefined,
     agentTypes: gatewayAgentTypes,
-    scope: scopeFromUrl || undefined,
-    teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
-    authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
-    excludeAuthorIds: excludeAuthorIdsFromUrl
-      ? excludeAuthorIdsFromUrl.split(",")
-      : undefined,
-    excludeOtherPersonalAgents:
-      scopeFromUrl !== "personal" &&
-      !authorIdsFromUrl &&
-      !excludeAuthorIdsFromUrl
-        ? true
-        : undefined,
+    scope: scopeFilter.scope,
+    teamIds: scopeFilter.teamIds,
+    authorIds: scopeFilter.authorIds,
+    excludeAuthorIds: scopeFilter.excludeAuthorIds,
+    excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
   });
@@ -220,10 +209,19 @@ function McpGateways({
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
     null,
   );
+  // The row's scope check travels with the id: it is computed per row, and the
+  // dialog's restore is an update that has to answer to it.
+  const [history, setHistory] = useState<{
+    id: string;
+    canModify: boolean;
+  } | null>(null);
   const [cloningGateway, setCloningGateway] = useState<GatewayData | null>(
     null,
   );
+  const [permanentlyDeletingGateway, setPermanentlyDeletingGateway] =
+    useState<GatewayData | null>(null);
   const restoreGateway = useRestoreProfile();
+  const permanentlyDeleteGateway = usePermanentlyDeleteProfile("MCP Gateway");
 
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
@@ -323,6 +321,7 @@ function McpGateways({
     {
       id: "toolsCount",
       accessorKey: "toolsCount",
+      size: 80,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -343,6 +342,7 @@ function McpGateways({
     {
       id: "subagentsCount",
       accessorKey: "subagentsCount",
+      size: 100,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -363,6 +363,7 @@ function McpGateways({
     {
       id: "lastUsedAt",
       accessorKey: "lastUsedAt",
+      size: 110,
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -390,11 +391,13 @@ function McpGateways({
     {
       id: "team",
       header: "Accessible to",
+      size: 140,
       enableSorting: false,
       cell: ({ row }) => (
         <ResourceVisibilityBadge
           scope={row.original.scope}
           teams={row.original.teams}
+          users={row.original.users}
           authorId={row.original.authorId}
           authorName={row.original.authorName}
           currentUserId={currentUserId}
@@ -405,6 +408,9 @@ function McpGateways({
     {
       id: "actions",
       header: "Actions",
+      // Pixel-sized so the five icon buttons never clip: the actions column
+      // keeps its px width while the sized columns scale down to fit.
+      size: 200,
       enableHiding: false,
       cell: ({ row }) => {
         const agent = row.original;
@@ -436,7 +442,11 @@ function McpGateways({
                 },
               });
             }}
+            onPermanentlyDelete={setPermanentlyDeletingGateway}
             onClone={setCloningGateway}
+            onHistory={(id, historyCanModify) =>
+              setHistory({ id, canModify: historyCanModify })
+            }
           />
         );
       },
@@ -519,11 +529,12 @@ function McpGateways({
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter
+                <ResourceScopeFilter
+                  showLabels
                   ownerLabelPlural="MCP gateways"
                   adminPermission={{ mcpGateway: ["admin"] }}
                 />
-                <AgentDeletedStatusFilter
+                <ResourceDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}
                 />
               </div>
@@ -552,10 +563,7 @@ function McpGateways({
                 onPaginationChange={handlePaginationChange}
                 hasActiveFilters={Boolean(
                   nameFilter ||
-                    scopeFromUrl ||
-                    teamIdsFromUrl ||
-                    authorIdsFromUrl ||
-                    excludeAuthorIdsFromUrl ||
+                    scopeFilter.hasActiveScopeFilters ||
                     labelsFromUrl ||
                     isDeletedView,
                 )}
@@ -635,6 +643,25 @@ function McpGateways({
               />
             )}
 
+            {permanentlyDeletingGateway && (
+              <DeleteConfirmDialog
+                open={!!permanentlyDeletingGateway}
+                onOpenChange={(open) =>
+                  !open && setPermanentlyDeletingGateway(null)
+                }
+                title="Delete MCP Gateway permanently"
+                description={`This destroys "${permanentlyDeletingGateway.name}" and everything it owns. Its MCP tool-call history is kept, no longer pointing at the gateway. Nothing recovers the gateway itself.`}
+                isPending={permanentlyDeleteGateway.isPending}
+                onConfirm={async () => {
+                  const ok = await permanentlyDeleteGateway.mutateAsync(
+                    permanentlyDeletingGateway.id,
+                  );
+                  if (ok) setPermanentlyDeletingGateway(null);
+                }}
+                confirmLabel={PERMANENT_DELETE_LABEL}
+              />
+            )}
+
             <CloneAgentDialog
               agent={cloningGateway}
               onOpenChange={(open) => {
@@ -643,6 +670,14 @@ function McpGateways({
               onCloned={(cloned) => {
                 // Open edit dialog for the clone so user can rename immediately
                 editDialog.open(cloned as GatewayData);
+              }}
+            />
+
+            <AgentVersionHistoryDialog
+              agentId={history?.id ?? null}
+              canModify={!!history?.canModify}
+              onOpenChange={(open) => {
+                if (!open) setHistory(null);
               }}
             />
           </div>

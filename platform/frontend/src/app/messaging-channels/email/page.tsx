@@ -209,7 +209,7 @@ export default function EmailPage() {
                   {renewMutation.isPending && (
                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Renew subscription
+                  <span>Renew subscription</span>
                 </PermissionButton>
                 <PermissionButton
                   permissions={{ agentTrigger: ["delete"] }}
@@ -418,9 +418,11 @@ function EmailAgentRow({
           <ResourceVisibilityBadge
             scope={agent.scope}
             teams={agent.teams}
+            users={agent.users}
             authorId={agent.authorId}
             authorName={agent.authorName}
             currentUserId={currentUserId}
+            showSelfAsMe
           />
         </div>
       </TableCell>

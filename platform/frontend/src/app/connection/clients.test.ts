@@ -99,6 +99,7 @@ describe("Copilot CLI connection client", () => {
       url: "http://localhost:9000/v1/azure/default",
       tokenPlaceholder: "<your-azure-api-key>",
       proxyName: "default",
+      appName: "Archestra",
     });
 
     expect(instruction.kind).toBe("steps");
@@ -120,6 +121,35 @@ describe("Copilot CLI connection client", () => {
       'COPILOT_PROVIDER_API_KEY="<your-archestra-virtual-key>"',
     );
     expect(rendered).toContain("archestra-copilot-cli-ok");
+  });
+
+  it("brands proxy instructions with the deployment's app name", () => {
+    const client = getCopilotClient();
+    if (client.proxy.kind !== "custom") {
+      throw new Error("Copilot CLI proxy support should be custom");
+    }
+
+    const instruction = client.proxy.build({
+      provider: "azure",
+      providerLabel: "Azure OpenAI",
+      url: "http://localhost:9000/v1/azure/default",
+      tokenPlaceholder: "<your-azure-api-key>",
+      proxyName: "default",
+      appName: "Acme AI",
+    });
+
+    if (instruction.kind !== "steps") {
+      throw new Error("Copilot CLI proxy instructions should be steps");
+    }
+    const prose = instruction.steps
+      .map((step) => `${step.title ?? ""} ${step.body ?? ""}`)
+      .join("\n");
+
+    expect(prose).toContain("the Acme AI base URL");
+    // The vendor brand must not survive into a white-labeled deployment's
+    // connect instructions. Code blocks are excluded: they carry literal env
+    // var names and placeholders that stay stable across brands.
+    expect(prose).not.toContain("Archestra");
   });
 
   it("uses the Copilot SVG path in the client picker", () => {

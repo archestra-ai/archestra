@@ -281,7 +281,7 @@ describe("mcp server inspect route", () => {
     ]);
   });
 
-  test("filters out personal connections whose owner is not in the selected assignment team", async ({
+  test("filters out all personal connections for team assignments", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTeam,
@@ -300,13 +300,15 @@ describe("mcp server inspect route", () => {
       organizationId,
       serverType: "remote",
     });
-    const ownPersonalServer = await makeMcpServer({
+    await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
     await makeMcpServer({
       ownerId: otherUser.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
 
     const response = await app.inject({
@@ -315,12 +317,10 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().map((server: { id: string }) => server.id)).toEqual([
-      ownPersonalServer.id,
-    ]);
+    expect(response.json()).toEqual([]);
   });
 
-  test("filters personal connections by organization membership for org assignment scope", async ({
+  test("does not expose member-owned personal connections for org assignment scope", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeMember,
@@ -339,11 +339,12 @@ describe("mcp server inspect route", () => {
       organizationId,
       serverType: "remote",
     });
-    const memberOwnedServer = await makeMcpServer({
+    await makeMcpServer({
       ownerId: memberOwner.id,
       catalogId: catalog.id,
     });
     const orgOwnedServer = await makeMcpServer({
+      scope: "org",
       catalogId: catalog.id,
     });
     await makeMcpServer({
@@ -362,7 +363,7 @@ describe("mcp server inspect route", () => {
         .json()
         .map((server: { id: string }) => server.id)
         .sort(),
-    ).toEqual([memberOwnedServer.id, orgOwnedServer.id].sort());
+    ).toEqual([orgOwnedServer.id]);
   });
 
   test("filters connections for personal assignment scope", async ({
@@ -390,15 +391,18 @@ describe("mcp server inspect route", () => {
       organizationId,
       serverType: "remote",
     });
-    const ownPersonalServer = await makeMcpServer({
+    await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
     await makeMcpServer({
       ownerId: otherUser.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
     const authorTeamServer = await makeMcpServer({
+      scope: "team",
       ownerId: otherUser.id,
       catalogId: catalog.id,
       teamId: authorTeam.id,
@@ -409,6 +413,7 @@ describe("mcp server inspect route", () => {
       teamId: otherTeam.id,
     });
     const orgOwnedServer = await makeMcpServer({
+      scope: "org",
       catalogId: catalog.id,
     });
 
@@ -423,9 +428,7 @@ describe("mcp server inspect route", () => {
         .json()
         .map((server: { id: string }) => server.id)
         .sort(),
-    ).toEqual(
-      [ownPersonalServer.id, authorTeamServer.id, orgOwnedServer.id].sort(),
-    );
+    ).toEqual([authorTeamServer.id, orgOwnedServer.id].sort());
   });
 
   test("automatically retries protected remote MCP server installation with the current identity-provider access token", async ({
@@ -2078,8 +2081,95 @@ describe("mcp server inspect route", () => {
     });
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "exchanged-github-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer exchanged-github-token",
+      },
     });
+    // The exchanged credential travels as a resolved header, never as a static
+    // secret — the static path would ignore the catalog's injection mode.
+    expect(connectAndGetToolsMock.mock.calls[0][0].secrets).not.toHaveProperty(
+      "access_token",
+    );
+  });
+
+  // Regression: install-time discovery used to hand the exchanged credential to
+  // the transport as a static `access_token`, which always emits
+  // `Authorization: Bearer` and silently ignores a configured custom header.
+  test("enterprise-managed install discovery honors a custom injection header", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Custom Header Remote",
+      serverType: "remote",
+      serverUrl: "https://internal.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "header",
+        headerName: "x-provider-api-token",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-custom-header-token",
+    });
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "get-server-info",
+        description: "Returns server details",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Custom Header Remote",
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+
+    const [discoveryParams] = connectAndGetToolsMock.mock.calls[0];
+    // Bare value under the configured header — not `Bearer …`, and not
+    // `Authorization`.
+    expect(discoveryParams.enterpriseTransportCredential).toMatchObject({
+      headerName: "x-provider-api-token",
+      headerValue: "exchanged-custom-header-token",
+    });
+    expect(discoveryParams.secrets).not.toHaveProperty("access_token");
   });
 
   // Regression: enterprise-managed catalogs with install-time userConfig used
@@ -2176,7 +2266,10 @@ describe("mcp server inspect route", () => {
     expect(callsForCatalog[0][0]).toMatchObject({
       secrets: {
         header_x_tenant: "tenant-a",
-        access_token: "exchanged-downstream-token",
+      },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer exchanged-downstream-token",
       },
     });
   });
@@ -2271,7 +2364,10 @@ describe("mcp server inspect route", () => {
     );
     expect(callsForCatalog).toHaveLength(1);
     expect(callsForCatalog[0][0]).toMatchObject({
-      secrets: { access_token: "exchanged-local-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer exchanged-local-token",
+      },
     });
   });
 
@@ -2348,7 +2444,10 @@ describe("mcp server inspect route", () => {
       }),
     });
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "downstream-user-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer downstream-user-token",
+      },
     });
   });
 
@@ -2394,7 +2493,10 @@ describe("mcp server inspect route", () => {
     expect(exchangeEnterpriseManagedCredentialMock).not.toHaveBeenCalled();
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "raw-session-access-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer raw-session-access-token",
+      },
     });
   });
 
@@ -2487,7 +2589,10 @@ describe("mcp server inspect route", () => {
     });
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "shared-install-discovery-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer shared-install-discovery-token",
+      },
     });
   });
 
@@ -2614,7 +2719,10 @@ describe("mcp server inspect route", () => {
       }),
     });
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "mcp-server-access-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer mcp-server-access-token",
+      },
     });
 
     const persistedTool = await ToolModel.findByName(
@@ -2689,7 +2797,7 @@ describe("mcp server inspect route", () => {
     expect(response.json()).not.toHaveProperty("enterpriseManagedConfig");
   });
 
-  test("returns 500 when protected remote MCP server installation still lacks usable auth after automatic fallback", async ({
+  test("returns 502 when protected remote MCP server installation still lacks usable auth after automatic fallback", async ({
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
@@ -2714,7 +2822,7 @@ describe("mcp server inspect route", () => {
       },
     });
 
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(502);
     expect(response.json()).toMatchObject({
       error: {
         message: expect.stringContaining(
@@ -2958,7 +3066,7 @@ describe("mcp server inspect route", () => {
       },
     });
 
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(502);
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
   });
 
@@ -3011,8 +3119,230 @@ describe("mcp server inspect route", () => {
       },
     });
 
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(502);
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression: the inspector reaches the same upstream as the MCP Gateway, but
+  // connected with only the install's static secrets. For an enterprise-managed
+  // catalog that meant no auth header at all — the configured injection mode
+  // was never consulted, so a custom-header server saw an unauthenticated call.
+  test("inspect sends the enterprise-managed credential under the configured custom header", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Inspect Custom Header",
+      serverType: "remote",
+      serverUrl: "https://internal.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "header",
+        headerName: "x-provider-api-token",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-inspect-token",
+    });
+
+    inspectServerMock.mockResolvedValueOnce({ tools: [] });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(inspectServerMock).toHaveBeenCalledTimes(1);
+    expect(inspectServerMock.mock.calls[0][0]).toMatchObject({
+      method: "tools/list",
+      enterpriseTransportCredential: {
+        headerName: "x-provider-api-token",
+        headerValue: "exchanged-inspect-token",
+      },
+    });
+  });
+
+  test("inspect sends a bearer Authorization for the default injection mode", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Inspect Bearer",
+      serverType: "remote",
+      serverUrl: "https://internal.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-inspect-bearer",
+    });
+
+    inspectServerMock.mockResolvedValueOnce({ tools: [] });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(inspectServerMock.mock.calls[0][0]).toMatchObject({
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer exchanged-inspect-bearer",
+      },
+    });
+  });
+
+  // Fail closed: connecting anyway would reach the upstream with no credential,
+  // which is the unauthenticated call this fix exists to stop.
+  test("inspect returns 401 when the enterprise-managed credential cannot be resolved", async ({
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Inspect Unlinked",
+      serverType: "remote",
+      serverUrl: "https://internal.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "header",
+        headerName: "x-provider-api-token",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    // No linked account for the caller, so no assertion to exchange.
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.message).toContain("keycloak");
+    expect(inspectServerMock).not.toHaveBeenCalled();
+  });
+
+  // Non-enterprise catalogs must keep inspecting with their static secrets.
+  test("inspect leaves non-enterprise catalogs without an enterprise credential", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "https://plain.example.com/mcp",
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    inspectServerMock.mockResolvedValueOnce({ tools: [] });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      inspectServerMock.mock.calls[0][0].enterpriseTransportCredential,
+    ).toBeUndefined();
   });
 
   test("returns 409 when the MCP server is not running yet", async ({
@@ -3899,7 +4229,11 @@ describe("mcp server core route coverage", () => {
         catalogId: catalog.id,
       });
       const tool = await makeTool({ catalogId: catalog.id });
-      const agent = await makeAgent({ name: "Server Consumer" });
+      const agent = await makeAgent({
+        name: "Server Consumer",
+        scope: "personal",
+        authorId: user.id,
+      });
       await makeAgentTool(agent.id, tool.id);
 
       const response = await app.inject({
@@ -3910,8 +4244,16 @@ describe("mcp server core route coverage", () => {
       expect(response.statusCode).toBe(200);
       const servers = response.json();
       const returned = servers.find((s: { id: string }) => s.id === server.id);
+      // The owner rides along so the UI can tell same-named personal agents
+      // ("My Assistant", "My Gateway") apart.
       expect(returned.assignedAgents).toEqual([
-        { id: agent.id, name: "Server Consumer" },
+        {
+          id: agent.id,
+          name: "Server Consumer",
+          agentType: agent.agentType,
+          scope: "personal",
+          ownerEmail: user.email,
+        },
       ]);
     });
   });
@@ -4071,7 +4413,7 @@ describe("mcp server core route coverage", () => {
       await expect(McpServerModel.findById(builtin.id)).resolves.not.toBeNull();
     });
 
-    test("uninstalling the last connection retains tools, policies, and assignments (binding nulled)", async ({
+    test("uninstalling the last connection retains tools, policies, and assignments (binding retained)", async ({
       makeInternalMcpCatalog,
     }) => {
       const { default: AgentModel } = await import("@/models/agent");
@@ -4163,7 +4505,9 @@ describe("mcp server core route coverage", () => {
           ),
         );
       expect(assignmentAfter).toHaveLength(1);
-      expect(assignmentAfter[0].mcpServerId).toBeNull();
+      // Soft delete keeps the server row, so the FK never fires — the binding
+      // still points at the (soft-deleted) install and survives a restore.
+      expect(assignmentAfter[0].mcpServerId).toBe(installedServer.id);
     });
 
     test("refuses to delete an app server with 400", async ({

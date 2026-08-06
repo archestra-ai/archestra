@@ -21,6 +21,7 @@ import {
 import { CodeText } from "@/components/code-text";
 import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
+import { McpOauthManagement } from "@/components/mcp-oauth-management";
 import { getManageTokenLink } from "@/components/tokens/manage-token-link";
 import {
   Collapsible,
@@ -77,11 +78,6 @@ export function A2AConnectionInstructions({
   const { data: hasAdminPermission } = useHasPermissions({
     agent: ["admin"],
   });
-  // The link opens the create dialog on the OAuth clients page, so it needs
-  // create (to submit) on top of read (to see the page at all).
-  const { data: canCreateOauthClients } = useHasPermissions({
-    mcpOauthClient: ["read", "create"],
-  });
   // The Messaging Channels pages are gated on agentTrigger:read.
   const { data: canReadAgentTriggers } = useHasPermissions({
     agentTrigger: ["read"],
@@ -97,6 +93,7 @@ export function A2AConnectionInstructions({
   const [streamExampleMessageId] = useState(() => generateUuid());
   const [replyExampleMessageId] = useState(() => generateUuid());
   const [approvalExampleMessageId] = useState(() => generateUuid());
+  const [backgroundExampleMessageId] = useState(() => generateUuid());
 
   // Mirror the /connection page's base-URL fallback chain so the A2A panel
   // honors the same admin curation (descriptions, default flag, hidden URLs).
@@ -307,6 +304,84 @@ curl -X POST "${a2aEndpoint}" \\
     [a2aEndpoint, tokenForDisplay, approvalExampleMessageId],
   );
 
+  // cURL example for background execution: get the task handle immediately,
+  // then poll it. Useful for runs that outlive a request timeout.
+  const backgroundTaskCurlCode = useMemo(
+    () => `# Start the run in the background — returns a task straight away
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "${backgroundExampleMessageId}",
+        "role": "ROLE_USER",
+        "parts": [{"text": "Summarize every open PR in the repo."}]
+      },
+      "configuration": {"returnImmediately": true}
+    }
+  }'
+
+# Poll it until status.state is TASK_STATE_COMPLETED.
+# The answer arrives in artifacts[]; historyLength: 0 keeps the reply small.
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 6,
+    "method": "GetTask",
+    "params": {"id": "<task.id from the reply>", "historyLength": 0}
+  }'`,
+    [a2aEndpoint, tokenForDisplay, backgroundExampleMessageId],
+  );
+
+  // cURL example for re-joining a running task's event stream.
+  const subscribeCurlCode = useMemo(
+    () => `# Re-join a running task — after a dropped stream, for example.
+# A disconnect never cancels the run, so the task keeps going without you.
+# The first frame is the task snapshot; live events follow until it settles.
+curl -N -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 7,
+    "method": "SubscribeToTask",
+    "params": {"id": "<task.id>"}
+  }'`,
+    [a2aEndpoint, tokenForDisplay],
+  );
+
+  // cURL example for listing and cancelling tasks.
+  const manageTasksCurlCode = useMemo(
+    () => `# List this agent's tasks, newest status change first
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 8,
+    "method": "ListTasks",
+    "params": {"pageSize": 20, "status": "TASK_STATE_WORKING"}
+  }'
+
+# Stop one. The task settles as TASK_STATE_CANCELED right away.
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 9,
+    "method": "CancelTask",
+    "params": {"id": "<task.id>"}
+  }'`,
+    [a2aEndpoint, tokenForDisplay],
+  );
+
   const chatDeepLinkBlock = (
     <div className="space-y-6">
       {/* Chat Deep Link */}
@@ -474,9 +549,9 @@ curl -X POST "${a2aEndpoint}" \\
       <WizardStep n={2} title="Authentication">
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            A2A agents accept your platform tokens — the same tokens the MCP
-            Gateway uses — or OAuth clients. LLM API keys and virtual keys will
-            not work here.
+            Use a platform token for direct A2A calls. OAuth access tokens and
+            configured identity-provider JWTs are also accepted. LLM API keys
+            and virtual keys will not work here.
           </p>
           <Select
             value={effectiveTokenId}
@@ -491,10 +566,10 @@ curl -X POST "${a2aEndpoint}" \\
                     <div>{getTokenDisplayName()}</div>
                     <div className="text-xs text-muted-foreground">
                       {isPersonalTokenSelected
-                        ? "The most secure option."
+                        ? "For your own integrations"
                         : selectedTeamToken?.isOrganizationToken
-                          ? "To share org-wide"
-                          : "To share with your teammates"}
+                          ? "Shared across the organization"
+                          : "Shared with this team"}
                     </div>
                   </div>
                 )}
@@ -506,7 +581,7 @@ curl -X POST "${a2aEndpoint}" \\
                   <div className="flex flex-col gap-0.5 items-start">
                     <div>Personal Token</div>
                     <div className="text-xs text-muted-foreground">
-                      The most secure option.
+                      For your own integrations
                     </div>
                   </div>
                 </SelectItem>
@@ -531,7 +606,7 @@ curl -X POST "${a2aEndpoint}" \\
                         <div className="text-xs text-muted-foreground">
                           {unusable
                             ? unusableTokenReason
-                            : "To share with your teammates"}
+                            : "Shared with this team"}
                         </div>
                       </div>
                     </SelectItem>
@@ -545,7 +620,7 @@ curl -X POST "${a2aEndpoint}" \\
                     <div className="flex flex-col gap-0.5 items-start">
                       <div>Organization Token</div>
                       <div className="text-xs text-muted-foreground">
-                        To share org-wide
+                        Shared across the organization
                       </div>
                     </div>
                   </SelectItem>
@@ -559,20 +634,6 @@ curl -X POST "${a2aEndpoint}" \\
             >
               {manageTokenLink.label}
             </Link>
-            {canCreateOauthClients && (
-              <>
-                {" "}
-                · For machine-to-machine or user-delegated OAuth,{" "}
-                <Link
-                  // Deep link: opens the create dialog with the client type
-                  // and this agent pre-selected.
-                  href={`/credentials/oauth-clients?create=true&clientType=mcp&gatewayId=${agent.id}`}
-                  className="underline hover:text-foreground"
-                >
-                  create an OAuth client for this agent
-                </Link>
-              </>
-            )}
           </p>
           {agent.identityProviderId && (
             <p className="text-xs text-muted-foreground">
@@ -651,9 +712,63 @@ curl -X POST "${a2aEndpoint}" \\
               />
             </CollapsibleContent>
           </Collapsible>
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              Run in the background (long tasks)
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`background-${effectiveTokenId}`}
+                code={backgroundTaskCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              Reconnect to a running task
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`subscribe-${effectiveTokenId}`}
+                code={subscribeCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              List and cancel tasks
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`manage-${effectiveTokenId}`}
+                code={manageTasksCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
           <p className="text-xs text-muted-foreground">
-            Full protocol reference — streaming, multi-turn conversations, and
-            tool approvals — in the{" "}
+            Every method — streaming, background tasks, cancellation, artifacts,
+            and tool approvals — is covered in the{" "}
             <a
               href={getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}
               target="_blank"
@@ -674,6 +789,20 @@ curl -X POST "${a2aEndpoint}" \\
         {chatDeepLinkBlock}
         {layout === "dialog" && dialogOnlyChannels}
       </div>
+      {layout === "dialog" && (
+        <div className="mt-6 space-y-3 border-t pt-6">
+          <div className="space-y-1">
+            <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+              OAuth clients
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Register applications that call this agent as themselves or on
+              behalf of signed-in users.
+            </p>
+          </div>
+          <McpOauthManagement resourceId={agent.id} resourceKind="agent" />
+        </div>
+      )}
     </div>
   );
 }

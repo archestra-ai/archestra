@@ -16,13 +16,11 @@ const mockHasPermission = hasPermission as Mock;
  * The preset feature is removed, but legacy child rows (non-NULL
  * `parentCatalogItemId`) may still exist in the DB. Deleting a parent catalog
  * item when one of those legacy children has an installed mcp_server must
- * still succeed and tear the child subtree down.
+ * still succeed and soft-delete the child subtree.
  *
- * Trap: `mcp_server.catalog_id` is `NOT NULL` but its FK declares
- * `ON DELETE SET NULL`. The parent's DB cascade tries to clear the column on
- * the child's server rows and aborts the whole DELETE with a NOT NULL
- * violation. The model must therefore remove servers for the WHOLE subtree
- * (parent + every legacy descendant) before issuing the catalog DELETE.
+ * Delete is now SOFT: the catalog rows, their installs, and their tools survive
+ * with a shared `deletedAt` stamp (the restore correlation key), and the DB
+ * secret rows are RETAINED so a restore + reinstall recovers stored credentials.
  */
 describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy child", () => {
   let app: FastifyInstanceWithZod;
@@ -53,8 +51,10 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
     await app.close();
   });
 
-  test("succeeds when a legacy child has an installed mcp_server", async ({
+  test("soft-deletes the subtree when a legacy child has an installed mcp_server", async ({
     makeMcpServer,
+    makeTool,
+    makeSecret,
   }) => {
     const parent = await createCatalog({
       name: "parent-with-installed-child",
@@ -68,11 +68,20 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
 
     const child = await seedLegacyChild(parent.id);
 
+    // The install carries a DB secret that soft-delete must RETAIN.
+    const secret = await makeSecret();
     const installedServer = await makeMcpServer({
       catalogId: child.id,
       ownerId: user.id,
       scope: "personal",
     });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ secretId: secret.id })
+      .where(eq(schema.mcpServersTable.id, installedServer.id));
+
+    // A tool on the child catalog must be soft-deleted by the cascade.
+    const tool = await makeTool({ catalogId: child.id });
 
     const deleteResponse = await app.inject({
       method: "DELETE",
@@ -81,23 +90,43 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy 
 
     expect(deleteResponse.statusCode).toBe(200);
 
-    const parentRow = await db
+    // Rows survive (soft-deleted), each carrying a deletedAt stamp.
+    const [parentRow] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, parent.id));
-    expect(parentRow).toHaveLength(0);
+    expect(parentRow?.deletedAt).not.toBeNull();
 
-    const childRow = await db
+    const [childRow] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, child.id));
-    expect(childRow).toHaveLength(0);
+    expect(childRow?.deletedAt).not.toBeNull();
 
-    const serverRow = await db
+    const [serverRow] = await db
       .select()
       .from(schema.mcpServersTable)
       .where(eq(schema.mcpServersTable.id, installedServer.id));
-    expect(serverRow).toHaveLength(0);
+    expect(serverRow?.deletedAt).not.toBeNull();
+
+    const [toolRow] = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, tool.id));
+    expect(toolRow?.deletedAt).not.toBeNull();
+
+    // The whole cascade shares ONE timestamp (the restore correlation key).
+    const at = parentRow?.deletedAt?.getTime();
+    expect(childRow?.deletedAt?.getTime()).toBe(at);
+    expect(serverRow?.deletedAt?.getTime()).toBe(at);
+    expect(toolRow?.deletedAt?.getTime()).toBe(at);
+
+    // Secret retention: the DB secret row is NOT deleted on soft-delete.
+    const secretRow = await db
+      .select()
+      .from(schema.secretsTable)
+      .where(eq(schema.secretsTable.id, secret.id));
+    expect(secretRow).toHaveLength(1);
   });
 
   async function createCatalog(payload: Record<string, unknown>): Promise<{

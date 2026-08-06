@@ -20,10 +20,14 @@ import type {
   StreamAccumulatorState,
   UsageView,
 } from "@/types";
-import { extractCommonMessageText } from "@/types";
+import {
+  extractCommonMessageText,
+  extractCommonToolCallArguments,
+} from "@/types";
 import type { Minimax } from "@/types/llm-providers";
 import type { ToolCompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { upstreamHttpError } from "./upstream-http-error";
 
 // =============================================================================
 // TYPE ALIASES
@@ -88,7 +92,7 @@ class MinimaxClient {
         errorMessage += ` - ${errorText}`;
       }
 
-      throw new Error(errorMessage);
+      throw upstreamHttpError(errorMessage, response.status);
     }
 
     return response.json() as Promise<MinimaxResponse>;
@@ -112,8 +116,9 @@ class MinimaxClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
+      throw upstreamHttpError(
         `MiniMax streaming error: ${response.status} - ${errorText}`,
+        response.status,
       );
     }
 
@@ -158,10 +163,12 @@ class MinimaxClient {
               const chunk = JSON.parse(data) as MinimaxStreamChunk;
               yield chunk;
             } catch (error) {
+              // data is raw completion content — log only its size at warn.
               logger.warn(
-                { data, error },
+                { dataLength: data.length, error },
                 "[MinimaxAdapter] Failed to parse SSE chunk",
               );
+              logger.debug({ data }, "[MinimaxAdapter] Unparseable SSE chunk");
             }
           }
         }
@@ -177,8 +184,12 @@ class MinimaxClient {
             yield chunk;
           } catch (error) {
             logger.warn(
-              { data: trimmed, error },
+              { dataLength: trimmed.length, error },
               "[MinimaxAdapter] Failed to parse final SSE chunk",
+            );
+            logger.debug(
+              { data: trimmed },
+              "[MinimaxAdapter] Unparseable final SSE chunk",
             );
           }
         }
@@ -243,7 +254,7 @@ class MinimaxRequestAdapter
 
     for (const message of this.request.messages) {
       if (message.role === "tool") {
-        const toolName = this.findToolNameInMessages(
+        const toolCall = this.findToolCallInMessages(
           this.request.messages,
           message.tool_call_id,
         );
@@ -261,7 +272,8 @@ class MinimaxRequestAdapter
 
         results.push({
           id: message.tool_call_id,
-          name: toolName ?? "unknown",
+          name: toolCall?.name ?? "unknown",
+          arguments: toolCall?.arguments,
           content,
           isError: false,
         });
@@ -391,12 +403,12 @@ class MinimaxRequestAdapter
       };
 
       if (message.role === "tool") {
-        const toolName = this.findToolNameInMessages(
+        const toolCall = this.findToolCallInMessages(
           messages,
           message.tool_call_id,
         );
 
-        if (toolName) {
+        if (toolCall) {
           let toolResult: unknown;
           if (typeof message.content === "string") {
             try {
@@ -411,7 +423,8 @@ class MinimaxRequestAdapter
           commonMessage.toolCalls = [
             {
               id: message.tool_call_id,
-              name: toolName,
+              name: toolCall.name,
+              arguments: toolCall.arguments,
               content: toolResult,
               isError: false,
             },
@@ -426,12 +439,13 @@ class MinimaxRequestAdapter
   }
 
   /**
-   * Find tool name from tool_call_id by looking at previous assistant messages
+   * Find the paired tool call from tool_call_id by looking at previous
+   * assistant messages
    */
-  private findToolNameInMessages(
+  private findToolCallInMessages(
     messages: MinimaxMessages,
     toolCallId: string,
-  ): string | null {
+  ): { name: string; arguments?: Record<string, unknown> } | null {
     // Search backwards through messages
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
@@ -440,7 +454,12 @@ class MinimaxRequestAdapter
           (tc) => "id" in tc && tc.id === toolCallId,
         );
         if (toolCall && toolCall.type === "function") {
-          return toolCall.function.name;
+          return {
+            name: toolCall.function.name,
+            arguments: extractCommonToolCallArguments(
+              toolCall.function.arguments,
+            ),
+          };
         }
       }
     }

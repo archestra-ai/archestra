@@ -15,6 +15,10 @@ import {
 } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
+import {
+  resolveRunToolDispatch,
+  resolveRunToolTarget,
+} from "@/archestra-mcp-server/run-tool-target";
 import { isNativeAnthropicModelShape } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
 import { metrics } from "@/observability";
@@ -23,6 +27,7 @@ import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
 import { getTokenizer } from "@/tokenizers";
 import type {
   CommonMcpToolDefinition,
+  CommonMessage,
   DualLlmAnalysis,
   GatewayAgent,
   InsertInteraction,
@@ -41,6 +46,7 @@ import {
 } from "@/utils/network-errors";
 import * as utils from "./utils";
 import { estimateToolTokens } from "./utils/cost-optimization";
+import type { ToolNameCanonicalizer } from "./utils/gateway-tool-names";
 import type { SessionSource } from "./utils/headers/session-id";
 
 /**
@@ -75,23 +81,72 @@ export function shouldForwardAnthropicBeta(
  *
  * - String arguments: validated as JSON, wrapped in `{ raw: ... }` if invalid
  * - Object arguments: serialized with JSON.stringify
+ * - Names are canonicalized (client-decorated gateway names stripped back to
+ *   the platform's own names), and a `run_tool` dispatch is unwrapped to the
+ *   target tool it names — policies must evaluate the tool that will actually
+ *   execute, not the opaque wrapper (whose name matches no `tools` row and
+ *   would fail open as "no policies found").
  */
 export function normalizeToolCallsForPolicy(
   toolCalls: Array<{ name: string; arguments: string | object }>,
-): Array<{ toolCallName: string; toolCallArgs: string }> {
+  canonicalizeToolName: ToolNameCanonicalizer = (name) => name,
+): Array<{
+  toolCallName: string;
+  toolCallArgs: string;
+  isRunToolDispatchTarget?: boolean;
+}> {
   return toolCalls.map((tc) => {
+    let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {
       try {
-        JSON.parse(tc.arguments);
+        args = JSON.parse(tc.arguments);
         argsString = tc.arguments;
       } catch {
+        args = undefined;
         argsString = JSON.stringify({ raw: tc.arguments });
       }
     } else {
+      args = tc.arguments;
       argsString = JSON.stringify(tc.arguments);
     }
-    return { toolCallName: tc.name, toolCallArgs: argsString };
+
+    const canonicalName = canonicalizeToolName(tc.name);
+    const dispatch = resolveRunToolDispatch(canonicalName, args);
+    if (dispatch.kind === "target") {
+      const { toolInput } = resolveRunToolTarget(canonicalName, args);
+      return {
+        toolCallName: dispatch.toolName,
+        toolCallArgs: JSON.stringify(toolInput),
+        isRunToolDispatchTarget: true,
+      };
+    }
+    return { toolCallName: canonicalName, toolCallArgs: argsString };
+  });
+}
+
+/**
+ * Return a copy of the request's common messages with every tool-call name
+ * canonicalized, so trusted-data evaluation sees the platform's own tool
+ * names instead of the client-decorated twins (which match no tool row and
+ * would flip every gateway conversation to untrusted — including over
+ * platform-authored built-in results like `search_tools`).
+ */
+export function canonicalizeCommonMessageToolNames(
+  messages: CommonMessage[],
+  canonicalizeToolName: ToolNameCanonicalizer,
+): CommonMessage[] {
+  return messages.map((message) => {
+    if (!message.toolCalls || message.toolCalls.length === 0) {
+      return message;
+    }
+    return {
+      ...message,
+      toolCalls: message.toolCalls.map((toolCall) => ({
+        ...toolCall,
+        name: canonicalizeToolName(toolCall.name),
+      })),
+    };
   });
 }
 
@@ -364,6 +419,7 @@ export function handleError(
     const errorObj = error as Error & {
       status?: number;
       statusCode?: number;
+      $metadata?: { httpStatusCode?: number };
     };
     if (typeof errorObj.status === "number") {
       statusCode = errorObj.status;
@@ -371,23 +427,52 @@ export function handleError(
     } else if (typeof errorObj.statusCode === "number") {
       statusCode = errorObj.statusCode;
       hasExplicitStatus = true;
+    } else if (typeof errorObj.$metadata?.httpStatusCode === "number") {
+      // AWS SDK errors (Bedrock) carry the HTTP status on $metadata, so
+      // without this a throttling 429 or provider 503 surfaced as a 500.
+      statusCode = errorObj.$metadata.httpStatusCode;
+      hasExplicitStatus = true;
     }
   }
 
   // Some SDK transport and streaming failures do not carry an HTTP status.
   if (!hasExplicitStatus) {
-    const upstreamStatus = classifyTransientUpstreamError(error);
-    if (upstreamStatus !== undefined) {
-      statusCode = upstreamStatus;
+    if (isClientAbortError(error)) {
+      // The proxy client disconnected and the disconnect was propagated to
+      // the in-flight provider call as an AbortSignal (see
+      // createDownstreamAbortSignal). Nobody is waiting for this response —
+      // report 499 (client closed request) so the interaction record names
+      // the cause and error tracking's 4xx rule treats it as expected
+      // instead of a crash of ours.
+      statusCode = 499;
+    } else {
+      const upstreamStatus = classifyTransientUpstreamError(error);
+      if (upstreamStatus !== undefined) {
+        statusCode = upstreamStatus;
+      }
     }
   }
 
   // The internal code preserves overload semantics after streaming starts.
+  // Any non-ApiError 503 in the proxy's catch is the provider saying it is
+  // unavailable — whether stated explicitly (e.g. Google's UNAVAILABLE "high
+  // demand" errors) or classified from a status-less SDK failure — our own
+  // service-unavailable paths always throw ApiError.
   const isUpstreamOverload =
-    statusCode === 529 ||
-    (statusCode === 503 &&
-      !(error instanceof ApiError) &&
-      classifyUpstreamOverload(error) !== undefined);
+    statusCode === 529 || (statusCode === 503 && !(error instanceof ApiError));
+
+  // Provider-returned 5xx relays (an SDK error carrying the provider's own
+  // HTTP failure) are upstream faults, not crashes of ours — marked so error
+  // tracking drops the relay as noise while clients still get the status.
+  // The status-less variant is an in-stream failure: once the provider's
+  // stream commits 200, a failure arrives as an SSE `error` event that the
+  // SDK relays with a parsed provider body but no HTTP status (e.g.
+  // Anthropic's mid-stream `api_error` "Internal server error").
+  const isUpstreamProviderFailure =
+    statusCode >= 500 &&
+    !(error instanceof ApiError) &&
+    hasProviderHttpErrorShape(error) &&
+    (hasExplicitStatus || hasUpstreamErrorPayload(error));
 
   const errorMessage = extractErrorMessage(error);
   const adapterInternalCode = extractInternalCode(error);
@@ -472,7 +557,36 @@ export function handleError(
 
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
-  throw new ApiError(statusCode, errorMessage, internalCode);
+  const apiError = new ApiError(statusCode, errorMessage, internalCode);
+  apiError.upstream = isUpstreamProviderFailure || isUpstreamOverload;
+  throw apiError;
+}
+
+/**
+ * Whether the error looks like a provider SDK's HTTP error (a parsed error
+ * body, response headers, or the AWS SDK's response metadata) rather than an
+ * internal error that merely carries a status code.
+ */
+function hasProviderHttpErrorShape(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return "error" in error || "headers" in error || "$metadata" in error;
+}
+
+/**
+ * Whether the error is an abort of a request we initiated — the fetch/SDK
+ * AbortError raised when the signal wired to the proxy client's disconnect
+ * fires, or the SDK's own user-abort wrapper around it. Deliberately does NOT
+ * match AbortSignal.timeout's TimeoutError ("… aborted due to timeout", a 504
+ * classified below): the message fallback is anchored so only a bare abort
+ * matches.
+ */
+function isClientAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "AbortError" ||
+    error.name === "APIUserAbortError" ||
+    /\boperation was aborted\.?$/i.test(error.message)
+  );
 }
 
 /**
@@ -549,6 +663,19 @@ function nestedProviderErrorType(error: Error): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Whether the SDK error carries an upstream error payload. OpenAI-compatible
+ * upstreams are free-form in what they put under the stream's `error` member —
+ * usually an object, but some send a bare string — and the SDK relays either
+ * verbatim, so both shapes identify an in-stream provider failure.
+ */
+function hasUpstreamErrorPayload(error: unknown): boolean {
+  if (extractUpstreamErrorBody(error) !== undefined) return true;
+  if (!(error instanceof Error)) return false;
+  const body = (error as Error & { error?: unknown }).error;
+  return typeof body === "string" && body.length > 0;
 }
 
 /**

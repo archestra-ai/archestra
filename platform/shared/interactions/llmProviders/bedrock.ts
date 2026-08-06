@@ -98,7 +98,8 @@ class BedrockConverseInteraction implements InteractionUtils {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role === "user" && Array.isArray(message.content)) {
-        for (const block of message.content) {
+        for (let j = message.content.length - 1; j >= 0; j--) {
+          const block = message.content[j];
           if (block.toolResult?.toolUseId) {
             return block.toolResult.toolUseId;
           }

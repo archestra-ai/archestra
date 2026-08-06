@@ -6,6 +6,7 @@ import {
   E2eTestId,
   formatSecretStorageType,
   getDocsUrl,
+  isPlaywrightCatalogItem,
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import { format } from "date-fns";
@@ -22,7 +23,6 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
-import { StaticCredentialConfirmDialog } from "@/components/static-credential-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -141,6 +141,8 @@ interface ManageUsersContentProps {
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
   bodyTestId?: string;
+  /** Whether this catalog is currently being installed. */
+  isInstalling?: boolean;
 }
 
 export function ManageUsersContent({
@@ -155,17 +157,13 @@ export function ManageUsersContent({
   onOpenPodLogs,
   hideHeader = false,
   bodyTestId,
+  isInstalling = false,
 }: ManageUsersContentProps) {
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
   // servers (no catalogId filter) and keep those installed from this catalog.
   const { data: allServersUnfiltered = [], isFetched: serversFetched } =
     useMcpServers();
   const { data: catalogItems } = useInternalMcpCatalog({});
-
-  const allServers = allServersUnfiltered.filter(
-    (s) => s.catalogId === catalogId,
-  );
-
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -181,6 +179,10 @@ export function ManageUsersContent({
     mcpServerInstallation: ["admin"],
   });
 
+  const allServers = allServersUnfiltered.filter(
+    (s) => s.catalogId === catalogId,
+  );
+
   const [serviceAccountDialogOpen, setServiceAccountDialogOpen] =
     useState(false);
 
@@ -191,12 +193,6 @@ export function ManageUsersContent({
   const catalogItem = catalogItems?.find((item) => item.id === catalogId);
   const isOAuthServer = !!catalogItem?.oauthConfig;
 
-  const getServerScope = (
-    mcpServer: (typeof allServers)[number],
-  ): "personal" | "team" | "org" => {
-    return mcpServer.scope ?? (mcpServer.teamId ? "team" : "personal");
-  };
-
   const canReauthenticate = useCanReauthenticate();
 
   // Get tooltip message for disabled re-authenticate button
@@ -204,7 +200,7 @@ export function ManageUsersContent({
     if (!hasMcpServerCreatePermission) {
       return "You need MCP server create permission to re-authenticate";
     }
-    const scope = getServerScope(mcpServer);
+    const scope = resolveServerScope(mcpServer);
     if (scope === "org") {
       return "Only an organization admin can re-authenticate an organization connection";
     }
@@ -222,7 +218,7 @@ export function ManageUsersContent({
   // Personal: owner OR mcpServer:update. Team: team admin role OR (mcpServer:update AND membership).
   // Org: mcpServerInstallation:admin.
   const canRevoke = (mcpServer: (typeof allServers)[number]) => {
-    const scope = getServerScope(mcpServer);
+    const scope = resolveServerScope(mcpServer);
     if (scope === "org") return !!hasMcpServerAdminPermission;
     if (scope === "personal") {
       return (
@@ -247,7 +243,7 @@ export function ManageUsersContent({
 
   // Get tooltip message for disabled revoke button
   const getRevokeTooltip = (mcpServer: (typeof allServers)[number]): string => {
-    const scope = getServerScope(mcpServer);
+    const scope = resolveServerScope(mcpServer);
     if (scope === "org") {
       return "Only an organization admin can revoke an organization connection";
     }
@@ -326,16 +322,18 @@ export function ManageUsersContent({
   type Server = (typeof allServers)[number];
   function splitByScope(servers: Server[]) {
     const teamServers = servers.filter(
-      (s) => getServerScope(s) === "team" && !!s.teamId,
+      (s) => resolveServerScope(s) === "team" && !!s.teamId,
     );
-    const orgServers = servers.filter((s) => getServerScope(s) === "org");
+    const orgServers = servers.filter((s) => resolveServerScope(s) === "org");
     const teamsWithConnection = new Set(teamServers.map((s) => s.teamId));
     const myPersonalServer =
       servers.find(
-        (s) => getServerScope(s) === "personal" && s.ownerId === currentUserId,
+        (s) =>
+          resolveServerScope(s) === "personal" && s.ownerId === currentUserId,
       ) ?? null;
     const otherPersonalServers = servers.filter(
-      (s) => getServerScope(s) === "personal" && s.ownerId !== currentUserId,
+      (s) =>
+        resolveServerScope(s) === "personal" && s.ownerId !== currentUserId,
     );
     const availableTeamsForShared =
       userTeams?.filter((t) => !teamsWithConnection.has(t.id)) ?? [];
@@ -351,7 +349,7 @@ export function ManageUsersContent({
   }
 
   const getCredentialOwnerName = (mcpServer: Server): string => {
-    const scope = getServerScope(mcpServer);
+    const scope = resolveServerScope(mcpServer);
     if (scope === "org") return "Organization";
     if (scope === "team") return mcpServer.teamDetails?.name || "Team";
     return mcpServer.ownerEmail || "Deleted user";
@@ -385,7 +383,10 @@ export function ManageUsersContent({
     !!onAddOrgConnection &&
     !split.hasOrgConnection &&
     !!hasMcpServerAdminPermission;
-  const canAddServiceAccount = canAddTeam || canAddOrg;
+  const isLocalServer = catalogItem?.serverType === "local";
+  const isPersonalOnly =
+    catalogItem != null && isPlaywrightCatalogItem(catalogItem.id);
+  const canAddServiceAccount = !isPersonalOnly && (canAddTeam || canAddOrg);
 
   const rowProps: RowRenderProps = {
     isOAuthServer,
@@ -421,7 +422,7 @@ export function ManageUsersContent({
         className={hideHeader ? "space-y-6" : "space-y-6 pb-4"}
         data-testid={bodyTestId}
       >
-        {catalogItem && (
+        {catalogItem?.serverType === "remote" && (
           <AgentConnectionsSection
             item={catalogItem}
             connections={allServers}
@@ -430,9 +431,19 @@ export function ManageUsersContent({
 
         {(personalRows.length > 0 || canAddPersonal) && (
           <ConnectionsSection
-            title="Personal connections"
-            description="Each person connects their own account."
-            emptyText="No personal connections yet."
+            title={
+              isLocalServer ? "Personal installations" : "Personal connections"
+            }
+            description={
+              isLocalServer
+                ? "A private hosted instance available only to its owner."
+                : "Private to its owner — only that person can use it."
+            }
+            emptyText={
+              isLocalServer
+                ? "No personal installations yet."
+                : "No personal connections yet."
+            }
             rows={personalRows}
             tableTestId={E2eTestId.ManageCredentialsDialogTable}
             action={
@@ -441,13 +452,18 @@ export function ManageUsersContent({
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
+                  disabled={isInstalling}
                   onClick={() => {
                     onClose();
                     onAddPersonalConnection?.();
                   }}
                 >
                   <Plus className="mr-1 h-3 w-3" />
-                  Connect my account
+                  {isInstalling
+                    ? "Installing..."
+                    : isLocalServer
+                      ? "Install for me"
+                      : "Connect my account"}
                 </Button>
               ) : null
             }
@@ -457,9 +473,17 @@ export function ManageUsersContent({
 
         {(serviceAccountRows.length > 0 || canAddServiceAccount) && (
           <ConnectionsSection
-            title="Service accounts"
-            description="Shared team & organization keys."
-            emptyText="No service accounts yet."
+            title={isLocalServer ? "Shared installations" : "Service accounts"}
+            description={
+              isLocalServer
+                ? "Hosted instances shared with a team or organization."
+                : "Static credentials intentionally shared with a team or organization."
+            }
+            emptyText={
+              isLocalServer
+                ? "No shared installations yet."
+                : "No service accounts yet."
+            }
             rows={serviceAccountRows}
             tableTestId={E2eTestId.ManageServiceAccountsTable}
             action={
@@ -468,13 +492,16 @@ export function ManageUsersContent({
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
+                  disabled={isInstalling}
                   data-testid={
                     E2eTestId.ManageCredentialsAddServiceAccountButton
                   }
                   onClick={() => setServiceAccountDialogOpen(true)}
                 >
                   <Plus className="mr-1 h-3 w-3" />
-                  Add service account
+                  {isLocalServer
+                    ? "Add shared installation"
+                    : "Add service account"}
                 </Button>
               ) : null
             }
@@ -488,6 +515,7 @@ export function ManageUsersContent({
         onOpenChange={setServiceAccountDialogOpen}
         availableTeams={canAddTeam ? split.availableTeamsForShared : []}
         canAddOrg={canAddOrg}
+        resourceKind={isLocalServer ? "installation" : "service-account"}
         onConfirm={(target) => {
           onClose();
           if (target.type === "org") {
@@ -791,6 +819,12 @@ function ConnectionsTable({
   );
 }
 
+// `scope` is nullable on rows created before it existed; a team id implies a
+// team connection, and everything else without a scope is personal.
+function resolveServerScope(server: ServerEntry): "personal" | "team" | "org" {
+  return server.scope ?? (server.teamId ? "team" : "personal");
+}
+
 // Multi-tenant catalogs alias one pod across N caller rows. Each row's
 // K8sDeployment instance tracks its own state independently, so the row that
 // didn't observe the pod first stays "pending" while the other goes "failed".
@@ -844,20 +878,14 @@ function AgentConnectionsSection({
 }) {
   const { canModify } = useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
+  const serviceAccountConnections = connections.filter(
+    (connection) => resolveServerScope(connection) !== "personal",
+  );
   const pinnedId = item.dynamicConnectionMcpServerId ?? null;
   const pinnedConnection = pinnedId
-    ? connections.find((connection) => connection.id === pinnedId)
+    ? serviceAccountConnections.find((connection) => connection.id === pinnedId)
     : undefined;
-  const pinRemoved = Boolean(pinnedId) && !pinnedConnection;
-
-  const [pendingPersonalDefault, setPendingPersonalDefault] = useState<{
-    id: string;
-    mcpName: string;
-    ownerEmail: string;
-    isCurrentUser: boolean;
-  } | null>(null);
+  const pinUnresolved = Boolean(pinnedId) && !pinnedConnection;
 
   const applyDefault = (value: string | null) =>
     updateMutation.mutate({
@@ -865,141 +893,103 @@ function AgentConnectionsSection({
       data: { dynamicConnectionMcpServerId: value },
     });
 
-  // Making a personal connection the default authenticates every call-time
-  // resolution as that one owner; confirm before applying. Org/team accounts
-  // and "on behalf of the user" are shared by design and apply immediately.
   const handleSelectDefault = (value: string) => {
     if (value === ON_BEHALF_OF_VALUE) {
       applyDefault(null);
-      return;
-    }
-    const connection = connections.find((c) => c.id === value);
-    const scope = connection
-      ? (connection.scope ?? (connection.teamId ? "team" : "personal"))
-      : undefined;
-    if (connection && scope === "personal") {
-      setPendingPersonalDefault({
-        id: value,
-        mcpName: connection.catalogName ?? item.name,
-        ownerEmail: connection.ownerEmail || "Deleted user",
-        isCurrentUser: !!currentUserId && connection.ownerId === currentUserId,
-      });
       return;
     }
     applyDefault(value);
   };
 
   const connectionLabel = (connection: (typeof connections)[number]) => {
-    const scope = connection.scope ?? (connection.teamId ? "team" : "personal");
+    const scope = resolveServerScope(connection);
     if (scope === "org") return "Organization account";
     if (scope === "team")
       return `Team — ${connection.teamDetails?.name ?? "Unknown team"}`;
-    return connection.ownerEmail ?? "Unknown user";
+    return "Service account";
   };
 
   return (
-    <>
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <div className="max-w-xl space-y-1">
-          <h4 className="text-sm font-medium">Default credential</h4>
-          <p className="text-sm text-muted-foreground">
-            {!pinnedId ? (
-              <>
-                Agents connect on behalf of whoever is calling — each person
-                uses their own connection if they have one, otherwise a team or
-                organization connection they can access. Applies in Auto mode
-                and to Custom tool assignments that resolve at call time.
-              </>
-            ) : pinRemoved ? (
-              <>
-                The selected connection was removed. Agents connect on behalf of
-                whoever is calling until you choose another one.
-              </>
-            ) : (
-              <>
-                Agents connect as{" "}
-                <span className="font-medium text-foreground">
-                  {pinnedConnection ? connectionLabel(pinnedConnection) : ""}
-                </span>
-                , no matter who is calling. Applies in Auto mode and to Custom
-                tool assignments that resolve at call time.
-              </>
-            )}{" "}
-            <ExternalDocsLink
-              href={getDocsUrl(
-                DocsPage.McpAuthentication,
-                "resolve-at-call-time",
-              )}
-              className="underline"
-              showIcon={false}
-            >
-              Learn more
-            </ExternalDocsLink>
-          </p>
-        </div>
-        <Select
-          value={pinRemoved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
-          disabled={!canModify || updateMutation.isPending}
-          onValueChange={handleSelectDefault}
-        >
-          <SelectTrigger className="w-[320px]">
-            <SelectValue placeholder="Connection removed" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              value={ON_BEHALF_OF_VALUE}
-              className="cursor-pointer"
-              description="Everyone connects their own account."
-            >
-              <div className="flex items-center gap-1.5">
-                <Zap className="h-3.5! w-3.5! text-amber-500" />
-                <span>On behalf of the user (Recommended)</span>
-              </div>
-            </SelectItem>
-            {connections.length > 0 && (
-              <>
-                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
-                  Always use one account
-                </div>
-                {connections.map((connection) => (
-                  <SelectItem
-                    key={connection.id}
-                    value={connection.id}
-                    className="cursor-pointer"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
-                      <span>{connectionLabel(connection)}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </>
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <div className="max-w-xl space-y-1">
+        <h4 className="text-sm font-medium">Default credential</h4>
+        <p className="text-sm text-muted-foreground">
+          {!pinnedId ? (
+            <>
+              Agents connect on behalf of whoever is calling — each person uses
+              their own connection if they have one, otherwise a team or
+              organization connection they can access. Applies in Auto mode and
+              to Custom tool assignments that resolve at call time.
+            </>
+          ) : pinUnresolved ? (
+            <>
+              The selected connection is unavailable. Agents connect on behalf
+              of whoever is calling until you choose another one.
+            </>
+          ) : (
+            <>
+              Agents connect as{" "}
+              <span className="font-medium text-foreground">
+                {pinnedConnection ? (
+                  <span>{connectionLabel(pinnedConnection)}</span>
+                ) : null}
+              </span>
+              , no matter who is calling. Applies in Auto mode and to Custom
+              tool assignments that resolve at call time.
+            </>
+          )}{" "}
+          <ExternalDocsLink
+            href={getDocsUrl(
+              DocsPage.McpAuthentication,
+              "resolve-at-call-time",
             )}
-          </SelectContent>
-        </Select>
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </p>
       </div>
-      <StaticCredentialConfirmDialog
-        open={pendingPersonalDefault !== null}
-        context="server"
-        pins={
-          pendingPersonalDefault
-            ? [
-                {
-                  mcpName: pendingPersonalDefault.mcpName,
-                  ownerEmail: pendingPersonalDefault.ownerEmail,
-                  isCurrentUser: pendingPersonalDefault.isCurrentUser,
-                },
-              ]
-            : []
-        }
-        onConfirm={() => {
-          if (pendingPersonalDefault) {
-            applyDefault(pendingPersonalDefault.id);
-          }
-          setPendingPersonalDefault(null);
-        }}
-        onCancel={() => setPendingPersonalDefault(null)}
-      />
-    </>
+      <Select
+        value={pinUnresolved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
+        disabled={!canModify || updateMutation.isPending}
+        onValueChange={handleSelectDefault}
+      >
+        <SelectTrigger className="w-[320px]">
+          <SelectValue placeholder="Connection unavailable" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem
+            value={ON_BEHALF_OF_VALUE}
+            className="cursor-pointer"
+            description="Everyone connects their own account."
+          >
+            <div className="flex items-center gap-1.5">
+              <Zap className="h-3.5! w-3.5! text-amber-500" />
+              <span>On behalf of the user (Recommended)</span>
+            </div>
+          </SelectItem>
+          {serviceAccountConnections.length > 0 && (
+            <>
+              <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                Always use one service account
+              </div>
+              {serviceAccountConnections.map((connection) => (
+                <SelectItem
+                  key={connection.id}
+                  value={connection.id}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
+                    <span>{connectionLabel(connection)}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

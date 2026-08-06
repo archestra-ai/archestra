@@ -128,7 +128,10 @@ function parseJsonRecord(value: string | null): Record<string, unknown> | null {
       return parsed as Record<string, unknown>;
     }
   } catch (error) {
-    logger.warn({ error, value }, "Failed to parse API key JSON record");
+    logger.warn(
+      { error, valueLength: value.length },
+      "Failed to parse API key JSON record",
+    );
     return null;
   }
 

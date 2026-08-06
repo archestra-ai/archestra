@@ -193,6 +193,33 @@ describe("ContextWindowPanel", () => {
     expect(screen.queryByText(/^Compaction /)).not.toBeInTheDocument();
   });
 
+  it("gives headroom and the last compaction a block each", () => {
+    const { container } = render(
+      <ContextWindowPanel
+        breakdown={makeBreakdown()}
+        lastCompaction={{
+          originalTokenEstimate: 50_000,
+          compactedTokenEstimate: 12_000,
+          trigger: "auto",
+        }}
+      />,
+    );
+
+    // Two separate statements about two separate moments — they must not be
+    // crammed into one note, and each must carry its own icon.
+    const notes = container.querySelectorAll(".rounded-md.border");
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toHaveTextContent(
+      "71% of context remaining until auto-compact.",
+    );
+    expect(notes[1]).toHaveTextContent(
+      /Auto-compaction summarized earlier turns/,
+    );
+    for (const note of notes) {
+      expect(note.querySelector("svg")).toBeInTheDocument();
+    }
+  });
+
   it("renders the estimate footnote", () => {
     render(<ContextWindowPanel breakdown={makeBreakdown()} />);
     expect(screen.getByText(/Estimated before sending/)).toBeInTheDocument();
@@ -288,5 +315,133 @@ describe("ContextWindowDialog — fallback state", () => {
 
     expect(screen.getByText("claude-opus-4-8")).toBeInTheDocument();
     expect(screen.getByText("Messages")).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// ContextWindowDialog — manual compaction
+// ============================================================================
+
+describe("ContextWindowDialog — compact action", () => {
+  async function openDialog(ui: React.ReactElement) {
+    const user = userEvent.setup();
+    render(ui);
+    await user.click(screen.getByRole("button", { name: "Open" }));
+    return user;
+  }
+
+  it("offers no compact action when the conversation cannot be compacted", async () => {
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={makeBreakdown()}
+        tokensUsed={89_000}
+        maxTokens={1_000_000}
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /compact now/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("compacts on demand", async () => {
+    const onCompact = vi.fn();
+    const user = await openDialog(
+      <ContextWindowDialog
+        breakdown={makeBreakdown()}
+        tokensUsed={89_000}
+        maxTokens={1_000_000}
+        onCompact={onCompact}
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /compact now/i }));
+
+    expect(onCompact).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks re-entry while a compaction is already running", async () => {
+    const onCompact = vi.fn();
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={makeBreakdown()}
+        tokensUsed={89_000}
+        maxTokens={1_000_000}
+        onCompact={onCompact}
+        isCompacting
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    const button = screen.getByRole("button", { name: /compacting/i });
+    expect(button).toBeDisabled();
+  });
+
+  it("states headroom to auto-compaction in the same words as the indicator", async () => {
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={makeBreakdown()}
+        tokensUsed={89_000}
+        maxTokens={1_000_000}
+        onCompact={vi.fn()}
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    // 8.9% used against an 80% trigger → 71 points of headroom.
+    expect(
+      screen.getByText("71% of context remaining until auto-compact."),
+    ).toBeInTheDocument();
+  });
+
+  it("warns that auto-compaction is imminent once past the threshold", async () => {
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={makeBreakdown({
+          usedTokens: 850_000,
+          freeTokens: 150_000,
+          usedPercent: 85,
+        })}
+        tokensUsed={850_000}
+        maxTokens={1_000_000}
+        onCompact={vi.fn()}
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    expect(
+      screen.getByText("Auto-compact runs on your next message."),
+    ).toBeInTheDocument();
+  });
+
+  it("invents no headroom when the model's window is unknown", async () => {
+    await openDialog(
+      <ContextWindowDialog
+        breakdown={makeBreakdown({ contextLength: null, freeTokens: null })}
+        tokensUsed={89_000}
+        maxTokens={null}
+        onCompact={vi.fn()}
+      >
+        <button type="button">Open</button>
+      </ContextWindowDialog>,
+    );
+
+    // No window means no threshold to count down to, so the note that would
+    // carry both the sentence and the action has nothing to say and is
+    // dropped. The composer cannot reach this state anyway — its context ring
+    // only renders once a window is known — and `/compact` still works.
+    expect(
+      screen.queryByText(/remaining until auto-compact/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /compact now/i }),
+    ).not.toBeInTheDocument();
   });
 });

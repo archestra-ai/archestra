@@ -1,6 +1,8 @@
 import {
+  ConversationModel,
   ProjectModel,
   ProjectNameExistsError,
+  ProjectPinModel,
   ProjectShareModel,
 } from "@/models";
 import { describe, expect, test } from "@/test";
@@ -99,7 +101,7 @@ describe("ProjectModel", () => {
     expect(second.slug.startsWith("quarterly-report-")).toBe(true);
   });
 
-  test("deleting a project nulls its conversations", async ({
+  test("deleting a project detaches its chats and retains the row", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -128,11 +130,102 @@ describe("ProjectModel", () => {
 
     await ProjectModel.delete(project.id);
 
+    // the chat survives as an ordinary conversation — the soft delete stops the
+    // FK from firing, so the model detaches it by hand to the same effect.
     const [after] = await db
       .select()
       .from(schema.conversationsTable)
       .where(eq(schema.conversationsTable.id, conv.id));
     expect(after.projectId).toBeNull();
+
+    // the project is gone from every read path, but the row is retained so an
+    // operator can restore it.
+    expect(await ProjectModel.findById(project.id)).toBeNull();
+    const [raw] = await db
+      .select()
+      .from(schema.projectsTable)
+      .where(eq(schema.projectsTable.id, project.id));
+    expect(raw.deletedAt).not.toBeNull();
+  });
+
+  test("a restored project comes back with its share config and pins", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const project = await makeProject({
+      organizationId: org.id,
+      userId: user.id,
+      name: "recoverable",
+    });
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId: org.id,
+      createdByUserId: user.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    await ProjectPinModel.pin({ userId: user.id, projectId: project.id });
+
+    await ProjectModel.delete(project.id);
+    expect(await ProjectModel.findById(project.id)).toBeNull();
+
+    // shares and pins are deliberately NOT removed on delete: every read of
+    // them resolves the project first, so keeping them is invisible — and it is
+    // what makes a restore land on a project configured as it was.
+    const { default: db, schema } = await import("@/database");
+    const { restore } = await import("@/database/soft-delete");
+    const { eq } = await import("drizzle-orm");
+    expect(
+      await restore(
+        db,
+        schema.projectsTable,
+        eq(schema.projectsTable.id, project.id),
+      ),
+    ).toBe(1);
+
+    expect((await ProjectModel.findById(project.id))?.name).toBe("recoverable");
+    expect(
+      (await ProjectShareModel.listAllOrgProjects({ organizationId: org.id }))
+        .map((p) => p.id)
+        .includes(project.id),
+    ).toBe(true);
+    expect(
+      (await ProjectShareModel.findByProjectId(project.id))?.visibility,
+    ).toBe("organization");
+    const pins = await ProjectPinModel.getPinnedAtForProjects({
+      userId: user.id,
+      projectIds: [project.id],
+    });
+    expect(pins.has(project.id)).toBe(true);
+  });
+
+  test("a deleted project frees its name but keeps its slug", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const first = await makeProject({
+      organizationId: org.id,
+      userId: user.id,
+      name: "Quarterly Report",
+    });
+    expect(first.slug).toBe("quarterly-report");
+
+    await ProjectModel.delete(first.id);
+
+    // same owner can immediately reuse the display name; the retained row keeps
+    // "quarterly-report" so a restore lands on its own folder, which means the
+    // new project gets a fresh suffixed slug.
+    const second = await makeProject({
+      organizationId: org.id,
+      userId: user.id,
+      name: "Quarterly Report",
+    });
+    expect(second.slug).not.toBe(first.slug);
+    expect(second.slug.startsWith("quarterly-report-")).toBe(true);
   });
 
   test("countConversations and listConversations", async ({
@@ -205,6 +298,47 @@ describe("ProjectModel", () => {
     expect(scheduledRow?.scheduleTriggerId).toBe(trigger.id);
     expect(scheduledRow?.scheduleRunId).toBe(run.id);
     expect(scheduledRow?.scheduleName).toBe(trigger.name);
+  });
+
+  test("countConversations and listConversations exclude soft-deleted chats", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const project = await makeProject({
+      organizationId: org.id,
+      userId: user.id,
+      name: "hides-deleted",
+    });
+    const { default: db, schema } = await import("@/database");
+    const { eq } = await import("drizzle-orm");
+
+    const ids: string[] = [];
+    for (const title of ["keep", "remove"]) {
+      const conv = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: org.id,
+        title,
+      });
+      await db
+        .update(schema.conversationsTable)
+        .set({ projectId: project.id })
+        .where(eq(schema.conversationsTable.id, conv.id));
+      ids.push(conv.id);
+    }
+
+    // Soft-delete the second chat; it must drop out of both the count and list.
+    await ConversationModel.delete(ids[1], user.id, org.id);
+
+    expect(
+      (await ProjectModel.countConversations([project.id])).get(project.id),
+    ).toBe(1);
+    const listed = await ProjectModel.listConversations(project.id);
+    expect(listed.map((c) => c.title)).toEqual(["keep"]);
   });
 });
 
@@ -334,5 +468,21 @@ describe("ProjectShareModel", () => {
     expect(listed.find((p) => p.id === orgShared.id)?.visibility).toBe(
       "organization",
     );
+
+    // soft-deleted projects vanish from every list surface, including the
+    // admin oversight base set: the retained row is invisible to the API.
+    await ProjectModel.delete(orgShared.id);
+    const afterDelete = await ProjectShareModel.listAccessibleProjects({
+      userId: viewer.id,
+      organizationId: org.id,
+    });
+    expect(afterDelete.map((p) => p.name).sort()).toEqual([
+      "mine",
+      "team-shared",
+    ]);
+    const allOrg = await ProjectShareModel.listAllOrgProjects({
+      organizationId: org.id,
+    });
+    expect(allOrg.map((p) => p.id)).not.toContain(orgShared.id);
   });
 });

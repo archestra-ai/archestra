@@ -1,7 +1,24 @@
-import pg from "pg";
 import config from "@/config";
-import logger from "@/logging";
+import {
+  createInMemoryNotifyHub,
+  createPollingNotifyHub,
+  createPostgresNotifyHub,
+  type KeyedNotifier,
+  type PgNotifyHub,
+} from "@/services/pg-notify-hub";
 
+/**
+ * Cross-replica wake-ups for active chat runs, keyed by run id.
+ *
+ * Two channels: one for new stream events (so a reconnecting client's replay
+ * catches up the moment another pod writes) and one for Stop (so a running
+ * stream notices a stop requested on a different pod). Both ride the shared
+ * notify hub, which multiplexes every channel in the process onto a single
+ * listener connection — A2A task streams use the same one.
+ *
+ * Delivery is best-effort by design: every wait carries a timeout and re-reads
+ * the database, so a missed notification costs latency, never correctness.
+ */
 const EVENT_CHANNEL = "chat_active_run_events";
 const STOP_CHANNEL = "chat_active_run_stops";
 
@@ -13,300 +30,92 @@ export interface ActiveChatRunNotifier {
   close?(): Promise<void>;
 }
 
-/**
- * @public - exported for testability
- */
-export class PollingActiveChatRunNotifier implements ActiveChatRunNotifier {
-  async notifyEvent(_runId: string): Promise<void> {}
-
-  async notifyStop(_runId: string): Promise<void> {}
-
-  async waitForEvent(params: WaitForRunParams): Promise<void> {
-    await sleepWithAbort(params.timeoutMs, params.abortSignal);
-  }
-
-  async waitForStop(params: WaitForRunParams): Promise<void> {
-    await sleepWithAbort(params.timeoutMs, params.abortSignal);
-  }
-}
-
-/**
- * @public - exported for testability
- */
-export class InMemoryActiveChatRunNotifier extends PollingActiveChatRunNotifier {
-  private readonly eventWaiters = new RunWaiters();
-  private readonly stopWaiters = new RunWaiters();
-
-  async notifyEvent(runId: string): Promise<void> {
-    this.eventWaiters.notify(runId);
-  }
-
-  async notifyStop(runId: string): Promise<void> {
-    this.stopWaiters.notify(runId);
-  }
-
-  async waitForEvent(params: WaitForRunParams): Promise<void> {
-    await this.eventWaiters.wait(params);
-  }
-
-  async waitForStop(params: WaitForRunParams): Promise<void> {
-    await this.stopWaiters.wait(params);
-  }
-}
-
-/**
- * @public - exported for testability
- */
-export class PostgresActiveChatRunNotifier extends InMemoryActiveChatRunNotifier {
-  private client: PgClient | null = null;
-  private connectPromise: Promise<void> | null = null;
-
-  constructor(
-    private readonly connectionString: string,
-    private readonly clientFactory: PgClientFactory = createDefaultPgClient,
-  ) {
-    super();
-  }
-
-  override async notifyEvent(runId: string): Promise<void> {
-    await this.notify(EVENT_CHANNEL, runId);
-  }
-
-  override async notifyStop(runId: string): Promise<void> {
-    await this.notify(STOP_CHANNEL, runId);
-  }
-
-  override async waitForEvent(params: WaitForRunParams): Promise<void> {
-    await this.ensureListening("event", params.runId);
-    await super.waitForEvent(params);
-  }
-
-  override async waitForStop(params: WaitForRunParams): Promise<void> {
-    await this.ensureListening("stop", params.runId);
-    await super.waitForStop(params);
-  }
-
-  async close(): Promise<void> {
-    await this.connectPromise?.catch(() => undefined);
-    await this.resetClient(this.client);
-  }
-
-  private async notify(channel: string, runId: string): Promise<void> {
-    try {
-      await this.ensureConnected();
-      const client = this.client;
-      if (!client) {
-        return;
-      }
-
-      await client.query("select pg_notify($1, $2)", [
-        channel,
-        JSON.stringify({ runId }),
-      ]);
-    } catch (error) {
-      await this.resetClient(this.client);
-      logger.warn(
-        { error, channel, runId },
-        "Failed to publish active chat run notification",
-      );
-    }
-  }
-
-  private async ensureConnected(): Promise<void> {
-    if (!this.connectPromise) {
-      const client = this.createClient();
-      this.client = client;
-      this.connectPromise = this.connectClient(client);
-    }
-
-    await this.connectPromise;
-  }
-
-  private createClient(): PgClient {
-    const client = this.clientFactory(this.connectionString);
-
-    client.on("notification", (notification) => {
-      this.handleNotification(notification as pg.Notification);
-    });
-    client.on("error", (error) => {
-      logger.warn({ error }, "Active chat run notify connection error");
-      void this.resetClient(client);
-    });
-    client.on("end", () => {
-      if (this.client === client) {
-        this.client = null;
-        this.connectPromise = null;
-      }
-    });
-
-    return client;
-  }
-
-  private async connectClient(client: PgClient): Promise<void> {
-    try {
-      await client.connect();
-      await client.query(`LISTEN ${EVENT_CHANNEL}`);
-      await client.query(`LISTEN ${STOP_CHANNEL}`);
-    } catch (error) {
-      await this.resetClient(client);
-      throw error;
-    }
-  }
-
-  private async resetClient(client: PgClient | null): Promise<void> {
-    if (!client || this.client !== client) {
-      return;
-    }
-
-    this.client = null;
-    this.connectPromise = null;
-    await client.end().catch((error) => {
-      logger.warn({ error }, "Failed to close active chat run notifier");
-    });
-  }
-
-  private handleNotification(notification: pg.Notification): void {
-    const runId = parseRunId(notification.payload);
-    if (!runId) {
-      return;
-    }
-
-    if (notification.channel === EVENT_CHANNEL) {
-      void super.notifyEvent(runId);
-      return;
-    }
-
-    if (notification.channel === STOP_CHANNEL) {
-      void super.notifyStop(runId);
-    }
-  }
-
-  private async ensureListening(kind: "event" | "stop", runId: string) {
-    try {
-      await this.ensureConnected();
-    } catch (error) {
-      await this.resetClient(this.client);
-      logger.warn(
-        { error, kind, runId },
-        "Failed to ensure active chat run listener connection",
-      );
-    }
-  }
-}
-
-export function createActiveChatRunNotifier(): ActiveChatRunNotifier {
-  // Prefer Postgres LISTEN/NOTIFY for active-run replay and Stop wake-ups. Use
-  // polling compatibility only when the database endpoint cannot keep a
-  // session-stable listener connection, for example PgBouncer transaction
-  // pooling or managed/serverless proxies that break long-lived listeners.
-  if (config.chat.activeRun.pollingCompatibilityEnabled) {
-    return new PollingActiveChatRunNotifier();
-  }
-
-  return new PostgresActiveChatRunNotifier(
-    config.chat.activeRun.notifyDatabaseUrl || config.database.url,
-  );
-}
-
 interface WaitForRunParams {
   runId: string;
   timeoutMs: number;
   abortSignal?: AbortSignal;
 }
 
-interface PgClient {
-  connect(): Promise<unknown>;
-  end(): Promise<unknown>;
-  query(queryText: string, values?: unknown[]): Promise<unknown>;
-  on(event: string, listener: (...args: unknown[]) => void): unknown;
-}
+/**
+ * Adapts a notify hub to the run-id-keyed interface chat uses.
+ *
+ * Declared above its subclasses rather than at the bottom with the other
+ * internals: `extends` is evaluated when the module loads, so the base has to
+ * exist by then.
+ */
+class HubBackedNotifier implements ActiveChatRunNotifier {
+  private readonly events: KeyedNotifier;
+  private readonly stops: KeyedNotifier;
 
-type PgClientFactory = (connectionString: string) => PgClient;
-
-class RunWaiters {
-  private readonly waiters = new Map<string, Set<() => void>>();
-
-  notify(runId: string): void {
-    const waiters = this.waiters.get(runId);
-    if (!waiters) {
-      return;
-    }
-
-    this.waiters.delete(runId);
-    for (const resolve of waiters) {
-      resolve();
-    }
+  constructor(private readonly hub: PgNotifyHub) {
+    this.events = hub.channel(EVENT_CHANNEL);
+    this.stops = hub.channel(STOP_CHANNEL);
   }
 
-  async wait(params: WaitForRunParams): Promise<void> {
-    if (params.abortSignal?.aborted) {
-      return;
-    }
+  async notifyEvent(runId: string): Promise<void> {
+    await this.events.notify(runId);
+  }
 
-    await new Promise<void>((resolve) => {
-      const cleanup = () => {
-        clearTimeout(timeout);
-        params.abortSignal?.removeEventListener("abort", onAbort);
-        const waiters = this.waiters.get(params.runId);
-        waiters?.delete(resolveAndCleanup);
-        if (waiters?.size === 0) {
-          this.waiters.delete(params.runId);
-        }
-      };
+  async notifyStop(runId: string): Promise<void> {
+    await this.stops.notify(runId);
+  }
 
-      const resolveAndCleanup = () => {
-        cleanup();
-        resolve();
-      };
+  async waitForEvent(params: WaitForRunParams): Promise<void> {
+    await this.events.wait(toWaitParams(params));
+  }
 
-      const onAbort = () => resolveAndCleanup();
-      const timeout = setTimeout(resolveAndCleanup, params.timeoutMs);
-      params.abortSignal?.addEventListener("abort", onAbort, { once: true });
+  async waitForStop(params: WaitForRunParams): Promise<void> {
+    await this.stops.wait(toWaitParams(params));
+  }
 
-      const waiters = this.waiters.get(params.runId) ?? new Set<() => void>();
-      waiters.add(resolveAndCleanup);
-      this.waiters.set(params.runId, waiters);
-    });
+  async close(): Promise<void> {
+    await this.hub.close();
   }
 }
 
-function parseRunId(payload: string | undefined): string | null {
-  if (!payload) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(payload);
-    return typeof parsed.runId === "string" ? parsed.runId : null;
-  } catch {
-    return null;
+/**
+ * @public - exported for testability
+ *
+ * Wakes waiters in this process only. Real behavior for a single-process test,
+ * with no database and no cross-replica delivery.
+ */
+export class InMemoryActiveChatRunNotifier extends HubBackedNotifier {
+  constructor() {
+    super(createInMemoryNotifyHub());
   }
 }
 
-function createDefaultPgClient(connectionString: string): PgClient {
-  return new pg.Client({
-    connectionString,
-    connectionTimeoutMillis: 1_000,
-    keepAlive: true,
-    keepAliveInitialDelayMillis: 10_000,
-  });
+/**
+ * @public - exported for testability
+ *
+ * Never wakes anything: waiters resolve on their own timeout. Mirrors an
+ * endpoint that cannot deliver notifications at all.
+ */
+export class PollingActiveChatRunNotifier extends HubBackedNotifier {
+  constructor() {
+    super(createPollingNotifyHub());
+  }
 }
 
-function sleepWithAbort(ms: number, abortSignal?: AbortSignal): Promise<void> {
-  if (abortSignal?.aborted) {
-    return Promise.resolve();
+export function createActiveChatRunNotifier(): ActiveChatRunNotifier {
+  // The hub proves for itself whether notifications are delivered and tightens
+  // its own fallback when they are not, so this switch only exists to skip
+  // opening a listener connection on an endpoint known to be incapable.
+  if (config.chat.activeRun.pollingCompatibilityEnabled) {
+    return new PollingActiveChatRunNotifier();
   }
 
-  return new Promise((resolve) => {
-    const timeout = setTimeout(resolveAndCleanup, ms);
-    const onAbort = () => resolveAndCleanup();
+  return new HubBackedNotifier(
+    createPostgresNotifyHub(
+      config.chat.activeRun.notifyDatabaseUrl || config.database.url,
+    ),
+  );
+}
 
-    function resolveAndCleanup() {
-      clearTimeout(timeout);
-      abortSignal?.removeEventListener("abort", onAbort);
-      resolve();
-    }
-
-    abortSignal?.addEventListener("abort", onAbort, { once: true });
-  });
+function toWaitParams(params: WaitForRunParams) {
+  return {
+    key: params.runId,
+    timeoutMs: params.timeoutMs,
+    abortSignal: params.abortSignal,
+  };
 }

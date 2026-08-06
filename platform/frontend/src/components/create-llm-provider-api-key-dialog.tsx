@@ -27,6 +27,7 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   useCreateLlmProviderApiKey,
   useLlmProviderApiKeys,
+  useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 
 export type CreateLlmProviderApiKeyDialogProps = {
@@ -38,8 +39,16 @@ export type CreateLlmProviderApiKeyDialogProps = {
   /** Restrict the provider picker to this allowlist (e.g. the providers the
    * selected connect client can actually route). Omit to allow all providers. */
   allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
+  /** Selects the focused progressive flow shown by this dialog. */
+  credentialMode?: "api-key" | "subscription";
   showConsoleLink?: boolean;
   onSuccess?: () => void;
+  /**
+   * Re-authentication mode: rotate this existing key's credential in place
+   * instead of creating a new key. Used to reconnect an expired personal
+   * subscription (ChatGPT/Copilot) without minting a duplicate credential row.
+   */
+  reconnectKeyId?: string;
 };
 
 export function CreateLlmProviderApiKeyDialog({
@@ -49,10 +58,13 @@ export function CreateLlmProviderApiKeyDialog({
   description,
   defaultValues,
   allowedProviders,
+  credentialMode = "api-key",
   showConsoleLink = false,
   onSuccess,
+  reconnectKeyId,
 }: CreateLlmProviderApiKeyDialogProps) {
   const createMutation = useCreateLlmProviderApiKey();
+  const updateMutation = useUpdateLlmProviderApiKey();
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
@@ -88,7 +100,7 @@ export function CreateLlmProviderApiKeyDialog({
     values: formValues,
   });
 
-  const handleCreate = form.handleSubmit(async (values) => {
+  const createCredential = async (values: LlmProviderApiKeyFormValues) => {
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
@@ -131,7 +143,30 @@ export function CreateLlmProviderApiKeyDialog({
     } catch {
       // Error handled by mutation
     }
-  });
+  };
+  const handleCreate = form.handleSubmit(createCredential);
+  const handleSubscriptionCredential = (credential: string) => {
+    if (reconnectKeyId) {
+      // Re-authentication: rotate the existing key's secret in place — a
+      // second create would leave a duplicate credential row behind, with the
+      // stale one still selected in conversations.
+      void (async () => {
+        try {
+          await updateMutation.mutateAsync({
+            id: reconnectKeyId,
+            data: { apiKey: credential },
+          });
+          onOpenChange(false);
+          onSuccess?.();
+        } catch {
+          // Error handled by mutation
+        }
+      })();
+      return;
+    }
+    const values = { ...form.getValues(), apiKey: credential };
+    void createCredential(values);
+  };
 
   return (
     <FormDialog
@@ -155,18 +190,27 @@ export function CreateLlmProviderApiKeyDialog({
             existingKeys={existingKeys}
             isPending={createMutation.isPending}
             allowedProviders={allowedProviders}
+            credentialMode={credentialMode}
+            progressive
+            allowPersonalSubscriptions={credentialMode === "subscription"}
+            onSubscriptionCredential={handleSubscriptionCredential}
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           <DialogCancelButton>Cancel</DialogCancelButton>
-          <Button type="submit" disabled={!isValid || createMutation.isPending}>
-            {createMutation.isPending && (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
-            Test & Create
-          </Button>
+          {credentialMode === "api-key" && (
+            <Button
+              type="submit"
+              disabled={!isValid || createMutation.isPending}
+            >
+              {createMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              <span>Test & Create</span>
+            </Button>
+          )}
         </DialogStickyFooter>
       </DialogForm>
     </FormDialog>

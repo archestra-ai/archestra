@@ -5,7 +5,6 @@ import { LlmLogsPage } from "./pages/llm-logs-page";
 import { LlmProviderApiKeysPage } from "./pages/llm-provider-api-keys-page";
 import { McpRegistryPage } from "./pages/mcp-registry-page";
 import { SkillsNewPage } from "./pages/skills-new-page";
-import { VirtualKeysPage } from "./pages/virtual-keys-page";
 
 // Biome's useImportType rule otherwise rewrites these to `import type` because
 // the class identifiers only appear in `new X(page)` positions, which it
@@ -15,7 +14,6 @@ void AgentsPage;
 void LlmLogsPage;
 void LlmProviderApiKeysPage;
 void SkillsNewPage;
-void VirtualKeysPage;
 
 type Fixtures = {
   agentsPage: AgentsPage;
@@ -24,7 +22,6 @@ type Fixtures = {
   mcpRegistryPage: McpRegistryPage;
   mswControl: MswControl;
   skillsNewPage: SkillsNewPage;
-  virtualKeysPage: VirtualKeysPage;
 };
 
 type AutoFixtures = {
@@ -52,9 +49,6 @@ export const test = base.extend<Fixtures & AutoFixtures>({
   },
   skillsNewPage: async ({ page }, use) => {
     await use(new SkillsNewPage(page));
-  },
-  virtualKeysPage: async ({ page }, use) => {
-    await use(new VirtualKeysPage(page));
   },
   mswControl: async ({ request, page, baseURL }, use) => {
     if (!baseURL) {

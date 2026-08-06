@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   type ChatOpenedAppMetadata,
+  DUAL_LLM_ANALYSIS_PART_TYPE,
   getArchestraAppResourceUri,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
@@ -10,11 +11,13 @@ import {
   parseFullToolName,
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
+  TOOL_COPY_FILE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
+  getToolNameFromPart,
   isCompactEligible,
 } from "@/lib/chat/chat-tools-display.utils";
 import type { PanelApp } from "./apps-context";
@@ -60,6 +63,21 @@ export type CompactToolGroupEntry =
 export type CompactToolGroup = {
   startIndex: number;
   entries: CompactToolGroupEntry[];
+};
+
+/**
+ * A maximal run of reasoning parts that render as neighbours on screen, folded
+ * into the single "Thought for N seconds" row that renders at `startIndex`.
+ */
+export type ReasoningRun = {
+  /** First reasoning part of the run — where the merged row renders. */
+  startIndex: number;
+  /** Last reasoning part of the run — drives the streaming flag. */
+  lastIndex: number;
+  /** The run's texts, joined seamlessly. */
+  text: string;
+  /** Nothing renders after `lastIndex` yet, so the run may still grow. */
+  isTrailing: boolean;
 };
 
 /**
@@ -327,6 +345,62 @@ export function deriveAppsFromMessages(
   }
 
   return apps;
+}
+
+/**
+ * Per-app revision of agent-side writes into an app's file store: how many
+ * successful `copy_file` calls into the app (`to.scope === "app"` on the call
+ * INPUT) the conversation holds, attributed to the app that was open for that
+ * turn (the openedApp metadata on the preceding user message — the same hint
+ * the backend resolves for the copy itself). The input is the only place the
+ * direction survives client-side: the chat flattens tool outputs to a text
+ * `content` for the model, so the result's `destination` field never reaches
+ * the part. Recomputed as parts stream in, so a bump reaches the running app
+ * the moment the copy's result lands, not at end of turn. Only delivered,
+ * successful results count — a bump must mean the write provably happened, or
+ * the app would re-list and see nothing.
+ */
+export function deriveAppFilesRevisions(
+  messages: UIMessage[],
+  getToolShortName: (toolName: string) => ArchestraToolShortName | null,
+): ReadonlyMap<string, number> {
+  const revisions = new Map<string, number>();
+  let openAppId: string | null = null;
+
+  for (const message of messages) {
+    if (message.role === "user") {
+      // A raw field read, not a schema parse: this runs over the whole
+      // history on every streaming tick, and the id is only a grouping key —
+      // the backend re-validates and re-authorizes it in resolveOpenedApp.
+      const openedApp = (
+        message.metadata as { openedApp?: { appId?: unknown } } | undefined
+      )?.openedApp;
+      openAppId = typeof openedApp?.appId === "string" ? openedApp.appId : null;
+      continue;
+    }
+    if (message.role !== "assistant" || !openAppId) continue;
+
+    for (const part of message.parts ?? []) {
+      // Cheap field checks first — most parts on a streaming tick are other
+      // tools or not yet delivered, and name parsing is the expensive step.
+      const toolPart = part as DynamicToolUIPart | ToolUIPart;
+      if (toolPart.state !== "output-available") continue;
+      const to = (toolPart.input as { to?: { scope?: string } } | undefined)
+        ?.to;
+      if (to?.scope !== "app") continue;
+      const toolName = getToolNameFromPart(toolPart);
+      if (
+        !toolName ||
+        getToolShortName(toolName) !== TOOL_COPY_FILE_SHORT_NAME
+      ) {
+        continue;
+      }
+      if (getToolErrorText({ part: toolPart, toolResultPart: null })) continue;
+      revisions.set(openAppId, (revisions.get(openAppId) ?? 0) + 1);
+    }
+  }
+
+  return revisions;
 }
 
 /**
@@ -736,6 +810,121 @@ export function identifyCompactToolGroups(
 
   finalizeCurrentGroup({ currentGroup, groupMap });
   return { groupMap, consumedIndices };
+}
+
+/**
+ * Fold each message's reasoning parts into runs that render as one row.
+ *
+ * A model routinely thinks between tool calls, and `identifyCompactToolGroups`
+ * hoists every compact-eligible tool in the message into a single circle row at
+ * the *first* tool's index — so the thinking blocks that followed those tools
+ * are left stacked directly on top of each other, one accordion each. This
+ * merges the ones that end up touching: reasoning parts join the same run when
+ * every part between them renders nothing, and anything that does render (a
+ * text bubble, a tool card, an MCP App panel, the circle row itself) closes the
+ * run. Narration therefore still splits the stream into separate rows.
+ *
+ * Keyed by `startIndex`, where the merged row renders. Every non-blank
+ * reasoning part belongs to exactly one run — including runs of one — so the
+ * caller renders whatever `get(i)` returns and drops every other reasoning
+ * index, blank parts included.
+ *
+ * Deliberately not modelled: the auth-state-dependent `return null` branches in
+ * the text renderer, whose inputs are not part data. Those parts count as
+ * visible, so a run spanning one simply doesn't merge — the pre-merge
+ * rendering, never a wrong one.
+ */
+export function identifyReasoningRuns(params: {
+  parts: UIMessage["parts"] | undefined;
+  role: UIMessage["role"];
+  groupMap: Map<number, CompactToolGroup>;
+  consumedIndices: Set<number>;
+}): Map<number, ReasoningRun> {
+  const { parts, role, groupMap, consumedIndices } = params;
+  const runs = new Map<number, ReasoningRun>();
+  if (!parts) return runs;
+
+  const rendersNothing = (index: number): boolean => {
+    // The compact tool group renders its whole circle row here, so this index
+    // is visible even though every *other* tool it swallowed is not.
+    if (groupMap.has(index)) return false;
+    if (consumedIndices.has(index)) return true;
+
+    const part = parts[index];
+    switch (part.type) {
+      case "reasoning":
+        return isBlankReasoningPart(part);
+      case "text":
+        return isBlankAssistantTextPart(part, role);
+      case "file":
+        return false;
+      default: {
+        // Mirrors the `default` branch of the part renderer in
+        // chat-messages.tsx: it draws a card for a tool part the row didn't
+        // swallow, a chip for a hook run, and the MCP App panel for an early
+        // UI announcement — the one part a compact row leaves behind, since
+        // only the tool-* parts it covers are consumed. Everything else
+        // (step-start, and the remaining data-* parts, including the
+        // `data-mcp-task` background-task part that renders on the tool call
+        // it backs rather than as a block of its own) falls through to
+        // `return null` there. Keep the two in sync: over-reporting
+        // visibility only costs a missed merge, under-reporting reorders the
+        // transcript.
+        if (isToolPart(part)) return false;
+        if (isHookRunPart(part)) return false;
+        if (part.type.startsWith("data-tool-ui-start")) return false;
+        if (part.type.startsWith(DUAL_LLM_ANALYSIS_PART_TYPE)) return false;
+        return true;
+      }
+    }
+  };
+
+  // A run stays open-ended until something renders below it. Every run's own
+  // last reasoning part is visible, so only the run that owns the last visible
+  // index can still grow.
+  let lastVisibleIndex = -1;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (!rendersNothing(i)) {
+      lastVisibleIndex = i;
+      break;
+    }
+  }
+
+  let current: {
+    startIndex: number;
+    lastIndex: number;
+    texts: string[];
+  } | null = null;
+
+  const finalize = () => {
+    if (!current) return;
+    runs.set(current.startIndex, {
+      startIndex: current.startIndex,
+      lastIndex: current.lastIndex,
+      text: current.texts.join("\n\n"),
+      isTrailing: current.lastIndex === lastVisibleIndex,
+    });
+    current = null;
+  };
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part.type === "reasoning" && !isBlankReasoningPart(part)) {
+      const text = part.text.trim();
+      if (current) {
+        current.lastIndex = i;
+        current.texts.push(text);
+      } else {
+        current = { startIndex: i, lastIndex: i, texts: [text] };
+      }
+      continue;
+    }
+    if (rendersNothing(i)) continue;
+    finalize();
+  }
+  finalize();
+
+  return runs;
 }
 
 /**

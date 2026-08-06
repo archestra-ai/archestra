@@ -1,5 +1,8 @@
 import type { SupportedProvider } from "@archestra/shared";
-import { RERANKER_MIN_RELEVANCE_SCORE } from "@archestra/shared";
+import {
+  RERANKER_MIN_RELEVANCE_SCORE,
+  RERANKER_NATIVE_MIN_RELEVANCE_SCORE,
+} from "@archestra/shared";
 import { generateObject } from "ai";
 import { z } from "zod";
 import logger from "@/logging";
@@ -9,13 +12,16 @@ import {
   withKbObservability,
 } from "./kb-interaction";
 import { resolveRerankerConfig } from "./kb-llm-client";
+import { callNativeRerank } from "./native-rerank";
 
 async function rerank(params: {
   queryText: string;
   chunks: VectorSearchResult[];
   organizationId: string;
+  /** The one connector this query is scoped to, or null when it spans several. */
+  connectorId?: string | null;
 }): Promise<VectorSearchResult[]> {
-  const { queryText, chunks, organizationId } = params;
+  const { queryText, chunks, organizationId, connectorId = null } = params;
 
   if (chunks.length === 0) {
     return [];
@@ -45,6 +51,10 @@ async function rerank(params: {
     return chunks;
   }
 
+  if (rerankerConfig.kind === "native-rerank") {
+    return nativeRerank({ queryText, chunks, config: rerankerConfig });
+  }
+
   const numberedList = chunks
     .map((chunk, i) => `[${i}] ${chunk.content}`)
     .join("\n\n");
@@ -72,7 +82,6 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
       provider: rerankerConfig.provider,
       model: rerankerConfig.modelName,
       chunkCount: chunks.length,
-      queryText,
     },
     "[Reranker] Calling LLM for reranking",
   );
@@ -83,6 +92,7 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
       provider: rerankerConfig.provider,
       model: rerankerConfig.modelName,
       source: "knowledge:reranker",
+      connectorId,
       type: getProviderChatInteractionType(rerankerConfig.provider),
       callback: () =>
         generateObject({
@@ -109,18 +119,25 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
 
     logger.info(
       {
-        queryText,
         chunkCount: chunks.length,
         filteredOut: reranked.length - filtered.length,
         minRelevanceScore: RERANKER_MIN_RELEVANCE_SCORE,
-        scores: reranked.map(({ chunk, score }) => ({
+        scores: reranked.map(({ score }) => score),
+      },
+      "[Reranker] LLM scores received",
+    );
+    // Query text, titles, and previews are user/corpus content — debug only.
+    logger.debug(
+      {
+        queryText,
+        scoredChunks: reranked.map(({ chunk, score }) => ({
           score,
           kept: score >= RERANKER_MIN_RELEVANCE_SCORE,
           title: chunk.title,
           contentPreview: chunk.content.slice(0, 80),
         })),
       },
-      "[Reranker] LLM scores received",
+      "[Reranker] LLM score previews",
     );
 
     return filtered.map((r) => r.chunk);
@@ -136,6 +153,76 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
 export default rerank;
 
 // ===== Internal helpers =====
+
+/**
+ * Rerank through the provider's native rerank API (Cohere Rerank, directly or
+ * Azure-hosted). Same contract as the LLM path: sort by relevance, drop chunks
+ * below the (native-scale) floor, and fall back to the original order on any
+ * failure — reranking stays best-effort.
+ */
+async function nativeRerank(params: {
+  queryText: string;
+  chunks: VectorSearchResult[];
+  config: {
+    provider: SupportedProvider;
+    modelName: string;
+    apiKey: string | null;
+    baseUrl: string | null;
+  };
+}): Promise<VectorSearchResult[]> {
+  const { queryText, chunks, config } = params;
+
+  logger.info(
+    {
+      provider: config.provider,
+      model: config.modelName,
+      chunkCount: chunks.length,
+    },
+    "[Reranker] Calling native rerank API",
+  );
+
+  try {
+    const scores = await callNativeRerank({
+      provider: config.provider,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.modelName,
+      query: queryText,
+      documents: chunks.map((chunk) => chunk.content),
+    });
+
+    const scoreMap = new Map<number, number>();
+    for (const { index, score } of scores) {
+      scoreMap.set(index, score);
+    }
+
+    const reranked = chunks
+      .map((chunk, idx) => ({ chunk, score: scoreMap.get(idx) ?? 0 }))
+      .sort((a, b) => b.score - a.score);
+
+    const filtered = reranked.filter(
+      (r) => r.score >= RERANKER_NATIVE_MIN_RELEVANCE_SCORE,
+    );
+
+    logger.info(
+      {
+        chunkCount: chunks.length,
+        filteredOut: reranked.length - filtered.length,
+        minRelevanceScore: RERANKER_NATIVE_MIN_RELEVANCE_SCORE,
+        scores: reranked.map(({ score }) => score),
+      },
+      "[Reranker] Native rerank scores received",
+    );
+
+    return filtered.map((r) => r.chunk);
+  } catch (error) {
+    logger.warn(
+      { error },
+      "[Reranker] Native reranking failed, returning original order",
+    );
+    return chunks;
+  }
+}
 
 function buildRerankerInteraction(
   config: { modelName: string; provider: SupportedProvider },

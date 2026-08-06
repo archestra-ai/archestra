@@ -23,6 +23,7 @@ import {
 } from "botbuilder";
 import { PasswordServiceClientCredentialFactory } from "botframework-connector";
 
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel } from "@/models";
@@ -1211,7 +1212,7 @@ class MSTeamsProvider implements ChatOpsProvider {
           },
           {
             type: "TextBlock",
-            text: "**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @Archestra Sales > what's the status?).",
+            text: `**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).`,
             wrap: true,
             spacing: "Small",
           },

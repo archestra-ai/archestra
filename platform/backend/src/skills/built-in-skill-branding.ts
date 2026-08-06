@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { ARCHESTRA_TOOL_PREFIX, DEFAULT_APP_NAME } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 
 /**
@@ -25,19 +24,5 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
  * skills are stored verbatim.
  */
 export function applyBuiltInSkillBranding(text: string): string {
-  const toolPrefix = archestraMcpBranding.toolPrefix;
-  const appName = archestraMcpBranding.catalogName;
-
-  let out = text;
-  // The two search tokens never overlap — the prefix is lowercase
-  // (`archestra__`) and the app name is the capitalized brand (`Archestra`) — so
-  // the order is independent. A `from === to` pair (no white-labeling) is
-  // skipped so non-branded orgs pay nothing.
-  if (toolPrefix !== ARCHESTRA_TOOL_PREFIX) {
-    out = out.split(ARCHESTRA_TOOL_PREFIX).join(toolPrefix);
-  }
-  if (appName !== DEFAULT_APP_NAME) {
-    out = out.split(DEFAULT_APP_NAME).join(appName);
-  }
-  return out;
+  return archestraMcpBranding.brandBuiltInText(text);
 }

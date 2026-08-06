@@ -1,12 +1,18 @@
 import { createHash } from "node:crypto";
 import { prepareAppEnvelope } from "@archestra/app-runtime-rs";
 import {
+  type ArchestraToolShortName,
   getArchestraAppResourceUri,
   getArchestraToolFullName,
   MCP_APPS_EXTENSION_ID,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
+  TOOL_READ_FILE_RAW_SHORT_NAME,
+  TOOL_READ_FILE_SHORT_NAME,
+  TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps";
 import { eq } from "drizzle-orm";
@@ -17,6 +23,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AppDataModel,
@@ -29,7 +36,7 @@ import {
   buildConnectorResourceUri,
 } from "@/services/apps/app-connector-resource";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import mcpAppProxyRoutes from "./mcp-app-proxy";
 
@@ -458,6 +465,283 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     ).toBeNull();
   });
 
+  // The file tools give an app a store scoped to the (app, viewer) pair. These
+  // pin that scoping end-to-end through the route, since it is the whole
+  // security contract: neither another app nor another viewer of the same app
+  // may observe a file, and the app's writes must not land in the shared
+  // headless orphan bucket where other surfaces would see them.
+  describe("app file tools", () => {
+    const sandboxFlag = config.skillsSandbox;
+    let originalEnabled: boolean;
+
+    beforeEach(() => {
+      originalEnabled = sandboxFlag.enabled;
+      sandboxFlag.enabled = true;
+    });
+    afterEach(() => {
+      sandboxFlag.enabled = originalEnabled;
+    });
+
+    async function callTool(
+      instance: FastifyInstance,
+      appId: string,
+      shortName: ArchestraToolShortName,
+      args: Record<string, unknown>,
+    ) {
+      const response = await instance.inject({
+        method: "POST",
+        url: `/api/mcp/app/${appId}`,
+        headers: JSON_RPC_HEADERS,
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: getArchestraToolFullName(shortName),
+            arguments: args,
+          },
+          id: 1,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json();
+    }
+
+    test("saves and reads back a file in the app's own namespace", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "member" });
+      app = await buildApp(user.id, created.organizationId);
+
+      const saved = await callTool(app, created.id, TOOL_SAVE_FILE_SHORT_NAME, {
+        filename: "notes.txt",
+        content: "hello from the app",
+      });
+      expect(saved.result?.isError ?? false).toBe(false);
+
+      const read = await callTool(app, created.id, TOOL_READ_FILE_SHORT_NAME, {
+        filename: "notes.txt",
+      });
+      expect(read.result?.isError ?? false).toBe(false);
+      expect(JSON.stringify(read.result)).toContain("hello from the app");
+
+      // The row is tagged with the app and the viewer, and is NOT an orphan —
+      // so the headless bucket (unique on user+filename) stays free for reuse.
+      const [row] = await db
+        .select()
+        .from(schema.filesTable)
+        .where(eq(schema.filesTable.appId, created.id));
+      expect(row).toMatchObject({
+        appId: created.id,
+        userId: user.id,
+        conversationId: null,
+        projectId: null,
+        filename: "notes.txt",
+      });
+    });
+
+    // archestra.tools.call unwraps a result to structuredContent whenever the
+    // tool provides one, and read_file always does — so the app NEVER sees the
+    // numbered text block. Content therefore has to reach the app through
+    // structuredContent, unnumbered, or an app that reads a file it wrote back
+    // gets nothing but metadata.
+    test("returns the file's own bytes to the app, without line numbers", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "member" });
+      app = await buildApp(user.id, created.organizationId);
+
+      // Multi-line, so a numbered rendering would be unmistakable in the result.
+      const body = ["solid cube", "  facet normal 0 0 1", "endsolid cube"].join(
+        "\n",
+      );
+      await callTool(app, created.id, TOOL_SAVE_FILE_SHORT_NAME, {
+        filename: "model.stl",
+        content: body,
+      });
+
+      const read = await callTool(app, created.id, TOOL_READ_FILE_SHORT_NAME, {
+        filename: "model.stl",
+      });
+      const structured = read.result?.structuredContent as {
+        content?: string;
+        totalLines?: number;
+      };
+      expect(structured.content).toBe(body);
+      expect(structured.content).not.toMatch(/^\d+\t/m);
+      expect(structured.totalLines).toBe(3);
+    });
+
+    // read_file refuses non-image binary by design (a model can't read it);
+    // read_file_raw is the program-shaped read: exact bytes, any type. Binary
+    // STL is the canonical case — save base64 with NUL bytes, get them back
+    // byte-identical.
+    test("read_file_raw returns exact binary bytes an app saved", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "member" });
+      app = await buildApp(user.id, created.organizationId);
+
+      // Binary STL header shape: NUL padding + little-endian triangle count.
+      const bytes = Buffer.concat([
+        Buffer.from("binary-stl\x00\x00\x00"),
+        Buffer.from([0x00, 0x01, 0x02, 0xff, 0xfe, 0x00]),
+      ]);
+      await callTool(app, created.id, TOOL_SAVE_FILE_SHORT_NAME, {
+        filename: "model.stl",
+        contentBase64: bytes.toString("base64"),
+        mimeType: "model/stl",
+      });
+
+      const read = await callTool(
+        app,
+        created.id,
+        TOOL_READ_FILE_RAW_SHORT_NAME,
+        { filename: "model.stl" },
+      );
+      expect(read.result?.isError ?? false).toBe(false);
+      const structured = read.result?.structuredContent as {
+        contentBase64?: string;
+        mimeType?: string;
+        sizeBytes?: number;
+      };
+      expect(structured.contentBase64).toBe(bytes.toString("base64"));
+      expect(structured.sizeBytes).toBe(bytes.byteLength);
+
+      // The paged text read still refuses the same binary file (byte-decided,
+      // not mime-decided) — the two contracts stay distinct.
+      const textRead = await callTool(
+        app,
+        created.id,
+        TOOL_READ_FILE_SHORT_NAME,
+        { filename: "model.stl" },
+      );
+      expect(textRead.result?.isError).toBe(true);
+    });
+
+    test("read_file_raw reads text files too, byte-exact", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "member" });
+      app = await buildApp(user.id, created.organizationId);
+
+      const body = "solid p\n  facet normal 0 0 1\nendsolid p";
+      await callTool(app, created.id, TOOL_SAVE_FILE_SHORT_NAME, {
+        filename: "model-ascii.stl",
+        content: body,
+      });
+      const read = await callTool(
+        app,
+        created.id,
+        TOOL_READ_FILE_RAW_SHORT_NAME,
+        { filename: "model-ascii.stl" },
+      );
+      const structured = read.result?.structuredContent as {
+        contentBase64?: string;
+      };
+      expect(
+        Buffer.from(structured.contentBase64 ?? "", "base64").toString("utf8"),
+      ).toBe(body);
+    });
+
+    test("isolates files from another app and another viewer", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+    }) => {
+      const routeApp = await makeApp();
+      const otherApp = await makeApp({
+        organizationId: routeApp.organizationId,
+      });
+      const owner = await makeUser();
+      const otherViewer = await makeUser();
+      await makeMember(owner.id, routeApp.organizationId, { role: "member" });
+      await makeMember(otherViewer.id, routeApp.organizationId, {
+        role: "member",
+      });
+
+      app = await buildApp(owner.id, routeApp.organizationId);
+      const saved = await callTool(
+        app,
+        routeApp.id,
+        TOOL_SAVE_FILE_SHORT_NAME,
+        { filename: "private.txt", content: "owner only" },
+      );
+      expect(saved.result?.isError ?? false).toBe(false);
+
+      // Same user, a different app: its namespace is empty.
+      const fromOtherApp = await callTool(
+        app,
+        otherApp.id,
+        TOOL_SEARCH_FILES_SHORT_NAME,
+        {},
+      );
+      expect(JSON.stringify(fromOtherApp.result)).not.toContain("private.txt");
+
+      // Same app, a different viewer: also empty, and a read is not-found.
+      const viewerInstance = await buildApp(
+        otherViewer.id,
+        routeApp.organizationId,
+      );
+      const fromOtherViewer = await callTool(
+        viewerInstance,
+        routeApp.id,
+        TOOL_SEARCH_FILES_SHORT_NAME,
+        {},
+      );
+      expect(JSON.stringify(fromOtherViewer.result)).not.toContain(
+        "private.txt",
+      );
+      const readAcross = await callTool(
+        viewerInstance,
+        routeApp.id,
+        TOOL_READ_FILE_SHORT_NAME,
+        { filename: "private.txt" },
+      );
+      expect(readAcross.result?.isError).toBe(true);
+      await viewerInstance.close();
+    });
+
+    test("refuses an explicit sandbox target so an app keeps one sandbox", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "member" });
+      app = await buildApp(user.id, created.organizationId);
+
+      const fresh = await callTool(
+        app,
+        created.id,
+        TOOL_UPLOAD_FILE_SHORT_NAME,
+        {
+          path: "/home/sandbox/a.txt",
+          source: { type: "text", text: "x" },
+          target: { fresh: true },
+        },
+      );
+      expect(fresh.result?.isError).toBe(true);
+      expect(JSON.stringify(fresh.result)).toContain("omit `target`");
+    });
+  });
+
   test("tools/list advertises the synthetic launch tool with its UI resource", async ({
     makeApp,
     makeUser,
@@ -539,7 +823,8 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().error?.code).toBe(-32002);
+    // SEP-2164 moved missing-resource errors onto JSON-RPC Invalid Params.
+    expect(response.json().error?.code).toBe(-32602);
   });
 
   // ---- External MCP clients (Bearer token) ----

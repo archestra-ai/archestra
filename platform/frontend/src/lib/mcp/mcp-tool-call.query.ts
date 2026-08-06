@@ -2,6 +2,7 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
+import type { CallerIdentity } from "@/components/executed-as-badge";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { throwOnApiError } from "@/lib/utils";
 
@@ -22,6 +23,31 @@ export function formatAuthMethod(authMethod: MCPGatewayAuthMethod): string {
       return "External IdP";
     case "session":
       return "Session";
+  }
+}
+
+/**
+ * Who a tool call ran on behalf of, for the calls the platform served itself.
+ * A call made with a gateway token carries no user, and an auditor still needs
+ * an identity for it: the token acts for its team or for the organization, so
+ * that is who made the call. The auth method stays visible in its own column.
+ */
+export function formatCallerIdentity(row: {
+  userName: string | null;
+  authMethod: MCPGatewayAuthMethod | null;
+}): CallerIdentity | null {
+  if (row.userName) {
+    return { name: row.userName, scope: "personal" };
+  }
+  switch (row.authMethod) {
+    case "org_token":
+      return { name: null, scope: "org" };
+    case "team_token":
+      return { name: null, scope: "team" };
+    default:
+      // Every other method authenticates a person, so a missing name means the
+      // user is gone — there is nothing to name them by.
+      return null;
   }
 }
 

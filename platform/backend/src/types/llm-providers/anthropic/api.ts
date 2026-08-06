@@ -125,8 +125,10 @@ export const MessagesResponseSchema = z.object({
   content: z.array(MessageContentBlockSchema),
   model: z.string(),
   role: z.enum(["assistant"]),
-  stop_reason: z.any().nullable(),
-  stop_sequence: z.string().nullable(),
+  // Anthropic/Bedrock may omit these keys rather than null them; requiring the
+  // key fails Fastify response serialization (500).
+  stop_reason: z.any().nullish(),
+  stop_sequence: z.string().nullish(),
   type: z.enum(["message"]),
   usage: UsageSchema,
 });

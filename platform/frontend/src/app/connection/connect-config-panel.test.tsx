@@ -172,7 +172,11 @@ describe("ConnectConfigPanel — shared skills marketplace", () => {
     renderPanel();
 
     expect(screen.getByText(/Install/)).toBeInTheDocument();
-    expect(screen.getByText(/2 shared skills/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) => el?.tagName === "A" && el.textContent === "2 shared skills",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Blog editor, Release notes/)).toBeInTheDocument();
   });
 

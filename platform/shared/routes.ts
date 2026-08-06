@@ -10,6 +10,10 @@ export const RouteId = {
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
   RestoreAgent: "restoreAgent",
+  PermanentlyDeleteAgent: "permanentlyDeleteAgent",
+  GetAgentVersions: "getAgentVersions",
+  GetAgentVersion: "getAgentVersion",
+  RestoreAgentVersion: "restoreAgentVersion",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
   GetAgentToolExclusions: "getAgentToolExclusions",
@@ -55,6 +59,7 @@ export const RouteId = {
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
+  GetAuthState: "getAuthState",
 
   // MCP Catalog Routes
   GetInternalMcpCatalog: "getInternalMcpCatalog",
@@ -66,6 +71,7 @@ export const RouteId = {
   RefreshInternalMcpCatalogImage: "refreshInternalMcpCatalogImage",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
+  RestoreInternalMcpCatalogItem: "restoreInternalMcpCatalogItem",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
   GetInternalMcpCatalogLabelValues: "getInternalMcpCatalogLabelValues",
   ListPendingImageApprovalCatalogItems: "listPendingImageApprovalCatalogItems",
@@ -82,6 +88,7 @@ export const RouteId = {
   InspectMcpServer: "inspectMcpServer",
   InstallMcpServer: "installMcpServer",
   DeleteMcpServer: "deleteMcpServer",
+  RestoreMcpServer: "restoreMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
   ReloadMcpServerTools: "reloadMcpServerTools",
@@ -91,16 +98,6 @@ export const RouteId = {
   McpGatewayPost: "mcpGatewayPost",
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
   McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
-
-  // MCP Server Installation Request Routes
-  GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
-  CreateMcpServerInstallationRequest: "createMcpServerInstallationRequest",
-  GetMcpServerInstallationRequest: "getMcpServerInstallationRequest",
-  UpdateMcpServerInstallationRequest: "updateMcpServerInstallationRequest",
-  ApproveMcpServerInstallationRequest: "approveMcpServerInstallationRequest",
-  DeclineMcpServerInstallationRequest: "declineMcpServerInstallationRequest",
-  AddMcpServerInstallationRequestNote: "addMcpServerInstallationRequestNote",
-  DeleteMcpServerInstallationRequest: "deleteMcpServerInstallationRequest",
 
   // OAuth Routes
   InitiateOAuth: "initiateOAuth",
@@ -146,6 +143,7 @@ export const RouteId = {
   GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
+  GetToolObservers: "getToolObservers",
   GetUnassignedTools: "getUnassignedTools",
   DeleteTool: "deleteTool",
 
@@ -228,6 +226,10 @@ export const RouteId = {
   PerplexityChatCompletionsWithDefaultAgent:
     "perplexityChatCompletionsWithDefaultAgent",
   PerplexityChatCompletionsWithAgent: "perplexityChatCompletionsWithAgent",
+
+  // Proxy Routes - Perplexity Agent API (the provider's Responses-shaped surface)
+  PerplexityResponsesWithDefaultAgent: "perplexityResponsesWithDefaultAgent",
+  PerplexityResponsesWithAgent: "perplexityResponsesWithAgent",
 
   // Proxy Routes - Groq
   GroqChatCompletionsWithDefaultAgent: "groqChatCompletionsWithDefaultAgent",
@@ -353,8 +355,10 @@ export const RouteId = {
   StreamChat: "streamChat",
   ResolveChatMcpElicitation: "resolveChatMcpElicitation",
   StopChatStream: "stopChatStream",
+  CancelChatMcpTask: "cancelChatMcpTask",
   GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
+  GetDeletedChatConversations: "getDeletedChatConversations",
   GetChatConversation: "getChatConversation",
   GetChatConversationFiles: "getChatConversationFiles",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
@@ -364,6 +368,7 @@ export const RouteId = {
   SetConversationHooksDebug: "setConversationHooksDebug",
   MarkChatConversationRead: "markChatConversationRead",
   DeleteChatConversation: "deleteChatConversation",
+  RestoreChatConversation: "restoreChatConversation",
   ClearChatConversationErrors: "clearChatConversationErrors",
   CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
@@ -550,6 +555,7 @@ export const RouteId = {
   GetTeamStatistics: "getTeamStatistics",
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
+  GetUserStatistics: "getUserStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
 
@@ -644,6 +650,8 @@ export const RouteId = {
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
+  RestoreSkill: "restoreSkill",
+  PermanentlyDeleteSkill: "permanentlyDeleteSkill",
   ResetSkill: "resetSkill",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
@@ -652,6 +660,8 @@ export const RouteId = {
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
   GetSkillUsageStatistics: "getSkillUsageStatistics",
+  GetSkillVersions: "getSkillVersions",
+  GetSkillVersion: "getSkillVersion",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
   GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
@@ -662,6 +672,8 @@ export const RouteId = {
   UpdateProject: "updateProject",
   SetProjectShare: "setProjectShare",
   DeleteProject: "deleteProject",
+  RestoreProject: "restoreProject",
+  PermanentlyDeleteProject: "permanentlyDeleteProject",
   GetProjectConversations: "getProjectConversations",
   GetProjectFiles: "getProjectFiles",
   UploadProjectFiles: "uploadProjectFiles",
@@ -703,6 +715,8 @@ export const RouteId = {
   UpdateApp: "updateApp",
   EnableApp: "enableApp",
   DisableApp: "disableApp",
+  LockApp: "lockApp",
+  UnlockApp: "unlockApp",
   DeleteApp: "deleteApp",
   GetAppVersions: "getAppVersions",
   GetAppVersion: "getAppVersion",
@@ -710,6 +724,8 @@ export const RouteId = {
   AssignToolToApp: "assignToolToApp",
   UnassignToolFromApp: "unassignToolFromApp",
   GetAppTemplates: "getAppTemplates",
+  GetAppLabelKeys: "getAppLabelKeys",
+  GetAppLabelValues: "getAppLabelValues",
   OpenAppInChat: "openAppInChat",
   OpenExternalAppInChat: "openExternalAppInChat",
   PinApp: "pinApp",

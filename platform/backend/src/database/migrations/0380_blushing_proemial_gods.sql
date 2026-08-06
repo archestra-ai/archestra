@@ -1,0 +1,7 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=Soft-delete for skills: the two name-uniqueness indexes are dropped and recreated in the same transaction with an additional `deleted_at IS NULL` predicate. Every existing row has deleted_at NULL, so the recreated indexes enforce exactly the uniqueness that held before (the predicate only relaxes uniqueness for soft-deleted rows, which do not exist yet) — no existing data can violate them and older writers see unchanged constraints. The skills table is small and cold, so the transactional index rebuild takes no meaningful lock time.
+DROP INDEX "skills_org_personal_name_idx";--> statement-breakpoint
+DROP INDEX "skills_org_shared_name_idx";--> statement-breakpoint
+ALTER TABLE "skills" ADD COLUMN "deleted_at" timestamp;--> statement-breakpoint
+CREATE UNIQUE INDEX "skills_org_personal_name_idx" ON "skills" USING btree ("organization_id","author_id","name") WHERE "skills"."scope" = 'personal' AND "skills"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "skills_org_shared_name_idx" ON "skills" USING btree ("organization_id","name") WHERE "skills"."scope" in ('team', 'org') AND "skills"."deleted_at" IS NULL;

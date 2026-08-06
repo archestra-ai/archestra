@@ -1,4 +1,8 @@
-import { AgentExcludedSubagentModel, AgentModel } from "@/models";
+import {
+  AgentExcludedSubagentModel,
+  AgentModel,
+  AgentVersionModel,
+} from "@/models";
 import type { AgentSubagentExclusions } from "@/types";
 
 /**
@@ -24,6 +28,8 @@ class AgentSubagentExclusionsService {
     agentId: string;
     organizationId: string;
     excludedSubagentIds: string[];
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
   }): Promise<AgentSubagentExclusions> {
     const { agentId, organizationId, excludedSubagentIds } = params;
 
@@ -37,6 +43,11 @@ class AgentSubagentExclusionsService {
     );
 
     await AgentExcludedSubagentModel.replaceForAgent(agentId, valid);
+
+    // Excluded-subagent set is part of the config snapshot — fork a version.
+    if (!params.deferVersionFork) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
 
     return this.getExclusions(agentId);
   }

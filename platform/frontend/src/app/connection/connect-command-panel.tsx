@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DEFAULT_MODELS,
   providerDisplayNames,
   providerRequiresPerUserCredential,
   type SupportedProvider,
@@ -24,8 +25,10 @@ import { CreditWarningNotice } from "@/components/connection/credit-warning-noti
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { ProviderIcon } from "@/components/provider-icon";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -35,7 +38,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WizardStep } from "@/components/wizard-step";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
   type CreateConnectionSetupBody,
@@ -43,6 +46,7 @@ import {
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
@@ -67,7 +71,13 @@ import { TerminalBlock } from "./terminal-block";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
-type EditableRow = "endpoint" | "gateway" | "proxy" | "skills" | "platform";
+type EditableRow =
+  | "endpoint"
+  | "gateway"
+  | "proxy"
+  | "model"
+  | "skills"
+  | "platform";
 
 const SCRIPT_CLIENT_IDS: readonly string[] = [
   "claude-code",
@@ -152,6 +162,9 @@ export function ConnectCommandPanel({
 }: ConnectCommandPanelProps) {
   const { eligible: skillsEligible, skills: allSkills } =
     useConnectSkills(llmProxyId);
+  // The skill picker labels each row's owner, so it needs the viewer's id.
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   // Skill selection: `null` means "all skills" (the default, and it keeps
   // including skills created later). Once the user touches any checkbox it
   // becomes an explicit snapshot of chosen ids — so an opt-out (empty set)
@@ -239,6 +252,28 @@ export function ConnectCommandPanel({
   const needsPerUserConnect =
     providerIsPerUser && !configuredProviders.has(provider);
 
+  // The Copilot CLI refuses to launch a BYOK provider without an explicit
+  // COPILOT_MODEL, so the review step surfaces the model as a reviewable
+  // choice instead of hard-wiring a default. null = the provider's default;
+  // reset when the provider changes so a model picked for one provider never
+  // leaks onto another. Options come from the org's synced model list; with
+  // none synced for the provider, a free-text field takes any model id.
+  const isCopilotClient = client.id === "copilot-cli";
+  const [modelChoice, setModelChoice] = useState<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
+  useEffect(() => setModelChoice(null), [provider]);
+  const { modelsByProvider } = useLlmModelsByProvider();
+  const effectiveModel =
+    isCopilotClient && provider
+      ? (modelChoice ?? DEFAULT_MODELS[provider])
+      : null;
+  const modelOptions = useMemo(() => {
+    if (!isCopilotClient || !provider) return [];
+    const ids = (modelsByProvider[provider] ?? []).map((m) => m.id);
+    // the current value stays selectable even when it's not in the synced list
+    return Array.from(new Set(effectiveModel ? [effectiveModel, ...ids] : ids));
+  }, [isCopilotClient, provider, modelsByProvider, effectiveModel]);
+
   // Per-user providers always use virtual-key auth (no passthrough tab). This
   // is derived rather than written back into `proxyAuth`: overwriting the
   // stored choice would flip the panel into virtual-key mode for good, which
@@ -321,6 +356,7 @@ export function ConnectCommandPanel({
     proxyId: proxyActive ? proxy.id : null,
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? effectiveProxyAuth : null,
+    model: proxyActive ? effectiveModel : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
   });
@@ -337,6 +373,7 @@ export function ConnectCommandPanel({
         proxyId: string | null;
         provider: SupportedProvider | null;
         proxyAuth: ConnectProxyAuth | null;
+        model: string | null;
         skillIds: string[] | null;
       };
 
@@ -357,6 +394,7 @@ export function ConnectCommandPanel({
         llmProxyId: inputs.proxyId ?? undefined,
         provider: inputs.provider ?? undefined,
         proxyAuth: inputs.proxyAuth ?? undefined,
+        model: inputs.model ?? undefined,
         skills,
       });
       if (latestKeyRef.current !== key) return; // stale response
@@ -525,16 +563,27 @@ export function ConnectCommandPanel({
           <p className="text-xs text-muted-foreground">
             {effectiveProxyAuth === "provider-key" ? (
               passthroughAttributes ? (
-                "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan). Your personal auth key is created for you and wired into the command via ANTHROPIC_CUSTOM_HEADERS."
+                <span>
+                  Passthrough — the command only rewires the base URL, so you
+                  reuse your own API key or existing subscription (e.g. Claude
+                  or ChatGPT plan). Your personal auth key is created for you
+                  and wired into the command via ANTHROPIC_CUSTOM_HEADERS.
+                </span>
               ) : (
-                "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+                <span>
+                  Passthrough — the command only rewires the base URL, so you
+                  reuse your own API key or existing subscription (e.g. Claude
+                  or ChatGPT plan).
+                </span>
               )
             ) : providerIsPerUser && provider ? (
-              `${providerDisplayNames[provider]} runs through a personal virtual key — connect your own account below.`
+              <span>
+                {`${providerDisplayNames[provider]} runs through a personal virtual key — connect your own account below.`}
+              </span>
             ) : providers.length === 0 ? (
               canCreateProviderKey ? (
                 <>
-                  {noVirtualKeyReason}{" "}
+                  <span>{noVirtualKeyReason} </span>
                   <button
                     type="button"
                     className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
@@ -542,20 +591,59 @@ export function ConnectCommandPanel({
                     data-testid="connect-auth-add-provider-key"
                   >
                     Add {addKeyPhrase}
-                  </button>{" "}
-                  or switch to your provider key.
+                  </button>
+                  <span> or switch to your provider key.</span>
                 </>
               ) : (
-                `${noVirtualKeyReason} Switch to your provider key, or ask an admin to add ${addKeyPhrase}.`
+                <span>
+                  {`${noVirtualKeyReason} Switch to your provider key, or ask an admin to add ${addKeyPhrase}.`}
+                </span>
               )
             ) : (
-              "A virtual key is created for you and wired into the command."
+              <span>
+                A virtual key is created for you and wired into the command.
+              </span>
             )}
           </p>
         </div>
       </EditorField>
     </div>
   ) : null;
+
+  const modelEditor =
+    isCopilotClient && provider ? (
+      <div className="grid gap-1.5">
+        <EditorField label="Model">
+          {modelOptions.length > 1 ? (
+            <Select
+              value={effectiveModel ?? undefined}
+              onValueChange={setModelChoice}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select model" />
+              </SelectTrigger>
+              <SelectContent>
+                {modelOptions.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              value={effectiveModel ?? ""}
+              onChange={(event) => setModelChoice(event.target.value || null)}
+              placeholder="Model id"
+            />
+          )}
+        </EditorField>
+        <p className="text-xs text-muted-foreground">
+          Applied as COPILOT_MODEL by the setup script — pick a model your{" "}
+          {providerDisplayNames[provider]} access serves.
+        </p>
+      </div>
+    ) : null;
 
   const skillsEditor = (
     <div className="grid gap-2">
@@ -603,7 +691,16 @@ export function ConnectCommandPanel({
                   toggleSkill(skill.id, checked === true)
                 }
               />
-              {skill.name}
+              <span>{skill.name}</span>
+              <ResourceVisibilityBadge
+                scope={skill.scope}
+                teams={skill.teams}
+                users={skill.users}
+                authorId={skill.authorId}
+                authorName={skill.authorName}
+                currentUserId={currentUserId}
+                showSelfAsMe
+              />
             </label>
           </li>
         ))}
@@ -685,6 +782,21 @@ export function ConnectCommandPanel({
               )}
             </SummaryRow>
           )}
+          {isCopilotClient && proxyActive && provider && (
+            <SummaryRow
+              done
+              editable
+              isEditing={editing === "model"}
+              onToggle={() => toggleEdit("model")}
+              editor={modelEditor}
+              changeTestId="connect-change-model"
+            >
+              Run Copilot with{" "}
+              <span className="font-medium text-foreground">
+                {effectiveModel}
+              </span>
+            </SummaryRow>
+          )}
           {skillsEligible && (
             <SummaryRow
               done={includeSkills}
@@ -701,15 +813,20 @@ export function ConnectCommandPanel({
             >
               {includeSkills ? (
                 <>
-                  Install{" "}
+                  <span>Install </span>
                   <ResourceLink href="/skills">
-                    {selectedSkills.length === allSkills.length
-                      ? `${allSkills.length} shared skill${allSkills.length === 1 ? "" : "s"}`
-                      : `${selectedSkills.length} of ${allSkills.length} shared skills`}
+                    {selectedSkills.length === allSkills.length ? (
+                      <span>
+                        <span>{allSkills.length} shared skill</span>
+                        {allSkills.length === 1 ? null : <span>s</span>}
+                      </span>
+                    ) : (
+                      <span>{`${selectedSkills.length} of ${allSkills.length} shared skills`}</span>
+                    )}
                   </ResourceLink>
                 </>
               ) : (
-                "Shared skills not installed"
+                <span>Shared skills not installed</span>
               )}
             </SummaryRow>
           )}
@@ -893,7 +1010,11 @@ function CommandLine({
   if (failed) {
     return (
       <div className="flex items-center gap-3 px-5 py-4 font-mono text-[13px] text-[#f87171]">
-        Couldn't generate the command.
+        {/* Spans (here and in the pending branch below): these three branches
+            reconcile into the same div, so branch flips delete the old bare
+            text node — which crashes React once Chrome page-translate has
+            re-parented it into a <font> wrapper (facebook/react#11538). */}
+        <span>Couldn't generate the command.</span>
         <Button
           type="button"
           variant="outline"
@@ -911,7 +1032,7 @@ function CommandLine({
     return (
       <div className="flex items-center gap-2.5 px-5 py-4 font-mono text-[13px] text-[#9ca3af]">
         <Loader2 className="size-3.5 animate-spin" />
-        Generating command…
+        <span>Generating command…</span>
       </div>
     );
   }
@@ -989,10 +1110,12 @@ function ProviderKeyGate({
   return (
     <div className="flex flex-col gap-3 px-5 py-4">
       <p className="text-[13px] text-[#e5e7eb]">
-        {reason}{" "}
-        {canAddKey
-          ? `Add ${addKeyPhrase} to mint one from, or switch to your provider key in the review above.`
-          : `Ask an admin to add ${addKeyPhrase}, or switch to your provider key in the review above.`}
+        <span>{reason} </span>
+        {canAddKey ? (
+          <span>{`Add ${addKeyPhrase} to mint one from, or switch to your provider key in the review above.`}</span>
+        ) : (
+          <span>{`Ask an admin to add ${addKeyPhrase}, or switch to your provider key in the review above.`}</span>
+        )}
       </p>
       {canAddKey && (
         <div>
@@ -1008,7 +1131,7 @@ function ProviderKeyGate({
             ) : (
               <KeyRound className="size-4" />
             )}
-            Add {addKeyPhrase}
+            <span>Add {addKeyPhrase}</span>
           </Button>
         </div>
       )}

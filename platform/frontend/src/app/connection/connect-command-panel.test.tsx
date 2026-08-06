@@ -1,7 +1,13 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { CONNECT_CLIENTS } from "./clients";
@@ -37,9 +43,18 @@ vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/hooks/use-app-name");
 
-const { availableKeysMock, createKeyMock } = vi.hoisted(() => ({
-  availableKeysMock: vi.fn(),
-  createKeyMock: vi.fn(),
+const { availableKeysMock, createKeyMock, modelsByProviderMock } = vi.hoisted(
+  () => ({
+    availableKeysMock: vi.fn(),
+    createKeyMock: vi.fn(),
+    modelsByProviderMock: vi.fn(),
+  }),
+);
+
+vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModelsByProvider: () => ({
+    modelsByProvider: modelsByProviderMock(),
+  }),
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
@@ -116,14 +131,27 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as ReturnType<typeof useSession>);
   availableKeysMock.mockReturnValue({
     data: [{ provider: "anthropic" }, { provider: "bedrock" }],
   });
   createKeyMock.mockResolvedValue({ id: "key-1" });
+  modelsByProviderMock.mockReturnValue({});
   allSkillsMock.mockReturnValue({
     data: [
-      { id: "s1", name: "warehouse-postgres" },
-      { id: "s2", name: "billing-pipeline" },
+      { id: "s1", name: "warehouse-postgres", scope: "org", teams: [] },
+      // A colleague's personal skill: the picker lists these for skill admins
+      // and preselects them, so the row must name whose it is.
+      {
+        id: "s2",
+        name: "billing-pipeline",
+        scope: "personal",
+        authorId: "user-2",
+        authorName: "Dana",
+        teams: [],
+      },
     ],
   });
   createSetupMock.mockResolvedValue({
@@ -155,7 +183,12 @@ describe("ConnectCommandPanel", () => {
     // the summary reflects the defaults without any clicks
     expect(screen.getByText(/My Gateway/)).toBeInTheDocument();
     expect(screen.getByText(/My Proxy/)).toBeInTheDocument();
-    expect(screen.getByText(/2 shared skills/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === "SPAN" && el.textContent === "2 shared skills",
+      ),
+    ).toBeInTheDocument();
     // single endpoint: not worth naming
     expect(
       screen.queryByText("http://localhost:9000/v1"),
@@ -273,7 +306,12 @@ describe("ConnectCommandPanel", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByTestId("connect-change-skills"));
-    await user.click(screen.getByLabelText("billing-pipeline"));
+    // The picker preselects skills an admin can see, including other people's
+    // personal ones, so each row must say whose it is before it is installed.
+    expect(screen.getByText("Dana")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: /billing-pipeline/ }),
+    );
 
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -301,7 +339,12 @@ describe("ConnectCommandPanel", () => {
         /skill-0, skill-1, skill-2, skill-3, skill-4, skill-5 and 2 more/,
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText(/8 shared skills/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === "SPAN" && el.textContent === "8 shared skills",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("lists the MCP servers behind the selected gateway", async () => {
@@ -418,6 +461,62 @@ describe("ConnectCommandPanel", () => {
     expect(allSkillsMock).toHaveBeenLastCalledWith({
       enabled: false,
       forAgentId: "p1",
+    });
+  });
+
+  describe("Copilot CLI model choice", () => {
+    it("surfaces the model in the review step and sends it with the setup", async () => {
+      renderPanel({ client: findClient("copilot-cli") });
+
+      // first supported provider (OpenAI) → its default model is preselected
+      expect(await screen.findByText("gpt-5.5")).toBeInTheDocument();
+      expect(screen.getByTestId("connect-change-model")).toBeInTheDocument();
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            clientId: "copilot-cli",
+            model: "gpt-5.5",
+          }),
+        ),
+      );
+    });
+
+    it("regenerates the command with an edited model", async () => {
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("copilot-cli") });
+      await screen.findByText(COMMAND);
+
+      await user.click(screen.getByTestId("connect-change-model"));
+      const input = screen.getByPlaceholderText("Model id");
+      fireEvent.change(input, { target: { value: "o4-mini" } });
+
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "o4-mini" }),
+        ),
+      );
+    });
+
+    it("offers the org's synced models for the provider as a dropdown", async () => {
+      modelsByProviderMock.mockReturnValue({
+        openai: [{ id: "gpt-5.5" }, { id: "o4-mini" }],
+      });
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("copilot-cli") });
+      await screen.findByText(COMMAND);
+
+      await user.click(screen.getByTestId("connect-change-model"));
+      // a Select (not the free-text input) backs multi-option providers
+      expect(screen.queryByPlaceholderText("Model id")).not.toBeInTheDocument();
+      expect(screen.getByRole("combobox")).toBeInTheDocument();
+    });
+
+    it("shows no model row for clients without provider env wiring", async () => {
+      renderPanel(); // claude-code
+      await screen.findByText(COMMAND);
+      expect(
+        screen.queryByTestId("connect-change-model"),
+      ).not.toBeInTheDocument();
     });
   });
 

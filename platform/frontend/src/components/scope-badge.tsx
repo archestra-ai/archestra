@@ -1,6 +1,10 @@
 import type { ResourceVisibilityScope } from "@archestra/shared";
-import { Globe, User, Users } from "lucide-react";
-import { scopeStyles } from "@/components/resource-visibility-badge";
+import { UserRoundCheck } from "lucide-react";
+import {
+  SCOPE_META,
+  scopeLabel,
+  scopeStyles,
+} from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -9,15 +13,6 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-const SCOPE_META: Record<
-  ResourceVisibilityScope,
-  { label: string; icon: typeof User }
-> = {
-  personal: { label: "Personal", icon: User },
-  team: { label: "Team", icon: Users },
-  org: { label: "Organization", icon: Globe },
-};
-
 // Icon-only scope pill (personal/team/org) with the label in the tooltip +
 // aria-label. Shared across the apps and projects cards so scope reads the same
 // everywhere. A team scope folds its team names into the label ("Team: London
@@ -25,23 +20,36 @@ const SCOPE_META: Record<
 export function ScopeBadge({
   scope,
   teamNames,
+  userNames,
   hidePersonal = false,
 }: {
   scope: ResourceVisibilityScope;
   teamNames?: string[] | null;
+  /**
+   * People the resource is shared with individually. An app shared this way is
+   * stored as `personal` plus grants, so reading the scope literally would
+   * label a shared app "Personal" — the very confusion this pill should settle.
+   * Resources without per-user grants simply omit it and are unaffected.
+   */
+  userNames?: string[] | null;
   hidePersonal?: boolean;
 }) {
-  if (scope === "personal" && hidePersonal) {
+  const sharedWith = userNames?.filter(Boolean) ?? [];
+  const sharedWithUsers = scope === "personal" && sharedWith.length > 0;
+
+  if (scope === "personal" && hidePersonal && !sharedWithUsers) {
     return null;
   }
 
-  const { label: scopeLabel, icon: Icon } = SCOPE_META[scope];
+  const { icon: scopeIcon } = SCOPE_META[scope];
+  const Icon = sharedWithUsers ? UserRoundCheck : scopeIcon;
 
   const names = teamNames?.filter(Boolean) ?? [];
-  const label =
-    scope === "team" && names.length > 0
+  const label = sharedWithUsers
+    ? `Shared with: ${sharedWith.join(", ")}`
+    : scope === "team" && names.length > 0
       ? `Team: ${names.join(", ")}`
-      : scopeLabel;
+      : scopeLabel(scope);
 
   return (
     <Tooltip>
@@ -49,7 +57,14 @@ export function ScopeBadge({
         <Badge
           variant="outline"
           aria-label={label}
-          className={cn(scopeStyles[scope], "px-1.5")}
+          className={cn(
+            // A shared personal resource stays personal-coloured — the grants
+            // change who can reach it, not its scope class. The distinct icon
+            // and tooltip carry the "shared" part, exactly as
+            // resource-visibility-badge renders the same case.
+            scopeStyles[scope],
+            "px-1.5",
+          )}
         >
           <Icon className="h-3 w-3" />
         </Badge>

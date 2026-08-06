@@ -11,14 +11,14 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-function seedRow(organizationId: string) {
-  return AuditLogModel.create({
-    actorId: null,
-    actorType: "user",
+function baseRow(organizationId: string) {
+  return {
+    actorId: null as string | null,
+    actorType: "user" as const,
     actorName: "Test Actor",
     actorEmail: "actor@example.com",
-    action: "auth.signed_in",
-    outcome: "success",
+    action: "auth.signed_in" as const,
+    outcome: "success" as const,
     occurredAt: new Date(),
     resourceType: null,
     resourceId: null,
@@ -31,7 +31,11 @@ function seedRow(organizationId: string) {
     sourceIp: null,
     userAgent: null,
     organizationId,
-  });
+  };
+}
+
+function seedRow(organizationId: string) {
+  return AuditLogModel.create(baseRow(organizationId));
 }
 
 describe("GET /api/audit-logs/:id", () => {
@@ -39,10 +43,13 @@ describe("GET /api/audit-logs/:id", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    // The route resolves auditLog:admin from org membership; the suite's
+    // default caller gets the org-wide view.
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
 
@@ -102,5 +109,36 @@ describe("GET /api/audit-logs/:id", () => {
     });
 
     expect(response.statusCode).toBe(404);
+  });
+
+  test("without auditLog:admin, someone else's event 404s and the caller's own returns", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+  }) => {
+    const limited = await makeUser();
+    const readOnly = await makeCustomRole(organizationId, {
+      permission: { auditLog: ["read"] },
+    });
+    await makeMember(limited.id, organizationId, { role: readOnly.role });
+
+    const own = await AuditLogModel.create({
+      ...baseRow(organizationId),
+      actorId: limited.id,
+    });
+    const other = await seedRow(organizationId);
+    user = limited;
+
+    const ownResponse = await app.inject({
+      method: "GET",
+      url: `/api/audit-logs/${own.id}`,
+    });
+    expect(ownResponse.statusCode).toBe(200);
+
+    const otherResponse = await app.inject({
+      method: "GET",
+      url: `/api/audit-logs/${other.id}`,
+    });
+    expect(otherResponse.statusCode).toBe(404);
   });
 });

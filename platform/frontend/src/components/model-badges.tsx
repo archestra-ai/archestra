@@ -67,6 +67,20 @@ export function UnknownCapabilitiesBadge() {
   );
 }
 
+/**
+ * Marks a model recorded as not supporting tool calling (an explicit false,
+ * not merely unknown): agents' tools never fire on it, which the picker
+ * should say up front rather than leaving the row unmarked. Worded as the
+ * negation of the capability icon's "Supports tool calling" tooltip.
+ */
+export function NoToolsBadge() {
+  return (
+    <InlineTag className="text-muted-foreground bg-muted">
+      Tool calling not supported
+    </InlineTag>
+  );
+}
+
 export function BestModelBadge() {
   return (
     <InlineTag

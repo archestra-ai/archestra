@@ -122,7 +122,8 @@ class AgentLabelModel {
 
   /**
    * Prune orphaned label keys and values that are no longer referenced
-   * by any label junction table (agent_labels, mcp_catalog_labels, or team_labels)
+   * by any label junction table (agent_labels, mcp_catalog_labels, team_labels,
+   * or app_labels)
    */
   static async pruneKeysAndValues(): Promise<{
     deletedKeys: number;
@@ -145,11 +146,16 @@ class AgentLabelModel {
           schema.teamLabelsTable,
           eq(schema.labelKeysTable.id, schema.teamLabelsTable.keyId),
         )
+        .leftJoin(
+          schema.appLabelsTable,
+          eq(schema.labelKeysTable.id, schema.appLabelsTable.keyId),
+        )
         .where(
           and(
             isNull(schema.agentLabelsTable.keyId),
             isNull(schema.mcpCatalogLabelsTable.keyId),
             isNull(schema.teamLabelsTable.keyId),
+            isNull(schema.appLabelsTable.keyId),
           ),
         );
 
@@ -169,11 +175,16 @@ class AgentLabelModel {
           schema.teamLabelsTable,
           eq(schema.labelValuesTable.id, schema.teamLabelsTable.valueId),
         )
+        .leftJoin(
+          schema.appLabelsTable,
+          eq(schema.labelValuesTable.id, schema.appLabelsTable.valueId),
+        )
         .where(
           and(
             isNull(schema.agentLabelsTable.valueId),
             isNull(schema.mcpCatalogLabelsTable.valueId),
             isNull(schema.teamLabelsTable.valueId),
+            isNull(schema.appLabelsTable.valueId),
           ),
         );
 

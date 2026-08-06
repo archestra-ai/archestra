@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { BUILT_IN_AGENT_IDS, E2eTestId } from "@archestra/shared";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +23,7 @@ const {
   useAvailableLlmProviderApiKeysMock,
   useAgentDelegationsMock,
   useAgentSubagentExclusionsMock,
-  useInternalAgentsMock,
+  useDelegationTargetAgentsMock,
   useLlmModelsByProviderMock,
   useProfileMock,
   useSyncAgentDelegationsMock,
@@ -32,7 +33,9 @@ const {
   pendingSaveChanges: vi.fn(
     () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
   ),
-  useInternalAgentsMock: vi.fn((): { data: unknown[] } => ({ data: [] })),
+  useDelegationTargetAgentsMock: vi.fn((): { data: unknown[] } => ({
+    data: [],
+  })),
   useProfileMock: vi.fn(
     (): { data: unknown | null; refetch: ReturnType<typeof vi.fn> } => ({
       data: null,
@@ -84,7 +87,7 @@ vi.mock("@/lib/agent.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
-  useInternalAgents: useInternalAgentsMock,
+  useDelegationTargetAgents: useDelegationTargetAgentsMock,
   useProfile: useProfileMock,
   useUpdateProfile: useUpdateProfileMock,
 }));
@@ -203,7 +206,12 @@ vi.mock("@/components/visibility-selector", () => ({
 }));
 
 vi.mock("@/components/environment-selector", () => ({
-  EnvironmentSelector: () => <div />,
+  EnvironmentSelector: ({ disabled }: { disabled?: boolean }) => (
+    <div
+      data-testid="environment-selector"
+      data-disabled={disabled ? "true" : "false"}
+    />
+  ),
 }));
 
 vi.mock("@/components/ui/alert", () => ({
@@ -346,7 +354,23 @@ vi.mock("@/components/ui/select", () => ({
 }));
 
 vi.mock("@/components/ui/switch", () => ({
-  Switch: () => null,
+  // A real checkbox rather than null: the advisor toggle's checked state is
+  // the behaviour under test, and a stub renders it unassertable.
+  Switch: ({
+    checked,
+    onCheckedChange,
+    ...props
+  }: {
+    checked?: boolean;
+    onCheckedChange?: (checked: boolean) => void;
+  } & React.InputHTMLAttributes<HTMLInputElement>) => (
+    <input
+      type="checkbox"
+      checked={checked ?? false}
+      onChange={(e) => onCheckedChange?.(e.target.checked)}
+      {...props}
+    />
+  ),
 }));
 
 vi.mock("@/components/ui/textarea", () => ({
@@ -418,12 +442,29 @@ const baseAgent = {
   incomingEmailSecurityMode: "public" as const,
   incomingEmailAllowedDomain: null,
   slug: null,
+  latestVersion: 0,
 };
 
 const targetAgent = {
   ...baseAgent,
   id: "00000000-0000-4000-8000-000000000002",
   name: "Target Agent",
+};
+
+const advisorAgent = {
+  ...baseAgent,
+  id: "00000000-0000-4000-8000-000000000003",
+  name: "Advisor",
+  builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+};
+
+// The Tools section carries its own Auto/Custom tabs, so the subagent ones have
+// to be reached through their section.
+const subagentModeTab = (name: "Auto" | "Custom") => {
+  const section = screen
+    .getByRole("heading", { name: "Subagents" })
+    .closest("div") as HTMLElement;
+  return within(section).getByRole("tab", { name });
 };
 
 describe("AgentDialog delegation state", () => {
@@ -437,11 +478,339 @@ describe("AgentDialog delegation state", () => {
       () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
     );
     useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
-    useInternalAgentsMock.mockReturnValue({ data: [targetAgent] });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [targetAgent] });
     useAgentDelegationsMock.mockReturnValue({
       data: [targetAgent],
       isFetched: true,
     });
+  });
+
+  it("turns the advisor on in Custom mode by adding it as a subagent", async () => {
+    const user = userEvent.setup();
+    useProfileMock.mockReturnValue({
+      data: { ...baseAgent, accessAllSubagents: false },
+      refetch: vi.fn(),
+    });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isFetched: true });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={{ ...baseAgent, accessAllSubagents: false }}
+      />,
+    );
+
+    const toggle = await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
+    expect(toggle).not.toBeChecked();
+
+    await user.click(toggle);
+
+    await waitFor(() => {
+      expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
+    });
+  });
+
+  it("shows the advisor which environment it belongs to, without offering to move it", async () => {
+    // The advisor is the one built-in with a row per environment, and the rest
+    // of the built-in form is hidden — so without this the dialog gives no clue
+    // which of several identically named advisors is open.
+    const advisorBuiltIn = {
+      ...baseAgent,
+      id: advisorAgent.id,
+      name: "Advisor",
+      builtIn: true,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    };
+    useProfileMock.mockReturnValue({ data: advisorBuiltIn, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [advisorAgent] });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={advisorBuiltIn}
+      />,
+    );
+
+    const selector = await screen.findByTestId("environment-selector");
+    // Moving it would strand every agent that consults it.
+    expect(selector).toHaveAttribute("data-disabled", "true");
+  });
+
+  it("keeps the advisor out of the subagent lists, so only its switch offers it", async () => {
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [advisorAgent.id] },
+      isFetched: true,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={autoAgent}
+      />,
+    );
+
+    // The switch is the single place the advisor is offered; listing it as a
+    // disabled subagent as well would mean two controls for one decision.
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText(advisorAgent.name)).not.toBeInTheDocument();
+    expect(screen.getByText(/Disabled subagents \(0\)/)).toBeInTheDocument();
+  });
+
+  it("reads as on in Auto mode only while the advisor is not disabled", async () => {
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    // Auto mode reaches every accessible agent, so the advisor being absent
+    // from the disabled set is what "on" means there.
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={autoAgent}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
+    });
+  });
+
+  it("reads as off in Auto mode while the advisor sits in the disabled set", async () => {
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [advisorAgent.id] },
+      isFetched: true,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={autoAgent}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
+      ).not.toBeChecked();
+    });
+  });
+
+  it("keeps the advisor on when the subagent mode switches from Auto to Custom", async () => {
+    const user = userEvent.setup();
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    });
+    // Custom mode's list holds no advisor, so reading it after the switch is
+    // what would drop a setting the administrator never touched.
+    useAgentDelegationsMock.mockReturnValue({ data: [], isFetched: true });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={autoAgent}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
+    });
+
+    await user.click(subagentModeTab("Custom"));
+
+    // The panel assertion is what proves the mode actually moved; the switch
+    // reading the same way afterwards is only meaningful once it has.
+    expect(
+      screen.getByText(/Only the subagents you assign below/),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
+  });
+
+  it("keeps the advisor off when the subagent mode switches from Custom to Auto", async () => {
+    const user = userEvent.setup();
+    const customAgent = { ...baseAgent, accessAllSubagents: false };
+    useProfileMock.mockReturnValue({ data: customAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isFetched: true });
+    // Auto mode reaches everything it does not exclude, so an empty exclusion
+    // set would otherwise turn the advisor on the moment the mode changes.
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={customAgent}
+      />,
+    );
+
+    const toggle = await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
+    expect(toggle).not.toBeChecked();
+
+    await user.click(subagentModeTab("Auto"));
+
+    expect(screen.getByText(/Disabled subagents \(0\)/)).toBeInTheDocument();
+    expect(
+      screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
+    ).not.toBeChecked();
+  });
+
+  it("drops a grant to another environment's advisor on save", async () => {
+    const user = userEvent.setup();
+    const syncDelegations = vi
+      .fn()
+      .mockResolvedValue({ added: [], removed: [] });
+    const otherEnvAdvisor = {
+      ...advisorAgent,
+      id: "00000000-0000-4000-8000-000000000004",
+      environmentId: "00000000-0000-4000-8000-0000000000ff",
+    };
+    const customAgent = { ...baseAgent, accessAllSubagents: false };
+    useProfileMock.mockReturnValue({ data: customAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent, otherEnvAdvisor],
+    });
+    // Left by an earlier configuration, when this agent sat in that
+    // environment: undispatchable now, and invisible in the dialog.
+    useAgentDelegationsMock.mockReturnValue({
+      data: [targetAgent, otherEnvAdvisor],
+      isFetched: true,
+    });
+    useSyncAgentDelegationsMock.mockReturnValue({
+      mutateAsync: syncDelegations,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(customAgent),
+      isPending: false,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={customAgent}
+      />,
+    );
+
+    await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    await waitFor(() => expect(syncDelegations).toHaveBeenCalled());
+    const { targetAgentIds } = syncDelegations.mock.calls[0][0];
+    expect(targetAgentIds).not.toContain(otherEnvAdvisor.id);
+    expect(targetAgentIds).toContain(targetAgent.id);
+  });
+
+  it("saves no advisor grant when the switch ends up off after a trip through Custom", async () => {
+    const user = userEvent.setup();
+    const syncDelegations = vi
+      .fn()
+      .mockResolvedValue({ added: [], removed: [] });
+    const syncExclusions = vi.fn().mockResolvedValue(undefined);
+    const autoAgent = { ...baseAgent, accessAllSubagents: true };
+    useProfileMock.mockReturnValue({ data: autoAgent, refetch: vi.fn() });
+    useDelegationTargetAgentsMock.mockReturnValue({
+      data: [targetAgent, advisorAgent],
+    });
+    useAgentDelegationsMock.mockReturnValue({ data: [], isFetched: true });
+    useAgentSubagentExclusionsMock.mockReturnValue({
+      data: { excludedSubagentIds: [] },
+      isFetched: true,
+    });
+    useSyncAgentDelegationsMock.mockReturnValue({
+      mutateAsync: syncDelegations,
+      isPending: false,
+    });
+    useUpdateAgentSubagentExclusionsMock.mockReturnValue({
+      mutateAsync: syncExclusions,
+      isPending: false,
+    });
+    useUpdateProfileMock.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(autoAgent),
+      isPending: false,
+    });
+
+    render(
+      <AgentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        agentType="agent"
+        agent={autoAgent}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch)).toBeChecked();
+    });
+    await user.click(subagentModeTab("Custom"));
+    await user.click(subagentModeTab("Auto"));
+    await user.click(screen.getByTestId(E2eTestId.ConsultAdvisorSwitch));
+    expect(
+      screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),
+    ).not.toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: /update/i }));
+
+    // Both sets are written on save regardless of mode, and system or token
+    // flows resolve targets from the delegation set even in Auto — so a grant
+    // surviving here is a consultation the switch says is off.
+    await waitFor(() => expect(syncExclusions).toHaveBeenCalled());
+    expect(syncExclusions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exclusions: { excludedSubagentIds: [advisorAgent.id] },
+      }),
+    );
+    for (const call of syncDelegations.mock.calls) {
+      expect(call[0].targetAgentIds).not.toContain(advisorAgent.id);
+    }
   });
 
   it("skips the delegation and subagent-exclusion syncs when neither set changed on save", async () => {
@@ -574,7 +943,9 @@ describe.skip("AgentDialog", () => {
       />,
     );
 
-    expect(useInternalAgentsMock).toHaveBeenCalledWith({ enabled: false });
+    expect(useDelegationTargetAgentsMock).toHaveBeenCalledWith({
+      enabled: false,
+    });
     expect(useAvailableLlmProviderApiKeysMock).toHaveBeenCalledWith({
       includeKeyId: undefined,
       enabled: false,
@@ -631,6 +1002,7 @@ describe.skip("AgentDialog", () => {
           incomingEmailSecurityMode: "public",
           incomingEmailAllowedDomain: null,
           slug: null,
+          latestVersion: 0,
         }}
       />,
     );

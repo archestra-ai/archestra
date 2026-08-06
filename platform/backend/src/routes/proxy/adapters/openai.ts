@@ -35,7 +35,10 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { extractCommonMessageText } from "@/types";
+import {
+  extractCommonMessageText,
+  extractCommonToolCallArguments,
+} from "@/types";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
   estimateToolResultContentLength,
@@ -50,6 +53,8 @@ import {
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { createOpenAiCodexClient } from "./openai-codex-client";
+import { toOpenAiStreamUsage } from "./openai-sse-chunk";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES
@@ -328,7 +333,7 @@ export class OpenAIRequestAdapter
 
     for (const message of this.request.messages) {
       if (message.role === "tool") {
-        const toolName = this.findToolNameInMessages(
+        const toolCall = this.findToolCallInMessages(
           this.request.messages,
           message.tool_call_id,
         );
@@ -346,7 +351,8 @@ export class OpenAIRequestAdapter
 
         results.push({
           id: message.tool_call_id,
-          name: toolName ?? "unknown",
+          name: toolCall?.name ?? "unknown",
+          arguments: toolCall?.arguments,
           content,
           isError: false,
         });
@@ -438,10 +444,10 @@ export class OpenAIRequestAdapter
           contentPatternSample.includes('"data":"');
 
         // Find tool name from previous assistant message
-        const toolName = this.findToolNameInMessages(
+        const toolName = this.findToolCallInMessages(
           messages,
           message.tool_call_id,
-        );
+        )?.name;
 
         logger.info(
           {
@@ -617,10 +623,10 @@ export class OpenAIRequestAdapter
   // Private Helpers (copied from utils/adapters/openai.ts)
   // ---------------------------------------------------------------------------
 
-  private findToolNameInMessages(
+  private findToolCallInMessages(
     messages: OpenAiMessages,
     toolCallId: string,
-  ): string | null {
+  ): { name: string; arguments?: Record<string, unknown> } | null {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
 
@@ -628,9 +634,14 @@ export class OpenAIRequestAdapter
         for (const toolCall of message.tool_calls) {
           if (toolCall.id === toolCallId) {
             if (toolCall.type === "function") {
-              return toolCall.function.name;
+              return {
+                name: toolCall.function.name,
+                arguments: extractCommonToolCallArguments(
+                  toolCall.function.arguments,
+                ),
+              };
             } else {
-              return toolCall.custom.name;
+              return { name: toolCall.custom.name };
             }
           }
         }
@@ -655,14 +666,14 @@ export class OpenAIRequestAdapter
 
       // Handle tool messages (tool results)
       if (message.role === "tool") {
-        const toolName = this.findToolNameInMessages(
+        const toolCall = this.findToolCallInMessages(
           messages,
           message.tool_call_id,
         );
 
-        if (toolName) {
+        if (toolCall) {
           logger.debug(
-            { toolCallId: message.tool_call_id, toolName },
+            { toolCallId: message.tool_call_id, toolName: toolCall.name },
             "[OpenAIAdapter] toCommonFormat: found tool message",
           );
           let toolResult: unknown;
@@ -679,7 +690,8 @@ export class OpenAIRequestAdapter
           commonMessage.toolCalls = [
             {
               id: message.tool_call_id,
-              name: toolName,
+              name: toolCall.name,
+              arguments: toolCall.arguments,
               content: toolResult,
               isError: false,
             },
@@ -1062,7 +1074,10 @@ export class OpenAIStreamAdapter
       };
     }
 
-    const choice = chunk.choices[0];
+    // `choices` can be entirely absent (not just empty) on some
+    // OpenAI-compatible upstreams' usage-only or error-shaped chunks —
+    // reading [0] off it unguarded is a crash.
+    const choice = chunk.choices?.[0];
     if (!choice) {
       // If we have usage, this is the final chunk (OpenAI sends usage in a chunk with empty choices)
       return {
@@ -1223,13 +1238,9 @@ export class OpenAIStreamAdapter
     // without it, streaming clients (e.g. the chat route's AI SDK, for OpenRouter and other
     // OpenAI-compatible models) never see token counts. Shape mirrors the non-streaming
     // `toProviderResponse()` below — `prompt_tokens` is net of cache, with no `prompt_tokens_details`.
-    if (this.state.usage !== null) {
-      finalChunk.usage = {
-        prompt_tokens: this.state.usage.inputTokens,
-        completion_tokens: this.state.usage.outputTokens,
-        total_tokens:
-          this.state.usage.inputTokens + this.state.usage.outputTokens,
-      };
+    const usage = toOpenAiStreamUsage(this.state.usage);
+    if (usage) {
+      finalChunk.usage = usage;
     }
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
@@ -1479,6 +1490,17 @@ export const openaiAdapterFactory: LLMProvider<
     return headers.authorization;
   },
 
+  isSubscriptionCredential(apiKey: string | undefined): boolean {
+    // ChatGPT-subscription (Codex) credentials travel through the proxy as
+    // marker-prefixed encoded strings (`chatgpt-oauth:…`). They are covered by
+    // a flat-rate plan, so they must classify as subscription — the same rule
+    // as Anthropic `sk-ant-oat…` OAuth tokens. `extractApiKey` returns the
+    // authorization header as-is, so strip an optional `Bearer ` prefix before
+    // the format check; plain `sk-…` API keys stay metered.
+    const token = apiKey?.startsWith("Bearer ") ? apiKey.slice(7) : apiKey;
+    return isOpenAiCodexCredential(token);
+  },
+
   getBaseUrl(): string | undefined {
     return config.llm.openai.baseUrl;
   },
@@ -1558,6 +1580,7 @@ export const openaiAdapterFactory: LLMProvider<
     };
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl,
       fetch: customFetch,
@@ -1603,6 +1626,15 @@ export const openaiAdapterFactory: LLMProvider<
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    // The ChatGPT-subscription (Codex) fetch wrapper reports a dead sign-in
+    // (expired/revoked refresh token) as a synthetic 401 whose body carries the
+    // normalized code; relay it so the chat mapper renders the reconnect card.
+    if (
+      get(error, "error.internal_code") ===
+      ArchestraInternalErrorCode.ProviderAuthRequired
+    ) {
+      return ArchestraInternalErrorCode.ProviderAuthRequired;
     }
     return undefined;
   },

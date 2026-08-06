@@ -236,7 +236,7 @@ export function RoleMappingForm({
                   <SelectValue placeholder="Select default role" />
                 </SelectTrigger>
               </FormControl>
-              <RoleSelectContent />
+              <RoleSelectContent restrictToGrantable={false} />
             </Select>
             <FormDescription>
               Role assigned when no mapping rules match.
@@ -424,7 +424,7 @@ function RoleMappingRuleRow({
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                 </FormControl>
-                <RoleSelectContent />
+                <RoleSelectContent restrictToGrantable={false} />
               </Select>
               <FormMessage />
             </FormItem>

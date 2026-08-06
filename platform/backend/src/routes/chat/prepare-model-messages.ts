@@ -11,6 +11,7 @@ import {
   type ToolResultPart,
   type UIMessage,
 } from "ai";
+import config from "@/config";
 import logger from "@/logging";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type { ChatMessage } from "@/types";
@@ -20,17 +21,52 @@ import {
   compactMessagesForChat,
 } from "./context-compaction";
 import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
-import { assertRequestWithinProviderPayloadLimit } from "./normalization/enforce-request-size-limit";
+import {
+  assertRequestWithinProviderPayloadLimit,
+  providerAttachmentLimitBytes,
+} from "./normalization/enforce-request-size-limit";
 import { materializeAttachments } from "./normalization/materialize-attachments";
 import { prepareMessagesForProvider } from "./normalization/prepare-for-provider";
 
+/**
+ * Providers whose chat-completion request schema has no content part able to
+ * carry a binary document — text and images only. Sending a PDF to one is a
+ * guaranteed 400, and a model row with no recorded input modalities defaults to
+ * "reads PDFs", so the file has to be diverted here rather than trusted to the
+ * modality set.
+ *
+ * Membership is asserted from a provider's own request schema, never inferred:
+ * `zhipuai`'s content part is a union of text and `image_url`
+ * (`types/llm-providers/zhipuai/messages.ts`). Add a provider only after
+ * reading its schema — a wrong entry silently stops sending documents that
+ * would have worked.
+ */
+const PROVIDERS_WITHOUT_DOCUMENT_CONTENT_PARTS: ReadonlySet<SupportedProvider> =
+  new Set<SupportedProvider>(["zhipuai"]);
+
+// All of these fire BEFORE the model stream's `start` chunk. They must be
+// transient: a non-transient data part arriving before `start` makes the AI
+// SDK open an assistant message under a client-generated id to hold it, and
+// on a reattach (refresh, reconnect, backend restart mid-run) each attach
+// builds its own such message — rendering the whole turn twice. The client
+// consumes all of them via onData state, exactly like the heartbeat, so
+// nothing is lost by keeping them out of the message list.
 type CompactionStreamEvent =
-  | { type: "data-context-compaction-start"; data: { trigger: "auto" } }
+  | {
+      type: "data-context-compaction-start";
+      data: { trigger: "auto" };
+      transient: true;
+    }
   | {
       type: "data-context-compaction-finish";
       data: ContextCompactionStreamData;
+      transient: true;
     }
-  | { type: "data-context-window-estimate"; data: ContextWindowEstimate };
+  | {
+      type: "data-context-window-estimate";
+      data: ContextWindowEstimate;
+      transient: true;
+    };
 
 /**
  * Compact the (already normalized) history when it is over the auto-compaction
@@ -89,6 +125,7 @@ export async function buildModelMessages(params: {
       emit({
         type: "data-context-compaction-start",
         data: { trigger: "auto" },
+        transient: true,
       });
     },
   });
@@ -101,6 +138,7 @@ export async function buildModelMessages(params: {
     emit({
       type: "data-context-compaction-finish",
       data: buildContextCompactionStreamData(compactionResult),
+      transient: true,
     });
   }
 
@@ -114,6 +152,7 @@ export async function buildModelMessages(params: {
       data: {
         estimatedTokens: compactionResult.inputTokenEstimate,
       } satisfies ContextWindowEstimate,
+      transient: true,
     });
   }
 
@@ -172,14 +211,25 @@ async function buildModelMessagesForProvider(params: {
   // attachment id. Legacy inline data URLs pass through unchanged. Returns a
   // deep copy — the original messages keep their refs for any subsequent
   // persistence step.
+  // What we may send is bounded by our own inline budget and, where the
+  // provider publishes one, its documented request ceiling — whichever is
+  // smaller. Anything above stays in the Files panel rather than being sent
+  // and refused.
+  const providerLimit = providerAttachmentLimitBytes(params.provider);
+  const inlineByteLimit = Math.min(
+    config.chat.attachmentInlineBytesLimit,
+    providerLimit ?? Number.POSITIVE_INFINITY,
+  );
   const materialized = await materializeAttachments({
     messages: params.messages,
     conversationId: params.conversationId,
     ingestibleMimeTypes: params.ingestibleMimeTypes,
     applyAnthropicCacheControl,
     rerouteBinaryDocsToSandbox:
-      params.provider === "anthropic" && !anthropicNativeEndpoint,
+      (params.provider === "anthropic" && !anthropicNativeEndpoint) ||
+      PROVIDERS_WITHOUT_DOCUMENT_CONTENT_PARTS.has(params.provider),
     sandboxAvailable: params.sandboxAvailable,
+    inlineByteLimit,
   });
   // Reject oversized inline attachments here, before the provider call, so the
   // user gets an actionable size error instead of a generic provider rejection.

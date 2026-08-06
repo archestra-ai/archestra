@@ -479,6 +479,7 @@ export class ModelsDevClient {
       cerebras: ["cerebras/"],
       mistral: ["mistral/"],
       perplexity: ["perplexity/"],
+      // Not synced from models.dev, which has no Agent API catalog.
       groq: ["groq/"],
       xai: ["xai/"],
       bedrock: ["amazon-bedrock/"],

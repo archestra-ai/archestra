@@ -48,6 +48,15 @@ export function builtInSkillSourceRef(builtInSkillId: string): string {
   return `${BUILT_IN_SKILL_SOURCE_REF_PREFIX}${builtInSkillId}`;
 }
 
+/**
+ * Whether a `source_ref` is a built-in identity token rather than an imported
+ * GitHub source. True even for an id we no longer ship, so a stale row is still
+ * recognized as built-in.
+ */
+export function isBuiltInSkillSourceRef(sourceRef: string): boolean {
+  return sourceRef.startsWith(BUILT_IN_SKILL_SOURCE_REF_PREFIX);
+}
+
 /** Resolve the shipped definition behind a `builtin:<id>` source ref, if any. */
 export function findBuiltInSkillBySourceRef(
   sourceRef: string,
@@ -280,26 +289,49 @@ permission error means the caller's role lacks the required
 retrying.
 `;
 
-// The build-app playbook embeds the SDK/CSP/storage contract and build-loop
-// guidance verbatim from the authoring tools' shared source, so the skill is the
-// single place those conventions live (the tool descriptions stay short).
+// The build-app playbook keeps SKILL.md focused on the build flow and how to
+// talk to the user; the SDK/CSP/storage contract and build-loop guidance are
+// bundled as a reference file (embedded verbatim from the authoring tools'
+// shared source, so the skill package is the single place those conventions
+// live and the tool descriptions stay short).
 const BUILD_APP_SKILL = `# Building Archestra Apps
 
-You build interactive single-file HTML/JS apps for users from chat — dashboards, forms, trackers, games, any custom UI. An app runs in a sandboxed iframe and talks to the platform through the injected window.archestra SDK. Build it up through the staged flow below — each tool's result tells you the next step — never write a whole app in one shot, and never paste app HTML into the chat reply or hand it back as a chat artifact. The app exists only as the versioned HTML these app tools manage; change it exclusively with \`archestra__edit_app\` — the \`run_command\` code sandbox is a separate scratch filesystem and cannot alter the app itself. When the document already exists as a file you can reach — a chat attachment, or something you assembled and saved — pass that file's id to \`archestra__edit_app\` as \`replacementHtmlSource\` instead of reproducing its bytes in a tool call: that is the only way to build an app from content too large to retype in one turn.
+You build interactive single-file HTML/JS apps for users from chat — dashboards, forms, trackers, games, any custom UI. An app runs in a sandboxed iframe and talks to the platform through the Archestra Apps SDK, injected at render time. Build it up through the staged flow below — each tool's result tells you the next step — never write a whole app in one shot, and never paste app HTML into the chat reply or hand it back as a chat artifact. The app exists only as the versioned HTML these app tools manage; change it exclusively with \`archestra__edit_app\` — the \`run_command\` code sandbox is a separate scratch filesystem and cannot alter the app itself. When the document already exists as a file you can reach — a chat attachment, or something you assembled and saved — pass that file's id to \`archestra__edit_app\` as \`replacementHtmlSource\` instead of reproducing its bytes in a tool call: that is the only way to build an app from content too large to retype in one turn.
+
+## Work silently — this rule comes first
+
+While building an app, every response you produce MUST begin directly with a tool call and contain no prose at all. Your habit is to write a sentence before each tool call — "Let me read the reference…", "Now I'll search for the tool…", "That didn't surface it, let me try…" — and here that habit is a bug: every such sentence is shown to the user as a chat message, and a build that narrates itself reads as broken. Do the step instead of announcing it — the user watches the app itself take shape as it renders inline. During a build, exactly three responses may contain prose:
+
+1. **Refining** — asking the (up to 3) clarifying questions via \`archestra__refine_app\`.
+2. **Blocked** — the build cannot continue without something only the user can provide or decide.
+3. **Delivery** — the app passed validation (and any requested publish is done) and you are handing it over.
+
+Everything you do say is in the user's terms. Never surface build internals in chat: tool names (\`set_app_tools\`, \`preview_app_tool\`), SDK identifiers (\`window.archestra\`, \`archestra.tools.call()\`), tool ids, version numbers, assignment/validation mechanics, or accounts of searches and checks you ran along the way ("the search only surfaced…", "I checked which servers…"). When you need to name the platform's app layer at all, call it the Archestra Apps SDK. Describe a gap or blocker by the action the user can take — one sentence naming the action, not an explanation of the platform's plumbing: "Connect Jira to enable submitting tickets from the app", never "the jira__create_issue tool could not be assigned".
+
+## The SDK reference
+
+The full Archestra Apps SDK contract (the injected surface, storage, file tools, the CSP/CDN allowlist, theming) and the tool-calling build loop live in this skill's \`references/apps-sdk.md\` — read it (load this skill again, passing that path) before your first \`archestra__edit_app\`, and code against it rather than from memory.
 
 ## Flow
-1. \`archestra__scaffold_app\` — **only when the request is for a brand-new app that does not exist yet.** This is the sole app-creating tool: every call writes a new app entity to the DB, so call it at most once per app and never for a change to an app that already exists. First decide whether the app is already there: if you are holding an app id from earlier in this conversation, or the user is asking to change, extend, fix, restyle, or add to an app you already built, that app exists — skip scaffolding and make the change with \`archestra__edit_app\` on its id (read_app first if its current HTML is not already in context). If you are unsure whether a matching app already exists, call \`archestra__list_apps\` and reuse a clear match instead of creating a duplicate — if several plausibly match, ask the user which one; only if none match is it a new app. Only when it is genuinely a new app, create it from the single starter template (a minimal scaffold is fine). Pass the tools it needs via the tools param if you already know them (this is the initial assignment set; replace it at any time afterward with \`archestra__set_app_tools\`, never edit_app/refine_app). Returns the new app's id and the seeded HTML — carry that id through every later step and any follow-up request for the same app; do not scaffold it again (each later change is an edit_app on that id).
+1. \`archestra__scaffold_app\` — **only when the request is for a brand-new app that does not exist yet.** This is the sole app-creating tool: every call writes a new app entity to the DB, so call it at most once per app and never for a change to an app that already exists. First decide whether the app is already there: if you are holding an app id from earlier in this conversation, or the user is asking to change, extend, fix, restyle, or add to an app you already built, that app exists — skip scaffolding and make the change with \`archestra__edit_app\` on its id (read_app first if its current HTML is not already in context). If you are unsure whether a matching app already exists, call \`archestra__list_apps\`. Reuse an existing app ONLY when the user is clearly referring to it — same purpose, or they named it as theirs to change. Never rework an app that serves a different purpose just because its name or theme is close: apps can be built from other conversations, and overwriting one destroys work the user still relies on. When in doubt — including on a name collision from scaffold_app — ask the user whether to modify the existing app or create a new one under a different name; only if nothing matches is it a new app. Only when it is genuinely a new app, create it from the single starter template (a minimal scaffold is fine). Pass the tools it needs via the tools param if you already know them (this is the initial assignment set; replace it at any time afterward with \`archestra__set_app_tools\`, never edit_app/refine_app). Returns the new app's id and the seeded HTML — carry that id through every later step and any follow-up request for the same app; do not scaffold it again (each later change is an edit_app on that id).
 2. \`archestra__refine_app\` — clarify what the app should be. Ask the user up to 3 questions (features and style only, never the implementation stack), then persist a consolidated spec. It returns the user's real assignable MCP tools and the SDK surface — design the app around those tools, never invent one.
 3. \`archestra__edit_app\` — build the app up with str_replace edits over the scaffold (for a full rewrite, pass the new document as replacementHtml instead of edits, or — when it already exists as a file — that file's id as replacementHtmlSource). Before writing code that parses an assigned tool's result, call \`archestra__preview_app_tool\` to see its real output shape.
 4. \`archestra__validate_app\` — run static structural checks plus the live render diagnostics (\`archestra__get_app_diagnostics\` reads those render diagnostics on their own). Fix any errors with \`archestra__edit_app\` and re-validate until it passes.
 5. \`archestra__publish_app\` — only if the user wants others to run the app: promote it to a team or the whole organization (publishing is for sharing, not a required build step).
 
-Once the app passes validation (and any requested publish is done), the build is complete: stop calling app tools — do not re-read, re-validate, or re-check an app you have not changed — and close the loop with the user: name the app and link to its standalone page by reproducing, verbatim, the markdown link the scaffold_app/edit_app result returned (it is already labeled with the app's name) — never rebuild the link from the id or surface the raw /a/<id> path as the link text, say in plain product terms what it does, and carry out whatever completion the user's request asked for. Describe the app the way its user thinks about it, not how it is wired — keep build-time mechanics out of the summary unless the user has to act on one (e.g. "connect the GitHub server to enable search"). Be honest about what actually works — if a tool could not be assigned or a feature is not wired up, say so plainly instead of implying it works. Do not tack on a menu of extra features you could build next.
+Once the app passes validation (and any requested publish is done), the build is complete: stop calling app tools — do not re-read, re-validate, or re-check an app you have not changed — and close the loop with the user: name the app and link to its standalone page by reproducing, verbatim, the markdown link the scaffold_app/edit_app result returned (it is already labeled with the app's name) — never rebuild the link from the id or surface the raw /a/<id> path as the link text, say in plain product terms what it does, and carry out whatever completion the user's request asked for. Describe the app the way its user thinks about it, not how it is wired — per "Working in chat" above, build-time mechanics stay out of the summary, and anything the user must act on is named as their action in product terms (e.g. "Connect the GitHub server to enable search"). Be honest about what actually works — if a tool could not be assigned or a feature is not wired up, say so plainly in those same user terms instead of implying it works. Do not tack on a menu of extra features you could build next.
+`;
 
-## SDK and authoring conventions
+// The SDK contract and build loop, bundled as the build-app skill's reference
+// file. Embedded verbatim from the authoring tools' shared source
+// (app-authoring-guidance.ts) so the reference can never drift from what the
+// tools enforce; SKILL.md points the model here before its first edit_app.
+const BUILD_APP_SDK_REFERENCE = `# Archestra Apps SDK and authoring conventions
+
 ${APP_AUTHORING_CONTRACT}
 
 ## Build loop
+
 ${APP_BUILD_LOOP_GUIDANCE}
 `;
 
@@ -331,8 +363,14 @@ export const BUILT_IN_SKILLS: BuiltInSkill[] = [
     builtInSkillId: "build-app",
     name: "Build App",
     description:
-      "Build an interactive app for a user (dashboard, form, tracker, game, or custom UI): the staged scaffold → refine → edit → validate → publish flow and the window.archestra SDK, storage, tools, and CSP conventions. Use whenever the user asks to make, build, or create an app or interactive UI, authoring it through that flow.",
+      "Build an interactive app for a user (dashboard, form, tracker, game, or custom UI): the staged scaffold → refine → edit → validate → publish flow, the window.archestra SDK, storage, tools, and CSP conventions, and the silent-build chat conduct. Use whenever the user asks to make, build, or create an app or interactive UI, authoring it through that flow.",
     content: BUILD_APP_SKILL,
-    files: [],
+    files: [
+      {
+        path: "references/apps-sdk.md",
+        kind: "reference",
+        content: BUILD_APP_SDK_REFERENCE,
+      },
+    ],
   },
 ];

@@ -22,6 +22,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agent.updated": "Agent updated",
   "agent.deleted": "Agent deleted",
   "agent.restored": "Agent restored",
+  "agent.purged": "Agent permanently deleted",
   "agent.imported": "Agent imported",
   // Agent tool assignment
   "agentTool.created": "Agent tool added",
@@ -72,6 +73,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "internalMcpCatalog.created": "Internal catalog created",
   "internalMcpCatalog.updated": "Internal catalog updated",
   "internalMcpCatalog.deleted": "Internal catalog deleted",
+  "internalMcpCatalog.restored": "Internal catalog restored",
   "internalMcpCatalog.reinstalled": "Internal catalog reinstalled",
   // Invitation
   "invitation.created": "Invitation sent",
@@ -104,8 +106,11 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "mcpServer.created": "MCP server created",
   "mcpServer.updated": "MCP server updated",
   "mcpServer.deleted": "MCP server deleted",
+  "mcpServer.restored": "MCP server restored",
   "mcpServer.reinstalled": "MCP server reinstalled",
   // MCP install request
+  // Retired with the installation-request feature; retained so audit rows
+  // written before its removal still render with a readable label.
   "mcpServerInstallationRequest.created": "MCP install request created",
   "mcpServerInstallationRequest.updated": "MCP install request updated",
   // Member
@@ -118,6 +123,12 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "optimizationRule.deleted": "Optimization rule deleted",
   // Organization
   "organization.updated": "Organization updated",
+  // Project
+  "project.created": "Project created",
+  "project.updated": "Project updated",
+  "project.deleted": "Project deleted",
+  "project.restored": "Project restored",
+  "project.purged": "Project permanently deleted",
   // Role
   "role.created": "Role created",
   "role.updated": "Role updated",
@@ -135,6 +146,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "skill.created": "Skill created",
   "skill.updated": "Skill updated",
   "skill.deleted": "Skill deleted",
+  "skill.restored": "Skill restored",
+  "skill.purged": "Skill permanently deleted",
   "skill.imported": "Skill imported",
   // Team
   "team.created": "Team created",
@@ -163,6 +176,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "virtualApiKey.created": "Virtual API key created",
   "virtualApiKey.deleted": "Virtual API key deleted",
   // Auth surface
+  "auth.impersonation_started": "Impersonation started",
+  "auth.impersonation_stopped": "Impersonation stopped",
   "auth.signed_in": "Sign in",
   "auth.signed_out": "Sign out",
   "auth.signed_up": "Sign up",
@@ -175,8 +190,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
 
 /**
  * Derive a badge variant from the event name's verb suffix. Auth and unknown
- * events use `outline`; created → `default`; deleted → `destructive`;
- * everything else (updates, rotations, syncs, etc.) → `secondary`.
+ * events use `outline`; created → `default`; deleted and purged →
+ * `destructive`; everything else (updates, rotations, syncs, etc.) →
+ * `secondary`.
  */
 function verbVariant(eventName: AuditEventName): BadgeVariant {
   if (eventName.startsWith("auth.") || eventName.startsWith("unknown.")) {
@@ -184,7 +200,9 @@ function verbVariant(eventName: AuditEventName): BadgeVariant {
   }
   const verb = eventName.split(".")[1] ?? "";
   if (verb === "created") return "default";
-  if (verb === "deleted") return "destructive";
+  // `purged` is permanent deletion — the one action nothing recovers from, so
+  // it must not read as quieter than the soft delete it follows.
+  if (verb === "deleted" || verb === "purged") return "destructive";
   return "secondary";
 }
 

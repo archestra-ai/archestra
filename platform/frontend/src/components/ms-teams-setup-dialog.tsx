@@ -620,7 +620,7 @@ function StepManifest({
           ) : (
             <Download className="mr-2 h-4 w-4" />
           )}
-          Download {configuredAppName.toLowerCase()}-teams-app.zip
+          <span>Download {configuredAppName.toLowerCase()}-teams-app.zip</span>
         </Button>
 
         {!effectiveAppId && (

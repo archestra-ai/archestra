@@ -2,10 +2,11 @@
 
 import {
   APP_RECORDING_DESCRIPTION_MAX_CHARS,
-  APP_RECORDING_MAX_EXPORT_MS,
   APP_RECORDING_RENDER_REGION_ATTR,
   APP_RECORDING_VIEWPORT_ASPECT,
   ARCHESTRA_MCP_CATALOG_ID,
+  exceedsFinalCutLimit,
+  formatDurationMs,
   getArchestraToolShortName,
   normalizeCuts,
   parseFullToolName,
@@ -74,11 +75,14 @@ import {
 } from "@/components/ui/tooltip";
 import {
   cancelAppRecordingVideoRender,
+  type EnhancementFailureReason,
+  enhancementFailureMessage,
   fallbackRecordingDescription,
   useAppRecording,
   useAppRecordingEditor,
   useEnhanceAppRecording,
   useIsRenderingAppRecordingVideo,
+  useMaxFinalCutMs,
   useRenderAppRecordingVideo,
 } from "@/lib/app-session-recording/app-recording.query";
 import {
@@ -94,7 +98,7 @@ import {
 } from "@/lib/app-session-recording/app-recording-binary";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
-import { useMcpSandboxDomain } from "@/lib/config/config.query";
+import { useFeature, useMcpSandboxDomain } from "@/lib/config/config.query";
 import { DEFAULT_APP_LOGO } from "@/lib/hooks/use-app-name";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { cn } from "@/lib/utils";
@@ -120,6 +124,12 @@ type RecordingEnhancement = NonNullable<AppRecordingBundle["enhancement"]>;
 type TimelineEvent = PlaybackRecording["events"][number];
 type McpTimelineEvent = Extract<TimelineEvent, { kind: "mcp" }>;
 type TranscriptMessage = PlaybackRecording["transcript"][number];
+/**
+ * A transcript message as PLAYBACK sees it. `settled` marks one a cut
+ * collapsed: it is shown in full the instant it is reached, because the
+ * stretch it was said in was removed and there is no time left to type it in.
+ */
+type PlaybackTranscriptMessage = TranscriptMessage & { settled?: boolean };
 type PlayerAudioStatus =
   | { status: "loading" }
   | { status: "ready" }
@@ -192,6 +202,8 @@ export interface RecordingEnhancementDraft {
   prompt: string | null;
   response: string | null;
   category: string | null;
+  /** Why the build prompt is missing, when it is. Null once one was drafted. */
+  reason?: EnhancementFailureReason | null;
 }
 
 /**
@@ -226,7 +238,7 @@ export function backfilledEnhancement(
 }
 
 export function revealSchedule(
-  transcript: TranscriptMessage[],
+  transcript: PlaybackTranscriptMessage[],
   durationMs: number,
 ): {
   schedule: Map<string, { start: number; end: number }>;
@@ -237,9 +249,11 @@ export function revealSchedule(
     let previousEnd = Number.NEGATIVE_INFINITY;
     for (const message of transcript) {
       const start = Math.max(message.atMs, previousEnd);
+      // A settled message takes no time: a cut removed the stretch it was said
+      // in, so it is already on screen in full when the playhead arrives.
       const end =
         start +
-        (message.role === "assistant"
+        (message.role === "assistant" && !message.settled
           ? messageRevealMs(message.parts) * scale
           : 0);
       slots.set(message.id, { start, end });
@@ -471,8 +485,24 @@ export function AppSessionPlayer({
         ? {
             ...validBundle.recording,
             // Frame payloads leave base64 exactly once, here at bundle-open;
-            // every path after this handles Blobs/bytes only.
-            events: reviveRecordingEvents(validBundle.recording.events),
+            // every path after this handles Blobs/bytes only. DOM paints get
+            // the same treatment as the segments: document-killing markup is
+            // defused (a replayed paint re-inserts the app's own navigation
+            // handlers), and the img-src widening applies to re-inserted CSP
+            // metas — a recorded head repaint carries the live session's CSP
+            // meta, and a meta inserted by a replayed paint is enforced on top
+            // of the segment's policy — un-widened, it re-blocks every image
+            // the widening just allowed.
+            events: reviveRecordingEvents(validBundle.recording.events).map(
+              (event) => {
+                if (event.kind !== "dom") return event;
+                return defuseDomPaintPayload(
+                  typeof event.html === "string"
+                    ? { ...event, html: widenReplayImageCsp(event.html) }
+                    : event,
+                );
+              },
+            ),
             // The replayed chat is the capture seen through the viewer's
             // presentation edits: the AI consolidation (unless disabled),
             // minus removed messages, with manual user-text overrides.
@@ -561,7 +591,12 @@ export function AppSessionPlayer({
     () => (recording ? buildPlayback(recording).duration : 0),
     [recording],
   );
-  const tooLongToExport = finalCutMs > APP_RECORDING_MAX_EXPORT_MS;
+  const videoDownloadEnabled = useFeature("hackathonVideoDownloadEnabled");
+  const maxFinalCutMs = useMaxFinalCutMs();
+  // The one label every length surface quotes, formatted like the durations
+  // beside it (m:ss) so "runs 4:12 / trim to 3:00" reads as one comparison.
+  const finalCutLimitLabel = formatMs(maxFinalCutMs);
+  const tooLongToExport = exceedsFinalCutLimit(finalCutMs, maxFinalCutMs);
   const exportBlocked = descriptionEditing || surfaceEditing || tooLongToExport;
 
   // The quick action behind the tooltip pills (and the timeline's limit
@@ -570,10 +605,10 @@ export function AppSessionPlayer({
   // one undoable step.
   const trimToExportLimit = useCallback(() => {
     if (!recording) return;
-    const next = trimCutsToExportLimit(recording, APP_RECORDING_MAX_EXPORT_MS);
+    const next = trimCutsToExportLimit(recording, maxFinalCutMs);
     if (!next) return;
     editor.applyEdits({ cuts: next, chat: recording.edits?.chat });
-  }, [recording, editor]);
+  }, [recording, editor, maxFinalCutMs]);
   // The over-length tooltips end with the fix, not just the diagnosis.
   // Quietly: an invitation to trim, not an alarm — neutral until hovered.
   const trimPill = (
@@ -589,7 +624,7 @@ export function AppSessionPlayer({
       onPointerDown={trimToExportLimit}
     >
       <Scissors className="size-3" />
-      Trim to {MAX_EXPORT_SECONDS}s
+      Trim to {finalCutLimitLabel}
     </button>
   );
 
@@ -833,78 +868,90 @@ export function AppSessionPlayer({
                     aria-hidden="true"
                   />
 
-                  <Tooltip>
-                    {/* The wrapper is what makes the blocked case explain
+                  {/* The offline video export is off unless the deployment
+                      opts in (a render drives a headless browser for as long as
+                      the cut runs). Absent, not disabled: a greyed button with
+                      no way to enable it is a dead end, and the tour skips any
+                      stop whose element is missing, so its "Video download"
+                      step drops out with it. */}
+                  {videoDownloadEnabled && (
+                    <Tooltip>
+                      {/* The wrapper is what makes the blocked case explain
                         itself: a disabled button fires no pointer events, so
                         the tooltip below — the only thing that says WHY the
                         export is unavailable — never opened on the one button
                         that needed it. Same span the play and replay buttons
                         use. */}
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="group size-7 text-muted-foreground hover:text-foreground"
-                          aria-label={
-                            rendering
-                              ? "Cancel preparing the video"
-                              : "Download a video of this session"
-                          }
-                          data-tour="download"
-                          // Live while rendering — this is the way back out of
-                          // a render started by mistake, and the spinner is
-                          // where the author looks for it.
-                          disabled={!rendering && exportBlocked}
-                          onClick={() => {
-                            if (rendering) {
-                              cancelAppRecordingVideoRender();
-                              return;
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="group size-7 text-muted-foreground hover:text-foreground"
+                            aria-label={
+                              rendering
+                                ? "Cancel preparing the video"
+                                : "Download a video of this session"
                             }
-                            if (!recording) return;
-                            renderVideo.mutate({
-                              conversationId: authoringConversationId,
-                              title,
-                            });
-                          }}
-                        >
-                          {rendering ? (
-                            <>
-                              <Loader
-                                size={14}
-                                className="group-hover:hidden"
-                              />
-                              <X className="hidden size-4 group-hover:block" />
-                            </>
-                          ) : (
-                            <DownloadIcon className="size-4" />
-                          )}
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[260px] text-xs">
-                      {rendering ? (
-                        "Preparing your video — click to cancel."
-                      ) : tooLongToExport ? (
-                        <>
-                          This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
-                          {MAX_EXPORT_SECONDS} seconds or less to export a
-                          video.
-                          {trimPill}
-                        </>
-                      ) : descriptionEditing || surfaceEditing ? (
-                        "Finish editing to export a video."
-                      ) : (
-                        "Downloads a video of this session with your edits applied. Takes up to a minute."
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
+                            data-tour="download"
+                            // Live while rendering — this is the way back out of
+                            // a render started by mistake, and the spinner is
+                            // where the author looks for it.
+                            disabled={!rendering && exportBlocked}
+                            onClick={() => {
+                              if (rendering) {
+                                cancelAppRecordingVideoRender();
+                                return;
+                              }
+                              if (!recording) return;
+                              renderVideo.mutate({
+                                conversationId: authoringConversationId,
+                                title,
+                              });
+                            }}
+                          >
+                            {rendering ? (
+                              <>
+                                <Loader
+                                  size={14}
+                                  className="group-hover:hidden"
+                                />
+                                <X className="hidden size-4 group-hover:block" />
+                              </>
+                            ) : (
+                              <DownloadIcon className="size-4" />
+                            )}
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[260px] text-xs">
+                        {rendering ? (
+                          <span>Preparing your video — click to cancel.</span>
+                        ) : tooLongToExport ? (
+                          <>
+                            <span>
+                              This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
+                              {finalCutLimitLabel} or less to export a video.
+                            </span>
+                            {trimPill}
+                          </>
+                        ) : descriptionEditing || surfaceEditing ? (
+                          <span>Finish editing to export a video.</span>
+                        ) : (
+                          <span>
+                            Downloads a video of this session with your edits
+                            applied. Takes up to a minute.
+                          </span>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
 
                   {/* Renders nothing unless the deployment offers the gallery.
                       Blocked exactly like the download — mid-edit AND over the
-                      export length cap: the gallery renders the submitted cut
-                      to video downstream, so the same 30-second bound applies. */}
+                      final-cut length limit: the gallery renders the submitted
+                      cut to video downstream, so the same bound applies. */}
                   <AppGalleryShareButton
                     conversationId={authoringConversationId}
                     disabled={exportBlocked}
@@ -912,7 +959,7 @@ export function AppSessionPlayer({
                       tooLongToExport ? (
                         <>
                           This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
-                          {MAX_EXPORT_SECONDS} seconds or less to submit.
+                          {finalCutLimitLabel} or less to submit.
                           {trimPill}
                         </>
                       ) : (
@@ -1447,16 +1494,18 @@ function PlayerSurface({
   // The timeline's export-limit mark: where played time crosses the allowed
   // length on the FULL strip, and the one-click trim down to it. Committed
   // with the same optimistic-cuts bridge every other timeline edit uses.
+  const maxFinalCutMs = useMaxFinalCutMs();
+  const finalCutLimitLabel = formatMs(maxFinalCutMs);
   const exportLimitBaseMs =
-    duration > APP_RECORDING_MAX_EXPORT_MS
-      ? basePlayback.toPlaybackMs(playback.toRawMs(APP_RECORDING_MAX_EXPORT_MS))
+    duration > maxFinalCutMs
+      ? basePlayback.toPlaybackMs(playback.toRawMs(maxFinalCutMs))
       : null;
   const trimToExportLimit = useCallback(() => {
-    const next = trimCutsToExportLimit(recording, APP_RECORDING_MAX_EXPORT_MS);
+    const next = trimCutsToExportLimit(recording, maxFinalCutMs);
     if (!next) return;
     setPendingCuts(next);
     applyEdits({ cuts: next, chat: chatEdits });
-  }, [recording, applyEdits, chatEdits]);
+  }, [recording, applyEdits, chatEdits, maxFinalCutMs]);
 
   // ── Chat edits: presentation-only operations over the captured transcript
   // (drop a message, override a user message's text, hide the AI-enhanced
@@ -2204,9 +2253,7 @@ function PlayerSurface({
               setPromptDraft("");
             }
             if (result) {
-              toast.info(
-                "Couldn't draft a build prompt automatically — write one here. (Your first chat message is used for the submission if you skip it.)",
-              );
+              toast.info(enhancementFailureMessage(result.reason));
             }
             return;
           }
@@ -2603,7 +2650,9 @@ function PlayerSurface({
   const replayHtml = useMemo(
     () =>
       neutralizeAppScripts(
-        relocalizeSandboxAssets(segment?.html ?? "", sandboxResult.baseUrl),
+        widenReplayImageCsp(
+          relocalizeSandboxAssets(segment?.html ?? "", sandboxResult.baseUrl),
+        ),
         // Deferring a remote stylesheet trades font fidelity for a fast first
         // paint — the right trade for someone watching, the wrong one for an
         // export. Nobody is waiting on the offline renderer, and its output is
@@ -2972,6 +3021,7 @@ function PlayerSurface({
                     : null
             }
             exportLimit={review ? null : exportLimitBaseMs}
+            exportLimitLabel={finalCutLimitLabel}
             onSeek={review ? seekPlayback : seekBase}
             onScrub={review ? scrubPlayback : scrubBase}
             onCut={cutBaseRange}
@@ -3059,7 +3109,7 @@ function ReplayPromptEditorCard({
             ) : (
               <Sparkles className="size-3" />
             )}
-            {editor.generating ? "Regenerating…" : "Regenerate"}
+            <span>{editor.generating ? "Regenerating…" : "Regenerate"}</span>
           </Button>
           <Button
             type="button"
@@ -3269,7 +3319,7 @@ function ReplayDescriptionRow({
               ) : (
                 <Sparkles className="size-3" />
               )}
-              {generate.isPending ? "Regenerating…" : "Regenerate"}
+              <span>{generate.isPending ? "Regenerating…" : "Regenerate"}</span>
             </Button>
             <Button
               type="button"
@@ -3390,7 +3440,7 @@ export function trimCutsToExportLimit(
   limitMs: number,
 ): { fromMs: number; toMs: number }[] | null {
   const playback = buildPlayback(recording);
-  if (playback.duration <= limitMs) return null;
+  if (!exceedsFinalCutLimit(playback.duration, limitMs)) return null;
   const base = buildPlayback(uncutRecording(recording));
   const rawStart = Math.round(base.toRawMs(0));
   const rawEnd = Math.round(base.toRawMs(Math.max(base.duration, 1)));
@@ -3408,11 +3458,19 @@ export function trimCutsToExportLimit(
       ...recording,
       edits: { ...recording.edits, cuts: next },
     }).duration;
-    return { next, fits: duration <= limitMs };
+    return { next, fits: !exceedsFinalCutLimit(duration, limitMs) };
   };
-  // The natural candidate: the raw instant currently playing at the limit.
-  let hi = Math.round(playback.toRawMs(limitMs));
-  if (hi - rawStart < 1 || rawEnd - hi < 1) return null;
+  // The natural candidate: the raw instant currently playing at the limit,
+  // CLAMPED inside the session rather than rejected when it lands on the end.
+  //
+  // A closing reply's reveal is charged against however many raw milliseconds
+  // are left after it, so the final raw span can carry a second of playback in
+  // one millisecond of recording — and the limit instant then rounds onto
+  // `rawEnd`. Reading that as "degenerate recording" and returning null is how
+  // the pill became a no-op while the tooltip demanded a trim: a fitting
+  // boundary existed, the bisection just never ran.
+  let hi = Math.min(Math.round(playback.toRawMs(limitMs)), rawEnd - 1);
+  if (hi - rawStart < 1) return null;
   const first = trial(hi);
   if (first.fits) return first.next;
   let lo = rawStart + 1; // a whole-session trim always fits
@@ -3471,6 +3529,7 @@ function ReplayTimeline({
   saving,
   readOnly = false,
   exportLimit,
+  exportLimitLabel,
   onSeek,
   onScrub,
   demo,
@@ -3503,6 +3562,8 @@ function ReplayTimeline({
   /** Where played time crosses the export cap on this strip — the clickable
    * "trim to the limit" mark; null while the cut already fits. */
   exportLimit: number | null;
+  /** The configured limit, formatted — the mark and its tooltip quote it. */
+  exportLimitLabel: string;
   /** Editing anything pauses the replay and locks the play controls. */
   onEditingChange?: (editing: boolean) => void;
   onSeek: (ms: number) => void;
@@ -4049,7 +4110,7 @@ function ReplayTimeline({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label="Trim to the maximum allowed length"
+                aria-label={`Trim to the maximum allowed length (${exportLimitLabel})`}
                 className="group absolute top-0 z-30 flex h-2.5 -translate-x-1/2 cursor-pointer items-center"
                 style={{ left: leftPct(exportLimit) }}
                 disabled={saving}
@@ -4058,12 +4119,16 @@ function ReplayTimeline({
               >
                 <span className="flex h-4 items-center gap-0.5 rounded-full border bg-background px-1 font-medium text-[10px] text-muted-foreground shadow-sm transition-colors group-hover:border-destructive/50 group-hover:text-destructive">
                   <Scissors className="size-2.5" />
-                  {MAX_EXPORT_SECONDS}s
+                  {/* "max 1:00", never a bare "1:00": the strip under it is
+                      the UNCUT timeline, so a bare duration reads as one of
+                      its ruler ticks — and with a head trim this badge sits
+                      well to the right of the tick that shares its number. */}
+                  max {exportLimitLabel}
                 </span>
               </button>
             </TooltipTrigger>
             <TooltipContent className="text-xs">
-              Trim to the max allowed length ({MAX_EXPORT_SECONDS}s)
+              Trim to the max allowed length ({exportLimitLabel})
             </TooltipContent>
           </Tooltip>
         )}
@@ -4321,7 +4386,7 @@ function ReplayChatPane({
   preview,
   onEnterEdit,
 }: {
-  transcript: TranscriptMessage[];
+  transcript: PlaybackTranscriptMessage[];
   clockMs: number;
   /** The playback's end. The reveal schedule must fit inside it — see below. */
   durationMs: number;
@@ -4519,7 +4584,7 @@ export function ReplayChatEditPane({
   onRestore,
   onDone,
 }: {
-  transcript: TranscriptMessage[];
+  transcript: PlaybackTranscriptMessage[];
   enhancement: RecordingEnhancement | null;
   chat: RecordingChatEdits | undefined;
   saving: boolean;
@@ -4604,7 +4669,9 @@ export function ReplayChatEditPane({
                 ) : (
                   <Sparkles className="size-3" />
                 )}
-                {promptEditor.generating ? "Drafting…" : "Draft AI prompt"}
+                <span>
+                  {promptEditor.generating ? "Drafting…" : "Draft AI prompt"}
+                </span>
               </Button>
               <Button
                 type="button"
@@ -4715,7 +4782,7 @@ function ReplayAiResponseBubble({
         ) : (
           <Sparkles className="size-3" />
         )}
-        AI-generated response
+        <span>AI-generated response</span>
       </div>
       <Message from="assistant" className="group/row">
         <MessageContent className="relative ring-2 ring-primary/50">
@@ -4850,7 +4917,7 @@ function ReplayAiPromptBubble({
           ) : (
             <Sparkles className="size-3" />
           )}
-          AI-generated prompt
+          <span>AI-generated prompt</span>
         </div>
         {/* The bubble itself is the edit control, like the description and
             every captured message: click it, edit and regenerate in the card
@@ -5385,7 +5452,7 @@ function ReplayAppStage({
 export function buildPlayback(recording: PlaybackRecording): {
   events: TimelineEvent[];
   segments: PlaybackRecording["segments"];
-  transcript: TranscriptMessage[];
+  transcript: PlaybackTranscriptMessage[];
   duration: number;
   /** Map a playback-timeline time back to raw recording time — the coordinate
    * space cuts are stored in, stable across player versions. */
@@ -5479,6 +5546,59 @@ export function buildPlayback(recording: PlaybackRecording): {
   );
   const withinEnd = (t: number) => !tailCut || t <= tailCut.fromMs;
 
+  /**
+   * A moment a MID cut removes — one that collapses onto the cut's instant
+   * rather than playing. The cut's own START still plays (it is the last kept
+   * moment); its END does not, matching how the bundle pruner and the
+   * trailing-trim filter read the same boundaries.
+   *
+   * ONLY mid cuts, and that restriction is the whole point. A head trim is
+   * stored as one cut reaching the axis floor, and pre-recording chat carries
+   * large NEGATIVE times — a real submission trims its first 25 seconds and
+   * stores {fromMs: -58041135, toMs: 25073}. Reading that as "everything in
+   * here was removed" swallows the entire conversation: measured across the
+   * live gallery it settled 73 of 73 and 20 of 20 messages, and those players
+   * replayed a fully-formed chat that never typed a character.
+   *
+   * A head trim does not delete conversation — it starts the demo later, and
+   * the history before it is exactly what this player exists to animate. A MID
+   * cut is the one that genuinely removes a stretch, so it is the one whose
+   * chat collapses. An end trim leaves its messages alone too: they still
+   * play, and charging them nothing would only shorten the tail nobody sees.
+   */
+  const midCuts = cuts.filter(
+    (cut) =>
+      cut.fromMs > leadStart + TRIM_EDGE_EPS_MS &&
+      cut.toMs < rawDataEnd - TRIM_EDGE_EPS_MS,
+  );
+  const insideCut = (t: number) =>
+    midCuts.some((cut) => cut.fromMs < t && t <= cut.toMs);
+
+  // How long the chat pane will still be animating from each raw instant. An
+  // assistant turn reveals over real wall-clock time (see messageRevealMs),
+  // and that reveal is the ONLY thing on the timeline whose length is not a
+  // recorded duration — so the compression has to be told about it. Summed per
+  // instant because a burst stamped at one timestamp cascades in
+  // revealSchedule rather than landing at once.
+  const revealAt = new Map<number, number>();
+  for (const message of source.transcript) {
+    if (message.role !== "assistant") continue;
+    // A reply the cut REMOVED buys no time. It still replays — collapsed onto
+    // the cut's instant, arriving already sent (see `settled` below) — but a
+    // cut that costs a second and a half per reply inside it is not a cut: the
+    // playhead crawls through a removed stretch instead of stepping over it,
+    // and a minute of kept material reports as longer than a minute.
+    //
+    // A reply said BEFORE the cut still holds (that clamp is further down),
+    // because trimming the pause after a long answer cannot un-draw the
+    // answer — it is still on screen, mid-reveal, when the cut begins.
+    if (insideCut(message.atMs)) continue;
+    revealAt.set(
+      message.atMs,
+      (revealAt.get(message.atMs) ?? 0) + messageRevealMs(message.parts),
+    );
+  }
+
   const sorted = [...anchors].sort((a, b) => a - b);
   const compressedAt = new Map<number, number>();
   // The timeline opens at the lead's start, so the very first message
@@ -5486,6 +5606,11 @@ export function buildPlayback(recording: PlaybackRecording): {
   // opening already sent.
   let compressed = 0;
   compressedAt.set(sorted[0] ?? 0, compressed);
+  // The compressed instant the chat pane is busy revealing until. Nothing may
+  // be scheduled before it: the recorded session was SEQUENTIAL — the builder
+  // read the reply, then touched the app — and replaying the app's half over a
+  // reply that is still typing invents a concurrency that never happened.
+  let revealBusyUntil = revealAt.get(sorted[0] ?? 0) ?? 0;
   for (let i = 1; i < sorted.length; i++) {
     const gapInCut = cuts.some(
       (cut) => cut.fromMs <= sorted[i - 1] && sorted[i] <= cut.toMs,
@@ -5502,7 +5627,15 @@ export function buildPlayback(recording: PlaybackRecording): {
           : MAX_IDLE_MS;
       compressed += Math.min(sorted[i] - sorted[i - 1], cap);
     }
+    // Hold every later anchor behind the pending reveal — including one whose
+    // own gap was cut away. A cut removes RECORDED time; it cannot remove the
+    // time the chat pane needs to finish drawing a reply that is still on
+    // screen, and letting it would put the bug back exactly where a builder
+    // trimmed the pause after a long answer.
+    compressed = Math.max(compressed, revealBusyUntil);
     compressedAt.set(sorted[i], compressed);
+    const reveal = revealAt.get(sorted[i]);
+    if (reveal) revealBusyUntil = compressed + reveal;
   }
   const map = (t: number) => compressedAt.get(t) ?? t;
 
@@ -5584,12 +5717,17 @@ export function buildPlayback(recording: PlaybackRecording): {
     // A cut removes ONLY the app replay in its range (events, frames, segments
     // — filtered/collapsed above); the chat is never trimmed. Every captured
     // message still replays: one inside a removed stretch collapses onto the
-    // cut's instant the same way the app events there do, and the reveal
-    // cascade streams that collapsed run in quickly — so the conversation plays
-    // in full, only sped up across the cut rather than losing what was said.
+    // cut's instant the same way the app events there do, so the conversation
+    // plays in full rather than losing what was said.
+    //
+    // It arrives ALREADY SENT, though (`settled`). The stretch it was said in
+    // is gone, so there is no time left to type it in — and typing it anyway
+    // is the thing that made a cut cost real seconds and put the chat pane's
+    // animation back on top of an app replay that had already moved on.
     transcript: source.transcript.map((message) => ({
       ...message,
       atMs: map(message.atMs),
+      ...(insideCut(message.atMs) ? { settled: true as const } : {}),
     })),
     // The full compressed span — the last anchor, which may be a message that
     // lands just after the app interaction ends.
@@ -6188,15 +6326,12 @@ function stableStringify(value: unknown): string {
     .join(",")}}`;
 }
 
-function formatMs(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-/** The export ceiling in whole seconds, for the copy that quotes it. */
-const MAX_EXPORT_SECONDS = Math.round(APP_RECORDING_MAX_EXPORT_MS / 1000);
+/**
+ * `m:ss`, from the shared implementation the length CHECK is defined against
+ * — a formatter that could disagree with the check is what printed "runs 1:00
+ * … trim to 1:00 or less".
+ */
+export const formatMs = formatDurationMs;
 
 /**
  * Point the recorded document's platform assets at the origin that will
@@ -6244,6 +6379,30 @@ export const replaySandboxPrefix = (conversationId: string | undefined) =>
   `archestra-app-replay-${conversationId}`;
 
 /**
+ * Let a replay show the images the recorded session referenced.
+ *
+ * The live app runs under the platform's fixed CSP allowlist, whose `img-src`
+ * admits only the bundled CDN and font hosts — an app that hotlinks any other
+ * image host (GitHub avatars, say) renders broken images, and the recorder
+ * captures markup, not pixels, so every replay inherits the same blanks. In a
+ * replay that strictness buys nothing: the app's scripts are neutralized
+ * ({@link neutralizeAppScripts}), the document is fixed recorded content, and
+ * an image fetch can neither run code nor read the page. So the segment's CSP
+ * meta gets `https:` added to `img-src`, and the replay shows what the app
+ * meant to show. Only the serialized segment the player is about to mount is
+ * rewritten — a live app's CSP is untouched. A segment without a CSP meta
+ * passes through unchanged (its frame has no CSP to widen).
+ *
+ * @public — exported for testability
+ */
+export function widenReplayImageCsp(html: string): string {
+  return html.replace(
+    /(<meta[^>]*Content-Security-Policy[^>]*\bimg-src)(?= )/i,
+    "$1 https:",
+  );
+}
+
+/**
  * Stop the app's own code from running in a replay.
  *
  * A recorded session is replayed from what the app produced, not by running it
@@ -6259,26 +6418,116 @@ export function neutralizeAppScripts(
   html: string,
   { deferRemoteStylesheets = true }: { deferRemoteStylesheets?: boolean } = {},
 ): string {
+  const retyped = (
+    deferRemoteStylesheets ? deferThirdPartyStylesheets(html) : html
+  ).replace(/<script\b([^>]*)>/gi, (tag: string, attrs: string) => {
+    if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
+    // Any `type` the app set must be REMOVED, not merely followed by the
+    // replay type: the HTML parser drops duplicate attributes and keeps the
+    // FIRST, so `<script type="module" type="application/…">` still parses
+    // as a module — and executes. That is how a module-based app re-ran
+    // itself inside its own replay, rolling fresh Math.random state and
+    // repainting its canvas over the recorded frames.
+    const rest = attrs.replace(
+      /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
+      "",
+    );
+    return `<script${rest} type="application/archestra-replayed-script">`;
+  });
   return (
-    REPLAY_CHROME_CSS +
-    (deferRemoteStylesheets ? deferThirdPartyStylesheets(html) : html).replace(
-      /<script\b([^>]*)>/gi,
-      (tag: string, attrs: string) => {
-        if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
-        // Any `type` the app set must be REMOVED, not merely followed by the
-        // replay type: the HTML parser drops duplicate attributes and keeps the
-        // FIRST, so `<script type="module" type="application/…">` still parses
-        // as a module — and executes. That is how a module-based app re-ran
-        // itself inside its own replay, rolling fresh Math.random state and
-        // repainting its canvas over the recorded frames.
-        const rest = attrs.replace(
-          /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
-          "",
-        );
-        return `<script${rest} type="application/archestra-replayed-script">`;
-      },
-    )
+    REPLAY_CHROME_CSS + REPLAY_NAVIGATION_GUARD + defuseDocumentKillers(retyped)
   );
+}
+
+/**
+ * Cancel navigation-capable DEFAULT actions inside the replay document.
+ *
+ * The replay driver re-drives recorded clicks as real events, and real events
+ * carry real default actions: a click on a PR-row `<a href>` follows the link,
+ * and a click on a `<button>` inside a `<form>` (buttons default to
+ * type="submit") submits and navigates — each destroying the replay document,
+ * whose successor announces itself, gets a full catch-up including the same
+ * click, and dies again: an endless reload flicker, even while paused.
+ * Attribute-level defusal can't reach these (they need no handler at all), so
+ * this always-live guard cancels the defaults at capture phase, ahead of any
+ * target. Replay is output-driven — the recorded DOM paints already show what
+ * every navigation produced — so no replayed interaction may navigate for
+ * real. Injected before the app markup; the retype pass in
+ * `neutralizeAppScripts` never sees it.
+ */
+const REPLAY_NAVIGATION_GUARD = `<script data-archestra-replay-guard>
+  (function () {
+    var cancel = function (event) { event.preventDefault(); };
+    addEventListener('click', cancel, true);
+    addEventListener('auxclick', cancel, true);
+    addEventListener('submit', function (event) { event.preventDefault(); event.stopImmediatePropagation(); }, true);
+  })();
+</script>`;
+
+/**
+ * Retyping `<script>` tags does not touch inline `on*="…"` handler attributes.
+ * Most of those reference app functions that no longer exist and just throw
+ * quietly when the replay driver re-drives the recorded clicks — but
+ * navigation calls are self-contained and DESTROY the replay document: a
+ * recorded click on a "reload page" button re-executes
+ * `window.location.reload()` for real, the fresh document announces itself,
+ * catch-up re-drives the same click, and the frame reloads in a loop
+ * (observed live as a flickering replay). Empty the body of any quoted inline
+ * handler that touches navigation — the recorded DOM paints already show what
+ * the navigation produced — and drop `<meta http-equiv="refresh">`, the same
+ * killer without a click. Handlers with unquoted values are left alone:
+ * generated app HTML always quotes.
+ */
+function defuseDocumentKillers(html: string): string {
+  const NAVIGATES = /\b(?:location|history)\b|window\s*\.\s*open/i;
+  return html
+    .replace(
+      /(\son\w+\s*=\s*")([^"]*)(")/gi,
+      (all, pre: string, body: string, post: string) =>
+        NAVIGATES.test(body) ? `${pre}${post}` : all,
+    )
+    .replace(
+      /(\son\w+\s*=\s*')([^']*)(')/gi,
+      (all, pre: string, body: string, post: string) =>
+        NAVIGATES.test(body) ? `${pre}${post}` : all,
+    )
+    .replace(/<meta\b[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
+}
+
+/** Cheap pre-filter so the payload walk below only pays the full regex pass on
+ * strings that could possibly contain an inline handler or a meta refresh. */
+const MAYBE_KILLER = /\son\w+\s*=|http-equiv/i;
+
+/**
+ * Defuse document-killing markup inside a replayed DOM paint's payload.
+ *
+ * Neutralizing the segment HTML is not enough: recorded mutations re-insert
+ * the app's own markup — up to full-document snapshots — and with it the very
+ * inline handlers the segment pass removed. Replaying a click on a re-inserted
+ * "reload page" button then destroys the document all over again (observed as
+ * an endless reload flicker, even paused). Every string in a `dom` event is
+ * swept with the same defusal before the event is ever posted into the app
+ * frame. Runs once at bundle-open.
+ *
+ * @public — exported for testability
+ */
+export function defuseDomPaintPayload<T>(value: T): T {
+  if (typeof value === "string") {
+    return (MAYBE_KILLER.test(value)
+      ? defuseDocumentKillers(value)
+      : value) as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => defuseDomPaintPayload(item)) as unknown as T;
+  }
+  if (value && typeof value === "object" && value.constructor === Object) {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value))
+      out[key] = defuseDomPaintPayload(item);
+    return out as unknown as T;
+  }
+  // Blobs, byte arrays, numbers, etc. pass through untouched.
+  return value;
 }
 
 /**
@@ -6398,7 +6647,7 @@ const PLAYER_TOUR_STEP_KEY = "app-recording-player-tour-step";
  * elements. Each key matches a `data-tour` attribute on the element it
  * explains; stops whose element isn't on screen are skipped.
  */
-const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
+const playerTourSteps = (modKey: "Cmd" | "Ctrl", limitLabel: string) => [
   {
     key: "description",
     title: "App description",
@@ -6455,7 +6704,7 @@ const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
     key: "download",
     title: "Video download",
     text: "Final cut with all your edits applied.",
-    note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
+    note: `Keep your final cut under ${limitLabel}.`,
   },
   // Absent (and skipped) on deployments that don't offer the gallery — the
   // share button renders nothing there.
@@ -6463,7 +6712,7 @@ const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
     key: "share",
     title: "Submit to Archestra for review!",
     text: "Authorize Archestra to Create a Pull Request to Apps Hackathon repository on GitHub for you.\nFinal cut with all your edits applied.",
-    note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
+    note: `Keep your final cut under ${limitLabel}.`,
   },
   {
     key: "tour",
@@ -6496,7 +6745,11 @@ function PlayerTour({
   // Shortcut copy names the platform's own modifier — Cmd exists only on Mac
   // keyboards; Windows/Linux read Ctrl.
   const { modKey } = usePlatform();
-  const steps = useMemo(() => playerTourSteps(modKey), [modKey]);
+  const limitLabel = formatMs(useMaxFinalCutMs());
+  const steps = useMemo(
+    () => playerTourSteps(modKey, limitLabel),
+    [modKey, limitLabel],
+  );
   // Resume where a mid-tour player close left off (progress persists per
   // browser until the tour finishes or is skipped).
   const [index, setIndex] = useState(() => {
@@ -6506,7 +6759,7 @@ function PlayerTour({
       10,
     );
     return Number.isFinite(stored) && stored > 0
-      ? Math.min(stored, playerTourSteps("Ctrl").length - 1)
+      ? Math.min(stored, playerTourSteps("Ctrl", "").length - 1)
       : 0;
   });
   useEffect(() => {

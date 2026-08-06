@@ -1,8 +1,14 @@
-import { SupportedProviders } from "@archestra/shared";
+import { RouteId, SupportedProviders } from "@archestra/shared";
 import * as Sentry from "@sentry/node";
+import { eq } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vi } from "vitest";
-import { afterEach, describe, expect, test } from "@/test";
+import config from "@/config";
+import db, { schema } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
+import { OrganizationModel, SessionModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { ApiError } from "@/types";
 import { Authnz } from "./middleware";
 
 // Mock Sentry
@@ -729,6 +735,285 @@ describe("Authnz", () => {
         "WWW-Authenticate",
         expect.stringContaining("resource_metadata"),
       );
+    });
+  });
+
+  describe("enforceOrganizationAuthPolicies", () => {
+    beforeEach(() => {
+      enterpriseTier.setUserCountForTesting(0); // licensed (small-team tier)
+    });
+
+    const enforce = (request: unknown) =>
+      // biome-ignore lint/complexity/useLiteralKeys: reaching a private method under test
+      authnz["enforceOrganizationAuthPolicies"](request as FastifyRequest);
+
+    const makeRequest = ({
+      organizationId,
+      user,
+      session,
+      routeId,
+      authMethod = "session",
+    }: {
+      organizationId: string;
+      user: { id: string; twoFactorEnabled: boolean | null };
+      session?: { id: string; createdAt: Date };
+      routeId?: RouteId;
+      authMethod?: string;
+    }) =>
+      ({
+        authMethod,
+        organizationId,
+        user,
+        sessionInfo: session,
+        routeOptions: { schema: routeId ? { operationId: routeId } : {} },
+      }) as unknown as FastifyRequest;
+
+    async function makePolicyFixtures(
+      {
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeSession,
+      }: {
+        makeOrganization: (o?: object) => Promise<{ id: string }>;
+        makeUser: (o?: object) => Promise<{
+          id: string;
+          twoFactorEnabled: boolean | null;
+        }>;
+        makeMember: (u: string, o: string, e?: object) => Promise<unknown>;
+        makeSession: (
+          u: string,
+          o?: object,
+        ) => Promise<{ id: string; createdAt: Date }>;
+      },
+      {
+        requireTwoFactor = false,
+        sessionMaxAgeSeconds = null as number | null,
+        twoFactorEnabled = false,
+        sessionCreatedAt = new Date(),
+      } = {},
+    ) {
+      const organization = await makeOrganization();
+      await OrganizationModel.patch(organization.id, {
+        requireTwoFactor,
+        sessionMaxAgeSeconds,
+      });
+      const user = await makeUser({ twoFactorEnabled });
+      await makeMember(user.id, organization.id, { role: "member" });
+      const session = await makeSession(user.id, {
+        createdAt: sessionCreatedAt,
+      });
+      return { organization, user, session };
+    }
+
+    test("revokes a session older than the organization's cap", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      const { organization, user, session } = await makePolicyFixtures(
+        { makeOrganization, makeUser, makeMember, makeSession },
+        {
+          sessionMaxAgeSeconds: 3600,
+          sessionCreatedAt: new Date(Date.now() - 7200 * 1000),
+        },
+      );
+
+      const error = await enforce(
+        makeRequest({ organizationId: organization.id, user, session }),
+      ).then(
+        () => null,
+        (err: unknown) => err,
+      );
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).statusCode).toBe(401);
+
+      const [row] = await db
+        .select()
+        .from(schema.sessionsTable)
+        .where(eq(schema.sessionsTable.id, session.id));
+      expect(row).toBeUndefined();
+    });
+
+    test("leaves a session younger than the cap alone", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      const { organization, user, session } = await makePolicyFixtures(
+        { makeOrganization, makeUser, makeMember, makeSession },
+        {
+          sessionMaxAgeSeconds: 7200,
+          sessionCreatedAt: new Date(Date.now() - 60 * 1000),
+        },
+      );
+
+      await enforce(
+        makeRequest({ organizationId: organization.id, user, session }),
+      );
+
+      const [row] = await db
+        .select()
+        .from(schema.sessionsTable)
+        .where(eq(schema.sessionsTable.id, session.id));
+      expect(row).toBeDefined();
+    });
+
+    test("refuses non-enrolled members when the organization requires 2FA", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      const { organization, user, session } = await makePolicyFixtures(
+        { makeOrganization, makeUser, makeMember, makeSession },
+        { requireTwoFactor: true, twoFactorEnabled: false },
+      );
+
+      const error = await enforce(
+        makeRequest({
+          organizationId: organization.id,
+          user,
+          session,
+          routeId: RouteId.GetAgents,
+        }),
+      ).then(
+        () => null,
+        (err: unknown) => err,
+      );
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).statusCode).toBe(403);
+      expect((error as ApiError).internalCode).toBe(
+        "two_factor_setup_required",
+      );
+    });
+
+    test("lets non-enrolled members reach the enrollment-surface routes", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      const { organization, user, session } = await makePolicyFixtures(
+        { makeOrganization, makeUser, makeMember, makeSession },
+        { requireTwoFactor: true, twoFactorEnabled: false },
+      );
+
+      for (const routeId of [
+        RouteId.GetConfig,
+        RouteId.GetUserPermissions,
+        RouteId.GetOrganization,
+        RouteId.GetAppearanceSettings,
+      ]) {
+        await enforce(
+          makeRequest({
+            organizationId: organization.id,
+            user,
+            session,
+            routeId,
+          }),
+        );
+      }
+    });
+
+    test("lets enrolled members through untouched", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      const { organization, user, session } = await makePolicyFixtures(
+        { makeOrganization, makeUser, makeMember, makeSession },
+        { requireTwoFactor: true, twoFactorEnabled: true },
+      );
+
+      await enforce(
+        makeRequest({
+          organizationId: organization.id,
+          user,
+          session,
+          routeId: RouteId.GetAgents,
+        }),
+      );
+    });
+
+    test("stops enforcing entirely when the enterprise license lapses", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      const { organization, user, session } = await makePolicyFixtures(
+        { makeOrganization, makeUser, makeMember, makeSession },
+        {
+          requireTwoFactor: true,
+          twoFactorEnabled: false,
+          sessionMaxAgeSeconds: 3600,
+          sessionCreatedAt: new Date(Date.now() - 7200 * 1000),
+        },
+      );
+
+      const originalEnvFlag = config.enterpriseFeatures.core;
+      Object.defineProperty(config.enterpriseFeatures, "core", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(9999); // over the free threshold
+      try {
+        // Enrollment is refused without a license, so enforcing would
+        // strand every non-enrolled member.
+        await enforce(
+          makeRequest({
+            organizationId: organization.id,
+            user,
+            session,
+            routeId: RouteId.GetAgents,
+          }),
+        );
+      } finally {
+        enterpriseTier.setUserCountForTesting(0);
+        Object.defineProperty(config.enterpriseFeatures, "core", {
+          value: originalEnvFlag,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
+
+    test("skips non-session auth methods entirely", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      const { organization, user, session } = await makePolicyFixtures(
+        { makeOrganization, makeUser, makeMember, makeSession },
+        {
+          requireTwoFactor: true,
+          twoFactorEnabled: false,
+          sessionMaxAgeSeconds: 3600,
+          sessionCreatedAt: new Date(Date.now() - 7200 * 1000),
+        },
+      );
+
+      await enforce(
+        makeRequest({
+          organizationId: organization.id,
+          user,
+          session,
+          routeId: RouteId.GetAgents,
+          authMethod: "apiKey",
+        }),
+      );
+
+      const [row] = await db
+        .select()
+        .from(schema.sessionsTable)
+        .where(eq(schema.sessionsTable.id, session.id));
+      expect(row).toBeDefined();
     });
   });
 });

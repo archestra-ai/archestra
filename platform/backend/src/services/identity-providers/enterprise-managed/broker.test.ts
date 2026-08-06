@@ -5,7 +5,10 @@ import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
-import { resolveEnterpriseTransportCredential } from "./broker";
+import {
+  buildEnterpriseCredentialHeader,
+  resolveEnterpriseTransportCredential,
+} from "./broker";
 
 describe("resolveEnterpriseTransportCredential", () => {
   test("exchanges a session IdP token for a managed secret and builds an authorization header", async ({
@@ -959,6 +962,76 @@ describe("resolveEnterpriseTransportCredential", () => {
     );
 
     fetchMock.mockRestore();
+  });
+});
+
+describe("buildEnterpriseCredentialHeader", () => {
+  test("sends the credential under the configured custom header, unprefixed", () => {
+    expect(
+      buildEnterpriseCredentialHeader({
+        config: {
+          tokenInjectionMode: "header",
+          headerName: "X-Provider-Token",
+        },
+        value: "downstream-token",
+      }),
+    ).toEqual({
+      headerName: "X-Provider-Token",
+      headerValue: "downstream-token",
+    });
+  });
+
+  test("does not fall back to Authorization when a custom header is configured", () => {
+    const { headerName } = buildEnterpriseCredentialHeader({
+      config: { tokenInjectionMode: "header", headerName: "X-Provider-Token" },
+      value: "downstream-token",
+    });
+
+    expect(headerName.toLowerCase()).not.toBe("authorization");
+  });
+
+  test("rejects custom-header mode that is missing a header name", () => {
+    expect(() =>
+      buildEnterpriseCredentialHeader({
+        config: { tokenInjectionMode: "header" },
+        value: "downstream-token",
+      }),
+    ).toThrow(
+      "Enterprise-managed credential injection mode 'header' requires headerName",
+    );
+  });
+
+  test.each([
+    "env",
+    "body_field",
+  ] as const)("refuses to smuggle a %s-mode credential into an Authorization header", (tokenInjectionMode) => {
+    expect(() =>
+      buildEnterpriseCredentialHeader({
+        config: { tokenInjectionMode },
+        value: "downstream-token",
+      }),
+    ).toThrow(/is not supported for HTTP MCP transports/);
+  });
+
+  test("sends the raw value for raw_authorization mode", () => {
+    expect(
+      buildEnterpriseCredentialHeader({
+        config: { tokenInjectionMode: "raw_authorization" },
+        value: "token abc123",
+      }),
+    ).toEqual({ headerName: "Authorization", headerValue: "token abc123" });
+  });
+
+  test("defaults to a bearer Authorization header", () => {
+    expect(
+      buildEnterpriseCredentialHeader({
+        config: {},
+        value: "downstream-token",
+      }),
+    ).toEqual({
+      headerName: "Authorization",
+      headerValue: "Bearer downstream-token",
+    });
   });
 });
 

@@ -115,7 +115,10 @@ export const ChatRequestSchema = z
 
 const ResponseMessageSchema = z.looseObject({
   role: z.string(),
-  content: z.string(),
+  // Tool-call replies clear/omit textual content; adapter coalesces with `?? ""`.
+  // https://docs.ollama.com/api/chat
+  // https://github.com/ollama/ollama/issues/7488
+  content: z.string().optional(),
   thinking: z.string().optional(),
   tool_calls: z.array(ToolCallSchema).nullable().optional(),
 });

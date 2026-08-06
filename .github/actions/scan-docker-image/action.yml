@@ -29,7 +29,26 @@ inputs:
 runs:
   using: composite
   steps:
+    # First attempt is allowed to fail so a transient infrastructure error
+    # (e.g. a 403 downloading the Scout binary release asset, which has kicked
+    # PRs out of the merge queue) gets one retry. A genuine CVE finding fails
+    # the retry identically, so real findings still fail the job.
     - name: Docker Scout CVE Check
+      id: scout-first-attempt
+      continue-on-error: true
+      uses: docker/scout-action@7520205ff60037fdc436b40b6a1d1e55a839ec2d # v1.22.0
+      with:
+        command: cves
+        image: ${{ inputs.image }}
+        dockerhub-user: ${{ inputs.dockerhub-user }}
+        dockerhub-password: ${{ inputs.dockerhub-password }}
+        only-severities: ${{ inputs.only-severities }}
+        only-fixed: ${{ inputs.only-fixed }}
+        write-comment: false
+        exit-code: ${{ inputs.exit-code }}
+
+    - name: Docker Scout CVE Check (retry)
+      if: steps.scout-first-attempt.outcome == 'failure'
       uses: docker/scout-action@7520205ff60037fdc436b40b6a1d1e55a839ec2d # v1.22.0
       with:
         command: cves

@@ -246,7 +246,7 @@ function AddApiKeyDialog({
             {createMutation.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />
             )}
-            Test & Create
+            <span>Test & Create</span>
           </Button>
         </DialogStickyFooter>
       </DialogForm>
@@ -896,9 +896,9 @@ function KnowledgeSettingsContent() {
           <CardHeader>
             <CardTitle>Reranking Configuration</CardTitle>
             <CardDescription>
-              Configure the LLM used to rerank knowledge base search results for
-              improved relevance. Any LLM provider and model can be used —
-              reranking is optional.
+              Configure the model used to rerank knowledge base search results
+              for improved relevance. Use any chat model, or a Cohere Rerank
+              model (Cohere or Azure AI Foundry keys) — reranking is optional.
             </CardDescription>
           </CardHeader>
           <CardContent>

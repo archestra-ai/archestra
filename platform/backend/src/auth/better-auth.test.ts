@@ -1,9 +1,18 @@
+import {
+  ADMIN_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  type Permissions,
+} from "@archestra/shared";
+import { allAvailableActions } from "@archestra/shared/access-control";
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
+import { eq } from "drizzle-orm";
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
 import { CREDENTIAL_PROVIDER_ID } from "@/constants";
+import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 
 vi.mock("@/logging");
@@ -18,10 +27,15 @@ import {
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
+import McpServerModel from "@/models/mcp-server";
+import SecretModel from "@/models/secret";
 import { beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 
 // Create a hoisted ref to control disableInvitations in tests
 const mockDisableInvitations = vi.hoisted(() => ({ value: false }));
+const mockDisableImpersonation = vi.hoisted(() => ({ value: false }));
+const mockDisableBasicAuth = vi.hoisted(() => ({ value: false }));
 
 // Mock config module before importing better-auth
 vi.mock("@/config", async (importOriginal) => {
@@ -35,6 +49,12 @@ vi.mock("@/config", async (importOriginal) => {
         trustedOrigins: ["https://app.example.com"],
         get disableInvitations() {
           return mockDisableInvitations.value;
+        },
+        get disableImpersonation() {
+          return mockDisableImpersonation.value;
+        },
+        get disableBasicAuth() {
+          return mockDisableBasicAuth.value;
         },
       },
     },
@@ -97,6 +117,123 @@ describe("handleBeforeHook", () => {
   // Reset mock to default before each test for proper isolation
   beforeEach(() => {
     mockDisableInvitations.value = false;
+  });
+
+  describe("basic auth disabled", () => {
+    // Route names verified against better-auth 1.6.22. "/forget-password" is
+    // deliberately not among them — it is not a route, only a rate-limiter
+    // path entry, which is exactly the bug these tests exist to catch.
+    const blockedPaths = [
+      "/sign-in/email",
+      "/sign-up/email",
+      "/request-password-reset",
+      "/reset-password",
+      "/verify-password",
+      "/change-password",
+      "/admin/set-user-password",
+    ];
+
+    for (const path of blockedPaths) {
+      test(`refuses ${path} while basic auth is disabled`, async () => {
+        mockDisableBasicAuth.value = true;
+        try {
+          const ctx = createMockContext({ path, method: "POST", body: {} });
+
+          await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+          await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+            body: { message: expect.stringContaining("identity provider") },
+          });
+        } finally {
+          mockDisableBasicAuth.value = false;
+        }
+      });
+    }
+
+    test("still allows sign-out so a held session can always be ended", async () => {
+      mockDisableBasicAuth.value = true;
+      try {
+        const ctx = createMockContext({
+          path: "/sign-out",
+          method: "POST",
+          body: {},
+        });
+
+        await expect(handleBeforeHook(ctx)).resolves.not.toThrow();
+      } finally {
+        mockDisableBasicAuth.value = false;
+      }
+    });
+
+    test("leaves password sign-in alone when the flag is off", async () => {
+      const ctx = createMockContext({
+        path: "/sign-in/email",
+        method: "POST",
+        body: { email: "someone@example.com", password: "irrelevant" },
+      });
+
+      await expect(handleBeforeHook(ctx)).resolves.not.toThrow();
+    });
+  });
+
+  describe("two-factor enrollment enterprise gate", () => {
+    test("refuses /two-factor/enable without an enterprise license", async () => {
+      const spy = vi
+        .spyOn(enterpriseTier, "isCoreActive")
+        .mockReturnValue(false);
+      try {
+        const ctx = createMockContext({
+          path: "/two-factor/enable",
+          method: "POST",
+          body: { password: "irrelevant" },
+        });
+
+        await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+        await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+          body: {
+            message: expect.stringContaining("enterprise feature"),
+          },
+        });
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test("allows /two-factor/enable when the license is active", async () => {
+      const spy = vi
+        .spyOn(enterpriseTier, "isCoreActive")
+        .mockReturnValue(true);
+      try {
+        const ctx = createMockContext({
+          path: "/two-factor/enable",
+          method: "POST",
+          body: { password: "irrelevant" },
+        });
+
+        const result = await handleBeforeHook(ctx);
+        expect(result).toBe(ctx);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test("leaves verify/disable open so a lapsed license never locks users out", async () => {
+      const spy = vi
+        .spyOn(enterpriseTier, "isCoreActive")
+        .mockReturnValue(false);
+      try {
+        for (const path of ["/two-factor/verify-totp", "/two-factor/disable"]) {
+          const ctx = createMockContext({
+            path,
+            method: "POST",
+            body: {},
+          });
+          const result = await handleBeforeHook(ctx);
+          expect(result).toBe(ctx);
+        }
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 
   describe("invitation email validation", () => {
@@ -348,6 +485,558 @@ describe("handleBeforeHook", () => {
 
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
+    });
+  });
+
+  describe("impersonation permission gate", () => {
+    const impersonateCtx = (user: { id: string; email: string }) =>
+      createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: "some-target-user" },
+        context: {
+          session: {
+            user,
+            session: { id: "session-id" },
+          },
+        },
+      });
+
+    test("allows callers whose role grants member:impersonate", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const adminUser = await makeUser({ role: "admin" });
+      await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      const ctx = impersonateCtx(adminUser);
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("throws FORBIDDEN when the caller's role lacks member:impersonate", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      // System-level admin (passes better-auth's own gate) whose org role
+      // has broad member management but not member:impersonate.
+      const restrictedAdmin = await makeUser({ role: "admin" });
+      const customRole = await makeCustomRole(org.id, {
+        permission: { member: ["read", "create", "update", "delete"] },
+      });
+      await makeMember(restrictedAdmin.id, org.id, { role: customRole.role });
+
+      const ctx = impersonateCtx(restrictedAdmin);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: { message: "You do not have permission to impersonate users" },
+      });
+    });
+
+    test("throws FORBIDDEN when the caller has no organization membership", async ({
+      makeUser,
+    }) => {
+      const orphanUser = await makeUser({ role: "admin" });
+
+      const ctx = impersonateCtx(orphanUser);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+    });
+
+    test("leaves unauthenticated calls for better-auth to reject", async () => {
+      const ctx = createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: "some-target-user" },
+      });
+
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("does not gate stop-impersonating", async () => {
+      const ctx = createMockContext({
+        path: "/admin/stop-impersonating",
+        method: "POST",
+      });
+
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("syncs the system-level user.role once the org RBAC gate passes", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      // Org admin promoted after bootstrap: no system-level role yet.
+      const orgAdmin = await makeUser();
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      await handleBeforeHook(impersonateCtx(orgAdmin));
+
+      const [row] = await db
+        .select({ role: schema.usersTable.role })
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.id, orgAdmin.id));
+      expect(row.role).toBe("admin");
+    });
+
+    test("records denied attempts in the audit log", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const plainMember = await makeUser();
+      await makeMember(plainMember.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      await expect(
+        handleBeforeHook(impersonateCtx(plainMember)),
+      ).rejects.toThrow(APIError);
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, org.id));
+      const denied = rows.find(
+        (row) =>
+          row.action === "auth.impersonation_started" &&
+          row.outcome === "denied",
+      );
+      expect(denied).toBeDefined();
+      expect(denied?.actorId).toBe(plainMember.id);
+      expect(denied?.resourceId).toBe("some-target-user");
+    });
+
+    test("kill switch blocks impersonation and records the denial", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      mockDisableImpersonation.value = true;
+      try {
+        const org = await makeOrganization();
+        const orgAdmin = await makeUser({ role: "admin" });
+        await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+        await expect(
+          handleBeforeHook(impersonateCtx(orgAdmin)),
+        ).rejects.toMatchObject({
+          body: {
+            message: "User impersonation is disabled on this deployment",
+          },
+        });
+
+        const rows = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.organizationId, org.id));
+        expect(
+          rows.some(
+            (row) =>
+              row.action === "auth.impersonation_started" &&
+              row.outcome === "denied",
+          ),
+        ).toBe(true);
+      } finally {
+        mockDisableImpersonation.value = false;
+      }
+    });
+
+    test("kill switch never blocks stop-impersonating", async () => {
+      mockDisableImpersonation.value = true;
+      try {
+        const ctx = createMockContext({
+          path: "/admin/stop-impersonating",
+          method: "POST",
+        });
+        const result = await handleBeforeHook(ctx);
+        expect(result).toBe(ctx);
+      } finally {
+        mockDisableImpersonation.value = false;
+      }
+    });
+
+    test("writes a success audit row once better-auth mints the impersonated session", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const orgAdmin = await makeUser({ role: "admin" });
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+      const target = await makeUser();
+      await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      const request = new Request(
+        "http://localhost/api/auth/admin/impersonate-user",
+        { method: "POST" },
+      );
+      const beforeCtx = createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: target.id },
+        request,
+        context: {
+          session: {
+            user: orgAdmin,
+            session: { id: "session-id" },
+          },
+        },
+      });
+      await handleBeforeHook(beforeCtx);
+
+      const afterCtx = createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: target.id },
+        request,
+        context: {
+          newSession: {
+            user: { id: target.id, email: target.email },
+            session: { id: "impersonated-session" },
+          },
+        },
+      });
+      await handleAfterHook(afterCtx);
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, org.id));
+      const started = rows.find(
+        (row) =>
+          row.action === "auth.impersonation_started" &&
+          row.outcome === "success",
+      );
+      expect(started).toBeDefined();
+      expect(started?.actorId).toBe(orgAdmin.id);
+      expect(started?.resourceId).toBe(target.id);
+      expect(started?.after).toMatchObject({ targetUserId: target.id });
+    });
+
+    test("writes a stop audit row attributed to the impersonator", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const orgAdmin = await makeUser({ role: "admin" });
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+      const target = await makeUser();
+      await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      const getSessionSpy = vi.spyOn(auth.api, "getSession").mockResolvedValue({
+        user: { id: target.id, email: target.email, name: target.name },
+        session: {
+          id: "impersonated-session",
+          impersonatedBy: orgAdmin.id,
+          activeOrganizationId: org.id,
+        },
+      } as unknown as Awaited<ReturnType<typeof auth.api.getSession>>);
+      try {
+        const request = new Request(
+          "http://localhost/api/auth/admin/stop-impersonating",
+          { method: "POST" },
+        );
+        const beforeCtx = createMockContext({
+          path: "/admin/stop-impersonating",
+          method: "POST",
+          request,
+        });
+        await handleBeforeHook(beforeCtx);
+        getSessionSpy.mockRestore();
+
+        const afterCtx = createMockContext({
+          path: "/admin/stop-impersonating",
+          method: "POST",
+          request,
+        });
+        await handleAfterHook(afterCtx);
+      } finally {
+        getSessionSpy.mockRestore();
+      }
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, org.id));
+      const stopped = rows.find(
+        (row) => row.action === "auth.impersonation_stopped",
+      );
+      expect(stopped).toBeDefined();
+      expect(stopped?.outcome).toBe("success");
+      expect(stopped?.actorId).toBe(orgAdmin.id);
+      expect(stopped?.resourceId).toBe(target.id);
+    });
+  });
+
+  describe("admin endpoint org-RBAC gate", () => {
+    const adminEndpointCtx = (
+      user: { id: string; email: string },
+      path = "/admin/list-users",
+    ) =>
+      createMockContext({
+        path,
+        method: "POST",
+        body: {},
+        context: {
+          session: {
+            user,
+            session: { id: "session-id" },
+          },
+        },
+      });
+
+    test("allows callers with full member-management permissions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const orgAdmin = await makeUser({ role: "admin" });
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      const ctx = adminEndpointCtx(orgAdmin);
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("blocks callers without member management even if user.role is admin", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      // The threat: a custom role granting only member:impersonate gets
+      // user.role="admin" from the sync; better-auth alone would then let it
+      // reach ban/set-role/remove-user.
+      const impersonatorOnly = await makeUser({ role: "admin" });
+      const customRole = await makeCustomRole(org.id, {
+        permission: { member: ["read", "impersonate"] },
+      });
+      await makeMember(impersonatorOnly.id, org.id, {
+        role: customRole.role,
+      });
+
+      await expect(
+        handleBeforeHook(adminEndpointCtx(impersonatorOnly, "/admin/set-role")),
+      ).rejects.toMatchObject({
+        body: {
+          message: "You do not have permission to use admin user management",
+        },
+      });
+    });
+
+    test("leaves unauthenticated admin-endpoint calls for better-auth", async () => {
+      const ctx = createMockContext({
+        path: "/admin/list-users",
+        method: "POST",
+        body: {},
+      });
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+  });
+
+  describe("role-assignment no-escalation gate", () => {
+    // The threat this closes: a deliberately-restricted admin role (all
+    // permissions EXCEPT e.g. log:read/auditLog:read/member:impersonate,
+    // but including member:update) must not be able to hand out — to
+    // themselves or anyone — a role carrying the withheld permissions,
+    // read what their own role withholds, and switch back.
+    const restrictedAdminPermission = Object.fromEntries(
+      Object.entries(allAvailableActions).map(([resource, actions]) => {
+        if (resource === "log" || resource === "auditLog")
+          return [resource, []];
+        if (resource === "member")
+          return [resource, actions.filter((a) => a !== "impersonate")];
+        return [resource, actions];
+      }),
+    ) as Permissions;
+
+    const updateMemberCtx = (
+      user: { id: string; email: string } | null,
+      role: string,
+      memberId = "some-member-id",
+    ) =>
+      createMockContext({
+        path: "/organization/update-member-role",
+        method: "POST",
+        body: { memberId, role },
+        ...(user
+          ? {
+              context: {
+                session: { user, session: { id: "session-id" } },
+              },
+            }
+          : {}),
+      });
+
+    test("blocks a restricted admin assigning the admin role (to anyone, including themselves)", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+
+      const ctx = updateMemberCtx(restricted, ADMIN_ROLE_NAME);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: {
+          message: expect.stringContaining(
+            "would grant permissions you don't have yourself",
+          ),
+        },
+      });
+      // The rejection names exactly what the caller's role withholds.
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: { message: expect.stringContaining("log:read") },
+      });
+    });
+
+    test("blocks assigning a custom role that carries withheld permissions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const restrictedRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: restrictedRole.role });
+      const auditReader = await makeCustomRole(org.id, {
+        permission: { auditLog: ["read"] },
+      });
+
+      const ctx = updateMemberCtx(restricted, auditReader.role);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+    });
+
+    test("allows assignments within the caller's own permission set", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+
+      // Downgrading someone to the predefined member role is fine…
+      const downgrade = updateMemberCtx(restricted, MEMBER_ROLE_NAME);
+      expect(await handleBeforeHook(downgrade)).toBe(downgrade);
+      // …and so is assigning their own restricted role (exact subset).
+      const lateral = updateMemberCtx(restricted, customRole.role);
+      expect(await handleBeforeHook(lateral)).toBe(lateral);
+    });
+
+    test("a full admin can still assign any role — including editor, whose predefined set carries vestigial actions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const adminUser = await makeUser({ role: "admin" });
+      await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      // Editor's predefined set includes actions absent from
+      // allAvailableActions (e.g. invitation:read); those grant nothing and
+      // must not block assignment.
+      for (const role of [ADMIN_ROLE_NAME, "editor", MEMBER_ROLE_NAME]) {
+        const ctx = updateMemberCtx(adminUser, role);
+        expect(await handleBeforeHook(ctx)).toBe(ctx);
+      }
+    });
+
+    test("leaves unauthenticated and unknown-role calls for better-auth", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const unauthenticated = updateMemberCtx(null, ADMIN_ROLE_NAME);
+      expect(await handleBeforeHook(unauthenticated)).toBe(unauthenticated);
+
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+      const unknownRole = updateMemberCtx(restricted, "no_such_role");
+      expect(await handleBeforeHook(unknownRole)).toBe(unknownRole);
+    });
+
+    test("a platform_admin cannot grant the full admin role — the customer-shaped restriction holds", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const platformAdmin = await makeUser();
+      await makeMember(platformAdmin.id, org.id, { role: "platform_admin" });
+
+      const escalate = updateMemberCtx(platformAdmin, ADMIN_ROLE_NAME);
+      await expect(handleBeforeHook(escalate)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(escalate)).rejects.toMatchObject({
+        body: { message: expect.stringContaining("log:admin") },
+      });
+
+      // Managing users within their own permission set still works.
+      const lateral = updateMemberCtx(platformAdmin, "platform_admin");
+      expect(await handleBeforeHook(lateral)).toBe(lateral);
+      const downgrade = updateMemberCtx(platformAdmin, MEMBER_ROLE_NAME);
+      expect(await handleBeforeHook(downgrade)).toBe(downgrade);
+    });
+
+    test("blocks inviting a user into a role stronger than the inviter's", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+
+      const inviteCtx = (role: string) =>
+        createMockContext({
+          path: "/organization/invite-member",
+          method: "POST",
+          body: { email: "new-user@example.com", role },
+          context: {
+            session: { user: restricted, session: { id: "session-id" } },
+          },
+        });
+
+      await expect(
+        handleBeforeHook(inviteCtx(ADMIN_ROLE_NAME)),
+      ).rejects.toThrow(APIError);
+      // Within the subset, the invitation passes through.
+      const allowed = inviteCtx(MEMBER_ROLE_NAME);
+      expect(await handleBeforeHook(allowed)).toBe(allowed);
     });
   });
 });
@@ -2927,7 +3616,7 @@ describe("auth event audit logging", () => {
     );
     await handleBeforeHook(
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId: member.id, role: "editor" },
         request: beforeRequest,
@@ -2944,7 +3633,7 @@ describe("auth event audit logging", () => {
       >);
 
     const afterCtx = createMockContext({
-      path: "/organization/update-member",
+      path: "/organization/update-member-role",
       method: "POST",
       body: { memberId: member.id, role: "editor" },
       request: beforeRequest,
@@ -2990,7 +3679,7 @@ describe("auth event audit logging", () => {
     );
     await handleBeforeHook(
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId: member.id, role: "member" },
         request: beforeRequest,
@@ -3008,7 +3697,7 @@ describe("auth event audit logging", () => {
 
     await handleAfterHook(
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId: member.id, role: "member" },
         request: beforeRequest,
@@ -3053,10 +3742,14 @@ describe("auth event audit logging", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: member.id },
+        body: { memberIdOrEmail: member.id, organizationId: org.id },
         request: beforeRequest,
       }),
     );
+
+    // Simulate better-auth's own removal — the after-hook verifies the
+    // membership is actually gone before treating the operation as a success.
+    await MemberModel.deleteByMemberOrUserId(target.id, org.id);
 
     const getSessionSpy = vi
       .spyOn(auth.api, "getSession")
@@ -3071,7 +3764,7 @@ describe("auth event audit logging", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: member.id },
+        body: { memberIdOrEmail: member.id, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -3123,10 +3816,14 @@ describe("auth event audit logging", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: target.email },
+        body: { memberIdOrEmail: target.email, organizationId: org.id },
         request: beforeRequest,
       }),
     );
+
+    // Simulate better-auth's own removal — the after-hook verifies the
+    // membership is actually gone before treating the operation as a success.
+    await MemberModel.deleteByMemberOrUserId(target.id, org.id);
 
     const getSessionSpy = vi
       .spyOn(auth.api, "getSession")
@@ -3141,7 +3838,7 @@ describe("auth event audit logging", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: target.email },
+        body: { memberIdOrEmail: target.email, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -3199,5 +3896,443 @@ describe("auth event audit logging", () => {
     const auditRows = data.filter((r) => r.action === "auth.signed_in");
     expect(auditRows).toHaveLength(1);
     expect(auditRows[0].organizationId).toBe(org.id);
+  });
+});
+
+describe("membership removal cleanup", () => {
+  // Cleanup runs inside the after-hook and is awaited there, but audit rows on
+  // some paths are fire-and-forget — give them a beat before asserting.
+  async function settle() {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  async function makePersonalInstall(params: {
+    ownerId: string;
+    organizationId: string;
+    makeInternalMcpCatalog: (
+      overrides: Record<string, unknown>,
+    ) => Promise<{ id: string }>;
+    makeMcpServer: (
+      overrides: Record<string, unknown>,
+    ) => Promise<{ id: string }>;
+  }) {
+    const catalog = await params.makeInternalMcpCatalog({
+      organizationId: params.organizationId,
+      serverType: "remote",
+    });
+    const secret = await SecretModel.create({
+      name: `cred-${crypto.randomUUID().substring(0, 8)}`,
+      secret: { access_token: "at" },
+    });
+    const server = await params.makeMcpServer({
+      ownerId: params.ownerId,
+      scope: "personal",
+      serverType: "remote",
+      catalogId: catalog.id,
+      secretId: secret.id,
+    });
+    return { server, secret };
+  }
+
+  test("remove-member purges the organization's personal installs but keeps a user with other memberships", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const admin = await makeUser();
+    const target = await makeUser();
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+    await makeMember(admin.id, orgA.id, { role: "admin" });
+    const membership = await makeMember(target.id, orgA.id, { role: "member" });
+    await makeMember(target.id, orgB.id, { role: "member" });
+
+    const inA = await makePersonalInstall({
+      ownerId: target.id,
+      organizationId: orgA.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+    const inB = await makePersonalInstall({
+      ownerId: target.id,
+      organizationId: orgB.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/remove-member",
+      { method: "POST" },
+    );
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id, organizationId: orgA.id },
+        request: beforeRequest,
+      }),
+    );
+
+    // Simulate better-auth's own removal, which happens between the hooks.
+    await MemberModel.deleteByMemberOrUserId(target.id, orgA.id);
+
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-cleanup-a", activeOrganizationId: orgA.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id, organizationId: orgA.id },
+        request: beforeRequest,
+      }),
+    );
+    await settle();
+    getSessionSpy.mockRestore();
+
+    // Org A residue is gone, credentials included.
+    expect(await McpServerModel.findById(inA.server.id)).toBeNull();
+    expect(await SecretModel.findById(inA.secret.id)).toBeNull();
+    // The other organization's install — and the user — survive.
+    expect(await McpServerModel.findById(inB.server.id)).not.toBeNull();
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, target.id));
+    expect(userRow).toBeDefined();
+  });
+
+  test("removing the last membership deletes the user outright", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const admin = await makeUser();
+    const target = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const membership = await makeMember(target.id, org.id, { role: "member" });
+    const install = await makePersonalInstall({
+      ownerId: target.id,
+      organizationId: org.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/remove-member",
+      { method: "POST" },
+    );
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id, organizationId: org.id },
+        request: beforeRequest,
+      }),
+    );
+    await MemberModel.deleteByMemberOrUserId(target.id, org.id);
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-cleanup-b", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id, organizationId: org.id },
+        request: beforeRequest,
+      }),
+    );
+    await settle();
+    getSessionSpy.mockRestore();
+
+    expect(await McpServerModel.findById(install.server.id)).toBeNull();
+    expect(await SecretModel.findById(install.secret.id)).toBeNull();
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, target.id));
+    expect(userRow).toBeUndefined();
+  });
+
+  test("a rejected removal purges nothing — the membership survives, so cleanup and audit are skipped", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const admin = await makeUser();
+    const target = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const membership = await makeMember(target.id, org.id, { role: "member" });
+    const install = await makePersonalInstall({
+      ownerId: target.id,
+      organizationId: org.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/remove-member",
+      { method: "POST" },
+    );
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id, organizationId: org.id },
+        request: beforeRequest,
+      }),
+    );
+
+    // No member deletion in between: better-auth rejected the operation, but
+    // after-hooks still run on error responses — the hook must notice the
+    // membership survived and do nothing.
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id, organizationId: org.id },
+        request: beforeRequest,
+      }),
+    );
+    await settle();
+
+    expect(await McpServerModel.findById(install.server.id)).not.toBeNull();
+    expect(await SecretModel.findById(install.secret.id)).not.toBeNull();
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(data.filter((r) => r.action === "member.deleted")).toHaveLength(0);
+  });
+
+  test("organization leave is audited and cleaned up like remove-member", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const leaver = await makeUser({ name: "Leaver" });
+    const org = await makeOrganization();
+    const membership = await makeMember(leaver.id, org.id, { role: "member" });
+    const install = await makePersonalInstall({
+      ownerId: leaver.id,
+      organizationId: org.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/leave",
+      { method: "POST" },
+    );
+    // The before-hook resolves the leaver from their session.
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: leaver.id, email: leaver.email, name: leaver.name },
+        session: { id: "sess-leave", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/leave",
+        method: "POST",
+        body: { organizationId: org.id },
+        request: beforeRequest,
+      }),
+    );
+    getSessionSpy.mockRestore();
+
+    await MemberModel.deleteByMemberOrUserId(leaver.id, org.id);
+
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/leave",
+        method: "POST",
+        body: { organizationId: org.id },
+        request: beforeRequest,
+      }),
+    );
+    await settle();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+    const rows = data.filter(
+      (r) => r.resourceType === "member" && r.action === "member.deleted",
+    );
+    expect(rows).toHaveLength(1);
+    // The account deletion below set-nulls the actor FK; the snapshot columns
+    // keep identifying who left.
+    expect(rows[0].actorEmail).toBe(leaver.email);
+    expect(rows[0].resourceId).toBe(membership.id);
+    expect(rows[0].before).toMatchObject({
+      email: leaver.email,
+      role: "member",
+    });
+
+    expect(await McpServerModel.findById(install.server.id)).toBeNull();
+    expect(await SecretModel.findById(install.secret.id)).toBeNull();
+    // Last membership — the account itself is unreachable residue and goes too.
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, leaver.id));
+    expect(userRow).toBeUndefined();
+  });
+});
+
+describe("SSO account linking onto existing password users", () => {
+  // Regression guard for instances that switch to SSO sign-in after users
+  // already exist with email/password accounts. Archestra never sends
+  // verification email, so those local users stay emailVerified=false
+  // forever; without accountLinking.requireLocalEmailVerified: false,
+  // better-auth refuses to implicitly link their first SSO login
+  // (redirecting with error=account_not_linked), which permanently locks
+  // them out once basic auth is disabled.
+  const IDP_ORIGIN = "https://sso-idp.archestra-test.invalid";
+
+  const mswServer = useMswServer();
+
+  test("OIDC callback links onto an existing email/password user whose email was never verified", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAccount,
+    makeIdentityProvider,
+  }) => {
+    const user = await makeUser({
+      email: "unverified-password-user@example.com",
+      emailVerified: false,
+    });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+    await makeAccount(user.id, {
+      providerId: CREDENTIAL_PROVIDER_ID,
+      accountId: user.id,
+    });
+
+    const provider = await makeIdentityProvider(org.id, {
+      providerId: "oidc-unverified-link",
+      issuer: IDP_ORIGIN,
+      domain: "example.com",
+      oidcConfig: {
+        clientId: "test-client-id",
+        clientSecret: "test-client-secret",
+        authorizationEndpoint: `${IDP_ORIGIN}/authorize`,
+        tokenEndpoint: `${IDP_ORIGIN}/token`,
+        userInfoEndpoint: `${IDP_ORIGIN}/userinfo`,
+        jwksEndpoint: `${IDP_ORIGIN}/jwks`,
+        pkce: false,
+      },
+    });
+
+    // Initiate SSO sign-in to mint the server-side state row and the signed
+    // state cookie the callback validates.
+    const signInResponse = await auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/sso", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://localhost:3000",
+        },
+        body: JSON.stringify({
+          providerId: provider.providerId,
+          callbackURL: "http://localhost:3000/chat",
+        }),
+      }),
+    );
+    expect(signInResponse.status).toBe(200);
+    const { url: authorizationUrl } = (await signInResponse.json()) as {
+      url: string;
+    };
+    const state = new URL(authorizationUrl).searchParams.get("state");
+    expect(state).toBeTruthy();
+    const stateCookies = signInResponse.headers
+      .getSetCookie()
+      .map((cookie) => cookie.split(";")[0])
+      .join("; ");
+
+    // Fake the IdP: code exchange + userinfo with a verified email that
+    // matches the existing local user.
+    mswServer.use(
+      http.post(`${IDP_ORIGIN}/token`, () =>
+        HttpResponse.json({
+          access_token: "sso-access-token",
+          token_type: "Bearer",
+        }),
+      ),
+      http.get(`${IDP_ORIGIN}/userinfo`, () =>
+        HttpResponse.json({
+          sub: "external-subject-1",
+          email: user.email,
+          email_verified: true,
+          name: "Unverified Password User",
+        }),
+      ),
+    );
+
+    const callbackResponse = await auth.handler(
+      new Request(
+        `http://localhost:3000/api/auth/sso/callback/${provider.providerId}?code=fake-code&state=${state}`,
+        { headers: { cookie: stateCookies } },
+      ),
+    );
+
+    expect(callbackResponse.status).toBe(302);
+    const location = callbackResponse.headers.get("location") ?? "";
+    // Without requireLocalEmailVerified: false this redirect carries
+    // ?error=account_not_linked instead of completing the sign-in.
+    expect(location).not.toContain("error=");
+    expect(location).toContain("http://localhost:3000/chat");
+
+    // The SSO account is linked to the pre-existing user...
+    const linkedAccounts = await db
+      .select()
+      .from(schema.accountsTable)
+      .where(eq(schema.accountsTable.userId, user.id));
+    const ssoAccount = linkedAccounts.find(
+      (account) => account.providerId === provider.providerId,
+    );
+    expect(ssoAccount).toBeDefined();
+    expect(ssoAccount?.accountId).toBe("external-subject-1");
+
+    // ...a session was created for that user (not a duplicate user)...
+    const [sessionRow] = await db
+      .select()
+      .from(schema.sessionsTable)
+      .where(eq(schema.sessionsTable.userId, user.id));
+    expect(sessionRow).toBeDefined();
+
+    // ...and the verified IdP assertion flipped the local flag, so the
+    // account self-heals on first SSO login.
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, user.id));
+    expect(userRow.emailVerified).toBe(true);
   });
 });

@@ -22,8 +22,10 @@ export const actions = [
   "execute",
   "deploy-to-restricted",
   "manage",
+  "manage-deleted",
   "read-all",
   "share-org",
+  "impersonate",
 ] as const;
 
 export const resources = [
@@ -42,7 +44,6 @@ export const resources = [
   "knowledgeSource",
   "knowledgeSourceAutoSync",
   "knowledgeSettings",
-  "mcpServerInstallationRequest",
   "environment",
   "githubAppConfig",
   "chat",
@@ -111,7 +112,6 @@ export const resourceLabels: Record<Resource, string> = {
   knowledgeSource: "Knowledge Sources",
   knowledgeSourceAutoSync: "Auto-Sync Permissions Connectors",
   knowledgeSettings: "Knowledge Settings",
-  mcpServerInstallationRequest: "MCP Server Installation Requests",
   environment: "Environments",
   githubAppConfig: "GitHub App Configurations",
   team: "Teams",
@@ -174,7 +174,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpSettings: "MCP settings (online catalog availability)",
   skillsSettings: "Skills settings (online catalog availability)",
   mcpServerInstallation: "Installed MCP servers and their runtime",
-  mcpServerInstallationRequest: "Requests for new MCP server installations",
   environment: "Deployment environments (namespace) for catalog items",
   githubAppConfig:
     "GitHub credentials (App configs and stored personal access tokens) for authenticating skill imports, skill sync, and knowledge connectors",
@@ -234,7 +233,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "toolPolicy",
     "mcpRegistry",
     "mcpServerInstallation",
-    "mcpServerInstallationRequest",
     "mcpSettings",
     "environment",
   ],

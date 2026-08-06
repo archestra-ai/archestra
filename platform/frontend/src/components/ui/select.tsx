@@ -19,9 +19,27 @@ function SelectGroup({
 }
 
 function SelectValue({
+  placeholder,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Value>) {
-  return <SelectPrimitive.Value data-slot="select-value" {...props} />;
+  return (
+    <SelectPrimitive.Value
+      data-slot="select-value"
+      // A string placeholder renders as a bare text child of the value span
+      // and Radix removes it when the first value is selected — which crashes
+      // React once Chrome page-translate has re-parented that text into a
+      // <font> wrapper (facebook/react#11538). Wrapping it keeps the removed
+      // unit an element.
+      placeholder={
+        typeof placeholder === "string" ? (
+          <span>{placeholder}</span>
+        ) : (
+          placeholder
+        )
+      }
+      {...props}
+    />
+  );
 }
 
 function SelectTrigger({
@@ -129,7 +147,15 @@ function SelectItem({
       </span>
       {icon}
       <div className="flex flex-col">
-        <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+        {/* The span keeps the value Radix portals into SelectValue an element
+            instead of a bare text node. Chrome page-translate re-parents text
+            nodes into injected <font> wrappers, and React crashes unmounting a
+            re-parented text node from its portal container
+            (facebook/react#11538) — with the span, React only ever removes the
+            span itself, which translation never moves. */}
+        <SelectPrimitive.ItemText>
+          <span>{children}</span>
+        </SelectPrimitive.ItemText>
         {description && (
           <span className="text-xs text-muted-foreground font-normal">
             {description}

@@ -15,7 +15,8 @@
           "id": "meta-llama/Llama-3.1-8B-Instruct",
           "object": "model",
           "created": 1686935002,
-          "owned_by": "vllm"
+          "owned_by": "vllm",
+          "max_model_len": 131072
         }
       ]
     }

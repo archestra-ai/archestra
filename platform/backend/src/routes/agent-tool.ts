@@ -19,6 +19,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentToolModel,
+  AgentVersionModel,
   InternalMcpCatalogModel,
   McpServerModel,
   TeamModel,
@@ -27,6 +28,7 @@ import {
 import {
   assignToolToAgent,
   type PrefetchedMcpServer,
+  type ToolAssignmentError,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
 import type { InternalMcpCatalog, Tool } from "@/types";
@@ -349,6 +351,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         clearChatMcpClient(agentId);
       }
 
+      // Fork a config version once per agent whose tool surface actually
+      // changed. This bulk path uses AgentToolModel directly (not the
+      // assignToolToAgent service), so it forks here rather than inheriting the
+      // service's fork; duplicates changed nothing and are skipped.
+      await AgentVersionModel.forkAgentsBestEffort(
+        succeeded.map((s) => s.agentId),
+      );
+
       return reply.send({ succeeded, failed, duplicates });
     },
   );
@@ -480,7 +490,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      const success = await AgentToolModel.delete(agentId, toolId);
+      const success = await AgentToolModel.delete({ agentId, toolId });
 
       if (!success) {
         throw new ApiError(404, "Agent tool not found");
@@ -626,6 +636,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Clear chat MCP client cache to ensure fresh tools are fetched
       clearChatMcpClient(agentTool.agentId);
+
+      // Credential-resolution / mcp-server changes are part of the tool snapshot.
+      await AgentVersionModel.forkIfChangedBestEffort(agentTool.agentId);
 
       return reply.send(agentTool);
     },
@@ -943,9 +956,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 function mapAgentToolAssignmentErrorCodeToHttpStatus(
-  code: "not_found" | "validation_error",
-): 400 | 404 {
-  return code === "not_found" ? 404 : 400;
+  code: ToolAssignmentError["code"],
+): 400 | 403 | 404 {
+  if (code === "not_found") return 404;
+  if (code === "forbidden") return 403;
+  return 400;
 }
 
 export default agentToolRoutes;

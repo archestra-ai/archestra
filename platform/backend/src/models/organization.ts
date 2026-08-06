@@ -1,13 +1,16 @@
 import {
+  DEFAULT_APP_NAME,
   DEFAULT_THEME_ID,
   MEMBER_ROLE_NAME,
   type OrganizationCustomFont,
   type SupportedProvider,
+  TimeInMs,
 } from "@archestra/shared";
 import { and, eq, isNull } from "drizzle-orm";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
   AppearanceSettings,
   NetworkPolicy,
@@ -16,6 +19,22 @@ import type {
 } from "@/types";
 
 class OrganizationModel {
+  /**
+   * Process-local cache for {@link getAppearanceSettings}. The appearance
+   * settings back white-labeling on the unauthenticated login page (and every
+   * subsequent page load), so without a cache each page view costs a database
+   * query for a row that only changes when an admin edits appearance. Being
+   * process-local (not the Postgres-backed cacheManager) it also keeps the
+   * hot path off the database connection pool entirely. Writes in this
+   * process clear it immediately; other pods converge within the TTL.
+   */
+  private static readonly appearanceSettingsCache = registerProcessLocalCache(
+    new LRUCacheManager<AppearanceSettings>({
+      maxSize: 1,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
+
   /**
    * Get the first organization in the database (fallback for various operations)
    */
@@ -37,14 +56,15 @@ class OrganizationModel {
    * white-labeling. Falls back to "Archestra" when unset.
    */
   static async getAppName(): Promise<string> {
-    return (await OrganizationModel.getFirst())?.appName || "Archestra";
+    return (await OrganizationModel.getFirst())?.appName || DEFAULT_APP_NAME;
   }
 
   /**
    * The role slug assigned to newly provisioned members that don't carry an
-   * explicit role (email/password self-signup, ChatOps auto-provisioning).
-   * Falls back to the built-in "member" role when unset. Org-wide mirror of the
-   * per-IdP SSO `roleMapping.defaultRole` fallback.
+   * explicit role (email/password self-signup, ChatOps auto-provisioning, and
+   * first-time SSO logins whose IdP defines no `roleMapping.defaultRole`).
+   * Falls back to the built-in "member" role when unset. A per-IdP SSO
+   * `roleMapping.defaultRole` still takes precedence over this org-wide value.
    */
   static async getDefaultMemberRole(organizationId: string): Promise<string> {
     const [organization] = await db
@@ -182,6 +202,8 @@ class OrganizationModel {
       "OrganizationModel.patch: completed",
     );
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+    await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
+    OrganizationModel.appearanceSettingsCache.clear();
     return updatedOrganization || null;
   }
 
@@ -204,6 +226,7 @@ class OrganizationModel {
       .returning({ id: schema.organizationsTable.id });
     if (rows.length > 0) {
       await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+      await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
     }
     return rows.length > 0;
   }
@@ -225,6 +248,7 @@ class OrganizationModel {
       .returning({ id: schema.organizationsTable.id });
     for (const { id } of rows) {
       await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+      await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
     }
     return rows.length;
   }
@@ -385,10 +409,58 @@ class OrganizationModel {
   }
 
   /**
-   * Get appearance settings
+   * Cached per-request read of the org's auth-enforcement policies
+   * (require-2FA, session max age). Same cache key as the other org
+   * settings, so any OrganizationModel.patch invalidates it.
+   */
+  static async getAuthEnforcementSettings(id: string): Promise<{
+    requireTwoFactor: boolean;
+    sessionMaxAgeSeconds: number | null;
+  }> {
+    const cacheKey = getOrganizationAuthEnforcementCacheKey(id);
+    const cached = await cacheManager.get<{
+      requireTwoFactor: boolean;
+      sessionMaxAgeSeconds: number | null;
+    }>(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const [organization] = await db
+      .select({
+        requireTwoFactor: schema.organizationsTable.requireTwoFactor,
+        sessionMaxAgeSeconds: schema.organizationsTable.sessionMaxAgeSeconds,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+
+    const policies = {
+      requireTwoFactor: organization?.requireTwoFactor ?? false,
+      sessionMaxAgeSeconds: organization?.sessionMaxAgeSeconds ?? null,
+    };
+    try {
+      await cacheManager.set(cacheKey, policies);
+    } catch {
+      // Cache writes are best-effort here; tests and early startup may not
+      // have the distributed cache initialized yet.
+    }
+    return policies;
+  }
+
+  /**
+   * Get appearance settings, cached process-locally for the unauthenticated
+   * white-labeling hot path (login page, every page load).
    * Returns default appearance settings if no organization exists.
    */
   static async getAppearanceSettings(): Promise<AppearanceSettings> {
+    const cached = OrganizationModel.appearanceSettingsCache.get(
+      APPEARANCE_SETTINGS_CACHE_KEY,
+    );
+    if (cached) {
+      return cached;
+    }
+
     const [organization] = await db
       .select({
         theme: schema.organizationsTable.theme,
@@ -433,6 +505,10 @@ class OrganizationModel {
       };
     }
 
+    OrganizationModel.appearanceSettingsCache.set(
+      APPEARANCE_SETTINGS_CACHE_KEY,
+      organization,
+    );
     return organization;
   }
 
@@ -519,7 +595,8 @@ class OrganizationModel {
         org.defaultDiscoveredToolInvocationPolicy,
       defaultDiscoveredToolResultPolicy: org.defaultDiscoveredToolResultPolicy,
       rerankerModel: org.rerankerModel ?? null,
-      showTwoFactor: org.showTwoFactor,
+      requireTwoFactor: org.requireTwoFactor,
+      sessionMaxAgeSeconds: org.sessionMaxAgeSeconds,
       slimChatErrorUi: org.slimChatErrorUi,
       oauthAccessTokenLifetimeSeconds: org.oauthAccessTokenLifetimeSeconds,
       connectionDefaultMcpGatewayId: org.connectionDefaultMcpGatewayId ?? null,
@@ -532,6 +609,13 @@ class OrganizationModel {
 }
 export default OrganizationModel;
 
+/** Single-org table (`limit 1` read), so one fixed key is enough. */
+const APPEARANCE_SETTINGS_CACHE_KEY = "appearance-settings";
+
 function getOrganizationSettingsCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-${organizationId}` as const;
+}
+
+function getOrganizationAuthEnforcementCacheKey(organizationId: string) {
+  return `${CacheKey.OrganizationSettings}-auth-enforcement-${organizationId}` as const;
 }

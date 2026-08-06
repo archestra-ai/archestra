@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { matchesSearchTokens } from "@/lib/search-tokens";
 import { cn } from "@/lib/utils";
 
 interface SearchableSelectItem {
@@ -75,11 +76,11 @@ export function SearchableSelect({
   const filteredItems = React.useMemo(() => {
     if (!searchQuery) return items;
 
-    const query = searchQuery.toLowerCase();
-    return items.filter(
-      (item) =>
-        (item.searchText ?? item.label).toLowerCase().includes(query) ||
-        item.description?.toLowerCase().includes(query),
+    return items.filter((item) =>
+      matchesSearchTokens(searchQuery, [
+        item.searchText ?? item.label,
+        item.description,
+      ]),
     );
   }, [items, searchQuery]);
 
@@ -150,7 +151,16 @@ export function SearchableSelect({
             className,
           )}
         >
-          <span className="min-w-0 flex-1 truncate text-left">
+          {/* Keyed by the selection so changing it swaps this whole element
+              instead of reconciling its children in place. Selected content is
+              typically an icon beside a bare label, and reconciling that pair
+              inserts the new icon before the label's text node — which crashes
+              React once Chrome page-translate has re-parented that text into a
+              <font> wrapper (facebook/react#11538). */}
+          <span
+            key={selectedItem?.value ?? value ?? ""}
+            className="min-w-0 flex-1 truncate text-left"
+          >
             {selectedItem
               ? (selectedItem.selectedContent ??
                 selectedItem.content ??

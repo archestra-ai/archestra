@@ -20,6 +20,11 @@ export const AuditEventNameSchema = z.enum([
   "agent.deleted",
   "agent.restored",
   "agent.imported",
+  // `.purged` = permanent deletion from the trash. Deliberately distinct from
+  // `.deleted` (which soft-deletes and is recoverable), and deliberately
+  // recorded with identity only — a purge record must not preserve a copy of
+  // the content the caller asked to destroy.
+  "agent.purged",
   "agentTool.created",
   "agentTool.updated",
   "agentTool.deleted",
@@ -58,6 +63,7 @@ export const AuditEventNameSchema = z.enum([
   "internalMcpCatalog.created",
   "internalMcpCatalog.updated",
   "internalMcpCatalog.deleted",
+  "internalMcpCatalog.restored",
   "internalMcpCatalog.reinstalled",
   "invitation.created",
   "invitation.deleted",
@@ -82,7 +88,12 @@ export const AuditEventNameSchema = z.enum([
   "mcpServer.created",
   "mcpServer.updated",
   "mcpServer.deleted",
+  "mcpServer.restored",
   "mcpServer.reinstalled",
+  // Retired with the MCP server installation request feature. Kept in the
+  // vocabulary because audit rows written before its removal still carry these
+  // names — dropping them would render that history as raw dotted keys. No
+  // route produces them any more.
   "mcpServerInstallationRequest.created",
   "mcpServerInstallationRequest.updated",
   "member.created",
@@ -92,6 +103,11 @@ export const AuditEventNameSchema = z.enum([
   "optimizationRule.updated",
   "optimizationRule.deleted",
   "organization.updated",
+  "project.created",
+  "project.updated",
+  "project.deleted",
+  "project.restored",
+  "project.purged",
   "role.created",
   "role.updated",
   "role.deleted",
@@ -105,6 +121,8 @@ export const AuditEventNameSchema = z.enum([
   "skill.created",
   "skill.updated",
   "skill.deleted",
+  "skill.restored",
+  "skill.purged",
   "skill.imported",
   "team.created",
   "team.updated",
@@ -125,6 +143,8 @@ export const AuditEventNameSchema = z.enum([
   "virtualApiKey.created",
   "virtualApiKey.deleted",
   // Auth surface
+  "auth.impersonation_started",
+  "auth.impersonation_stopped",
   "auth.signed_in",
   "auth.signed_out",
   "auth.signed_up",
@@ -154,7 +174,11 @@ export const AuditableSnapshotSchema = z
 export type AuditableSnapshot = z.infer<typeof AuditableSnapshotSchema>;
 
 export const SelectAuditLogSchema = createSelectSchema(schema.auditLogsTable, {
-  action: AuditEventNameSchema,
+  // Persisted rows are re-validated on read-back, so this must tolerate
+  // actions written by other releases (the registered-action set changes
+  // between versions); one nonconforming row would otherwise 500 the entire
+  // audit log listing. Writes stay strict via InsertAuditLogSchema.
+  action: AuditEventNameSchema.or(z.string()),
   actorType: AuditActorTypeSchema,
   outcome: AuditOutcomeSchema,
 }).extend({
@@ -174,4 +198,15 @@ export const InsertAuditLogSchema = createInsertSchema(schema.auditLogsTable, {
   });
 
 export type AuditLog = z.infer<typeof SelectAuditLogSchema>;
+
+/**
+ * Read shape: audit rows joined with the impersonator's current email so the
+ * UI can attribute impersonated actions without an id-only display.
+ */
+export const AuditLogWithImpersonatorSchema = SelectAuditLogSchema.extend({
+  impersonatedByEmail: z.string().nullable(),
+});
+export type AuditLogWithImpersonator = z.infer<
+  typeof AuditLogWithImpersonatorSchema
+>;
 export type InsertAuditLog = z.infer<typeof InsertAuditLogSchema>;

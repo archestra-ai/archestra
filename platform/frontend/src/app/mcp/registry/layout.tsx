@@ -29,12 +29,29 @@ export default function McpCatalogLayout({
   const [pageActionButton, setActionButton] = useState<React.ReactNode>(null);
   const contextValue = useMemo(() => ({ setActionButton }), []);
 
-  // Detail/edit/new/catalog pages carry their own headers — render bare
-  // content (no overflow wrapper, so in-page sticky footers pin to the viewport).
-  // Installation-requests pages keep the shared PageLayout chrome.
-  const isFullPage =
-    pathname.startsWith("/mcp/registry/") &&
-    !pathname.startsWith("/mcp/registry/installation-requests");
+  const registrySubPath = pathname.startsWith("/mcp/registry/")
+    ? pathname.slice("/mcp/registry/".length)
+    : null;
+
+  // The server detail page renders its own PageLayout, whose header band spans
+  // the full width and supplies its own padding. Wrapping it in the padded
+  // container below would inset that band and double its horizontal padding,
+  // so this route is handed through untouched.
+  const isServerDetailPage =
+    !!registrySubPath &&
+    !registrySubPath.includes("/") &&
+    !REGISTRY_NON_DETAIL_ROUTES.includes(registrySubPath);
+  if (isServerDetailPage) {
+    return (
+      <McpRegistryLayoutContext.Provider value={contextValue}>
+        {children}
+      </McpRegistryLayoutContext.Provider>
+    );
+  }
+
+  // Edit/new/catalog pages carry their own headers — render bare content (no
+  // overflow wrapper, so in-page sticky footers pin to the viewport).
+  const isFullPage = pathname.startsWith("/mcp/registry/");
   if (isFullPage) {
     return (
       <McpRegistryLayoutContext.Provider value={contextValue}>
@@ -71,3 +88,9 @@ export default function McpCatalogLayout({
     </McpRegistryLayoutContext.Provider>
   );
 }
+
+/**
+ * Single-segment routes under `/mcp/registry/` that are not a server id, and so
+ * are not the server detail page.
+ */
+const REGISTRY_NON_DETAIL_ROUTES = ["new", "catalog"];

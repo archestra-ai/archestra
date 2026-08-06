@@ -21,7 +21,7 @@ import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
-import { readRowBytes, storageFilename } from "./file-storage";
+import { storageFilename } from "./file-storage";
 import { fileStore } from "./file-store";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
@@ -43,6 +43,11 @@ import {
   type UploadFileParams,
   type UploadRef,
 } from "./types";
+import {
+  SANDBOX_UPLOAD_SPOOL_ROOT,
+  uploadReplayEntry,
+  warmUploadSpool,
+} from "./upload-spool";
 
 const CONSUMER_ID = "skill-sandbox";
 // synthetic exit code recorded when the runtime errored mid-call and the real
@@ -124,6 +129,7 @@ class SkillSandboxRuntimeService {
           environment: params.environment,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+          spoolRoot: SANDBOX_UPLOAD_SPOOL_ROOT,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
         });
@@ -234,6 +240,7 @@ class SkillSandboxRuntimeService {
           // here invalidates Dagger's per-replay layer cache.
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+          spoolRoot: SANDBOX_UPLOAD_SPOOL_ROOT,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
         });
@@ -316,6 +323,9 @@ class SkillSandboxRuntimeService {
           userId: sandbox.userId,
           projectId: params.projectId ?? null,
           conversationId: sandbox.conversationId,
+          // an app's sandbox lands its artifacts in that app's namespace; the
+          // sandbox row is the authority, so no caller can redirect them.
+          appId: sandbox.appId,
           sandboxId: params.sandboxId,
           filename,
           mimeType,
@@ -561,6 +571,38 @@ class SkillSandboxRuntimeService {
    * the sandbox row inside the critical section so `fn` observes a replay
    * state no concurrent operation can move under it.
    */
+  /**
+   * Stage the conversation's attachments into its default sandbox at upload
+   * time instead of waiting for the first sandbox operation, so a file the
+   * model can't take is already on the sandbox filesystem when the pointer
+   * notice reaches it. Same dedup as op-time staging (which stays as the
+   * idempotent catch-up); never throws — a failure only delays staging to
+   * the next op.
+   */
+  async stageConversationAttachmentsNow(params: {
+    organizationId: string;
+    userId: string;
+    conversationId: string;
+  }): Promise<void> {
+    if (!config.skillsSandbox.enabled) return;
+    try {
+      const sandbox = await SkillSandboxModel.findOrCreateDefault({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        conversationId: params.conversationId,
+        defaultCwd: SKILL_SANDBOX_HOME,
+      });
+      await this.runWithSandbox(asSandboxId(sandbox.id), (loaded) =>
+        stageConversationAttachments(loaded),
+      );
+    } catch (error) {
+      logger.warn(
+        { error, conversationId: params.conversationId },
+        "[SkillSandbox] upload-time attachment staging failed",
+      );
+    }
+  }
+
   private runWithSandbox<T>(
     sandboxId: SandboxId,
     fn: (sandbox: SkillSandbox) => Promise<T>,
@@ -657,14 +699,9 @@ class SkillSandboxRuntimeService {
               },
             };
           case "upload":
-            return {
-              kind: "file",
-              file: {
-                path: entry.upload.path,
-                encoding: "base64",
-                content: (await readRowBytes(entry.upload)).toString("base64"),
-              },
-            };
+            // transport choice (inline vs host-synced spool file) lives in
+            // upload-spool.ts; a spool hit never reads the payload from the DB.
+            return uploadReplayEntry(entry.upload);
           case "skill_mount":
             return {
               kind: "skill_mount",
@@ -1028,8 +1065,8 @@ async function stageConversationAttachments(
   });
   for (const skip of oversized) {
     // debug, not warn: an oversize attachment is expected and recoverable (the
-    // model gets a notice + download URL), and staging re-runs every op — a warn
-    // here would repeat for the whole conversation.
+    // model gets a notice and the file stays in the Files panel), and staging
+    // re-runs every op — a warn here would repeat for the whole conversation.
     logger.debug(
       {
         sandboxId: sandbox.id,
@@ -1054,7 +1091,7 @@ async function stageConversationAttachments(
     // sanitized names are always valid; this guards our own path logic and
     // fails loudly (not silently) if that ever regresses.
     validateUploadPath(path);
-    await SkillSandboxReplayEventModel.appendUpload({
+    const staged = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
       userId: sandbox.userId,
       path,
@@ -1064,6 +1101,12 @@ async function stageConversationAttachments(
       data: full.fileData,
       sourceAttachmentId: full.id,
     });
+    if (staged) {
+      // bytes are in hand — write the spool file now, so the first
+      // materialize filesyncs without re-reading the payload from Postgres.
+      const { data: _data, ...metadata } = staged;
+      await warmUploadSpool(metadata, full.fileData);
+    }
   }
   return notices;
 }
@@ -1091,7 +1134,7 @@ function planAttachmentStaging(params: {
     if (stagedIds.has(attachment.id)) continue;
     if (attachment.fileSize > limit) {
       notices.push(
-        `attachment ${JSON.stringify(attachment.originalName ?? attachment.id)} (${attachment.fileSize} bytes) was not auto-staged into the sandbox: it exceeds the ${limit}-byte file limit. Reference it via its download URL instead.`,
+        `attachment ${JSON.stringify(attachment.originalName ?? attachment.id)} (${attachment.fileSize} bytes) was not auto-staged into the sandbox: it exceeds the ${limit}-byte file limit. It stays in the conversation's Files panel, where the user can download it.`,
       );
       oversized.push({
         attachmentId: attachment.id,

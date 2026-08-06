@@ -34,7 +34,10 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { extractCommonMessageText } from "@/types";
+import {
+  extractCommonMessageText,
+  extractCommonToolCallArguments,
+} from "@/types";
 import {
   type SamplingParam,
   withSamplingParamFallback,
@@ -65,6 +68,12 @@ type BedrockCommandContext = {
         }>
       | undefined;
     inferenceConfig: BedrockRequest["inferenceConfig"];
+    /**
+     * Model-native parameters Converse forwards verbatim (thinking config,
+     * reasoning effort, …). Every AI-SDK reasoning knob rides this field, so
+     * dropping it silently re-enables reasoning the caller disabled.
+     */
+    additionalModelRequestFields: Record<string, unknown> | undefined;
     toolConfig:
       | {
           tools:
@@ -566,8 +575,11 @@ class BedrockRequestAdapter
           if (isToolResultBlock(contentBlock)) {
             const toolResult = contentBlock.toolResult;
             const toolUseId = toolResult.toolUseId ?? "";
-            // Find tool name from previous assistant messages
-            const toolName = this.findToolName(toolUseId);
+            // Find the paired tool use from previous assistant messages
+            const toolUse = this.findToolUse(
+              this.request.messages ?? [],
+              toolUseId,
+            );
 
             let content: unknown;
             // Extract content from tool result
@@ -588,7 +600,8 @@ class BedrockRequestAdapter
 
             results.push({
               id: toolUseId,
-              name: toolName ?? "unknown",
+              name: toolUse?.name ?? "unknown",
+              arguments: toolUse?.arguments,
               content,
               isError: toolResult.status === "error",
             });
@@ -680,8 +693,10 @@ class BedrockRequestAdapter
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private findToolName(toolUseId: string): string | null {
-    const messages = this.request.messages ?? [];
+  private findToolUse(
+    messages: BedrockMessages,
+    toolUseId: string,
+  ): { name: string; arguments?: Record<string, unknown> } | null {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role === "assistant" && Array.isArray(message.content)) {
@@ -691,7 +706,13 @@ class BedrockRequestAdapter
             content.toolUse.toolUseId === toolUseId
           ) {
             const name = content.toolUse.name ?? null;
-            return name ? decodeToolName(name, this.toolNameMapping) : null;
+            if (!name) {
+              return null;
+            }
+            return {
+              name: decodeToolName(name, this.toolNameMapping),
+              arguments: extractCommonToolCallArguments(content.toolUse.input),
+            };
           }
         }
       }
@@ -723,11 +744,11 @@ class BedrockRequestAdapter
           if (isToolResultBlock(contentBlock)) {
             const toolResult = contentBlock.toolResult;
             const toolUseId = toolResult.toolUseId ?? "";
-            const toolName = this.findToolNameInMessages(messages, toolUseId);
+            const toolUse = this.findToolUse(messages, toolUseId);
 
-            if (toolName) {
+            if (toolUse) {
               logger.debug(
-                { toolUseId, toolName },
+                { toolUseId, toolName: toolUse.name },
                 "[BedrockAdapter] toCommonFormat: found tool result",
               );
 
@@ -747,7 +768,8 @@ class BedrockRequestAdapter
 
               toolCalls.push({
                 id: toolUseId,
-                name: toolName,
+                name: toolUse.name,
+                arguments: toolUse.arguments,
                 content: parsedResult,
                 isError: false,
               });
@@ -778,27 +800,6 @@ class BedrockRequestAdapter
    * Extract tool name from messages by finding the assistant message
    * that contains the tool_use_id
    */
-  private findToolNameInMessages(
-    messages: BedrockMessages,
-    toolUseId: string,
-  ): string | null {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (message.role === "assistant" && Array.isArray(message.content)) {
-        for (const content of message.content) {
-          if (
-            isToolUseBlock(content) &&
-            content.toolUse.toolUseId === toolUseId
-          ) {
-            const name = content.toolUse.name ?? null;
-            return name ? decodeToolName(name, this.toolNameMapping) : null;
-          }
-        }
-      }
-    }
-    return null;
-  }
-
   /**
    * Apply tool result updates back to Bedrock messages
    */
@@ -1082,7 +1083,7 @@ class BedrockStreamAdapter
       if (
         blockDelta.delta &&
         "text" in blockDelta.delta &&
-        blockDelta.delta.text
+        typeof blockDelta.delta.text === "string"
       ) {
         this.state.text += blockDelta.delta.text;
         sseData =
@@ -1104,6 +1105,18 @@ class BedrockStreamAdapter
         }
         this.state.rawToolCallEvents.push(chunk);
         isToolCallChunk = true;
+      } else if (blockDelta.delta) {
+        // Any other delta kind — reasoningContent (text/signature/redacted)
+        // and whatever Bedrock adds next — streams through unmodified. Only
+        // toolUse deltas are held back for policy evaluation. Reasoning is
+        // deliberately not folded into state.text, which holds the final
+        // answer for interaction logging.
+        sseData =
+          rawBytes ??
+          encodeEventStreamMessage(
+            "contentBlockDelta",
+            chunk.contentBlockDelta,
+          );
       }
     } else if ("contentBlockStop" in chunk && chunk.contentBlockStop) {
       const isToolBlock =
@@ -1633,6 +1646,7 @@ function buildBedrockCommandContext(
         return s;
       }),
       inferenceConfig: request.inferenceConfig,
+      additionalModelRequestFields: request.additionalModelRequestFields,
       toolConfig: request.toolConfig
         ? {
             tools: request.toolConfig.tools?.map((t) => ({

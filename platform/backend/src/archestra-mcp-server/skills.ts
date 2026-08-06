@@ -609,7 +609,16 @@ const registry = defineArchestraTools([
           expectedLatestVersion: args.baseVersion,
         });
       } catch (error) {
-        if (error instanceof ApiError) return errorResult(error.message);
+        if (error instanceof ApiError) {
+          // The model's conflict message is client-neutral, so the way back is
+          // added here — `load_skill` is this caller's re-read, not the REST
+          // route's.
+          return errorResult(
+            error.internalCode === "skill_version_conflict"
+              ? `${error.message} Reload the skill with load_skill and retry.`
+              : error.message,
+          );
+        }
         throw error;
       }
       if (!updated) {

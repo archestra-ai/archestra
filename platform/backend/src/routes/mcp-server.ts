@@ -28,10 +28,17 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { filterMcpServersAssignableToTarget } from "@/services/agent-tool-assignment";
+import {
+  filterMcpServersAssignableToTarget,
+  isPredefinedAdmin,
+} from "@/services/agent-tool-assignment";
 import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
-import { exchangeIdJagAtProtectedResource } from "@/services/identity-providers/enterprise-managed/broker";
+import {
+  buildEnterpriseCredentialHeader,
+  exchangeIdJagAtProtectedResource,
+  type ResolvedEnterpriseTransportCredential,
+} from "@/services/identity-providers/enterprise-managed/broker";
 import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
 import {
   findExternalIdentityProviderById,
@@ -48,6 +55,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  type EnterpriseManagedCredentialConfig,
   InsertMcpServerSchema,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
@@ -75,20 +83,55 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.array(z.string()),
             )
             .optional(),
+          status: z
+            .enum(["active", "deleted"])
+            .default("active")
+            .describe(
+              "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default).",
+            ),
         }),
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
       },
     },
     async ({ user, headers, query, organizationId }, reply) => {
-      const { assignmentScope, assignmentTeamIds, catalogId } = query;
-      const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        headers,
-      );
+      const { assignmentScope, assignmentTeamIds, catalogId, status } = query;
+
+      // Soft-deleted installs are visible only to holders of the dedicated
+      // manage-deleted capability (admins by default): the listing is org-wide
+      // (it includes other users' personal installs), so the ordinary delete
+      // permission — which members hold for their own uninstalls — must not
+      // unlock it. It is a backend affordance for discovering restorable ids —
+      // there is no UI toggle this change.
+      if (status === "deleted") {
+        const { success: canManageDeleted } = await hasPermission(
+          { mcpServerInstallation: ["manage-deleted"] },
+          headers,
+        );
+        if (!canManageDeleted) {
+          throw new ApiError(
+            403,
+            "You do not have permission to list deleted MCP servers.",
+          );
+        }
+        let deleted =
+          await McpServerModel.findDeletedForOrganization(organizationId);
+        if (catalogId) {
+          deleted = deleted.filter((s) => s.catalogId === catalogId);
+        }
+        return reply.send(deleted);
+      }
+
+      const [{ success: isMcpServerAdmin }, userIsPredefinedAdmin] =
+        await Promise.all([
+          hasPermission({ mcpServerInstallation: ["admin"] }, headers),
+          isPredefinedAdmin({ userId: user.id, organizationId }),
+        ]);
       let allServers = await McpServerModel.findAll(
         user.id,
         isMcpServerAdmin,
         organizationId,
+        undefined,
+        userIsPredefinedAdmin,
       );
 
       // serverType:"app" backings are managed on the Apps surface, not listed as
@@ -1084,16 +1127,31 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           localInstallationError: null,
         });
       } catch (toolError) {
-        // If fetching/creating tools fails, clean up everything we created
-        await McpServerModel.delete(mcpServer.id);
+        // A never-succeeded install must not leave a soft-deleted ghost row, so
+        // HARD-delete it (unlike the recoverable uninstall path). Tear down any
+        // deployment created before the failure first, since hardDelete does not.
+        if (mcpServer.serverType === "local") {
+          try {
+            await McpServerRuntimeManager.removeMcpServer(mcpServer.id);
+          } catch (cleanupError) {
+            logger.error(
+              { err: cleanupError, mcpServerId: mcpServer.id },
+              "Failed to tear down K8s deployment during install rollback",
+            );
+          }
+        }
+        await McpServerModel.hardDelete(mcpServer.id);
 
         // Also clean up the secret if we created one
         if (createdSecretId) {
           await secretManager().deleteSecret(createdSecretId);
         }
 
+        // 502, not 500: the failure is the user's MCP server rejecting or
+        // dropping the connection (bad auth, stale session, unreachable) —
+        // an upstream fault, not a crash of ours.
         throw new ApiError(
-          500,
+          502,
           `Failed to fetch tools from MCP server ${mcpServer.name}: ${toolError instanceof Error ? toolError.message : "Unknown error"}`,
         );
       }
@@ -1482,28 +1540,87 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Delete database secret if it exists and is for a local server
-      // (don't delete OAuth tokens for remote servers)
-      if (mcpServer.secretId && mcpServer.serverType === "local") {
-        try {
-          await secretManager().deleteSecret(mcpServer.secretId);
-          logger.info(
-            { mcpServerId },
-            "Deleted database secret for local MCP server",
-          );
-        } catch (error) {
-          logger.error(
-            { err: error, mcpServerId },
-            "Failed to delete database secret",
-          );
-          // Continue with MCP server deletion even if secret deletion fails
-        }
-      }
+      // Soft-delete RETAINS the DB secret row so restore recovers stored
+      // credentials — only the live K8s Secret was torn down by stopServer above.
+      // (A future purge is responsible for deleting retained secret rows.)
 
-      // Delete the MCP server record
+      // Soft-delete the MCP server record (uninstall = recoverable delete).
       const success = await McpServerModel.delete(mcpServerId);
 
       return reply.send({ success });
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_server/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreMcpServer,
+        description:
+          "Restore a soft-deleted (uninstalled) MCP server. Flag-only: the server is marked for manual reinstall, not re-provisioned.",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async ({ params: { id: mcpServerId }, organizationId }, reply) => {
+      const mcpServer = await McpServerModel.findDeletedByIdForOrganization(
+        mcpServerId,
+        organizationId,
+      );
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Mirror the delete-route guards: these server types are not user-managed
+      // via this route (restoring one would resurrect a row another lifecycle owns).
+      if (mcpServer.serverType === "builtin") {
+        throw new ApiError(400, "Cannot restore built-in MCP servers");
+      }
+      if (mcpServer.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App servers are managed via the Apps API; restore the app instead.",
+        );
+      }
+
+      // Authorization is the route-level manage-deleted permission (admin-only
+      // by default): deleted-resource lifecycle is one org-scoped capability,
+      // not derived from per-scope ownership of the live resource.
+
+      // A standalone server-restore requires its parent catalog to be active:
+      // tools resolve through the catalog, and catalog reads filter notDeleted, so
+      // restoring a server under a still-deleted catalog would come back broken.
+      if (mcpServer.catalogId) {
+        const catalog = await InternalMcpCatalogModel.findById(
+          mcpServer.catalogId,
+        );
+        if (!catalog) {
+          throw new ApiError(
+            409,
+            "Cannot restore because this server's catalog item has been deleted. Restore the catalog item first.",
+          );
+        }
+      }
+
+      const conflict =
+        await McpServerModel.getRestoreConflictMessage(mcpServer);
+      if (conflict) {
+        throw new ApiError(409, conflict);
+      }
+
+      const success = await McpServerModel.restore(mcpServerId);
+      if (!success) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      const restored = await McpServerModel.findById(mcpServerId);
+      if (!restored) {
+        throw new ApiError(404, "MCP server not found");
+      }
+      return reply.send(restored);
     },
   );
 
@@ -1644,6 +1761,37 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // The inspector talks to the same upstream as the MCP Gateway, so it has
+      // to present the same credential. Without this it connected with only the
+      // install's static secrets — for an enterprise-managed catalog that means
+      // no auth header at all, and none of the configured injection mode.
+      const enterpriseTransportCredential = buildDiscoveryTransportCredential({
+        enterpriseManagedConfig: catalogItem.enterpriseManagedConfig,
+        accessToken: catalogItem.enterpriseManagedConfig
+          ? await getInstallDiscoveryAccessToken({
+              catalogItem,
+              userId: user.id,
+            })
+          : undefined,
+      });
+      if (
+        catalogItem.enterpriseManagedConfig &&
+        !enterpriseTransportCredential
+      ) {
+        const identityProvider = catalogItem.enterpriseManagedConfig
+          .identityProviderId
+          ? await findExternalIdentityProviderById(
+              catalogItem.enterpriseManagedConfig.identityProviderId,
+            )
+          : null;
+        throw new ApiError(
+          401,
+          identityProvider
+            ? `Connect ${identityProvider.providerId} before inspecting this MCP server.`
+            : "Sign in with SSO to link your identity provider before inspecting this MCP server.",
+        );
+      }
+
       try {
         const result = await mcpClient.inspectServer({
           catalogItem,
@@ -1652,6 +1800,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           method: body.method,
           toolName: body.toolName,
           toolArguments: body.toolArguments,
+          enterpriseTransportCredential,
         });
 
         return reply.send(result as Record<string, unknown>);
@@ -2316,9 +2465,10 @@ async function connectAndGetToolsForInstallation(params: {
           userId: params.userId,
         })
       : undefined;
-  const discoverySecrets = installDiscoveryAccessToken
-    ? { ...secrets, access_token: installDiscoveryAccessToken }
-    : secrets;
+  const installDiscoveryCredential = buildDiscoveryTransportCredential({
+    enterpriseManagedConfig: catalogItem.enterpriseManagedConfig,
+    accessToken: installDiscoveryAccessToken,
+  });
 
   if (catalogItem.enterpriseManagedConfig && !installDiscoveryAccessToken) {
     const identityProvider = catalogItem.enterpriseManagedConfig
@@ -2337,8 +2487,9 @@ async function connectAndGetToolsForInstallation(params: {
     return await mcpClient.connectAndGetTools({
       catalogItem,
       mcpServerId: params.mcpServerId,
-      secrets: discoverySecrets,
+      secrets,
       secretId: params.secretId,
+      enterpriseTransportCredential: installDiscoveryCredential,
     });
   } catch (error) {
     if (
@@ -2353,7 +2504,10 @@ async function connectAndGetToolsForInstallation(params: {
       catalogItem,
       userId: params.userId,
     });
-    if (!accessToken || discoverySecrets.access_token === accessToken) {
+    // Only non-enterprise catalogs reach the retry (the guard above rethrows
+    // when an enterprise config is set), so the token already tried is the
+    // install's own stored one.
+    if (!accessToken || secrets.access_token === accessToken) {
       throw error;
     }
 
@@ -2370,7 +2524,7 @@ async function connectAndGetToolsForInstallation(params: {
       catalogItem,
       mcpServerId: params.mcpServerId,
       secrets: {
-        ...discoverySecrets,
+        ...secrets,
         access_token: accessToken,
       },
       secretId: params.secretId,
@@ -2384,6 +2538,32 @@ async function getCurrentIdentityProviderAccessToken(
   const account =
     await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
   return account ? ensureFreshSsoAccessToken(account) : undefined;
+}
+
+/**
+ * Route an exchanged credential through the catalog's injection mode.
+ *
+ * Handing the value to the transport as a static `access_token` instead always
+ * emits `Authorization: Bearer`, which silently ignores a configured custom
+ * header and sends traffic with a credential the upstream never expects.
+ * Shared by install-time discovery and the inspector so both reach the upstream
+ * with the same header the MCP Gateway uses.
+ */
+function buildDiscoveryTransportCredential(params: {
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+  accessToken: string | undefined;
+}): ResolvedEnterpriseTransportCredential | undefined {
+  if (!params.enterpriseManagedConfig || !params.accessToken) {
+    return undefined;
+  }
+
+  return {
+    ...buildEnterpriseCredentialHeader({
+      config: params.enterpriseManagedConfig,
+      value: params.accessToken,
+    }),
+    expiresInSeconds: null,
+  };
 }
 
 async function getInstallDiscoveryAccessToken(params: {

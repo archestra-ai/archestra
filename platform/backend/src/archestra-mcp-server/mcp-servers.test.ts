@@ -3,7 +3,10 @@ import {
   ADMIN_ROLE_NAME,
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_CREATE_MCP_SERVER_SHORT_NAME,
+  TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
+  TOOL_SEARCH_PRIVATE_MCP_REGISTRY_SHORT_NAME,
 } from "@archestra/shared";
 import {
   EnvironmentModel,
@@ -93,19 +96,7 @@ describe("mcp server tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "User context not available",
-    );
-  });
-
-  test("create_mcp_server_installation_request returns success message", async () => {
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
-      {},
-      mockContext,
-    );
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "dialog for adding or requesting",
+      "Organization context not available",
     );
   });
 
@@ -248,7 +239,7 @@ describe("mcp server tool execution", () => {
   test("create_mcp_server persists environmentId", async () => {
     const env = await EnvironmentModel.create({
       organizationId,
-      name: "Production",
+      name: "production",
     });
 
     const result = await executeArchestraTool(
@@ -1085,5 +1076,149 @@ describe("mcp-server tools — team-scope RBAC", () => {
     );
     expect(denied.isError).toBe(true);
     expect(bodyText(denied)).toMatch(/teams you are a member of/i);
+  });
+});
+
+/**
+ * Environment isolation on the agent-facing MCP server tools: an agent bound to
+ * environment E must only discover and act on servers in E, matching the tools
+ * it can actually call. Without this the registry tools enumerated the whole
+ * organization's catalog regardless of the agent's environment.
+ */
+describe("mcp server tools respect the agent's environment", () => {
+  const tool = (shortName: string) =>
+    `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`;
+
+  let orgId: string;
+  let stagingContext: ArchestraContext;
+  let stagingEnvId: string;
+  let prodEnvId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    orgId = org.id;
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+
+    const staging = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "staging",
+    });
+    const prod = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    stagingEnvId = staging.id;
+    prodEnvId = prod.id;
+
+    const stagingAgent = await makeAgent({
+      name: "Staging Agent",
+      organizationId: org.id,
+      environmentId: staging.id,
+    });
+    stagingContext = {
+      agent: { id: stagingAgent.id, name: stagingAgent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+  });
+
+  test("get_mcp_servers lists only the agent's environment", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const stagingCatalog = await makeInternalMcpCatalog({
+      name: "Staging Server",
+      organizationId: orgId,
+      environmentId: stagingEnvId,
+    });
+    const prodCatalog = await makeInternalMcpCatalog({
+      name: "Production Server",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+    const defaultCatalog = await makeInternalMcpCatalog({
+      name: "Default Server",
+      organizationId: orgId,
+      environmentId: null,
+    });
+
+    const result = await executeArchestraTool(
+      tool(TOOL_GET_MCP_SERVERS_SHORT_NAME),
+      {},
+      stagingContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const ids = (
+      result.structuredContent as { items: { id: string }[] }
+    ).items.map((item) => item.id);
+    expect(ids).toContain(stagingCatalog.id);
+    expect(ids).not.toContain(prodCatalog.id);
+    expect(ids).not.toContain(defaultCatalog.id);
+  });
+
+  test("search_private_mcp_registry does not surface other environments", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const stagingCatalog = await makeInternalMcpCatalog({
+      name: "grafana staging",
+      organizationId: orgId,
+      environmentId: stagingEnvId,
+    });
+    const prodCatalog = await makeInternalMcpCatalog({
+      name: "grafana prod",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+
+    const result = await executeArchestraTool(
+      tool(TOOL_SEARCH_PRIVATE_MCP_REGISTRY_SHORT_NAME),
+      { query: "grafana" },
+      stagingContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const ids = (
+      result.structuredContent as { items: { id: string }[] }
+    ).items.map((item) => item.id);
+    expect(ids).toEqual([stagingCatalog.id]);
+    expect(ids).not.toContain(prodCatalog.id);
+  });
+
+  test("get_mcp_server_tools reports a cross-environment server as not found", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const prodCatalog = await makeInternalMcpCatalog({
+      name: "Production Only",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+
+    const result = await executeArchestraTool(
+      tool(TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME),
+      { mcpServerId: prodCatalog.id },
+      stagingContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("not found");
+  });
+
+  test("create_mcp_server defaults to the calling agent's environment", async () => {
+    const result = await executeArchestraTool(
+      tool(TOOL_CREATE_MCP_SERVER_SHORT_NAME),
+      {
+        name: "Agent Authored Server",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      },
+      stagingContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const created = await InternalMcpCatalogModel.findByName(
+      "Agent Authored Server",
+    );
+    expect(created?.environmentId).toBe(stagingEnvId);
   });
 });

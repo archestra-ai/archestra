@@ -7,8 +7,8 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
-import { InteractionModel } from "@/models";
+import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
+import { InteractionModel, KnowledgeBaseConnectorModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -30,6 +30,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             profileId: UuidIdSchema.optional().describe(
+              // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
               "Filter by profile ID (internal Archestra profile)",
             ),
             externalAgentId: z
@@ -95,12 +96,21 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+      // log:read scopes the view to the caller's own attributed rows;
+      // log:admin lifts it (the agent-visibility filter below still applies).
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
 
       fastify.log.info(
         {
           userId: user.id,
           email: user.email,
           isAgentAdmin,
+          canSeeAllLogs,
           profileId,
           externalAgentId,
           filterUserId: userId,
@@ -121,7 +131,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           profileId,
           externalAgentId,
-          userId,
+          userId: canSeeAllLogs ? userId : user.id,
           sessionId,
           startDate: startDate ? new Date(startDate) : undefined,
           endDate: endDate ? new Date(endDate) : undefined,
@@ -153,6 +163,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             profileId: UuidIdSchema.optional().describe(
+              // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
               "Filter by profile ID (internal Archestra profile)",
             ),
             userId: z
@@ -207,12 +218,19 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
 
       fastify.log.info(
         {
           userId: user.id,
           email: user.email,
           isAgentAdmin,
+          canSeeAllLogs,
           profileId,
           filterUserId: userId,
           source,
@@ -231,7 +249,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isAgentAdmin,
         {
           profileId,
-          userId,
+          userId: canSeeAllLogs ? userId : user.id,
           source,
           client,
           sessionId,
@@ -278,9 +296,17 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+
       const externalAgentIds = await InteractionModel.getUniqueExternalAgentIds(
         user.id,
         isAgentAdmin,
+        canSeeAllLogs ? undefined : user.id,
       );
 
       return reply.send(externalAgentIds);
@@ -305,6 +331,18 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      if (!canSeeAllLogs) {
+        // Own-logs view: the only user to filter by is the caller — anything
+        // more would enumerate the org roster through a side door.
+        return reply.send([{ id: user.id, name: user.name }]);
+      }
 
       const userIds = await InteractionModel.getUniqueUserIds(
         user.id,
@@ -344,7 +382,38 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Interaction not found");
       }
 
-      return reply.send(interaction);
+      // Own-logs view: a row attributed to someone else (or to nobody — no
+      // X-Archestra-User-Id) does not exist for this caller. 404, not 403,
+      // so existence is not disclosed.
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      if (!canSeeAllLogs && interaction.userId !== user.id) {
+        throw new ApiError(404, "Interaction not found");
+      }
+
+      // `interactions` carries no organization of its own, and findById waives
+      // its access check for agent admins — so for a KB interaction, whose
+      // profile is always null, the connector is the only thing tying the row to
+      // an organization. Treat a connector owned by another one as not found
+      // rather than serving the row's payload across the tenant boundary.
+      // A connector that no longer exists cannot be placed, and stays readable
+      // so its logs survive the connector.
+      const connector = interaction.connectorId
+        ? await KnowledgeBaseConnectorModel.findById(interaction.connectorId)
+        : null;
+
+      if (connector && connector.organizationId !== organizationId) {
+        throw new ApiError(404, "Interaction not found");
+      }
+
+      return reply.send({
+        ...interaction,
+        connectorName: connector?.name ?? null,
+      });
     },
   );
 };

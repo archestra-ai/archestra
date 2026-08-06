@@ -8,6 +8,7 @@ import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  PLATFORM_ADMIN_ROLE_NAME,
   type PredefinedRoleName,
 } from "./roles";
 import { RouteId } from "./routes";
@@ -97,11 +98,18 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "create",
     "update",
     "delete",
+    "manage-deleted",
     "team-admin",
     "deploy-to-restricted",
   ],
-  mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
-  mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
+  mcpServerInstallation: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "manage-deleted",
+    "admin",
+  ],
   environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
@@ -129,18 +137,18 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "read-all",
   ],
   file: ["manage"],
-  log: ["read"],
+  log: ["read", "admin"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
   serviceAccount: ["read", "create", "update", "delete"],
-  auditLog: ["read"],
+  auditLog: ["read", "admin"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
   skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
-  member: ["read", "create", "update", "delete"],
+  member: ["read", "create", "update", "delete", "impersonate"],
   invitation: ["create", "cancel"],
   ac: ["read", "create", "update", "delete"],
   team: ["read", "create", "update", "delete"],
@@ -228,7 +236,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
     "deploy-to-restricted",
   ],
   mcpServerInstallation: ["read", "create", "update", "delete"],
-  mcpServerInstallationRequest: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
@@ -247,6 +254,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
+  // Editors see only their own logs; org-wide visibility is log:admin,
+  // reserved for admin-tier roles.
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -308,7 +317,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   toolPolicy: ["read"],
   mcpRegistry: ["read", "update"],
   mcpServerInstallation: ["read", "create", "delete"],
-  mcpServerInstallationRequest: ["read", "create", "update"],
   environment: ["read"],
   // minting installation tokens from a stored App credential is privileged;
   // default members get no access — editors and admins manage/use App configs
@@ -354,14 +362,71 @@ export const memberPermissions: Record<Resource, Action[]> = {
   organization: [],
 };
 
+/**
+ * The no-privilege-escalation rule, shared by every server-side grant path
+ * (role authoring, member role assignment, invitations, service-account
+ * roles, the org default role) and by the UI that previews it: a role may
+ * only be granted by someone who already holds every permission it carries.
+ * Returns the `resource:action` pairs the granter is missing (empty = OK).
+ *
+ * UI-behavior resources are exempt — predefined admin deliberately holds
+ * LESS than member on those (e.g. `simpleView`), so including them would
+ * make ordinary grants impossible.
+ */
+export function findUngrantablePermissions(
+  granterPermissions: Permissions,
+  rolePermissions: Permissions,
+): string[] {
+  const exemptUiResources: Resource[] = [
+    "simpleView",
+    "chatAgentPicker",
+    "chatProviderSettings",
+  ];
+
+  const missing: string[] = [];
+  for (const [resource, actions] of Object.entries(rolePermissions)) {
+    if (exemptUiResources.includes(resource as Resource)) continue;
+    const granterActions = granterPermissions[resource as Resource] || [];
+    const realActions = allAvailableActions[resource as Resource] || [];
+    for (const action of actions ?? []) {
+      // Actions outside the permission universe grant nothing (RBAC checks
+      // resolve against allAvailableActions), so they cannot be escalation.
+      // Predefined sets carry a few such vestigial actions (e.g. the editor
+      // role's invitation:read); without this filter no one could grant them.
+      if (!realActions.includes(action)) continue;
+      if (!granterActions.includes(action)) {
+        missing.push(`${resource}:${action}`);
+      }
+    }
+  }
+  return missing;
+}
+
 export const adminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
   simpleView: [],
 };
 
+/**
+ * Platform Admin: runs the deployment — full user, role, and settings
+ * management — while org-wide log visibility and impersonation stay withheld.
+ * They keep log:read / auditLog:read, so their OWN activity stays visible to
+ * them. Combined with the no-escalation rule (a role can only be granted by
+ * someone holding every permission it carries), holders cannot hand
+ * themselves or anyone else a role that would widen their visibility.
+ */
+export const platformAdminPermissions: Record<Resource, Action[]> = {
+  ...allAvailableActions,
+  simpleView: [],
+  log: ["read"],
+  auditLog: ["read"],
+  member: allAvailableActions.member.filter((a) => a !== "impersonate"),
+};
+
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {
     [ADMIN_ROLE_NAME]: adminPermissions,
+    [PLATFORM_ADMIN_ROLE_NAME]: platformAdminPermissions,
     [EDITOR_ROLE_NAME]: editorPermissions,
     [MEMBER_ROLE_NAME]: memberPermissions,
   };
@@ -446,6 +511,8 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:create": "Add servers to the MCP registry",
   "mcpRegistry:update": "Modify MCP registry entries",
   "mcpRegistry:delete": "Remove servers from the MCP registry",
+  "mcpRegistry:manage-deleted":
+    "View and restore soft-deleted MCP registry entries",
   "mcpRegistry:team-admin": "Manage team assignments for MCP registry entries",
   "mcpRegistry:deploy-to-restricted":
     "Deploy MCP servers (catalog items) to restricted environments",
@@ -453,15 +520,10 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
   "mcpServerInstallation:delete": "Uninstall MCP servers",
+  "mcpServerInstallation:manage-deleted":
+    "View and restore soft-deleted (uninstalled) MCP servers",
   "mcpServerInstallation:admin":
     "Approve or manage all MCP server installations",
-  "mcpServerInstallationRequest:read": "View MCP server installation requests",
-  "mcpServerInstallationRequest:create":
-    "Submit requests to install MCP servers",
-  "mcpServerInstallationRequest:update": "Add notes to installation requests",
-  "mcpServerInstallationRequest:delete": "Delete installation requests",
-  "mcpServerInstallationRequest:admin":
-    "Approve or decline installation requests",
   "environment:read": "View and list deployment environments",
   "environment:create": "Create deployment environments",
   "environment:update":
@@ -541,13 +603,16 @@ export const permissionDescriptions: Record<string, string> = {
   "project:read-all":
     "View chats that other members started in any project you can access. Without this, you only see the chats you started yourself — including in projects you own.",
   "file:manage": "List, read, write, and delete files in chats and projects",
-  "log:read": "View LLM proxy and MCP tool call logs",
+  "log:read": "View your own LLM proxy and MCP tool call logs",
+  "log:admin": "View every user's LLM proxy and MCP tool call logs",
 
   // Administration
   "member:read": "View organization members and their roles",
   "member:create": "Add new members to the organization",
   "member:update": "Change member roles and settings",
   "member:delete": "Remove members from the organization",
+  "member:impersonate":
+    "Temporarily sign in as another member to see the app with their access (role debugging)",
   "ac:read": "View custom roles and their permissions",
   "ac:create": "Create new custom roles",
   "ac:update": "Modify custom role permissions",
@@ -571,8 +636,9 @@ export const permissionDescriptions: Record<string, string> = {
   "serviceAccount:create": "Create service accounts",
   "serviceAccount:update": "Modify service accounts",
   "serviceAccount:delete": "Delete service accounts",
-  "auditLog:read":
-    "View the organization-wide audit log of administrative actions",
+  "auditLog:read": "View audit log records of your own administrative actions",
+  "auditLog:admin":
+    "View the organization-wide audit log of every member's administrative actions",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
@@ -659,6 +725,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
   [RouteId.RestoreAgent]: {},
+  [RouteId.PermanentlyDeleteAgent]: {},
+  // Version history: agent-type read permission checked dynamically in handler
+  [RouteId.GetAgentVersions]: {},
+  [RouteId.GetAgentVersion]: {},
+  [RouteId.RestoreAgentVersion]: {},
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
@@ -715,6 +786,9 @@ export const requiredEndpointPermissionsMap: Partial<
     toolPolicy: ["read"],
   },
   [RouteId.GetToolsWithAssignments]: {
+    toolPolicy: ["read"],
+  },
+  [RouteId.GetToolObservers]: {
     toolPolicy: ["read"],
   },
   [RouteId.DeleteTool]: {
@@ -801,6 +875,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteInternalMcpCatalogItemByName]: {
     mcpRegistry: ["delete"],
   },
+  // Deleted-resource lifecycle is its own capability, granted by default to
+  // admins only — delete does not imply the ability to see or revive tombstones.
+  [RouteId.RestoreInternalMcpCatalogItem]: {
+    mcpRegistry: ["manage-deleted"],
+  },
   [RouteId.GetInternalMcpCatalogLabelKeys]: {
     mcpRegistry: ["read"],
   },
@@ -843,6 +922,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpServer]: {
     mcpServerInstallation: ["delete"],
   },
+  // Deleted-resource lifecycle is its own capability, granted by default to
+  // admins only — delete does not imply the ability to see or revive tombstones.
+  [RouteId.RestoreMcpServer]: {
+    mcpServerInstallation: ["manage-deleted"],
+  },
   [RouteId.ReauthenticateMcpServer]: {
     // Re-authentication re-supplies credentials for a connection the caller can
     // already install, so it is gated like installation (:create), not :update.
@@ -869,30 +953,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServerInstallation: ["read"],
-  },
-  [RouteId.GetMcpServerInstallationRequests]: {
-    mcpServerInstallationRequest: ["read"],
-  },
-  [RouteId.CreateMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["create"],
-  },
-  [RouteId.GetMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["read"],
-  },
-  [RouteId.UpdateMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["update"],
-  },
-  [RouteId.ApproveMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["admin"],
-  },
-  [RouteId.DeclineMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["admin"],
-  },
-  [RouteId.AddMcpServerInstallationRequestNote]: {
-    mcpServerInstallationRequest: ["update"],
-  },
-  [RouteId.DeleteMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["delete"],
   },
   [RouteId.InitiateOAuth]: {
     mcpServerInstallation: ["create"],
@@ -993,11 +1053,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StopChatStream]: {
     chat: ["read"],
   },
+  [RouteId.CancelChatMcpTask]: {
+    chat: ["read"],
+  },
   [RouteId.GetActiveChatRun]: {
     chat: ["read"],
   },
   [RouteId.GetChatConversations]: {
     chat: ["read"],
+  },
+  // Listing soft-deleted conversations (the "Trash" view) is gated on delete,
+  // not read: seeing which chats were trashed is part of the delete/restore
+  // lifecycle, so a chat:read-only role sees active chats but not the trash.
+  [RouteId.GetDeletedChatConversations]: {
+    chat: ["delete"],
   },
   [RouteId.GetChatConversation]: {
     chat: ["read"],
@@ -1034,6 +1103,10 @@ export const requiredEndpointPermissionsMap: Partial<
     chat: ["update"],
   },
   [RouteId.DeleteChatConversation]: {
+    chat: ["delete"],
+  },
+  // Restore is the inverse of delete — same gate.
+  [RouteId.RestoreChatConversation]: {
     chat: ["delete"],
   },
   // Clearing a conversation's recorded chat errors is a chat-content edit, not a
@@ -1354,6 +1427,10 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicConfig]: {},
+  // Public: reports only whether a two-factor sign-in challenge is pending,
+  // so the auth pages can redirect when they don't apply. Auth is skipped in
+  // middleware for this path.
+  [RouteId.GetAuthState]: {},
   /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users
@@ -1415,7 +1492,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
-  [RouteId.GetImpersonableUsers]: { member: ["update"] }, // Role debugger picker — admin-only (better-auth still gates the actual impersonate-user call)
+  [RouteId.GetImpersonableUsers]: { member: ["impersonate"] }, // Role debugger picker (the impersonate-user call itself is also gated on member:impersonate in the auth before-hook)
 
   // Member default routes - available to all authenticated users (manages their own defaults)
   [RouteId.GetMemberDefaultAgent]: {},
@@ -1433,6 +1510,12 @@ export const requiredEndpointPermissionsMap: Partial<
     llmCost: ["read"],
   },
   [RouteId.GetModelStatistics]: {
+    llmCost: ["read"],
+  },
+  // Per-user usage is employee-level data, so the route additionally checks
+  // `member:read` at request time: callers without it see only their own usage
+  // rather than the whole org (see the GetUserStatistics handler).
+  [RouteId.GetUserStatistics]: {
     llmCost: ["read"],
   },
   [RouteId.GetOverviewStatistics]: {
@@ -1600,6 +1683,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.RestoreSkill]: { skill: ["delete"] },
+  // Permanent deletion is irreversible, so the handler narrows this further to
+  // a built-in admin ROLE — no skill permission, `skill:admin` included, gets
+  // you past the trash.
+  [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
@@ -1608,6 +1696,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
   [RouteId.GetSkillUsageStatistics]: { skill: ["read"] },
+  [RouteId.GetSkillVersions]: { skill: ["read"] },
+  [RouteId.GetSkillVersion]: { skill: ["read"] },
   [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
   // matches the `download_file` tool (sandbox:execute) that hands out this
   // URL, so a role allowed to produce an artifact can also fetch it.
@@ -1623,6 +1713,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateProject]: { project: ["update"] },
   [RouteId.SetProjectShare]: { project: ["update"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
+  // Restore is the inverse of delete and, like the deleted-projects view, an
+  // oversight action — the handler further narrows it to `project:admin`.
+  [RouteId.RestoreProject]: { project: ["delete"] },
+  // Irreversible, so the handler narrows to a built-in admin ROLE — further
+  // than restore's `project:admin`, which a custom oversight role can hold.
+  // That also settles the org-wide-share question delete/restore have to ask:
+  // an admin role always holds `project:share-org`, so there is no separate
+  // branch here to answer 403 and leak a trashed project's existence.
+  [RouteId.PermanentlyDeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   // Project file surfaces combine project-level access with the files gate:
   // `file:manage` covers the file operations, while project membership is
@@ -1670,6 +1769,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // an update (the handler further requires scope-modify at the app's scope).
   [RouteId.EnableApp]: { app: ["update"] },
   [RouteId.DisableApp]: { app: ["update"] },
+  [RouteId.LockApp]: { app: ["update"] },
+  [RouteId.UnlockApp]: { app: ["update"] },
   [RouteId.DeleteApp]: { app: ["delete"] },
   [RouteId.GetAppVersions]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },
@@ -1677,6 +1778,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.AssignToolToApp]: { app: ["update"] },
   [RouteId.UnassignToolFromApp]: { app: ["update"] },
   [RouteId.GetAppTemplates]: { app: ["read"] },
+  [RouteId.GetAppLabelKeys]: { app: ["read"] },
+  [RouteId.GetAppLabelValues]: { app: ["read"] },
   // Opens an app in chat: reads the app and creates a seeded conversation.
   [RouteId.OpenAppInChat]: { app: ["read"], chat: ["create"] },
   [RouteId.OpenExternalAppInChat]: { app: ["read"], chat: ["create"] },
@@ -1816,17 +1919,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
 
-  // Credentials (unified — OAuth clients across agents/gateways/proxies +
-  // LLM virtual keys). The predefined member/admin roles grant
-  // mcpOauthClient:read, so this gates the shared Credentials nav item; the
-  // page itself only lists the client types the caller can read.
-  "/credentials/oauth-clients": { mcpOauthClient: ["read"] },
-  "/credentials/virtual-keys": { llmVirtualKey: ["read"] },
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
-  "/mcp/registry/installation-requests": {
-    mcpServerInstallationRequest: ["read"],
-  },
 
   // Logs
   "/llm/logs": { log: ["read"] },
@@ -1852,7 +1946,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/github": { githubAppConfig: ["read"] },
-  "/settings/organization": { organizationSettings: ["read"] },
+  "/settings/appearance": { organizationSettings: ["read"] },
+  "/settings/auth": { organizationSettings: ["read"] },
 };
 
 // === Internal helpers

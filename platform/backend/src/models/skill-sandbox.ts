@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeletedConversation } from "@/database/schemas/conversation";
 import type {
   InsertSkillSandbox,
   SkillSandbox,
@@ -39,6 +40,11 @@ class SkillSandboxModel {
    * as a plain shell with nothing under `/skills`.
    */
   static async create(sandbox: InsertSkillSandbox): Promise<SkillSandbox> {
+    // A soft-deleted conversation keeps its row, so the FK below stays valid —
+    // guard explicitly so a sandbox op on a deleted chat still fails closed.
+    if (sandbox.conversationId) {
+      await assertConversationActive(sandbox.conversationId);
+    }
     let rows: SkillSandbox[];
     try {
       rows = await db
@@ -71,6 +77,10 @@ class SkillSandboxModel {
     defaultCwd: string;
   }): Promise<SkillSandbox> {
     const { organizationId, userId, conversationId, defaultCwd } = params;
+
+    // Soft delete leaves the conversation row (and the FK) intact, so detect a
+    // deleted conversation up front rather than relying on an FK violation.
+    await assertConversationActive(conversationId);
 
     try {
       await db
@@ -108,6 +118,51 @@ class SkillSandboxModel {
       // the conversation was deleted in between: the FK is ON DELETE SET NULL,
       // which detaches the default sandbox from the conversation.
       throw new SkillSandboxConversationGoneError(conversationId);
+    }
+    return row;
+  }
+
+  /**
+   * Find the (app, user) default sandbox or create it — the single sandbox an
+   * MCP App runtime ever uses, since an app carries no conversation. Same
+   * concurrency argument as {@link findOrCreateDefault}, against the partial
+   * unique index `(organization_id, user_id, app_id) WHERE is_default AND
+   * app_id IS NOT NULL`.
+   */
+  static async findOrCreateAppDefault(params: {
+    organizationId: string;
+    userId: string;
+    appId: string;
+    defaultCwd: string;
+  }): Promise<SkillSandbox> {
+    const { organizationId, userId, appId, defaultCwd } = params;
+
+    await db
+      .insert(schema.skillSandboxesTable)
+      .values({
+        organizationId,
+        userId,
+        appId,
+        defaultCwd,
+        isDefault: true,
+      })
+      .onConflictDoNothing();
+
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxesTable.organizationId, organizationId),
+          eq(schema.skillSandboxesTable.userId, userId),
+          eq(schema.skillSandboxesTable.appId, appId),
+          eq(schema.skillSandboxesTable.isDefault, true),
+        ),
+      );
+    if (!row) {
+      // The app FK is ON DELETE CASCADE, so a missing row here means the app
+      // was deleted between the insert and the re-select.
+      throw new Error(`App ${appId} no longer exists`);
     }
     return row;
   }
@@ -191,6 +246,25 @@ class SkillSandboxModel {
 export default SkillSandboxModel;
 
 // === internal helpers ===
+
+// Throw the typed "gone" error unless the conversation exists and is active
+// (not soft-deleted). Fail-closed guard for sandbox operations, which must not
+// run in a conversation the user has deleted.
+async function assertConversationActive(conversationId: string): Promise<void> {
+  const [row] = await db
+    .select({ id: schema.conversationsTable.id })
+    .from(schema.conversationsTable)
+    .where(
+      and(
+        notDeletedConversation,
+        eq(schema.conversationsTable.id, conversationId),
+      ),
+    )
+    .limit(1);
+  if (!row) {
+    throw new SkillSandboxConversationGoneError(conversationId);
+  }
+}
 
 const CONVERSATION_FK_CONSTRAINT =
   "skill_sandboxes_conversation_id_conversations_id_fk";

@@ -4,6 +4,8 @@ import {
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
 import config from "@/config";
+import type { Transaction } from "@/database";
+import logger from "@/logging";
 import {
   FileModel,
   FileNameExistsError,
@@ -11,6 +13,7 @@ import {
   ProjectShareModel,
   UserModel,
 } from "@/models";
+import { metrics } from "@/observability";
 import type {
   PersistedFile,
   SandboxArtifactRow,
@@ -50,15 +53,19 @@ export class FileNotDeletableError extends SkillSandboxError {
 /** Which files a `search` lists — a single owner scope. */
 type FileSearchScope =
   | { kind: "conversation"; conversationId: string }
-  | { kind: "project"; projectId: string; projectName: string | null };
+  | { kind: "project"; projectId: string; projectName: string | null }
+  | { kind: "app"; appId: string };
 
 /**
  * The scope a `my_file` resolution (by id or filename) is confined to: the
- * current conversation for a no-project chat, or the project for a project chat.
+ * current conversation for a no-project chat, the project for a project chat,
+ * or the app for an MCP App runtime (whose namespace is the (app, viewer) pair
+ * and never a chat's or project's files).
  */
 type MyFileScope =
   | { kind: "conversation"; conversationId: string }
-  | { kind: "project"; projectId: string };
+  | { kind: "project"; projectId: string }
+  | { kind: "app"; appId: string };
 
 /** The owner half of an untracked-object ref (ids only; ACL is checked from it). */
 type RefScope =
@@ -105,6 +112,7 @@ class FileStore {
     userId: string;
     projectId: string | null;
     conversationId: string | null;
+    appId?: string | null;
     sandboxId?: string | null;
     filename: string;
     mimeType: string;
@@ -139,6 +147,7 @@ class FileStore {
         userId: params.userId,
         projectId: params.projectId,
         conversationId: params.conversationId,
+        appId: params.appId ?? null,
         sandboxId: params.sandboxId ?? null,
         filename: params.filename,
         mimeType: params.mimeType,
@@ -293,27 +302,6 @@ class FileStore {
   }
 
   /**
-   * Delete the stored bytes of every file in a project. Deleting the project row
-   * cascade-deletes the `files` rows, but external bytes live outside Postgres,
-   * so the caller must purge them around the delete. Inline (`db`) rows are a
-   * no-op. Best-effort per file.
-   */
-  async purgeProjectBytes(params: {
-    organizationId: string;
-    projectId: string;
-  }): Promise<void> {
-    const rows = await FileModel.listByProject(params);
-    await Promise.all(
-      rows.map((row) =>
-        deleteRowBytes({
-          provider: row.storageProvider,
-          objectKey: row.objectKey,
-        }).catch(() => {}),
-      ),
-    );
-  }
-
-  /**
    * Delete a conversation's no-project files — both rows and external bytes —
    * when the conversation is deleted. No-project files belong to their
    * conversation, so they must not outlive it as unreachable orphans (the
@@ -326,16 +314,103 @@ class FileStore {
     organizationId: string;
     conversationId: string;
   }): Promise<void> {
-    const rows = await FileModel.listNoProjectFilesForConversation(params);
-    await Promise.all(
-      rows.map(async (row) => {
-        await FileModel.deleteById(row.id);
-        await deleteRowBytes({
-          provider: row.storageProvider,
-          objectKey: row.objectKey,
-        }).catch(() => {});
-      }),
+    const purgeBytes = await this.purgeConversationFileRows(params);
+    await purgeBytes();
+  }
+
+  /**
+   * Row-deletion half of {@link purgeConversationFiles}, composable with a
+   * caller-owned transaction (the retention sweep deletes file rows and the
+   * conversation under one row lock). Returns a closure that best-effort
+   * deletes the external bytes — with a transaction, call it AFTER commit so
+   * bytes never vanish for rows a rollback resurrects.
+   */
+  async purgeConversationFileRows(
+    params: {
+      organizationId: string;
+      conversationId: string;
+    },
+    executor?: Transaction,
+  ): Promise<() => Promise<void>> {
+    const rows = await FileModel.listNoProjectFilesForConversation(
+      params,
+      executor,
     );
+    for (const row of rows) {
+      await FileModel.deleteById(row.id, executor);
+    }
+    return async () => {
+      await Promise.all(
+        rows.map((row) =>
+          deleteRowBytes({
+            provider: row.storageProvider,
+            objectKey: row.objectKey,
+          }).catch(() => {}),
+        ),
+      );
+    };
+  }
+
+  /**
+   * Capture the external bytes of a permanently deleted project's files, so the
+   * caller can remove them once the row cascade has taken the rows naming them.
+   * Unlike {@link purgeConversationFileRows} this deletes no rows: the project
+   * cascade already removes `files`. Inline (`db`) bytes die with the row and
+   * the returned closure is a no-op for them.
+   *
+   * ROWS ONLY — the project's folder in the object store is never listed. A
+   * file's owner is the `project_id` on its row; the folder is named by SLUG
+   * (`scopeFolder`), which is unique only per-organization and is freed for
+   * reuse by this very purge, so it cannot attribute anything to anyone.
+   * Objects sitting in the folder with no row are therefore left behind,
+   * exactly as the pre-soft-delete hard delete left them.
+   *
+   * Capture and closure BOTH run inside the caller's transaction — see
+   * `ProjectService.purge` for the ordering, and for why this differs from the
+   * conversation equivalent, which defers its closure to after commit.
+   *
+   * Best-effort per object: one that refuses to go must not strand the rest,
+   * and the row naming it is gone either way, so there is nothing left to retry
+   * against. The closure returns how many objects were left behind, so the
+   * caller can say so; each one is also logged WITH ITS OBJECT KEY and counted
+   * on `file_storage_orphaned_objects_total`. The key is the point — the `files`
+   * row naming it dies in this same transaction, so once this returns, that log
+   * line is the only thing in the system that still knows the object exists.
+   */
+  async captureProjectFileBytes(
+    params: {
+      organizationId: string;
+      projectId: string;
+    },
+    // Required, not optional: the capture has to see the rows before the
+    // cascade removes them, which only the caller's transaction guarantees.
+    executor: Transaction,
+  ): Promise<() => Promise<number>> {
+    const rows = await FileModel.listByProject(params, executor);
+
+    return async () => {
+      let orphaned = 0;
+      // Chunked rather than one `Promise.all` over the whole set: a project
+      // with thousands of files would otherwise open thousands of concurrent
+      // requests to the object store at once.
+      for (let i = 0; i < rows.length; i += PROJECT_BYTE_PURGE_CHUNK) {
+        await Promise.all(
+          rows.slice(i, i + PROJECT_BYTE_PURGE_CHUNK).map((row) => {
+            // Named so the failure path can report exactly which object stayed
+            // behind, not merely that one did.
+            const blob = {
+              provider: row.storageProvider,
+              objectKey: row.objectKey,
+            };
+            return deleteRowBytes(blob).catch((err) => {
+              orphaned += 1;
+              logOrphan(err, params, blob);
+            });
+          }),
+        );
+      }
+      return orphaned;
+    };
   }
 
   /**
@@ -351,17 +426,11 @@ class FileStore {
     query?: string;
   }): Promise<SandboxFileListItem[]> {
     const { scope } = params;
-    const rows =
-      scope.kind === "project"
-        ? await FileModel.listByProject({
-            organizationId: params.organizationId,
-            projectId: scope.projectId,
-          })
-        : await FileModel.listNoProjectByConversation({
-            organizationId: params.organizationId,
-            userId: params.userId,
-            conversationId: scope.conversationId,
-          });
+    const rows = await this.listRowsInScope({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      scope,
+    });
     const projectName = scope.kind === "project" ? scope.projectName : null;
     const projectId = scope.kind === "project" ? scope.projectId : null;
     const query = params.query?.toLowerCase() ?? null;
@@ -523,6 +592,7 @@ class FileStore {
         userId: file.userId,
         projectId: file.projectId,
         conversationId: file.conversationId,
+        appId: file.appId,
       });
       const { key } = await store.write({
         scope,
@@ -703,8 +773,15 @@ class FileStore {
       if (scope.kind === "project") {
         if (file.projectId !== scope.projectId)
           return { error: "outside_project" };
+      } else if (scope.kind === "app") {
+        // this app's own file, authored by this viewer — nothing else. Another
+        // viewer's row in the same app is as invisible as a foreign app's.
+        if (file.appId !== scope.appId || file.userId !== params.userId) {
+          return { error: "not_found" };
+        }
       } else if (
         file.projectId != null ||
+        file.appId != null ||
         file.conversationId !== scope.conversationId ||
         file.userId !== params.userId
       ) {
@@ -714,17 +791,11 @@ class FileStore {
       return file;
     }
     const filename = params.filename ?? "";
-    const candidates =
-      scope.kind === "project"
-        ? await FileModel.listByProject({
-            organizationId: params.organizationId,
-            projectId: scope.projectId,
-          })
-        : await FileModel.listNoProjectByConversation({
-            organizationId: params.organizationId,
-            userId: params.userId,
-            conversationId: scope.conversationId,
-          });
+    const candidates = await this.listRowsInScope({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      scope,
+    });
     const matches = candidates.filter((f) => f.filename === filename);
     if (matches.length > 1) return { error: "ambiguous" };
     if (matches.length === 1) {
@@ -931,6 +1002,7 @@ class FileStore {
     userId: string;
     projectId: string | null;
     conversationId: string | null;
+    appId?: string | null;
   }): Promise<OwnerScope> {
     if (params.projectId) {
       const scope = await this.projectScope(params.projectId);
@@ -939,9 +1011,44 @@ class FileStore {
       }
       return scope;
     }
-    const scope = await this.userScope(params.userId, params.conversationId);
+    const scope = await this.userScope(
+      params.userId,
+      params.conversationId,
+      params.appId ?? null,
+    );
     if (!scope) throw new Error(`user ${params.userId} has no email`);
     return scope;
+  }
+
+  /**
+   * The rows one owner scope contains — the single place the three scopes map
+   * to their listing query, so `search` and the by-filename `my_file`
+   * resolution can never disagree about what a scope holds.
+   */
+  private async listRowsInScope(params: {
+    organizationId: string;
+    userId: string;
+    scope: FileSearchScope | MyFileScope;
+  }): Promise<SandboxArtifactRow[]> {
+    const { organizationId, userId, scope } = params;
+    if (scope.kind === "project") {
+      return await FileModel.listByProject({
+        organizationId,
+        projectId: scope.projectId,
+      });
+    }
+    if (scope.kind === "app") {
+      return await FileModel.listByAppAndUser({
+        organizationId,
+        userId,
+        appId: scope.appId,
+      });
+    }
+    return await FileModel.listNoProjectByConversation({
+      organizationId,
+      userId,
+      conversationId: scope.conversationId,
+    });
   }
 
   // the folder is the project's immutable slug, so a rename never moves files.
@@ -953,10 +1060,11 @@ class FileStore {
   private async userScope(
     userId: string,
     conversationId: string | null = null,
+    appId: string | null = null,
   ): Promise<OwnerScope | null> {
     const email = await UserModel.getEmailById(userId);
     return email
-      ? { kind: "user", userId, label: email, conversationId }
+      ? { kind: "user", userId, label: email, conversationId, appId }
       : null;
   }
 
@@ -986,6 +1094,32 @@ export const fileStore = new FileStore();
 export const OBJECT_REF_PREFIX = "obj_";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** How many object-store deletes a project purge has in flight at once. */
+const PROJECT_BYTE_PURGE_CHUNK = 25;
+
+/**
+ * Record one object the purge could not remove. `objectKey` is the whole point:
+ * the `files` row that named it is destroyed in the same transaction, so this
+ * line is the only remaining way to locate the leftover bytes. The counter
+ * exists because a log line nobody greps for is not an alert — an object store
+ * that is down fails every delete in the purge, and that has to be visible
+ * without anyone reading logs.
+ */
+function logOrphan(
+  err: unknown,
+  target: { organizationId: string; projectId: string },
+  blob: { provider: string; objectKey: string | null },
+): void {
+  logger.warn(
+    { err, ...target, ...blob },
+    "Failed to delete stored file contents for a permanently deleted project; the object is now orphaned",
+  );
+  metrics.fileStorage.reportOrphanedObject({
+    provider: blob.provider,
+    scope: "project",
+  });
+}
 
 function toListItem(
   row: SandboxArtifactRow,

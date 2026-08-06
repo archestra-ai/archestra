@@ -38,7 +38,6 @@ import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import type { SelectedCategory } from "./CatalogFilters";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformExternalCatalogToFormValues } from "./mcp-catalog-form.utils";
-import { RequestInstallationDialog } from "./request-installation-dialog";
 
 // "mcp-apps-demo" is a pseudo-type: demo servers are marked with the
 // MCP_APPS_DEMO_CATEGORY catalog category, hidden from every other type view,
@@ -63,8 +62,6 @@ export function ArchestraCatalogTab({
   onSelectServer: (formValues: McpCatalogFormValues) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [requestServer, setRequestServer] =
-    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
   const [filters, setFilters] = useState<{
     type: ServerType;
     category: SelectedCategory;
@@ -106,13 +103,6 @@ export function ArchestraCatalogTab({
   ) => {
     const formValues = transformExternalCatalogToFormValues(server);
     onSelectServer(formValues);
-  };
-
-  const handleRequestInstallation = async (
-    server: archestraCatalogTypes.ArchestraMcpServerManifest,
-  ) => {
-    // Just open the request dialog with the server data
-    setRequestServer(server);
   };
 
   // Flatten all pages into a single array of servers
@@ -262,7 +252,6 @@ export function ArchestraCatalogTab({
                     key={server.name}
                     server={server}
                     onSelectServer={handleSelectServer}
-                    onRequestInstallation={handleRequestInstallation}
                     isInCatalog={catalogServerNames.has(server.name)}
                     userAllowedToCreateCatalogItem={
                       userAllowedToCreateCatalogItem
@@ -282,10 +271,10 @@ export function ArchestraCatalogTab({
                     {isFetchingNextPage ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Loading more...
+                        <span>Loading more...</span>
                       </>
                     ) : (
-                      "Load more"
+                      <span>Load more</span>
                     )}
                   </Button>
                 </div>
@@ -294,11 +283,6 @@ export function ArchestraCatalogTab({
           )}
         </>
       )}
-
-      <RequestInstallationDialog
-        server={requestServer}
-        onClose={() => setRequestServer(null)}
-      />
     </div>
   );
 }
@@ -307,15 +291,11 @@ export function ArchestraCatalogTab({
 function ServerCard({
   server,
   onSelectServer,
-  onRequestInstallation,
   isInCatalog,
   userAllowedToCreateCatalogItem,
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
   onSelectServer: (
-    server: archestraCatalogTypes.ArchestraMcpServerManifest,
-  ) => void;
-  onRequestInstallation: (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
   isInCatalog: boolean;
@@ -368,6 +348,7 @@ function ServerCard({
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Docs"
+                aria-label={`Documentation for ${server.display_name || server.name} (opens in new tab)`}
               >
                 <BookOpen className="h-4 w-4" />
               </a>
@@ -385,6 +366,7 @@ function ServerCard({
                 target="_blank"
                 rel="noopener noreferrer"
                 title="GitHub"
+                aria-label={`GitHub repository for ${server.display_name || server.name} (opens in new tab)`}
               >
                 <Github className="h-4 w-4" />
               </a>
@@ -394,19 +376,22 @@ function ServerCard({
             variant={isInCatalog ? "ghost" : "default"}
             size="icon"
             className="h-8 w-8"
-            disabled={isInCatalog}
+            disabled={isInCatalog || !userAllowedToCreateCatalogItem}
             title={
               isInCatalog
                 ? "Added"
                 : userAllowedToCreateCatalogItem
                   ? "Use as template"
-                  : "Request to add to internal registry"
+                  : "Ask an administrator to add this server to the registry"
             }
-            onClick={() =>
-              userAllowedToCreateCatalogItem
-                ? onSelectServer(server)
-                : onRequestInstallation(server)
+            aria-label={
+              isInCatalog
+                ? `${server.display_name || server.name} already added`
+                : userAllowedToCreateCatalogItem
+                  ? `Use ${server.display_name || server.name} as template`
+                  : "Ask an administrator to add this server to the registry"
             }
+            onClick={() => onSelectServer(server)}
             data-testid={E2eTestId.AddCatalogItemButton}
           >
             {isInCatalog ? (

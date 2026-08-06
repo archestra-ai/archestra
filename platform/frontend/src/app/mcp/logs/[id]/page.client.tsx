@@ -1,9 +1,14 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  extractMcpExecutedAs,
+  parseFullToolName,
+} from "@archestra/shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
@@ -19,8 +24,10 @@ import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
 import {
   formatAuthMethod,
+  formatCallerIdentity,
   useMcpToolCall,
 } from "@/lib/mcp/mcp-tool-call.query";
+import { resolveMcpToolCallStatus } from "@/lib/mcp-logs/tool-call-status";
 import { formatDate } from "@/lib/utils";
 
 export function McpToolCallDetailPage({
@@ -97,12 +104,15 @@ function McpToolCallDetail({
     content?: unknown;
   } | null;
 
-  const isError =
-    method === "tools/call" &&
-    toolResult &&
-    typeof toolResult === "object" &&
-    "isError" in toolResult &&
-    toolResult.isError;
+  // Whose credential served the call upstream, recorded with the result.
+  const executedAs = extractMcpExecutedAs(mcpToolCall.toolResult);
+
+  // Success / error / cancelled — a cancelled call (the user stopped the run
+  // or the background task) is neither a success nor a failure.
+  const status =
+    method === "tools/call" && toolResult
+      ? resolveMcpToolCallStatus(toolResult)
+      : "success";
 
   return (
     <LoadingWrapper isPending={isPending}>
@@ -134,10 +144,20 @@ function McpToolCallDetail({
                 {method}
               </Badge>
               <Badge
-                variant={isError ? "destructive" : "default"}
+                variant={
+                  status === "error"
+                    ? "destructive"
+                    : status === "cancelled"
+                      ? "secondary"
+                      : "default"
+                }
                 className="text-xs"
               >
-                {isError ? "Error" : "Success"}
+                {status === "error"
+                  ? "Error"
+                  : status === "cancelled"
+                    ? "Cancelled"
+                    : "Success"}
               </Badge>
             </>
           }
@@ -183,6 +203,14 @@ function McpToolCallDetail({
               <Badge variant="secondary" className="text-xs">
                 {formatAuthMethod(mcpToolCall.authMethod)}
               </Badge>
+            </MetadataItem>
+          )}
+          {executedAs && (
+            <MetadataItem label="Called as">
+              <ExecutedAsBadge
+                executedAs={executedAs}
+                caller={formatCallerIdentity(mcpToolCall)}
+              />
             </MetadataItem>
           )}
         </MetadataCard>

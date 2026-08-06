@@ -13,7 +13,6 @@ import {
   Loader2,
   PlugZap,
   RefreshCw,
-  Wand2,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
@@ -27,8 +26,11 @@ import {
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { SearchInput } from "@/components/search-input";
+import { ToolPolicyBulkActionsBar } from "@/components/tool-policy-bulk-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -41,7 +43,7 @@ import {
   EmptyHeader,
   EmptyMedia,
 } from "@/components/ui/empty";
-import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -51,7 +53,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAutoConfigurePolicies } from "@/lib/agent-tools.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
@@ -446,43 +447,15 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
   const { data: resultPolicies } = useToolResultPolicies();
   const callPolicyMutation = useCallPolicyMutation();
   const resultPolicyMutation = useResultPolicyMutation();
-  const autoConfigureMutation = useAutoConfigurePolicies();
   // Same install the Test Connection step reports on — the reload endpoint
   // needs a concrete server install, not the catalog item.
   const { target: reloadTarget } = useTestConnectionTarget(item);
   const reloadTools = useReloadMcpServerTools();
   // `${toolId}:${field}` entries for in-flight policy updates.
   const [updating, setUpdating] = useState<ReadonlySet<string>>(new Set());
-
-  // Let a subagent pick sensible default policies for every tool on this
-  // server in one shot (custom policies are preserved). Replaces the bulk
-  // "Configure with Subagent" action from the full guardrails table.
-  const configureWithSubagent = async (toolIds: string[]) => {
-    if (toolIds.length === 0) return;
-    try {
-      const result = await autoConfigureMutation.mutateAsync(toolIds);
-      if (!result) return;
-      const successCount = result.results.filter(
-        (r: { success: boolean }) => r.success,
-      ).length;
-      const failureCount = result.results.length - successCount;
-      if (failureCount === 0) {
-        toast.success(
-          `Default policies configured for ${successCount} tool(s). Custom policies are preserved.`,
-        );
-      } else {
-        toast.warning(
-          `Configured ${successCount} tool(s), failed ${failureCount}. Custom policies are preserved.`,
-        );
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to auto-configure policies",
-      );
-    }
-  };
+  const [selectedToolIds, setSelectedToolIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
 
   const updatePolicy = async (
     toolId: string,
@@ -550,7 +523,7 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
       ) : (
         <RefreshCw className="h-4 w-4" />
       )}
-      Refresh Tools
+      <span>Refresh Tools</span>
     </PermissionButton>
   );
 
@@ -576,45 +549,86 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
     ? tools.filter((tool) => tool.name.toLowerCase().includes(normalizedSearch))
     : tools;
 
+  // Selection may reference tools removed by a refresh; count only live ones.
+  const selectedTools = tools.filter((tool) => selectedToolIds.has(tool.id));
+  const selectedVisibleCount = visibleTools.filter((tool) =>
+    selectedToolIds.has(tool.id),
+  ).length;
+  const allVisibleSelected =
+    visibleTools.length > 0 && selectedVisibleCount === visibleTools.length;
+  const selectAllLabel = normalizedSearch
+    ? `Select all matching (${visibleTools.length})`
+    : `Select all (${visibleTools.length})`;
+
+  // Select-all toggles the currently visible (filtered) tools, keeping any
+  // selection made outside the filter intact.
+  const toggleAllVisible = (checked: boolean) => {
+    setSelectedToolIds((prev) => {
+      const next = new Set(prev);
+      for (const tool of visibleTools) {
+        if (checked) {
+          next.add(tool.id);
+        } else {
+          next.delete(tool.id);
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleTool = (toolId: string, checked: boolean) => {
+    setSelectedToolIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(toolId);
+      } else {
+        next.delete(toolId);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {tools.length} {tools.length === 1 ? "tool" : "tools"} discovered. Set
-          guardrails per tool, or let a subagent configure sensible defaults.
+          guardrails per tool, in bulk for a selection, or let a subagent
+          configure sensible defaults.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {refreshToolsButton}
-          <PermissionButton
-            permissions={{ agent: ["update"], toolPolicy: ["update"] }}
-            variant="outline"
-            size="sm"
-            onClick={() => configureWithSubagent(tools.map((tool) => tool.id))}
-            disabled={autoConfigureMutation.isPending}
-          >
-            {autoConfigureMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Configuring...
-              </>
-            ) : (
-              <>
-                <Wand2 className="h-4 w-4" />
-                Configure with Subagent
-              </>
-            )}
-          </PermissionButton>
-        </div>
+        {refreshToolsButton}
       </div>
       {tools.length > 5 && (
-        <Input
+        <SearchInput
           placeholder="Filter tools by name"
-          aria-label="Filter tools"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
           className="max-w-xs"
+          value={search}
+          onSearchChange={setSearch}
+          syncQueryParams={false}
+          debounceMs={0}
         />
       )}
+      <ToolPolicyBulkActionsBar
+        selectedToolIds={selectedTools.map((tool) => tool.id)}
+      />
+      {/* 1px card border + p-4, so the checkbox column lines up with the cards */}
+      <div className="flex items-center gap-2 text-sm pl-[calc(1rem+1px)]">
+        <Checkbox
+          id="select-all-tools"
+          aria-label="Select all tools"
+          checked={
+            allVisibleSelected
+              ? true
+              : selectedVisibleCount > 0
+                ? "indeterminate"
+                : false
+          }
+          onCheckedChange={(checked) => toggleAllVisible(checked === true)}
+        />
+        <Label htmlFor="select-all-tools" className="font-normal">
+          {selectAllLabel}
+        </Label>
+      </div>
       {total > tools.length && (
         <p className="text-sm text-muted-foreground">
           Showing the first {tools.length} of {total} tools.{" "}
@@ -632,6 +646,8 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
         <ToolReviewCard
           key={tool.id}
           tool={tool}
+          selected={selectedToolIds.has(tool.id)}
+          onSelectedChange={(checked) => toggleTool(tool.id, checked)}
           callAction={getCallPolicyActionFromPolicies(
             tool.id,
             invocationPolicies ?? { byProfileToolId: {} },
@@ -682,6 +698,8 @@ const ANNOTATION_BADGES: Array<{
 
 function ToolReviewCard({
   tool,
+  selected,
+  onSelectedChange,
   callAction,
   resultAction,
   hasCustomCallPolicy,
@@ -692,6 +710,8 @@ function ToolReviewCard({
   onOpenDetails,
 }: {
   tool: ToolWithAssignmentsData;
+  selected: boolean;
+  onSelectedChange: (checked: boolean) => void;
   callAction: CallPolicyAction;
   resultAction: ResultPolicyAction;
   hasCustomCallPolicy: boolean;
@@ -731,6 +751,12 @@ function ToolReviewCard({
   return (
     <div className="rounded-lg border">
       <div className="flex flex-wrap items-start justify-between gap-4 p-4">
+        <Checkbox
+          aria-label={`Select ${displayName}`}
+          className="mt-0.5"
+          checked={selected}
+          onCheckedChange={(checked) => onSelectedChange(checked === true)}
+        />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <code className="text-sm font-semibold">{displayName}</code>

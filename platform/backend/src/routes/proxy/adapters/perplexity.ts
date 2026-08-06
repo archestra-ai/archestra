@@ -5,14 +5,19 @@
  *
  * Key differences from OpenAI:
  * - No external tool calling support (returns empty for tool methods).
- *   Perplexity's tool calling (2026) is exclusive to its separate Agent API
- *   (/responses/create, a Responses-style wire format) — the chat-completions
- *   endpoint this adapter targets still takes no `tools` parameter.
+ *   Perplexity's tool calling is exclusive to its separate Agent API
+ *   (`POST /v1/agent`, aliased as `POST /v1/responses`), which speaks a
+ *   Responses-style `input`/`output` wire format and serves its own model
+ *   catalog — the chat-completions endpoint this adapter targets takes no
+ *   `tools` parameter, so the tool methods below stay empty by construction
+ *   rather than by omission (see inferPerplexityCapabilities in
+ *   services/model-sync.ts).
  * - Returns search_results and citations from internal web search
  * - Has Perplexity-specific usage metrics
  *
  * @see https://docs.perplexity.ai/api-reference/chat-completions-post
  */
+
 import {
   ArchestraInternalErrorCode,
   isPerplexityReasoningModel,
@@ -43,6 +48,8 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import { toOpenAiStreamUsage } from "./openai-sse-chunk";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES
@@ -454,6 +461,14 @@ class PerplexityStreamAdapter
         },
       ],
     };
+    // We always ask upstream for usage (`stream_options: { include_usage: true }`),
+    // but the chunk carrying it is not forwarded, so the synthesized final chunk
+    // has to relay it or the client never sees token counts. Shape mirrors
+    // `toProviderResponse()` below.
+    const usage = toOpenAiStreamUsage(this.state.usage);
+    if (usage) {
+      finalChunk.usage = usage;
+    }
     return `data: ${JSON.stringify(finalChunk)}\n\ndata: [DONE]\n\n`;
   }
 
@@ -590,6 +605,7 @@ export const perplexityAdapterFactory: LLMProvider<
 
     // Use OpenAI SDK with Perplexity base URL (OpenAI-compatible API)
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl,
       fetch: customFetch,

@@ -119,6 +119,7 @@ async function runAppLlmCompletion(
     userId,
     source: "app:llm_complete",
     baseUrl: selection.baseUrl,
+    chatApiKeyId: selection.chatApiKeyId,
   });
 
   const system = args.jsonMode
@@ -130,9 +131,16 @@ async function runAppLlmCompletion(
       model,
       system: system || undefined,
       prompt: args.prompt,
+      abortSignal: context.abortSignal,
     });
     return structuredSuccessResult({ text: result.text }, result.text);
   } catch (error) {
+    // The caller gave up (its request timeout fired, or the app was torn
+    // down): nobody receives this result, so stop the completion without
+    // treating the abort as a provider failure.
+    if (context.abortSignal?.aborted) {
+      return errorResult("The LLM completion was cancelled.");
+    }
     // 429 is an upstream provider rate limit; 402 is the Archestra token-cost
     // limit block. Both surface to apps as llm_quota — the app-visible action
     // (stop and back off) is the same, so the message does not assert a
@@ -146,11 +154,22 @@ async function runAppLlmCompletion(
         "The LLM call was rate-limited or has reached its usage limit — back off and retry.",
       );
     }
-    logger.error({ err: error, appId }, "App LLM completion failed");
-    return llmErrorResult(
-      "llm_unavailable",
-      "The LLM completion could not be produced.",
+    // Name the provider and model: an app author reports "every completion
+    // fails" and the only question that matters is WHICH resolved LLM is
+    // failing — the chat's, the agent's, or the org default they never chose.
+    logger.error(
+      {
+        err: error,
+        appId,
+        provider: selection.provider,
+        model: selection.modelName,
+        statusCode: APICallError.isInstance(error)
+          ? error.statusCode
+          : undefined,
+      },
+      "App LLM completion failed",
     );
+    return llmErrorResult("llm_unavailable", appLlmFailureMessage(error));
   }
 }
 
@@ -168,4 +187,53 @@ function llmErrorResult(
     _meta: { archestraError },
     isError: true,
   };
+}
+
+/** The generic ending, kept for failures that describe themselves no better. */
+const UNKNOWN_FAILURE_MESSAGE = "The LLM completion could not be produced.";
+
+/**
+ * How much of the provider's own explanation travels back to the app. Long
+ * enough to carry a real reason ("context length exceeded", "model not found"),
+ * short enough that a provider echoing the request back cannot become the
+ * error message.
+ */
+const UPSTREAM_REASON_MAX_LENGTH = 300;
+
+/**
+ * What the app is told when a completion fails for anything other than a quota
+ * block.
+ *
+ * One sentence used to cover every such failure, which left an app author with
+ * no way to tell a prompt too long for the model from a revoked org credential
+ * from a provider outage — the actual cause reached only a server log they
+ * cannot read, so a fixable mistake in their own app looked exactly like a
+ * platform fault. The cause travels with the error instead.
+ *
+ * Assembled from the status code and the provider's own response body only.
+ * Deliberately NOT from `APICallError.message` or `.url`, which embed the
+ * resolved provider endpoint, nor from `requestBodyValues`: how the platform
+ * routes and authenticates its LLM calls is not the app's business.
+ */
+function appLlmFailureMessage(error: unknown): string {
+  if (!APICallError.isInstance(error)) return UNKNOWN_FAILURE_MESSAGE;
+
+  const status = error.statusCode;
+  const cause =
+    status === undefined
+      ? UNKNOWN_FAILURE_MESSAGE
+      : status === 400 || status === 422
+        ? "The LLM provider rejected the request — the prompt may be too long for the model."
+        : status === 401 || status === 403
+          ? "The LLM provider rejected this organization's credential."
+          : status === 404
+            ? "The configured model is not available from the LLM provider."
+            : status >= 500
+              ? "The LLM provider is unavailable right now — retry shortly."
+              : UNKNOWN_FAILURE_MESSAGE;
+
+  const reason = error.responseBody
+    ?.trim()
+    .slice(0, UPSTREAM_REASON_MAX_LENGTH);
+  return reason ? `${cause} (provider said: ${reason})` : cause;
 }

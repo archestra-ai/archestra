@@ -149,7 +149,7 @@ export function AppRecordingControls() {
                   Disable in settings.
                 </Link>
               ) : (
-                "Ask your admin to disable this."
+                <span>Ask your admin to disable this.</span>
               )}
             </p>
           </HoverCardContent>

@@ -3,17 +3,18 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
+  ArchiveRestore,
   BookOpen,
   Braces,
   ChartColumn,
   ChevronDown,
   ChevronUp,
+  History,
   Info,
   MessageSquare,
   Pencil,
   Plus,
   RefreshCw,
-  RotateCcw,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -23,7 +24,17 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import {
+  PERMANENT_DELETE_LABEL,
+  permanentDeleteRowAction,
+} from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  ActiveFilterBadges,
+  ResourceDeletedStatusFilter,
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -50,17 +61,21 @@ import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   useDeleteSkill,
-  useResetSkill,
+  usePermanentlyDeleteSkill,
+  useRestoreSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
+import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { withOpenEditRewritten } from "./_parts/editor-url";
 import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
+import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
 
@@ -93,6 +108,10 @@ function SkillsList() {
   const pageSize = Number(searchParams.get("pageSize") || DEFAULT_TABLE_LIMIT);
   const search = searchParams.get("search") || "";
   const sourceRepo = searchParams.get("sourceRepo") || "";
+  const scopeFilter = useScopeFilterParams();
+  // The trash view; the backend restricts `status=deleted` to admins/team-admins
+  // and the status filter itself is only shown to skill admins.
+  const isDeletedView = searchParams.get("status") === "deleted";
 
   type SkillSortBy = NonNullable<
     NonNullable<archestraApiTypes.GetSkillsData["query"]>["sortBy"]
@@ -114,6 +133,12 @@ function SkillsList() {
       offset: pageIndex * pageSize,
       search: search || undefined,
       sourceRepo: sourceRepo || undefined,
+      scope: scopeFilter.scope,
+      teamIds: scopeFilter.teamIds,
+      authorIds: scopeFilter.authorIds,
+      excludeAuthorIds: scopeFilter.excludeAuthorIds,
+      excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
+      status: isDeletedView ? "deleted" : undefined,
       sortBy,
       sortDirection,
     },
@@ -121,6 +146,8 @@ function SkillsList() {
   );
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
+  const restoreSkill = useRestoreSkill();
+  const admin = useIsGlobalAdmin();
 
   const setSourceRepoFilter = useCallback(
     (value: string) => {
@@ -178,7 +205,9 @@ function SkillsList() {
   });
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
-  const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
+  const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
+    useState<SkillItem | null>(null);
+  const [historySkillId, setHistorySkillId] = useState<string | null>(null);
   const [usageSkill, setUsageSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -202,13 +231,26 @@ function SkillsList() {
   }, [openEdit, items, searchParams, pathname, router]);
   const pagination = skills?.pagination;
   const totalSkills = pagination?.total ?? 0;
-  const hasActiveFilters = !!search || !!sourceRepo;
+  const hasActiveFilters =
+    !!search ||
+    !!sourceRepo ||
+    scopeFilter.hasActiveScopeFilters ||
+    isDeletedView;
   const showEmptyState = !isPending && totalSkills === 0 && !hasActiveFilters;
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("search");
-    params.delete("sourceRepo");
+    for (const key of [
+      "search",
+      "sourceRepo",
+      "scope",
+      "teamIds",
+      "authorIds",
+      "excludeAuthorIds",
+      "status",
+    ]) {
+      params.delete(key);
+    }
     params.set("page", "1");
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [pathname, router, searchParams]);
@@ -227,7 +269,7 @@ function SkillsList() {
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      size: 700,
+      size: 420,
       cell: ({ row }) => {
         const skill = row.original;
         const repo = parseRepoFromSourceRef(skill.sourceRef);
@@ -309,21 +351,23 @@ function SkillsList() {
     },
     {
       id: "visibility",
-      size: 160,
+      size: 130,
       header: "Visibility",
       cell: ({ row }) => (
         <ResourceVisibilityBadge
           scope={row.original.scope}
           teams={row.original.teams}
+          users={row.original.users}
           authorId={row.original.authorId}
           authorName={row.original.authorName}
           currentUserId={currentUserId}
+          showSelfAsMe
         />
       ),
     },
     {
       id: "files",
-      size: 150,
+      size: 90,
       header: () => <div className="text-right">Files</div>,
       cell: ({ row }) => (
         <div className="text-right text-sm text-muted-foreground">
@@ -335,9 +379,11 @@ function SkillsList() {
     {
       id: "usageCount",
       accessorKey: "usageCount",
-      size: 150,
+      size: 120,
       header: ({ column }) => (
-        <div className="flex justify-end">
+        // Right padding keeps the right-aligned value from sitting flush
+        // against the Actions buttons in the next cell.
+        <div className="flex justify-end pr-4">
           <Button
             variant="ghost"
             className="h-auto !p-0 font-medium hover:bg-transparent"
@@ -349,7 +395,7 @@ function SkillsList() {
         </div>
       ),
       cell: ({ row }) => (
-        <div className="flex justify-end">
+        <div className="flex justify-end pr-4">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -390,44 +436,61 @@ function SkillsList() {
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const skill = row.original;
-        const isBuiltIn = skill.sourceType === "built_in";
-        const actions: TableRowAction[] = [
-          {
-            icon: <Pencil className="h-4 w-4" />,
-            label: "Edit",
-            permissions: { skill: ["update"] },
-            onClick: () => openEditor(skill),
-          },
-          {
-            icon: <MessageSquare className="h-4 w-4" />,
-            label: "Chat",
-            permissions: { chat: ["read", "create"] },
-            href: `/chat/new?skill_id=${skill.id}`,
-          },
-          {
-            icon: <ChartColumn className="h-4 w-4" />,
-            label: "Usage",
-            permissions: { skill: ["read"] },
-            onClick: () => setUsageSkill(skill),
-          },
-          ...(isBuiltIn
-            ? [
-                {
-                  icon: <RotateCcw className="h-4 w-4" />,
-                  label: "Reset to default",
-                  permissions: { skill: ["update"] },
-                  onClick: () => setResettingSkill(skill),
-                } satisfies TableRowAction,
-              ]
-            : []),
-          {
-            icon: <Trash2 className="h-4 w-4" />,
-            label: "Delete",
-            variant: "destructive",
-            permissions: { skill: ["delete"] },
-            onClick: () => setDeletingSkill(skill),
-          },
-        ];
+        // A soft-deleted skill can only be restored; edit/chat/usage/delete all
+        // act on active rows and would 404.
+        const actions: TableRowAction[] = isDeletedView
+          ? [
+              {
+                icon: <ArchiveRestore className="h-4 w-4" />,
+                label: "Restore",
+                permissions: { skill: ["delete"] },
+                onClick: () => restoreSkill.mutate(skill.id),
+              },
+              permanentDeleteRowAction({
+                admin,
+                onClick: () => setPermanentlyDeletingSkill(skill),
+                // A built-in's deleted row IS the opt-out: it is what stops the
+                // startup seeder recreating the skill, so the API refuses to
+                // destroy it and deleting it already removed it for good.
+                disabledReason:
+                  skill.sourceType === "built_in"
+                    ? "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart"
+                    : undefined,
+              }),
+            ]
+          : [
+              {
+                icon: <Pencil className="h-4 w-4" />,
+                label: "Edit",
+                permissions: { skill: ["update"] },
+                onClick: () => openEditor(skill),
+              },
+              {
+                icon: <MessageSquare className="h-4 w-4" />,
+                label: "Chat",
+                permissions: { chat: ["read", "create"] },
+                href: `/chat/new?skill_id=${skill.id}`,
+              },
+              {
+                icon: <ChartColumn className="h-4 w-4" />,
+                label: "Usage",
+                permissions: { skill: ["read"] },
+                onClick: () => setUsageSkill(skill),
+              },
+              {
+                icon: <History className="h-4 w-4" />,
+                label: "Version history",
+                permissions: { skill: ["read"] },
+                onClick: () => setHistorySkillId(skill.id),
+              },
+              {
+                icon: <Trash2 className="h-4 w-4" />,
+                label: "Delete",
+                variant: "destructive",
+                permissions: { skill: ["delete"] },
+                onClick: () => setDeletingSkill(skill),
+              },
+            ];
         return (
           <div className="flex justify-end">
             <TableRowActions actions={actions} itemName={skill.name} />
@@ -471,29 +534,52 @@ function SkillsList() {
           <SkillsEmptyState />
         ) : (
           <>
-            <div className="mb-6 flex flex-wrap items-center gap-3">
-              <SearchInput paramName="search" className="relative w-[370px]" />
-              <Select
-                value={sourceRepo || "all"}
-                onValueChange={(value) =>
-                  setSourceRepoFilter(value === "all" ? "" : value)
-                }
-              >
-                <SelectTrigger
-                  aria-label="Filter by repository"
-                  className="w-[260px]"
-                >
-                  <SelectValue placeholder="All repositories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All repositories</SelectItem>
-                  {sourceRepos.map((repo) => (
-                    <SelectItem key={repo} value={repo}>
-                      <span className="truncate font-mono text-xs">{repo}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="mb-6 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <SearchInput
+                  paramName="search"
+                  className="relative w-[370px]"
+                />
+                <ResourceScopeFilter
+                  ownerLabelPlural="skills"
+                  adminPermission={{ skill: ["admin"] }}
+                />
+                {/* Backend gates status=deleted on isAdmin||isTeamAdmin; the
+                    checker has no `skill:delete` boolean, so this shows the
+                    trash toggle to skill admins to avoid a control that 403s. */}
+                <ResourceDeletedStatusFilter
+                  deletePermission={{ skill: ["admin"] }}
+                />
+                {/* Only imported skills have a repository, so the filter would
+                    be a single inert "All repositories" entry until at least
+                    one skill is imported. */}
+                {sourceRepos.length > 0 && (
+                  <Select
+                    value={sourceRepo || "all"}
+                    onValueChange={(value) =>
+                      setSourceRepoFilter(value === "all" ? "" : value)
+                    }
+                  >
+                    <SelectTrigger
+                      aria-label="Filter by repository"
+                      className="w-[260px]"
+                    >
+                      <SelectValue placeholder="All repositories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All repositories</SelectItem>
+                      {sourceRepos.map((repo) => (
+                        <SelectItem key={repo} value={repo}>
+                          <span className="truncate font-mono text-xs">
+                            {repo}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
             </div>
 
             <DataTable
@@ -502,7 +588,11 @@ function SkillsList() {
               getRowId={(row) => row.id}
               emptyMessage="No skills yet."
               hasActiveFilters={hasActiveFilters}
-              filteredEmptyMessage="No skills match the current filters."
+              filteredEmptyMessage={
+                isDeletedView
+                  ? "No deleted skills found."
+                  : "No skills match the current filters."
+              }
               onClearFilters={clearFilters}
               hideSelectedCount
               manualPagination
@@ -522,7 +612,7 @@ function SkillsList() {
                   scroll: false,
                 });
               }}
-              onRowClick={(row) => openEditor(row)}
+              onRowClick={isDeletedView ? undefined : (row) => openEditor(row)}
               isLoading={isFetching}
             />
           </>
@@ -545,11 +635,19 @@ function SkillsList() {
         />
       )}
 
-      {resettingSkill && (
-        <ResetSkillDialog
-          skill={resettingSkill}
-          open={!!resettingSkill}
-          onOpenChange={(open) => !open && setResettingSkill(null)}
+      {permanentlyDeletingSkill && (
+        <PermanentlyDeleteSkillDialog
+          skill={permanentlyDeletingSkill}
+          open={!!permanentlyDeletingSkill}
+          onOpenChange={(open) => !open && setPermanentlyDeletingSkill(null)}
+        />
+      )}
+
+      {historySkillId && (
+        <SkillVersionHistoryDialog
+          skillId={historySkillId}
+          open={!!historySkillId}
+          onOpenChange={(open) => !open && setHistorySkillId(null)}
         />
       )}
 
@@ -580,18 +678,6 @@ function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
   );
-}
-
-/** Extract `owner/repo` from a `source_ref` shaped like `owner/repo@ref:path`. */
-function parseRepoFromSourceRef(sourceRef: string | null): string | null {
-  if (!sourceRef) return null;
-  // Built-in skills carry an internal `builtin:<id>` ref (e.g.
-  // `builtin:archestra-platform-operations`); it is an identity token, not a
-  // source repo, and would leak the unbranded "archestra" id into the UI. The
-  // app-name badge already marks these as built-in, so show nothing here.
-  if (sourceRef.startsWith("builtin:")) return null;
-  const atIdx = sourceRef.indexOf("@");
-  return atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
 }
 
 function SkillsEmptyState() {
@@ -651,7 +737,7 @@ function DeleteSkillDialog({
   );
 }
 
-function ResetSkillDialog({
+function PermanentlyDeleteSkillDialog({
   skill,
   open,
   onOpenChange,
@@ -660,26 +746,24 @@ function ResetSkillDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const resetSkill = useResetSkill();
-  const appName = useAppName();
+  const permanentlyDeleteSkill = usePermanentlyDeleteSkill();
 
-  const handleReset = useCallback(async () => {
-    const result = await resetSkill.mutateAsync(skill.id);
+  const handleDelete = useCallback(async () => {
+    const result = await permanentlyDeleteSkill.mutateAsync(skill.id);
     if (result) {
       onOpenChange(false);
     }
-  }, [skill.id, resetSkill, onOpenChange]);
+  }, [skill.id, permanentlyDeleteSkill, onOpenChange]);
 
   return (
     <DeleteConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Reset Skill"
-      description={`Reset "${skill.name}" to the version ${appName} ships? Any local edits to its instructions and resource files will be overwritten.`}
-      isPending={resetSkill.isPending}
-      onConfirm={handleReset}
-      confirmLabel="Reset to default"
-      pendingLabel="Resetting..."
+      title="Delete skill permanently"
+      description={`This destroys "${skill.name}" along with every version and resource file, its grants and environment assignments, and any public share link for it. Nothing recovers it.`}
+      isPending={permanentlyDeleteSkill.isPending}
+      onConfirm={handleDelete}
+      confirmLabel={PERMANENT_DELETE_LABEL}
     />
   );
 }

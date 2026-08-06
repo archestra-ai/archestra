@@ -5,9 +5,11 @@ import {
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
+  clientFilterToAgentIds,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraToolGroupId,
+  isAppRuntimeOnlyArchestraToolShortName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
@@ -24,6 +26,7 @@ import {
   count,
   desc,
   eq,
+  exists,
   getTableColumns,
   ilike,
   inArray,
@@ -44,13 +47,18 @@ import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
+import { restore, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
-import { toolInEnvironmentPredicate } from "@/services/environments/environment-isolation";
+import {
+  toolInEnvironmentOrDefaultPredicate,
+  toolInEnvironmentPredicate,
+} from "@/services/environments/environment-isolation";
 import type {
+  Agent,
   AssignedTool,
   ExtendedTool,
   InsertTool,
@@ -68,6 +76,7 @@ import type {
 import { isUniqueConstraintError } from "@/utils/db";
 import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -434,6 +443,8 @@ class ToolModel {
     toolId: string,
     options?: {
       invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+      /** Shown in the policy editor to explain a non-org-default stamp. */
+      invocationReason?: string | null;
       resultAction?: TrustedData.TrustedDataPolicyAction;
     },
   ): Promise<void> {
@@ -442,7 +453,7 @@ class ToolModel {
       toolId,
       conditions: [],
       action: options?.invocationAction ?? "block_when_context_is_untrusted",
-      reason: null,
+      reason: options?.invocationReason ?? null,
     });
 
     // Create default result policy
@@ -483,7 +494,13 @@ class ToolModel {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.id, id));
+      .where(
+        and(
+          eq(schema.toolsTable.id, id),
+          // A soft-deleted catalog's tool reads as gone.
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     if (!tool) {
       return null;
@@ -525,7 +542,13 @@ class ToolModel {
         agentId: schema.toolsTable.agentId,
       })
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.id, params.id));
+      .where(
+        and(
+          eq(schema.toolsTable.id, params.id),
+          // A soft-deleted catalog's tool reads as gone.
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     if (!tool) {
       return null;
@@ -633,6 +656,7 @@ class ToolModel {
         name: schema.toolsTable.name,
         rawName: schema.toolsTable.rawName,
         catalogId: schema.toolsTable.catalogId,
+        deletedAt: schema.toolsTable.deletedAt,
         parameters: schema.toolsTable.parameters,
         description: schema.toolsTable.description,
         createdAt: schema.toolsTable.createdAt,
@@ -704,7 +728,13 @@ class ToolModel {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.name, name));
+      .where(
+        and(
+          eq(schema.toolsTable.name, name),
+          // A soft-deleted catalog's tool reads as gone.
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     if (!tool) {
       return null;
@@ -754,6 +784,10 @@ class ToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.toolsTable.name, name),
+          // A soft-deleted tool (its catalog was deleted) must not authorize a
+          // call: the agent_tools binding is retained by design, so the parent's
+          // liveness is expressed here via the tool's own deleted_at.
+          notDeleted(schema.toolsTable),
         ),
       )
       .limit(1);
@@ -787,6 +821,8 @@ class ToolModel {
           eq(schema.agentToolsTable.agentId, agentId),
           // Always hide query_knowledge_sources from UI — it's auto-injected behind the scenes
           ne(schema.toolsTable.name, brandedKnowledgeToolName),
+          // Hide tools whose catalog was soft-deleted (retained binding).
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -849,6 +885,8 @@ class ToolModel {
                 ),
                 toolInEnvironmentPredicate(agentEnvironmentId),
                 notDisabledAppLaunchTool(),
+                // Hide tools whose catalog was soft-deleted (retained binding).
+                notDeleted(schema.toolsTable),
               ),
             )
             .orderBy(
@@ -898,6 +936,13 @@ class ToolModel {
      * run_tool cannot reach cross-environment tools.
      */
     environmentId: string | null;
+    /**
+     * Also match Default-environment tools when `environmentId` is non-default
+     * ({@link toolInEnvironmentOrDefaultPredicate}). App tool assignment only —
+     * apps may always draw from the Default baseline; agent/gateway discovery
+     * must stay strictly fenced and never sets this.
+     */
+    includeDefaultEnvironment?: boolean;
     /** Exact-name filter for single-tool resolution (avoids loading the whole corpus). */
     name?: string;
     /**
@@ -944,7 +989,9 @@ class ToolModel {
         and(
           inArray(schema.toolsTable.catalogId, catalogIds),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
-          toolInEnvironmentPredicate(params.environmentId),
+          params.includeDefaultEnvironment
+            ? toolInEnvironmentOrDefaultPredicate(params.environmentId)
+            : toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined
             ? eq(schema.toolsTable.name, params.name)
             : undefined,
@@ -955,6 +1002,8 @@ class ToolModel {
             ? isNotNull(toolUiResourceUriSql())
             : undefined,
           notDisabledAppLaunchTool(),
+          // Hide tools whose catalog was soft-deleted from dynamic discovery.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt), asc(schema.toolsTable.id));
@@ -1285,6 +1334,10 @@ class ToolModel {
   }): Promise<{ confirmedToolIds: string[] }> {
     const { catalogId, discoveredToolNames } = params;
 
+    // Provisional read is intentionally NOT `notDeleted`: a `(catalogId, name)`
+    // row soft-deleted by a prior cascade must be MATCHED here and revived when
+    // confirmed, not left behind for the sync to duplicate (the composite unique
+    // is NULLS-DISTINCT, so a dead row does not block inserting a live twin).
     const provisional = await db
       .select()
       .from(schema.toolsTable)
@@ -1310,9 +1363,11 @@ class ToolModel {
     }
 
     if (confirmedToolIds.length > 0) {
+      // Match-and-restore: confirming clears the provisional flag AND `deletedAt`
+      // so a revived tool comes back live (mirrors syncToolsForCatalog).
       await db
         .update(schema.toolsTable)
-        .set({ clonedPendingDiscovery: false })
+        .set({ clonedPendingDiscovery: false, deletedAt: null })
         .where(inArray(schema.toolsTable.id, confirmedToolIds));
     }
     if (toDelete.length > 0) {
@@ -1357,7 +1412,15 @@ class ToolModel {
         },
       });
 
-    const archestraTools = getArchestraMcpTools();
+    // App-runtime-only built-ins never become tool rows: no row means no agent
+    // assignment, no search_tools hit, no gateway listing. They dispatch
+    // in-process through the app MCP proxy alone.
+    const archestraTools = getArchestraMcpTools().filter((t) => {
+      // Branding-aware parse: seeding runs on rebranded names, so the shared
+      // strict `archestra__` parser could miss a white-labeled prefix here.
+      const shortName = archestraMcpBranding.getToolShortName(t.name);
+      return !(shortName && isAppRuntimeOnlyArchestraToolShortName(shortName));
+    });
     const archestraToolNames = new Set(archestraTools.map((t) => t.name));
 
     // Migrate pre-existing "discovered" Archestra tools (catalog_id = NULL) to use the catalog
@@ -1507,8 +1570,11 @@ class ToolModel {
         .insert(schema.toolsTable)
         .values(toolsToInsert)
         .onConflictDoUpdate({
+          // targetWhere MUST mirror the partial index predicate exactly
+          // (tools_archestra_catalog_name_uidx, now gated on deleted_at is null)
+          // or Postgres cannot infer the arbiter index (42P10).
           target: [schema.toolsTable.catalogId, schema.toolsTable.name],
-          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null`,
+          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null and ${schema.toolsTable.deletedAt} is null`,
           set: {
             description: sql`excluded.description`,
             parameters: sql`excluded.parameters`,
@@ -1645,7 +1711,8 @@ class ToolModel {
     );
     if (toolIds.length === 0) return 0;
 
-    const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
+    const agentIds =
+      await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
 
     for (const agentId of agentIds) {
       await AgentToolModel.createManyIfNotExists(agentId, toolIds);
@@ -1720,7 +1787,8 @@ class ToolModel {
         newAppShortNames,
       );
       if (toolIds.length === 0) continue;
-      const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
+      const agentIds =
+        await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }
@@ -2016,6 +2084,8 @@ class ToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools
+          // A soft-deleted catalog's tools stop resolving (retained binding).
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -2047,6 +2117,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
         meta: schema.toolsTable.meta,
+        parameters: schema.toolsTable.parameters,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -2064,6 +2135,8 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
           toolInEnvironmentPredicate(agentEnvironmentId),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tools must not resolve for execution.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2112,6 +2185,10 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId),
           toolInEnvironmentPredicate(agentEnvironmentId),
           notDisabledAppLaunchTool(),
+          // Keep in sync with getMcpToolsAssignedToAgent: a soft-deleted
+          // catalog's tools resolve to no row (so no policy runs against a dead
+          // tool, matching execution which also skips it).
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2160,6 +2237,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
         meta: schema.toolsTable.meta,
+        parameters: schema.toolsTable.parameters,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -2177,6 +2255,8 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId),
           toolInEnvironmentPredicate(agentEnvironmentId),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tools must not resolve for execution.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2196,11 +2276,12 @@ class ToolModel {
    * Of `toolIds`, the subset assignable to an MCP App in `environmentId`:
    * catalog-backed (non-null catalogId, which app dispatch requires), org-visible
    * (the catalog belongs to the org or is a global org-less entry), not an
-   * Archestra built-in, not a clone pending discovery, and in the environment.
+   * Archestra built-in, not a clone pending discovery, and in the environment or
+   * the Default baseline ({@link toolInEnvironmentOrDefaultPredicate}).
    * This is the by-id, install-agnostic gate {@link resolveAppAssignableToolRows}
    * applies to the agent's *assigned* tools — an assigned tool is reachable
    * through its assignment without a separate discoverable install, but must
-   * still be org-visible and in-environment.
+   * still be org-visible and environment-matched.
    */
   static async filterAppAssignableToolIds(
     organizationId: string,
@@ -2220,7 +2301,9 @@ class ToolModel {
           inArray(schema.toolsTable.id, toolIds),
           ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
-          toolInEnvironmentPredicate(environmentId),
+          toolInEnvironmentOrDefaultPredicate(environmentId),
+          // A soft-deleted catalog's tools are not app-assignable.
+          notDeleted(schema.toolsTable),
           or(
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             isNull(schema.internalMcpCatalogTable.organizationId),
@@ -2259,6 +2342,8 @@ class ToolModel {
             isNull(schema.internalMcpCatalogTable.organizationId),
           ),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tool is not app-assignable.
+          notDeleted(schema.toolsTable),
         ),
       )
       .limit(1);
@@ -2266,13 +2351,14 @@ class ToolModel {
   }
 
   /**
-   * Whether a tool belongs to (is assignable/callable within) `environmentId`,
-   * reusing the canonical {@link toolInEnvironmentPredicate} so the app
-   * assignment fence and call-time fence never drift from the agent isolation
-   * rules: null = org default, and the built-in Archestra/Playwright catalogs
-   * plus delegation tools are exempt.
+   * Whether a tool is assignable/callable within an *app* bound to
+   * `environmentId`: the app fences share
+   * {@link toolInEnvironmentOrDefaultPredicate} — the environment's own tools
+   * plus the Default baseline — so the assignment fence and call-time fence
+   * never drift apart. The built-in Archestra/Playwright catalogs and
+   * delegation tools are exempt as everywhere.
    */
-  static async isToolInEnvironment(
+  static async isToolInEnvironmentOrDefault(
     toolId: string,
     environmentId: string | null,
   ): Promise<boolean> {
@@ -2282,7 +2368,9 @@ class ToolModel {
       .where(
         and(
           eq(schema.toolsTable.id, toolId),
-          toolInEnvironmentPredicate(environmentId),
+          toolInEnvironmentOrDefaultPredicate(environmentId),
+          // A soft-deleted catalog's tool is not callable within an app.
+          notDeleted(schema.toolsTable),
         ),
       )
       .limit(1);
@@ -2290,11 +2378,12 @@ class ToolModel {
   }
 
   /**
-   * Of `toolIds`, the subset that belongs to `environmentId` — the batch form of
-   * {@link isToolInEnvironment}, used to trim an app's runtime tool list to its
-   * bound environment (UX hygiene; the call-time gate is the hard fence).
+   * Of `toolIds`, the subset callable within an app bound to `environmentId` —
+   * the batch form of {@link isToolInEnvironmentOrDefault}, used to trim an
+   * app's runtime tool list to what the call-time gate would allow (UX hygiene;
+   * the call-time gate is the hard fence).
    */
-  static async filterToolIdsInEnvironment(
+  static async filterToolIdsInEnvironmentOrDefault(
     toolIds: string[],
     environmentId: string | null,
   ): Promise<Set<string>> {
@@ -2305,7 +2394,9 @@ class ToolModel {
       .where(
         and(
           inArray(schema.toolsTable.id, toolIds),
-          toolInEnvironmentPredicate(environmentId),
+          toolInEnvironmentOrDefaultPredicate(environmentId),
+          // A soft-deleted catalog's tool is not callable within an app.
+          notDeleted(schema.toolsTable),
         ),
       );
     return new Set(rows.map((r) => r.id));
@@ -2314,7 +2405,7 @@ class ToolModel {
   /**
    * App-owner counterpart of {@link getMcpToolsAssignedToAgent}. Includes the
    * tool `id` so the runtime gate can apply the environment fence
-   * ({@link isToolInEnvironment}) against the resolved tool.
+   * ({@link isToolInEnvironmentOrDefault}) against the resolved tool.
    */
   static async getMcpToolsAssignedToApp(
     toolNames: string[],
@@ -2334,6 +2425,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
         meta: schema.toolsTable.meta,
+        parameters: schema.toolsTable.parameters,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -2350,6 +2442,8 @@ class ToolModel {
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tools must not resolve for app execution.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2379,6 +2473,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
         meta: schema.toolsTable.meta,
+        parameters: schema.toolsTable.parameters,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -2395,6 +2490,8 @@ class ToolModel {
           sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
           isNotNull(schema.toolsTable.catalogId),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tools must not resolve for app execution.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2479,6 +2576,9 @@ class ToolModel {
         and(
           eq(schema.toolsTable.catalogId, catalogId),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
+          // Active tools only — a soft-deleted catalog's tools stop listing
+          // (defense-in-depth; the catalog pre-check also blocks the caller).
+          notDeleted(schema.toolsTable),
           ...hiddenToolNames.map((toolName) =>
             ne(schema.toolsTable.name, toolName),
           ),
@@ -2823,7 +2923,14 @@ class ToolModel {
         // Backfill/refresh the stored raw name (legacy rows have it null).
         const rawNameChanged = existingTool.rawName !== rawName;
 
+        // Match-and-restore: `existingTools` intentionally includes soft-deleted
+        // rows (its read is NOT `notDeleted`). A reinstall that re-advertises a
+        // soft-deleted tool must RESTORE that row (clear deleted_at), never insert
+        // a fresh one — the composite unique is NULLS-DISTINCT for MCP tools and
+        // would otherwise let a duplicate live row in beside the dead one.
+        const wasSoftDeleted = existingTool.deletedAt !== null;
         if (
+          wasSoftDeleted ||
           nameChanged ||
           descriptionChanged ||
           parametersChanged ||
@@ -2839,6 +2946,7 @@ class ToolModel {
                 description: tool.description,
                 parameters: tool.parameters,
                 meta: tool.meta,
+                deletedAt: null,
                 updatedAt: new Date(),
               })
               .where(eq(schema.toolsTable.id, existingTool.id))
@@ -2987,11 +3095,56 @@ class ToolModel {
     return (result.rowCount || 0) > 0;
   }
 
+  /**
+   * Soft-delete every tool row for a catalog, stamped with the cascade's shared
+   * `at` timestamp (the restore correlation key). Called by the catalog delete
+   * cascade — tools are catalog-scoped, so this fires on catalog delete only, not
+   * on a single-server uninstall (installs share a catalog's tools by design).
+   */
+  static async softDeleteByCatalog(
+    catalogId: string,
+    at: Date,
+    tx?: Transaction,
+  ): Promise<number> {
+    return softDelete(
+      tx ?? db,
+      schema.toolsTable,
+      eq(schema.toolsTable.catalogId, catalogId),
+      at,
+    );
+  }
+
+  /**
+   * Restore exactly the tools a catalog delete cascaded, matched by the shared
+   * `deletedAt` timestamp so tools deleted individually earlier are not revived.
+   */
+  static async restoreByCatalog(
+    catalogId: string,
+    deletedAt: Date,
+    tx?: Transaction,
+  ): Promise<number> {
+    return restore(
+      tx ?? db,
+      schema.toolsTable,
+      and(
+        eq(schema.toolsTable.catalogId, catalogId),
+        eq(schema.toolsTable.deletedAt, deletedAt),
+      ),
+    );
+  }
+
   static async getByIds(ids: string[]): Promise<Tool[]> {
     return db
       .select()
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.id, ids));
+      .where(
+        and(
+          inArray(schema.toolsTable.id, ids),
+          // Active tools only — validating caller-supplied ids (e.g. agent tool
+          // assignment) must not accept a soft-deleted catalog's tool.
+          notDeleted(schema.toolsTable),
+        ),
+      );
   }
 
   /**
@@ -3022,6 +3175,17 @@ class ToolModel {
       name: string;
       description?: string | null;
       parameters?: Record<string, unknown>;
+      /**
+       * Per-tool override of the default invocation policy stamped at
+       * discovery, taking precedence over `defaults.invocationAction` (e.g.
+       * native coding-CLI tools default to allow so the client stays usable).
+       * The reason is recorded on the policy row so the override is
+       * self-explaining in the policy editor.
+       */
+      invocationDefaultOverride?: {
+        action: ToolInvocation.ToolInvocationPolicyAction;
+        reason: string;
+      };
     }>,
     /** @deprecated No longer used. Proxy tools are shared (agentId=NULL). Kept for call-site compatibility. */
     _agentId: string,
@@ -3076,8 +3240,23 @@ class ToolModel {
         .returning();
 
       // Create default policies for newly inserted tools
+      const overridesByName = new Map(
+        tools
+          .filter((t) => t.invocationDefaultOverride)
+          .map((t) => [t.name, t.invocationDefaultOverride]),
+      );
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id, defaults);
+        const override = overridesByName.get(tool.name);
+        await ToolModel.createDefaultPolicies(
+          tool.id,
+          override
+            ? {
+                ...defaults,
+                invocationAction: override.action,
+                invocationReason: override.reason,
+              }
+            : defaults,
+        );
       }
 
       // If some tools weren't inserted due to conflict, fetch them
@@ -3214,6 +3393,9 @@ class ToolModel {
             isNotNull(schema.toolsTable.delegateToAgentId),
           ),
           toolInEnvironmentPredicate(agentEnvironmentId),
+          // Mirror getMcpToolsByAgent: a soft-deleted catalog's tool must not be
+          // reachable via resources/read either.
+          notDeleted(schema.toolsTable),
           or(
             sql`${schema.toolsTable.meta}->'_meta'->'ui'->>'resourceUri' = ${resourceUri}`,
             sql`${schema.toolsTable.meta}->'_meta'->>'ui/resourceUri' = ${resourceUri}`,
@@ -3239,6 +3421,7 @@ class ToolModel {
         description: string | null;
         systemPrompt: string | null;
         environmentId: string | null;
+        builtInAgentConfig: Agent["builtInAgentConfig"];
       };
     }>
   > {
@@ -3251,6 +3434,7 @@ class ToolModel {
           description: schema.agentsTable.description,
           systemPrompt: schema.agentsTable.systemPrompt,
           environmentId: schema.agentsTable.environmentId,
+          builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
         },
       })
       .from(schema.agentToolsTable)
@@ -3337,6 +3521,9 @@ class ToolModel {
     // Build WHERE conditions for tools
     const toolWhereConditions: ReturnType<typeof sql>[] = [];
 
+    // A soft-deleted catalog's tools are ghosts — keep them out of the listing.
+    toolWhereConditions.push(notDeleted(schema.toolsTable));
+
     // Filter by search query (tool name)
     if (filters?.search) {
       toolWhereConditions.push(
@@ -3362,6 +3549,38 @@ class ToolModel {
           eq(schema.toolsTable.catalogId, filters.origin),
         );
       }
+    }
+
+    // Filter by who observed the tool in LLM proxy traffic, and through which
+    // client app. Both narrow via the tool_observations attribution rows, so
+    // they only ever match tools seen in proxy requests.
+    if (filters?.observedByUserId || filters?.observedByClient) {
+      const observationConditions: SQL[] = [
+        eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
+      ];
+      if (filters.observedByUserId) {
+        observationConditions.push(
+          eq(schema.toolObservationsTable.userId, filters.observedByUserId),
+        );
+      }
+      if (filters.observedByClient) {
+        observationConditions.push(
+          inArray(
+            schema.toolObservationsTable.externalAgentId,
+            // Spread: clientFilterToAgentIds returns a readonly array and
+            // inArray wants a mutable one.
+            [...clientFilterToAgentIds(filters.observedByClient)],
+          ),
+        );
+      }
+      toolWhereConditions.push(
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(schema.toolObservationsTable)
+            .where(and(...observationConditions)),
+        ),
+      );
     }
 
     // Exclude Archestra built-in tools
@@ -3647,17 +3866,41 @@ class ToolModel {
   private static async getAgentHasKnowledgeSources(
     agentId: string,
   ): Promise<boolean> {
+    // Cached: this runs on every gateway tools listing, and the two
+    // junction-table lookups below were a measurable share of gateway DB
+    // traffic. Assignment writes invalidate (see agentKnowledgeSourcesCache).
+    const cached = agentKnowledgeSourcesCache.get(agentId);
+    if (cached !== undefined) {
+      return cached;
+    }
     const [kbRows, connectorIds] = await Promise.all([
+      // Join the KB parent so a soft-deleted KB does not keep this agent's
+      // query_knowledge_sources tool visible. (The connector half already
+      // filters via AgentConnectorAssignmentModel.getConnectorIds.)
       db
         .select({
           knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
         })
         .from(schema.agentKnowledgeBasesTable)
-        .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId))
+        .innerJoin(
+          schema.knowledgeBasesTable,
+          eq(
+            schema.agentKnowledgeBasesTable.knowledgeBaseId,
+            schema.knowledgeBasesTable.id,
+          ),
+        )
+        .where(
+          and(
+            eq(schema.agentKnowledgeBasesTable.agentId, agentId),
+            notDeleted(schema.knowledgeBasesTable),
+          ),
+        )
         .limit(1),
       AgentConnectorAssignmentModel.getConnectorIds(agentId),
     ]);
-    return kbRows.length > 0 || connectorIds.length > 0;
+    const hasKnowledgeSources = kbRows.length > 0 || connectorIds.length > 0;
+    agentKnowledgeSourcesCache.set(agentId, hasKnowledgeSources);
+    return hasKnowledgeSources;
   }
 
   /**

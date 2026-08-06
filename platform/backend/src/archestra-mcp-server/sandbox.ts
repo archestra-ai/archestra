@@ -1,9 +1,12 @@
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
+  MAX_PROJECT_UPLOAD_BYTES,
   PROJECT_INSTRUCTIONS_FILENAME,
+  TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
+  TOOL_READ_FILE_RAW_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
@@ -233,7 +236,27 @@ const DownloadFileOutputSchema = z.object({
     .describe("True when an existing same-named file was replaced in place."),
 });
 
-const UploadSourceSchema = z.discriminatedUnion("type", [
+/**
+ * Every file selector in this module picks its file one of two ways — by id or
+ * by name — and refuses both or neither. One predicate and one message so the
+ * rule cannot drift between upload_file, read_file_raw, and copy_file.
+ */
+const exactlyOneOf = (a: string, b: string) =>
+  [
+    (v: Record<string, unknown>) => (v[a] != null) !== (v[b] != null),
+    { message: `provide exactly one of \`${a}\` or \`${b}\`` },
+  ] as const;
+
+const ID_OR_FILENAME = exactlyOneOf("id", "filename");
+const ATTACHMENT_ID_OR_FILENAME = exactlyOneOf("attachmentId", "filename");
+
+/**
+ * A chat attachment as a source of bytes, shared by upload_file and copy_file.
+ * Ids are never model-visible — the attachment notice only names the sandbox
+ * directory — so the name is the selector a model can actually reach for, and
+ * latest-wins because attachment names are not unique.
+ */
+const chatAttachmentSource = (describe: { self: string; id: string }) =>
   z
     .strictObject({
       type: z.literal("chat_attachment"),
@@ -241,15 +264,31 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
         .string()
         .min(1)
         .refine(
-          (v) => isUuid(v),
-          "must be the attachment's id, not its filename",
+          isUuid,
+          "must be the attachment's id — when you only know the name, use `filename` instead",
         )
+        .optional()
+        .describe(describe.id),
+      filename: z
+        .string()
+        .min(1)
+        .optional()
         .describe(
-          "Id of an attachment in the current conversation. The bytes are " +
-            "copied directly and never enter your context.",
+          "Original filename of an attachment in this conversation (when " +
+            "you have no id). If the same name was attached more than once, " +
+            "the newest one wins.",
         ),
     })
-    .describe("Copy bytes from a file the user attached to this conversation."),
+    .refine(...ATTACHMENT_ID_OR_FILENAME)
+    .describe(describe.self);
+
+const UploadSourceSchema = z.discriminatedUnion("type", [
+  chatAttachmentSource({
+    self: "Copy bytes from a file the user attached to this conversation.",
+    id:
+      "Id of an attachment in the current conversation. The bytes are " +
+      "copied directly and never enter your context.",
+  }),
   z
     .strictObject({
       type: z.literal("base64"),
@@ -309,7 +348,7 @@ const UploadFileSchema = z
       ),
     source: UploadSourceSchema.describe(
       "Where the file bytes come from. One of four shapes, each tagged by a " +
-        '`type`: a chat attachment (`{"type":"chat_attachment","attachmentId":...}`), ' +
+        '`type`: a chat attachment (`{"type":"chat_attachment","attachmentId"|"filename":...}`), ' +
         'inline base64 (`{"type":"base64","dataBase64":...}`), inline text ' +
         '(`{"type":"text","text":"print(1)"}`), or a file from the user\'s ' +
         'persistent files (`{"type":"my_file","filename":...}`, found via ' +
@@ -339,10 +378,19 @@ const SearchFilesSchema = z
       .describe(
         "Case-insensitive substring matched against filenames only. Omit it (or pass empty) to list the files (the first 200).",
       ),
+    scope: z
+      .enum(["chat", "app"])
+      .optional()
+      .describe(
+        '"chat" (default) = this chat\'s files; "app" = the files of the app ' +
+          "the user has open, which is how you find what the app has produced " +
+          "before copying one out with copy_file.",
+      ),
   })
   .describe(
-    "List or search the conversation's persistent files by filename substring; " +
-      "omit the query to list the files (the first 200). Filenames only, not contents.",
+    "List or search persistent files by filename substring; omit the query to " +
+      "list them (the first 200). Filenames only, not contents. Lists this " +
+      "chat's files, or the open app's files with scope: \"app\".",
   );
 
 const SearchFilesOutputSchema = z.object({
@@ -435,6 +483,127 @@ const ReadFileOutputSchema = z.object({
     .describe(
       "True when more lines follow the returned window (raise `offset` to continue).",
     ),
+  content: z
+    .string()
+    .optional()
+    .describe(
+      "The returned window's text, WITHOUT the line numbers — the file's own " +
+        "bytes. Present for text reads so a structured consumer (an app via " +
+        "archestra.tools.call, which unwraps to structuredContent and never " +
+        "sees the text block) gets usable content instead of only metadata. " +
+        "The numbered rendering stays in the text output, where line numbers " +
+        "are what makes edit_file addressable.",
+    ),
+});
+
+/** `id` XOR `filename` selector fields, described per call site. */
+const idOrFilenameShape = (describe: { id: string; filename: string }) => ({
+  id: z.string().optional().describe(describe.id),
+  filename: z.string().min(1).optional().describe(describe.filename),
+});
+
+const ReadFileRawSchema = z
+  .strictObject(
+    idOrFilenameShape({
+      id: "File id (the `id` or `ref` from search_files / save_file).",
+      filename:
+        "Filename to read instead of `id`; rejected as ambiguous if more than one file shares the name.",
+    }),
+  )
+  .refine(...ID_OR_FILENAME)
+  .describe(
+    "Read a persistent file's exact bytes, base64-encoded, whatever its type — " +
+      "text, images, or any binary (3D models, PDFs, archives). For programs " +
+      "that parse the content; there is no paging and no line numbering.",
+  );
+
+const ReadFileRawOutputSchema = z.object({
+  fileId: z
+    .string()
+    .nullable()
+    .describe("The file's id, or null for a hand-placed file with no row."),
+  filename: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  contentBase64: z.string().describe("The file's exact bytes, base64-encoded."),
+});
+
+const CopyFileSchema = z
+  .strictObject({
+    from: z
+      .discriminatedUnion("type", [
+        z
+          .strictObject({
+            type: z.literal("chat_file"),
+            ...idOrFilenameShape({
+              id: "File id from search_files.",
+              filename: "Filename instead of `id`; ambiguous names rejected.",
+            }),
+          })
+          .refine(...ID_OR_FILENAME)
+          .describe("A file from this chat's scope (conversation or project)."),
+        chatAttachmentSource({
+          self: "A file the user attached to this chat.",
+          id: "Id of an attachment uploaded to THIS conversation.",
+        }),
+        z
+          .strictObject({
+            type: z.literal("app_file"),
+            ...idOrFilenameShape({
+              id: "File id in the app's store.",
+              filename: "Filename instead of `id`.",
+            }),
+          })
+          .refine(...ID_OR_FILENAME)
+          .describe(
+            "A file from the open app's per-viewer store (what the app saved for this user).",
+          ),
+      ])
+      .describe(
+        'Where the bytes come from: {"type":"chat_file","id"|"filename"} | {"type":"chat_attachment","attachmentId"|"filename"} | {"type":"app_file","id"|"filename"}.',
+      ),
+    to: z
+      .strictObject({
+        scope: z
+          .enum(["chat", "app"])
+          .describe(
+            '"app" = the open app\'s per-viewer store; "chat" = this chat\'s files (the project\'s files when this chat belongs to a project).',
+          ),
+        filename: z
+          .string()
+          .min(1)
+          .max(256)
+          .optional()
+          .describe(
+            "Destination filename; defaults to the source's name. Plain filename, no paths.",
+          ),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe(
+            "Replace an existing same-named destination file in place. Default false: a duplicate name is an error.",
+          ),
+      })
+      .describe("Where the copy lands."),
+  })
+  .refine((v) => (v.from.type === "app_file") !== (v.to.scope === "app"), {
+    message:
+      "copy_file exchanges files with the open app: exactly one side must be the app (from app_file to chat, or from chat_file/chat_attachment to app).",
+  })
+  .describe(
+    "Copy a file between this chat and the app the user has open. One side is " +
+      "always the app; the other is the chat's files or an attachment.",
+  );
+
+const CopyFileOutputSchema = z.object({
+  fileId: z.string().describe("Id of the copy at the destination."),
+  filename: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  destination: z
+    .enum(["conversation", "project", "app"])
+    .describe("The scope the copy landed in."),
+  overwritten: z.boolean(),
 });
 
 const SaveFileSchema = z
@@ -749,6 +918,7 @@ const registry = defineArchestraTools([
         source: args.source,
         userCtx: guard.userCtx,
         conversationId: context.conversationId,
+        appId: context.appId,
         scope: uploadScope,
       });
       if ("error" in loaded) return errorResult(loaded.error);
@@ -792,12 +962,27 @@ const registry = defineArchestraTools([
       "it (or pass empty) to list the files (the first 200; narrow with a substring if " +
       "there are more). Returns metadata only — each result carries a stable `ref` you " +
       "pass to read_file, edit_file, or delete_file, or to upload_file to copy the file " +
-      "into the sandbox.",
+      'into the sandbox. Pass scope: "app" to list the files of the app the user has ' +
+      "open instead — the only way to see what an app holds, and the discovery step " +
+      "before copying one of its files out with copy_file.",
     schema: SearchFilesSchema,
     outputSchema: SearchFilesOutputSchema,
     async handler({ args, context }) {
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
+
+      // An app runtime is always confined to its own store, whatever it asks
+      // for. For an agent, scope "app" means the app open in this chat, keyed
+      // off the same access-verified openedAppId that gates copy_file — never
+      // an app id taken from a tool argument.
+      const appId =
+        context.appId ??
+        (args.scope === "app" ? context.openedAppId : undefined);
+      if (args.scope === "app" && !appId) {
+        return errorResult(
+          "No app is open in this chat, so there are no app files to list. Ask the user to open the app first, then retry.",
+        );
+      }
 
       let scope: ProjectFileScope | null;
       try {
@@ -812,7 +997,11 @@ const registry = defineArchestraTools([
         throw error;
       }
 
-      const fileScope = resolveChatFileScope(scope, context.conversationId);
+      const fileScope = resolveChatFileScope(
+        scope,
+        context.conversationId,
+        appId,
+      );
       // A headless no-project call has no conversation to scope to — no files.
       if (!fileScope) {
         return structuredSuccessResult(
@@ -842,7 +1031,9 @@ const registry = defineArchestraTools([
       };
       const summary =
         matches.length === 0
-          ? "No persistent files matched."
+          ? fileScope.kind === "app"
+            ? "The open app has no files matching that."
+            : "No persistent files matched."
           : shown
               .map(
                 (f) =>
@@ -885,7 +1076,11 @@ const registry = defineArchestraTools([
       }
 
       const ref = args.id ?? args.filename ?? "";
-      const fileScope = resolveChatFileScope(scope, context.conversationId);
+      const fileScope = resolveChatFileScope(
+        scope,
+        context.conversationId,
+        context.appId,
+      );
       if (!fileScope) {
         return errorResult(describeMyFileError("not_found", ref));
       }
@@ -975,6 +1170,7 @@ const registry = defineArchestraTools([
             startLine: 1,
             returnedLines: 0,
             truncated: false,
+            content: "",
           },
           `"${originalName}" is empty.`,
         );
@@ -1036,8 +1232,83 @@ const registry = defineArchestraTools([
           startLine,
           returnedLines: numbered.returnedLines,
           truncated,
+          content: numbered.returnedLines > 0 ? numbered.raw : "",
         },
         summary.join("\n"),
+      );
+    },
+  }),
+  // App-runtime only (never seeded; see APP_RUNTIME_ONLY_ARCHESTRA_TOOL_SHORT_
+  // NAMES): the program-shaped sibling of read_file. An app parsing a file —
+  // a 3D model, a PDF, its own saved state — needs the exact bytes, not a
+  // paged, line-numbered rendering built for a model's context window.
+  defineArchestraTool({
+    shortName: TOOL_READ_FILE_RAW_SHORT_NAME,
+    title: "Read File (raw bytes)",
+    description:
+      "Read a persistent file's exact bytes, base64-encoded, whatever its " +
+      "type — text, images, or any binary (3D models, PDFs, archives). No " +
+      "paging, no line numbers. Identify the file by `id` or `filename`.",
+    schema: ReadFileRawSchema,
+    outputSchema: ReadFileRawOutputSchema,
+    async handler({ args, context }) {
+      const guard = ensureUsable(context);
+      if ("error" in guard) return errorResult(guard.error);
+
+      let scope: ProjectFileScope | null;
+      try {
+        scope = await resolveProjectFileScope({
+          conversationId: context.conversationId,
+          userId: guard.userCtx.userId,
+          organizationId: guard.userCtx.organizationId,
+        });
+      } catch (error) {
+        if (error instanceof SkillSandboxError)
+          return errorResult(error.message);
+        throw error;
+      }
+
+      const ref = args.id ?? args.filename ?? "";
+      const fileScope = resolveChatFileScope(
+        scope,
+        context.conversationId,
+        context.appId,
+      );
+      if (!fileScope) {
+        return errorResult(describeMyFileError("not_found", ref));
+      }
+      const resolved = await fileStore.resolveMyFileSource({
+        organizationId: guard.userCtx.organizationId,
+        userId: guard.userCtx.userId,
+        id: args.id,
+        filename: args.filename,
+        scope: fileScope,
+      });
+      if ("error" in resolved) {
+        return errorResult(describeMyFileError(resolved.error, ref));
+      }
+
+      const { data, mimeType, originalName, fileId } = resolved;
+      const limit = config.skillsSandbox.artifactBytesLimit;
+      if (data.byteLength > limit) {
+        return errorResult(
+          `"${originalName}" is too large to read raw (${data.byteLength} bytes > ${limit} byte limit).`,
+        );
+      }
+
+      logger.info(
+        { fileId, sizeBytes: data.byteLength, mimeType },
+        "[Sandbox] file read raw from PFS",
+      );
+      return structuredSuccessResult(
+        {
+          fileId,
+          filename: originalName,
+          mimeType,
+          sizeBytes: data.byteLength,
+          contentBase64: Buffer.from(data).toString("base64"),
+        },
+        `"${originalName}" (${mimeType}, ${data.byteLength} bytes) returned as base64.`,
       );
     },
   }),
@@ -1113,7 +1384,11 @@ const registry = defineArchestraTools([
       // exists. Without overwrite, a duplicate name surfaces as an error below.
       // A headless no-project write resolves the orphan it created on a prior run
       // (no conversation/project scope), so re-runs stay idempotent.
-      const fileScope = resolveChatFileScope(scope, context.conversationId);
+      const fileScope = resolveChatFileScope(
+        scope,
+        context.conversationId,
+        context.appId,
+      );
       if (args.overwrite) {
         const existing = fileScope
           ? await fileStore.resolveMyFileRef({
@@ -1156,6 +1431,7 @@ const registry = defineArchestraTools([
           userId: guard.userCtx.userId,
           projectId: scope?.projectId ?? null,
           conversationId: context.conversationId ?? null,
+          appId: context.appId ?? null,
           filename,
           mimeType,
           sizeBytes: data.byteLength,
@@ -1209,7 +1485,11 @@ const registry = defineArchestraTools([
       }
 
       const ref = args.id ?? args.filename ?? "";
-      const fileScope = resolveChatFileScope(scope, context.conversationId);
+      const fileScope = resolveChatFileScope(
+        scope,
+        context.conversationId,
+        context.appId,
+      );
       if (!fileScope) {
         return errorResult(describeMyFileError("not_found", ref));
       }
@@ -1332,7 +1612,11 @@ const registry = defineArchestraTools([
       }
 
       const ref = args.id ?? args.filename ?? "";
-      const fileScope = resolveChatFileScope(scope, context.conversationId);
+      const fileScope = resolveChatFileScope(
+        scope,
+        context.conversationId,
+        context.appId,
+      );
       if (!fileScope) {
         return errorResult(describeMyFileError("not_found", ref));
       }
@@ -1376,6 +1660,196 @@ const registry = defineArchestraTools([
         { fileId: resolved.id, filename: resolved.filename, deleted: true },
         `Deleted ${resolved.filename}.`,
       );
+    },
+  }),
+  // Agent-side exchange with the chat's open app. The app's namespace is
+  // hermetic by design — an app can never reach a chat's files — so the agent,
+  // acting as the user with the user's RBAC, is the one sanctioned broker. The
+  // "app" side keys off context.openedAppId (set by the chat route after
+  // re-verifying the viewer's access this turn), never off a tool argument.
+  defineArchestraTool({
+    shortName: TOOL_COPY_FILE_SHORT_NAME,
+    title: "Copy File",
+    description:
+      "Exchange a file between this chat and the app the user has open: copy a " +
+      "chat/project file or a chat attachment INTO the open app's file store " +
+      "(so the app can load it), or copy a file OUT of the app's store into " +
+      "this chat's files (so it appears in the Files panel, can be read here, " +
+      "or downloaded). Exactly one side is always the app. Use it when the " +
+      "user asks to open a file in the app, or to save something the app " +
+      "produced. The copy is per-viewer: it lands in the current user's own " +
+      'namespace of the app. To copy OUT, call search_files with scope: "app" ' +
+      "first to see what the app holds — its store is not otherwise visible " +
+      "from here, so a filename you did not list is a guess.",
+    schema: CopyFileSchema,
+    outputSchema: CopyFileOutputSchema,
+    async handler({ args, context }) {
+      const guard = ensureUsable(context);
+      if ("error" in guard) return errorResult(guard.error);
+      if (!context.conversationId) {
+        return errorResult(
+          "copy_file exchanges files between a chat and its open app; this run has no chat conversation.",
+        );
+      }
+      const fromIsApp = args.from.type === "app_file";
+      const toIsApp = args.to.scope === "app";
+      const openedAppId = context.openedAppId;
+      if ((fromIsApp || toIsApp) && !openedAppId) {
+        return errorResult(
+          "No app is open in this chat. Ask the user to open the app to exchange files with, then retry.",
+        );
+      }
+
+      let scope: ProjectFileScope | null;
+      try {
+        scope = await resolveProjectFileScope({
+          conversationId: context.conversationId,
+          userId: guard.userCtx.userId,
+          organizationId: guard.userCtx.organizationId,
+        });
+      } catch (error) {
+        if (error instanceof SkillSandboxError)
+          return errorResult(error.message);
+        throw error;
+      }
+
+      // Source bytes through the same loader upload_file uses: conversation-
+      // bound attachment check, scoped my_file resolution, one LoadedUpload
+      // shape. The app side passes the verified openedAppId so resolution is
+      // confined to the app's namespace; the chat side passes no appId.
+      const source: UploadSource =
+        args.from.type === "chat_attachment"
+          ? {
+              type: "chat_attachment",
+              attachmentId: args.from.attachmentId,
+              filename: args.from.filename,
+            }
+          : { type: "my_file", id: args.from.id, filename: args.from.filename };
+      const loaded = await loadUploadSource({
+        source,
+        userCtx: guard.userCtx,
+        conversationId: context.conversationId,
+        appId: fromIsApp ? openedAppId : undefined,
+        scope: fromIsApp ? null : scope,
+      });
+      if ("error" in loaded) {
+        return errorResult(loaded.error);
+      }
+
+      const filename = (
+        args.to.filename ??
+        loaded.originalName ??
+        (args.from.type !== "chat_attachment" ? (args.from.filename ?? "") : "")
+      ).trim();
+      if (
+        !filename ||
+        filename.includes("/") ||
+        filename.includes("\\") ||
+        filename.startsWith(".")
+      ) {
+        return errorResult(
+          `"${filename}" is not a usable file name. Pass \`to.filename\` with a plain filename including extension.`,
+        );
+      }
+
+      const destProjectId = toIsApp ? null : (scope?.projectId ?? null);
+      // The project instructions file is writable only through its own editor —
+      // a copy must not overwrite (or shadow) it. Same guard as save_file's.
+      if (destProjectId && filename === PROJECT_INSTRUCTIONS_FILENAME) {
+        return errorResult(
+          `"${PROJECT_INSTRUCTIONS_FILENAME}" is reserved for the project's instructions; copy under a different name.`,
+        );
+      }
+      // Destination-side cap: a project's upload limit is tighter than the
+      // sandbox artifact limit, and the DESTINATION's rule is the one that
+      // governs what may land there.
+      const destCap = destProjectId
+        ? MAX_PROJECT_UPLOAD_BYTES
+        : config.skillsSandbox.artifactBytesLimit;
+      if (loaded.data.byteLength > destCap) {
+        return errorResult(
+          `"${filename}" is too large for the destination (${loaded.data.byteLength} bytes > ${destCap} byte limit).`,
+        );
+      }
+
+      const mimeType = resolveArtifactMime({
+        buffer: loaded.data,
+        claimed: loaded.mimeType,
+      });
+      const destScope = toIsApp
+        ? resolveChatFileScope(null, undefined, openedAppId)
+        : resolveChatFileScope(scope, context.conversationId, undefined);
+      if (!destScope) {
+        return errorResult(describeMyFileError("not_found", filename));
+      }
+
+      // Overwrite-else-create, mirroring save_file: replace in place keeps the
+      // destination row's id; without overwrite a duplicate name is an error.
+      if (args.to.overwrite) {
+        const existing = await fileStore.resolveMyFileRef({
+          organizationId: guard.userCtx.organizationId,
+          userId: guard.userCtx.userId,
+          filename,
+          scope: destScope,
+        });
+        if (!("error" in existing)) {
+          const updated = await fileStore.update({
+            file: existing,
+            mimeType,
+            sizeBytes: loaded.data.byteLength,
+            data: loaded.data,
+          });
+          if (!updated) {
+            return errorResult(describeMyFileError("not_found", filename));
+          }
+          return copyFileSuccess({
+            row: updated,
+            filename,
+            fromType: args.from.type,
+            toIsApp,
+            destProjectId,
+            overwritten: true,
+          });
+        }
+        if (existing.error !== "not_found") {
+          return errorResult(describeMyFileError(existing.error, filename));
+        }
+      }
+
+      try {
+        const row = await fileStore.put({
+          organizationId: guard.userCtx.organizationId,
+          userId: guard.userCtx.userId,
+          projectId: destProjectId,
+          conversationId: toIsApp ? null : (context.conversationId ?? null),
+          appId: toIsApp ? (openedAppId ?? null) : null,
+          filename,
+          mimeType,
+          sizeBytes: loaded.data.byteLength,
+          data: loaded.data,
+        });
+        return copyFileSuccess({
+          row,
+          filename,
+          fromType: args.from.type,
+          toIsApp,
+          destProjectId,
+          overwritten: false,
+        });
+      } catch (error) {
+        if (error instanceof FileNameExistsError) {
+          return errorResult(
+            `A file named "${filename}" already exists at the destination. Choose a different name, pass to.overwrite: true, or delete the existing file first.`,
+          );
+        }
+        if (error instanceof UnsafePathError) {
+          return errorResult(`"${filename}" is not a usable file name.`);
+        }
+        if (error instanceof SkillSandboxError) {
+          return errorResult(error.message);
+        }
+        throw error;
+      }
     },
   }),
 ] as const);
@@ -1517,6 +1991,11 @@ function normalizeTarget(
  * Resolve a {@link SandboxTarget} to a concrete sandbox id, creating the
  * conversation default (or a fresh sandbox) as needed. Explicit ids are scoped
  * to the calling user + organization.
+ *
+ * An MCP App runtime is the exception: it has exactly ONE sandbox — the
+ * (org, viewer, app) default — and every sandbox-backed capability it uses
+ * resolves to that same instance, so an explicit `target` is refused rather
+ * than silently minting a second one.
  */
 async function resolveTarget(params: {
   target: SandboxTarget;
@@ -1526,6 +2005,26 @@ async function resolveTarget(params: {
   const { target, userCtx, context } = params;
   const conversationId = context.conversationId ?? null;
   const isolationKey = context.isolationKey ?? null;
+
+  if (context.appId) {
+    const normalizedAppTarget = normalizeTarget(target);
+    if ("error" in normalizedAppTarget) {
+      return { error: normalizedAppTarget.error };
+    }
+    if (normalizedAppTarget.intent) {
+      return {
+        error:
+          "Apps always use the app's own sandbox — omit `target`. A separate or shared sandbox is not available here.",
+      };
+    }
+    const sandbox = await SkillSandboxModel.findOrCreateAppDefault({
+      organizationId: userCtx.organizationId,
+      userId: userCtx.userId,
+      appId: context.appId,
+      defaultCwd: SKILL_SANDBOX_HOME,
+    });
+    return { sandboxId: asSandboxId(sandbox.id) };
+  }
 
   const normalized = normalizeTarget(target);
   if ("error" in normalized) {
@@ -1547,6 +2046,9 @@ async function resolveTarget(params: {
         userCtx,
         conversationId,
         isolationKey,
+        // app callers return above, so this is always null here; passed
+        // explicitly so a non-app caller can never match an app's sandbox.
+        appId: null,
       })
     ) {
       logger.warn(
@@ -1638,12 +2140,19 @@ const CONVERSATION_GONE_ERROR =
  * org+user-wide access (they have no narrower scope to check against).
  */
 function sandboxConversationInScope(params: {
-  sandbox: { id: string; conversationId: string | null };
+  sandbox: { id: string; conversationId: string | null; appId: string | null };
   userCtx: UserContext;
   conversationId: string | null;
   isolationKey: string | null;
+  appId: string | null;
 }): boolean {
-  const { sandbox, userCtx, conversationId, isolationKey } = params;
+  const { sandbox, userCtx, conversationId, isolationKey, appId } = params;
+  // An app's sandbox belongs to that app alone, and an app caller reaches
+  // nothing else. Checked before the org+user-wide fallback below, which would
+  // otherwise let any conversation-less caller reach another app's sandbox.
+  if (sandbox.appId !== null || appId !== null) {
+    return sandbox.appId === appId;
+  }
   if (sandbox.conversationId !== null) {
     return sandbox.conversationId === conversationId;
   }
@@ -1721,6 +2230,7 @@ function numberLines(params: {
   byteLimit: number;
 }): {
   body: string;
+  raw: string;
   returnedLines: number;
   totalLines: number;
   byteCapped: boolean;
@@ -1733,6 +2243,9 @@ function numberLines(params: {
   const from = Math.min(Math.max(params.startLine - 1, 0), totalLines);
   const window = all.slice(from, from + params.maxLines);
   const out: string[] = [];
+  // The same window without the line-number prefixes. Built in this loop so the
+  // byte cap below trims both renderings at exactly the same line.
+  const rawOut: string[] = [];
   let bytes = 0;
   let byteCapped = false;
   for (let i = 0; i < window.length; i++) {
@@ -1745,13 +2258,56 @@ function numberLines(params: {
     }
     bytes += add;
     out.push(rendered);
+    rawOut.push(window[i]);
   }
   return {
     body: out.join("\n"),
+    raw: rawOut.join("\n"),
     returnedLines: out.length,
     totalLines,
     byteCapped,
   };
+}
+
+/** Build the copy_file success result for both the create and overwrite paths. */
+function copyFileSuccess(params: {
+  row: PersistedFile;
+  filename: string;
+  fromType: "chat_file" | "chat_attachment" | "app_file";
+  toIsApp: boolean;
+  destProjectId: string | null;
+  overwritten: boolean;
+}) {
+  const { row, filename, fromType, toIsApp, destProjectId, overwritten } =
+    params;
+  const destination = toIsApp
+    ? ("app" as const)
+    : destProjectId
+      ? ("project" as const)
+      : ("conversation" as const);
+  logger.info(
+    {
+      fileId: row.id,
+      sizeBytes: row.sizeBytes,
+      fromType,
+      destination,
+      destProjectId,
+      appScoped: toIsApp,
+      overwritten,
+    },
+    "[Sandbox] file copied across scopes",
+  );
+  return structuredSuccessResult(
+    {
+      fileId: row.id,
+      filename,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      destination,
+      overwritten,
+    },
+    `Copied ${filename} to the ${destination === "app" ? "open app's files" : `${destination} files`}${overwritten ? " (replaced the existing file)" : ""}.`,
+  );
 }
 
 /** Build the save_file success result for both the create and overwrite paths. */
@@ -1794,10 +2350,18 @@ function saveFileSuccess(params: {
 function resolveChatFileScope(
   projectScope: ProjectFileScope | null,
   conversationId: string | undefined,
+  appId?: string | undefined,
 ):
   | { kind: "project"; projectId: string; projectName: string }
   | { kind: "conversation"; conversationId: string }
+  | { kind: "app"; appId: string }
   | null {
+  // An app runtime's namespace is the (app, viewer) pair — it never reaches a
+  // chat's or a project's files, so this wins over the conversation scope even
+  // if one were somehow present.
+  if (appId) {
+    return { kind: "app", appId };
+  }
   if (projectScope) {
     return {
       kind: "project",
@@ -1834,10 +2398,12 @@ async function loadUploadSource(params: {
   source: UploadSource;
   userCtx: UserContext;
   conversationId: string | undefined;
+  /** App runtime making the call; confines my_file resolution to its namespace. */
+  appId: string | undefined;
   /** Project file scope of the conversation; confines my_file resolution. */
   scope: ProjectFileScope | null;
 }): Promise<LoadedUpload | { error: string }> {
-  const { source, userCtx, conversationId, scope } = params;
+  const { source, userCtx, conversationId, appId, scope } = params;
   switch (source.type) {
     case "base64": {
       if (!BASE64_RE.test(source.dataBase64)) {
@@ -1863,6 +2429,7 @@ async function loadUploadSource(params: {
             organizationId: userCtx.organizationId,
             userId: userCtx.userId,
             attachmentId: source.attachmentId,
+            filename: source.filename,
             reason: "no_conversation_context",
           },
           "[Sandbox] rejected chat_attachment upload",
@@ -1876,7 +2443,7 @@ async function loadUploadSource(params: {
       // the id column is uuid-typed, so querying it with a non-UUID throws an
       // unhandled Postgres error that aborts the whole turn instead of
       // surfacing as the graceful "no such attachment" result below.
-      if (!isUuid(source.attachmentId)) {
+      if (source.attachmentId != null && !isUuid(source.attachmentId)) {
         logger.warn(
           {
             organizationId: userCtx.organizationId,
@@ -1888,12 +2455,18 @@ async function loadUploadSource(params: {
           "[Sandbox] rejected chat_attachment upload",
         );
         return {
-          error: `No accessible attachment with id "${source.attachmentId}" exists. Pass the attachment's id, not its filename.`,
+          error: `No accessible attachment with id "${source.attachmentId}" exists. Pass the attachment's id, or select it by \`filename\` instead.`,
         };
       }
-      const attachment = await ConversationAttachmentModel.findByIdWithData(
-        source.attachmentId,
-      );
+      const attachment =
+        source.attachmentId != null
+          ? await ConversationAttachmentModel.findByIdWithData(
+              source.attachmentId,
+            )
+          : await ConversationAttachmentModel.findLatestByNameWithData({
+              conversationId,
+              originalName: source.filename ?? "",
+            });
       if (!attachment || attachment.organizationId !== userCtx.organizationId) {
         logger.warn(
           {
@@ -1901,12 +2474,16 @@ async function loadUploadSource(params: {
             userId: userCtx.userId,
             conversationId,
             attachmentId: source.attachmentId,
+            filename: source.filename,
             reason: "attachment_not_found_or_wrong_org",
           },
           "[Sandbox] rejected chat_attachment upload",
         );
         return {
-          error: `No accessible attachment with id ${source.attachmentId} exists.`,
+          error:
+            source.attachmentId != null
+              ? `No accessible attachment with id ${source.attachmentId} exists.`
+              : `No attachment named "${source.filename}" exists in this conversation.`,
         };
       }
       if (attachment.conversationId !== conversationId) {
@@ -1932,7 +2509,7 @@ async function loadUploadSource(params: {
       };
     }
     case "my_file": {
-      const fileScope = resolveChatFileScope(scope, conversationId);
+      const fileScope = resolveChatFileScope(scope, conversationId, appId);
       const ref = source.id ?? source.filename ?? "";
       if (!fileScope) {
         return { error: describeMyFileError("not_found", ref) };

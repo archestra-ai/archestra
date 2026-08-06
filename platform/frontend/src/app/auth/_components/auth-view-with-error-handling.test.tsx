@@ -19,6 +19,20 @@ vi.mock("./two-factor-view", () => ({
   TwoFactorView: () => <div data-testid="two-factor-view" />,
 }));
 
+// The guard fronting the two-factor pages is exercised in its own test; here
+// it must simply let the child through so the dispatch assertions are about
+// routing, not about auth state.
+vi.mock("./auth-route-guard", () => ({
+  RequireEnrollableSession: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  RequirePendingTwoFactorChallenge: ({
+    children,
+  }: {
+    children: React.ReactNode;
+  }) => <>{children}</>,
+}));
+
 vi.mock("./recover-account-view", () => ({
   RecoverAccountView: () => <div data-testid="recover-account-view" />,
 }));

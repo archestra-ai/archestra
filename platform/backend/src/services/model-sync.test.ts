@@ -313,6 +313,65 @@ describe("ModelSyncService", () => {
     expect(capabilities.supportsToolCalling).toBe(false);
   });
 
+  test("records perplexity models as tool-less when nothing upstream declares tool support", () => {
+    // Neither the provider's endpoint nor models.dev carries `tool_call` for
+    // sonar, and an undeclared capability reads as "send tools anyway" — which
+    // the chat-completions endpoint rejects outright.
+    const capabilities = resolveModelCapabilities({
+      provider: "perplexity",
+      modelId: "sonar-pro",
+    });
+
+    expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("lets a perplexity model that declares tool support keep it", () => {
+    // The gate is per model, not per provider: a declared capability outranks
+    // the inferred default, so a tool-capable model needs no code change.
+    const capabilities = resolveModelCapabilities({
+      provider: "perplexity",
+      modelId: "sonar-with-tools",
+      fetched: { supportsToolCalling: true },
+    });
+
+    expect(capabilities.supportsToolCalling).toBe(true);
+  });
+
+  test("records perplexity Agent API models as tool-capable", () => {
+    // Accepting tools is the Agent API's whole purpose, and nothing upstream
+    // states it: the catalog is static and models.dev has no entry for it.
+    const capabilities = resolveModelCapabilities({
+      provider: "perplexity",
+      modelId: "perplexity/glm-5.2",
+    });
+
+    expect(capabilities.supportsToolCalling).toBe(true);
+    // A null modality list makes the model edit dialog invalid on open.
+    expect(capabilities.inputModalities).toEqual(["text"]);
+    expect(capabilities.outputModalities).toEqual(["text"]);
+  });
+
+  test("splits perplexity tool capability by transport, not provider", () => {
+    // One provider, two surfaces: the bare `sonar*` chat-completions ids stay
+    // tool-less while the vendor-prefixed Agent API ids take tools, so the
+    // vendor prefix is what must decide.
+    const sonar = resolveModelCapabilities({
+      provider: "perplexity",
+      modelId: "sonar",
+    });
+    expect(sonar.supportsToolCalling).toBe(false);
+    // Text modalities are recorded on this branch too — see the agent-model
+    // test above for what null modalities break.
+    expect(sonar.inputModalities).toEqual(["text"]);
+    expect(sonar.outputModalities).toEqual(["text"]);
+    expect(
+      resolveModelCapabilities({
+        provider: "perplexity",
+        modelId: "anthropic/claude-opus-5",
+      }).supportsToolCalling,
+    ).toBe(true);
+  });
+
   test("persists a sanitized outputLength from the models.dev limit.output", () => {
     const [good, bad] = buildModelsToUpsert({
       provider: "openai",
@@ -684,6 +743,26 @@ describe("ModelSyncService", () => {
     expect(
       selectableEmbeddingModels.map((model) => model.modelId).sort(),
     ).toEqual(["nomic-ai/nomic-embed-text", "openai/text-embedding-3-small"]);
+  });
+
+  test("collapses duplicate model ids so one batch never carries the same (provider, model_id) twice", () => {
+    // Azure AI Foundry lists an entry per model/SKU, so the same id repeats.
+    // Postgres rejects a whole INSERT whose rows share the ON CONFLICT target,
+    // which previously rolled the entire model sync back to zero.
+    const built = buildModelsToUpsert({
+      provider: "azure",
+      models: [
+        { id: "claude-opus-5" },
+        { id: "DeepSeek-R1" },
+        { id: "claude-opus-5" },
+      ],
+      modelsDevData: {},
+    });
+
+    expect(built.map((model) => model.modelId)).toEqual([
+      "claude-opus-5",
+      "DeepSeek-R1",
+    ]);
   });
 
   test("uses an authoritative fetched embedding dimension over the name heuristic", () => {

@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-07-23
+lastUpdated: 2026-08-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -48,6 +48,8 @@ The context window visualizer shows how the model's context window is filled for
 
 The indicator ring appears after the first message in a conversation. The ring color escalates as the window fills: green below 50 %, yellow from 50 %, orange from 75 %, red from 90 %.
 
+Hover the ring for a summary: tokens used, and how much of the window is left before auto-compaction runs. Auto-compaction fires at 80 % — a tick on the panel's bar marks that point.
+
 The panel breaks usage down by category:
 
 | Category | What it counts |
@@ -62,7 +64,7 @@ Expand any category to see the largest individual contributors (top tools by sch
 
 **Estimates, not exact counts.** The breakdown is computed before the request is sent, using the same character-per-token and bytes-per-token heuristics that drive auto-compaction. The provider's exact prompt size arrives afterward via per-step token usage and supersedes the estimate for the ring. The visualizer never mutates or truncates the request.
 
-When auto-compaction frees tokens, a note appears in the panel showing how many tokens were recovered. See [Context Compaction](#context-compaction) for how compaction works.
+Use **Compact now** in the panel to summarize earlier turns before auto-compaction does it for you. When a compaction frees tokens, a note appears showing how many were recovered. See [Context Compaction](#context-compaction) for how compaction works.
 
 Ollama models often run with a smaller context window than the model architecturally supports. Archestra detects the effective window and sizes the ring to it — see [Ollama Context Window](/docs/platform-supported-llm-providers#context-window).
 
@@ -71,3 +73,5 @@ Ollama models often run with a smaller context window than the model architectur
 Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.
 
 You can attach any file type. Images, PDFs, and common text documents (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.toml`) go straight to the model. Other files — a zip archive, for example — are saved to the chat's Files panel. When the agent has a code sandbox, those files are also staged there for the agent to process; without one, the agent can't read them and tells you so.
+
+Large files are kept too. Anything the model can't take — the wrong file type, too big for the code sandbox, or simply too big to send — lands in the Files panel instead, ready to download, and the agent is told it is there. Admins set the maximum upload size; see [Deployment](./platform-deployment).

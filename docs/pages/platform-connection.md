@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-07-24
+lastUpdated: 2026-08-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -65,7 +65,7 @@ You can also read the generator. A deterministic renderer builds the script with
 
 For Claude Code, Codex, and Copilot CLI, the script installs a startup guard — a pre-loader that checks your Archestra remotes each time you launch `claude`, `codex`, or `copilot`. It makes a single health request covering the configured remotes — the LLM proxy and the MCP gateway; the skills marketplace rides on the same origin — then plays each remote's check in turn with a brief spinner. When everything is healthy, the CLI starts in about a second. The guard draws on the terminal's alternate screen, so nothing lingers after the CLI exits.
 
-A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote — "Disconnect MCP gateway (name) from Codex now? (Y/n)", naming your client, or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the same reverse-of-connect steps as the Disconnect panel; `n` keeps them. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with the CLI starting; the guard never blocks a launch. Non-interactive runs, `codex exec` or `claude -p` for example, only get a warning on stderr.
+A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote — "Disconnect MCP gateway (name) from Codex now? (Y/n)", naming your client, or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the exact reverse of the connect steps; `n` keeps them. The guard reads the client's config back to confirm each removal landed. A removal it cannot confirm gets a ✗ line with the command to run by hand, and the guard stays installed to try again. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with the CLI starting; the guard never blocks a launch. Non-interactive runs, `codex exec` or `claude -p` for example, only get a warning on stderr.
 
 Under the checks the guard always shows a reconfigure entry: "To reconfigure your Archestra connection press [C]". When everything is healthy it waits about a second and a half for that key, then starts the CLI. Press `C` and the rows turn into a numbered menu — one per remote — so you can disconnect any of them, reachable or not, by pressing its number. The row lands on a check, later launches skip it, and removing the last connected remote uninstalls the guard. Press `Esc` to leave the menu and start the CLI.
 
@@ -77,11 +77,11 @@ The guard lives under `~/.archestra/`, hooked in by a marked wrapper block in yo
 | Codex | `~/.archestra/codex-startup-guard.sh` | `~/.archestra/codex-startup-guard.ps1` | `ARCHESTRA_CODEX_GUARD=0` |
 | Copilot CLI | `~/.archestra/copilot-startup-guard.sh` | `~/.archestra/copilot-startup-guard.ps1` | `ARCHESTRA_COPILOT_GUARD=0` |
 
-Set the disable variable to turn the guard off without uninstalling. The Disconnect panel has per-OS one-liners that remove everything the guard installed.
+Set the disable variable to turn the guard off without uninstalling. To remove everything by hand instead, follow your client's Revert steps below.
 
 ## Supported Clients
 
-Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the connection's virtual key on the Virtual API Keys page and revoke any skills share link on the Skills page.
+Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key from the LLM Proxy's **Connect** dialog and revoke any skills share link on the Skills page.
 
 ### Claude Code
 
@@ -94,7 +94,7 @@ The `claude` CLI must be on your `PATH`.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
-- **Revert** — open the Disconnect panel on the Connection page for the exact reverse steps. Or restore the backup, delete the Archestra env keys, run `claude mcp remove <name>`, and drop the exported Bedrock token from your profile.
+- **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: restore the backup, delete the Archestra env keys, run `claude mcp remove <name>` and `claude plugin marketplace remove <name>`, and drop the exported Bedrock token from your profile.
 
 ### Codex
 
@@ -105,7 +105,7 @@ The `codex` CLI must be on your `PATH`.
 - **Skills** — runs `codex plugin marketplace add`.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `codex` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.codex/config.toml.archestra-backup`.
-- **Revert** — restore the backup, or delete the `# >>> archestra:<name> >>>` block; run `codex mcp remove <name>`.
+- **Revert** — the startup guard's reconfigure menu (press `C` at launch) disconnects any remote. By hand: delete the `# >>> archestra:<name> >>>` block, run `codex mcp remove <name>` and `codex plugin marketplace remove <name>`; if the script signed Codex in with a virtual key, run `codex logout`, then `codex login` with your own account.
 
 ### Cursor
 
@@ -122,11 +122,11 @@ Cursor is a desktop app, so the script edits its files directly and prints the U
 The `copilot` CLI must be on your `PATH`.
 
 - **MCP gateway** — runs `copilot mcp add --transport http <name> <url>`.
-- **LLM proxy** — prints the `COPILOT_PROVIDER_*` and `COPILOT_MODEL` `export` lines to add to your shell profile, because a piped script cannot set variables in your shell. For a GitHub Copilot subscription the script runs the GitHub device flow locally, so your token never leaves the machine.
+- **LLM proxy** — on Windows the script sets the `COPILOT_PROVIDER_*` variables for you: in the current session and in your User environment. The model you pick in the review step is applied as `COPILOT_MODEL`. On macOS and Linux the script prints `export` lines to add to your shell profile — a piped script cannot set variables in your shell there. For a GitHub Copilot subscription the script runs the GitHub device flow locally, so your token never leaves the machine.
 - **Skills** — runs `copilot plugin marketplace add`.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `copilot` launch. See [Startup Guard](#startup-guard).
-- **Backup** — none; the proxy settings are `export` lines you add yourself.
-- **Revert** — run `copilot mcp remove <name>`; delete the export lines from your shell profile.
+- **Backup** — none; the proxy settings are environment variables.
+- **Revert** — run `copilot mcp remove <name>`; on Windows remove the `COPILOT_PROVIDER_*` variables from your User environment, on macOS and Linux delete the export lines from your shell profile.
 
 ### Claude Desktop
 

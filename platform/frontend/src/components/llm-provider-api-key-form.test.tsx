@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { type UseFormReturn, useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +16,11 @@ import {
   type LlmProviderApiKeyFormValues,
   type LlmProviderApiKeyResponse,
 } from "./llm-provider-api-key-form";
+
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
+Element.prototype.scrollIntoView = vi.fn();
 
 const DEFAULTS: LlmProviderApiKeyFormValues = {
   name: "",
@@ -44,10 +50,16 @@ function Harness({
   existingKeys,
   existingKey,
   defaults,
+  credentialMode,
+  progressive,
+  allowPersonalSubscriptions,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
   defaults?: Partial<LlmProviderApiKeyFormValues>;
+  credentialMode?: "api-key" | "subscription";
+  progressive?: boolean;
+  allowPersonalSubscriptions?: boolean;
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...defaults },
@@ -59,6 +71,9 @@ function Harness({
       showConsoleLink={false}
       existingKeys={existingKeys}
       existingKey={existingKey}
+      credentialMode={credentialMode}
+      progressive={progressive}
+      allowPersonalSubscriptions={allowPersonalSubscriptions}
     />
   );
 }
@@ -67,6 +82,9 @@ function renderForm(options?: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
   defaults?: Partial<LlmProviderApiKeyFormValues>;
+  credentialMode?: "api-key" | "subscription";
+  progressive?: boolean;
+  allowPersonalSubscriptions?: boolean;
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -77,6 +95,9 @@ function renderForm(options?: {
         existingKeys={options?.existingKeys}
         existingKey={options?.existingKey}
         defaults={options?.defaults}
+        credentialMode={options?.credentialMode}
+        progressive={options?.progressive}
+        allowPersonalSubscriptions={options?.allowPersonalSubscriptions}
       />
     </QueryClientProvider>,
   );
@@ -97,6 +118,59 @@ beforeEach(() => {
 });
 
 describe("LlmProviderApiKeyForm", () => {
+  it("shows only sign-in content for a focused subscription flow", () => {
+    renderForm({
+      credentialMode: "subscription",
+      defaults: {
+        provider: "openai",
+        openaiAuthMethod: "chatgpt-subscription",
+      },
+    });
+
+    expect(screen.getByText(/Sign in with ChatGPT/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Provider")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Name/)).not.toBeInTheDocument();
+    expect(screen.queryByText("API Key")).not.toBeInTheDocument();
+    expect(screen.queryByText("Scope")).not.toBeInTheDocument();
+    expect(screen.queryByText("Primary key")).not.toBeInTheDocument();
+    expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Extra HTTP headers")).not.toBeInTheDocument();
+  });
+
+  it("reveals optional API key settings progressively", async () => {
+    const user = userEvent.setup();
+    renderForm({ credentialMode: "api-key", progressive: true });
+
+    expect(screen.getByLabelText("Provider")).toBeInTheDocument();
+    expect(screen.getByText("API Key")).toBeInTheDocument();
+    expect(screen.getByText("Scope")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+    expect(screen.queryByText("Primary key")).not.toBeInTheDocument();
+    expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Extra HTTP headers")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+
+    expect(screen.getByText("Primary key")).toBeInTheDocument();
+    expect(screen.getByText("Base URL")).toBeInTheDocument();
+    expect(screen.getByText("Extra HTTP headers")).toBeInTheDocument();
+  });
+
+  it("excludes subscription-only providers from the API key flow", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      credentialMode: "api-key",
+      progressive: true,
+      allowPersonalSubscriptions: false,
+    });
+
+    await user.click(screen.getByLabelText("Provider"));
+
+    expect(screen.queryByText("GitHub Copilot")).not.toBeInTheDocument();
+    expect(screen.queryByText("Microsoft 365 Copilot")).not.toBeInTheDocument();
+    expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
+  });
+
   it("clears provider-specific credentials when the provider changes", async () => {
     renderForm();
 
@@ -289,6 +363,63 @@ describe("LlmProviderApiKeyForm", () => {
     // No provider change: re-renders must not wipe the typed key.
     await waitFor(() => {
       expect(form.getValues("apiKey")).toBe("sk-openai-secret");
+    });
+  });
+
+  describe("Bedrock region", () => {
+    it("asks for a region instead of requiring a base URL", async () => {
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      // AWS publishes no "base URL" for Bedrock, so demanding one was a dead end.
+      await waitFor(() => {
+        expect(screen.getByLabelText("Region")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Base URL is required for this provider"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows the region carried by an existing key's endpoint", async () => {
+      renderForm({
+        defaults: {
+          provider: "bedrock",
+          baseUrl: "https://bedrock-runtime.ap-southeast-2.amazonaws.com",
+        },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Region")).toHaveTextContent(
+          "ap-southeast-2",
+        );
+      });
+    });
+
+    it("defaults to the region Bedrock would fall back to anyway", async () => {
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      // Not an arbitrary default: it mirrors the backend's getBedrockRegion
+      // fallback, so an untouched picker shows what would actually be used.
+      await waitFor(() => {
+        expect(screen.getByLabelText("Region")).toHaveTextContent("us-east-1");
+      });
+    });
+
+    it("warns when a custom endpoint carries no recognizable region", async () => {
+      renderForm({
+        defaults: {
+          provider: "bedrock",
+          baseUrl: "https://my-bedrock-gateway.internal/v1",
+        },
+      });
+
+      // The backend silently falls back to us-east-1 here, which is exactly the
+      // surprise this copy exists to prevent.
+      await waitFor(() => {
+        expect(
+          screen.getByText(/carries no recognizable region/),
+        ).toBeInTheDocument();
+      });
     });
   });
 });

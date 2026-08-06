@@ -49,6 +49,7 @@ export const DocsPage = {
   PlatformOverview: "platform-overview",
   PlatformPerformanceBenchmarks: "platform-performance-benchmarks",
   PlatformPricingModel: "platform-pricing-model",
+  PlatformTwoFactorAuthentication: "platform-two-factor-authentication",
   PlatformPrivateRegistry: "platform-private-registry",
   PlatformProjects: "platform-projects",
   PlatformPydanticExample: "platform-pydantic-example",

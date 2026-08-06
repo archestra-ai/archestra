@@ -4,8 +4,11 @@ import {
   calculatePaginationMeta,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { UserSelectOption } from "@/components/user-select-option";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { throwOnApiError } from "@/lib/utils";
 import { useActiveOrganization } from "./organization.query";
 
@@ -61,8 +64,10 @@ type RawInvitation = NonNullable<
 export function useMembersPaginated(
   query: Required<Pick<MembersQuery, "limit" | "offset">> &
     Pick<MembersQuery, "name" | "role">,
+  options?: { enabled?: boolean },
 ) {
   return useQuery({
+    enabled: options?.enabled ?? true,
     queryKey: memberKeys.paginated(query),
     queryFn: async () => {
       const response = await getMembers({ query });
@@ -82,6 +87,73 @@ export function useMembersPaginated(
       );
     },
   });
+}
+
+/**
+ * Server-side member search for the user pickers.
+ *
+ * Every picker needs the same three things — debounce the keystrokes, ask the
+ * API instead of filtering a locally-held roster, and keep the currently
+ * selected user in the list even when the active query no longer matches them
+ * (otherwise the trigger falls back to a bare id or an empty label). Owning
+ * that here keeps the pickers from re-deriving it, each slightly differently.
+ *
+ * Pass `selectedUserIds` so the selection is retained; pass `enabled: false`
+ * to hold the request back until a dialog is actually open.
+ */
+export function useMemberSearch({
+  selectedUserIds = [],
+  limit = 50,
+  enabled = true,
+}: {
+  selectedUserIds?: string[];
+  limit?: number;
+  enabled?: boolean;
+} = {}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedValue(searchQuery, 250);
+  const { data, isFetching } = useMembersPaginated(
+    { limit, offset: 0, name: debouncedSearch || undefined },
+    { enabled },
+  );
+
+  const results = useMemo(
+    () =>
+      (data?.data ?? []).map((member) => ({
+        userId: member.userId,
+        name: member.name,
+        email: member.email,
+      })),
+    [data],
+  );
+
+  // Remember everyone we've rendered so a selection made under an earlier
+  // query can still be labelled under the current one.
+  const seenUsers = useRef<Record<string, UserSelectOption>>({});
+  for (const user of results) {
+    seenUsers.current[user.userId] = user;
+  }
+
+  // Cheap enough to redo each render, and no consumer keys an effect off this
+  // list — so it stays plain rather than memoised on a hand-rolled key derived
+  // from the (freshly allocated every render) selectedUserIds array.
+  const present = new Set(results.map((user) => user.userId));
+  const retained = selectedUserIds
+    .filter((userId) => !present.has(userId))
+    .map((userId) => seenUsers.current[userId])
+    .filter((user): user is UserSelectOption => Boolean(user));
+  const users = [...retained, ...results];
+
+  // True while the typed query is still debouncing or its fetch is in flight,
+  // so a picker can say "Searching…" instead of a premature "no results".
+  const isSearching = searchQuery !== debouncedSearch || isFetching;
+
+  return {
+    users,
+    isSearching,
+    onSearchQueryChange: setSearchQuery,
+    emptyMessage: isSearching ? "Searching…" : "No matching users found.",
+  };
 }
 
 /**
@@ -151,7 +223,11 @@ export function useUpdateMemberRole() {
     }) => {
       const response = await authClient.organization.updateMemberRole({
         memberId,
-        role: role as "admin" | "member",
+        // better-auth's client types only admit its built-in role names;
+        // custom and platform-defined roles pass through as plain strings.
+        role: role as Parameters<
+          typeof authClient.organization.updateMemberRole
+        >[0]["role"],
       });
       if (response.error) {
         throw new Error(response.error.message ?? "Failed to update role");

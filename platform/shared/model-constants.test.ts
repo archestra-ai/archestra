@@ -5,6 +5,7 @@ import {
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   requiresOpenAiResponsesApi,
+  stripClaudeContextVariantSuffix,
 } from "./model-constants";
 
 describe("anthropicThinksByDefault", () => {
@@ -121,5 +122,52 @@ describe("isSelfHostedProvider", () => {
     expect(isSelfHostedProvider("azure")).toBe(false);
     expect(isSelfHostedProvider("anthropic")).toBe(false);
     expect(isSelfHostedProvider("openai")).toBe(false);
+  });
+});
+
+describe("stripClaudeContextVariantSuffix", () => {
+  test("drops a context-variant marker from a Claude id", () => {
+    // The marker names the same model: every Claude with a 1M window has it by
+    // default, at standard pricing.
+    expect(stripClaudeContextVariantSuffix("claude-opus-4-8[1m]")).toBe(
+      "claude-opus-4-8",
+    );
+    expect(stripClaudeContextVariantSuffix("claude-sonnet-4-5[200k]")).toBe(
+      "claude-sonnet-4-5",
+    );
+  });
+
+  test("drops it from a reseller's Claude id too", () => {
+    expect(
+      stripClaudeContextVariantSuffix(
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0[1m]",
+      ),
+    ).toBe("us.anthropic.claude-sonnet-4-5-20250929-v1:0");
+  });
+
+  test("leaves an unmarked id untouched", () => {
+    expect(stripClaudeContextVariantSuffix("claude-opus-4-8")).toBe(
+      "claude-opus-4-8",
+    );
+  });
+
+  test("leaves a bracketed segment that is not a token count", () => {
+    // Only a token-count marker is understood; anything else keeps its meaning.
+    expect(stripClaudeContextVariantSuffix("claude-opus-4-8[beta]")).toBe(
+      "claude-opus-4-8[beta]",
+    );
+  });
+
+  test("leaves non-Claude ids alone", () => {
+    expect(stripClaudeContextVariantSuffix("gpt-5.4[1m]")).toBe("gpt-5.4[1m]");
+    expect(stripClaudeContextVariantSuffix("llama3-2-90b[1m]")).toBe(
+      "llama3-2-90b[1m]",
+    );
+  });
+
+  test("only strips a marker at the end of the id", () => {
+    expect(stripClaudeContextVariantSuffix("claude-[1m]-opus")).toBe(
+      "claude-[1m]-opus",
+    );
   });
 });

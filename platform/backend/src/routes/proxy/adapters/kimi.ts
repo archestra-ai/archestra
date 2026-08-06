@@ -11,6 +11,7 @@ import config from "@/config";
 import { metrics } from "@/observability";
 import type { CreateClientOptions } from "@/types";
 import { createOpenAiCompatibleAdapterFactory } from "./openai-compatible-adapter";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 export const kimiAdapterFactory = createOpenAiCompatibleAdapterFactory({
   provider: "kimi",
@@ -25,6 +26,7 @@ export const kimiAdapterFactory = createOpenAiCompatibleAdapterFactory({
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl ?? config.llm.kimi.baseUrl,
       fetch: customFetch,

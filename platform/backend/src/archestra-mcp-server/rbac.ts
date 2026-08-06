@@ -54,10 +54,6 @@ export const TOOL_PERMISSIONS: Record<
   list_mcp_server_deployments: { resource: "mcpRegistry", action: "read" },
   get_mcp_server_logs: { resource: "mcpRegistry", action: "read" },
   reload_mcp_server_tools: { resource: "mcpRegistry", action: "update" },
-  create_mcp_server_installation_request: {
-    resource: "mcpServerInstallationRequest",
-    action: "create",
-  },
 
   // Teams
   create_team: { resource: "team", action: "create" },
@@ -180,6 +176,11 @@ export const TOOL_PERMISSIONS: Record<
   // (authorship, project membership) stays in the handlers.
   search_files: { resource: "file", action: "manage" },
   read_file: { resource: "file", action: "manage" },
+  // Agent-side exchange with the chat's open app — pure PFS↔PFS, so file
+  // permission, not sandbox execution.
+  copy_file: { resource: "file", action: "manage" },
+  // App-runtime only (never seeded/agent-visible); still viewer-RBAC-checked.
+  read_file_raw: { resource: "file", action: "manage" },
   save_file: { resource: "file", action: "manage" },
   edit_file: { resource: "file", action: "manage" },
   delete_file: { resource: "file", action: "manage" },
@@ -197,6 +198,10 @@ export const TOOL_PERMISSIONS: Record<
   // set_app_tools replaces an app's assigned tool set; assertCallerMayModifyApp
   // is the real authority, app:update is the floor (mirrors edit_app).
   set_app_tools: { resource: "app", action: "update" },
+  set_app_labels: { resource: "app", action: "update" },
+  // set_app_lock flips the app's lock; the per-app authorization (scope +
+  // author + teams) rides the same loadApp modify gate as the other mutations.
+  set_app_lock: { resource: "app", action: "update" },
   // validate_app only reads the head html and reports static findings.
   validate_app: { resource: "app", action: "read" },
   // publish_app changes the app's visibility scope; the scope-promotion gate
@@ -243,14 +248,20 @@ export async function checkToolPermission(
   if (!perm) return null;
 
   if (!context.organizationId) {
-    return errorResult("User context not available");
+    return errorResult("Organization context not available");
   }
 
   // org/team-token sessions have no user; they may still use read-only tools
   // that operate at organization scope — the handlers restrict the results.
   if (!context.userId) {
     if (ORG_CONTEXT_READ_TOOLS.has(typedShortName)) return null;
-    return errorResult("User context not available");
+    // Name the cause: this is reached whenever the caller authenticated with a
+    // credential that acts for an application rather than a person, and the
+    // previous wording ("User context not available") read as an internal
+    // fault rather than a fixable choice of credential.
+    return errorResult(
+      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. Team tokens, organization tokens, and OAuth client-credentials tokens act for an application, not a person. Re-authenticate with a personal token, a user OAuth token, or an Identity Provider JWT.`,
+    );
   }
 
   const allowed = await userHasPermission(

@@ -401,6 +401,287 @@ describe("StatisticsModel", () => {
     });
   });
 
+  describe("getUserStatistics", () => {
+    const baseParams = {
+      timeframe: "24h" as StatisticsTimeFrame,
+      pagination: { limit: 50, offset: 0 },
+      sortBy: "totalTokens" as const,
+      sortDirection: "desc" as const,
+      includeTimeSeries: false,
+      includeModels: false,
+      isAgentAdmin: true,
+      canReadAllUsers: true,
+    };
+
+    test("attributes usage per user and leaves unattributed traffic out", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const alice = await makeUser({ email: "alice@test.com" });
+      const bob = await makeUser({ email: "bob@test.com" });
+
+      await makeInteraction(agent.id, {
+        userId: alice.id,
+        inputTokens: 100,
+        outputTokens: 50,
+        cost: "1.0000000000",
+        model: "gpt-4o",
+      });
+      await makeInteraction(agent.id, {
+        userId: bob.id,
+        inputTokens: 10,
+        outputTokens: 5,
+        cost: "0.5000000000",
+        model: "gpt-4o",
+      });
+      // No user id: a shared credential with no user context. Must not be
+      // attributed to anyone, and must not create a phantom row.
+      await makeInteraction(agent.id, {
+        inputTokens: 999,
+        outputTokens: 999,
+        cost: "9.0000000000",
+        model: "gpt-4o",
+      });
+
+      const result = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        requestingUserId: alice.id,
+      });
+
+      expect(result.pagination.total).toBe(2);
+      expect(result.data.map((row) => row.userId)).toEqual([alice.id, bob.id]);
+
+      const aliceRow = result.data[0];
+      expect(aliceRow.userEmail).toBe("alice@test.com");
+      expect(aliceRow.requests).toBe(1);
+      expect(aliceRow.inputTokens).toBe(100);
+      expect(aliceRow.outputTokens).toBe(50);
+      expect(aliceRow.totalTokens).toBe(150);
+      expect(aliceRow.billedCost).toBeCloseTo(1, 5);
+      expect(aliceRow.activeDays).toBe(1);
+      expect(aliceRow.lastActiveAt).not.toBeNull();
+    });
+
+    test("sums token totals beyond int32 without overflowing", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const user = await makeUser();
+
+      // Each row fits the int32 column, but the org-wide SUM crosses int32 —
+      // an INTEGER cast on the aggregate raised "integer out of range".
+      const perRow = 1_500_000_000;
+      await makeInteraction(agent.id, {
+        userId: user.id,
+        inputTokens: perRow,
+        outputTokens: perRow,
+        cost: "1.0000000000",
+        model: "gpt-4o",
+      });
+      await makeInteraction(agent.id, {
+        userId: user.id,
+        inputTokens: perRow,
+        outputTokens: perRow,
+        cost: "1.0000000000",
+        model: "gpt-4o",
+      });
+
+      const result = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        requestingUserId: user.id,
+      });
+
+      const row = result.data[0];
+      expect(row.inputTokens).toBe(2 * perRow);
+      expect(row.outputTokens).toBe(2 * perRow);
+      expect(row.totalTokens).toBe(4 * perRow);
+    });
+
+    test("reports subscription-covered usage separately from billed spend", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const user = await makeUser();
+
+      // A user whose traffic is entirely subscription-fulfilled. Billed spend
+      // is $0, but they are one of the heaviest users — reporting only cost
+      // would render them as inactive.
+      await makeInteraction(agent.id, {
+        userId: user.id,
+        inputTokens: 1000,
+        outputTokens: 500,
+        cost: "7.0000000000",
+        billingMode: "subscription",
+        model: "claude-sonnet-4",
+      });
+
+      const result = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        requestingUserId: user.id,
+      });
+
+      const row = result.data[0];
+      expect(row.billedCost).toBeCloseTo(0, 5);
+      expect(row.subscriptionCost).toBeCloseTo(7, 5);
+      expect(row.totalTokens).toBe(1500);
+    });
+
+    test("paginates and sorts, so a page is bounded regardless of user count", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+
+      const light = await makeUser();
+      const heavy = await makeUser();
+      const middle = await makeUser();
+
+      await makeInteraction(agent.id, {
+        userId: light.id,
+        inputTokens: 1,
+        outputTokens: 1,
+        model: "gpt-4o",
+      });
+      await makeInteraction(agent.id, {
+        userId: heavy.id,
+        inputTokens: 500,
+        outputTokens: 500,
+        model: "gpt-4o",
+      });
+      await makeInteraction(agent.id, {
+        userId: middle.id,
+        inputTokens: 50,
+        outputTokens: 50,
+        model: "gpt-4o",
+      });
+
+      const firstPage = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        pagination: { limit: 1, offset: 0 },
+        requestingUserId: heavy.id,
+      });
+
+      expect(firstPage.data).toHaveLength(1);
+      expect(firstPage.data[0].userId).toBe(heavy.id);
+      // The total counts every matching user, not just the page.
+      expect(firstPage.pagination.total).toBe(3);
+
+      const secondPage = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        pagination: { limit: 1, offset: 1 },
+        requestingUserId: heavy.id,
+      });
+      expect(secondPage.data[0].userId).toBe(middle.id);
+
+      const ascending = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        pagination: { limit: 1, offset: 0 },
+        sortDirection: "asc",
+        requestingUserId: heavy.id,
+      });
+      expect(ascending.data[0].userId).toBe(light.id);
+    });
+
+    test("omits the time series and model breakdown unless asked for them", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const user = await makeUser();
+
+      await makeInteraction(agent.id, {
+        userId: user.id,
+        inputTokens: 100,
+        outputTokens: 20,
+        cost: "2.0000000000",
+        model: "gpt-4o",
+      });
+      await makeInteraction(agent.id, {
+        userId: user.id,
+        inputTokens: 10,
+        outputTokens: 5,
+        cost: "0.2500000000",
+        model: "claude-sonnet-4",
+      });
+
+      const lean = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        requestingUserId: user.id,
+      });
+      expect(lean.data[0].models).toBeUndefined();
+      expect(lean.data[0].timeSeries).toBeUndefined();
+
+      const enriched = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        includeModels: true,
+        includeTimeSeries: true,
+        requestingUserId: user.id,
+      });
+
+      // Heaviest model first, so the mix is readable without re-sorting.
+      expect(enriched.data[0].models?.map((m) => m.model)).toEqual([
+        "gpt-4o",
+        "claude-sonnet-4",
+      ]);
+      expect(enriched.data[0].models?.[0].requests).toBe(1);
+      expect(enriched.data[0].models?.[0].billedCost).toBeCloseTo(2, 5);
+      expect(enriched.data[0].timeSeries?.length).toBeGreaterThan(0);
+    });
+
+    test("narrows to the caller's own usage without permission to read the roster", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const caller = await makeUser();
+      const someoneElse = await makeUser();
+
+      await makeInteraction(agent.id, {
+        userId: caller.id,
+        inputTokens: 10,
+        outputTokens: 10,
+        model: "gpt-4o",
+      });
+      await makeInteraction(agent.id, {
+        userId: someoneElse.id,
+        inputTokens: 999,
+        outputTokens: 999,
+        model: "gpt-4o",
+      });
+
+      const result = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        requestingUserId: caller.id,
+        canReadAllUsers: false,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].userId).toBe(caller.id);
+      expect(result.pagination.total).toBe(1);
+    });
+  });
+
   describe("getOverviewStatistics", () => {
     test("should return overview statistics", async ({
       makeUser,

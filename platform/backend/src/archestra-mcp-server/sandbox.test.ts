@@ -22,6 +22,7 @@ import {
   OrganizationModel,
   ProjectModel,
   SkillModel,
+  SkillSandboxFileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
   SkillVersionModel,
@@ -1315,7 +1316,7 @@ describe("sandbox tools (runtime enabled)", () => {
       );
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain(
-        "must be the attachment's id, not its filename",
+        "must be the attachment's id — when you only know the name, use `filename` instead",
       );
       expect(uploadSpy).not.toHaveBeenCalled();
     });
@@ -1364,7 +1365,11 @@ describe("sandbox tools (runtime enabled)", () => {
         expect(uploads).toHaveLength(1);
         const [only] = uploads;
         if (only.kind !== "upload") throw new Error("expected an upload event");
-        expect(only.upload.data?.toString("utf8")).toBe(bytes.toString("utf8"));
+        expect(
+          (
+            await SkillSandboxFileModel.findUploadDataById(only.upload.id)
+          )?.toString("utf8"),
+        ).toBe(bytes.toString("utf8"));
         expect(only.upload.path).toBe("/home/sandbox/data/input.csv");
       });
 

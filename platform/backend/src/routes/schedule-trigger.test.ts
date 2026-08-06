@@ -202,6 +202,49 @@ describe("schedule trigger routes", () => {
     expect(response.json().projectId).toBe(project.id);
   });
 
+  test("run-now and by-id reads 404 once the trigger's project is soft-deleted", async ({
+    makeInternalAgent,
+    makeScheduleTrigger,
+  }) => {
+    const agent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "doomed-scheduled",
+      description: null,
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      // The actor normally always has access; the soft-deleted project overrides
+      // even that, so run-now can't execute into a hidden project.
+      actorUserId: adminUser.id,
+      agentId: agent.id,
+      projectId: project.id,
+    });
+
+    await projectService.delete({
+      id: project.id,
+      organizationId,
+      userId: adminUser.id,
+    });
+
+    const runNow = await app.inject({
+      method: "POST",
+      url: `/api/schedule-triggers/${trigger.id}/run-now`,
+    });
+    expect(runNow.statusCode).toBe(404);
+
+    const byId = await app.inject({
+      method: "GET",
+      url: `/api/schedule-triggers/${trigger.id}`,
+    });
+    expect(byId.statusCode).toBe(404);
+  });
+
   test("POST create without an agentId falls back to the org default agent", async ({
     makeInternalAgent,
   }) => {
@@ -233,6 +276,83 @@ describe("schedule trigger routes", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().agentId).toBe(defaultAgent.id);
+  });
+
+  test("POST create without an agentId prefers the project's default agent over the org's", async ({
+    makeInternalAgent,
+  }) => {
+    // Same "basic user" path, but the project pins its own agent. Without this
+    // the pin is honored only for callers whose UI can send an agentId.
+    const orgDefault = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+      isDefault: true,
+    });
+    const projectAgent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "pinned-agent-project",
+      description: null,
+      defaultAgentId: projectAgent.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/schedule-triggers",
+      payload: {
+        name: "Project pin wins",
+        projectId: project.id,
+        messageTemplate: "go",
+        cronExpression: "* * * * *",
+        timezone: "UTC",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().agentId).toBe(projectAgent.id);
+    expect(response.json().agentId).not.toBe(orgDefault.id);
+  });
+
+  test("POST create with an explicit agentId keeps it over the project's pin", async ({
+    makeInternalAgent,
+  }) => {
+    const projectAgent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const chosenAgent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "explicit-over-pin",
+      description: null,
+      defaultAgentId: projectAgent.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/schedule-triggers",
+      payload: {
+        name: "Explicit wins",
+        projectId: project.id,
+        agentId: chosenAgent.id,
+        messageTemplate: "go",
+        cronExpression: "* * * * *",
+        timezone: "UTC",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().agentId).toBe(chosenAgent.id);
   });
 
   test("POST create without an agentId and no default agent returns 400", async () => {

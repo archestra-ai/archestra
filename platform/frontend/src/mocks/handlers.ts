@@ -2,6 +2,7 @@
 // barrel (`@archestra/shared`) transitively imports a JSON module without an
 // import attribute, which the Playwright integration-test ESM loader rejects.
 // `client.ts` depends only on zod.
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import {
   type ClientFilter,
   ClientFilterSchema,
@@ -52,7 +53,7 @@ import {
 // browser (served via Next.js rewrites). MSW path-to-regexp does not accept
 // `*/...` host wildcards.
 const BACKEND_ORIGIN =
-  process.env.ARCHESTRA_INTERNAL_API_BASE_URL || "http://localhost:9000";
+  process.env.ARCHESTRA_INTERNAL_API_BASE_URL || DEFAULT_INTERNAL_API_BASE_URL;
 
 function paired(path: string): [string, string] {
   return [`${BACKEND_ORIGIN}${path}`, path];
@@ -96,11 +97,25 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/auth/default-credentials-status", { enabled: false }),
   ...getJson("/api/auth/organization/list", []),
   ...getJson("/api/auth/organization/get-full-organization", betterAuthOrgSeed),
+  // The role behind `useIsGlobalAdmin` — admin, matching the session identity,
+  // so admin-only affordances (permanent delete) render.
+  ...getJson("/api/auth/organization/get-active-member-role", {
+    role: sessionSeed.user.role,
+  }),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/health", healthSeed),
   ...getJson("/api/organization", organizationSeed),
+  // The roster behind owner pickers and the scope filter's "member" facet —
+  // the seeded admin, mirroring the session identity.
+  ...getJson("/api/organization/members", [
+    {
+      id: sessionSeed.user.id,
+      name: sessionSeed.user.name,
+      email: sessionSeed.user.email,
+    },
+  ]),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the survey/feedback dialogs interfere with other tests.
@@ -167,6 +182,10 @@ export const handlers: HttpHandler[] = [
       supportsFqdn: false,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "probe",
+      enforcementStatus: "verified-enforced",
+      probe: "enforced",
+      probedAt: "2026-01-01T00:00:00.000Z",
     },
   }),
 

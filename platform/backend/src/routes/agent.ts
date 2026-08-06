@@ -12,17 +12,28 @@ import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
+  isGlobalAdmin,
   requireAgentModifyPermission,
   userHasPermission,
 } from "@/auth";
-import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+// Imported from the module rather than the `@/auth` barrel on purpose: route
+// tests mock `@/auth` wholesale to open up permissions, and these are
+// validation rules (team existence, org ownership, the ≥1-team invariant) that
+// must keep running in those tests rather than silently becoming no-ops.
+import {
+  type AgentTypePermissionChecker,
+  assertAgentTeams,
+} from "@/auth/agent-type-permissions";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
+  AgentTeamModel,
+  AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   MemberModel,
+  ProjectModel,
   TeamModel,
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
@@ -30,8 +41,10 @@ import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
+  type Agent,
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -49,6 +62,12 @@ import {
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
+import {
+  AgentVersionMetadataSchema,
+  RestoreAgentVersionBodySchema,
+  SelectAgentVersionSchema,
+} from "@/types/agent-version";
+import { isForeignKeyConstraintError } from "@/utils/db";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -249,6 +268,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Exclude built-in agents from the results. Defaults to false.",
             ),
+          includeAdvisor: z
+            .preprocess((val) => val === "true" || val === true, z.boolean())
+            .optional()
+            .describe(
+              "Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to.",
+            ),
           scope: AgentScopeFilterSchema.optional().describe(
             "Filter by scope: personal, team, org, or built_in.",
           ),
@@ -277,6 +302,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType,
           agentTypes,
           excludeBuiltIn,
+          includeAdvisor,
           scope,
           excludeOtherPersonalAgents,
           status,
@@ -315,6 +341,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
           excludeBuiltIn,
+          includeAdvisor,
           scope:
             scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
           excludeOtherPersonalAgents: isAdmin
@@ -524,11 +551,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // A team-scoped agent with no teams is accessible to nobody (not even its
-      // author), so reject it. Applies to admins too — they can otherwise reach
-      // this via the API/UI (issue #6624).
-      assertTeamScopeHasTeams({
+      // author), so reject it, and reject teams outside this organization.
+      // Applies to admins too — they can otherwise reach this via the API/UI
+      // (issue #6624).
+      await assertAgentTeams({
         scope: body.scope ?? "personal",
-        teamCount: body.teams.length,
+        teamIds: body.teams,
+        organizationId,
       });
 
       // Omit teams if scope is not 'team' — scope takes precedence
@@ -559,43 +588,161 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Fetch agent first to determine its type
-      // Use admin=true for the lookup so we can check type, then enforce type-specific RBAC
-      const agent = await AgentModel.findById(id, user.id, true);
+      const agent = await requireReadableAgent({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(agent);
+    },
+  );
 
-      if (!agent) {
+  fastify.get(
+    "/api/agents/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetAgentVersions,
+        description:
+          "List an agent's config version history, newest first, as " +
+          "metadata only (no snapshot). Retention keeps the last 100 " +
+          "versions, so the oldest listed version may be greater than 1.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: PaginationQuerySchema,
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(AgentVersionMetadataSchema),
+        ),
+      },
+    },
+    async ({ params: { id }, query, user, organizationId }, reply) => {
+      await requireReadableAgent({ id, userId: user.id, organizationId });
+      return reply.send(
+        await AgentVersionModel.listForAgent({
+          agentId: id,
+          organizationId,
+          pagination: query,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/versions/:version",
+    {
+      schema: {
+        operationId: RouteId.GetAgentVersion,
+        description:
+          "Get one immutable agent config version (full snapshot; key " +
+          "material is never captured). Versions dropped by retention are " +
+          "404.",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+          // capped at int4 max so impossible versions 400 instead of
+          // reaching Postgres as an out-of-range bind
+          version: z.coerce.number().int().positive().max(2_147_483_647),
+        }),
+        response: constructResponseSchema(SelectAgentVersionSchema),
+      },
+    },
+    async ({ params: { id, version }, user, organizationId }, reply) => {
+      await requireReadableAgent({ id, userId: user.id, organizationId });
+      const row = await AgentVersionModel.findByAgentAndVersion({
+        agentId: id,
+        version,
+        organizationId,
+      });
+      if (!row) {
+        throw new ApiError(404, `Agent has no version ${version}`);
+      }
+      return reply.send(row);
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/versions/:version/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreAgentVersion,
+        description:
+          "Restore an agent's config to an earlier version by replaying its " +
+          "snapshot forward as a new head version — history is never " +
+          "rewritten. All-or-nothing: the restore is validated in full before " +
+          "anything is written, and a version referencing something that no " +
+          "longer exists or is out of the caller's reach (a deleted tool, key " +
+          "or knowledge source) is rejected with 400 rather than partially " +
+          "applied. Only differences from the agent's live config are written, " +
+          "so restoring the current configuration is a no-op. Retrying is " +
+          "safe: the source version is immutable, and the pre-restore config " +
+          "is forked as a version before anything is written.",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+          // capped at int4 max so impossible versions 400 instead of
+          // reaching Postgres as an out-of-range bind
+          version: z.coerce.number().int().positive().max(2_147_483_647),
+        }),
+        // Nullish so a bare POST without a payload keeps working (an empty
+        // body arrives as null)
+        body: RestoreAgentVersionBodySchema.nullish(),
+        response: constructResponseSchema(SelectAgentSchema),
+      },
+    },
+    async ({ params: { id, version }, body, user, organizationId }, reply) => {
+      // Fetch agent to determine its type for permission check
+      const existingAgent = await AgentModel.findById(id, user.id, true);
+      if (!existingAgent) {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Defense-in-depth: never allow cross-organization access, even for admins.
-      // Permissions are scoped to the current organizationId.
-      if (agent.organizationId !== organizationId) {
+      // Defense-in-depth: never allow cross-organization access, even for
+      // admins. AgentModel.findById is not org-scoped.
+      if (existingAgent.organizationId !== organizationId) {
         throw new ApiError(404, "Agent not found");
       }
 
-      // Single DB query for all permission checks on this agent type
       const checker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
       });
 
-      // Check read permission (return 404 to avoid leaking existence)
+      // Restoring is an update in permission terms
+      // (return 404 to avoid leaking existence)
       try {
-        checker.require(agent.agentType, "read");
+        checker.require(existingAgent.agentType, "update");
       } catch {
         throw new ApiError(404, "Agent not found");
       }
 
-      if (!checker.isAdmin(agent.agentType)) {
-        // Re-fetch with team filtering
-        const filteredAgent = await AgentModel.findById(id, user.id, false);
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
-        return reply.send(filteredAgent);
+      // Enforce scope-based modify permissions like UpdateAgent does
+      const userTeamIds = !checker.isAdmin(existingAgent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: existingAgent.agentType,
+        agentScope: existingAgent.scope,
+        agentAuthorId: existingAgent.authorId,
+        agentTeamIds: existingAgent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      // Built-in agents restrict which fields an update may touch; a snapshot
+      // replay would bypass that allowlist.
+      if (existingAgent.builtInAgentConfig) {
+        throw new ApiError(403, "Built-in agents cannot be restored");
       }
 
-      return reply.send(agent);
+      return reply.send(
+        await restoreAgentVersion({
+          agentId: id,
+          version,
+          baseVersion: body?.baseVersion,
+          userId: user.id,
+          organizationId,
+        }),
+      );
     },
   );
 
@@ -668,12 +815,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const targetScope = body?.scope ?? sourceAgent.scope;
       const requestedTeams = body?.teams ?? [];
 
-      // A team-scoped clone must land on ≥1 team (issue #6624). Effective teams
-      // default to the source's when the caller omits them, matching
-      // AgentModel.cloneAgent. Applies to admins too.
-      assertTeamScopeHasTeams({
+      // A team-scoped clone must land on ≥1 team (issue #6624) and may only
+      // target teams in this organization. Effective teams default to the
+      // source's when the caller omits them, matching AgentModel.cloneAgent.
+      // Applies to admins too.
+      await assertAgentTeams({
         scope: targetScope,
-        teamCount: (body?.teams ?? sourceAgent.teams).length,
+        teamIds: body?.teams ?? sourceAgent.teams.map((t) => t.id),
+        organizationId,
       });
 
       if (!checker.isAdmin(sourceAgent.agentType)) {
@@ -1157,13 +1306,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Shared agents cannot be made personal");
       }
 
-      // A team-scoped agent must keep ≥1 team (issue #6624). Evaluate the merged
-      // result — the team-admin path above may have rewritten body.teams — so
-      // this catches switching to team scope with none, or clearing the teams of
-      // an already team-scoped agent. Applies to admins too.
-      assertTeamScopeHasTeams({
+      // A team-scoped agent must keep ≥1 team (issue #6624) and may only be
+      // assigned teams in this organization. Evaluate the merged result — the
+      // team-admin path above may have rewritten body.teams — so this catches
+      // switching to team scope with none, or clearing the teams of an already
+      // team-scoped agent. Applies to admins too.
+      await assertAgentTeams({
         scope: body.scope ?? existingAgent.scope,
-        teamCount: (body.teams ?? existingAgent.teams).length,
+        teamIds: body.teams ?? existingAgent.teams.map((t) => t.id),
+        organizationId,
       });
 
       // Validate knowledgeBaseIds if provided
@@ -1365,6 +1516,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Projects pinning this agent are shown "no default" from here on, so
+      // clear the rows to match. Left set, restoring the agent would silently
+      // re-pin projects whose owners were last told the pin was gone.
+      await ProjectModel.clearDefaultAgent(id);
+
       return reply.send({ success: true });
     },
   );
@@ -1430,6 +1586,49 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(restored);
+    },
+  );
+
+  fastify.delete(
+    "/api/agents/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeleteAgent,
+        description:
+          "Permanently destroy a soft-deleted agent. Global admins only — an " +
+          "`agent:delete` or `agent:admin` grant reaches the trash, not past " +
+          "it. Irreversible, with no grace period: the agent's configuration " +
+          "and scheduled runs are destroyed, and it is cleared from the " +
+          "organization, /connection, and member defaults. Its history " +
+          "survives, detached — conversations and LLM usage rows are kept and " +
+          "simply stop pointing at it. 404 if there is no soft-deleted agent " +
+          "with that id in the org, which is also the answer when the agent " +
+          "is still live or the caller is not a global admin. Restore wins a " +
+          "race. Purging a high-traffic LLM proxy detaches millions of usage " +
+          "rows in one transaction and can take minutes; past five it is " +
+          "abandoned and the agent stays in the trash, unharmed.",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Checked before the agent is looked up at all: a non-admin gets the same
+      // 404 whatever the id, so the endpoint never confirms an agent exists.
+      // The purge itself re-checks id, org, and soft-deleted state under a row
+      // lock, so there is no separate existence read to do here.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const purged = await AgentModel.purge(id, organizationId);
+      if (!purged) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      return reply.send({ success: true });
     },
   );
 
@@ -1561,12 +1760,24 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      await MemberModel.setDefaultModelSelection({
-        userId: user.id,
-        organizationId,
-        modelId: body.modelId,
-        apiKeyId: body.chatApiKeyId,
-      });
+      try {
+        await MemberModel.setDefaultModelSelection({
+          userId: user.id,
+          organizationId,
+          modelId: body.modelId,
+          apiKeyId: body.chatApiKeyId,
+        });
+      } catch (error) {
+        // The referenced model or API key can be deleted between the client
+        // loading its options and saving the selection.
+        if (isForeignKeyConstraintError(error)) {
+          throw new ApiError(
+            400,
+            "The selected model or API key no longer exists",
+          );
+        }
+        throw error;
+      }
 
       return reply.send({
         modelId: body.modelId,
@@ -1577,6 +1788,52 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default agentRoutes;
+
+/**
+ * Resolve a live agent and enforce the full read-access path shared by
+ * GetAgent and the version-history routes: org scoping, per-type RBAC, and —
+ * for non-admins — team-filtered visibility. Every failure is a 404 so
+ * existence is never leaked. Version reads don't filter soft-deletes
+ * themselves, so resolving the live agent here (findById excludes deleted
+ * rows) is what keeps a deleted agent's history unreachable.
+ */
+async function requireReadableAgent(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}): Promise<Agent> {
+  // admin lookup first to learn the type, then enforce type-specific RBAC
+  const agent = await AgentModel.findById(params.id, params.userId, true);
+  if (!agent || agent.organizationId !== params.organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const checker = await getAgentTypePermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  try {
+    checker.require(agent.agentType, "read");
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  if (!checker.isAdmin(agent.agentType)) {
+    // Team/author visibility, mirroring GetAgent's non-admin filter. The
+    // already-fetched agent serves as the access context — no re-fetch.
+    const hasAccess = await AgentTeamModel.userHasAgentAccess(
+      params.userId,
+      params.id,
+      false,
+      agent,
+    );
+    if (!hasAccess) {
+      throw new ApiError(404, "Agent not found");
+    }
+  }
+
+  return agent;
+}
 
 async function validateKnowledgeBaseAccess(params: {
   kbId: string;
@@ -1670,23 +1927,6 @@ async function assertEnvironmentAssignable(params: {
     organizationId,
     canDeployToRestricted: hasResourceDeploy,
   });
-}
-
-/**
- * A team-scoped agent with zero teams matches no team membership, so it is
- * inaccessible to everyone including its author (issue #6624). Reject it at the
- * write paths. Callers pass the resolved effective scope and team count.
- */
-function assertTeamScopeHasTeams(params: {
-  scope: string;
-  teamCount: number;
-}): void {
-  if (params.scope === "team" && params.teamCount === 0) {
-    throw new ApiError(
-      400,
-      "A team-scoped agent must be assigned at least one team",
-    );
-  }
 }
 
 /**

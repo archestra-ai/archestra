@@ -106,6 +106,8 @@ export const McpAppRuntime = function McpAppRuntime({
   inlineInitialHeight,
   degradeResourceLoadError,
   recorder,
+  filesRevision,
+  onModelContextUpdate,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -151,6 +153,12 @@ export const McpAppRuntime = function McpAppRuntime({
    * All no-ops while the user isn't recording.
    */
   recorder?: AppSessionRecorderRuntimeHooks;
+  /** Per-app count of agent-side file-store writes; threaded to the sandbox so
+   * a bump nudges the running app to re-list its files. */
+  filesRevision?: number;
+  /** Called when the app reports what it is showing (ui/update-model-context);
+   * the chat stamps the latest report onto outgoing message metadata. */
+  onModelContextUpdate?: (text: string) => void;
 }) {
   const { resolvedTheme } = useTheme();
   // The host only ever caps height (width is unbounded); unpack the SEP-shaped
@@ -199,6 +207,8 @@ export const McpAppRuntime = function McpAppRuntime({
   onSizeChangeRef.current = onSizeChange;
   const onSendMessageRef = useRef(onSendMessage);
   onSendMessageRef.current = onSendMessage;
+  const onModelContextUpdateRef = useRef(onModelContextUpdate);
+  onModelContextUpdateRef.current = onModelContextUpdate;
   const onResourceStateChangeRef = useRef(onResourceStateChange);
   onResourceStateChangeRef.current = onResourceStateChange;
   const degradeResourceLoadErrorRef = useRef(degradeResourceLoadError);
@@ -329,6 +339,7 @@ export const McpAppRuntime = function McpAppRuntime({
     const appBridge = new AppBridge(
       null,
       {
+        // white-label-ok: wire identifier, not copy
         name: "Archestra",
         version: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0",
       },
@@ -350,6 +361,7 @@ export const McpAppRuntime = function McpAppRuntime({
           ),
           locale: navigator.language,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          // white-label-ok: wire identifier, not copy
           userAgent: `Archestra/${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}`,
           styles: {
             variables: buildMcpUiStyleVariables(),
@@ -391,7 +403,11 @@ export const McpAppRuntime = function McpAppRuntime({
     // Every exchange (request, response, latency) is reported to the session
     // recorder — these captures are the "mocked MCP responses" a recorded demo
     // replays instead of a live gateway. No-op unless the user is recording.
-    const mcpProxy = async (method: string, params: unknown) => {
+    const mcpProxy = async (
+      method: string,
+      params: unknown,
+      signal?: AbortSignal,
+    ) => {
       const proxyStartedAt = Date.now();
       const recordExchange = (result: unknown, isError: boolean) => {
         recorderRef.current?.captureMcp({
@@ -418,6 +434,11 @@ export const McpAppRuntime = function McpAppRuntime({
           method,
           params,
         }),
+        // The guest's cancellation (its request timeout, or the bridge tearing
+        // down) must reach the backend as a closed connection, or the
+        // dispatched work — an LLM completion in particular — runs and bills
+        // unobserved.
+        signal,
       });
       if (!response.ok) {
         recordExchange({ message: response.statusText }, true);
@@ -446,12 +467,15 @@ export const McpAppRuntime = function McpAppRuntime({
       setToolCallAuthError(null);
     };
     setToolCallAuthError(null);
-    const proxyToolCall = async (params: {
-      name: string;
-      arguments?: unknown;
-    }) => {
+    const proxyToolCall = async (
+      params: {
+        name: string;
+        arguments?: unknown;
+      },
+      signal?: AbortSignal,
+    ) => {
       const generation = ++nextToolCallGeneration;
-      const result = await mcpProxy("tools/call", params);
+      const result = await mcpProxy("tools/call", params, signal);
       if (cancelled) return result;
 
       const authState = resolveMcpAppToolCallAuthState(result);
@@ -492,16 +516,19 @@ export const McpAppRuntime = function McpAppRuntime({
     if (endpoint.kind === "agent") {
       const serverPrefix = endpoint.serverPrefix;
 
-      appBridge.oncalltool = async (params) => {
+      appBridge.oncalltool = async (params, extra) => {
         // Always enforce the server prefix — strip any existing prefix to prevent
         // a compromised MCP App from calling tools on a different server.
         const rawName = parseFullToolName(params.name).toolName;
         const toolName = buildFullToolName(serverPrefix, rawName);
 
-        return proxyToolCall({
-          name: toolName,
-          arguments: params.arguments,
-        });
+        return proxyToolCall(
+          {
+            name: toolName,
+            arguments: params.arguments,
+          },
+          extra.signal,
+        );
       };
 
       // Scope resource/prompt handlers to the owning server to prevent a compromised
@@ -567,11 +594,14 @@ export const McpAppRuntime = function McpAppRuntime({
       // (and ignores the requested URI), and implements ONLY resources/read — so
       // list/template/prompt handlers return empty rather than hitting an
       // unimplemented method.
-      appBridge.oncalltool = async (params) =>
-        proxyToolCall({
-          name: params.name,
-          arguments: params.arguments,
-        });
+      appBridge.oncalltool = async (params, extra) =>
+        proxyToolCall(
+          {
+            name: params.name,
+            arguments: params.arguments,
+          },
+          extra.signal,
+        );
       appBridge.onreadresource = async (params) =>
         mcpProxy("resources/read", params);
       appBridge.onlistresources = async () => ({ resources: [] });
@@ -586,27 +616,38 @@ export const McpAppRuntime = function McpAppRuntime({
       console.debug("[MCP App]", params.level, params.data);
     };
 
-    // ui/message — View injects a user message into the conversation.
-    // Text blocks are concatenated; non-text blocks are ignored.
-    // Cap length to prevent a compromised MCP App from injecting arbitrarily long text.
-    const MAX_MESSAGE_LENGTH = 10_000;
-    appBridge.onmessage = async (params) => {
-      const text = (params.content as Array<{ type: string; text?: string }>)
+    // Both app→host text channels normalize the same way: text blocks
+    // concatenated, non-text blocks ignored, length capped so a compromised
+    // app cannot inject arbitrarily long text. One extractor keeps any future
+    // hardening applied to both.
+    const contentBlocksToText = (content: unknown, maxLength: number) =>
+      (content as Array<{ type: string; text?: string }>)
         .filter((b) => b.type === "text" && b.text)
         .map((b) => b.text as string)
         .join("\n")
-        .slice(0, MAX_MESSAGE_LENGTH);
+        .slice(0, maxLength);
+
+    // ui/message — View injects a user message into the conversation.
+    const MAX_MESSAGE_LENGTH = 10_000;
+    appBridge.onmessage = async (params) => {
+      const text = contentBlocksToText(params.content, MAX_MESSAGE_LENGTH);
       if (text) onSendMessageRef.current?.(text);
       return {};
     };
 
-    // TODO: implement ui/update-model-context
-    // AppBridge re-exported from @mcp-ui/client does not expose the `onupdatemodelcontext`
-    // setter in its TypeScript declarations even though the underlying
-    // @modelcontextprotocol/ext-apps@1.0.1 app-bridge.d.ts defines it.
-    // Casting through `any` at runtime silences the compiler but the setter has no
-    // effect because @mcp-ui/client ships its own bundled copy of AppBridge that may
-    // not include the handler wiring. Revisit once @mcp-ui/client exposes the type.
+    // ui/update-model-context — the app reports what it is currently showing
+    // (e.g. which file a viewer app has open). App-authored text, so the
+    // consumer (chat metadata → system prompt) treats it strictly as data.
+    // The cap matches the metadata schema's bound.
+    const MAX_MODEL_CONTEXT_LENGTH = 2_000;
+    appBridge.onupdatemodelcontext = async (params) => {
+      const text = contentBlocksToText(
+        params.content,
+        MAX_MODEL_CONTEXT_LENGTH,
+      );
+      if (text) onModelContextUpdateRef.current?.(text);
+      return {};
+    };
 
     if (!cancelled) {
       setBridge(appBridge);
@@ -857,6 +898,7 @@ export const McpAppRuntime = function McpAppRuntime({
           onIframeElement={recorder ? recorder.bindIframe : undefined}
           onRecordingEvents={recorder ? recorder.onRecordingEvents : undefined}
           ownedApp={ownedAppId != null}
+          filesRevision={filesRevision}
         />
       )}
     </div>
@@ -936,6 +978,7 @@ export function SandboxIframe({
   onInitialized,
   onContentLoaded,
   ownedApp,
+  filesRevision,
 }: {
   html: string;
   sandboxUrl: URL;
@@ -983,6 +1026,10 @@ export function SandboxIframe({
   /** Archestra-owned app: its envelope carries the platform CSP, so the proxy
    * must not inject a second one. A trusted host signal, not derived from HTML. */
   ownedApp?: boolean;
+  /** Monotonic count of agent-side writes into this app's file store observed
+   * by the host (chat `copy_file` results). A bump after init sends the guest
+   * `notifications/resources/list_changed` so its file UI can re-list. */
+  filesRevision?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -1274,6 +1321,27 @@ export function SandboxIframe({
     }
   }, [ready, initialized, toolResult, appBridge]);
 
+  // Nudge the guest when its file store changed under it (the chat threads a
+  // per-app revision counting agent copies into the store). The mount value is
+  // swallowed — a freshly initialized app lists fresh anyway; only a bump while
+  // the app is already running means the store moved under it. Sent as the
+  // MCP-standard resources/list_changed, which the injected SDK surfaces as
+  // archestra.files.onChange.
+  const sentFilesRevisionRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!ready || !initialized || filesRevision == null) return;
+    if (sentFilesRevisionRef.current === filesRevision) return;
+    const isFirstObservation = sentFilesRevisionRef.current === null;
+    sentFilesRevisionRef.current = filesRevision;
+    if (isFirstObservation) return;
+    appBridge.sendResourceListChanged().catch((err) => {
+      console.warn(
+        "[mcp-app] sendResourceListChanged skipped (bridge not connected)",
+        err,
+      );
+    });
+  }, [ready, initialized, filesRevision, appBridge]);
+
   return (
     <div
       ref={containerRef}
@@ -1361,6 +1429,7 @@ export function buildReplayHostContext(displayMode: McpUiDisplayMode) {
     containerDimensions: {},
     locale: navigator.language,
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    // white-label-ok: wire identifier, not copy
     userAgent: `Archestra/${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}`,
     styles: {
       variables: buildMcpUiStyleVariables(),

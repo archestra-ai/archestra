@@ -2,6 +2,7 @@ import {
   AnthropicErrorTypes,
   ArchestraInternalErrorCode,
   BedrockErrorTypes,
+  CHATGPT_SUBSCRIPTION_LABEL,
   ChatErrorCode,
   ChatErrorMessages,
   type ChatErrorResponse,
@@ -9,6 +10,7 @@ import {
   GeminiErrorReasons,
   OllamaErrorTypes,
   OpenAIErrorTypes,
+  providerDisplayNames,
   RetryableErrorCodes,
   type SupportedProvider,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
@@ -35,6 +37,10 @@ import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
 import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-365-copilot-graph-translator";
+import {
+  GithubCopilot,
+  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+} from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
 import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
@@ -351,7 +357,9 @@ function extractArchestraInternalCode(
       code === ArchestraInternalErrorCode.ProviderInsufficientBalance ||
       code === ArchestraInternalErrorCode.UpstreamEmptyResponse ||
       code === ArchestraInternalErrorCode.UpstreamTimeout ||
-      code === ArchestraInternalErrorCode.ProviderOverloaded
+      code === ArchestraInternalErrorCode.ProviderOverloaded ||
+      code === ArchestraInternalErrorCode.RequestExceedsRateLimit ||
+      code === ArchestraInternalErrorCode.ProviderAuthRequired
     ) {
       return code;
     }
@@ -944,7 +952,9 @@ function mapAnthropicErrorToCode(
       case AnthropicErrorTypes.NOT_FOUND:
         return ChatErrorCode.NotFound;
       case AnthropicErrorTypes.REQUEST_TOO_LARGE:
-        return ChatErrorCode.ContextTooLong;
+        // Anthropic's 413 is a byte-size cap on the request body, not a context
+        // overflow — attachments are the usual cause.
+        return ChatErrorCode.RequestTooLarge;
       case AnthropicErrorTypes.API_ERROR:
       case AnthropicErrorTypes.OVERLOADED:
         return ChatErrorCode.ServerError;
@@ -1142,7 +1152,11 @@ function mapStatusCodeToErrorCode(
     case 404:
       return ChatErrorCode.NotFound;
     case 413:
-      return ChatErrorCode.ContextTooLong;
+      // A 413 is about the size of *this request*, not the length of the
+      // conversation: providers return it for oversized payloads and for
+      // token-bucket rejections alike. Advising "start a new chat" is wrong for
+      // both — the request has to get smaller, not the history.
+      return ChatErrorCode.RequestTooLarge;
     case 422:
       return ChatErrorCode.InvalidRequest;
     case 429:
@@ -1373,6 +1387,32 @@ function mapMicrosoft365CopilotErrorToCode(
 }
 
 /**
+ * GitHub Copilot shares the OpenAI-compatible error body, but the LLM proxy's
+ * error wrapping keeps only `message`/`type` — the upstream
+ * `model_not_supported` code is gone by the time the chat maps the error, so
+ * the one Copilot-specific case is keyed on the message. Copilot catalogues
+ * models its chat/completions endpoint rejects (the model fetcher verifies
+ * invocability, but a conversation can stay pinned to a model that has since
+ * been dropped), and that deterministic rejection must surface the actionable
+ * "choose a different model" copy, not the retry-suggesting invalid-request
+ * one.
+ */
+function mapGithubCopilotErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  if (
+    statusCode === 400 &&
+    parsedError?.message?.includes(
+      GithubCopilot.API.MODEL_NOT_SUPPORTED_MESSAGE,
+    )
+  ) {
+    return ChatErrorCode.NotFound;
+  }
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
+/**
  * Registry of provider-specific error parse/map pairs.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
  * if a new provider is added to SupportedProvider without updating this map.
@@ -1396,7 +1436,10 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   kimi: openAiCompatibleErrorHandler,
-  "github-copilot": openAiCompatibleErrorHandler,
+  "github-copilot": providerErrorHandler(
+    parseOpenAIError,
+    mapGithubCopilotErrorToCode,
+  ),
   "microsoft-365-copilot": providerErrorHandler(
     parseOpenAIError,
     mapMicrosoft365CopilotErrorToCode,
@@ -1527,7 +1570,7 @@ function createErrorResponse(
     code,
     message: usageLimitError
       ? formatUsageLimitMessage(usageLimitError.entityType)
-      : ChatErrorMessages[code],
+      : archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
     isRetryable: RetryableErrorCodes.has(code),
     originalError: {
       provider,
@@ -1566,7 +1609,7 @@ export function buildAbortiveTurnError(
     code,
     provider,
     undefined,
-    ChatErrorMessages[code],
+    archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
     "AbortiveTurn",
     undefined,
   );
@@ -1685,7 +1728,7 @@ export function mapProviderError(
       code,
       provider,
       undefined,
-      ChatErrorMessages[code],
+      archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
       "EmptyModelResponseError",
       {
         finishReason: error.finishReason,
@@ -1822,6 +1865,15 @@ export function mapProviderError(
     // ("the provider is experiencing issues"). Reclassify to the retryable
     // EmptyResponse code so the card names what actually happened.
     errorCode = ChatErrorCode.EmptyResponse;
+  } else if (
+    normalizedCode === ArchestraInternalErrorCode.RequestExceedsRateLimit
+  ) {
+    // A token-bucket rejection arrives as a 413 the status mapper would call
+    // RequestTooLarge ("compress or split large attachments"), which points at
+    // the wrong thing entirely — the payload is usually tiny and the reserved
+    // output budget is what blew the per-minute allowance. Reclassify so the
+    // card names the real cause and stops advising a new chat.
+    errorCode = ChatErrorCode.RequestExceedsRateLimit;
   } else if (normalizedCode === ArchestraInternalErrorCode.UpstreamTimeout) {
     // Mid-stream HTTP status is already committed as 200, so the normalized
     // code preserves the upstream 504 semantics and retryability.
@@ -1829,6 +1881,15 @@ export function mapProviderError(
   } else if (normalizedCode === ArchestraInternalErrorCode.ProviderOverloaded) {
     // Mid-stream overloads have no usable HTTP status.
     errorCode = ChatErrorCode.ServerError;
+  } else if (
+    normalizedCode === ArchestraInternalErrorCode.ProviderAuthRequired
+  ) {
+    // A per-user subscription credential is unusable (not linked, or the
+    // sign-in expired/was revoked upstream — e.g. a dead ChatGPT/Codex refresh
+    // token). The status mapper would call this Authentication ("Invalid API
+    // key — check your Chat Settings"), pointing at entirely the wrong remedy.
+    // Reclassify so the UI renders the connect/reconnect card.
+    errorCode = ChatErrorCode.ProviderAuthRequired;
   }
   const usageLimitError = extractUsageLimitError(responseBody);
   // An Archestra usage-limit block arrives over the proxy envelope as an HTTP
@@ -1871,6 +1932,29 @@ export function mapProviderError(
   if (
     errorCode === ChatErrorCode.Unknown &&
     isUpstreamProviderError(errorMessage)
+  ) {
+    errorCode = ChatErrorCode.ServerError;
+  }
+
+  // A secrets-backend outage surfaces through the provider call as our own
+  // secrets-unavailable message (relayed by the proxy), often with no status
+  // code, landing on the dead-end Unknown card. The underlying incident is
+  // already captured and grouped at its source — classify it as a retryable
+  // ServerError here so the user gets a retry and the relay isn't re-captured.
+  if (
+    errorCode === ChatErrorCode.Unknown &&
+    isSecretsUnavailableMessage(errorMessage)
+  ) {
+    errorCode = ChatErrorCode.ServerError;
+  }
+
+  // Bedrock's InternalServerException arrives mid-stream as the bare message
+  // "Bedrock is unable to process your request." with no status code or typed
+  // body, so the per-provider mapper can't classify it. It's a transient
+  // provider-side failure — retryable ServerError, like any provider 5xx.
+  if (
+    errorCode === ChatErrorCode.Unknown &&
+    isProviderInternalFailureMessage(errorMessage)
   ) {
     errorCode = ChatErrorCode.ServerError;
   }
@@ -1922,7 +2006,7 @@ export function mapProviderError(
     "[ChatErrorMapper] Mapped provider error",
   );
 
-  return createErrorResponse(
+  const response = createErrorResponse(
     errorCode,
     provider,
     statusCode,
@@ -1942,6 +2026,27 @@ export function mapProviderError(
     },
     usageLimitError,
   );
+
+  if (errorCode === ChatErrorCode.ProviderAuthRequired) {
+    // The upstream message names the exact remedy ("Reconnect your ChatGPT
+    // account…"), so prefer it over the table's generic connect text, and
+    // attach authAction so the UI renders the inline connect/reconnect card.
+    // On `openai` this code is only ever emitted for the ChatGPT-subscription
+    // credential mode — a plain API key never needs a per-user link — so the
+    // label must name the subscription, not the provider.
+    if (errorMessage) {
+      response.message = errorMessage;
+    }
+    response.authAction = {
+      provider,
+      providerLabel:
+        provider === "openai"
+          ? CHATGPT_SUBSCRIPTION_LABEL
+          : providerDisplayNames[provider],
+    };
+  }
+
+  return response;
 }
 
 // Matches by name rather than DOMException instanceof: the AbortError may be
@@ -1971,6 +2076,20 @@ function isToolApprovalPolicyBlockError(message: string): boolean {
 
 function isUpstreamProviderError(message: string): boolean {
   return /^upstream error from /i.test(message);
+}
+
+// `includes` rather than equality: the message may pick up envelope prefixes
+// on its way through the proxy, but the secrets-manager text and internal code
+// slug are stable constants.
+function isSecretsUnavailableMessage(message: string): boolean {
+  return (
+    message.includes("An error occurred while accessing secrets") ||
+    message.includes(SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE)
+  );
+}
+
+function isProviderInternalFailureMessage(message: string): boolean {
+  return message.includes("unable to process your request");
 }
 
 /**
@@ -2027,10 +2146,14 @@ export function sanitizeChatErrorForFrontend(
 }
 
 function formatUsageLimitMessage(entityType: string | undefined): string {
+  // Named under the deployment's own brand: this reaches the end user, and the
+  // whole point of the sentence is attributing the block to the platform rather
+  // than the AI provider.
+  const appName = archestraMcpBranding.appName;
   if (!entityType) {
-    return "Archestra blocked this request because a configured usage limit has been reached.";
+    return `${appName} blocked this request because a configured usage limit has been reached.`;
   }
-  return `Archestra blocked this request because the ${entityType.replace(
+  return `${appName} blocked this request because the ${entityType.replace(
     /_/g,
     " ",
   )} usage limit has been reached.`;

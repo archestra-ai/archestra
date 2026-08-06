@@ -1,13 +1,41 @@
-import { generateKeyPair, SignJWT } from "jose";
-import { afterEach, beforeAll, describe, expect, test } from "@/test";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { exportJWK, generateKeyPair, SignJWT } from "jose";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { jwksValidator } from "./jwks-validator";
 
 // We'll generate a real RSA key pair for testing
 let privateKey: CryptoKey;
 
+/**
+ * A real JWKS endpoint on a loopback port. Serving the public key over HTTP —
+ * rather than stubbing jose — keeps signature verification and claim
+ * extraction on their real code path, so these tests fail if either breaks.
+ */
+let jwksServer: Server;
+let jwksUrl: string;
+
 beforeAll(async () => {
   const keyPair = await generateKeyPair("RS256");
   privateKey = keyPair.privateKey as CryptoKey;
+
+  const publicJwk = await exportJWK(keyPair.publicKey as CryptoKey);
+  const body = JSON.stringify({
+    keys: [{ ...publicJwk, kid: "test-kid-1", alg: "RS256", use: "sig" }],
+  });
+
+  jwksServer = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(body);
+  });
+  await new Promise<void>((resolve) =>
+    jwksServer.listen(0, "127.0.0.1", resolve),
+  );
+  jwksUrl = `http://127.0.0.1:${(jwksServer.address() as AddressInfo).port}/jwks.json`;
+});
+
+afterAll(async () => {
+  await new Promise<void>((resolve) => jwksServer.close(() => resolve()));
 });
 
 afterEach(() => {
@@ -46,14 +74,9 @@ async function createSignedJwt(params: {
   return builder.sign(privateKey);
 }
 
-/**
- * Create a mock JWKS HTTP server URL.
- * Since we can't easily start an HTTP server in unit tests,
- * we test the validateJwt method by mocking createRemoteJWKSet.
- */
-
 describe("JwksValidator", () => {
-  describe("validateJwt with mocked JWKS endpoint", () => {
+  // These reject before any key is fetched, so the JWKS URL is never reached.
+  describe("validateJwt rejects malformed and expired tokens", () => {
     test("returns null for malformed tokens", async () => {
       const result = await jwksValidator.validateJwt({
         token: "not-a-jwt",
@@ -96,21 +119,95 @@ describe("JwksValidator", () => {
     });
   });
 
-  describe("extractStringClaim behavior", () => {
-    test("preferred_username fallback is used when name is missing", async () => {
-      // This tests the internal logic indirectly - when name is null,
-      // preferred_username should be used as fallback
-      // We verify this through the JwksValidationResult interface
+  describe("claim extraction", () => {
+    const ISSUER = "https://idp.example.com";
+    const NAMESPACED_CLAIM = "https://example.com/email";
+
+    async function validate(params: {
+      token: string;
+      emailClaim?: string | null;
+    }) {
+      return jwksValidator.validateJwt({
+        token: params.token,
+        issuerUrl: ISSUER,
+        jwksUrl,
+        audience: null,
+        ...(params.emailClaim !== undefined && {
+          emailClaim: params.emailClaim,
+        }),
+      });
+    }
+
+    test("preferred_username is used when name is missing", async () => {
       const token = await createSignedJwt({
         sub: "user-1",
-        iss: "https://idp.example.com",
+        iss: ISSUER,
         extraClaims: { preferred_username: "alice" },
       });
 
-      // Can't fully test without a real JWKS endpoint, but we verify
-      // the token is properly formed
-      expect(token).toBeTruthy();
-      expect(token.split(".")).toHaveLength(3);
+      const result = await validate({ token });
+
+      expect(result?.name).toBe("alice");
+    });
+
+    test("reads the email from the IdP's configured claim when the standard claim is absent", async () => {
+      // The case that made namespaced-claim IdPs unusable: the token carries
+      // the email, just not under `email`.
+      const token = await createSignedJwt({
+        sub: "auth-provider|user-1",
+        iss: ISSUER,
+        extraClaims: { [NAMESPACED_CLAIM]: "user@example.com" },
+      });
+
+      const result = await validate({ token, emailClaim: NAMESPACED_CLAIM });
+
+      expect(result?.email).toBe("user@example.com");
+    });
+
+    test("the configured claim wins over a standard email claim", async () => {
+      const token = await createSignedJwt({
+        sub: "user-1",
+        iss: ISSUER,
+        email: "standard@example.com",
+        extraClaims: { [NAMESPACED_CLAIM]: "mapped@example.com" },
+      });
+
+      const result = await validate({ token, emailClaim: NAMESPACED_CLAIM });
+
+      expect(result?.email).toBe("mapped@example.com");
+    });
+
+    test("falls back to the standard email claim when no mapping is configured", async () => {
+      const token = await createSignedJwt({
+        sub: "user-1",
+        iss: ISSUER,
+        email: "standard@example.com",
+      });
+
+      const result = await validate({ token });
+
+      expect(result?.email).toBe("standard@example.com");
+    });
+
+    test("falls back to the standard email claim when the mapped claim is absent", async () => {
+      const token = await createSignedJwt({
+        sub: "user-1",
+        iss: ISSUER,
+        email: "standard@example.com",
+      });
+
+      const result = await validate({ token, emailClaim: NAMESPACED_CLAIM });
+
+      expect(result?.email).toBe("standard@example.com");
+    });
+
+    test("email is null when neither the mapped nor the standard claim is present", async () => {
+      const token = await createSignedJwt({ sub: "user-1", iss: ISSUER });
+
+      const result = await validate({ token, emailClaim: NAMESPACED_CLAIM });
+
+      expect(result?.sub).toBe("user-1");
+      expect(result?.email).toBeNull();
     });
   });
 

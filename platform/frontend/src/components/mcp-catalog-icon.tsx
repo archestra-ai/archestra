@@ -31,6 +31,7 @@ export function McpCatalogIcon({
         width={size}
         height={size}
         className={cn("shrink-0 rounded-sm object-contain", className)}
+        style={{ width: size, height: size }}
       />
     );
   }
@@ -52,6 +53,7 @@ export function McpCatalogIcon({
         width={size}
         height={size}
         className={cn("shrink-0 rounded-sm object-contain", className)}
+        style={{ width: size, height: size }}
       />
     );
   }

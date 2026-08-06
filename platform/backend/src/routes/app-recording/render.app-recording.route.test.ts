@@ -1,6 +1,9 @@
-import { APP_RECORDING_MAX_BUNDLE_BYTES } from "@archestra/shared";
+import {
+  APP_RECORDING_MAX_BUNDLE_BYTES,
+  APPS_HACKATHON_OPENS_AT_MS,
+} from "@archestra/shared";
 import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import appRecordingRoutes from "./app-recording.routes";
 
@@ -10,7 +13,33 @@ describe("POST /api/app-recordings/render", () => {
   beforeEach(async ({ makeMember }) => {
     await makeMember(ctx.user.id, ctx.organizationId);
     config.hackathonRecorder.enabled = true;
-    config.hackathonRecorder.overrideActive = true;
+    // The date gate reads the wall clock and has no bypass, so pin the clock
+    // inside the hackathon window.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS);
+    // The video export is its own opt-in on top of the recorder, so every
+    // render test has to turn it on the way a deployment would.
+    config.hackathonRecorder.videoDownloadEnabled = true;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("403s when the deployment does not offer video download", async () => {
+    // Hiding the button is presentation; this is the check. An endpoint that
+    // still answered would let anyone spend a headless-browser render by
+    // calling it directly, on a deployment that never opted in.
+    config.hackathonRecorder.videoDownloadEnabled = false;
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/app-recordings/render",
+      body: { bundle: {}, title: "Nope" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toMatch(/not available/i);
   });
 
   test("a bundle over the size ceiling is refused from its headers, with the number and the remedy", async () => {

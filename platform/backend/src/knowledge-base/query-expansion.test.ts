@@ -17,11 +17,13 @@ vi.mock("./kb-interaction", () => ({
     .mockReturnValue("openai:chatCompletions"),
 }));
 
+import { withKbObservability } from "./kb-interaction";
 import { expandQuery } from "./query-expansion";
 
 let server: ReturnType<typeof useMswServer>;
 
 const MOCK_RERANKER_CONFIG = {
+  kind: "llm" as const,
   llmModel: createOpenAI({
     baseURL: TEST_BASE_URL,
     apiKey: "test-key",
@@ -80,6 +82,27 @@ describe("expandQuery", () => {
 
   it("returns single query when no reranker config", async () => {
     mockResolveRerankerConfig.mockResolvedValue(null);
+
+    const result = await expandQuery({
+      queryText: "test query",
+      organizationId: "org-1",
+    });
+
+    expect(result).toEqual([
+      { queryText: "test query", weight: 1.0, type: "semantic" },
+    ]);
+  });
+
+  it("skips expansion when the reranker is a native rerank model", async () => {
+    // A dedicated rerank-API model can only score documents, not generate
+    // rephrasings — expansion degrades like an unconfigured reranker.
+    mockResolveRerankerConfig.mockResolvedValue({
+      kind: "native-rerank",
+      apiKey: "azure-key",
+      baseUrl: "https://my-resource.cognitiveservices.azure.com/openai/v1",
+      modelName: "Cohere-rerank-v4.0-fast",
+      provider: "azure",
+    });
 
     const result = await expandQuery({
       queryText: "test query",
@@ -253,5 +276,40 @@ describe("expandQuery", () => {
     expect(keywords).toHaveLength(2);
     expect(keywords[0].queryText).toBe("kw1");
     expect(keywords[1].queryText).toBe("kw2");
+  });
+
+  it("tags both expansion calls with the connector the query was scoped to", async () => {
+    mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
+    vi.mocked(withKbObservability).mockClear();
+    const connectorId = "7d4e2a10-5c3b-4f8e-9a1d-6b2c8e4f0a95";
+
+    serveExpansion({ semantic: "rephrased", keyword: "kw1" });
+
+    await expandQuery({
+      queryText: "test query",
+      organizationId: "org-1",
+      connectorId,
+    });
+
+    const sources = vi
+      .mocked(withKbObservability)
+      .mock.calls.map(([params]) => [params.source, params.connectorId]);
+    expect(sources).toEqual([
+      ["knowledge:query-expansion", connectorId],
+      ["knowledge:query-expansion", connectorId],
+    ]);
+  });
+
+  it("leaves both expansion calls unattributed when the query spans several connectors", async () => {
+    mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
+    vi.mocked(withKbObservability).mockClear();
+
+    serveExpansion({ semantic: "rephrased", keyword: "kw1" });
+
+    await expandQuery({ queryText: "test query", organizationId: "org-1" });
+
+    for (const [params] of vi.mocked(withKbObservability).mock.calls) {
+      expect(params.connectorId).toBeNull();
+    }
   });
 });

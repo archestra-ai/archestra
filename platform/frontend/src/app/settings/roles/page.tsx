@@ -1,14 +1,14 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
 import { Eye } from "lucide-react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
@@ -25,8 +25,14 @@ const RolesListEnterprise = dynamic(() =>
   })),
 );
 
-function RoleDebuggerCallout() {
+/**
+ * Compact dialog entry point for the role debugger, sitting opposite the roles
+ * search field rather than in a full-width callout, so the page leads with the
+ * roles themselves.
+ */
+function RoleDebuggerDialog() {
   const canImpersonate = useCanImpersonate();
+  const [open, setOpen] = useState(false);
   const {
     data: candidates,
     isLoading,
@@ -38,46 +44,43 @@ function RoleDebuggerCallout() {
   const userOptions = (candidates ?? []).map((candidate) => ({
     userId: candidate.id,
     name: candidate.role
-      ? `${candidate.name} · ${candidate.role}`
+      ? `${candidate.name} · ${getRoleDisplayName(candidate.role)}`
       : candidate.name,
     email: candidate.email,
   }));
 
   if (!canImpersonate) return null;
+  // A single-user organization has nobody to impersonate, so the trigger would
+  // only ever open onto an empty picker. Errors keep it visible: hiding then
+  // would make a failed fetch look like an empty org.
+  if (!isLoading && !isCandidatesLoadError && userOptions.length === 0) {
+    return null;
+  }
 
   return (
-    <div className="mb-4 rounded-md border border-border bg-muted/40 p-3 text-sm">
-      <p className="font-medium">Want to debug a role?</p>
-      <p className="text-muted-foreground">
-        Pick a user and view the app as them. The session expires after one hour
-        or when you click <em>Return to admin</em> in the banner.
-      </p>
-      {isCandidatesLoadError ? (
-        <QueryLoadError
-          className="mt-3"
-          title="Couldn't load users to impersonate"
-          onRetry={() => refetchCandidates()}
-        />
-      ) : (
-        <div className="mt-3 flex items-center gap-2">
-          <UserSearchableSelect
-            value={selectedUserId}
-            onValueChange={setSelectedUserId}
-            users={userOptions}
-            disabled={isLoading || !candidates || candidates.length === 0}
-            placeholder={
-              isLoading
-                ? "Loading users..."
-                : !candidates || candidates.length === 0
-                  ? "No users available"
-                  : "Select a user"
-            }
-            searchPlaceholder="Search users by name or email"
-            className="w-72"
-            emptyMessage="No matching users found."
-          />
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        data-testid={E2eTestId.ImpersonationDebugRoleButton}
+        onClick={() => setOpen(true)}
+      >
+        <Eye className="mr-2 h-4 w-4" />
+        <span>Debug a role</span>
+      </Button>
+      <StandardDialog
+        open={open}
+        onOpenChange={setOpen}
+        size="small"
+        title="View the app as another user"
+        description={
+          <>
+            The impersonated session expires after one hour or when you click{" "}
+            <em>Return to admin</em> in the banner.
+          </>
+        }
+        footer={
           <Button
-            size="sm"
             variant="outline"
             data-testid={E2eTestId.ImpersonationViewAsButton}
             disabled={!selectedUserId || isPending}
@@ -86,11 +89,29 @@ function RoleDebuggerCallout() {
             }}
           >
             <Eye className="mr-2 h-4 w-4" />
-            View as user
+            <span>View as user</span>
           </Button>
-        </div>
-      )}
-    </div>
+        }
+      >
+        {isCandidatesLoadError ? (
+          <QueryLoadError
+            title="Couldn't load users to impersonate"
+            onRetry={() => refetchCandidates()}
+          />
+        ) : (
+          <UserSearchableSelect
+            value={selectedUserId}
+            onValueChange={setSelectedUserId}
+            users={userOptions}
+            disabled={isLoading}
+            placeholder={isLoading ? "Loading users..." : "Select a user"}
+            searchPlaceholder="Search users by name or email"
+            className="w-full"
+            emptyMessage="No matching users found."
+          />
+        )}
+      </StandardDialog>
+    </>
   );
 }
 
@@ -99,20 +120,8 @@ export default function RolesSettingsPage() {
   return (
     <ErrorBoundary>
       <SmallTeamTierBanner featureName="RBAC" />
-      <p className="mb-4 text-sm text-muted-foreground">
-        New users who join via email/password self-signup or ChatOps
-        auto-provisioning are assigned a default role. Change it in{" "}
-        <Link
-          href="/settings/organization"
-          className="font-medium underline underline-offset-4"
-        >
-          Organization → Auth
-        </Link>
-        .
-      </p>
-      <RoleDebuggerCallout />
       <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
-        <RolesListEnterprise />
+        <RolesListEnterprise headerAction={<RoleDebuggerDialog />} />
       </DisabledEnterpriseSection>
     </ErrorBoundary>
   );

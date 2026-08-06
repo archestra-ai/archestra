@@ -1,6 +1,9 @@
 import { describe, expect, test } from "@/test";
-import type { OpenAi } from "@/types";
-import { openaiToGemini } from "./gemini-openai-translator";
+import type { Gemini, OpenAi } from "@/types";
+import {
+  geminiResponseToOpenai,
+  openaiToGemini,
+} from "./gemini-openai-translator";
 
 type OpenAiRequest = OpenAi.Types.ChatCompletionsRequest;
 
@@ -185,5 +188,54 @@ describe("openaiToGemini — multimodal user content", () => {
         },
       },
     ]);
+  });
+});
+
+describe("geminiResponseToOpenai — blocked replies", () => {
+  const ctx = {
+    chatcmplId: "chatcmpl-test",
+    createdUnix: 1_700_000_000,
+    requestedModel: "gemini-2.5-flash",
+  };
+
+  test("maps a candidate blocked without content to an empty content_filter choice", () => {
+    const result = geminiResponseToOpenai(
+      {
+        candidates: [{ finishReason: "SAFETY" }],
+      } as Gemini.Types.GenerateContentResponse,
+      ctx,
+    );
+
+    expect(result.choices[0].finish_reason).toBe("content_filter");
+    expect(result.choices[0].message.content).toBeNull();
+  });
+
+  test("maps a prompt-blocked reply with no candidates to content_filter", () => {
+    const result = geminiResponseToOpenai(
+      {
+        promptFeedback: { blockReason: "SAFETY" },
+      } as Gemini.Types.GenerateContentResponse,
+      ctx,
+    );
+
+    expect(result.choices[0].finish_reason).toBe("content_filter");
+    expect(result.choices[0].message.content).toBeNull();
+  });
+
+  test("still reports stop for an ordinary completion", () => {
+    const result = geminiResponseToOpenai(
+      {
+        candidates: [
+          {
+            finishReason: "STOP",
+            content: { role: "model", parts: [{ text: "hi" }] },
+          },
+        ],
+      } as Gemini.Types.GenerateContentResponse,
+      ctx,
+    );
+
+    expect(result.choices[0].finish_reason).toBe("stop");
+    expect(result.choices[0].message.content).toBe("hi");
   });
 });

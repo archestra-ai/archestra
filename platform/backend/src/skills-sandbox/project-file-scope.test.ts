@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import { softDelete } from "@/database/soft-delete";
 import { ProjectModel } from "@/models";
 import ConversationModel from "@/models/conversation";
 import { projectService } from "@/services/project";
@@ -125,4 +128,44 @@ test("resolveProjectFileScope resolves for a member of an org-shared project", a
     organizationId: org.id,
   });
   expect(scope?.projectId).toBe(project.id);
+});
+
+test("resolveProjectFileScope FAILS CLOSED when the chat's project is soft-deleted", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  const project = await ProjectModel.create({
+    organizationId: org.id,
+    userId: user.id,
+    name: "doomed",
+    description: null,
+  });
+  const conv = await ConversationModel.create({
+    userId: user.id,
+    organizationId: org.id,
+    agentId: agent.id,
+    projectId: project.id,
+  });
+
+  // Soft-delete the row directly rather than through ProjectModel.delete, which
+  // detaches the chats — this pins the defensive branch for a chat that somehow
+  // still points at a hidden project, where degrading to a personal (no-project)
+  // scope would silently hand file tools access outside it.
+  await softDelete(
+    db,
+    schema.projectsTable,
+    eq(schema.projectsTable.id, project.id),
+  );
+
+  await expect(
+    resolveProjectFileScope({
+      conversationId: conv.id,
+      userId: user.id,
+      organizationId: org.id,
+    }),
+  ).rejects.toBeInstanceOf(SkillSandboxError);
 });

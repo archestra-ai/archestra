@@ -10,6 +10,7 @@ import logger from "@/logging";
 import {
   AgentExcludedToolModel,
   AgentModel,
+  AgentVersionModel,
   InternalMcpCatalogModel,
   ToolModel,
 } from "@/models";
@@ -88,6 +89,8 @@ class AgentToolExclusionsService {
     agentId: string;
     organizationId: string;
     excludedToolIds: string[];
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
   }): Promise<AgentToolExclusions> {
     const { agentId, organizationId } = params;
     const excludedToolIds = [...new Set(params.excludedToolIds)];
@@ -121,6 +124,12 @@ class AgentToolExclusionsService {
     const { clearChatMcpClient } = await import("@/clients/chat-mcp-client");
     clearChatMcpClient(agentId);
 
+    // After the replace transaction commits and its row lock is released, so the
+    // fork's own FOR UPDATE can't self-deadlock against it.
+    if (!params.deferVersionFork) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
+
     logger.info(
       { agentId, excludedToolCount: excludedToolIds.length },
       "Replaced agent tool exclusions",
@@ -141,6 +150,8 @@ class AgentToolExclusionsService {
     agentId: string;
     organizationId: string;
     toolIds: string[];
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
   }): Promise<AgentToolExclusions> {
     const { agentId, organizationId } = params;
     const toAdd = [...new Set(params.toolIds)];
@@ -173,6 +184,11 @@ class AgentToolExclusionsService {
 
     const { clearChatMcpClient } = await import("@/clients/chat-mcp-client");
     clearChatMcpClient(agentId);
+
+    // After commit / lock release (see replaceExclusions).
+    if (!params.deferVersionFork) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
 
     logger.info(
       {
@@ -250,9 +266,14 @@ class AgentToolExclusionsService {
     };
   }
 
-  // === Private validation helpers ===
-
-  private async validateToolIds(
+  /**
+   * Throw unless every id is an excludable tool in this organization. Public
+   * because the version-restore preflight has to know whether an exclusion set
+   * WOULD be accepted before it writes anything — `replaceExclusions` decides
+   * that inside its own transaction, which is too late for a caller that must
+   * fail before touching the agent at all.
+   */
+  async validateToolIds(
     toolIds: string[],
     organizationId: string,
   ): Promise<void> {

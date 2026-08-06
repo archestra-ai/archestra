@@ -41,6 +41,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { a2aTaskRunService } from "@/agents/a2a/a2a-task-run-service";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   cleanupEmailProvider,
@@ -52,14 +53,22 @@ import {
 } from "@/agents/incoming-email";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
+import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
 import { cacheManager } from "@/cache-manager";
 import config, {
   shouldRunRenderer,
   shouldRunWebServer,
   shouldRunWorker,
 } from "@/config";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
-import { dropLegacyPayloadTrgmIndexes } from "@/database/index-maintenance";
+import {
+  dropContentTrgmIndexesUnderEncryption,
+  dropLegacyPayloadTrgmIndexes,
+} from "@/database/index-maintenance";
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -72,8 +81,9 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
-import { initializeObservabilityMetrics } from "@/observability";
+import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
+import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -84,6 +94,7 @@ import {
 } from "@/services/apps/app-sdk-injection";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
+import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -239,9 +250,11 @@ export function registerOpenApiSchemas() {
     id: "DeepSeekChatCompletionResponse",
   });
   z.globalRegistry.add(Archestra.API.ChatCompletionRequestSchema, {
+    // white-label-ok: wire identifier, not copy
     id: "ArchestraChatCompletionRequest",
   });
   z.globalRegistry.add(Archestra.API.ChatCompletionResponseSchema, {
+    // white-label-ok: wire identifier, not copy
     id: "ArchestraChatCompletionResponse",
   });
   z.globalRegistry.add(Minimax.API.ChatCompletionRequestSchema, {
@@ -1216,10 +1229,33 @@ const startWebServer = async () => {
   registerAuditLogHook(fastify);
 
   try {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Fails startup when retention windows are configured without a license —
+    // an operator relying on retention for compliance must never run with it
+    // silently disabled.
+    assertRetentionConfigLicensed();
+    // SPDX-SnippetEnd
+
     // Initialize database connection first
     await initializeDatabase();
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Fail-closed content-key verification, before any write could encrypt
+    // (or silently plaintext) interaction/message content.
+    await verifyContentEncryptionKey();
+    // SPDX-SnippetEnd
+
     await seedRequiredStartingData();
+
+    // With basic auth disabled, a password session that predates the flag
+    // would otherwise stay valid until it expired. Runs after seeding so the
+    // bootstrap admin exists first (and is itself swept when it has no
+    // federated account, which is the intent).
+    await revokeBasicAuthOnlySessions();
 
     // Sync system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)
     const defaultOrg = await OrganizationModel.getFirst();
@@ -1251,6 +1287,12 @@ const startWebServer = async () => {
 
     // Start metrics server
     await startMetricsServer();
+
+    // Poll the org-wide active-user count for the `llm_active_users` gauge.
+    // Only the API process collects it: the value is derived from the shared
+    // database, so extra replicas would repeat the same query for the same
+    // answer.
+    metrics.activeUsers.activeUsersMetricCollector.start();
 
     // Register sandbox proxy route on the main server (single-port setup).
     // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
@@ -1301,6 +1343,11 @@ const startWebServer = async () => {
     // (no-op unless ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES is set).
     mcpToolsRefreshManager.start();
 
+    // Post-TTL lifecycle for gateway-minted MCP tasks: mark expired orphans
+    // failed, purge rows past the retention grace (the two steps the Tasks
+    // extension sanctions).
+    mcpGatewayTaskReaper.start();
+
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
     if (shouldRunWorker) {
@@ -1312,6 +1359,11 @@ const startWebServer = async () => {
       // migration 0116 stopped creating them. Idempotent; errors are logged
       // inside and retried next boot.
       void dropLegacyPayloadTrgmIndexes();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      void dropContentTrgmIndexesUnderEncryption();
+      // SPDX-SnippetEnd
     }
 
     // Background job to renew email subscriptions before they expire
@@ -1341,6 +1393,11 @@ const startWebServer = async () => {
     const activeChatRunReaperIntervalId = setInterval(() => {
       void activeChatRunService.reapStaleRuns();
     }, ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS);
+
+    // Same safety net for A2A task runs: the service owns its own interval
+    // (it also prunes terminal event logs), started here unconditionally so
+    // orphaned tasks get settled even on pods that never start a run.
+    a2aTaskRunService.startMaintenance();
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
@@ -1435,6 +1492,10 @@ const startWebServer = async () => {
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
 
+    // If the previous container instance died abnormally (e.g. OOMKilled),
+    // it could not report its own death — surface it now. Fire-and-forget.
+    void reportAbnormalPreviousTermination();
+
     // Optional dedicated listener aliasing the MS Teams webhook on its own
     // port (see startPublicEndpointsServer).
     await startPublicEndpointsServer();
@@ -1498,9 +1559,19 @@ function registerWebServerShutdown(
     // runs are freed, leaving their conversations blocked until the reaper runs.
     // This is a single fast UPDATE, bounded so a slow DB cannot stall shutdown.
     await Promise.race([
-      activeChatRunService.failInFlightRuns().catch((error) => {
-        fastify.log.error({ error }, "Failed to fail in-flight chat runs");
-      }),
+      Promise.all([
+        activeChatRunService.failInFlightRuns().catch((error) => {
+          fastify.log.error({ error }, "Failed to fail in-flight chat runs");
+        }),
+        // Same reasoning for A2A task runs: settle this pod's WORKING tasks
+        // to FAILED now, instead of leaving clients polling until the reaper.
+        a2aTaskRunService.failInFlightRuns().catch((error) => {
+          fastify.log.error(
+            { error },
+            "Failed to fail in-flight A2A task runs",
+          );
+        }),
+      ]),
       new Promise<void>((resolve) =>
         setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS),
       ),
@@ -1546,7 +1617,11 @@ function registerWebServerShutdown(
 
       mcpToolsRefreshManager.stop();
 
+      mcpGatewayTaskReaper.stop();
+
       instanceAnalyticsService.stop();
+
+      metrics.activeUsers.activeUsersMetricCollector.stop();
 
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"
@@ -1604,7 +1679,22 @@ const startWorker = async () => {
   logger.info("Starting in worker-only mode (ARCHESTRA_PROCESS_TYPE=worker)");
 
   try {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Same gate as `start` — the retention sweep runs on the worker.
+    assertRetentionConfigLicensed();
+    // SPDX-SnippetEnd
+
     await initializeDatabase();
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Workers write messages and interactions (scheduled runs, triggers), so
+    // the content-key guard must hold here too.
+    await verifyContentEncryptionKey();
+    // SPDX-SnippetEnd
     cacheManager.start();
     await enterpriseTier.start();
 
@@ -1634,6 +1724,11 @@ const startWorker = async () => {
     // See the shouldRunWorker branch in `start` — same legacy-index cleanup,
     // for the dedicated worker Deployment.
     void dropLegacyPayloadTrgmIndexes();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    void dropContentTrgmIndexesUnderEncryption();
+    // SPDX-SnippetEnd
 
     posthogErrorTrackingService.init().catch((error) => {
       logger.warn(

@@ -7,6 +7,7 @@ import {
   buildAzureDeploymentsUrl,
   buildAzureModelsUrl,
   buildAzureOpenAiV1ModelsUrl,
+  buildAzureV1DeploymentsUrl,
   extractAzureDeploymentName,
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
@@ -38,6 +39,22 @@ export async function fetchAzureModels(
     const deployments = await tryAzureManagementDeployments(baseUrl);
     if (deployments.length > 0) {
       return deployments;
+    }
+
+    // /openai/v1/models answers with the regional catalog, not this resource's
+    // deployments, and Azure rejects a catalog id as `model` with a 404. Ask
+    // the classic data plane what is actually deployed before settling for it.
+    const v1DeploymentsUrl = buildAzureV1DeploymentsUrl(baseUrl);
+    if (v1DeploymentsUrl) {
+      const dataPlaneDeployments = await fetchAzureDeploymentList({
+        apiKey,
+        extraHeaders,
+        url: v1DeploymentsUrl,
+        baseUrl,
+      });
+      if (dataPlaneDeployments.length > 0) {
+        return dataPlaneDeployments;
+      }
     }
 
     return fetchAzureModelList({
@@ -105,6 +122,53 @@ export async function fetchAzureModels(
       }
     }
     return fallbackToConfiguredDeployment(deploymentName);
+  }
+}
+
+/**
+ * Read the classic data-plane deployment listing. Absent on some resources, so
+ * an unavailable listing is not an error — the caller falls back.
+ */
+async function fetchAzureDeploymentList(params: {
+  apiKey: string;
+  baseUrl: string;
+  extraHeaders?: Record<string, string> | null;
+  url: string;
+}): Promise<ModelInfo[]> {
+  try {
+    const authHeaders = await getAzureAuthHeaders(
+      params.apiKey,
+      params.baseUrl,
+    );
+    const response = await fetch(params.url, {
+      headers: {
+        ...(params.extraHeaders ?? {}),
+        ...authHeaders,
+      },
+    });
+
+    if (!response.ok) {
+      logger.debug(
+        { status: response.status },
+        "Azure data-plane deployment listing unavailable",
+      );
+      return [];
+    }
+
+    const data = (await response.json()) as {
+      data?: { id: string; model?: string }[];
+    };
+
+    return (data.data ?? []).map((deployment) => ({
+      id: deployment.id,
+      displayName: deployment.id,
+      provider: "azure" as const,
+      // Deployments carry the backing model name; use it for pricing.
+      ...(deployment.model ? { underlyingModelName: deployment.model } : {}),
+    }));
+  } catch (error) {
+    logger.debug({ error }, "Azure data-plane deployment listing failed");
+    return [];
   }
 }
 

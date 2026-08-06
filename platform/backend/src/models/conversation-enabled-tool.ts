@@ -1,5 +1,6 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
+import { notDeletedConversation } from "@/database/schemas/conversation";
 import logger from "@/logging";
 import ToolModel from "./tool";
 
@@ -47,7 +48,12 @@ class ConversationEnabledToolModel {
           schema.conversationsTable.hasCustomToolSelection,
       })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, conversationId))
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, conversationId),
+        ),
+      )
       .limit(1);
 
     const hasCustom = result[0]?.hasCustomToolSelection ?? false;

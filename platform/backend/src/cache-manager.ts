@@ -80,6 +80,14 @@ export const CacheKey = {
   SlackThreadMuted: "slack-thread-muted",
   /** Per-channel "answer all messages" flag, briefly cached to spare the gate a DB read per message */
   ChatOpsChannelAnswerAll: "chatops-channel-answer-all",
+  /** MS Teams thread-format team id → aadGroupId, so the gate resolves it without a Bot Framework call per message */
+  TeamsTeamAadGroupId: "teams-team-aad-group-id",
+  /** MS Teams teams that have delivered an un-mentioned channel message — proof the RSC consent for reading channel messages exists */
+  TeamsUnmentionedChannelTraffic: "teams-unmentioned-channel-traffic",
+  /** Dual LLM sanitized tool results, keyed by tool call + content hash */
+  DualLlmSanitizedResult: "dual-llm-sanitized-result",
+  /** Completed Q&A rounds of a dual LLM analysis that failed mid-flight, keyed by content hash so a retry resumes instead of re-interrogating */
+  DualLlmPartialTranscript: "dual-llm-partial-transcript",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */

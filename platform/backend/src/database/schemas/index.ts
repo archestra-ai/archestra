@@ -13,6 +13,7 @@
  * 2. Status-quo drift (app-code singular names predating this policy — eligible
  *    to be renamed to plural in future migrations):
  *      a2a_context, a2a_message, a2a_task, a2a_task_approval_request,
+ *      a2a_artifact, a2a_task_event, a2a_push_notification_config,
  *      agent_connector_assignment, agent_knowledge_base, agent_team,
  *      chatops_channel_binding, chatops_processed_message,
  *      chatops_thread_agent_override,
@@ -20,7 +21,7 @@
  *      identity_provider, incoming_email_subscription, internal_mcp_catalog,
  *      knowledge_base_connector_assignment, limit_model_usage,
  *      mcp_catalog_team, mcp_preset_entry, mcp_server,
- *      mcp_server_installation_request, mcp_server_user,
+ *      mcp_server_user,
  *      organization_role, processed_email, secret,
  *      site_notification, skill_team,
  *      team_external_group, team_token, team_vault_folder, user_token,
@@ -38,11 +39,14 @@
  *   - messages — a top-level entity named for itself, not a conversation child
  *   - chat_active_runs — ephemeral run state predating this guidance
  */
+export { default as a2aArtifactsTable } from "./a2a-artifact";
 export { default as a2aContextsTable } from "./a2a-context";
 export { default as a2aContextCompactionsTable } from "./a2a-context-compaction";
 export { default as a2aMessagesTable } from "./a2a-message";
+export { default as a2aPushNotificationConfigsTable } from "./a2a-push-notification-config";
 export { default as a2aTasksTable } from "./a2a-task";
 export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-request";
+export { default as a2aTaskEventsTable } from "./a2a-task-event";
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
@@ -53,9 +57,12 @@ export { default as agentLabelsTable } from "./agent-label";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
+export { default as agentUsersTable } from "./agent-user";
+export { default as agentVersionsTable } from "./agent-version";
 export { default as apikeysTable } from "./api-key";
 export { default as appsTable } from "./app";
 export { default as appDataTable } from "./app-data";
+export { default as appLabelsTable } from "./app-label";
 export { default as appPinsTable } from "./app-pin";
 export { default as appRenderDiagnosticsTable } from "./app-render-diagnostics";
 export { default as appRenderScreenshotTable } from "./app-render-screenshot";
@@ -76,6 +83,8 @@ export {
   default as connectionSetupsTable,
 } from "./connection-setup";
 export { default as connectorRunsTable } from "./connector-run";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed schema; inert without the feature
+export { default as contentEncryptionStateTable } from "./content-encryption-state.ee";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationAttachmentsTable } from "./conversation-attachment";
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";
@@ -117,16 +126,18 @@ export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
 export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
+export { default as mcpCatalogUsersTable } from "./mcp-catalog-user";
+export { default as mcpGatewayTasksTable } from "./mcp-gateway-task";
 export { default as mcpHttpSessionsTable } from "./mcp-http-session";
 export { default as mcpPresetEntriesTable } from "./mcp-preset-entry";
 export { default as mcpServersTable } from "./mcp-server";
-export { default as mcpServerInstallationRequestsTable } from "./mcp-server-installation-request";
 export { default as mcpServerUsersTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
 export { default as modelsTable } from "./model";
 export { default as modelTeamsTable } from "./model-team";
+export { default as modelUsersTable } from "./model-user";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";
 export { default as oauthClientsTable } from "./oauth-client";
 export { default as oauthClientTeamsTable } from "./oauth-client-team";
@@ -140,6 +151,7 @@ export {
   default as projectsTable,
   projectSharesTable,
   projectShareTeamsTable,
+  projectShareUsersTable,
 } from "./project";
 export { default as projectPinsTable } from "./project-pin";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
@@ -164,6 +176,7 @@ export {
 export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";
 export { default as skillTeamsTable } from "./skill-team";
 export { default as skillUsageEventsTable } from "./skill-usage-event";
+export { default as skillUsersTable } from "./skill-user";
 export { default as skillVersionsTable } from "./skill-version";
 export { default as skillVersionFilesTable } from "./skill-version-file";
 export { default as tasksTable } from "./task";
@@ -174,6 +187,7 @@ export { default as teamTokensTable } from "./team-token";
 export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
+export { default as toolObservationsTable } from "./tool-observation";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";

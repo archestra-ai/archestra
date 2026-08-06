@@ -9,6 +9,8 @@ import {
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
+import InteractionDeltaManager from "@/models/interaction-delta-manager";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -19,10 +21,13 @@ describe("interaction routes", () => {
   let currentUser: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeAdmin, makeOrganization }) => {
+  beforeEach(async ({ makeAdmin, makeOrganization, makeMember }) => {
     currentUser = await makeAdmin();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    // The routes resolve log:admin from the caller's org membership; the
+    // suite's default caller is an org admin (org-wide log visibility).
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -440,10 +445,16 @@ describe("interaction routes", () => {
       },
     };
     const m0 = { role: "user", content: "first message in the claude session" };
+    // The tip's own delta suffix carries no user TEXT (tool_result-only), so
+    // the preview's text exists only in the head row — a suffix-only
+    // (unreconstructed) read would yield a null preview.
     const fullMessages = [
       m0,
       { role: "assistant", content: "ack" },
-      { role: "user", content: "second message" },
+      {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tu_1", content: "ok" }],
+      },
     ];
 
     const anthropicReq = (messages: unknown[]) =>
@@ -462,6 +473,10 @@ describe("interaction routes", () => {
       type: "anthropic:messages",
       request: anthropicReq([m0]),
       response: anthropicResp,
+      // Explicit distinct timestamps: defaultNow() can tie within the same
+      // millisecond, and the last-interaction window ranks by created_at
+      // alone — a tie could select the head row and dodge tip reconstruction.
+      createdAt: new Date("2020-01-01T00:00:00.000Z"),
     });
     const tip = await InteractionModel.create({
       profileId: agent.id,
@@ -470,9 +485,29 @@ describe("interaction routes", () => {
       type: "anthropic:messages",
       request: anthropicReq(fullMessages),
       response: anthropicResp,
+      createdAt: new Date("2020-01-01T00:00:01.000Z"),
     });
 
-    // Detail endpoint reconstructs the full request and passes response schema.
+    // Sessions endpoint derives its preview from the reconstructed request —
+    // the raw request body itself is never returned by the listing (T-1015:
+    // shipping full bodies OOM-killed the platform container). Runs FIRST, on
+    // a cold delta cache, so the preview provably comes from DB
+    // reconstruction rather than tip state warmed by the writes above.
+    InteractionDeltaManager.reset();
+    const sessions = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=10&offset=0&sessionId=route-delta-session",
+    });
+    expect(sessions.statusCode).toBe(200);
+    const sessionRow = sessions.json().data[0];
+    expect(sessionRow.lastUserMessagePreview).toBe(
+      "first message in the claude session",
+    );
+    expect(sessionRow).not.toHaveProperty("lastInteractionRequest");
+
+    // Detail endpoint reconstructs the full request and passes response
+    // schema. Cold cache again: the sessions call above warmed the tip.
+    InteractionDeltaManager.reset();
     const detail = await app.inject({
       method: "GET",
       url: `/api/interactions/${tip.id}`,
@@ -480,7 +515,9 @@ describe("interaction routes", () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().request.messages).toEqual(fullMessages);
 
-    // Session-filtered list reconstructs every interaction's request.
+    // Session-filtered list reconstructs every interaction's request — also
+    // from a cold cache.
+    InteractionDeltaManager.reset();
     const list = await app.inject({
       method: "GET",
       url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc&sessionId=route-delta-session",
@@ -490,16 +527,6 @@ describe("interaction routes", () => {
       .json()
       .data.find((i: { id: string }) => i.id === tip.id);
     expect(tipRow.request.messages).toEqual(fullMessages);
-
-    // Sessions endpoint reconstructs the last interaction request.
-    const sessions = await app.inject({
-      method: "GET",
-      url: "/api/interactions/sessions?limit=10&offset=0&sessionId=route-delta-session",
-    });
-    expect(sessions.statusCode).toBe(200);
-    expect(sessions.json().data[0].lastInteractionRequest.messages).toEqual(
-      fullMessages,
-    );
   });
 
   test("filters the sessions endpoint by client (external_agent_id)", async ({
@@ -607,5 +634,305 @@ describe("interaction routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toHaveLength(2);
     expect(response.json().pagination.total).toBe(4);
+  });
+
+  test("hides an agent-less interaction from a non-agent-admin", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // The suite's default caller is an org admin; this test needs a caller
+    // without agent-admin (or log:admin) standing.
+    const limited = await makeUser();
+    await makeMember(limited.id, organizationId, { role: "member" });
+    currentUser = limited;
+
+    const interaction = await InteractionModel.create({
+      profileId: null,
+      source: "knowledge:embedding",
+      request: { model: "text-embedding-3-small", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [],
+        model: "text-embedding-3-small",
+      } as unknown as InteractionResponse,
+      type: "openai:embeddings",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("names the knowledge base connector a KB interaction belongs to", async ({
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeMember,
+  }) => {
+    // KB interactions carry no agent, so only an agent admin may read them.
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+    const kb = await makeKnowledgeBase(organizationId);
+    const connector = await makeKnowledgeBaseConnector(kb.id, organizationId, {
+      name: "Docs Web Crawler",
+    });
+    const interaction = await InteractionModel.create({
+      profileId: null,
+      connectorId: connector.id,
+      source: "knowledge:embedding",
+      request: { model: "text-embedding-3-small", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [],
+        model: "text-embedding-3-small",
+      } as unknown as InteractionResponse,
+      type: "openai:embeddings",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      connectorId: connector.id,
+      connectorName: "Docs Web Crawler",
+    });
+  });
+
+  test("hides a KB interaction whose connector belongs to another organization", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeMember,
+  }) => {
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+    const otherOrg = await makeOrganization();
+    const otherKb = await makeKnowledgeBase(otherOrg.id);
+    const foreignConnector = await makeKnowledgeBaseConnector(
+      otherKb.id,
+      otherOrg.id,
+      { name: "Secret Connector" },
+    );
+    const interaction = await InteractionModel.create({
+      profileId: null,
+      connectorId: foreignConnector.id,
+      source: "knowledge:embedding",
+      request: { model: "text-embedding-3-small", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [],
+        model: "text-embedding-3-small",
+      } as unknown as InteractionResponse,
+      type: "openai:embeddings",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+
+    // Not merely a nulled name: the payload itself carries the indexed document
+    // text, so the row must not cross the tenant boundary at all.
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("reports a null connector name when the connector has been deleted", async ({
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeMember,
+  }) => {
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+    const kb = await makeKnowledgeBase(organizationId);
+    const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+    const interaction = await InteractionModel.create({
+      profileId: null,
+      connectorId: connector.id,
+      source: "knowledge:embedding",
+      request: { model: "text-embedding-3-small", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [],
+        model: "text-embedding-3-small",
+      } as unknown as InteractionResponse,
+      type: "openai:embeddings",
+    });
+    await KnowledgeBaseConnectorModel.delete(connector.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    // The id survives the connector so the log still records what produced it.
+    expect(response.json()).toMatchObject({
+      connectorId: connector.id,
+      connectorName: null,
+    });
+  });
+
+  describe("own-vs-all log visibility (log:read vs log:admin)", () => {
+    let limitedUser: User;
+    let otherUser: User;
+    let agentId: string;
+    let ownRowId: string;
+    let otherRowId: string;
+
+    const seedRow = (userId: string | null, sessionId: string) =>
+      InteractionModel.create({
+        profileId: agentId,
+        userId,
+        sessionId,
+        externalAgentId: userId ? `ext-${userId}` : null,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r",
+          object: "chat.completion",
+          choices: [],
+        } as unknown as InteractionResponse,
+        type: "openai:chatCompletions",
+      });
+
+    beforeEach(async ({ makeAgent, makeUser, makeMember, makeCustomRole }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      agentId = agent.id;
+
+      otherUser = await makeUser();
+      limitedUser = await makeUser();
+      const readOnlyLogs = await makeCustomRole(organizationId, {
+        permission: { log: ["read"], agent: ["read"] },
+      });
+      await makeMember(limitedUser.id, organizationId, {
+        role: readOnlyLogs.role,
+      });
+
+      ownRowId = (await seedRow(limitedUser.id, "own-session")).id;
+      otherRowId = (await seedRow(otherUser.id, "other-session")).id;
+      await seedRow(null, "unattributed-session");
+    });
+
+    test("log:read lists only the caller's own rows — a userId filter for someone else is overridden", async () => {
+      currentUser = limitedUser;
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/interactions?limit=10&offset=0",
+      });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().pagination.total).toBe(1);
+      expect(list.json().data[0].id).toBe(ownRowId);
+
+      // Asking for another user's rows must not widen the view.
+      const forced = await app.inject({
+        method: "GET",
+        url: `/api/interactions?limit=10&offset=0&userId=${otherUser.id}`,
+      });
+      expect(forced.json().pagination.total).toBe(1);
+      expect(forced.json().data[0].id).toBe(ownRowId);
+    });
+
+    test("log:read hides another user's (and unattributed) detail rows as 404", async () => {
+      currentUser = limitedUser;
+
+      const own = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${ownRowId}`,
+      });
+      expect(own.statusCode).toBe(200);
+
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${otherRowId}`,
+      });
+      expect(other.statusCode).toBe(404);
+    });
+
+    test("log:read narrows sessions, user-ids, and external-agent-ids to the caller", async () => {
+      currentUser = limitedUser;
+
+      const sessions = await app.inject({
+        method: "GET",
+        url: "/api/interactions/sessions?limit=10&offset=0",
+      });
+      expect(sessions.statusCode).toBe(200);
+      expect(sessions.json().pagination.total).toBe(1);
+      expect(sessions.json().data[0].sessionId).toBe("own-session");
+
+      const userIds = await app.inject({
+        method: "GET",
+        url: "/api/interactions/user-ids",
+      });
+      expect(userIds.json()).toEqual([
+        { id: limitedUser.id, name: limitedUser.name },
+      ]);
+
+      const extIds = await app.inject({
+        method: "GET",
+        url: "/api/interactions/external-agent-ids",
+      });
+      expect(extIds.json().map((e: { id: string }) => e.id)).toEqual([
+        `ext-${limitedUser.id}`,
+      ]);
+    });
+
+    test("log:admin (custom role) and the predefined admin see every user's rows", async ({
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const auditor = await makeUser();
+      const allLogs = await makeCustomRole(organizationId, {
+        permission: { log: ["read", "admin"], agent: ["read", "admin"] },
+      });
+      await makeMember(auditor.id, organizationId, { role: allLogs.role });
+      currentUser = auditor;
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/interactions?limit=10&offset=0",
+      });
+      expect(list.json().pagination.total).toBe(3);
+
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${otherRowId}`,
+      });
+      expect(other.statusCode).toBe(200);
+    });
+
+    test("the predefined platform_admin sees only their own rows", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const platformAdmin = await makeUser();
+      await makeMember(platformAdmin.id, organizationId, {
+        role: "platform_admin",
+      });
+      const mine = await seedRow(platformAdmin.id, "pa-session");
+      currentUser = platformAdmin;
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/interactions?limit=10&offset=0",
+      });
+      expect(list.json().pagination.total).toBe(1);
+      expect(list.json().data[0].id).toBe(mine.id);
+
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${otherRowId}`,
+      });
+      expect(other.statusCode).toBe(404);
+    });
   });
 });

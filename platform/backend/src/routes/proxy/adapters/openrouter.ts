@@ -4,6 +4,7 @@
  * OpenRouter exposes an OpenAI-compatible API at https://openrouter.ai/api/v1
  * and recommends attribution headers (HTTP-Referer, X-OpenRouter-Title).
  */
+
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -29,6 +30,7 @@ import {
   OpenAIResponseAdapter,
   OpenAIStreamAdapter,
 } from "./openai";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES (reuse OpenAI types since OpenRouter is OpenAI-compatible)
@@ -249,6 +251,7 @@ export const openrouterAdapterFactory: LLMProvider<
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: rawApiKey,
       baseURL: options.baseUrl ?? config.llm.openrouter.baseUrl,
       fetch: customFetch,
@@ -321,7 +324,9 @@ export const openrouterAdapterFactory: LLMProvider<
 };
 
 function assertOpenrouterResponseHasOutput(response: OpenrouterResponse): void {
-  const choice = response.choices[0];
+  // OpenRouter deviates from the OpenAI schema on some error/edge payloads
+  // and omits `choices` entirely — reading [0] off it unguarded is a crash.
+  const choice = response.choices?.[0];
   if (!choice || choice.finish_reason !== "stop") {
     return;
   }
@@ -343,7 +348,7 @@ function assertOpenrouterStreamChunkHasOutput(
   state: StreamAccumulatorState,
   chunk: OpenrouterStreamChunk,
 ): void {
-  if (chunk.choices[0]?.finish_reason !== "stop") {
+  if (chunk.choices?.[0]?.finish_reason !== "stop") {
     return;
   }
 

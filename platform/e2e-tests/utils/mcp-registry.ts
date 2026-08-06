@@ -212,12 +212,26 @@ async function openCatalogItemConnectDialog(
   catalogItemName: string,
   options?: { timeoutMs?: number },
 ): Promise<void> {
-  const timeoutMs = options?.timeoutMs ?? 30_000;
-  await filterMcpRegistryByName(page, catalogItemName);
+  // 60s, not 30s: on standard GitHub-hosted runners the card can spend a
+  // while with its Install button legitimately absent (e.g. the viewer's own
+  // just-triggered install still settling) before it renders.
+  const timeoutMs = options?.timeoutMs ?? 60_000;
   const connectButton = page.getByTestId(
     `${E2eTestId.ConnectCatalogItemButton}-${catalogItemName}`,
   );
-  await connectButton.waitFor({ state: "visible", timeout: timeoutMs });
+  // Re-apply the filter until the card appears instead of filling once and
+  // waiting: on slow runners a fill() can land before React hydration
+  // attaches the input's onChange, so the DOM holds the text but the list
+  // state never filters — no amount of waiting shows the button then.
+  await expect
+    .poll(
+      async () => {
+        await filterMcpRegistryByName(page, catalogItemName);
+        return connectButton.isVisible().catch(() => false);
+      },
+      { timeout: timeoutMs, intervals: [1_000, 2_000, 3_000] },
+    )
+    .toBe(true);
   await expect(connectButton).toBeEnabled({ timeout: timeoutMs });
   await connectButton.click({ timeout: timeoutMs });
 }

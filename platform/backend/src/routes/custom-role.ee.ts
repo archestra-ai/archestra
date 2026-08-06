@@ -6,6 +6,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { betterAuth } from "@/auth";
+import { syncSystemRoleForRoleHolders } from "@/auth/system-role-sync";
 import logger from "@/logging";
 import { OrganizationRoleModel, UserModel } from "@/models";
 import {
@@ -229,6 +230,16 @@ const customRoleRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         result.roleData.role,
       );
+
+      // The role's member:impersonate grant may have appeared or vanished;
+      // resync the system-level user.role of everyone holding it (the
+      // better-auth admin plugin gates impersonation on that column).
+      if (permission) {
+        await syncSystemRoleForRoleHolders(
+          result.roleData.role,
+          organizationId,
+        );
+      }
 
       return reply.send(normalizeRoleResponse(result.roleData));
     },

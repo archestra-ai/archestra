@@ -1,6 +1,9 @@
+import { TOOL_SEARCH_FILES_SHORT_NAME } from "@archestra/shared";
 import { AppModel, AppToolModel, McpServerModel } from "@/models";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
 import { sanitizeAppNameForToolMetadata } from "@/services/apps/app-run-link";
+import { isAppRuntimeBuiltinAvailable } from "@/services/apps/app-tool-runtime-gate";
+import { fileStore } from "@/skills-sandbox/file-store";
 
 /**
  * The app a chat is open with, resolved for the system prompt. One shape per
@@ -11,6 +14,13 @@ import { sanitizeAppNameForToolMetadata } from "@/services/apps/app-run-link";
 export type OpenedApp =
   | {
       kind: "owned";
+      /**
+       * The app's id, carried so the chat can thread it into the tool-execution
+       * context (`ArchestraContext.openedAppId`) for the agent-side file
+       * exchange. Safe to trust: `resolveOpenedApp` re-verified the viewer's
+       * access to exactly this id on this turn.
+       */
+      id: string;
       name: string;
       description: string | null;
       /**
@@ -23,6 +33,24 @@ export type OpenedApp =
        * `[a-z0-9_-]`, so a name cannot break out of the sentence holding it.
        */
       tools: string[];
+      /**
+       * The app's per-viewer file store, listed server-side so the model knows
+       * what the open app holds without being asked to go look. Empty when the
+       * deployment runs without the sandbox runtime (no file store) — the
+       * prompt block then says nothing about files at all.
+       */
+      files: { filename: string; sizeBytes: number }[];
+      /**
+       * Whether the deployment has a file store at all; distinguishes "no
+       * files" (worth stating) from "no file feature" (say nothing).
+       */
+      hasFileStore: boolean;
+      /**
+       * What the running app last reported it is showing (via the MCP-Apps
+       * update-model-context request), sanitized to one prompt-safe line.
+       * App-authored and viewer-relayed — quoted strictly as data.
+       */
+      reportedContext: string | null;
     }
   | {
       kind: "external";
@@ -45,7 +73,12 @@ export type OpenedApp =
  * to undefined and simply drops the injection rather than leaking anything.
  */
 export async function resolveOpenedApp(params: {
-  openedApp: { appId: string | null; appMcpServerId: string | null };
+  openedApp: {
+    appId: string | null;
+    appMcpServerId: string | null;
+    /** App-reported display state off the message metadata (untrusted). */
+    modelContext?: string | null;
+  };
   userId: string;
   organizationId: string;
 }): Promise<OpenedApp | undefined> {
@@ -58,19 +91,48 @@ export async function resolveOpenedApp(params: {
       userId,
       isAppAdmin: await callerIsAppAdmin(userId, organizationId),
     });
-    if (!app) return undefined;
+    // A disabled app must not reach the model at all (T-980) — dropping the
+    // injection here matches the chat tools, which report it as not found.
+    if (!app || !app.enabled) return undefined;
     const name = promptSafe(app.name);
     // A name that sanitizes away leaves nothing to call the app by, so there is
     // no block worth writing.
     if (!name) return undefined;
-    const tools = await AppToolModel.getToolsForApp(app.id);
+    // Availability comes from the same predicate the runtime gate, dispatch,
+    // and SDK bootstrap ask, and the inventory from the same listing the
+    // app-scope search_files runs — so what the prompt claims about the store
+    // can never disagree with what the tools would actually return.
+    const hasFileStore = isAppRuntimeBuiltinAvailable(
+      TOOL_SEARCH_FILES_SHORT_NAME,
+    );
+    const [tools, fileItems] = await Promise.all([
+      AppToolModel.getToolsForApp(app.id),
+      hasFileStore
+        ? fileStore.search({
+            organizationId,
+            userId,
+            scope: { kind: "app", appId: app.id },
+          })
+        : Promise.resolve([]),
+    ]);
     return {
       kind: "owned",
+      id: app.id,
       name,
       description: promptSafe(app.description),
       // Sorted so the block is byte-stable across turns: assignment order is
       // arbitrary, and a list that reshuffles would break prompt caching.
       tools: tools.map((tool) => tool.name).sort(),
+      // Filenames are user/app-authored text — sanitized like every other app
+      // string that reaches the prompt. Sorted for byte-stability too.
+      files: fileItems
+        .flatMap((item) => {
+          const filename = promptSafe(item.filename);
+          return filename ? [{ filename, sizeBytes: item.sizeBytes ?? 0 }] : [];
+        })
+        .sort((a, b) => a.filename.localeCompare(b.filename)),
+      hasFileStore,
+      reportedContext: promptSafe(openedApp.modelContext ?? null),
     };
   }
 

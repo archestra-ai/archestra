@@ -50,6 +50,10 @@ import { useGithubAppConfigs } from "@/lib/github-app-config.query";
 import { useGithubPats } from "@/lib/github-pat.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  composeManifest,
+  parseManifestFields,
+} from "@/lib/skills/manifest-compose";
+import {
   useCreateSkill,
   useSkill,
   useUpdateSkill,
@@ -58,7 +62,6 @@ import {
 import { formatBytes } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { composeManifest, parseManifestFields } from "./manifest-compose";
 import { SkillScopeSelector } from "./skill-scope-selector";
 
 interface ResourceFile {
@@ -151,6 +154,9 @@ export function SkillEditorDialog({
   const [files, setFiles] = useState<ResourceFile[]>([]);
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  // People the skill is shared with by name. Stored beside the `personal`
+  // scope, so the selector reads (scope, userIds) as a fourth choice.
+  const [userIds, setUserIds] = useState<string[]>([]);
   // empty = not restricted (available to agents in every environment).
   const [environmentIds, setEnvironmentIds] = useState<string[]>([]);
   // null = the SKILL.md manifest is open; otherwise an index into `files`.
@@ -205,6 +211,7 @@ export function SkillEditorDialog({
       );
       setScope(skill.scope);
       setTeamIds(skill.teams.map((team) => team.id));
+      setUserIds(skill.users.map((user) => user.id));
       setEnvironmentIds(
         skill.environments.map((environment) => environment.id),
       );
@@ -213,6 +220,7 @@ export function SkillEditorDialog({
       setFiles([]);
       setScope("personal");
       setTeamIds([]);
+      setUserIds([]);
       setEnvironmentIds([]);
     }
     setOpenFileIndex(null);
@@ -243,11 +251,29 @@ export function SkillEditorDialog({
       ...(isSyncedSkill ? {} : { files }),
       scope,
       teamIds: scope === "team" ? teamIds : [],
+      userIds: scope === "personal" ? userIds : [],
       environmentIds,
+      // Anchor the save to the head this form was seeded from. `files` is a
+      // whole-set replacement built from that read, so without the anchor a
+      // save would bury anything written since — an `edit_skill` call, a sync
+      // pull, another user. The effect above reseeds the content and
+      // `latestVersion` together, so the two cannot drift apart.
+      //
+      // A synced skill is exempt: its save carries no files and the backend
+      // rejects any content change, so there is nothing to bury — anchoring it
+      // would only let the sync worker's own pulls reject a scope edit.
+      ...(isEdit && skill && !isSyncedSkill
+        ? { baseVersion: skill.latestVersion }
+        : {}),
     };
-    const result = isEdit
-      ? await updateSkill.mutateAsync({ id: skillId, body })
-      : await createSkill.mutateAsync(body);
+    // A handled failure resolves to null and a rejection is reported by the
+    // mutation's own `onError`; both leave the dialog open with the draft
+    // intact, so the author can retry without retyping. Caught here only so an
+    // unreachable API does not escape as an unhandled rejection.
+    const result = await (isEdit
+      ? updateSkill.mutateAsync({ id: skillId, body })
+      : createSkill.mutateAsync(body)
+    ).catch(() => null);
     if (result) {
       onOpenChange(false);
       onSaved?.();
@@ -424,7 +450,7 @@ export function SkillEditorDialog({
     >
       {(isPreview && isPreviewLoading) || (isEdit && isLoading) ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
-          Loading skill...
+          <span>Loading skill...</span>
         </div>
       ) : (
         <div className="flex h-full min-h-0 flex-col gap-4">
@@ -441,7 +467,7 @@ export function SkillEditorDialog({
                       {githubSourceRepo}
                     </code>
                   ) : (
-                    "GitHub"
+                    <span>GitHub</span>
                   )}{" "}
                   as a one-time copy. Saving changes here won’t update the repo,
                   and {appName} won’t pull later changes from it.
@@ -664,6 +690,8 @@ export function SkillEditorDialog({
                 onScopeChange={setScope}
                 teamIds={teamIds}
                 onTeamIdsChange={setTeamIds}
+                userIds={userIds}
+                onUserIdsChange={setUserIds}
               />
               <EnvironmentMultiSelector
                 value={environmentIds}
@@ -1224,7 +1252,7 @@ function TemplatedManifestHint() {
           for available variables.
         </>
       ) : (
-        "."
+        <span>.</span>
       )}
     </p>
   );

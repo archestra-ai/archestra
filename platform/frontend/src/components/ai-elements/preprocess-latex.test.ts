@@ -36,6 +36,61 @@ describe("preprocessLaTeX", () => {
     );
   });
 
+  // Pandoc's rule: what sits *next to* the delimiters decides, so prose that
+  // merely happens to contain two dollars is not a formula. Asserted as "no
+  // `$$` was produced" because the currency pass legitimately rewrites some of
+  // these to `\$`, which still renders as the literal price.
+  it.each([
+    ["a space before the closer", "Set $HOME and $PATH before running."],
+    ["a space before the closer, twice", "Export $USER then check $SHELL."],
+    ["underscored env vars", "Check $JAVA_HOME and $MAVEN_HOME are set."],
+    ["single-letter vars", "The var $A and the var $B differ."],
+    ["postfix amounts", "He paid 5$ and I paid 10$."],
+    ["a digit after the closer", "Item A ($5) and Item B ($10)."],
+    ["a hyphenated range", "Pricing tiers: $5-$10 per seat."],
+    ["a slash-separated range", "Costs $50/$60 depending on region."],
+    ["tickers", "The ticker is $AAPL and $MSFT today."],
+    ["positional shell args", "Use $1 and $2 as positional args in bash."],
+    ["a price then a variable", "Item A ($5) and Item B ($x)."],
+    ["a price then a variable in a ratio", "Rates: ($5)/($x) per unit."],
+  ])("does not promote %s", (_label, input) => {
+    expect(preprocessLaTeX(input)).not.toContain("$$");
+  });
+
+  // Rule 2 alone would pair these: the closing candidate is pinned against
+  // punctuation rather than a space, so it satisfies Pandoc on its own.
+  it.each([
+    ["a path separator", "Use $HOME/$USER as the target directory."],
+    ["a colon", "Prepend $PATH:$HOME to the search path."],
+    ["an at sign", 'Set PS1="$USER@$HOST" in your profile.'],
+    ["a comma", "Compare $HOME,$PATH ordering."],
+    ["a semicolon", "Try $FOO;$BAR in one line."],
+  ])("does not promote across %s", (_label, input) => {
+    expect(preprocessLaTeX(input)).not.toContain("$$");
+  });
+
+  // A number closed by a `$` is a formula, not a price, so the currency pass
+  // has to stand down for it.
+  it("promotes a numeric formula that closes on a dollar", () => {
+    expect(preprocessLaTeX("The answer is $42$ exactly.")).toBe(
+      "The answer is $$42$$ exactly.",
+    );
+  });
+
+  // A promoted pair inserted under an open `$$` gets eaten by it: the stray
+  // opener pairs with our opening `$$` and the prose between them becomes the
+  // formula. Declining to promote leaves the span as the literal text instead.
+  it("declines to promote under an unclosed display delimiter", () => {
+    const input = "Save $$ when $x$ is high.";
+    expect(preprocessLaTeX(input)).toBe(input);
+  });
+
+  it("resumes promoting in the next paragraph", () => {
+    expect(preprocessLaTeX("Save $$ today.\n\nThen $x$ holds.")).toBe(
+      "Save $$ today.\n\nThen $$x$$ holds.",
+    );
+  });
+
   it.each([
     ["existing display math", "$$\nE = mc^2\n$$"],
     ["a fenced code block", "```sh\necho $HOME and $PATH\n```"],

@@ -263,3 +263,89 @@ describe("Response math rendering", () => {
     expect(container.querySelector(".katex-error")).toBeNull();
   });
 });
+
+// Promoting `$…$` is the one rewrite that can turn ordinary prose into a
+// formula, and the damage is invisible in the normalized string — only a render
+// shows text being swallowed. These assert on the rendered output for that
+// reason, and are kept as a corpus because the rule is a balance of several
+// lookarounds: a change that fixes one shape tends to regress another.
+describe("Response dollar-sign safety", () => {
+  it.each([
+    // prices
+    "The plan costs $5 and the addon is $10.",
+    "Revenue grew from $20,000 and $30,000 last year.",
+    "Egress is $0.02/GB and storage is $0.01/GB.",
+    "It runs $203/month vs $150/month.",
+    "Pricing tiers: $5-$10 per seat.",
+    "Costs $50/$60 depending on region.",
+    "Item A ($5) and Item B ($10).",
+    "We charge US$100 and CA$200.",
+    "Between $1 million and $2 million in ARR.",
+    "He paid 5$ and I paid 10$.",
+    "Budget: $1,250.50 today, $3.2M next year.",
+    "Item A ($5) and Item B ($x).",
+    "Rates: ($5)/($x) per unit.",
+    "Tiers ($10)-($n) apply.",
+    // shell and ticker prose
+    "Set $HOME and $PATH before running.",
+    "Export $USER then check $SHELL.",
+    "Use $HOME/$USER as the target directory.",
+    "Prepend $PATH:$HOME to the search path.",
+    'Set PS1="$USER@$HOST" in your profile.',
+    "Check $JAVA_HOME and $MAVEN_HOME are set.",
+    "Compare $HOME,$PATH ordering.",
+    "Try $FOO;$BAR in one line.",
+    "The var $A and the var $B differ.",
+    "The ticker is $AAPL and $MSFT today.",
+    "Use $1 and $2 as positional args in bash.",
+    "Save $$ on your bill.",
+  ])("renders no math in: %s", (markdown) => {
+    const { container } = renderResponse(markdown);
+    expect(container.querySelector(".katex")).toBeNull();
+  });
+
+  it.each([
+    "The value $x$ is positive.",
+    "We know $a + b$ equals the total.",
+    "Let $x^2$ denote the square.",
+    "Here $\\frac{1}{2}$ is one half.",
+    "Given $n$ items and $k$ buckets.",
+    "Then $\\alpha$ and $\\beta$ are angles.",
+    "Consider $f(x)$ over the interval.",
+    "Segment $AB$ meets triangle $ABC$.",
+    "Solve $x = y$ for x.",
+    "The bound is $O(n \\log n)$ overall.",
+    "Let $v_i$ be the i-th vector.",
+    "Where $5x$ is the coefficient term.",
+    "The answer is $42$ exactly.",
+    "The ratio $a:b$ is fixed.",
+    "Compute $a/b$ directly.",
+    "Vector $\\vec{v}$ has norm $|v|$.",
+    "Then $P(A \\cap B)$ is the joint.",
+    "Let $x_1, x_2$ be the roots.",
+    "The interval $[0, 1]$ is closed.",
+    "Sum $\\sum_{i=1}^{n} i$ over all i.",
+    "If $x$ is the price then $x = 5$ dollars.",
+    "A $5 fee applies when $n$ exceeds the cap.",
+  ])("renders math in: %s", (markdown) => {
+    const { container } = renderResponse(markdown);
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.querySelector(".katex-error")).toBeNull();
+  });
+
+  // The prices above must survive as readable text, not just avoid becoming a
+  // formula — the currency pass escapes them, and `\$` has to render as `$`.
+  it("shows an escaped price as a plain dollar amount", () => {
+    const { container } = renderResponse(
+      "The plan costs $5 and the addon $10.",
+    );
+    expect(container.textContent).toBe("The plan costs $5 and the addon $10.");
+  });
+
+  // The stray-`$$` case: promoting under an open display delimiter let the
+  // opener pair with the promoted one and swallow the prose between them.
+  it("keeps prose intact next to a stray display delimiter", () => {
+    const { container } = renderResponse("Save $$ when $x$ is high.");
+    expect(container.textContent).toBe("Save $$ when $x$ is high.");
+  });
+});

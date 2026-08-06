@@ -1,19 +1,36 @@
 /**
- * Currency-safe single-dollar math, vendored from LibreChat.
- *
- * Source: https://github.com/danny-avila/LibreChat — client/src/utils/latex.ts
- * MIT License, Copyright (c) Danny Avila.
+ * Currency-safe single-dollar math.
  *
  * Models emit inline math as `$x$` far more often than as `\(x\)`, but
- * `singleDollarTextMath` has to stay off or "$5 and $10" becomes a formula. The
- * way out is ordering, not a smarter delimiter rule: detect currency
- * *positively* (a `$` that introduces digits) and escape it, then treat every
- * `$…$` still standing as math and promote it to `$$…$$`. Prices are the
- * identifiable case; math is the remainder.
+ * `singleDollarTextMath` has to stay off or "$5 and $10" becomes a formula.
+ * remark-math only ever sees `$$`, so this pass decides which `$…$` spans are
+ * math and promotes those. The direction matters: promoting a detected span
+ * fails *safe* — a span we decline to promote is simply shown as the literal
+ * text the model wrote. Enabling `singleDollarTextMath` and escaping the
+ * non-math spans instead would fail the other way, where every span we failed
+ * to recognise becomes a formula.
  *
- * Complements `normalize-math.ts`, which covers the bracket forms LibreChat
- * does not handle. Run this first: it works on the original text, and the `$$`
- * regions it produces are then protected by normalize-math's own scan.
+ * Two rules decide, in order:
+ *
+ * 1. Currency is detected *positively* — a `$` that introduces digits — and
+ *    escaped, so it can no longer act as a delimiter. (Kept from LibreChat's
+ *    latex.ts, MIT, Copyright (c) Danny Avila.)
+ * 2. What is left is promoted only if it satisfies Pandoc's delimiter rule:
+ *    the opening `$` needs a non-space to its right, the closing `$` a
+ *    non-space to its left, and the closing `$` may not be followed by a
+ *    digit. That rule exists for exactly this problem — it is what makes
+ *    "$20,000 and $30,000" not parse as math — and is the same default
+ *    markdown-it-dollarmath ships as `allow_space: false` / `allow_digits:
+ *    false`.
+ *
+ * Rule 2 alone leaves the shell-variable shapes, where the closing candidate
+ * is pinned against punctuation rather than a space (`$HOME/$USER`,
+ * `$PATH:$HOME`, `"$USER@$HOST"`), so the closer additionally rejects the path
+ * and list punctuation that no inline formula ends on.
+ *
+ * Complements `normalize-math.ts`, which covers the bracket forms. Run this
+ * first: it works on the original text, and the `$$` regions it produces are
+ * then protected by normalize-math's own scan.
  *
  * Upstream's mhchem branch is deliberately not vendored. It rewrites `$\ce{…}$`
  * to `$$\\ce{…}$$`, and KaTeX reads that doubled backslash as a line break, so
@@ -26,10 +43,30 @@ export function preprocessLaTeX(content: string): string {
   // Early return for most common case
   if (!content.includes("$")) return content;
 
-  // Find all code block regions once
-  const codeRegions = findCodeBlockRegions(content);
+  return promoteInlineMath(escapeCurrency(content));
+}
 
-  // First pass: escape currency dollar signs
+// A `$` that introduces a number — `$5`, `$1,250.50`, `$3.2M` — and is not
+// already escaped or part of a `$$` delimiter. A number closed by a `$` is
+// excluded: `$42$` is inline math, not a price.
+const CURRENCY_REGEX =
+  /(?<![\\$])\$(?!\$)(?=\d+(?:,\d{3})*(?:\.\d+)?(?:[KMBkmb])?(?:\s|$|[^a-zA-Z\d$]))/g;
+
+// Pandoc's rule, plus the punctuation guard. Reading the parts:
+//   (?<![\\$])\$(?![$\s])  opener: not escaped, not part of `$$`, non-space right
+//   ([^$\n]*?)             body: one line, no `$` — lazy, so pairs stay tight
+//   (?<![\s\\/:@|&;,])     closer: non-space left, and not pinned against the
+//                          path/list punctuation a formula never ends on
+//   \$(?![$\d])            closer: not part of `$$`, not followed by a digit
+// The opener lookahead also makes an empty body impossible: an empty body puts
+// a `$` immediately to the opener's right, which `(?![$\s])` rejects.
+const INLINE_MATH_REGEX =
+  /(?<![\\$])\$(?![$\s])([^$\n]*?)(?<![\s\\/:@|&;,])\$(?![$\d])/g;
+
+const DOUBLE_DOLLAR_REGEX = /\$\$/g;
+
+function escapeCurrency(content: string): string {
+  const codeRegions = findCodeBlockRegions(content);
   const parts: string[] = [];
   let lastIndex = 0;
 
@@ -45,41 +82,90 @@ export function preprocessLaTeX(content: string): string {
     match = CURRENCY_REGEX.exec(content);
   }
   parts.push(content.substring(lastIndex));
-  const processed = parts.join("");
 
-  // Second pass: convert single dollar delimiters to double dollars. Regions
-  // are recomputed because the currency pass shifted every offset after the
-  // first `\$` it inserted.
-  const regionsAfterCurrency = findCodeBlockRegions(processed);
+  return parts.join("");
+}
+
+/**
+ * Promote surviving `$…$` spans to `$$…$$`.
+ *
+ * Regions are recomputed here because the currency pass shifted every offset
+ * after the first `\$` it inserted.
+ */
+function promoteInlineMath(content: string): string {
+  const codeRegions = findCodeBlockRegions(content);
+  const displayDelimiters = findDisplayDelimiters(content, codeRegions);
   const result: string[] = [];
-  lastIndex = 0;
+  let lastIndex = 0;
 
-  SINGLE_DOLLAR_REGEX.lastIndex = 0;
+  INLINE_MATH_REGEX.lastIndex = 0;
 
-  match = SINGLE_DOLLAR_REGEX.exec(processed);
+  let match = INLINE_MATH_REGEX.exec(content);
   while (match !== null) {
-    if (!isInCodeBlock(match.index, regionsAfterCurrency)) {
-      result.push(processed.substring(lastIndex, match.index));
+    if (
+      !isInCodeBlock(match.index, codeRegions) &&
+      !hasOpenDisplayMathBefore(content, match.index, displayDelimiters)
+    ) {
+      result.push(content.substring(lastIndex, match.index));
       result.push(`$$${match[1]}$$`);
       lastIndex = match.index + match[0].length;
     }
-    match = SINGLE_DOLLAR_REGEX.exec(processed);
+    match = INLINE_MATH_REGEX.exec(content);
   }
-  result.push(processed.substring(lastIndex));
+  result.push(content.substring(lastIndex));
 
   return result.join("");
 }
 
-// A `$` that introduces a number — `$5`, `$1,250.50`, `$3.2M` — and is not
-// already escaped or part of a `$$` delimiter.
-const CURRENCY_REGEX =
-  /(?<![\\$])\$(?!\$)(?=\d+(?:,\d{3})*(?:\.\d+)?(?:[KMBkmb])?(?:\s|$|[^a-zA-Z\d]))/g;
+/** Offsets of every `$$` outside code, in ascending order. */
+function findDisplayDelimiters(
+  content: string,
+  codeRegions: Array<[number, number]>,
+): number[] {
+  const positions: number[] = [];
 
-// A `$…$` span that survived the currency pass. `[^$\n]` keeps it on one line
-// and stops it swallowing a neighbouring `$$`; the trailing lookbehinds reject
-// an escaped or code-adjacent closer.
-const SINGLE_DOLLAR_REGEX =
-  /(?<!\\)\$(?!\$)((?:[^$\n]|\\[$])+?)(?<!\\)(?<!`)\$(?!\$)/g;
+  DOUBLE_DOLLAR_REGEX.lastIndex = 0;
+
+  let match = DOUBLE_DOLLAR_REGEX.exec(content);
+  while (match !== null) {
+    if (!isInCodeBlock(match.index, codeRegions)) positions.push(match.index);
+    match = DOUBLE_DOLLAR_REGEX.exec(content);
+  }
+
+  return positions;
+}
+
+/**
+ * Whether an unclosed `$$` already opened in this paragraph.
+ *
+ * A promoted pair inserted under an open `$$` gets eaten by it — the opener
+ * pairs with our opening `$$` and the prose between them becomes the formula,
+ * so "Save $$ when $x$ is high" rendered as "Save whenwhenwhenx$$ is high".
+ * Escaping the stray `$$` instead would cost more than it saves: an unclosed
+ * `$$` is the normal state of display math that is still streaming, and it
+ * renders progressively today (micromark closes math flow at end of input) —
+ * escaping it would hold the formula as raw text until its closer arrived.
+ * Declining to promote is the fail-safe half: the span stays literal.
+ *
+ * Scoped to the paragraph because that is as far as remark-math will pair a
+ * text-math delimiter, and it keeps an open display block from suppressing
+ * promotion in the rest of the reply.
+ */
+function hasOpenDisplayMathBefore(
+  content: string,
+  index: number,
+  displayDelimiters: number[],
+): boolean {
+  const paragraphStart = content.lastIndexOf("\n\n", index) + 1;
+  let count = 0;
+
+  for (const position of displayDelimiters) {
+    if (position >= index) break;
+    if (position >= paragraphStart) count++;
+  }
+
+  return count % 2 === 1;
+}
 
 /**
  * Code regions that must not be rewritten, as [start, end] pairs.

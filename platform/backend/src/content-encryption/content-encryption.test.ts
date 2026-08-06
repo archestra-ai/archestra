@@ -359,6 +359,54 @@ describe("content encryption", () => {
       );
     });
 
+    test("resumes after upgrade: clearing completed_at sweeps mcp_tool_calls without an operator run", async () => {
+      // Pre-upgrade state: encryption enabled and the interactions+messages
+      // sweep finished (completed_at set, cursors at their final positions).
+      const interactionId = await seedPlaintextInteraction();
+      setKeys(SECRET_A);
+      await dropTrgmIndex();
+      await runContentEncryptionBackfill({});
+
+      // A tool-call row the pre-upgrade binary never encrypted.
+      const [seeded] = await db
+        .insert(schema.mcpToolCallsTable)
+        .values({
+          mcpServerName: "email-server",
+          method: "tools/call",
+          toolCall,
+          toolResult,
+        })
+        .returning({ id: schema.mcpToolCallsTable.id });
+
+      // Migration 0400's data statement.
+      await db.execute(
+        sql`UPDATE content_encryption_state SET completed_at = NULL WHERE completed_at IS NOT NULL`,
+      );
+
+      // The ordinary background sweep — no restartIfCompleted — resumes and
+      // encrypts the historical tool call. The already-encrypted interaction
+      // is skipped, not rewritten.
+      const resumed = await runContentEncryptionBackfill({});
+      expect(resumed.status).toBe("completed");
+      const raw = await rawMcpToolCall(seeded.id);
+      expect(isContentEnvelope(raw.tool_call)).toBe(true);
+      expect(
+        decryptContentValue(raw.tool_result, "mcp_tool_calls.tool_result"),
+      ).toEqual(toolResult);
+      expect(
+        decryptContentValue(
+          (await rawInteraction(interactionId)).request,
+          "interactions.request",
+        ),
+      ).toEqual(request);
+
+      // Steady state again afterwards.
+      expect(await runContentEncryptionBackfill({})).toEqual({
+        status: "completed",
+        rowsRewritten: 0,
+      });
+    });
+
     test("re-encrypts previous-key rows after rotation", async () => {
       const interactionId = await seedPlaintextInteraction();
       setKeys(SECRET_A);

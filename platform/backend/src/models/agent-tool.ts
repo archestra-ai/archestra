@@ -379,10 +379,12 @@ class AgentToolModel {
       credentialResolutionMode?: CredentialResolutionMode;
     }>,
     _organizationId?: string,
+    tx?: Transaction,
   ) {
     if (values.length === 0) return [];
+    const dbx = tx ?? db;
 
-    const rows = await db
+    const rows = await dbx
       .insert(schema.agentToolsTable)
       .values(
         values.map((value) => ({
@@ -447,10 +449,12 @@ class AgentToolModel {
   static async bulkDelete(
     agentId: string,
     toolIds: string[],
+    tx?: Transaction,
   ): Promise<string[]> {
     if (toolIds.length === 0) return [];
+    const dbx = tx ?? db;
 
-    const rows = await db
+    const rows = await dbx
       .delete(schema.agentToolsTable)
       .where(
         and(
@@ -478,13 +482,9 @@ class AgentToolModel {
    * but a different server or resolution mode are different configurations, so
    * an id-only read would report "unchanged" and silently skip restoring them.
    */
-  static async findAssignmentsByAgent(agentId: string): Promise<
-    {
-      toolId: string;
-      mcpServerId: string | null;
-      credentialResolutionMode: CredentialResolutionMode;
-    }[]
-  > {
+  static async findAssignmentsByAgent(
+    agentId: string,
+  ): Promise<AgentToolAssignment[]> {
     return db
       .select({
         toolId: schema.agentToolsTable.toolId,
@@ -494,6 +494,36 @@ class AgentToolModel {
       })
       .from(schema.agentToolsTable)
       .where(eq(schema.agentToolsTable.agentId, agentId));
+  }
+
+  /**
+   * Batched {@link findAssignmentsByAgent}, keyed by agent id. Agents with no
+   * assignments still get an (empty) entry, so a caller snapshotting a set of
+   * agents does not have to distinguish "no rows" from "not queried".
+   */
+  static async findAssignmentsByAgents(
+    agentIds: string[],
+  ): Promise<Map<string, AgentToolAssignment[]>> {
+    const byAgent = new Map<string, AgentToolAssignment[]>(
+      agentIds.map((agentId) => [agentId, []]),
+    );
+    if (agentIds.length === 0) return byAgent;
+
+    const rows = await db
+      .select({
+        agentId: schema.agentToolsTable.agentId,
+        toolId: schema.agentToolsTable.toolId,
+        mcpServerId: schema.agentToolsTable.mcpServerId,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(inArray(schema.agentToolsTable.agentId, agentIds));
+
+    for (const { agentId, ...assignment } of rows) {
+      byAgent.get(agentId)?.push(assignment);
+    }
+    return byAgent;
   }
 
   static async findCatalogToolIdsByAgent(agentId: string): Promise<string[]> {
@@ -849,6 +879,7 @@ class AgentToolModel {
       credentialResolutionMode?: CredentialResolutionMode;
     }>,
     organizationId?: string,
+    tx?: Transaction,
   ): Promise<
     Array<{
       agentId: string;
@@ -857,6 +888,7 @@ class AgentToolModel {
     }>
   > {
     if (assignments.length === 0) return [];
+    const dbx = tx ?? db;
 
     // Build OR conditions for all (agentId, toolId) pairs
     const pairConditions = assignments.map((a) =>
@@ -867,7 +899,7 @@ class AgentToolModel {
     );
 
     // Batch fetch all existing assignments in one query
-    const existing = await db
+    const existing = await dbx
       .select()
       .from(schema.agentToolsTable)
       .where(or(...pairConditions));
@@ -916,7 +948,7 @@ class AgentToolModel {
             credentialResolutionMode:
               normalizeCredentialResolutionMode(assignment),
           };
-          await AgentToolModel.update(existingRow.id, updateData);
+          await AgentToolModel.update(existingRow.id, updateData, tx);
           results.push({
             agentId: assignment.agentId,
             toolId: assignment.toolId,
@@ -942,6 +974,7 @@ class AgentToolModel {
           credentialResolutionMode: normalizeCredentialResolutionMode(a),
         })),
         organizationId,
+        tx,
       );
     }
 
@@ -953,8 +986,9 @@ class AgentToolModel {
     data: Partial<
       Pick<UpdateAgentTool, "mcpServerId" | "credentialResolutionMode">
     >,
+    tx?: Transaction,
   ) {
-    const [agentTool] = await db
+    const [agentTool] = await (tx ?? db)
       .update(schema.agentToolsTable)
       .set({
         ...(data.mcpServerId !== undefined
@@ -1411,6 +1445,16 @@ class AgentToolModel {
 }
 
 export default AgentToolModel;
+
+/**
+ * One agent's binding of a tool: the tool plus the credential identity that
+ * makes two rows with the same `toolId` different configurations.
+ */
+type AgentToolAssignment = {
+  toolId: string;
+  mcpServerId: string | null;
+  credentialResolutionMode: CredentialResolutionMode;
+};
 
 function normalizeCredentialResolutionMode(params: {
   resolveAtCallTime?: boolean;

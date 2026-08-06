@@ -15,6 +15,7 @@ import {
   requireAgentTypePermission,
 } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
+import db, { type Transaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -221,127 +222,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { assignments } = request.body;
 
-      // Extract unique IDs for batch fetching to avoid N+1 queries
-      const uniqueAgentIds = [...new Set(assignments.map((a) => a.agentId))];
-      const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
+      const existingAgentIds = await assertCanModifyAgents({
+        request,
+        agentIds: [...new Set(assignments.map((a) => a.agentId))],
+      });
 
-      // Batch fetch agents for permission checks (avoids N+1 findById calls)
-      const [agentsForPermCheck, checker] = await Promise.all([
-        AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
-        getAgentTypePermissionChecker({
-          userId: request.user.id,
-          organizationId: request.organizationId,
-        }),
-      ]);
-
-      let userTeamIds: string[] | null = null;
-      for (const [, agent] of agentsForPermCheck) {
-        checker.require(agent.agentType, "update");
-        if (!checker.isAdmin(agent.agentType) && userTeamIds === null) {
-          userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
-        }
-        requireAgentModifyPermission({
-          checker,
-          agentType: agent.agentType,
-          agentScope: agent.scope,
-          agentAuthorId: agent.authorId,
-          agentTeamIds: agent.teamIds,
-          userTeamIds: userTeamIds ?? [],
-          userId: request.user.id,
-        });
-      }
-
-      // Batch fetch all required data in parallel
-      const existingAgentIds = new Set(agentsForPermCheck.keys());
-      const tools = await ToolModel.getByIds(uniqueToolIds);
-
-      // Create maps for efficient lookup
-      const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
-
-      // Extract unique catalog IDs from tools that have them
-      const uniqueCatalogIds = [
-        ...new Set(
-          tools.filter((t) => t.catalogId).map((t) => t.catalogId as string),
-        ),
-      ];
-
-      // Batch fetch catalog items if needed
-      const catalogItemsMap =
-        uniqueCatalogIds.length > 0
-          ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
-          : new Map<string, InternalMcpCatalog>();
-
-      // Batch fetch unique MCP server IDs for static assignment validation
-      const uniqueMcpServerIds = [
-        ...new Set(
-          assignments
-            .map((a) => a.mcpServerId)
-            .filter((id): id is string => id != null),
-        ),
-      ];
-      const mcpServersBasicMap = new Map<string, PrefetchedMcpServer>();
-      if (uniqueMcpServerIds.length > 0) {
-        const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
-        for (const s of servers) {
-          mcpServersBasicMap.set(s.id, s);
-        }
-      }
-
-      // Prepare pre-fetched data to pass to assignToolToAgent for validation
-      const preFetchedData = {
+      const { validated, failed } = await prepareToolAssignments({
+        assignments,
         existingAgentIds,
-        toolsMap,
-        catalogItemsMap,
-        mcpServersBasicMap,
-      };
-
-      // Validate all assignments first (no DB writes)
-      const validated: typeof assignments = [];
-      const failed: { agentId: string; toolId: string; error: string }[] = [];
-
-      for (const assignment of assignments) {
-        const normalizedAssignment =
-          normalizeBulkAssignmentCredentialResolutionMode({
-            assignment,
-            toolsMap,
-            catalogItemsMap,
-          });
-        const validationError = await validateAssignment({
-          agentId: normalizedAssignment.agentId,
-          toolId: normalizedAssignment.toolId,
-          mcpServerId: normalizedAssignment.mcpServerId,
-          preFetchedData,
-          resolveAtCallTime: normalizedAssignment.resolveAtCallTime,
-          credentialResolutionMode:
-            normalizedAssignment.credentialResolutionMode,
-        });
-        if (validationError) {
-          failed.push({
-            agentId: assignment.agentId,
-            toolId: assignment.toolId,
-            error: validationError.error.message,
-          });
-        } else {
-          validated.push(normalizedAssignment);
-        }
-      }
-
-      // Bulk create-or-update all validated assignments
-      const bulkResults = await AgentToolModel.bulkCreateOrUpdateCredentials(
+      });
+      const { succeeded, duplicates } = await writeToolAssignments({
         validated,
-        request.organizationId,
-      );
-
-      const succeeded: { agentId: string; toolId: string }[] = [];
-      const duplicates: { agentId: string; toolId: string }[] = [];
-
-      for (const result of bulkResults) {
-        if (result.status === "created" || result.status === "updated") {
-          succeeded.push({ agentId: result.agentId, toolId: result.toolId });
-        } else {
-          duplicates.push({ agentId: result.agentId, toolId: result.toolId });
-        }
-      }
+        organizationId: request.organizationId,
+      });
 
       // Clear chat MCP client cache for all affected agents
       const affectedAgentIds = new Set([
@@ -404,47 +297,15 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { assignments, removals } = request.body;
 
-      const uniqueAgentIds = [
-        ...new Set([
-          ...assignments.map((a) => a.agentId),
-          ...removals.map((r) => r.agentId),
-        ]),
-      ];
-
-      // Tenant fence: agent ids arrive straight from the body, and the scope
-      // checks below cannot catch a foreign-org agent (an admin short-circuits
-      // them, and "admin" means admin of the CALLER's org). Passing the
-      // organization drops foreign agents from the map, so they are treated
-      // exactly like ids that do not exist.
-      const [agentsForPermCheck, checker] = await Promise.all([
-        AgentModel.findByIdsForPermissionCheck(
-          uniqueAgentIds,
-          request.organizationId,
-        ),
-        getAgentTypePermissionChecker({
-          userId: request.user.id,
-          organizationId: request.organizationId,
-        }),
-      ]);
-
-      let userTeamIds: string[] | null = null;
-      for (const [, agent] of agentsForPermCheck) {
-        checker.require(agent.agentType, "update");
-        if (!checker.isAdmin(agent.agentType) && userTeamIds === null) {
-          userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
-        }
-        requireAgentModifyPermission({
-          checker,
-          agentType: agent.agentType,
-          agentScope: agent.scope,
-          agentAuthorId: agent.authorId,
-          agentTeamIds: agent.teamIds,
-          userTeamIds: userTeamIds ?? [],
-          userId: request.user.id,
-        });
-      }
-
-      const existingAgentIds = new Set(agentsForPermCheck.keys());
+      const existingAgentIds = await assertCanModifyAgents({
+        request,
+        agentIds: [
+          ...new Set([
+            ...assignments.map((a) => a.agentId),
+            ...removals.map((r) => r.agentId),
+          ]),
+        ],
+      });
 
       // A batch has no single resource id, and the audit registry only sees
       // route params — never the body — so this route registers without a
@@ -454,9 +315,14 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       request.auditBefore =
         await buildBulkToolUpdateAuditSnapshot(existingAgentIds);
 
-      // Removals run before assignments so a tool being re-pinned to a
-      // different credential in the same save cannot have its fresh assignment
-      // deleted by a stale removal.
+      // Validate before opening the transaction: validation only reads the
+      // prefetched maps, never the `agent_tools` rows the removals touch, so
+      // its verdict does not depend on running before or after them.
+      const { validated, failed } = await prepareToolAssignments({
+        assignments,
+        existingAgentIds,
+      });
+
       const removed: { agentId: string; toolId: string }[] = [];
       const notAssigned: { agentId: string; toolId: string }[] = [];
       // Deduped per agent: a pair repeated in the body deletes one row, so
@@ -465,10 +331,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const removalToolIdsByAgent = new Map<string, Set<string>>();
 
       for (const removal of removals) {
-        // Unknown or foreign agent: nothing to remove. Benign, not an error —
-        // see the note on `notAssigned` below.
+        // An agent that is absent here does not exist, belongs to another
+        // tenant, or is outside the caller's scope — nothing about the request
+        // was applied, so this is a failure, not the benign `notAssigned` a
+        // client is told to ignore. Same id and message the assignment side
+        // produces, so both halves of one request report it identically.
         if (!existingAgentIds.has(removal.agentId)) {
-          notAssigned.push(removal);
+          failed.push({
+            agentId: removal.agentId,
+            toolId: removal.toolId,
+            error: `Agent with ID ${removal.agentId} not found`,
+          });
           continue;
         }
         const toolIds =
@@ -477,107 +350,38 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         removalToolIdsByAgent.set(removal.agentId, toolIds);
       }
 
-      for (const [agentId, toolIdSet] of removalToolIdsByAgent) {
-        const toolIds = [...toolIdSet];
-        const deletedToolIds = new Set(
-          await AgentToolModel.bulkDelete(agentId, toolIds),
-        );
-        for (const toolId of toolIds) {
-          // `notAssigned` means the row was already gone — a concurrent edit,
-          // or a client working from a stale view. It is the removal-side twin
-          // of `duplicates`, NOT a failure, and clients must not treat it as
-          // one.
-          if (deletedToolIds.has(toolId)) {
-            removed.push({ agentId, toolId });
-          } else {
-            notAssigned.push({ agentId, toolId });
+      // One transaction so a save is all-or-nothing. Without it a throw in the
+      // assignment write leaves the removals committed but unforked: the agent
+      // has silently lost tools and no config version records the state to
+      // restore from.
+      const { succeeded, duplicates } = await db.transaction(async (tx) => {
+        // Removals run before assignments so a tool being re-pinned to a
+        // different credential in the same save cannot have its fresh
+        // assignment deleted by a stale removal.
+        for (const [agentId, toolIdSet] of removalToolIdsByAgent) {
+          const toolIds = [...toolIdSet];
+          const deletedToolIds = new Set(
+            await AgentToolModel.bulkDelete(agentId, toolIds, tx),
+          );
+          for (const toolId of toolIds) {
+            // `notAssigned` means the row was already gone — a concurrent
+            // edit, or a client working from a stale view. It is the
+            // removal-side twin of `duplicates`, NOT a failure, and clients
+            // must not treat it as one.
+            if (deletedToolIds.has(toolId)) {
+              removed.push({ agentId, toolId });
+            } else {
+              notAssigned.push({ agentId, toolId });
+            }
           }
         }
-      }
 
-      // Batch fetch everything the assignment validation needs, mirroring the
-      // bulk-assign handler above.
-      const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
-      const tools = await ToolModel.getByIds(uniqueToolIds);
-      const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
-
-      const uniqueCatalogIds = [
-        ...new Set(
-          tools.filter((t) => t.catalogId).map((t) => t.catalogId as string),
-        ),
-      ];
-      const catalogItemsMap =
-        uniqueCatalogIds.length > 0
-          ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
-          : new Map<string, InternalMcpCatalog>();
-
-      const uniqueMcpServerIds = [
-        ...new Set(
-          assignments
-            .map((a) => a.mcpServerId)
-            .filter((id): id is string => id != null),
-        ),
-      ];
-      const mcpServersBasicMap = new Map<string, PrefetchedMcpServer>();
-      if (uniqueMcpServerIds.length > 0) {
-        const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
-        for (const s of servers) {
-          mcpServersBasicMap.set(s.id, s);
-        }
-      }
-
-      const preFetchedData = {
-        existingAgentIds,
-        toolsMap,
-        catalogItemsMap,
-        mcpServersBasicMap,
-      };
-
-      const validated: typeof assignments = [];
-      const failed: { agentId: string; toolId: string; error: string }[] = [];
-
-      for (const assignment of assignments) {
-        const normalizedAssignment =
-          normalizeBulkAssignmentCredentialResolutionMode({
-            assignment,
-            toolsMap,
-            catalogItemsMap,
-          });
-        const validationError = await validateAssignment({
-          agentId: normalizedAssignment.agentId,
-          toolId: normalizedAssignment.toolId,
-          mcpServerId: normalizedAssignment.mcpServerId,
-          preFetchedData,
-          resolveAtCallTime: normalizedAssignment.resolveAtCallTime,
-          credentialResolutionMode:
-            normalizedAssignment.credentialResolutionMode,
+        return writeToolAssignments({
+          validated,
+          organizationId: request.organizationId,
+          tx,
         });
-        if (validationError) {
-          failed.push({
-            agentId: assignment.agentId,
-            toolId: assignment.toolId,
-            error: validationError.error.message,
-          });
-        } else {
-          validated.push(normalizedAssignment);
-        }
-      }
-
-      const bulkResults = await AgentToolModel.bulkCreateOrUpdateCredentials(
-        validated,
-        request.organizationId,
-      );
-
-      const succeeded: { agentId: string; toolId: string }[] = [];
-      const duplicates: { agentId: string; toolId: string }[] = [];
-
-      for (const result of bulkResults) {
-        if (result.status === "created" || result.status === "updated") {
-          succeeded.push({ agentId: result.agentId, toolId: result.toolId });
-        } else {
-          duplicates.push({ agentId: result.agentId, toolId: result.toolId });
-        }
-      }
+      });
 
       request.auditAfter =
         await buildBulkToolUpdateAuditSnapshot(existingAgentIds);
@@ -1255,18 +1059,183 @@ async function buildBulkToolUpdateAuditSnapshot(
   agentIds: Iterable<string>,
 ): Promise<Record<string, unknown>> {
   const sortedAgentIds = [...agentIds].sort();
-  const entries = await Promise.all(
-    sortedAgentIds.map(
-      async (agentId) =>
-        [
-          agentId,
-          (await AgentToolModel.findAssignmentsByAgent(agentId)).sort((a, b) =>
-            a.toolId < b.toolId ? -1 : a.toolId > b.toolId ? 1 : 0,
-          ),
-        ] as const,
+  const assignmentsByAgent =
+    await AgentToolModel.findAssignmentsByAgents(sortedAgentIds);
+  return {
+    agents: Object.fromEntries(
+      sortedAgentIds.map((agentId) => [
+        agentId,
+        (assignmentsByAgent.get(agentId) ?? []).sort((a, b) =>
+          a.toolId < b.toolId ? -1 : a.toolId > b.toolId ? 1 : 0,
+        ),
+      ]),
     ),
+  };
+}
+
+/**
+ * Resolve the agents a bulk body names, dropping any the caller may not modify,
+ * and return the ids that survived.
+ *
+ * The organization is a tenant fence, and it is load-bearing: agent ids arrive
+ * straight from the request body, and the scope checks below cannot catch a
+ * foreign-org agent on their own, because `requireAgentModifyPermission`
+ * short-circuits for an admin and "admin" means admin of the CALLER's org.
+ * Fencing here drops foreign agents from the map, so they become
+ * indistinguishable from ids that do not exist.
+ */
+async function assertCanModifyAgents(params: {
+  request: { user: { id: string }; organizationId: string };
+  agentIds: string[];
+}): Promise<Set<string>> {
+  const { request, agentIds } = params;
+
+  const [agentsForPermCheck, checker] = await Promise.all([
+    AgentModel.findByIdsForPermissionCheck(agentIds, request.organizationId),
+    getAgentTypePermissionChecker({
+      userId: request.user.id,
+      organizationId: request.organizationId,
+    }),
+  ]);
+
+  let userTeamIds: string[] | null = null;
+  for (const [, agent] of agentsForPermCheck) {
+    checker.require(agent.agentType, "update");
+    if (!checker.isAdmin(agent.agentType) && userTeamIds === null) {
+      userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
+    }
+    requireAgentModifyPermission({
+      checker,
+      agentType: agent.agentType,
+      agentScope: agent.scope,
+      agentAuthorId: agent.authorId,
+      agentTeamIds: agent.teamIds,
+      userTeamIds: userTeamIds ?? [],
+      userId: request.user.id,
+    });
+  }
+
+  return new Set(agentsForPermCheck.keys());
+}
+
+/**
+ * Batch-load everything assignment validation needs and split the request into
+ * assignments that may be written and those that cannot.
+ *
+ * Performs no writes, and reads nothing from `agent_tools` — only agents,
+ * tools, catalogs, and MCP servers. That is what lets the bulk-update route run
+ * this before it deletes anything: the verdict cannot change based on whether
+ * the removals in the same request have been applied yet.
+ */
+async function prepareToolAssignments(params: {
+  assignments: z.infer<typeof BulkAgentToolAssignmentSchema>[];
+  existingAgentIds: Set<string>;
+}): Promise<{
+  validated: z.infer<typeof BulkAgentToolAssignmentSchema>[];
+  failed: { agentId: string; toolId: string; error: string }[];
+}> {
+  const { assignments, existingAgentIds } = params;
+
+  const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
+  const tools = await ToolModel.getByIds(uniqueToolIds);
+  const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
+
+  const uniqueCatalogIds = [
+    ...new Set(
+      tools.filter((t) => t.catalogId).map((t) => t.catalogId as string),
+    ),
+  ];
+  const catalogItemsMap =
+    uniqueCatalogIds.length > 0
+      ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
+      : new Map<string, InternalMcpCatalog>();
+
+  const uniqueMcpServerIds = [
+    ...new Set(
+      assignments
+        .map((a) => a.mcpServerId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const mcpServersBasicMap = new Map<string, PrefetchedMcpServer>();
+  if (uniqueMcpServerIds.length > 0) {
+    const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
+    for (const s of servers) {
+      mcpServersBasicMap.set(s.id, s);
+    }
+  }
+
+  const preFetchedData = {
+    existingAgentIds,
+    toolsMap,
+    catalogItemsMap,
+    mcpServersBasicMap,
+  };
+
+  const validated: typeof assignments = [];
+  const failed: { agentId: string; toolId: string; error: string }[] = [];
+
+  for (const assignment of assignments) {
+    const normalizedAssignment =
+      normalizeBulkAssignmentCredentialResolutionMode({
+        assignment,
+        toolsMap,
+        catalogItemsMap,
+      });
+    const validationError = await validateAssignment({
+      agentId: normalizedAssignment.agentId,
+      toolId: normalizedAssignment.toolId,
+      mcpServerId: normalizedAssignment.mcpServerId,
+      preFetchedData,
+      resolveAtCallTime: normalizedAssignment.resolveAtCallTime,
+      credentialResolutionMode: normalizedAssignment.credentialResolutionMode,
+    });
+    if (validationError) {
+      failed.push({
+        agentId: assignment.agentId,
+        toolId: assignment.toolId,
+        error: validationError.error.message,
+      });
+    } else {
+      validated.push(normalizedAssignment);
+    }
+  }
+
+  return { validated, failed };
+}
+
+/**
+ * Write validated assignments, splitting the model's per-row status into the
+ * two buckets the API reports: anything that changed a row is `succeeded`,
+ * anything that already matched is `duplicates` (which changed nothing and so
+ * must not trigger a config-version fork).
+ */
+async function writeToolAssignments(params: {
+  validated: z.infer<typeof BulkAgentToolAssignmentSchema>[];
+  organizationId: string;
+  tx?: Transaction;
+}): Promise<{
+  succeeded: { agentId: string; toolId: string }[];
+  duplicates: { agentId: string; toolId: string }[];
+}> {
+  const bulkResults = await AgentToolModel.bulkCreateOrUpdateCredentials(
+    params.validated,
+    params.organizationId,
+    params.tx,
   );
-  return { agents: Object.fromEntries(entries) };
+
+  const succeeded: { agentId: string; toolId: string }[] = [];
+  const duplicates: { agentId: string; toolId: string }[] = [];
+
+  for (const result of bulkResults) {
+    if (result.status === "created" || result.status === "updated") {
+      succeeded.push({ agentId: result.agentId, toolId: result.toolId });
+    } else {
+      duplicates.push({ agentId: result.agentId, toolId: result.toolId });
+    }
+  }
+
+  return { succeeded, duplicates };
 }
 
 async function inferEnterpriseManagedCredentialMode(params: {

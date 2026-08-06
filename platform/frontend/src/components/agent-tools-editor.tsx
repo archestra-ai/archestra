@@ -662,7 +662,20 @@ const AgentToolsEditorContent = forwardRef<
         // already matched — both are benign. Throwing on them would surface a
         // no-op as a save failure, and on the create path agent-dialog reacts
         // to a throw by DELETING the agent it just created.
-        failure = result?.failed[0];
+        //
+        // The batch spans every catalog, so one save can fail several tools for
+        // unrelated reasons. Report the first and count the rest — dropping
+        // them silently would have the user fix one problem, re-save, and meet
+        // the next.
+        const failures = result?.failed ?? [];
+        if (failures[0]) {
+          failure = {
+            error:
+              failures.length > 1
+                ? `${failures[0].error} (and ${failures.length - 1} more)`
+                : failures[0].error,
+          };
+        }
       }
 
       // Invalidate once at the end — before any throw, because a partial

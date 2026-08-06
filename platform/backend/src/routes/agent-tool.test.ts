@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentModel, AgentToolModel, AgentVersionModel } from "@/models";
@@ -882,6 +883,42 @@ describe("POST /api/agents/tools/bulk-assign", () => {
 
     expect(assignment?.credentialResolutionMode).toBe("enterprise_managed");
   });
+
+  // Shares the tenant fence with bulk-update: the scope checks cannot catch a
+  // foreign tenant on their own, because they short-circuit for an admin and
+  // "admin" means admin of the CALLER's organization.
+  test("does not assign to an agent belonging to another organization", async ({
+    makeAgent,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const foreignAgent = await makeAgent({ organizationId: otherOrg.id });
+    const tool = await makeTool();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-assign",
+      payload: {
+        assignments: [{ agentId: foreignAgent.id, toolId: tool.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    // Indistinguishable from an agent that does not exist.
+    expect(body.succeeded).toEqual([]);
+    expect(body.failed).toEqual([
+      {
+        agentId: foreignAgent.id,
+        toolId: tool.id,
+        error: `Agent with ID ${foreignAgent.id} not found`,
+      },
+    ]);
+    expect(await AgentToolModel.findToolIdsByAgent(foreignAgent.id)).toEqual(
+      [],
+    );
+  });
 });
 
 describe("POST /api/agents/tools/bulk-update", () => {
@@ -1034,7 +1071,9 @@ describe("POST /api/agents/tools/bulk-update", () => {
   });
 
   // `notAssigned` is the removal-side twin of `duplicates`: a client working
-  // from a stale view must not see a no-op reported as a failed save.
+  // from a stale view must not see a no-op reported as a failed save. It means
+  // exactly one thing — the agent was reachable and the row was already gone.
+  // An unreachable agent is a `failed` (see the cross-organization test below).
   test("reports an already-unassigned tool as notAssigned, not failed", async ({
     makeAgent,
     makeTool,
@@ -1131,16 +1170,72 @@ describe("POST /api/agents/tools/bulk-update", () => {
     const body = response.json();
     // The agent is indistinguishable from one that does not exist.
     expect(body.succeeded).toEqual([]);
-    expect(body.failed).toEqual([
-      {
-        agentId: foreignAgent.id,
-        toolId: added.id,
-        error: `Agent with ID ${foreignAgent.id} not found`,
-      },
-    ]);
+    expect(body.removed).toEqual([]);
+    // BOTH halves report it, and identically. A removal aimed at an
+    // unreachable agent applied nothing, so reporting it as `notAssigned`
+    // would tell the client to ignore a save that silently did nothing.
+    expect(body.notAssigned).toEqual([]);
+    expect(body.failed).toEqual(
+      expect.arrayContaining([
+        {
+          agentId: foreignAgent.id,
+          toolId: added.id,
+          error: `Agent with ID ${foreignAgent.id} not found`,
+        },
+        {
+          agentId: foreignAgent.id,
+          toolId: existing.id,
+          error: `Agent with ID ${foreignAgent.id} not found`,
+        },
+      ]),
+    );
+    expect(body.failed).toHaveLength(2);
     expect(await AgentToolModel.findToolIdsByAgent(foreignAgent.id)).toEqual([
       existing.id,
     ]);
+  });
+
+  // Removals are written before assignments. Without a transaction a throw in
+  // the assignment write leaves them committed but unforked: the agent has
+  // silently lost tools and no config version records the state to restore.
+  test("rolls the removals back when the assignment write fails", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const [drop, add] = await Promise.all([makeTool(), makeTool()]);
+    await makeAgentTool(agent.id, drop.id);
+    await AgentVersionModel.forkIfChanged(agent.id);
+    const versionBefore = (await AgentModel.findById(agent.id))?.latestVersion;
+
+    const spy = vi
+      .spyOn(AgentToolModel, "bulkCreateOrUpdateCredentials")
+      .mockRejectedValueOnce(new Error("assignment write blew up"));
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/tools/bulk-update",
+        payload: {
+          assignments: [{ agentId: agent.id, toolId: add.id }],
+          removals: [{ agentId: agent.id, toolId: drop.id }],
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+    } finally {
+      spy.mockRestore();
+    }
+
+    // The removal is undone, so the agent's tool surface is exactly what it was
+    // and the version history still describes it.
+    expect(await AgentToolModel.findToolIdsByAgent(agent.id)).toEqual([
+      drop.id,
+    ]);
+    expect((await AgentModel.findById(agent.id))?.latestVersion).toBe(
+      versionBefore,
+    );
   });
 
   test("writes an audit record naming the affected agents and their assignments", async ({

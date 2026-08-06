@@ -13,20 +13,14 @@ import {
   isSelfHostedProvider,
   providerRequiresPerUserCredential,
 } from "@archestra/shared";
-import {
-  Building2,
-  CheckCircle2,
-  ChevronDown,
-  Trash2,
-  User,
-  Users,
-} from "lucide-react";
+import { CheckCircle2, ChevronDown, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
 import { OpenaiCodexSignIn } from "@/components/openai-codex-sign-in";
+import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -611,15 +605,15 @@ export function LlmProviderApiKeyForm({
     > => [
       {
         value: "personal",
-        label: "Personal",
+        label: scopeLabel("personal"),
         description: "Only you can use this key",
-        icon: User,
+        icon: SCOPE_META.personal.icon,
       },
       {
         value: "team",
-        label: "Team",
+        label: scopeLabel("team"),
         description: "Available to members of one selected team",
-        icon: Users,
+        icon: SCOPE_META.team.icon,
         disabled: isPerUserCredential || !canReadTeams || teams.length === 0,
         disabledReason: isPerUserCredential
           ? perUserScopeReason
@@ -631,9 +625,9 @@ export function LlmProviderApiKeyForm({
       },
       {
         value: "org",
-        label: "Organization",
+        label: scopeLabel("org"),
         description: "Available to everyone in the organization",
-        icon: Building2,
+        icon: SCOPE_META.org.icon,
         disabled: isPerUserCredential || !isLlmProviderApiKeyAdmin,
         disabledReason: isPerUserCredential
           ? perUserScopeReason

@@ -26,6 +26,7 @@ const {
   updateSkill,
   updateSkillGithubSync,
   deleteSkill,
+  permanentlyDeleteSkill,
   restoreSkill,
   resetSkill,
   discoverGithubSkills,
@@ -307,6 +308,36 @@ export function useRestoreSkill() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill restored");
+    },
+  });
+}
+
+/**
+ * Permanently destroy a soft-deleted skill: every version and resource file,
+ * plus its grants, environment assignments, usage events, and share links.
+ *
+ * The refusals surface their own message through the error toast — a 409 while
+ * a sandbox still mounts one of its versions, a 403 for a built-in.
+ */
+export function usePermanentlyDeleteSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await permanentlyDeleteSkill({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, id) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      // Drop the detail, versions and usage-statistics queries for an id that
+      // no longer resolves, rather than letting a stale history or edit URL
+      // remount them and refetch into a 404.
+      queryClient.removeQueries({ queryKey: ["skills", id] });
+      toast.success("Skill permanently deleted");
     },
   });
 }

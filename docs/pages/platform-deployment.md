@@ -493,13 +493,13 @@ Archestra protects every MCP server pod from Server-Side Request Forgery (SSRF) 
 
 Each pod gets one policy, chosen by its environment's egress mode:
 
-- **Unrestricted** (the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
-- **Restricted** — only the CIDRs and domains the environment allow-lists, plus DNS.
-- **Off** — all egress is denied.
+- **Allow all** (`unrestricted`, the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
+- **Allowlist** (`restricted`) — only the CIDRs and domains the environment allow-lists, plus DNS.
+- **Block all** (`off`) — all egress is denied.
 
 A namespace-wide default-deny baseline also selects every MCP pod, so a pod that is still starting up is denied by default rather than left open.
 
-**Blocked reserved ranges** (the unrestricted floor):
+**Blocked reserved ranges** (the Allow all floor):
 
 - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
@@ -511,7 +511,7 @@ A namespace-wide default-deny baseline also selects every MCP pod, so a pod that
 
 **Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
 
-To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's network policy to `restricted` and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
+To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's egress mode to **Allowlist** (`restricted`) and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
 
 ### Accessing the Platform
 
@@ -1445,6 +1445,12 @@ These environment variables configure the Incoming Email feature, which allows e
 ### ChatOps Configuration
 
 These environment variables configure the ChatOps feature, which allows users to interact with agents through messaging platforms like Microsoft Teams. See [Agents - ChatOps: Microsoft Teams](/docs/platform-agents#chatops-microsoft-teams) for setup instructions.
+
+- **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Opt-out switch for the welcome message sent to auto-provisioned chatops users.
+  - Default: `true`
+  - `false` skips the welcome entirely. Use it when your chatops users don't get web app access. Users are still auto-provisioned.
+  - When an SSO identity provider is configured, the welcome carries a sign-in link instead of the finish-signup link.
+  - Without SSO, the welcome is skipped automatically when the finish-signup flow is unavailable — `ARCHESTRA_AUTH_DISABLE_INVITATIONS` or `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH` set to `true`.
 
 #### Microsoft Teams
 

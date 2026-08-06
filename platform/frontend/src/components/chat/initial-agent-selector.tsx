@@ -346,8 +346,14 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                         <AgentIcon icon={agent.icon} size={14} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">
-                          {agent.name}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm font-medium truncate">
+                            {agent.name}
+                          </span>
+                          <AgentBadge
+                            type={agent.scope}
+                            className="text-[10px] px-1.5 py-0 shrink-0"
+                          />
                         </div>
                         {agent.description && (
                           <div className="text-[11px] text-muted-foreground truncate">
@@ -813,15 +819,14 @@ function AgentSettingsView({
       </div>
 
       <div className="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
-        {agent.scope === "org" ||
-          (agent.scope === "team" && (
-            <Alert variant="info" className="border-0 py-2 text-xs">
-              <Info className="size-3.5" />
-              <AlertDescription className="text-xs">
-                You are editing a shared agent
-              </AlertDescription>
-            </Alert>
-          ))}
+        {(agent.scope === "org" || agent.scope === "team") && (
+          <Alert variant="info" className="border-0 py-2 text-xs">
+            <Info className="size-3.5" />
+            <AlertDescription className="text-xs">
+              You are editing a shared agent
+            </AlertDescription>
+          </Alert>
+        )}
         <SystemPromptEditor
           value={instructions}
           onChange={setInstructions}

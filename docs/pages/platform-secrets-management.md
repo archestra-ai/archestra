@@ -3,7 +3,7 @@ title: "Secrets Management"
 category: Administration
 description: "Configure external secrets storage for sensitive data"
 order: 4
-lastUpdated: 2026-07-20
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

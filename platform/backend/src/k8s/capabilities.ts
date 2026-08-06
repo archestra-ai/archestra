@@ -65,7 +65,13 @@ export async function getK8sCapabilitiesFromApi(
   // while Dataplane V2, kindnet and the EKS VPC CNI enforce the standard API
   // and publish nothing. So inference only stands in when the probe has no
   // answer, and it stays the source of the dialect either way.
-  const inferredEnforced = supportsFqdn || calicoNetworkPolicy;
+  //
+  // Calico is deliberately not part of it. The others each name a dialect the
+  // runtime emits, so discovering them decides what to write; Calico clusters
+  // are served by plain NetworkPolicy, leaving that CRD with no job here beyond
+  // the enforcement guess — the one guess measured to be wrong, and wrong in
+  // the direction that hides the warning.
+  const inferredEnforced = supportsFqdn;
   // The probe exercises a plain networking.k8s.io NetworkPolicy, so it only
   // speaks for clusters whose enforcing policy is that kind. On the AWS VPC CNI
   // a plain NetworkPolicy is accepted and never enforced (see
@@ -81,6 +87,14 @@ export async function getK8sCapabilitiesFromApi(
     ? probe.result === "enforced"
     : inferredEnforced;
   const enforcementSource = probeDecided ? "probe" : "api-discovery";
+  // Only the probe observes a packet, so only the probe can verify. Everything
+  // else is "unknown", including AWS, where the probe is bypassed because the
+  // dialect it drives is not the one enforcing.
+  const enforcementStatus = !probeDecided
+    ? "unknown"
+    : enforced
+      ? "verified-enforced"
+      : "verified-not-enforced";
   const provider = !enforced
     ? "none"
     : ciliumNetworkPolicy
@@ -91,12 +105,15 @@ export async function getK8sCapabilitiesFromApi(
           ? "aws-application-network-policy"
           : "kubernetes";
 
-  if (probeDecided && enforced !== inferredEnforced) {
+  // Keyed off the CRDs themselves rather than off disagreement with the
+  // inference: Calico is not part of that inference, so comparing against it
+  // would stay silent on exactly the cluster this warning is for, and would fire
+  // on every healthy Calico cluster saying no CRD advertises what plainly does.
+  const advertisesAPolicyDialect = calicoNetworkPolicy || supportsFqdn;
+  if (probeDecided && !enforced && advertisesAPolicyDialect) {
     logger.warn(
       { probe: probe.result, detail: probe.detail, provider },
-      enforced
-        ? "Network policy enforcement was measured on this cluster even though no policy CRD advertises it"
-        : "Network policy CRDs are installed on this cluster but a probe found egress rules are not enforced",
+      "Network policy CRDs are installed on this cluster but a probe found egress rules are not enforced",
     );
   }
 
@@ -113,13 +130,16 @@ export async function getK8sCapabilitiesFromApi(
       supportsHttpMethods: false,
       message: capabilityMessage({
         enforced,
+        calicoNetworkPolicy,
         ciliumNetworkPolicy,
         gkeFqdnNetworkPolicy,
         awsApplicationNetworkPolicy,
         supportsFqdn: enforced && supportsFqdn,
         probe: probe.result,
+        enforcementStatus,
       }),
       enforcementSource,
+      enforcementStatus,
       probe: probe.result,
       probedAt: probe.probedAt,
     },
@@ -206,18 +226,26 @@ async function hasCiliumNetworkPolicyResource(
 
 function capabilityMessage(params: {
   enforced: boolean;
+  calicoNetworkPolicy: boolean;
   ciliumNetworkPolicy: boolean;
   gkeFqdnNetworkPolicy: boolean;
   awsApplicationNetworkPolicy: boolean;
   supportsFqdn: boolean;
   probe: NetworkPolicyProbeVerdict["result"];
+  enforcementStatus: "verified-enforced" | "verified-not-enforced" | "unknown";
 }): string {
   // A measured answer is stated as measured; the inferred wording below has to
   // hedge because serving a policy CRD is not evidence that anything enforces.
-  if (params.probe === "not-enforced") {
+  // Keyed on the status, not the raw probe result: on an AWS ANP cluster the
+  // probe truthfully reports the plain-NetworkPolicy dialect unenforced, the
+  // decision ignores that verdict, and the message must not resurrect it.
+  if (params.enforcementStatus === "verified-not-enforced") {
     return "A test pod under a deny-all policy still reached the cluster, so NetworkPolicy objects are accepted but not enforced here.";
   }
-  if (params.probe === "enforced" && !params.supportsFqdn) {
+  if (
+    params.enforcementStatus === "verified-enforced" &&
+    !params.supportsFqdn
+  ) {
     return "NetworkPolicy enforcement confirmed by a test pod. IP/CIDR egress is enforced; domain allowlists require a supported FQDN policy provider.";
   }
   if (params.ciliumNetworkPolicy) {
@@ -228,6 +256,14 @@ function capabilityMessage(params: {
   }
   if (params.awsApplicationNetworkPolicy) {
     return "AWS ApplicationNetworkPolicy API detected. Domain allowlists can be enforced by EKS Auto Mode.";
+  }
+  if (params.enforcementStatus === "unknown") {
+    // Naming Calico here is the point of still discovering it: its CRDs are the
+    // one signal that looks like an enforcer and routinely is not, so an
+    // operator seeing this has somewhere specific to look.
+    return params.calicoNetworkPolicy
+      ? "Calico CRDs are installed, but nothing has verified that this cluster enforces NetworkPolicy — GKE serves them with node enforcement switched off. Egress rules are applied but may be ignored."
+      : "NetworkPolicy enforcement has not been verified on this cluster. Egress rules are applied, but no test has confirmed the cluster acts on them.";
   }
   if (!params.enforced) {
     return "No NetworkPolicy enforcer detected (no Calico, Cilium, or FQDN policy provider). NetworkPolicy objects are accepted by the API but not enforced.";
@@ -326,6 +362,9 @@ function unavailableCapabilities(): K8sCapabilities {
       message:
         "Kubernetes capabilities could not be inspected. Network policy enforcement is unavailable until Kubernetes access is configured.",
       enforcementSource: "api-discovery",
+      // Reaching nothing is not the same as finding nothing: this says the
+      // cluster was never inspected, rather than asserting it fails to enforce.
+      enforcementStatus: "unknown",
       probe: "absent",
       probedAt: null,
     },

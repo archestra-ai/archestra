@@ -107,6 +107,16 @@ export const K8sNetworkPolicyCapabilitiesSchema = z.object({
   // cluster that enforces from one that only stores the objects, so the UI
   // words its warning differently depending on which answer it has.
   enforcementSource: z.enum(["probe", "api-discovery"]),
+  // How far the enforcement answer can be trusted, kept separate from
+  // `provider` because that field also names the dialect the runtime writes.
+  // Folding the two together forced an unmeasured cluster to be filed as either
+  // enforcing or not, and both answers are wrong for some cluster: claiming
+  // enforcement hides a real gap, denying it disables controls that work.
+  enforcementStatus: z.enum([
+    "verified-enforced",
+    "verified-not-enforced",
+    "unknown",
+  ]),
   probe: z.enum(["enforced", "not-enforced", "inconclusive", "absent"]),
   probedAt: z.string().nullable(),
 });

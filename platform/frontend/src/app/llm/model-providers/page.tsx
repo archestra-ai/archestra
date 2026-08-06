@@ -5,20 +5,16 @@ import {
   E2eTestId,
   formatSecretStorageType,
   isProviderApiKeyOptional,
-  type ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
-  Building2,
   CheckCircle2,
   Loader2,
   Pencil,
   Plus,
   Server,
   Trash2,
-  User,
-  Users,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -39,6 +35,8 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
+import { platformOwnedStyles } from "@/components/scope-vocabulary";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -59,8 +57,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -73,6 +77,7 @@ import {
   useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
+import { cn } from "@/lib/utils";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import { isEditApiKeyFormValid } from "./edit-key-form.utils";
@@ -95,12 +100,6 @@ type ModelProviderRow =
       credential: LlmProviderApiKeyResponse | null;
       defaultValues: Partial<LlmProviderApiKeyFormValues>;
     };
-
-const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
-  personal: <User className="h-3 w-3" />,
-  team: <Users className="h-3 w-3" />,
-  org: <Building2 className="h-3 w-3" />,
-};
 
 const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   name: "",
@@ -176,6 +175,10 @@ export default function ApiKeysPage() {
     enabled: apiKeyQueriesEnabled,
   });
   const { data: organization } = useOrganization();
+  // Read defensively: suites that render this page mock the auth query module
+  // wholesale, and the Access column should fall back to the scope label
+  // rather than crash the table (same convention as `user-share-field.tsx`).
+  const currentUserId = useSession()?.data?.user?.id;
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const byosEnabled = useFeature("byosEnabled");
@@ -481,33 +484,69 @@ export default function ApiKeysPage() {
         header: "Access",
         size: 210,
         minSize: 170,
-        cell: ({ row }) =>
-          row.original.kind === "subscription" ? (
-            <Badge variant="outline" className="max-w-full gap-1">
-              <User className="h-3 w-3" />
-              <span className="truncate">Personal account</span>
-            </Badge>
-          ) : (
-            <Badge
-              variant={row.original.isSystem ? "secondary" : "outline"}
-              className="max-w-full gap-1"
-            >
-              {row.original.isSystem ? (
-                <Server className="h-3 w-3" />
-              ) : (
-                SCOPE_ICONS[row.original.scope as ResourceVisibilityScope]
-              )}
-              <span className="truncate">
-                {row.original.isSystem
-                  ? "System"
-                  : row.original.scope === "team"
-                    ? row.original.teamName
-                    : row.original.scope === "personal"
-                      ? "Personal"
-                      : "Organization"}
-              </span>
-            </Badge>
-          ),
+        cell: ({ row }) => {
+          const credential = row.original;
+          if (credential.kind === "subscription") {
+            // A subscription is a personal credential of whoever connected it
+            // (today the endpoint only returns the viewer's own, so this reads
+            // "Me"); the Name column's "Subscription" tag already says what
+            // kind of credential it is, so the Access cell answers only whose.
+            return (
+              <ResourceVisibilityBadge
+                scope="personal"
+                teams={undefined}
+                authorId={credential.credential?.userId ?? currentUserId}
+                authorName={credential.credential?.userName ?? null}
+                currentUserId={currentUserId}
+                showSelfAsMe
+              />
+            );
+          }
+          if (credential.isSystem) {
+            // Not a visibility scope: nobody in the org owns this row. It is
+            // auto-provisioned because the deployment authenticates with cloud
+            // credentials, so it borrows the platform-owned styling that the
+            // built-in agent badge uses.
+            return (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        platformOwnedStyles,
+                        "max-w-full cursor-help gap-1",
+                      )}
+                    >
+                      <Server className="h-3 w-3" />
+                      <span className="truncate">System</span>
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Provisioned automatically because this deployment
+                    authenticates with cloud credentials instead of an API key.
+                    Managed through environment configuration and usable by the
+                    whole organization.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          }
+          return (
+            <ResourceVisibilityBadge
+              scope={credential.scope}
+              teams={
+                credential.teamId && credential.teamName
+                  ? [{ id: credential.teamId, name: credential.teamName }]
+                  : undefined
+              }
+              authorId={credential.userId}
+              authorName={credential.userName}
+              currentUserId={currentUserId}
+              showSelfAsMe
+            />
+          );
+        },
       },
       {
         accessorKey: "secretStorageType",
@@ -648,6 +687,7 @@ export default function ApiKeysPage() {
       getKeyUsage,
       azureOpenAiEntraIdEnabled,
       anthropicWifEnabled,
+      currentUserId,
     ],
   );
 

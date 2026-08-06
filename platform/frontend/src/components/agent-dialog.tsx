@@ -29,6 +29,7 @@ import {
   CheckIcon,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   Globe,
   InfoIcon,
   Loader2,
@@ -149,8 +150,8 @@ type AgentVisibilityChoice = AgentScope | "user";
 
 import {
   useCreateProfile,
+  useDelegationTargetAgents,
   useDeleteProfile,
-  useInternalAgents,
   useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
@@ -255,6 +256,10 @@ function getBuiltInAgentConfigForSave(params: {
     case BUILT_IN_AGENT_IDS.APP_RUNTIME:
       return {
         name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
+      };
+    case BUILT_IN_AGENT_IDS.ADVISOR:
+      return {
+        name: BUILT_IN_AGENT_IDS.ADVISOR,
       };
     default: {
       // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
@@ -375,8 +380,15 @@ function SubagentsEditor({
   showCreateAction = true,
   tone = "delegate",
 }: SubagentsEditorProps) {
-  // Filter out current agent from available agents
-  const filteredAgents = availableAgents.filter((a) => a.id !== currentAgentId);
+  // Filter out the current agent, and the advisor: its own switch below owns
+  // that decision, and listing it here would offer a second way to change the
+  // same thing — one that reads as the opposite in Auto mode, where this list
+  // is what an agent may *not* delegate to.
+  const filteredAgents = availableAgents.filter(
+    (a) =>
+      a.id !== currentAgentId &&
+      a.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR,
+  );
 
   const handleToggle = (agentId: string) => {
     if (selectedAgentIds.includes(agentId)) {
@@ -708,7 +720,7 @@ export function AgentDialog({
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
 
-  const { data: allInternalAgents = [] } = useInternalAgents({
+  const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: shouldLoadInternalAgents && !!canReadAgents,
   });
   const createAgent = useCreateProfile();
@@ -901,6 +913,7 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN;
   const isDualLlmQuarantineBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
+  const isAdvisorBuiltIn = builtInAgentName === BUILT_IN_AGENT_IDS.ADVISOR;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "mcp_gateway" ||
@@ -917,7 +930,10 @@ export function AgentDialog({
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
     isPolicyConfigBuiltIn ||
-    isDualLlmMainBuiltIn;
+    isDualLlmMainBuiltIn ||
+    // The advisor is the one built-in that exists per environment, so which one
+    // you are editing is not otherwise visible on the form.
+    isAdvisorBuiltIn;
   const showToolsAndSubagents =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
@@ -1065,6 +1081,134 @@ export function AgentDialog({
       );
     }
   }, [open, agentId, currentExcludedSubagentIds, subagentExclusionsFetched]);
+
+  // One advisor per environment, because delegation never crosses environments:
+  // the switch has to target the one this agent could actually reach.
+  const advisorAgentId = allInternalAgents.find(
+    (a) =>
+      a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
+      (a.environmentId ?? null) === (environmentId ?? null),
+  )?.id;
+
+  // Consulting the advisor is off until someone turns it on, and a new agent
+  // starts in Auto mode where every accessible agent is reachable. Seeding the
+  // disabled set is what makes the switch's "off" true rather than decorative.
+  const advisorSeededRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      advisorSeededRef.current = false;
+      return;
+    }
+    if (agentId || !advisorAgentId || advisorSeededRef.current) return;
+    advisorSeededRef.current = true;
+    setDisabledSubagentIds((ids) =>
+      ids.includes(advisorAgentId) ? ids : [...ids, advisorAgentId],
+    );
+  }, [open, agentId, advisorAgentId]);
+
+  // One switch over two representations: Auto mode reaches every agent unless
+  // excluded, Custom mode reaches only what is listed. The reader should not
+  // have to know which is in play to decide whether the advisor is on.
+  const advisorEnabled = advisorAgentId
+    ? accessAllSubagents
+      ? !disabledSubagentIds.includes(advisorAgentId)
+      : selectedDelegationTargetIds.includes(advisorAgentId)
+    : false;
+
+  // The advisor is kept out of both lists, so it must be kept out of their
+  // counts too — a count that includes something invisible reads as a bug.
+  const delegationTargetCount = selectedDelegationTargetIds.filter(
+    (id) => id !== advisorAgentId,
+  ).length;
+  const disabledSubagentCount = disabledSubagentIds.filter(
+    (id) => id !== advisorAgentId,
+  ).length;
+
+  const listedWhen = (
+    ids: string[],
+    agentId: string | undefined,
+    listed: boolean,
+  ) => {
+    if (!agentId) return ids;
+    if (listed) {
+      return ids.includes(agentId) ? ids : [...ids, agentId];
+    }
+    return ids.filter((id) => id !== agentId);
+  };
+
+  const advisorListedWhen = (ids: string[], listed: boolean) =>
+    listedWhen(ids, advisorAgentId, listed);
+
+  // Save writes both sets whatever the mode, and an Auto-mode agent driven by a
+  // system or token flow resolves its targets from the explicit set rather than
+  // the Auto surface. So the advisor has to match the switch in both sets, not
+  // just the one the current mode reads — a grant stranded in the other set is
+  // a live consultation nothing in the dialog can show or clear.
+  // Another environment's advisor can only have been left by an earlier
+  // configuration: it is undispatchable from here, invisible in the dialog, and
+  // would come alive the moment this agent moved to that environment.
+  const foreignAdvisorIds = allInternalAgents
+    .filter(
+      (a) =>
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
+        a.id !== advisorAgentId,
+    )
+    .map((a) => a.id);
+  const withoutForeignAdvisors = (ids: string[]) =>
+    ids.filter((id) => !foreignAdvisorIds.includes(id));
+
+  const delegationTargetIdsToSave = advisorListedWhen(
+    withoutForeignAdvisors(selectedDelegationTargetIds),
+    advisorEnabled,
+  );
+  const disabledSubagentIdsToSave = advisorListedWhen(
+    withoutForeignAdvisors(disabledSubagentIds),
+    !advisorEnabled,
+  );
+
+  const writeAdvisorEnabled = (enabled: boolean) => {
+    if (!advisorAgentId) return;
+    setDisabledSubagentIds((ids) => advisorListedWhen(ids, !enabled));
+    setSelectedDelegationTargetIds((ids) => advisorListedWhen(ids, enabled));
+  };
+
+  // Each mode reads the advisor from its own set, so a mode change would
+  // otherwise surface an unrelated value and appear to flip the switch on its
+  // own. Carry the current setting across instead.
+  const handleSubagentModeChange = (value: string) => {
+    setAccessAllSubagents(value === "auto");
+    writeAdvisorEnabled(advisorEnabled);
+  };
+
+  // Each environment has its own advisor, so moving the agent has to move the
+  // setting onto that environment's row and retire the old one from both sets
+  // — a grant left pointing at another environment's advisor can never be
+  // dispatched, and nothing in the dialog would show it.
+  const handleEnvironmentChange = (nextEnvironmentId: string | null) => {
+    const enabled = advisorEnabled;
+    const previousAdvisorId = advisorAgentId;
+    const nextAdvisorId = allInternalAgents.find(
+      (a) =>
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
+        (a.environmentId ?? null) === nextEnvironmentId,
+    )?.id;
+
+    setEnvironmentId(nextEnvironmentId);
+    setDisabledSubagentIds((ids) =>
+      listedWhen(
+        listedWhen(ids, previousAdvisorId, false),
+        nextAdvisorId,
+        !enabled,
+      ),
+    );
+    setSelectedDelegationTargetIds((ids) =>
+      listedWhen(
+        listedWhen(ids, previousAdvisorId, false),
+        nextAdvisorId,
+        enabled,
+      ),
+    );
+  };
 
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
@@ -1378,12 +1522,12 @@ export function AgentDialog({
         savedAgentId &&
         hasUnsavedChanges(
           [...currentDelegations.map((d) => d.id)].sort(),
-          [...selectedDelegationTargetIds].sort(),
+          [...delegationTargetIdsToSave].sort(),
         )
       ) {
         await syncDelegations.mutateAsync({
           agentId: savedAgentId,
-          targetAgentIds: selectedDelegationTargetIds,
+          targetAgentIds: delegationTargetIdsToSave,
         });
       }
 
@@ -1394,12 +1538,12 @@ export function AgentDialog({
         savedAgentId &&
         hasUnsavedChanges(
           [...(currentSubagentExclusions?.excludedSubagentIds ?? [])].sort(),
-          [...disabledSubagentIds].sort(),
+          [...disabledSubagentIdsToSave].sort(),
         )
       ) {
         await syncSubagentExclusions.mutateAsync({
           agentId: savedAgentId,
-          exclusions: { excludedSubagentIds: disabledSubagentIds },
+          exclusions: { excludedSubagentIds: disabledSubagentIdsToSave },
         });
       }
 
@@ -1438,10 +1582,10 @@ export function AgentDialog({
     isInternalAgent,
     builtInAgentName,
     showSecurity,
-    selectedDelegationTargetIds,
+    delegationTargetIdsToSave,
     currentDelegations,
     currentSubagentExclusions,
-    disabledSubagentIds,
+    disabledSubagentIdsToSave,
     updateAgent,
     createAgent,
     syncDelegations,
@@ -1574,7 +1718,7 @@ export function AgentDialog({
             onSubmit={handleSave}
           >
             <fieldset disabled={readOnly} className="contents">
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-4 space-y-4">
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-4 pb-4 space-y-4">
                 {agentType === "profile" && (
                   <Alert variant="warning">
                     <AlertTriangle className="h-4 w-4" />
@@ -1635,9 +1779,15 @@ export function AgentDialog({
                       agentType === "mcp_gateway") && (
                       <EnvironmentSelector
                         value={environmentId ?? null}
-                        onChange={setEnvironmentId}
+                        onChange={handleEnvironmentChange}
                         resource={getResourceForAgentType(agentType)}
-                        helpText={environmentHelpText}
+                        helpText={
+                          isAdvisorBuiltIn
+                            ? "Each environment has its own advisor, reachable only by the agents in that environment. Set a model on each one you want consulted."
+                            : environmentHelpText
+                        }
+                        // Moving it would strand every agent that consults it.
+                        disabled={isAdvisorBuiltIn}
                       />
                     )}
 
@@ -2312,9 +2462,7 @@ export function AgentDialog({
                     <div className="space-y-2">
                       <Tabs
                         value={accessAllSubagents ? "auto" : "custom"}
-                        onValueChange={(value) =>
-                          setAccessAllSubagents(value === "auto")
-                        }
+                        onValueChange={handleSubagentModeChange}
                       >
                         <TabsList className="grid w-full grid-cols-2">
                           <TabsTrigger value="auto">Auto</TabsTrigger>
@@ -2339,7 +2487,7 @@ export function AgentDialog({
                           </ul>
                           <div className="space-y-1.5">
                             <p className="text-sm text-muted-foreground">
-                              Disabled subagents ({disabledSubagentIds.length})
+                              Disabled subagents ({disabledSubagentCount})
                             </p>
                             <SubagentsEditor
                               availableAgents={allInternalAgents}
@@ -2360,13 +2508,54 @@ export function AgentDialog({
                             {agentTypeDisplayName[agentType] || "agent"}.
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Subagents ({selectedDelegationTargetIds.length})
+                            Subagents ({delegationTargetCount})
                           </p>
                           <SubagentsEditor
                             availableAgents={allInternalAgents}
                             selectedAgentIds={selectedDelegationTargetIds}
                             onSelectionChange={setSelectedDelegationTargetIds}
                             currentAgentId={agent?.id}
+                          />
+                        </div>
+                      )}
+                      {/* Outside the Auto/Custom split on purpose: whether this
+                        agent can consult the advisor is one decision, even
+                        though the two modes record it differently. */}
+                      {advisorAgentId && (
+                        <div className="flex items-center justify-between gap-4 border-t pt-4">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="consult-advisor">
+                              Enable Advisor
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Pairs this{" "}
+                              {agentTypeDisplayName[agentType] || "agent"} with
+                              a stronger model it consults at key moments. Those
+                              calls are billed at the advisor model&apos;s
+                              rates, and usually cost less than running the
+                              stronger model throughout.{" "}
+                              {/* New tab: this dialog holds unsaved edits that
+                                navigating away would discard. */}
+                              <Link
+                                href={`/agents?edit=${advisorAgentId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 underline underline-offset-4"
+                              >
+                                Edit the Advisor agent
+                                <span className="sr-only">
+                                  (opens in new tab)
+                                </span>
+                                <ExternalLink aria-hidden className="h-3 w-3" />
+                              </Link>
+                              .
+                            </p>
+                          </div>
+                          <Switch
+                            id="consult-advisor"
+                            checked={advisorEnabled}
+                            onCheckedChange={writeAdvisorEnabled}
+                            data-testid={E2eTestId.ConsultAdvisorSwitch}
                           />
                         </div>
                       )}

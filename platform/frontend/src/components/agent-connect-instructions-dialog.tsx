@@ -34,13 +34,14 @@ import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VirtualKeyManagement } from "@/components/virtual-key-management";
 import { useProfile, useProfiles } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
@@ -551,6 +552,8 @@ function OauthClientTable({
   proxyId: string;
   clients: LlmOauthClientRow[] | undefined;
 }) {
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
   const { data: canDelete } = useHasPermissions({
     llmOauthClient: ["delete"],
   });
@@ -596,6 +599,7 @@ function OauthClientTable({
             <th className="px-3 py-1.5 font-medium">Name</th>
             <th className="px-3 py-1.5 font-medium">Client ID</th>
             <th className="px-3 py-1.5 font-medium">Providers</th>
+            <th className="px-3 py-1.5 font-medium">Accessible to</th>
             {(canUpdate || canDelete) && <th className="w-8 px-2 py-1.5" />}
           </tr>
         </thead>
@@ -635,6 +639,16 @@ function OauthClientTable({
                       .map((mapping) => providerDisplayNames[mapping.provider])
                       .join(", ")
                   : "—"}
+              </td>
+              <td className="max-w-[180px] px-3 py-1.5">
+                <ResourceVisibilityBadge
+                  scope={client.scope}
+                  teams={client.teams}
+                  authorId={client.authorId}
+                  authorName={client.authorName}
+                  currentUserId={currentUserId}
+                  showSelfAsMe
+                />
               </td>
               {(canUpdate || canDelete) && (
                 <td className="px-2 py-1.5">

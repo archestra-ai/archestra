@@ -29,8 +29,11 @@ vi.mock("@/config", async () =>
 );
 
 import { shrinkImageToFit } from "@archestra/image-rs";
+import { eq } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
-import { ChatOpsChannelBindingModel } from "@/models";
+import config from "@/config";
+import db, { schema } from "@/database";
+import { ChatOpsChannelBindingModel, UserModel } from "@/models";
 import { markChannelThreadActive } from "./channel-activation";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import SlackProvider from "./slack-provider";
@@ -3461,5 +3464,184 @@ describe("SlackProvider.handleSlashCommandSocket", () => {
     expect(ack).toHaveBeenCalledWith(
       expect.objectContaining({ response_type: "ephemeral" }),
     );
+  });
+});
+
+// =============================================================================
+// handleSlashCommand — auto-provision signup welcome
+// =============================================================================
+
+describe("SlackProvider.handleSlashCommand — signup welcome", () => {
+  // Real path end to end: the slash command auto-provisions the sender in the
+  // database (user + member + invitation) and fires the welcome DM. Only the
+  // Slack Web API client is faked; assertions are on the outbound Slack calls.
+  function createSlashSetup(email: string) {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ok: true });
+    const conversationsOpen = vi
+      .fn()
+      .mockResolvedValue({ channel: { id: "D_WELCOME" } });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — fake Slack client boundary
+    (provider as any).client = {
+      users: {
+        info: vi.fn().mockResolvedValue({
+          user: { real_name: "Slash User", profile: { email } },
+        }),
+      },
+      conversations: { open: conversationsOpen },
+      chat: { postMessage },
+    };
+    return { provider, postMessage, conversationsOpen };
+  }
+
+  async function makeOrg() {
+    const orgId = crypto.randomUUID();
+    await db.insert(schema.organizationsTable).values({
+      id: orgId,
+      name: `Welcome Org ${orgId.substring(0, 8)}`,
+      slug: `welcome-org-${orgId.substring(0, 8)}`,
+      createdAt: new Date(),
+      theme: "cosmic-night",
+      customFont: "lato",
+    });
+  }
+
+  function slashBody(userId: string) {
+    return {
+      command: SLACK_SLASH_COMMANDS.HELP,
+      text: "",
+      user_id: userId,
+      user_name: "slash.user",
+      channel_id: "C12345",
+      team_id: "T12345",
+    };
+  }
+
+  // The gate reads config at call time (unlike the import-time semaphore
+  // above), so runtime mutation of the file's mocked config works here.
+  beforeEach(() => {
+    config.chatops.signupWelcomeEnabled = true;
+    config.auth.disableInvitations = false;
+    config.auth.disableBasicAuth = false;
+  });
+
+  test("first slash command provisions the user and DMs the signup link — once", async () => {
+    await makeOrg();
+    const email = `slash-${crypto.randomUUID()}@example.com`;
+    const { provider, postMessage, conversationsOpen } =
+      createSlashSetup(email);
+    const userId = `U_NEW_${crypto.randomUUID().substring(0, 8)}`;
+
+    const response = await provider.handleSlashCommand(slashBody(userId));
+    expect(response?.response_type).toBe("ephemeral");
+
+    // Provisioned in the real database
+    const user = await UserModel.findByEmail(email);
+    expect(user).toBeTruthy();
+    const [invitation] = await db
+      .select()
+      .from(schema.invitationsTable)
+      .where(eq(schema.invitationsTable.email, email));
+    expect(invitation).toBeTruthy();
+
+    // The welcome DM is fire-and-forget — wait for the Slack calls to land,
+    // then check the DM carries this user's actual signup link.
+    await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1));
+    expect(conversationsOpen).toHaveBeenCalledWith({ users: userId });
+    expect(JSON.stringify(postMessage.mock.calls[0][0])).toContain(
+      `/auth/sign-up-with-invitation?invitationId=${invitation.id}`,
+    );
+
+    // Same sender again: already provisioned, no second welcome
+    postMessage.mockClear();
+    conversationsOpen.mockClear();
+    await provider.handleSlashCommand(slashBody(userId));
+    expect(conversationsOpen).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false suppresses the DM but still provisions", async () => {
+    await makeOrg();
+    config.chatops.signupWelcomeEnabled = false;
+    const email = `slash-off-${crypto.randomUUID()}@example.com`;
+    const { provider, postMessage, conversationsOpen } =
+      createSlashSetup(email);
+
+    const response = await provider.handleSlashCommand(
+      slashBody(`U_OFF_${crypto.randomUUID().substring(0, 8)}`),
+    );
+
+    expect(response?.response_type).toBe("ephemeral");
+    expect(await UserModel.findByEmail(email)).toBeTruthy();
+    // The gate is awaited before the handler returns, so no send is in flight
+    expect(conversationsOpen).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("disabled invitations suppress the DM — its signup link would be a dead end", async () => {
+    await makeOrg();
+    config.auth.disableInvitations = true;
+    const email = `slash-noinv-${crypto.randomUUID()}@example.com`;
+    const { provider, postMessage, conversationsOpen } =
+      createSlashSetup(email);
+
+    const response = await provider.handleSlashCommand(
+      slashBody(`U_NOINV_${crypto.randomUUID().substring(0, 8)}`),
+    );
+
+    expect(response?.response_type).toBe("ephemeral");
+    expect(await UserModel.findByEmail(email)).toBeTruthy();
+    expect(conversationsOpen).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test("configured SSO switches the DM to a sign-in link — no invitation to complete", async () => {
+    await makeOrg();
+    // Typical SSO-enforced deployment: IdP is the only way in
+    config.auth.disableBasicAuth = true;
+    const idpId = crypto.randomUUID();
+    await db.insert(schema.identityProvidersTable).values({
+      id: idpId,
+      issuer: "https://idp.example.com",
+      providerId: `idp-${idpId.substring(0, 8)}`,
+      domain: "example.com",
+    });
+    try {
+      const email = `slash-sso-${crypto.randomUUID()}@example.com`;
+      const { provider, postMessage } = createSlashSetup(email);
+
+      const response = await provider.handleSlashCommand(
+        slashBody(`U_SSO_${crypto.randomUUID().substring(0, 8)}`),
+      );
+
+      expect(response?.response_type).toBe("ephemeral");
+      expect(await UserModel.findByEmail(email)).toBeTruthy();
+
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1));
+      const dm = JSON.stringify(postMessage.mock.calls[0][0]);
+      expect(dm).toContain("/auth/sign-in");
+      expect(dm).not.toContain("sign-up-with-invitation");
+    } finally {
+      await db
+        .delete(schema.identityProvidersTable)
+        .where(eq(schema.identityProvidersTable.id, idpId));
+    }
+  });
+
+  test("basic sign-in disabled without SSO suppresses the DM — signup can't set a password", async () => {
+    await makeOrg();
+    config.auth.disableBasicAuth = true;
+    const email = `slash-nobasic-${crypto.randomUUID()}@example.com`;
+    const { provider, postMessage, conversationsOpen } =
+      createSlashSetup(email);
+
+    const response = await provider.handleSlashCommand(
+      slashBody(`U_NOBASIC_${crypto.randomUUID().substring(0, 8)}`),
+    );
+
+    expect(response?.response_type).toBe("ephemeral");
+    expect(await UserModel.findByEmail(email)).toBeTruthy();
+    expect(conversationsOpen).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
   });
 });

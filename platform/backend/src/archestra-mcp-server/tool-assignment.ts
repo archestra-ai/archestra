@@ -252,7 +252,10 @@ async function handleBulkAssignTool(params: {
       ),
     ];
     const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
-      AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
+      // Org-fenced: target ids come straight from tool input, and the scope
+      // checks below cannot reject a foreign tenant on their own because the
+      // admin short-circuit means admin of the CALLER's org.
+      AgentModel.findByIdsForPermissionCheck(uniqueTargetIds, organizationId),
       getAgentTypePermissionChecker({
         userId,
         organizationId,
@@ -277,23 +280,31 @@ async function handleBulkAssignTool(params: {
       assignments.map(async (assignment) => {
         const targetId = getBulkAssignmentTargetId(assignment);
         const target = targetAgents.get(targetId);
-        if (target) {
-          if (target.environmentId !== callerEnvironmentId) {
-            throw new Error(
-              `${bulkAssignType === "agent" ? "Agent" : "MCP gateway"} ${targetId} is in a different environment; you can only assign tools within your own environment.`,
-            );
-          }
-          checker.require(target.agentType, "update");
-          requireAgentModifyPermission({
-            checker,
-            agentType: target.agentType,
-            agentScope: target.scope,
-            agentAuthorId: target.authorId,
-            agentTeamIds: target.teamIds,
-            userTeamIds,
-            userId,
-          });
+        // Absent from the org-fenced lookup means deleted, never existed, or in
+        // another tenant — indistinguishable on purpose. This must fail rather
+        // than fall through to the checks below being skipped: `assignToolToAgent`
+        // verifies only that the agent EXISTS, with no tenant scope of its own,
+        // so a foreign-org id would otherwise be written unchecked.
+        if (!target) {
+          throw new Error(
+            `${bulkAssignType === "agent" ? "Agent" : "MCP gateway"} with ID ${targetId} not found`,
+          );
         }
+        if (target.environmentId !== callerEnvironmentId) {
+          throw new Error(
+            `${bulkAssignType === "agent" ? "Agent" : "MCP gateway"} ${targetId} is in a different environment; you can only assign tools within your own environment.`,
+          );
+        }
+        checker.require(target.agentType, "update");
+        requireAgentModifyPermission({
+          checker,
+          agentType: target.agentType,
+          agentScope: target.scope,
+          agentAuthorId: target.authorId,
+          agentTeamIds: target.teamIds,
+          userTeamIds,
+          userId,
+        });
 
         return assignToolToAgent({
           agentId: targetId,
@@ -370,7 +381,10 @@ async function handleBulkRemoveTool(params: {
 
     const uniqueAgentIds = [...new Set(removals.map((r) => r.agentId))];
     const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
-      AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
+      // Org-fenced for the same reason as the bulk-assign path above: a
+      // foreign-tenant agent id must be indistinguishable from one that does not
+      // exist, and the environment check below is not what guarantees that.
+      AgentModel.findByIdsForPermissionCheck(uniqueAgentIds, organizationId),
       getAgentTypePermissionChecker({ userId, organizationId }),
       AgentModel.findEnvironmentId(contextAgent.id),
     ]);

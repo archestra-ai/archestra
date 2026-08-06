@@ -248,6 +248,12 @@ const PublicConfigResponseSchema = z.strictObject({
       host: z.string(),
     }),
   }),
+  // Product-usage telemetry (RUM): when enabled, the frontend loads its RUM
+  // module and posts usage events to /api/rum/events for OTLP export.
+  rum: z.strictObject({
+    enabled: z.boolean(),
+    sampleRate: z.number(),
+  }),
 });
 
 let cachedAnalyticsInstanceId: string | null = null;
@@ -270,6 +276,10 @@ async function getPublicConfigResponse(): Promise<
       enabled: config.analytics.enabled,
       instanceId: await getAnalyticsInstanceId(),
       posthog: config.analytics.posthog,
+    },
+    rum: {
+      enabled: config.observability.rum.enabled,
+      sampleRate: config.observability.rum.sampleRate,
     },
   };
 }

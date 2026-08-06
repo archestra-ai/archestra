@@ -39,6 +39,7 @@ export * from "./policy-conditions";
 export * from "./provider-billing-copy";
 export * from "./roles";
 export * from "./routes";
+export * from "./rum.ee";
 export * from "./seeded-app-render";
 export * from "./slack";
 export * from "./sso-template-helpers";

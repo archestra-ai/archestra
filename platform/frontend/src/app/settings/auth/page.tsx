@@ -23,6 +23,7 @@ import {
   useOrganization,
   useUpdateAuthSettings,
 } from "@/lib/organization.query";
+import { rumClient } from "@/lib/rum.ee";
 import {
   type AuthSettingsFormValues,
   buildAuthSettingsFormValues,
@@ -136,6 +137,9 @@ export default function AuthSettingsPage() {
     // would otherwise keep the dead session alive for up to a minute) and
     // send the admin through sign-in, which lands on the enrollment page.
     if (data.requireTwoFactor === true && !session?.user.twoFactorEnabled) {
+      // Direct sign-out (bypasses /auth/sign-out): tear down RUM state the
+      // same way that page does.
+      rumClient.reset();
       await authClient.signOut();
       window.location.assign("/auth/sign-in");
       return;

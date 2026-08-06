@@ -84,6 +84,7 @@ import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
+import { rumExporter } from "@/observability/rum/exporter.ee";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -1306,6 +1307,8 @@ const startWebServer = async () => {
       logger.warn({ err: error }, "Failed to track instance analytics");
     });
 
+    rumExporter.initialize();
+
     posthogErrorTrackingService.init().catch((error) => {
       logger.warn(
         { err: error },
@@ -1620,6 +1623,9 @@ function registerWebServerShutdown(
       mcpGatewayTaskReaper.stop();
 
       instanceAnalyticsService.stop();
+
+      // Flush any buffered RUM events before the process exits.
+      await rumExporter.shutdown();
 
       metrics.activeUsers.activeUsersMetricCollector.stop();
 

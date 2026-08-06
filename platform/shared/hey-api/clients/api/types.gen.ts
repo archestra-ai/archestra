@@ -54671,6 +54671,8 @@ export type GetConnectorsResponses = {
                 depotPaths: Array<string>;
                 excludePaths?: Array<string>;
                 fileTypes?: Array<string>;
+            } | {
+                [key: string]: unknown;
             };
             secretId: string | null;
             environmentId: string | null;

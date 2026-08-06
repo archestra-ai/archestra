@@ -114,6 +114,23 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
 const KnowledgeBaseConnectorResponseSchema =
   SelectKnowledgeBaseConnectorSchema.omit({ permissionSyncState: true });
 
+/**
+ * The connector LIST response. Identical to the detail response except that
+ * `config` also accepts a shape the current `ConnectorConfigSchema` no longer
+ * recognizes — a config persisted by an older version and since drifted.
+ *
+ * The active list drops such rows (they still have a detail page, an edit form
+ * and a delete button to reach them by id), but the trash cannot: it is the
+ * only surface offering restore and permanent delete, so a row it refuses to
+ * render is a row nobody can ever recover or purge. Valid configs still match
+ * the discriminated union first and keep their precise shape.
+ */
+const KnowledgeBaseConnectorListItemSchema =
+  KnowledgeBaseConnectorResponseSchema.extend({
+    config: z.union([ConnectorConfigSchema, z.record(z.string(), z.unknown())]),
+    assignedAgents: z.array(AssignedAgentSummarySchema),
+  });
+
 // `containerKey` is internal permission-sync bookkeeping; API consumers see
 // the document's EFFECTIVE audience (container tokens expanded server-side).
 const KnowledgeBaseDocumentListItemSchema = SelectKbDocumentSchema.omit({
@@ -525,7 +542,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "`knowledgeSource:delete`. Search and connector-type filtering " +
           "behave identically on both slices; `knowledgeBaseId` is an " +
           "active-only filter and is rejected with a 400 alongside " +
-          "`status=deleted`.",
+          "`status=deleted`. The deleted slice carries identity only: " +
+          "`assignedAgents` comes back empty, since those links resolve to " +
+          "nothing while the connector is in the trash. It is also the one " +
+          "slice that never hides a row whose stored `config` no longer " +
+          "matches a known connector shape — the trash is the only place " +
+          "restore and permanent delete are offered.",
         tags: ["Connectors"],
         querystring: PaginationQuerySchema.extend({
           knowledgeBaseId: z.string().optional(),
@@ -539,11 +561,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(
-            KnowledgeBaseConnectorResponseSchema.extend({
-              assignedAgents: z.array(AssignedAgentSummarySchema),
-            }),
-          ),
+          createPaginatedResponseSchema(KnowledgeBaseConnectorListItemSchema),
         ),
       },
     },
@@ -621,6 +639,23 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         total = result.total;
       }
 
+      // The trash renders identity and `deletedAt` only, so the two agent
+      // queries below are skipped for it — their answers would describe
+      // assignments no surface resolves while the connector sits in the trash.
+      // The schema filter is skipped too, and deliberately: it is what keeps a
+      // drifted `config` off the active list, but on the trash it would strand
+      // the row for good (see KnowledgeBaseConnectorListItemSchema). Declared
+      // in the endpoint description, not silently narrowed.
+      if (status === "deleted") {
+        return reply.send({
+          data: data.map((connector) => ({
+            ...connector,
+            assignedAgents: [],
+          })),
+          pagination: calculatePaginationMeta(total, { limit, offset }),
+        });
+      }
+
       // Enrich connectors with assigned agents (batch query to avoid N+1)
       const connectorIds = data.map((c) => c.id);
       const agentIdsByConnector =
@@ -679,19 +714,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return false;
       });
 
-      const currentPage = Math.floor(offset / limit) + 1;
-      const totalPages = Math.ceil(total / limit);
-
       return reply.send({
         data: validatedData,
-        pagination: {
-          currentPage,
-          limit,
-          total,
-          totalPages,
-          hasNext: currentPage < totalPages,
-          hasPrev: currentPage > 1,
-        },
+        pagination: calculatePaginationMeta(total, { limit, offset }),
       });
     },
   );

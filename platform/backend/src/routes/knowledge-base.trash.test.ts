@@ -2,7 +2,11 @@ import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { KnowledgeBaseConnectorModel, KnowledgeBaseModel } from "@/models";
+import {
+  AgentConnectorAssignmentModel,
+  KnowledgeBaseConnectorModel,
+  KnowledgeBaseModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -314,6 +318,93 @@ describe("knowledge base + connector trash routes", () => {
       newer.id,
       older.id,
     ]);
+  });
+
+  test("the trash lists a connector whose stored config no longer parses, so it stays recoverable", async () => {
+    const connector = await makeConnector("Drifted config");
+    // A config persisted by an older version and since drifted: the active
+    // list drops it, and the trash — the only surface offering restore and
+    // permanent delete — must not, or the row is stranded for good.
+    await db
+      .update(schema.knowledgeBaseConnectorsTable)
+      .set({
+        config: {
+          type: "jira",
+          retiredField: true,
+        } as unknown as ConnectorConfig,
+      })
+      .where(eq(schema.knowledgeBaseConnectorsTable.id, connector.id));
+
+    const active = await app.inject({ method: "GET", url: "/api/connectors" });
+    expect(active.statusCode).toBe(200);
+    expect(
+      active.json().data.some((c: { id: string }) => c.id === connector.id),
+    ).toBe(false);
+
+    await app.inject({
+      method: "DELETE",
+      url: `/api/connectors/${connector.id}`,
+    });
+
+    const deleted = await app.inject({
+      method: "GET",
+      url: "/api/connectors?status=deleted",
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(
+      deleted.json().data.some((c: { id: string }) => c.id === connector.id),
+    ).toBe(true);
+
+    // Visible means reachable: both trash actions work on it.
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/api/connectors/${connector.id}/restore`,
+        })
+      ).statusCode,
+    ).toBe(200);
+    await app.inject({
+      method: "DELETE",
+      url: `/api/connectors/${connector.id}`,
+    });
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/connectors/${connector.id}/permanent`,
+        })
+      ).statusCode,
+    ).toBe(200);
+  });
+
+  test("the connector trash returns identity only, skipping agent enrichment", async ({
+    makeAgent,
+  }) => {
+    const connector = await makeConnector("Assigned connector");
+    const agent = await makeAgent({ organizationId });
+    await AgentConnectorAssignmentModel.assign(agent.id, connector.id);
+
+    const active = await app.inject({ method: "GET", url: "/api/connectors" });
+    expect(
+      active
+        .json()
+        .data.find((c: { id: string }) => c.id === connector.id)
+        .assignedAgents.map((a: { id: string }) => a.id),
+    ).toEqual([agent.id]);
+
+    await app.inject({
+      method: "DELETE",
+      url: `/api/connectors/${connector.id}`,
+    });
+    const deleted = await app.inject({
+      method: "GET",
+      url: "/api/connectors?status=deleted",
+    });
+    expect(
+      deleted.json().data.find((c: { id: string }) => c.id === connector.id)
+        .assignedAgents,
+    ).toEqual([]);
   });
 
   test("restored connector comes back disabled and stays off the sync schedulers", async () => {

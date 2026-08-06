@@ -3935,7 +3935,7 @@ export const kimiChatCompletionsWithAgent = <ThrowOnError extends boolean = fals
 });
 
 /**
- * List all knowledge bases for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and pagination behave identically on both slices.
+ * List all knowledge bases for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and pagination behave identically on both slices, but the deleted slice carries identity only: `connectors` and `assignedAgents` come back empty and `totalDocsIndexed` zero, since those links resolve to nothing while the knowledge base is in the trash.
  *
  * Authentication:
  *
@@ -3976,7 +3976,7 @@ export const createKnowledgeBase = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them
  */
 export const deleteKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<DeleteKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).delete<DeleteKnowledgeBaseResponses, DeleteKnowledgeBaseErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}', ...options });
 
@@ -4022,7 +4022,7 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them
  */
 export const restoreKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<RestoreKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).post<RestoreKnowledgeBaseResponses, RestoreKnowledgeBaseErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/restore', ...options });
 
@@ -4035,7 +4035,7 @@ export const restoreKnowledgeBase = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them
  */
 export const permanentlyDeleteKnowledgeBase = <ThrowOnError extends boolean = false>(options: Options<PermanentlyDeleteKnowledgeBaseData, ThrowOnError>) => (options.client ?? client).delete<PermanentlyDeleteKnowledgeBaseResponses, PermanentlyDeleteKnowledgeBaseErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/permanent', ...options });
 
@@ -4053,7 +4053,7 @@ export const permanentlyDeleteKnowledgeBase = <ThrowOnError extends boolean = fa
 export const getKnowledgeBaseHealth = <ThrowOnError extends boolean = false>(options: Options<GetKnowledgeBaseHealthData, ThrowOnError>) => (options.client ?? client).get<GetKnowledgeBaseHealthResponses, GetKnowledgeBaseHealthErrors, ThrowOnError>({ url: '/api/knowledge-bases/{id}/health', ...options });
 
 /**
- * List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`.
+ * List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`. The deleted slice carries identity only: `assignedAgents` comes back empty, since those links resolve to nothing while the connector is in the trash. It is also the one slice that never hides a row whose stored `config` no longer matches a known connector shape — the trash is the only place restore and permanent delete are offered.
  *
  * Authentication:
  *
@@ -4094,7 +4094,7 @@ export const createConnector = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them
  */
 export const deleteConnector = <ThrowOnError extends boolean = false>(options: Options<DeleteConnectorData, ThrowOnError>) => (options.client ?? client).delete<DeleteConnectorResponses, DeleteConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}', ...options });
 
@@ -4153,7 +4153,7 @@ export const getConnectorDocuments = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them
  */
 export const deleteConnectorDocument = <ThrowOnError extends boolean = false>(options: Options<DeleteConnectorDocumentData, ThrowOnError>) => (options.client ?? client).delete<DeleteConnectorDocumentResponses, DeleteConnectorDocumentErrors, ThrowOnError>({ url: '/api/connectors/{id}/documents/{docId}', ...options });
 
@@ -4171,7 +4171,7 @@ export const deleteConnectorDocument = <ThrowOnError extends boolean = false>(op
 export const getConnectorDocument = <ThrowOnError extends boolean = false>(options: Options<GetConnectorDocumentData, ThrowOnError>) => (options.client ?? client).get<GetConnectorDocumentResponses, GetConnectorDocumentErrors, ThrowOnError>({ url: '/api/connectors/{id}/documents/{docId}', ...options });
 
 /**
- * Restore a soft-deleted connector. The stored credential was destroyed when the connector was deleted, so it is restored DISABLED — re-authenticate, then re-enable it to resume syncing. 404 if there is no soft-deleted connector with that id in the org.
+ * Restore a soft-deleted connector. The stored credential was destroyed when the connector was deleted, so it is restored DISABLED — re-authenticate, then re-enable it to resume syncing. 404 if there is no soft-deleted connector with that id in the org that the caller may manage — restoring one is gated on the same visibility as editing or deleting it.
  *
  * Authentication:
  *
@@ -4179,7 +4179,7 @@ export const getConnectorDocument = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them
  */
 export const restoreConnector = <ThrowOnError extends boolean = false>(options: Options<RestoreConnectorData, ThrowOnError>) => (options.client ?? client).post<RestoreConnectorResponses, RestoreConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}/restore', ...options });
 
@@ -4192,7 +4192,7 @@ export const restoreConnector = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors
+ * `knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them
  */
 export const permanentlyDeleteConnector = <ThrowOnError extends boolean = false>(options: Options<PermanentlyDeleteConnectorData, ThrowOnError>) => (options.client ?? client).delete<PermanentlyDeleteConnectorResponses, PermanentlyDeleteConnectorErrors, ThrowOnError>({ url: '/api/connectors/{id}/permanent', ...options });
 

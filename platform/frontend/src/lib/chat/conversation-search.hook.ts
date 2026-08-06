@@ -2,7 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/consts";
+import {
+  NEW_INCOGNITO_CHAT_HREF,
+  SHORTCUT_NEW_CHAT,
+  SHORTCUT_NEW_INCOGNITO_CHAT,
+  SHORTCUT_SEARCH,
+} from "@/consts";
+import { useFeature } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
 export function useConversationSearch() {
@@ -10,6 +16,7 @@ export function useConversationSearch() {
   const [isOpen, setIsOpen] = useState(false);
   const [recentChatsView, setRecentChatsView] = useState(false);
   const { isMac } = usePlatform();
+  const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
 
   useEffect(() => {
     const handleOpenPalette = (event: Event) => {
@@ -46,6 +53,19 @@ export function useConversationSearch() {
         setIsOpen(false);
         router.push("/chat");
       }
+
+      // Alt + I: New Incognito Chat. Same Alt-qualified shape as Alt+N, and
+      // inert while the instance has incognito chats disabled.
+      if (
+        incognitoEnabled &&
+        event.altKey &&
+        event.code === SHORTCUT_NEW_INCOGNITO_CHAT.code
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsOpen(false);
+        router.push(NEW_INCOGNITO_CHAT_HREF);
+      }
     };
 
     window.addEventListener("open-conversation-search", handleOpenPalette);
@@ -55,7 +75,7 @@ export function useConversationSearch() {
       window.removeEventListener("open-conversation-search", handleOpenPalette);
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [router, isMac]);
+  }, [router, isMac, incognitoEnabled]);
 
   return {
     isOpen,

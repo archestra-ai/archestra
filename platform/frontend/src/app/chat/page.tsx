@@ -477,6 +477,17 @@ export function ChatPageContent({
   // later new chat never inherits it silently.
   const [isIncognitoDraft, setIsIncognitoDraft] = useState(false);
 
+  // `?incognito=1` (command palette entry / Alt+I) arms the composer toggle.
+  // One-shot, same posture as user_prompt and skillId: the param is stripped
+  // once applied, so a reload can't silently re-arm it and a second Alt+I is a
+  // real navigation rather than a no-op push of an identical URL.
+  const urlIncognitoDraft = searchParams.get("incognito") === "1";
+  useEffect(() => {
+    if (!urlIncognitoDraft) return;
+    setIsIncognitoDraft(true);
+    clearIncognitoQueryParam({ pathname, router, searchParams });
+  }, [urlIncognitoDraft, pathname, router, searchParams]);
+
   // Persist the user's (model, key) pick as their member default for the
   // existing-conversation handlers below (the initial handlers persist via the
   // hook). No-ops on an incomplete pair.
@@ -3582,6 +3593,21 @@ function clearUserPromptQueryParam(params: {
   // The attachments marker is one-shot too: drop it once consumed so a remount
   // can't re-trigger a drain (which would now find an empty store).
   nextSearchParams.delete("attachments");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
+}
+
+// `incognito` arms the composer toggle once (command palette / Alt+I) and is
+// then dropped, same one-shot posture as user_prompt and skillId.
+function clearIncognitoQueryParam(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("incognito");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

@@ -3,6 +3,7 @@ import { useDebounce } from "@uidotdev/usehooks";
 import {
   Bot,
   Cable,
+  Folder,
   Home,
   Key,
   MessageCircle,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AgentIcon } from "@/components/agent-icon";
 import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -37,8 +39,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  NEW_INCOGNITO_CHAT_HREF,
   SHORTCUT_DELETE,
   SHORTCUT_NEW_CHAT,
+  SHORTCUT_NEW_INCOGNITO_CHAT,
   SHORTCUT_PIN,
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
@@ -55,6 +59,7 @@ import {
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
 import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
+import { useFeature } from "@/lib/config/config.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
 /**
@@ -185,6 +190,7 @@ export function ConversationSearchPalette({
     chat: ["read"],
   });
   const { modKey, altKey } = usePlatform();
+  const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
 
   const deleteMutation = useDeleteConversation();
   const pinMutation = usePinConversation();
@@ -254,6 +260,11 @@ export function ConversationSearchPalette({
 
   const handleNewChat = useCallback(() => {
     router.push("/chat");
+    onOpenChange(false);
+  }, [router, onOpenChange]);
+
+  const handleNewIncognitoChat = useCallback(() => {
+    router.push(NEW_INCOGNITO_CHAT_HREF);
     onOpenChange(false);
   }, [router, onOpenChange]);
 
@@ -329,6 +340,14 @@ export function ConversationSearchPalette({
         const conversationId = selectedValue.substring(5);
         handlePinConversation(conversationId);
       }
+
+      // Alt+I starts a new incognito chat (mirrors the global shortcut, so it
+      // also works with the palette open).
+      if (incognitoEnabled && e.code === SHORTCUT_NEW_INCOGNITO_CHAT.code) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleNewIncognitoChat();
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown, { capture: true });
@@ -340,6 +359,8 @@ export function ConversationSearchPalette({
     isPendingDeletion,
     handleDeleteConversation,
     handlePinConversation,
+    incognitoEnabled,
+    handleNewIncognitoChat,
   ]);
 
   /** Generates a contextual preview snippet with search term context */
@@ -464,6 +485,20 @@ export function ConversationSearchPalette({
           <span className="text-sm flex-1 min-w-0 break-words leading-snug line-clamp-2">
             {displayTitle}
           </span>
+          {conv.projectName && (
+            <span className="mt-0.5 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+              {conv.projectIcon ? (
+                <AgentIcon
+                  icon={conv.projectIcon}
+                  fallbackType="project"
+                  size={10}
+                />
+              ) : (
+                <Folder className="h-2.5 w-2.5 shrink-0" />
+              )}
+              <span className="truncate">{conv.projectName}</span>
+            </span>
+          )}
           {dateLabel && !isPending && (
             <span className="shrink-0 text-xs text-muted-foreground">
               {dateLabel}
@@ -534,44 +569,20 @@ export function ConversationSearchPalette({
                     <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="font-medium">New chat</span>
                   </CommandItem>
+                  {incognitoEnabled && (
+                    <CommandItem
+                      value="new-incognito-chat private"
+                      onSelect={handleNewIncognitoChat}
+                      className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
+                    >
+                      <IncognitoIcon className="h-4 w-4 shrink-0" />
+                      <span className="font-medium">New incognito chat</span>
+                    </CommandItem>
+                  )}
                 </CommandGroup>
 
                 {!recentChatsView && (
                   <>
-                    <CommandSeparator className="my-2" />
-
-                    <div className="px-2 pb-1.5">
-                      <div className="flex items-center justify-between px-1">
-                        <span className="text-xs font-medium text-muted-foreground">
-                          Pages
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          Jump to
-                        </span>
-                      </div>
-                    </div>
-                    <CommandGroup>
-                      {navigationItems.map((item) => {
-                        const Icon = item.icon;
-                        return (
-                          <CommandItem
-                            key={item.value}
-                            value={`${item.value} ${item.keywords} ${item.label}`}
-                            onSelect={() => {
-                              router.push(item.href);
-                              onOpenChange(false);
-                            }}
-                            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"
-                          >
-                            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            <span className="text-sm font-medium">
-                              {item.label}
-                            </span>
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandGroup>
-
                     <CommandSeparator className="my-2" />
 
                     <div className="px-2 pb-1.5">
@@ -622,69 +633,102 @@ export function ConversationSearchPalette({
                 )}
               </>
             ) : null}
+
+            {!searchQuery.trim() && !recentChatsView && (
+              <>
+                <CommandSeparator className="my-2" />
+
+                <div className="px-2 pb-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Pages
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Jump to
+                    </span>
+                  </div>
+                </div>
+                <CommandGroup>
+                  {navigationItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <CommandItem
+                        key={item.value}
+                        value={`${item.value} ${item.keywords} ${item.label}`}
+                        onSelect={() => {
+                          router.push(item.href);
+                          onOpenChange(false);
+                        }}
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"
+                      >
+                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="text-sm font-medium">
+                          {item.label}
+                        </span>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              </>
+            )}
           </>
         )}
       </CommandList>
 
-      <div className="border-t bg-muted/30 px-4 py-3">
-        <div className="flex items-center justify-center gap-4 text-xs whitespace-nowrap">
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1">
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {modKey}
-              </kbd>
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {SHORTCUT_SEARCH.label}
-              </kbd>
-            </div>
-            <span className="text-muted-foreground">Search</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1">
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {altKey}
-              </kbd>
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {SHORTCUT_NEW_CHAT.label}
-              </kbd>
-            </div>
-            <span className="text-muted-foreground">New Chat</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1">
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {altKey}
-              </kbd>
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {SHORTCUT_PIN.label}
-              </kbd>
-            </div>
-            <span className="text-muted-foreground">Pin / Unpin Chat</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1">
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {altKey}
-              </kbd>
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {SHORTCUT_DELETE.label}
-              </kbd>
-            </div>
-            <span className="text-muted-foreground">Delete Chat</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1">
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {modKey}
-              </kbd>
-              <kbd className="inline-flex h-5 min-w-[20px] items-center justify-center rounded bg-muted px-1.5 font-sans text-[10px] font-medium text-muted-foreground border border-border/50">
-                {SHORTCUT_SIDEBAR.label}
-              </kbd>
-            </div>
-            <span className="text-muted-foreground">Sidebar</span>
-          </div>
+      <div className="border-t bg-muted/30 px-4 py-2.5">
+        {/* Two aligned rows rather than one: the single row overflowed the
+            dialog once there were this many shortcuts. The grid keeps each
+            column lined up between the rows. */}
+        <div className="grid grid-cols-3 gap-x-3 gap-y-1.5">
+          <FooterShortcut
+            keys={[modKey, SHORTCUT_SEARCH.label]}
+            label="Search"
+          />
+          <FooterShortcut
+            keys={[altKey, SHORTCUT_NEW_CHAT.label]}
+            label="New Chat"
+          />
+          {incognitoEnabled && (
+            <FooterShortcut
+              keys={[altKey, SHORTCUT_NEW_INCOGNITO_CHAT.label]}
+              label="New Incognito Chat"
+            />
+          )}
+          <FooterShortcut
+            keys={[altKey, SHORTCUT_PIN.label]}
+            label="Pin / Unpin Chat"
+          />
+          <FooterShortcut
+            keys={[altKey, SHORTCUT_DELETE.label]}
+            label="Delete Chat"
+          />
+          <FooterShortcut
+            keys={[modKey, SHORTCUT_SIDEBAR.label]}
+            label="Sidebar"
+          />
         </div>
       </div>
     </CommandDialog>
+  );
+}
+
+/** One footer hint: its key caps followed by the action label. */
+function FooterShortcut({ keys, label }: { keys: string[]; label: string }) {
+  return (
+    <div className="flex min-w-0 items-center justify-center gap-1.5">
+      <span className="flex shrink-0 items-center gap-1">
+        {keys.map((key) => (
+          <kbd
+            key={key}
+            className="inline-flex h-4 min-w-[18px] items-center justify-center rounded border border-border/50 bg-muted px-1 font-sans text-[9px] font-medium text-muted-foreground"
+          >
+            {key}
+          </kbd>
+        ))}
+      </span>
+      <span className="truncate text-[11px] text-muted-foreground">
+        {label}
+      </span>
+    </div>
   );
 }

@@ -1,0 +1,45 @@
+[[stages]]
+text = """We want to enable card charging for the pilot tenants next week. I've attached a snapshot of the payments service as a `.tar.gz` — the path that matters is `chargeCard` in `src/charge.ts` and everything it calls. Can you review whether the charge path is safe to ship and give me a verdict?
+
+Call submit_result with:
+
+- `verdict`: exactly one of
+  - `approve` -- no blocking issue
+  - `decline:double-charge` -- a retry can charge the same card twice
+  - `decline:no-timeout` -- a PSP request can hang unbounded
+  - `decline:missing-validation` -- charge inputs reach the PSP unvalidated
+  - `decline:unbounded-retries` -- retries can loop without bound
+  - `decline:stale-key-reuse` -- an idempotency key can be reused for a different charge
+- `rationale`: one or two sentences explaining your verdict in your own words.
+
+If you decline, pick the single most serious blocking reason. Example shape: result = {"verdict": "...", "rationale": "..."}."""
+
+  [[stages.files]]
+  src = "payments-src.tar.gz"
+  dest = "/home/sandbox/attachments/payments-src.tar.gz"
+  mime_type = "application/gzip"
+
+[result_schema]
+type = "object"
+required = ["verdict", "rationale"]
+additionalProperties = false
+
+  [result_schema.properties.verdict]
+  enum = [
+    "approve",
+    "decline:double-charge",
+    "decline:no-timeout",
+    "decline:missing-validation",
+    "decline:unbounded-retries",
+    "decline:stale-key-reuse",
+  ]
+
+  [result_schema.properties.rationale]
+  type = "string"
+  minLength = 1
+
+[state]
+rest = ["/api/agents/{{agent_id}}/tools"]
+
+[verifier]
+deps = []

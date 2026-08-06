@@ -124,6 +124,8 @@ Which Archestra capability each task is built to exercise. A task usually leans 
 | `author-skill` | archestra-api | ✓ | | | author | | | | state |
 | `letter-count` | archestra-api | | | | | | | | state |
 | `author-aec-normalizer-skill` | archestra-api | ✓ | ✓ | | author | | | | state |
+| `advisor-verdict-escalation` | advisor | ✓ | ✓ | | | | | red-herring | |
+| `advisor-recovery-loop` | advisor | ✓ | ✓ | | | | | messy-data | |
 
 - **Sandbox** — needs code execution in the per-conversation sandbox.
 - **File in** — a file is staged into the conversation as an attachment (PDF/DOCX/XLSX/SQLite/zip/tar.gz/
@@ -285,6 +287,16 @@ three tasks —
 `share_backend = true` and includes `repo-docs-app`, `access-request-app`, `standup-notes-app`, and
 `keyboard-kanban-app`.
 
+`advisor` is a routing regression suite for the **Advisor** feature, run with advised lanes only (see
+the advisor lane attribute under "Run"): each task is engineered so consulting the Advisor is the
+right move — a ship/no-ship code verdict whose deciding fact hides off the main path
+(`advisor-verdict-escalation`), and a data rollup whose obvious parse keeps failing
+(`advisor-recovery-loop`) — and each verifier asserts, via the tool-call snapshot, that a consult
+actually happened alongside the correct answer. An unadvised lane fails these by construction; that
+is the suite's contract, not a defect. Pass criteria are deliberately about *routing* (did the cheap
+executor escalate when it should), so a model that happens to one-shot the answer without consulting
+still fails — the suite measures the behavior, not the answer alone.
+
 ## Lifecycle: fresh backend over shared infra
 
 The harness does not run its own Tilt stack. It resolves a Dagger code-runtime engine (see the ladder
@@ -383,7 +395,21 @@ archestra-bench dashboard --experiments-dir experiments
 named `(provider, model)` endpoint defined in `lanes.toml`; the sweep is `env x lane`. Each `[[lane]]`
 carries a unique `name` (the selection handle), `provider` (`anthropic`/`openai`/`gemini`/`openrouter`),
 `model`, an optional `base_url` (e.g. an Anthropic-compatible gateway), and an optional `api_key_env`
-(default `<PROVIDER>_API_KEY`) — so two lanes can share a provider through different gateways/keys. The
+(default `<PROVIDER>_API_KEY`) — so two lanes can share a provider through different gateways/keys.
+
+A lane may also declare `advisor = "<other-lane-name>"`, turning it into an **advised arm**: its agents
+get the platform's built-in Advisor pointed at the referenced lane's model, plus an explicit
+`agent__advisor` delegation (explicit because the bench authenticates with a minted API key, for which
+the platform never auto-expands subagents). The referenced lane is only model configuration for the
+arm — it needs no rollouts of its own, its endpoint is embedded at load time so `--lanes` selection
+can't strip it, and it must not itself be advised. An advised lane always runs on an **isolated
+backend** regardless of the env's `share_backend`: the built-in Advisor is one row per platform
+environment, so its model is per-backend state that concurrent lanes must not share. Its cost is the
+sum of both models' spend — advisor rows are split off by the Advisor agent's id and priced at the
+advisor lane's slug, the rest at the lane's own — and each advised rollout's `run.json` carries
+`advisor_consult_count`, the advisor token share, and the advisor cost share (aggregated per group in
+`aggregate.json` and the report). The canonical A/B is three arms in one run: cheap alone,
+cheap+advisor, strong alone (e.g. `--lanes gemini-35-flash,gemini-35-flash-adv-glm,glm`). The
 `--lanes` flag selects lane names from the catalog (default: every lane), so you can define many and run
 one; `--lanes-file` overrides the catalog path. `--max-workers` runs that many lanes concurrently
 (default: one worker per selected lane, capped at 4); tasks within a lane stay serial. On `benchmark`,

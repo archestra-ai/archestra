@@ -102,3 +102,12 @@ model = "glm-5.2"
 base_url = "https://api.z.ai/api/anthropic"
 api_key_env = "ZAI_API_KEY"
 openrouter_model = "z-ai/glm-5.2"
+
+# Advisor A/B arms: run all three of gemini-35-flash (cheap alone),
+# gemini-35-flash-adv-glm (cheap + advisor), and glm (strong alone) in one
+# sweep for a paired comparison on identical tasks.
+[[lane]]
+name = "gemini-35-flash-adv-glm"
+provider = "openrouter"
+model = "google/gemini-3.5-flash"
+advisor = "glm"

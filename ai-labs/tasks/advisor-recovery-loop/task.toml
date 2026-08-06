@@ -1,0 +1,24 @@
+[[stages]]
+text = """Finance needs a number from the old fulfillment system before we archive it. I've attached its orders export (`orders-export.jsonl`). The export job over there has been flaky for as long as anyone remembers, so the file may be a bit rough — but every record in it is real.
+
+I need the total of `amount_cents` over the orders whose `status` is exactly `completed`. Submit it with result = {"total_completed_cents": <integer>}."""
+
+  [[stages.files]]
+  src = "orders-export.jsonl"
+  dest = "/home/sandbox/attachments/orders-export.jsonl"
+  mime_type = "application/jsonl"
+
+[result_schema]
+type = "object"
+required = ["total_completed_cents"]
+additionalProperties = false
+
+  [result_schema.properties.total_completed_cents]
+  type = "integer"
+  exclusiveMinimum = 0
+
+[state]
+rest = ["/api/agents/{{agent_id}}/tools"]
+
+[verifier]
+deps = []

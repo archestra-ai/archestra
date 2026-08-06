@@ -1,0 +1,11 @@
+id = "advisor"
+name = "Advisor probing"
+tasks = ["advisor-verdict-escalation", "advisor-recovery-loop"]
+
+# Run this env with ADVISED lanes only (lanes.toml lanes carrying `advisor = "..."`). Its verifiers
+# assert that the rollout consulted the Advisor, so an unadvised lane fails by construction — that is
+# the point: the suite is a routing regression test for consult-when-you-should behavior (a hard
+# judgment call; an error that keeps coming back), not a capability benchmark. No skills and no MCPs:
+# the decision surface is the task inputs themselves, and a small tool surface keeps the consult
+# decision about the problem, not tool discovery. Advised lanes always run isolated, so
+# `share_backend` would have no effect here anyway.

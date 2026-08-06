@@ -116,6 +116,15 @@ export const ProjectDetailSchema = ProjectListItemSchema.extend({
   // People a `user`-shared project names. Null when the caller cannot
   // manage sharing, matching how shareTeamIds is withheld.
   shareUserIds: z.array(z.string()).nullable(),
+  /**
+   * The org-wide agent preselected for new chats and scheduled tasks in this
+   * project; null = fall through to the organization default. Resolved and
+   * re-validated server-side, so a pin whose agent was deleted or rescoped
+   * reads as null rather than naming an agent the caller cannot use.
+   */
+  defaultAgent: z
+    .object({ id: z.string().uuid(), name: z.string() })
+    .nullable(),
 });
 export type ProjectDetail = z.infer<typeof ProjectDetailSchema>;
 

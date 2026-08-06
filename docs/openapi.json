@@ -279108,6 +279108,12 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 1000000
+                  },
+                  "defaultAgentId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
@@ -280357,6 +280363,25 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "defaultAgent": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -280374,7 +280399,8 @@
                     "createdAt",
                     "deletedAt",
                     "shareTeamIds",
-                    "shareUserIds"
+                    "shareUserIds",
+                    "defaultAgent"
                   ],
                   "additionalProperties": false
                 }
@@ -280622,7 +280648,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Update a project's name, description, and/or icon (owner or a project admin). Only the provided fields change.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
+        "description": "Update a project's name, description, icon, and/or default agent (owner or a project admin). Only the provided fields change. The default agent must be an organization-wide chat agent; null clears it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
         "requestBody": {
           "required": true,
           "content": {
@@ -280644,6 +280670,12 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 1000000
+                  },
+                  "defaultAgentId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 }
               }
@@ -281652,6 +281684,25 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "defaultAgent": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -281669,7 +281720,8 @@
                     "createdAt",
                     "deletedAt",
                     "shareTeamIds",
-                    "shareUserIds"
+                    "shareUserIds",
+                    "defaultAgent"
                   ],
                   "additionalProperties": false
                 }

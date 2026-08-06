@@ -254,10 +254,16 @@ function ProjectDetail() {
           )}
 
           <div className="space-y-6">
-            {canChat && <ProjectChatInput projectId={project.id} />}
+            {canChat && (
+              <ProjectChatInput
+                projectId={project.id}
+                defaultAgentId={project.defaultAgent?.id ?? null}
+              />
+            )}
             <ProjectSchedulesSection
               projectId={project.id}
               canCreate={canChat}
+              defaultAgentId={project.defaultAgent?.id ?? null}
             />
             {!isAdminView && <ChatsList conversations={conversations ?? []} />}
           </div>
@@ -289,7 +295,13 @@ function ProjectDetail() {
  * message rides {@link setPendingProjectChatHandoff} across the single navigation,
  * where `/chat/<id>` sends it as the conversation's first message.
  */
-function ProjectChatInput({ projectId }: { projectId: string }) {
+function ProjectChatInput({
+  projectId,
+  defaultAgentId,
+}: {
+  projectId: string;
+  defaultAgentId: string | null;
+}) {
   const router = useRouter();
   const createConversation = useCreateConversation();
   const { data: projectFiles } = useProjectFiles(projectId);
@@ -297,6 +309,7 @@ function ProjectChatInput({ projectId }: { projectId: string }) {
 
   return (
     <NewChatComposer
+      projectDefaultAgentId={defaultAgentId}
       onSubmit={({ text, agentId, modelId, apiKeyId }) => {
         // Ignore a second submit while the first create is still in flight.
         if (createConversation.isPending) return;

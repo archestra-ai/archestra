@@ -69,9 +69,12 @@ export function ProjectSchedulesSection({
    * new ones. Defaults to true (owner / shared collaborator).
    */
   canCreate = true,
+  /** The project's pinned agent, preselected when creating a schedule. */
+  defaultAgentId = null,
 }: {
   projectId: string;
   canCreate?: boolean;
+  defaultAgentId?: string | null;
 }) {
   // Without scheduledTask:read the schedules query can only 403 (and it polls,
   // so it would toast the permission error forever). Hide the section and
@@ -85,6 +88,7 @@ export function ProjectSchedulesSection({
     <ProjectSchedulesSectionContent
       projectId={projectId}
       canCreate={canCreate}
+      defaultAgentId={defaultAgentId}
     />
   );
 }
@@ -92,9 +96,11 @@ export function ProjectSchedulesSection({
 function ProjectSchedulesSectionContent({
   projectId,
   canCreate,
+  defaultAgentId,
 }: {
   projectId: string;
   canCreate: boolean;
+  defaultAgentId: string | null;
 }) {
   const { data } = useScheduleTriggers({ projectId, refetchInterval: 10000 });
   const { data: canCreateSchedules } = useHasPermissions({
@@ -135,6 +141,7 @@ function ProjectSchedulesSectionContent({
       {createOpen && (
         <ScheduleDialog
           projectId={projectId}
+          defaultAgentId={defaultAgentId}
           open={createOpen}
           onOpenChange={setCreateOpen}
         />
@@ -311,12 +318,15 @@ function ScheduleRow({
 function ScheduleDialog({
   projectId,
   schedule,
+  defaultAgentId = null,
   open,
   onOpenChange,
 }: {
   projectId: string;
   /** Present in edit mode; absent when creating. */
   schedule?: ScheduleTrigger;
+  /** The project's pinned agent; seeds a new schedule, never an edit. */
+  defaultAgentId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -341,7 +351,7 @@ function ScheduleDialog({
           timezone: schedule.timezone,
           messageTemplate: schedule.messageTemplate,
         }
-      : DEFAULT_FORM_STATE(),
+      : { ...DEFAULT_FORM_STATE(), agentId: defaultAgentId ?? "" },
   );
 
   // Hide other people's personal agents, like the standalone scheduled page.
@@ -384,7 +394,8 @@ function ScheduleDialog({
         ? await updateSchedule.mutateAsync({ id: schedule.id, body: fields })
         : await createSchedule.mutateAsync({ ...fields, projectId });
     if (result) {
-      if (!isEditing) setForm(DEFAULT_FORM_STATE());
+      if (!isEditing)
+        setForm({ ...DEFAULT_FORM_STATE(), agentId: defaultAgentId ?? "" });
       onOpenChange(false);
     }
   };

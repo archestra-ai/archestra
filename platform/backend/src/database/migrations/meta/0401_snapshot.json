@@ -1,5 +1,5 @@
 {
-  "id": "7d16b2a2-6f69-4db9-bea8-3607e45c10d8",
+  "id": "09b39b26-16fb-400e-b6f4-8d9ed4109cbf",
   "prevId": "8c75f0ce-a17a-40b6-a743-3ffd882ecbcc",
   "version": "7",
   "dialect": "postgresql",
@@ -6115,25 +6115,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "incognito": {
-          "name": "incognito",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "incognito_dek_fingerprint": {
-          "name": "incognito_dek_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "incognito_escrow": {
-          "name": "incognito_escrow",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "pinned_at": {
           "name": "pinned_at",
@@ -13918,6 +13899,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "default_agent_id": {
+          "name": "default_agent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -13996,6 +13983,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "projects_default_agent_id_agents_id_fk": {
+          "name": "projects_default_agent_id_agents_id_fk",
+          "tableFrom": "projects",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "default_agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },

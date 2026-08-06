@@ -8,6 +8,8 @@ import { isGlobalAdmin, userHasPermission } from "@/auth";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
+  AgentModel,
+  AgentTeamModel,
   ConversationModel,
   ConversationNotOwnedError,
   FileNameExistsError,
@@ -22,6 +24,7 @@ import {
 import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
+  AgentScope,
   Project,
   ProjectConversationItem,
   ProjectDetail,
@@ -38,6 +41,13 @@ import {
   sanitizeUploadFilename,
 } from "@/utils/upload-filename";
 
+/** Who a project reaches, which is what its default agent must cover. */
+type ProjectShareAudience = {
+  visibility: ProjectShareVisibility | null;
+  teamIds: string[];
+  userIds: string[];
+};
+
 /**
  * Projects: named collections of chats that own a set of result files
  * (`files.project_id`). Mutations are owner-only; access to the project (and so
@@ -50,11 +60,21 @@ class ProjectService {
     name: string;
     description: string | null;
     icon?: string | null;
+    defaultAgentId?: string | null;
   }): Promise<Project> {
     const name = params.name.trim();
     const invalid = validateProjectName(name);
     if (invalid) {
       throw new ApiError(400, `project name is invalid: ${invalid}`);
+    }
+    if (params.defaultAgentId) {
+      // A project is unshared at creation, so the creator is its whole audience.
+      await this.requirePinnableDefaultAgent({
+        agentId: params.defaultAgentId,
+        organizationId: params.organizationId,
+        ownerUserId: params.userId,
+        share: { visibility: null, teamIds: [], userIds: [] },
+      });
     }
     try {
       return await ProjectModel.create({
@@ -63,6 +83,7 @@ class ProjectService {
         name,
         description: params.description,
         icon: params.icon ?? null,
+        defaultAgentId: params.defaultAgentId ?? null,
       });
     } catch (error) {
       if (error instanceof ProjectNameExistsError) {
@@ -363,18 +384,48 @@ class ProjectService {
     allowAdminOversight?: boolean;
   }): Promise<ProjectDetail> {
     const { project, viewerRole } = await this.requireViewable(params);
-    const [share, counts, pins, ownerNames, shareTeams, shareUsers] =
-      await Promise.all([
-        ProjectShareModel.findByProjectId(project.id),
-        ProjectModel.countConversations([project.id]),
-        ProjectPinModel.getPinnedAtForProjects({
-          userId: params.userId,
-          projectIds: [project.id],
-        }),
-        UserModel.getNamesByIds([project.userId]),
-        ProjectShareModel.getShareTeamsForProjects([project.id]),
-        ProjectShareModel.getShareUsersForProjects([project.id]),
-      ]);
+    const [
+      share,
+      counts,
+      pins,
+      ownerNames,
+      shareTeams,
+      shareUsers,
+      defaultAgent,
+    ] = await Promise.all([
+      ProjectShareModel.findByProjectId(project.id),
+      ProjectModel.countConversations([project.id]),
+      ProjectPinModel.getPinnedAtForProjects({
+        userId: params.userId,
+        projectIds: [project.id],
+      }),
+      UserModel.getNamesByIds([project.userId]),
+      ProjectShareModel.getShareTeamsForProjects([project.id]),
+      ProjectShareModel.getShareUsersForProjects([project.id]),
+      project.defaultAgentId
+        ? AgentModel.findPinnableProjectDefault({
+            id: project.defaultAgentId,
+            organizationId: project.organizationId,
+          })
+        : null,
+    ]);
+    // Re-checked rather than returned raw: a pin can outlive its eligibility —
+    // the agent soft-deleted, rescoped, or the project shared more widely than
+    // the agent reaches — and reporting a stale one would preselect an agent
+    // the member cannot actually use.
+    const reachableDefaultAgent =
+      defaultAgent &&
+      (await this.agentReachesAudience({
+        agent: defaultAgent,
+        ownerUserId: project.userId,
+        share: {
+          visibility: share?.visibility ?? null,
+          teamIds: share?.teamIds ?? [],
+          userIds: share?.userIds ?? [],
+        },
+      }))
+        ? { id: defaultAgent.id, name: defaultAgent.name }
+        : null;
     // Share targets are visible to whoever can manage the project (so the edit
     // dialog can populate sharing): the owner, or a project admin — including on
     // a project merely shared with them (viewerRole "shared"), so they still get
@@ -408,12 +459,16 @@ class ProjectService {
           ? (shareUsers.get(project.id) ?? []).map((u) => u.name)
           : null,
       pinnedAt: pins.get(project.id) ?? null,
+      defaultAgent: reachableDefaultAgent,
       createdAt: project.createdAt,
       deletedAt: project.deletedAt,
     };
   }
 
-  /** Update name/description/icon (owner or project admin); only provided keys change. */
+  /**
+   * Update name/description/icon/default agent (owner or project admin); only
+   * provided keys change.
+   */
   async update(params: {
     id: string;
     organizationId: string;
@@ -421,12 +476,14 @@ class ProjectService {
     name?: string;
     description?: string | null;
     icon?: string | null;
+    defaultAgentId?: string | null;
   }): Promise<void> {
-    await this.requireManageable(params);
+    const project = await this.requireManageable(params);
     const fields: {
       name?: string;
       description?: string | null;
       icon?: string | null;
+      defaultAgentId?: string | null;
     } = {};
     if (params.name !== undefined) {
       const name = params.name.trim();
@@ -439,6 +496,29 @@ class ProjectService {
     if (params.description !== undefined)
       fields.description = params.description;
     if (params.icon !== undefined) fields.icon = params.icon;
+    if (params.defaultAgentId !== undefined) {
+      if (params.defaultAgentId !== null) {
+        await this.requirePinnableDefaultAgent({
+          agentId: params.defaultAgentId,
+          organizationId: params.organizationId,
+          ownerUserId: project.userId,
+          share: await this.loadShareAudience(params.id),
+        });
+      }
+      fields.defaultAgentId = params.defaultAgentId;
+    } else if (project.defaultAgentId) {
+      // Repair a pin that outlived its eligibility. The read path hides such a
+      // pin, so the editor is shown "no default" and cannot clear what it
+      // cannot see — leaving the row set means re-widening the agent's scope
+      // silently resurrects a pin the user was last told was absent.
+      const stillReachable = await this.agentReachesProjectAudience({
+        agentId: project.defaultAgentId,
+        organizationId: params.organizationId,
+        ownerUserId: project.userId,
+        share: await this.loadShareAudience(params.id),
+      });
+      if (!stillReachable) fields.defaultAgentId = null;
+    }
     if (Object.keys(fields).length === 0) return;
     try {
       await ProjectModel.update({ id: params.id, fields });
@@ -506,7 +586,7 @@ class ProjectService {
     teamIds: string[];
     userIds?: string[];
   }): Promise<void> {
-    await this.requireManageable(params);
+    const project = await this.requireManageable(params);
     // Org-wide visibility is a broadcast to the whole organization, so both
     // entering and leaving it are gated behind `project:share-org` — otherwise
     // any owner could publish to (or silently withdraw from) everyone.
@@ -523,6 +603,8 @@ class ProjectService {
     }
     if (params.visibility === null) {
       await ProjectShareModel.remove(params.id);
+      // Unsharing only ever narrows the audience, so a pin that was reachable
+      // before still is.
       return;
     }
     if (params.visibility === "team") {
@@ -535,6 +617,38 @@ class ProjectService {
       visibility: params.visibility,
       teamIds: params.teamIds,
       userIds: params.userIds ?? [],
+    });
+    await this.clearDefaultAgentBeyondAudience({
+      project,
+      share: {
+        visibility: params.visibility,
+        teamIds: params.teamIds,
+        userIds: params.userIds ?? [],
+      },
+    });
+  }
+
+  /**
+   * Widening a project's sharing can outgrow its pinned agent. Drop the pin
+   * rather than leave a row pointing at an agent the new audience cannot run —
+   * the read path would hide it anyway, and a stale row resurfaces if the
+   * project is later narrowed again.
+   */
+  private async clearDefaultAgentBeyondAudience(params: {
+    project: Project;
+    share: ProjectShareAudience;
+  }): Promise<void> {
+    if (!params.project.defaultAgentId) return;
+    const stillReachable = await this.agentReachesProjectAudience({
+      agentId: params.project.defaultAgentId,
+      organizationId: params.project.organizationId,
+      ownerUserId: params.project.userId,
+      share: params.share,
+    });
+    if (stillReachable) return;
+    await ProjectModel.update({
+      id: params.project.id,
+      fields: { defaultAgentId: null },
     });
   }
 
@@ -904,6 +1018,123 @@ class ProjectService {
       userId: params.userId,
       projectId: params.id,
     });
+  }
+
+  /**
+   * A project's default agent must be one every member of the project can
+   * actually use, however widely the project is shared. Org scope is what
+   * guarantees that, so it is enforced here rather than left to the picker.
+   */
+  private async requirePinnableDefaultAgent(params: {
+    agentId: string;
+    organizationId: string;
+    ownerUserId: string;
+    share: ProjectShareAudience;
+  }): Promise<void> {
+    if (
+      !(await this.agentReachesProjectAudience({
+        agentId: params.agentId,
+        organizationId: params.organizationId,
+        ownerUserId: params.ownerUserId,
+        share: params.share,
+      }))
+    ) {
+      throw new ApiError(
+        400,
+        "A project's default agent must be usable by everyone the project is shared with",
+      );
+    }
+  }
+
+  /**
+   * Whether every person the project reaches can actually run the agent. A pin
+   * nobody but the owner can see would silently drop those members back to the
+   * organization default, so eligibility is a function of the project's sharing
+   * rather than a fixed scope.
+   *
+   * An `org` agent always qualifies. Otherwise the audience decides: a team
+   * share needs a team agent covering every shared team, while a private or
+   * named-user share is small enough to check person by person.
+   */
+  private async agentReachesProjectAudience(params: {
+    agentId: string;
+    organizationId: string;
+    ownerUserId: string;
+    share: ProjectShareAudience;
+  }): Promise<boolean> {
+    const agent = await AgentModel.findPinnableProjectDefault({
+      id: params.agentId,
+      organizationId: params.organizationId,
+    });
+    if (!agent) return false;
+    return this.agentReachesAudience({
+      agent,
+      ownerUserId: params.ownerUserId,
+      share: params.share,
+    });
+  }
+
+  private async agentReachesAudience(params: {
+    agent: { id: string; scope: AgentScope };
+    ownerUserId: string;
+    share: ProjectShareAudience;
+  }): Promise<boolean> {
+    const { agent } = params;
+    if (agent.scope === "org") return true;
+
+    switch (params.share.visibility) {
+      // Nothing narrower than an `org` agent covers the whole organization.
+      case "organization":
+        return false;
+      case "team": {
+        if (agent.scope !== "team") return false;
+        const agentTeamIds = new Set(
+          await AgentTeamModel.getTeamsForAgent(agent.id),
+        );
+        const coversSharedTeams = params.share.teamIds.every((teamId) =>
+          agentTeamIds.has(teamId),
+        );
+        // The owner chats here too and may not belong to the teams the project
+        // is shared with. Leaving them out would accept a pin they cannot run,
+        // which unsharing would then have to take away again.
+        return (
+          coversSharedTeams &&
+          (await this.everyUserHasAgentAccess([params.ownerUserId], agent.id))
+        );
+      }
+      case "user":
+        return this.everyUserHasAgentAccess(
+          [params.ownerUserId, ...params.share.userIds],
+          agent.id,
+        );
+      // Unshared: the owner is the only person who ever starts a chat here.
+      default:
+        return this.everyUserHasAgentAccess([params.ownerUserId], agent.id);
+    }
+  }
+
+  private async everyUserHasAgentAccess(
+    userIds: string[],
+    agentId: string,
+  ): Promise<boolean> {
+    const checks = await Promise.all(
+      [...new Set(userIds)].map((userId) =>
+        AgentTeamModel.userHasAgentAccess(userId, agentId, false),
+      ),
+    );
+    return checks.every(Boolean);
+  }
+
+  /** The project's current sharing, as the pin-eligibility rule reads it. */
+  private async loadShareAudience(
+    projectId: string,
+  ): Promise<ProjectShareAudience> {
+    const share = await ProjectShareModel.findByProjectId(projectId);
+    return {
+      visibility: share?.visibility ?? null,
+      teamIds: share?.teamIds ?? [],
+      userIds: share?.userIds ?? [],
+    };
   }
 
   /** Project the caller may read, by id; "no access" reads as 404. */

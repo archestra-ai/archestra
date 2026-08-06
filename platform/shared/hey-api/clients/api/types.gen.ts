@@ -71589,6 +71589,7 @@ export type CreateProjectData = {
         name: string;
         description?: string | null;
         icon?: string | null;
+        defaultAgentId?: string | null;
     };
     path?: never;
     query?: never;
@@ -71962,6 +71963,10 @@ export type GetProjectResponses = {
         deletedAt: string | null;
         shareTeamIds: Array<string> | null;
         shareUserIds: Array<string> | null;
+        defaultAgent: {
+            id: string;
+            name: string;
+        } | null;
     };
 };
 
@@ -71972,6 +71977,7 @@ export type UpdateProjectData = {
         name?: string;
         description?: string | null;
         icon?: string | null;
+        defaultAgentId?: string | null;
     };
     path: {
         id: string;
@@ -72244,6 +72250,10 @@ export type RestoreProjectResponses = {
         deletedAt: string | null;
         shareTeamIds: Array<string> | null;
         shareUserIds: Array<string> | null;
+        defaultAgent: {
+            id: string;
+            name: string;
+        } | null;
     };
 };
 

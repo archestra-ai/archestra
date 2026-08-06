@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -8,6 +9,9 @@ import { useTeams } from "@/lib/teams/team.query";
 const mockRouterPush = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockUpdateMutateAsync = vi.fn();
+const mockSetShareMutateAsync = vi.fn();
+/** The detail the edit dialog loads; tests override the pin and sharing. */
+let mockEditingProject: Record<string, unknown> = {};
 const mockPinMutate = vi.fn();
 const mockRestoreMutate = vi.fn();
 const mockPermanentlyDeleteMutateAsync = vi.fn();
@@ -138,14 +142,16 @@ vi.mock("@/components/standard-dialog", () => ({
     title,
     children,
     footer,
+    onSubmit,
   }: {
     open: boolean;
     title: string;
     children: React.ReactNode;
     footer?: React.ReactNode;
+    onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   }) =>
     open ? (
-      <form>
+      <form onSubmit={onSubmit}>
         <h2>{title}</h2>
         {children}
         {footer}
@@ -253,17 +259,15 @@ vi.mock("@/lib/projects/projects.query", () => ({
     isPending: false,
   }),
   // The edit dialog fetches the project detail by id; return a minimal one.
-  useProject: () => ({
-    data: {
-      id: "owner",
-      name: "Owner project",
-      description: null,
-      icon: null,
-      visibility: null,
-      shareTeamIds: null,
-    },
+  useProject: () => ({ data: mockEditingProject }),
+  useSetProjectShare: () => ({
+    mutateAsync: mockSetShareMutateAsync,
+    isPending: false,
   }),
-  useSetProjectShare: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("@/lib/agent.query", () => ({
+  useInternalAgents: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/teams/team.query");
@@ -304,6 +308,18 @@ describe("ProjectsPageClient", () => {
     };
     mockDeleteMutateAsync.mockResolvedValue(true);
     mockUpdateMutateAsync.mockResolvedValue(true);
+    mockSetShareMutateAsync.mockResolvedValue(true);
+    mockEditingProject = {
+      id: "owner",
+      name: "Owner project",
+      description: null,
+      icon: null,
+      visibility: null,
+      shareTeamIds: null,
+      shareUserIds: null,
+      viewerRole: "owner",
+      defaultAgent: null,
+    };
     window.localStorage.clear();
   });
 
@@ -363,6 +379,111 @@ describe("ProjectsPageClient", () => {
 
     fireEvent.click(screen.getByText("Delete"));
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
+  });
+
+  it("hides the default-agent field from an editor without agent:read", () => {
+    mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
+
+    render(<ProjectsPageClient />);
+    fireEvent.click(screen.getByText("Edit details"));
+
+    // An empty picker would read as "this org has no agents" rather than
+    // "not yours to set".
+    expect(screen.queryByText("Default agent")).not.toBeInTheDocument();
+    expect(useInternalAgents).toHaveBeenCalledWith({ enabled: false });
+  });
+
+  it("shows the default-agent field to an editor with agent:read", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: permissions.agent?.includes("read") === true,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
+
+    render(<ProjectsPageClient />);
+    fireEvent.click(screen.getByText("Edit details"));
+
+    expect(screen.getByText("Default agent")).toBeInTheDocument();
+    expect(useInternalAgents).toHaveBeenCalledWith({ enabled: true });
+  });
+
+  describe("default agent, with agent:read granted", () => {
+    const PINNED = { id: "pinned", name: "Pinned Agent", scope: "org" };
+
+    /** Visibility options render label and description in one control. */
+    function clickOptionStartingWith(label: string) {
+      const option = screen
+        .getAllByRole("button")
+        .find((button) => button.textContent?.startsWith(label));
+      if (!option) throw new Error(`no visibility option for "${label}"`);
+      fireEvent.click(option);
+    }
+
+    beforeEach(() => {
+      // share-org too, or the Organization option renders disabled.
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions) =>
+          ({
+            data:
+              permissions.agent?.includes("read") === true ||
+              permissions.project?.includes("share-org") === true,
+          }) as ReturnType<typeof useHasPermissions>,
+      );
+      mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
+      mockEditingProject = {
+        ...mockEditingProject,
+        defaultAgent: { id: PINNED.id, name: PINNED.name },
+      };
+    });
+
+    it("keeps the saved pin selected once the agent list arrives", () => {
+      vi.mocked(useInternalAgents).mockReturnValue({
+        data: [PINNED],
+        isPending: false,
+      } as unknown as ReturnType<typeof useInternalAgents>);
+
+      render(<ProjectsPageClient />);
+      fireEvent.click(screen.getByText("Edit details"));
+
+      expect(screen.getByText("Pinned Agent")).toBeInTheDocument();
+    });
+
+    it("does not clear the saved pin while the agent list is still loading", () => {
+      // Every agent looks unreachable against an empty list, so an unguarded
+      // reset wipes the project's pin the moment the dialog opens.
+      vi.mocked(useInternalAgents).mockReturnValue({
+        data: undefined,
+        isPending: true,
+      } as unknown as ReturnType<typeof useInternalAgents>);
+
+      render(<ProjectsPageClient />);
+      fireEvent.click(screen.getByText("Edit details"));
+
+      expect(screen.queryByText("Default")).not.toBeInTheDocument();
+    });
+
+    it("saves the sharing change before the agent, which is judged against it", async () => {
+      vi.mocked(useInternalAgents).mockReturnValue({
+        data: [PINNED],
+        isPending: false,
+      } as unknown as ReturnType<typeof useInternalAgents>);
+
+      render(<ProjectsPageClient />);
+      fireEvent.click(screen.getByText("Edit details"));
+      // The visibility selector shows only the current choice until expanded.
+      clickOptionStartingWith("Personal");
+      clickOptionStartingWith("Organization");
+      fireEvent.click(screen.getByText("Save"));
+
+      await waitFor(() => expect(mockSetShareMutateAsync).toHaveBeenCalled());
+      await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalled());
+      // Sending the agent first would validate it against the old audience.
+      expect(mockSetShareMutateAsync.mock.invocationCallOrder[0]).toBeLessThan(
+        mockUpdateMutateAsync.mock.invocationCallOrder[0],
+      );
+    });
   });
 
   it("shows the load-error retry state, not the add-key prompt, when the keys request fails", () => {

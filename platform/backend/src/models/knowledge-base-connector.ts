@@ -60,7 +60,14 @@ class KnowledgeBaseConnectorModel {
             : undefined,
         ),
       )
-      .orderBy(desc(schema.knowledgeBaseConnectorsTable.createdAt))
+      // `id` breaks `createdAt` ties, which this paginates over: `createdAt`
+      // defaults to now(), the transaction timestamp, so rows inserted together
+      // are stamped identically and LIMIT/OFFSET over a non-total order can
+      // render a row twice and drop another.
+      .orderBy(
+        desc(schema.knowledgeBaseConnectorsTable.createdAt),
+        desc(schema.knowledgeBaseConnectorsTable.id),
+      )
       .$dynamic();
 
     if (params.limit !== undefined) {
@@ -164,10 +171,21 @@ class KnowledgeBaseConnectorModel {
         // column into arbitrary order. `deletedAt` is non-null across that
         // slice by construction (the `isNotNull` filter above), so no null
         // ordering.
+        //
+        // `id` breaks ties on both branches: LIMIT/OFFSET needs a total order,
+        // or a tie group straddling a page boundary renders a row twice and
+        // drops another. Ties are the normal case, not the edge one —
+        // `createdAt` defaults to now(), the transaction timestamp, so rows
+        // inserted together are stamped identically, and a cascade hands
+        // `softDelete` one shared `at` deliberately. The uuid is random: a
+        // determinism key, not a recency proxy. This settles the order for a
+        // fixed snapshot only — OFFSET paging still shifts under a concurrent
+        // restore/purge, which would take keyset pagination to close.
         .orderBy(
           status === "deleted"
             ? desc(schema.knowledgeBaseConnectorsTable.deletedAt)
             : desc(schema.knowledgeBaseConnectorsTable.createdAt),
+          desc(schema.knowledgeBaseConnectorsTable.id),
         )
         .limit(limit)
         .offset(offset),

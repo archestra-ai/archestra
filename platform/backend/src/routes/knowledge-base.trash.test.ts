@@ -284,6 +284,42 @@ describe("knowledge base + connector trash routes", () => {
     ]);
   });
 
+  test("the KB trash pages a deletedAt tie without repeating or dropping a row", async () => {
+    // A cascade hands `softDelete` one shared `at`, so a tie spanning a page
+    // boundary is the normal case rather than the edge one. `createdAt` runs
+    // opposite to the expected sequence, so the assertion can only pass on the
+    // `id` tiebreaker.
+    const tiedAt = new Date("2026-04-01T00:00:00Z");
+    const kbs = [
+      await makeKb("Tied one"),
+      await makeKb("Tied two"),
+      await makeKb("Tied three"),
+    ];
+    for (const [index, kb] of kbs.entries()) {
+      await stampLifecycle(schema.knowledgeBasesTable, kb.id, {
+        createdAt: new Date(Date.UTC(2026, 0, index + 1)),
+        deletedAt: tiedAt,
+      });
+    }
+
+    const page = async (offset: number) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/knowledge-bases?status=deleted&limit=2&offset=${offset}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json().data.map((k: { id: string }) => k.id);
+    };
+
+    // Descending uuid text order is descending uuid byte order, which is what
+    // Postgres sorts on.
+    const expected = kbs
+      .map((kb) => kb.id)
+      .sort()
+      .reverse();
+    expect([...(await page(0)), ...(await page(2))]).toEqual(expected);
+  });
+
   // ===== Connectors =====
 
   test("the connector trash sorts by deletedAt, the column it actually renders", async () => {
@@ -318,6 +354,36 @@ describe("knowledge base + connector trash routes", () => {
       newer.id,
       older.id,
     ]);
+  });
+
+  test("the connector trash pages a deletedAt tie without repeating or dropping a row", async () => {
+    const tiedAt = new Date("2026-04-01T00:00:00Z");
+    const connectors = [
+      await makeConnector("Tied one"),
+      await makeConnector("Tied two"),
+      await makeConnector("Tied three"),
+    ];
+    for (const [index, connector] of connectors.entries()) {
+      await stampLifecycle(schema.knowledgeBaseConnectorsTable, connector.id, {
+        createdAt: new Date(Date.UTC(2026, 0, index + 1)),
+        deletedAt: tiedAt,
+      });
+    }
+
+    const page = async (offset: number) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors?status=deleted&limit=2&offset=${offset}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json().data.map((c: { id: string }) => c.id);
+    };
+
+    const expected = connectors
+      .map((connector) => connector.id)
+      .sort()
+      .reverse();
+    expect([...(await page(0)), ...(await page(2))]).toEqual(expected);
   });
 
   test("the trash lists a connector whose stored config no longer parses, so it stays recoverable", async () => {

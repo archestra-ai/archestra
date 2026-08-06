@@ -67,10 +67,21 @@ class KnowledgeBaseModel {
       // by it — ordering by `createdAt` there would scatter the visible column
       // into arbitrary order. `deletedAt` is non-null across that slice by
       // construction (buildOrgFilters pins `isNotNull`), so no null ordering.
+      //
+      // `id` breaks ties on both branches: LIMIT/OFFSET needs a total order, or
+      // a tie group straddling a page boundary renders a row twice and drops
+      // another. Ties are the normal case, not the edge one — `createdAt`
+      // defaults to now(), the transaction timestamp, so rows inserted together
+      // are stamped identically, and a cascade hands `softDelete` one shared
+      // `at` deliberately. The uuid is random: a determinism key, not a recency
+      // proxy. This settles the order for a fixed snapshot only — OFFSET paging
+      // still shifts under a concurrent restore/purge, which would take keyset
+      // pagination to close.
       .orderBy(
         params.status === "deleted"
           ? desc(schema.knowledgeBasesTable.deletedAt)
           : desc(schema.knowledgeBasesTable.createdAt),
+        desc(schema.knowledgeBasesTable.id),
       )
       .$dynamic();
 

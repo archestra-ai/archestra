@@ -9,6 +9,15 @@ on:
   schedule:
     - cron: "0 3 * * *" # daily 03:00 UTC
   workflow_dispatch:
+    inputs:
+      envs:
+        description: "Comma-separated env ids to run (BENCH_ENVS)"
+        required: false
+        default: "basic"
+      lanes:
+        description: "Comma-separated lane names to run (BENCH_LANES)"
+        required: false
+        default: "glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-56-luna,mimo-25,qwen36-35b-a3b,qwen36-27b"
 
 permissions: {}
 
@@ -165,6 +174,9 @@ jobs:
           DAGGER_RUNNER_HOST: ${{ steps.dagger.outputs.runner_host }}
           DAGGER_ENGINE_POD: ${{ steps.dagger.outputs.pod_name }}
           RUN_NUMBER: ${{ steps.dagger.outputs.run_number }}
+          # Scheduled runs carry no inputs, so the fallbacks keep the daily sweep unchanged.
+          BENCH_ENVS: ${{ inputs.envs || 'basic' }}
+          BENCH_LANES: ${{ inputs.lanes || 'glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-56-luna,mimo-25,qwen36-35b-a3b,qwen36-27b' }}
         run: |
           set -euo pipefail
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
@@ -172,11 +184,11 @@ jobs:
           # is safe in the bench .env URL.
           POSTGRES_PASSWORD=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
           export BENCH_IMAGE PLATFORM_SA DAGGER_RUNNER_HOST DAGGER_ENGINE_POD RUN_NUMBER POSTGRES_PASSWORD
-          export GCS_BUCKET RUN_URL GITHUB_RUN_NUMBER GITHUB_RUN_ATTEMPT
+          export GCS_BUCKET RUN_URL GITHUB_RUN_NUMBER GITHUB_RUN_ATTEMPT BENCH_ENVS BENCH_LANES
           echo "run_number=${RUN_NUMBER}" >> "${GITHUB_OUTPUT}"
           # The single-quoted list is envsubst's allowlist of vars to expand (not shell expansion).
           # shellcheck disable=SC2016
-          envsubst '${BENCH_IMAGE} ${PLATFORM_SA} ${DAGGER_RUNNER_HOST} ${DAGGER_ENGINE_POD} ${RUN_NUMBER} ${POSTGRES_PASSWORD} ${GCS_BUCKET} ${RUN_URL} ${GITHUB_RUN_NUMBER} ${GITHUB_RUN_ATTEMPT}' \
+          envsubst '${BENCH_IMAGE} ${PLATFORM_SA} ${DAGGER_RUNNER_HOST} ${DAGGER_ENGINE_POD} ${RUN_NUMBER} ${POSTGRES_PASSWORD} ${GCS_BUCKET} ${RUN_URL} ${GITHUB_RUN_NUMBER} ${GITHUB_RUN_ATTEMPT} ${BENCH_ENVS} ${BENCH_LANES}' \
             < .github/bench/job.yaml | kubectl apply -f -
 
       # The pod runs the full benchmark and reports its own results (GCS + Slack), so CI does not wait

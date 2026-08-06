@@ -103,11 +103,25 @@ base_url = "https://api.z.ai/api/anthropic"
 api_key_env = "ZAI_API_KEY"
 openrouter_model = "z-ai/glm-5.2"
 
-# Advisor A/B arms: run all three of gemini-35-flash (cheap alone),
-# gemini-35-flash-adv-glm (cheap + advisor), and glm (strong alone) in one
-# sweep for a paired comparison on identical tasks.
+# Advisor A/B arms: run an advised lane together with its base lane and glm
+# (the advisor/strong arm) in one sweep for a paired comparison on identical
+# tasks — e.g. --lanes gemma-4-31b,gemma-4-31b-adv-glm,glm.
 [[lane]]
 name = "gemini-35-flash-adv-glm"
 provider = "openrouter"
 model = "google/gemini-3.5-flash"
+advisor = "glm"
+
+# Max-headroom arm: gemma-4-31b is the weakest paid lane, 44 points under glm.
+[[lane]]
+name = "gemma-4-31b-adv-glm"
+provider = "openrouter"
+model = "google/gemma-4-31b-it"
+advisor = "glm"
+
+# Cost-efficiency arm: mimo-25 is the cheapest near-90% lane.
+[[lane]]
+name = "mimo-25-adv-glm"
+provider = "openrouter"
+model = "xiaomi/mimo-v2.5"
 advisor = "glm"

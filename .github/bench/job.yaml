@@ -63,9 +63,9 @@ spec:
             - name: POSTGRES_PASSWORD
               value: "${POSTGRES_PASSWORD}"
             - name: BENCH_ENVS
-              value: "basic"
+              value: "${BENCH_ENVS}"
             - name: BENCH_LANES
-              value: "glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-56-luna,mimo-25,qwen36-35b-a3b,qwen36-27b"
+              value: "${BENCH_LANES}"
             # Setting the benchmark-owned engine host also turns on the code sandbox.
             - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
               value: "${DAGGER_RUNNER_HOST}"
@@ -103,7 +103,10 @@ spec:
               memory: 2Gi
             limits:
               cpu: "2"
-              memory: 4Gi
+              # Advised lanes (lanes.toml `advisor = ...`) each boot an isolated backend process in
+              # this pod alongside the shared-env one, so the burst ceiling covers several Node
+              # servers at once; the request is unchanged to keep scheduling pressure as before.
+              memory: 6Gi
           volumeMounts:
             - name: work
               mountPath: /work

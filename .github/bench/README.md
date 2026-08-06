@@ -60,8 +60,10 @@ All three are synced into the `archestra-bench-secrets` k8s secret each run, whe
 - `SLACK_BENCH_WEBHOOK_URL` — Slack incoming webhook for the summary message. If unset, the pod skips
   the Slack post.
 
-These cover every lane in `job.yaml`'s `BENCH_LANES` set. The `kimi` lane is not in that set and its
-`KIMI_API_KEY` is not synced — add both if you ever put it on the CI roster.
+These cover every lane in the workflow's default `BENCH_LANES` set (a `workflow_dispatch` input;
+the scheduled run uses the same default). The `kimi` lane is not in that set and its `KIMI_API_KEY`
+is not synced — add both if you ever put it on the CI roster, and mind that a dispatch selecting a
+lane whose key is not synced fails env seeding.
 
 The WIF auth and GKE creds reuse the existing
 `DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME` /

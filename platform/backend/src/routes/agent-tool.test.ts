@@ -1,6 +1,9 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { AgentModel, AgentToolModel, AgentVersionModel } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
@@ -878,6 +881,311 @@ describe("POST /api/agents/tools/bulk-assign", () => {
       );
 
     expect(assignment?.credentialResolutionMode).toBe("enterprise_managed");
+  });
+});
+
+describe("POST /api/agents/tools/bulk-update", () => {
+  let app: FastifyInstanceWithZod;
+  let adminUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
+    adminUser = await makeUser();
+    const org = await makeOrganization();
+    organizationId = org.id;
+
+    await makeMember(adminUser.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = adminUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    registerAuditLogHook(app);
+
+    const { default: agentToolRoutes } = await import("./agent-tool");
+    await app.register(agentToolRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("applies additions and removals for several agents in one request", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agentA = await makeAgent({ organizationId, authorId: adminUser.id });
+    const agentB = await makeAgent({ organizationId, authorId: adminUser.id });
+    const [keep, add, drop] = await Promise.all([
+      makeTool(),
+      makeTool(),
+      makeTool(),
+    ]);
+    await makeAgentTool(agentA.id, keep.id);
+    await makeAgentTool(agentA.id, drop.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: [
+          { agentId: agentA.id, toolId: add.id },
+          { agentId: agentB.id, toolId: add.id },
+        ],
+        removals: [{ agentId: agentA.id, toolId: drop.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.failed).toEqual([]);
+    expect(body.succeeded).toEqual(
+      expect.arrayContaining([
+        { agentId: agentA.id, toolId: add.id },
+        { agentId: agentB.id, toolId: add.id },
+      ]),
+    );
+    expect(body.removed).toEqual([{ agentId: agentA.id, toolId: drop.id }]);
+
+    const agentAToolIds = await AgentToolModel.findToolIdsByAgent(agentA.id);
+    expect(agentAToolIds.sort()).toEqual([add.id, keep.id].sort());
+    expect(await AgentToolModel.findToolIdsByAgent(agentB.id)).toEqual([
+      add.id,
+    ]);
+  });
+
+  // The whole point of the batch: one save is one version, not one per tool.
+  test("forks exactly one config version per agent regardless of tool count", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const versionBefore = (await AgentModel.findById(agent.id))?.latestVersion;
+
+    const toAdd = await Promise.all([makeTool(), makeTool(), makeTool()]);
+    const toDrop = await Promise.all([makeTool(), makeTool()]);
+    for (const tool of toDrop) {
+      await makeAgentTool(agent.id, tool.id);
+    }
+    // Assigning directly through the model does not fork, so the count below
+    // measures only what the route did.
+    const versionBeforeRoute = (await AgentModel.findById(agent.id))
+      ?.latestVersion;
+    expect(versionBeforeRoute).toBe(versionBefore);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: toAdd.map((tool) => ({
+          agentId: agent.id,
+          toolId: tool.id,
+        })),
+        removals: toDrop.map((tool) => ({
+          agentId: agent.id,
+          toolId: tool.id,
+        })),
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect((await AgentModel.findById(agent.id))?.latestVersion).toBe(
+      (versionBefore ?? 0) + 1,
+    );
+  });
+
+  // Regression guard: keying the fork off assignment results alone would record
+  // no version at all for a save that only removes tools.
+  test("forks a version for a removals-only save", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+    // Capture the assignment in the head snapshot. Without this the removal
+    // restores the config the agent was created with, and content-hash dedup
+    // correctly suppresses the fork — which would test nothing.
+    await AgentVersionModel.forkIfChanged(agent.id);
+    const versionBefore = (await AgentModel.findById(agent.id))?.latestVersion;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: [],
+        removals: [{ agentId: agent.id, toolId: tool.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().removed).toEqual([
+      { agentId: agent.id, toolId: tool.id },
+    ]);
+    expect((await AgentModel.findById(agent.id))?.latestVersion).toBe(
+      (versionBefore ?? 0) + 1,
+    );
+  });
+
+  // `notAssigned` is the removal-side twin of `duplicates`: a client working
+  // from a stale view must not see a no-op reported as a failed save.
+  test("reports an already-unassigned tool as notAssigned, not failed", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const tool = await makeTool();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: [],
+        removals: [{ agentId: agent.id, toolId: tool.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.failed).toEqual([]);
+    expect(body.removed).toEqual([]);
+    expect(body.notAssigned).toEqual([{ agentId: agent.id, toolId: tool.id }]);
+  });
+
+  test("re-assigning a tool with a changed credential mode reports it as succeeded", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id, {
+      credentialResolutionMode: "static",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            credentialResolutionMode: "dynamic",
+          },
+        ],
+        removals: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().succeeded).toEqual([
+      { agentId: agent.id, toolId: tool.id },
+    ]);
+
+    const [assignment] = await db
+      .select({
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(assignment?.credentialResolutionMode).toBe("dynamic");
+  });
+
+  // Agent ids come straight from the body, and the scope checks cannot catch a
+  // foreign tenant: they short-circuit for an admin, and "admin" means admin of
+  // the CALLER's organization.
+  test("does not touch an agent belonging to another organization", async ({
+    makeAgent,
+    makeOrganization,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const foreignAgent = await makeAgent({ organizationId: otherOrg.id });
+    const [existing, added] = await Promise.all([makeTool(), makeTool()]);
+    await makeAgentTool(foreignAgent.id, existing.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: [{ agentId: foreignAgent.id, toolId: added.id }],
+        removals: [{ agentId: foreignAgent.id, toolId: existing.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    // The agent is indistinguishable from one that does not exist.
+    expect(body.succeeded).toEqual([]);
+    expect(body.failed).toEqual([
+      {
+        agentId: foreignAgent.id,
+        toolId: added.id,
+        error: `Agent with ID ${foreignAgent.id} not found`,
+      },
+    ]);
+    expect(await AgentToolModel.findToolIdsByAgent(foreignAgent.id)).toEqual([
+      existing.id,
+    ]);
+  });
+
+  test("writes an audit record naming the affected agents and their assignments", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: adminUser.id });
+    const tool = await makeTool();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assignments: [{ agentId: agent.id, toolId: tool.id }],
+        removals: [],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    // The audit row is written fire-and-forget from the onResponse hook.
+    await new Promise((r) => setTimeout(r, 50));
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceType: "agentTool",
+      limit: 20,
+      offset: 0,
+    });
+    const row = data.find((r) => r.action === "agentTool.bulk_updated");
+
+    expect(row?.outcome).toBe("success");
+    // A per-agent snapshot, not the org-wide assignment count: the diff has to
+    // say WHICH agent got WHICH tool.
+    expect(row?.before).not.toBeNull();
+    expect(row?.after).not.toBeNull();
+    expect(row?.before).not.toEqual(row?.after);
+    expect(
+      (row?.after as { agents?: Record<string, unknown[]> } | null)?.agents?.[
+        agent.id
+      ],
+    ).toEqual([
+      expect.objectContaining({
+        toolId: tool.id,
+        credentialResolutionMode: "static",
+      }),
+    ]);
   });
 });
 

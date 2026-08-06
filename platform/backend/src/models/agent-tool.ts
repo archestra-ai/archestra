@@ -434,22 +434,33 @@ class AgentToolModel {
   static async deleteCatalogToolsForAgent(agentId: string): Promise<number> {
     const catalogToolIds =
       await AgentToolModel.findCatalogToolIdsByAgent(agentId);
-    return AgentToolModel.bulkDelete(agentId, catalogToolIds);
+    const deleted = await AgentToolModel.bulkDelete(agentId, catalogToolIds);
+    return deleted.length;
   }
 
-  static async bulkDelete(agentId: string, toolIds: string[]): Promise<number> {
-    if (toolIds.length === 0) return 0;
+  /**
+   * Delete several of one agent's assignments in a single statement, returning
+   * the tool ids that were actually removed. RETURNING (not rowCount) for the
+   * same reason as `delete` above: rowCount is not dependable under PGlite, and
+   * bulk callers distinguish a real removal from a tool that was not assigned.
+   */
+  static async bulkDelete(
+    agentId: string,
+    toolIds: string[],
+  ): Promise<string[]> {
+    if (toolIds.length === 0) return [];
 
-    const result = await db
+    const rows = await db
       .delete(schema.agentToolsTable)
       .where(
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           inArray(schema.agentToolsTable.toolId, toolIds),
         ),
-      );
+      )
+      .returning({ toolId: schema.agentToolsTable.toolId });
 
-    return result.rowCount || 0;
+    return rows.map((row) => row.toolId);
   }
 
   static async findToolIdsByAgent(agentId: string): Promise<string[]> {

@@ -5,12 +5,14 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import { getApiErrorMessage, handleApiError, throwOnApiError } from "./utils";
 
 const {
   assignToolToAgent,
   autoConfigureAgentToolPolicies,
   bulkAssignTools,
+  bulkUpdateAgentTools,
   getAllAgentTools,
   unassignToolFromAgent,
   updateAgentTool,
@@ -180,9 +182,12 @@ export function useBulkAssignTools() {
       mcpServerId?: string | null;
       skipInvalidation?: boolean;
     }) => {
-      const { data } = await bulkAssignTools({
+      const { data, error } = await bulkAssignTools({
         body: { assignments },
       });
+      // Without this a 403/404/500 resolves as a successful mutation, so
+      // callers report a save that never happened.
+      throwOnApiError(error);
       if (!data) return null;
       return { ...data, mcpServerId, skipInvalidation };
     },
@@ -224,6 +229,50 @@ export function useBulkAssignTools() {
       queryClient.invalidateQueries({
         queryKey: ["chat", "agents"],
       });
+    },
+  });
+}
+
+/**
+ * Apply a whole tool-selection edit — additions, credential changes, and
+ * removals — in one request.
+ *
+ * Prefer this over looping {@link useAssignTool}/{@link useUnassignTool}: every
+ * one of those requests forks its own agent config version, so a 30-tool server
+ * burns 30 of the agent's 100 retained versions and evicts the changes a human
+ * actually made. The batch forks once per affected agent.
+ */
+export function useBulkUpdateAgentTools() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      assignments = [],
+      removals = [],
+      skipInvalidation,
+    }: NonNullable<archestraApiTypes.BulkUpdateAgentToolsData["body"]> & {
+      skipInvalidation?: boolean;
+    }) => {
+      const { data, error } = await bulkUpdateAgentTools({
+        body: { assignments, removals },
+      });
+      throwOnApiError(error);
+      if (!data) return null;
+      return { ...data, skipInvalidation };
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+      if (result.skipInvalidation) return;
+
+      invalidateToolAssignmentQueries(
+        queryClient,
+        new Set([
+          ...result.succeeded.map((s) => s.agentId),
+          ...result.removed.map((r) => r.agentId),
+        ]),
+      );
+      // Assignment counts hang off server and catalog cards.
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
     },
   });
 }

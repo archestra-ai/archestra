@@ -65,6 +65,11 @@ export const BulkAgentToolAssignmentSchema =
     agentId: UuidIdSchema,
   });
 
+export const BulkAgentToolRemovalSchema = z.object({
+  agentId: UuidIdSchema,
+  toolId: UuidIdSchema,
+});
+
 export const AgentToolFilterSchema = z.object({
   search: z.string().max(TOOL_SEARCH_MAX_LENGTH).optional(),
   agentId: UuidIdSchema.optional(),

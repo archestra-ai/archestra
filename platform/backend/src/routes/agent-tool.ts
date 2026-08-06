@@ -268,7 +268,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.BulkUpdateAgentTools,
         description:
-          "Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool. If the same agent/tool pair appears in both lists, the assignment wins and the removal is ignored. A pair repeated within a list is written once but reported once per occurrence.",
+          "Apply a batch of tool assignments and removals across agents in one request. Intended for editors that save a whole tool selection at once: the batch produces a single config version per affected agent instead of one per tool. If the same agent/tool pair appears in both lists, the assignment wins and the removal is ignored. A pair repeated within a list is written once but reported once per occurrence. Agents the caller cannot modify are reported two different ways: an agent that belongs to another organization or no longer exists is reported per entry in `failed`, and the rest of the batch still applies; an agent in the caller's own organization whose agent type the caller lacks `update` on rejects the entire request with 403 and applies nothing.",
         tags: ["Agent Tools"],
         body: z
           .object({

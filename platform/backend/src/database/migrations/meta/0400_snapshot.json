@@ -1,6 +1,6 @@
 {
-  "id": "34f77871-0ced-445f-8573-d45d77632dd1",
-  "prevId": "85e02801-06ba-47a7-a4ba-0dc8c1577735",
+  "id": "8c75f0ce-a17a-40b6-a743-3ffd882ecbcc",
+  "prevId": "4601c8c7-bb51-438a-ac00-0660a13a5d76",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -6116,25 +6116,6 @@
           "notNull": true,
           "default": false
         },
-        "incognito": {
-          "name": "incognito",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "incognito_dek_fingerprint": {
-          "name": "incognito_dek_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "incognito_escrow": {
-          "name": "incognito_escrow",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "pinned_at": {
           "name": "pinned_at",
           "type": "timestamp",
@@ -7612,6 +7593,12 @@
         "request_last_message_idx": {
           "name": "request_last_message_idx",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "request_last_message_hash": {
+          "name": "request_last_message_hash",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": false
         },

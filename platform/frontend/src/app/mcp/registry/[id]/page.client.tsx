@@ -23,6 +23,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -599,6 +600,22 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
                       {environmentLabel ?? defaultEnvironment.name}
                     </OverviewField>
                   )}
+                  <OverviewField label="Accessible to">
+                    {/*
+                      `showSelfAsMe` because this is a labelled field rather
+                      than one badge among many in a list: the viewer's own
+                      personal server must still say "Me" instead of leaving
+                      the field blank.
+                    */}
+                    <ResourceVisibilityBadge
+                      scope={item.scope}
+                      teams={item.teams}
+                      authorId={item.authorId}
+                      authorName={item.authorName}
+                      currentUserId={currentUserId}
+                      showSelfAsMe
+                    />
+                  </OverviewField>
                   {endpoint && (
                     <OverviewField
                       label={variant === "remote" ? "Server URL" : "Command"}

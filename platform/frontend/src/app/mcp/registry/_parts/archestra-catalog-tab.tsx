@@ -348,6 +348,7 @@ function ServerCard({
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Docs"
+                aria-label={`Documentation for ${server.display_name || server.name} (opens in new tab)`}
               >
                 <BookOpen className="h-4 w-4" />
               </a>
@@ -365,6 +366,7 @@ function ServerCard({
                 target="_blank"
                 rel="noopener noreferrer"
                 title="GitHub"
+                aria-label={`GitHub repository for ${server.display_name || server.name} (opens in new tab)`}
               >
                 <Github className="h-4 w-4" />
               </a>
@@ -380,6 +382,13 @@ function ServerCard({
                 ? "Added"
                 : userAllowedToCreateCatalogItem
                   ? "Use as template"
+                  : "Ask an administrator to add this server to the registry"
+            }
+            aria-label={
+              isInCatalog
+                ? `${server.display_name || server.name} already added`
+                : userAllowedToCreateCatalogItem
+                  ? `Use ${server.display_name || server.name} as template`
                   : "Ask an administrator to add this server to the registry"
             }
             onClick={() => onSelectServer(server)}

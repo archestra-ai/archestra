@@ -725,9 +725,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
   [RouteId.RestoreAgent]: {},
+  [RouteId.PermanentlyDeleteAgent]: {},
   // Version history: agent-type read permission checked dynamically in handler
   [RouteId.GetAgentVersions]: {},
   [RouteId.GetAgentVersion]: {},
+  [RouteId.RestoreAgentVersion]: {},
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
@@ -1682,6 +1684,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
   [RouteId.RestoreSkill]: { skill: ["delete"] },
+  // Permanent deletion is irreversible, so the handler narrows this further to
+  // a built-in admin ROLE — no skill permission, `skill:admin` included, gets
+  // you past the trash.
+  [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
@@ -1710,6 +1716,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // Restore is the inverse of delete and, like the deleted-projects view, an
   // oversight action — the handler further narrows it to `project:admin`.
   [RouteId.RestoreProject]: { project: ["delete"] },
+  // Irreversible, so the handler narrows to a built-in admin ROLE — further
+  // than restore's `project:admin`, which a custom oversight role can hold.
+  // That also settles the org-wide-share question delete/restore have to ask:
+  // an admin role always holds `project:share-org`, so there is no separate
+  // branch here to answer 403 and leak a trashed project's existence.
+  [RouteId.PermanentlyDeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   // Project file surfaces combine project-level access with the files gate:
   // `file:manage` covers the file operations, while project membership is

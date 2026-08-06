@@ -14,7 +14,7 @@ import { z } from "zod";
 import {
   autoProvisionUser,
   buildWelcomeMessage,
-  isSsoConfigured,
+  resolveSignupWelcomeMode,
 } from "@/agents/chatops/auto-provision";
 import {
   applyChannelGate,
@@ -569,13 +569,13 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }
 
               // If this is a DM and user has a pending auto-provisioned invitation,
-              // send the signup link before the agent selection card.
-              // Skip when SSO is enabled — users just sign in via their IdP.
-              if (
-                isTeamsDm &&
-                message.senderEmail &&
-                !(await isSsoConfigured())
-              ) {
+              // send the signup (or SSO sign-in) link before the agent
+              // selection card.
+              const welcomeMode =
+                isTeamsDm && message.senderEmail
+                  ? await resolveSignupWelcomeMode()
+                  : "none";
+              if (message.senderEmail && welcomeMode !== "none") {
                 const invitations = await InvitationModel.findByEmail(
                   message.senderEmail.toLowerCase(),
                 );
@@ -584,6 +584,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 );
                 if (autoProvInv) {
                   const welcome = await buildWelcomeMessage({
+                    mode: welcomeMode,
                     invitationId: autoProvInv.id,
                     email: message.senderEmail,
                     name: message.senderName,
@@ -2271,17 +2272,22 @@ async function resolveAndVerifySenderForMSTeams(params: {
 
       // In channels, don't expose the signup link — ask user to DM the bot.
       // In DMs, the signup link is sent later (before the agent selection card).
-      // Skip entirely when SSO is enabled — users just sign in via their IdP.
       const isDm =
         context.activity.conversation?.conversationType === "personal";
-      if (announce && !isDm && !(await isSsoConfigured())) {
+      const welcomeMode =
+        announce && !isDm ? await resolveSignupWelcomeMode() : "none";
+      if (welcomeMode !== "none") {
         const botId = context.activity.recipient.id;
         const dmDeepLink = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(botId)}`;
         const appName = await OrganizationModel.getAppName();
+        const nextStep =
+          welcomeMode === "login"
+            ? `To use the ${appName} web app, send me a direct message and I'll send you a sign-in link.`
+            : `To finish signing up so you can use the ${appName} web app, send me a direct message and I'll send you a link to finish signing up.`;
         await context
           .sendActivity(
             `Hey there 👋 We created a ${appName} user for you (${message.senderEmail}). ` +
-              `To finish signing up so you can use the ${appName} web app, send me a direct message and I'll send you a link to finish signing up.\n\n` +
+              `${nextStep}\n\n` +
               `[Open DM with me](${dmDeepLink})`,
           )
           .catch(() => {});

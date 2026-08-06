@@ -3,7 +3,7 @@ title: Overview
 category: LLM Proxy
 order: 1
 description: Secure proxy for LLM provider interactions
-lastUpdated: 2026-07-19
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -125,6 +125,10 @@ curl -X POST "https://your-archestra-instance/v1/openai/chat/completions" \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+## Version History
+
+Every configuration change to a proxy is kept as a version. Open **Version history** from the proxy's row to browse them. Read what changed, and restore an earlier one. Restoring creates a new version — the history is never rewritten. See [Version History](/docs/platform-agents#version-history).
 
 ## Environment
 

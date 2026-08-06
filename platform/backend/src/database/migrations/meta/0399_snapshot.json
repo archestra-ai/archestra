@@ -1,5 +1,5 @@
 {
-  "id": "85e02801-06ba-47a7-a4ba-0dc8c1577735",
+  "id": "4601c8c7-bb51-438a-ac00-0660a13a5d76",
   "prevId": "f8490f0a-8931-4a39-85ec-9d47f3c3fe9b",
   "version": "7",
   "dialect": "postgresql",
@@ -5359,12 +5359,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "mcp_tool_calls_cursor_id": {
-          "name": "mcp_tool_calls_cursor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "completed_at": {
           "name": "completed_at",
           "type": "timestamp",
@@ -7593,6 +7587,12 @@
         "request_last_message_idx": {
           "name": "request_last_message_idx",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "request_last_message_hash": {
+          "name": "request_last_message_hash",
+          "type": "varchar",
           "primaryKey": false,
           "notNull": false
         },

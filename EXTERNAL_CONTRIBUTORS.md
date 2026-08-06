@@ -729,3 +729,5 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @kannabiran-v005
 - @princeakpabio8-prog
 - @claudioramirez1995x
+- @yagobisojuheart
+- @het0814

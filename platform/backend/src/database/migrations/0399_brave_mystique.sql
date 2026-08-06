@@ -1,1 +1,0 @@
-ALTER TABLE "content_encryption_state" ADD COLUMN "mcp_tool_calls_cursor_id" uuid;

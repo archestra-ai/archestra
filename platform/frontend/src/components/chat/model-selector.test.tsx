@@ -130,6 +130,46 @@ beforeEach(() => {
   setQuery({});
 });
 
+describe("clear control", () => {
+  // The trigger is itself a <button>. A clear control nested inside it is
+  // invalid HTML: React reports it, hydration breaks, and keyboard users
+  // cannot reach it separately from the trigger.
+  it.each([
+    "outline",
+    "default",
+  ] as const)("renders the clear control outside the trigger button (%s variant)", (variant) => {
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    renderSelector({ selectedModel: "m1", onClear: vi.fn(), variant });
+
+    const clear = screen.getByRole("button", { name: /clear model/i });
+    expect(clear.parentElement?.closest("button")).toBeNull();
+    expect(document.querySelector("button button")).toBeNull();
+  });
+
+  it("clears without opening the model dialog", () => {
+    const onClear = vi.fn();
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    renderSelector({ selectedModel: "m1", onClear, variant: "outline" });
+
+    fireEvent.click(screen.getByRole("button", { name: /clear model/i }));
+
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("dialog-content")).not.toBeInTheDocument();
+  });
+
+  it("does not offer the clear control while the selector is disabled", () => {
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    renderSelector({
+      selectedModel: "m1",
+      onClear: vi.fn(),
+      variant: "outline",
+      disabled: true,
+    });
+
+    expect(screen.getByRole("button", { name: /clear model/i })).toBeDisabled();
+  });
+});
+
 describe("ModelSelector coverage matrix", () => {
   it("shows the loading spinner while a real fetch is in flight", () => {
     setQuery({ isPending: true, isFetching: true, isLoading: true });

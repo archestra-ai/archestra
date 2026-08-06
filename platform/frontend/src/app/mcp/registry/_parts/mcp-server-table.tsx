@@ -15,6 +15,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
   type TableRowAction,
   TableRowActions,
@@ -65,6 +66,8 @@ export function McpServerTable({
   onCancelInstallation,
 }: McpServerTableProps) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
 
   const columns: ColumnDef<CatalogItem>[] = [
     {
@@ -111,11 +114,16 @@ export function McpServerTable({
     {
       id: "author",
       size: 140,
-      header: "Author",
+      header: "Accessible to",
       cell: ({ row }) => (
-        <span className="line-clamp-1 text-sm text-muted-foreground">
-          {row.original.authorName ?? "—"}
-        </span>
+        <ResourceVisibilityBadge
+          scope={row.original.scope}
+          teams={row.original.teams}
+          authorId={row.original.authorId}
+          authorName={row.original.authorName}
+          currentUserId={currentUserId}
+          showSelfAsMe
+        />
       ),
     },
     {

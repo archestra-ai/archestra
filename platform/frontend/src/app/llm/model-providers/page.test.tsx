@@ -144,15 +144,21 @@ vi.mock("@/components/ui/data-table", () => ({
     data: Array<{ id: string; name: string }>;
     columns: Array<{
       id?: string;
+      accessorKey?: string;
       cell?: (context: { row: { original: unknown } }) => React.ReactNode;
     }>;
   }) => {
     const actions = columns.find((column) => column.id === "actions");
+    // The Access cell is rendered too: it is the only column besides actions
+    // whose contents are asserted, and dropping it would let a blank
+    // ownership cell pass unnoticed.
+    const access = columns.find((column) => column.accessorKey === "scope");
     return (
       <div data-loading={isLoading}>
         {data.map((row) => (
           <div key={row.id}>
             <span>{row.name}</span>
+            {access?.cell?.({ row: { original: row } })}
             {actions?.cell?.({ row: { original: row } })}
           </div>
         ))}
@@ -204,7 +210,7 @@ vi.mock("@/components/ui/select", () => ({
 }));
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import ApiKeysPage from "./page";
@@ -305,6 +311,54 @@ describe("ApiKeysPage", () => {
       screen.queryByText("Existing ChatGPT credential"),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText("Connect")).toHaveLength(2);
+  });
+
+  it("names who each scoped credential is accessible to", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-me" } },
+    } as ReturnType<typeof useSession>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "k1",
+          name: "My key",
+          provider: "anthropic",
+          scope: "personal",
+          userId: "user-me",
+          userName: "My Name",
+        },
+        {
+          id: "k2",
+          name: "Colleague key",
+          provider: "anthropic",
+          scope: "personal",
+          userId: "user-other",
+          userName: "Dana",
+        },
+        {
+          id: "k3",
+          name: "Shared key",
+          provider: "anthropic",
+          scope: "org",
+          userId: null,
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    // The owner is the point: the backend already joins userName, and before
+    // this column showed only a generic scope word for every personal key.
+    // "Me" appears four times — the viewer's own key plus the three
+    // subscription rows, which are the viewer's own accounts by definition.
+    expect(screen.getAllByText("Me")).toHaveLength(4);
+    expect(screen.getByText("Dana")).toBeInTheDocument();
+    expect(screen.getByText("Organization")).toBeInTheDocument();
   });
 
   it("opens Connect with provider-specific subscription defaults", () => {

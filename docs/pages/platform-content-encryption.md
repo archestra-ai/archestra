@@ -31,7 +31,6 @@ Metadata stays in plaintext: timestamps, model names, token counts, tool and ser
 
 - Conversation search matches titles only — message bodies are ciphertext.
 - MCP log search matches server names and methods only — tool arguments and results are ciphertext.
-- Claude Code request delta-compression is disabled for new records, so LLM log storage grows faster. Pair encryption with [data retention](./platform-deployment#data-retention).
 - OTel spans stop carrying message/tool content by default — the [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](./platform-deployment#observability--metrics) default flips to `false` so plaintext content does not reach the telemetry backend while the database copies are encrypted. An explicit `true` re-enables capture (see the [observability docs](./platform-observability)) and logs a startup warning.
 
 ## Enabling on a Running Deployment

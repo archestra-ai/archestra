@@ -2,9 +2,10 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Pencil, Pin, PinOff, Trash2 } from "lucide-react";
+import { ArchiveRestore, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AgentIcon } from "@/components/agent-icon";
+import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { ScopeBadge } from "@/components/scope-badge";
 import {
@@ -14,10 +15,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   canDeleteProject,
   canManageProject,
 } from "@/lib/projects/project-permissions";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
 
@@ -160,6 +163,103 @@ export function ProjectsTable({
       getRowId={(row) => row.id}
       onRowClick={(row) => router.push(`/projects/${row.id}`)}
       emptyMessage="No projects yet"
+      hidePaginationWhenSinglePage
+    />
+  );
+}
+
+// The trash view: soft-deleted projects org-wide (the backend serves this slice
+// to project admins only). Rows deliberately do not navigate — the project page
+// would 404 on a deleted id — and the actions collapse to Restore + Delete
+// permanently, matching the agents and skills trash views.
+export function DeletedProjectsTable({
+  projects,
+  onRestore,
+  onPermanentlyDelete,
+}: {
+  projects: ProjectListItem[];
+  onRestore: (project: ProjectListItem) => void;
+  onPermanentlyDelete: (project: ProjectListItem) => void;
+}) {
+  const admin = useIsGlobalAdmin();
+
+  const columns: ColumnDef<ProjectListItem>[] = [
+    {
+      id: "name",
+      accessorKey: "name",
+      header: "Project",
+      size: 560,
+      cell: ({ row }) => {
+        const project = row.original;
+        return (
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0">
+                <AgentIcon
+                  icon={project.icon}
+                  fallbackType="project"
+                  size={16}
+                />
+              </span>
+              <span className="truncate font-medium">{project.name}</span>
+              {project.ownerName && (
+                <Badge variant="secondary">Owned by {project.ownerName}</Badge>
+              )}
+            </div>
+            {project.description && (
+              <div className="truncate text-xs text-muted-foreground">
+                {project.description}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "deleted",
+      size: 200,
+      header: "Deleted",
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {formatRelativeTimeFromNow(row.original.deletedAt)}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      size: 140,
+      header: () => <div className="text-right">Actions</div>,
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <TableRowActions
+            itemName={row.original.name}
+            actions={[
+              {
+                icon: <ArchiveRestore className="h-4 w-4" />,
+                label: "Restore",
+                // The route gates restore on `project:admin`, not
+                // `project:delete` — the same bar that serves this slice at
+                // all. A lower one here would disable Restore for exactly the
+                // oversight role the trash is built for.
+                permissions: { project: ["admin"] },
+                onClick: () => onRestore(row.original),
+              },
+              permanentDeleteRowAction({
+                admin,
+                onClick: () => onPermanentlyDelete(row.original),
+              }),
+            ]}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <DataTable
+      columns={columns}
+      data={projects}
+      getRowId={(row) => row.id}
       hidePaginationWhenSinglePage
     />
   );

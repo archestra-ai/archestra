@@ -88,7 +88,10 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import ArchestraPromptInput from "./prompt-input";
 
 describe("chat composer typing performance", () => {
@@ -101,6 +104,10 @@ describe("chat composer typing performance", () => {
       data: null,
       isLoading: false,
     } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useAppearanceSettings).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAppearanceSettings>);
     // Provider settings visible (so the toolbar renders both selectors),
     // everything else off (so the agent picker stays out of the tree).
     vi.mocked(useHasPermissions).mockImplementation(

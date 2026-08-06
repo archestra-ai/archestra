@@ -424,6 +424,8 @@ export function ConnectionJsonPanel({
       },
     );
   };
+  // Monaco's addAction registers its callback once on mount; the ref keeps
+  // that stable callback pointed at the latest closure.
   const handleApplyRef = useRef(handleApply);
   handleApplyRef.current = handleApply;
 

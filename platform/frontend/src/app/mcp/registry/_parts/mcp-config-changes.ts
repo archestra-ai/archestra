@@ -5,11 +5,6 @@ import {
   type ImportedMcpServer,
 } from "./mcp-config-import";
 
-/**
- * Whether the connection subset is empty. Deliberately EXCLUDES `name`:
- * Identity alone must never summon the Connection JSON row or its copy
- * affordance — an export affordance needs an existing connection object.
- */
 /** The `mcpServers` wrapper key — same derivation as the serializer. */
 export function connectionServerKey(values: McpCatalogFormValues): string {
   return values.name?.trim() || "server";

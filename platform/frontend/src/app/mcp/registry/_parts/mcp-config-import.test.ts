@@ -566,20 +566,20 @@ describe("serializeFormValuesToMcpJson round-trip", () => {
   });
 });
 
-describe("applyImportedServerToForm", () => {
-  function makeFormStub(initial: Record<string, unknown>) {
-    const values: Record<string, unknown> = { ...initial };
-    return {
-      form: {
-        getValues: (name: string) => values[name],
-        setValue: (name: string, value: unknown) => {
-          values[name] = value;
-        },
-      } as never,
-      values,
-    };
-  }
+function makeFormStub(initial: Record<string, unknown>) {
+  const values: Record<string, unknown> = { ...initial };
+  return {
+    form: {
+      getValues: (name: string) => values[name],
+      setValue: (name: string, value: unknown) => {
+        values[name] = value;
+      },
+    } as never,
+    values,
+  };
+}
 
+describe("applyImportedServerToForm", () => {
   function makeImportedServer(
     overrides: Partial<ImportedMcpServer["values"]>,
   ): ImportedMcpServer {
@@ -873,19 +873,6 @@ describe("applyImportedServerToForm", () => {
 });
 
 describe("mounted secret-file rows are outside the JSON contract", () => {
-  function makeFormStub(initial: Record<string, unknown>) {
-    const values: Record<string, unknown> = { ...initial };
-    return {
-      form: {
-        getValues: (name: string) => values[name],
-        setValue: (name: string, value: unknown) => {
-          values[name] = value;
-        },
-      } as never,
-      values,
-    };
-  }
-
   const mountedRow = {
     key: "TLS_CERT",
     type: "secret" as const,

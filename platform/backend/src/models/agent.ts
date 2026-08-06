@@ -2314,6 +2314,38 @@ class AgentModel {
     return row ?? null;
   }
 
+  /**
+   * A project's `default_agent_id` as a candidate: a live, non-built-in chat
+   * agent in the given organization, with the `scope` its caller needs to judge
+   * whether the project's audience can reach it (`projectService`).
+   *
+   * Callers run this on read as well as write — agents soft-delete, so the FK's
+   * SET NULL never fires and a pin outlives its target.
+   */
+  static async findPinnableProjectDefault(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<{ id: string; name: string; scope: AgentScope } | null> {
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        scope: schema.agentsTable.scope,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.id),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   private static async getOrCreateDefaultByType(
     agentType: "llm_proxy",
     defaultName: string,

@@ -187,7 +187,7 @@ import {
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
-import { useProjectFiles } from "@/lib/projects/projects.query";
+import { useProject, useProjectFiles } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -430,6 +430,13 @@ export function ChatPageContent({
   // for a new chat ("member" level).
   const { data: memberDefault } = useMemberDefaultModel();
 
+  // A new chat started from a project (`/chat?project=<id>`) takes the
+  // project's pinned agent. `isPending` stays true while the query is disabled,
+  // so the loading gate only applies when there is a project to wait for.
+  const newChatProjectId = searchParams.get("project");
+  const { data: newChatProject, isPending: isNewChatProjectPending } =
+    useProject(newChatProjectId ?? undefined);
+
   // Shared new-chat initialization (agent/model/key resolution + persistence).
   const {
     agentId: initialAgentId,
@@ -450,9 +457,11 @@ export function ChatPageContent({
     chatApiKeys,
     memberDefault: memberDefault ?? null,
     urlAgentId: searchParams.get("agentId"),
+    projectDefaultAgentId: newChatProject?.defaultAgent?.id ?? null,
     canUseSavedAgent: canSeeAgentPicker === true,
     isPermissionResolving: isAgentPickerPermissionLoading,
     isOrgLoading,
+    isProjectLoading: !!newChatProjectId && isNewChatProjectPending,
     routeConversationId,
   });
 

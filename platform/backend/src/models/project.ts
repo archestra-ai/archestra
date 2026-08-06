@@ -191,8 +191,10 @@ class ProjectModel {
 
   /**
    * Update the owner-editable fields. Only the keys present in `fields` are
-   * written, so a caller can change name, description, and/or icon
-   * independently. A duplicate name surfaces as {@link ProjectNameExistsError}.
+   * written, so a caller can change name, description, icon, and/or the default
+   * agent independently. A duplicate name surfaces as {@link ProjectNameExistsError}.
+   *
+   * `defaultAgentId` is validated by the service before it reaches here.
    */
   static async update(params: {
     id: string;
@@ -200,6 +202,7 @@ class ProjectModel {
       name?: string;
       description?: string | null;
       icon?: string | null;
+      defaultAgentId?: string | null;
     };
   }): Promise<void> {
     try {
@@ -218,6 +221,21 @@ class ProjectModel {
       }
       throw error;
     }
+  }
+
+  /**
+   * Unpin an agent from every project that named it as their default.
+   *
+   * Agents soft-delete, so the column's `ON DELETE SET NULL` never fires and
+   * the pin would outlive the agent — invisible on reads, but restoring the
+   * agent would silently re-pin those projects. Deliberately includes
+   * soft-deleted projects, whose pins would come back with them.
+   */
+  static async clearDefaultAgent(agentId: string): Promise<void> {
+    await db
+      .update(schema.projectsTable)
+      .set({ defaultAgentId: null, updatedAt: new Date() })
+      .where(eq(schema.projectsTable.defaultAgentId, agentId));
   }
 
   /**

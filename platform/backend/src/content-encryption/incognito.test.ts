@@ -150,11 +150,15 @@ describe("incognito escrow (enterprise)", () => {
     config.chatIncognito.escrowPublicKey = "not-a-pem";
     expect(() => verifyIncognitoChatConfig()).toThrow();
 
-    const small = generateKeyPairSync("rsa", { modulusLength: 1024 });
-    config.chatIncognito.escrowPublicKey = small.publicKey.export({
-      type: "spki",
-      format: "pem",
-    }) as string;
+    // Static throwaway 1024-bit public key: exists only to exercise the
+    // too-small rejection path (generating one at runtime trips security
+    // scanners on the weak-key-creation API).
+    config.chatIncognito.escrowPublicKey = `-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCuijYqImrbeLGs83Xm0Fu8aqas
+huvm2Xtra8nyKmJ/+agBugefYnrCSkhoZ6nnVVJWFkELzcempfxJ2sMrlZIm+fXl
+c9tWbk/SWCgWHRZ9sT8EpmU4/mcWkeEOdVMM9NJaX4rEZ3qAlQ5WOnipnRMUg6cK
+kt2mqWURg9/ZzdQ7GwIDAQAB
+-----END PUBLIC KEY-----`;
     expect(() => verifyIncognitoChatConfig()).toThrow(/at least 2048 bits/);
 
     // Non-RSA keys are rejected by type, not size.

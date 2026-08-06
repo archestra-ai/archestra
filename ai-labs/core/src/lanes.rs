@@ -515,7 +515,6 @@ openrouter_model = "z-ai/glm-5.2"
         assert_eq!(advisor.model, "glm-5.2");
         assert_eq!(advisor.key_env(), "ZAI_API_KEY");
         assert_eq!(advisor.price_model().as_deref(), Some("z-ai/glm-5.2"));
-        // The referenced lane itself carries no advisor.
         let all = load(body, None).unwrap();
         assert!(all[1].advisor.is_none());
     }

@@ -2387,8 +2387,9 @@ fn advisor_consult_count(run: &ChatRunResult) -> usize {
 /// no recorded LLM call is `NoSpend` (a real zero).
 ///
 /// An advised lane prices as the sum of two buckets: the advisor's rows (split off by agent in
-/// `sum_usage`) at `advisor_price_model`, the remainder at `price_model`. Two distinct models are
-/// then expected, so only a third one unprices the run.
+/// `sum_usage`) at `advisor_price_model`, the remainder at `price_model`. The advisor's own model is
+/// then accounted for, so the mixed-model guard applies to the *executor side*: any distinct model
+/// beyond the advisor's still unprices the run — including on an advised run that never consulted.
 fn run_cost(
     run: Option<&ChatRunResult>,
     prices: &PriceBook,
@@ -2412,13 +2413,19 @@ fn run_cost(
     if !usage.had_spend() {
         return RunCost::NoSpend;
     }
-    let expected_models = if usage.advisor.is_some() { 2 } else { 1 };
-    if usage.rows_with_null_tokens > 0 || usage.models.len() > expected_models {
+    if usage.rows_with_null_tokens > 0 {
         return RunCost::Unpriced;
     }
-    match usage.advisor.as_deref() {
+    match usage.advisor.as_deref().filter(|a| a.had_spend()) {
         // Advised and actually consulted: price each bucket at its own slug, both or nothing.
-        Some(advisor) if advisor.had_spend() => {
+        Some(advisor) => {
+            // The split accounts only for the advisor's model(s); a second model on the executor
+            // side (or a multi-model advisor, which should be impossible) is spend the two slugs
+            // cannot faithfully cover.
+            let executor_models = usage.models.iter().filter(|m| !advisor.models.contains(*m)).count();
+            if executor_models > 1 || advisor.models.len() > 1 {
+                return RunCost::Unpriced;
+            }
             let executor = |total: i64, advisor_share: i64| Some((total - advisor_share).max(0));
             let executor_cost = prices.cost(
                 executor(usage.prompt_tokens, advisor.prompt_tokens),
@@ -2439,17 +2446,23 @@ fn run_cost(
                 _ => RunCost::Unpriced,
             }
         }
-        // No advisor, or advised but never consulted: the whole spend is the lane model's.
-        _ => match prices.cost(
-            Some(usage.prompt_tokens),
-            Some(usage.completion_tokens),
-            Some(usage.cache_read_tokens),
-            Some(usage.cache_write_tokens),
-            price_model,
-        ) {
-            Some(c) => RunCost::Priced(c),
-            None => RunCost::Unpriced,
-        },
+        // No advisor, or advised but never consulted: the whole spend is the lane model's, and a
+        // second model means spend the lane slug cannot cover.
+        _ => {
+            if usage.models.len() > 1 {
+                return RunCost::Unpriced;
+            }
+            match prices.cost(
+                Some(usage.prompt_tokens),
+                Some(usage.completion_tokens),
+                Some(usage.cache_read_tokens),
+                Some(usage.cache_write_tokens),
+                price_model,
+            ) {
+                Some(c) => RunCost::Priced(c),
+                None => RunCost::Unpriced,
+            }
+        }
     }
 }
 
@@ -3732,6 +3745,42 @@ mod tests {
     fn advised_usage_with_a_third_model_is_unpriced() {
         let mut run = advised_run();
         run.usage.models.insert("vendor/mystery".to_string());
+        let cost = run_cost(
+            Some(&run),
+            &two_slug_book(),
+            Some("vendor/cheap"),
+            Some("vendor/strong"),
+        );
+        assert_eq!(cost, RunCost::Unpriced);
+    }
+
+    #[test]
+    fn advised_but_unconsulted_usage_with_two_models_is_unpriced() {
+        // The empty advisor bucket must not widen the mixed-model guard: with no consult, a second
+        // model is executor-side spend the lane slug cannot cover.
+        let mut run = advised_run();
+        run.usage.advisor = Some(Box::new(RunUsage::default()));
+        let cost = run_cost(
+            Some(&run),
+            &two_slug_book(),
+            Some("vendor/cheap"),
+            Some("vendor/strong"),
+        );
+        assert_eq!(cost, RunCost::Unpriced);
+    }
+
+    #[test]
+    fn consulted_usage_with_mixed_executor_models_is_unpriced() {
+        // Two models where NEITHER is the advisor's: the advisor allowance covers only its own model,
+        // so the executor side is mixed and unpriceable even though the total count is two.
+        let mut run = advised_run();
+        run.usage.models = ["vendor/cheap".to_string(), "vendor/other".to_string()]
+            .into_iter()
+            .collect();
+        if let Some(advisor) = &mut run.usage.advisor {
+            advisor.models = ["vendor/other2".to_string()].into_iter().collect();
+        }
+        run.usage.models.insert("vendor/other2".to_string());
         let cost = run_cost(
             Some(&run),
             &two_slug_book(),

@@ -194,9 +194,14 @@ fn group_json(key_name: &str, g: &GroupAggregate) -> serde_json::Value {
     {
         map.insert("advised_n".to_string(), g.advised_n.into());
         map.insert("advisor_consults".to_string(), g.advisor_consults.into());
+        // Nulled when any rollout is unpriced, mirroring `cost_usd_json`: the summed share would be
+        // incomplete, and a partial figure reads as a complete one.
         map.insert(
             "advisor_cost_usd".to_string(),
-            serde_json::Value::from(g.advisor_cost_usd),
+            match g.cost_unpriced_n {
+                0 => serde_json::Value::from(g.advisor_cost_usd),
+                _ => serde_json::Value::Null,
+            },
         );
     }
     value
@@ -300,13 +305,15 @@ fn stats(g: &GroupAggregate) -> String {
         (0, n) => format!("incomplete ({n} unpriced)"),
         (_, n) => format!("${:.4} (+{n} unpriced)", g.total_cost_usd),
     };
-    let advisor = if g.advised_n > 0 {
-        format!(
+    // The advisor share follows the group cost's honesty rule: with any unpriced rollout the summed
+    // share is incomplete, so don't render a complete-looking dollar figure.
+    let advisor = match (g.advised_n, g.cost_unpriced_n) {
+        (0, _) => String::new(),
+        (_, 0) => format!(
             " · advisor consults {} (${:.4})",
             g.advisor_consults, g.advisor_cost_usd
-        )
-    } else {
-        String::new()
+        ),
+        _ => format!(" · advisor consults {} (cost incomplete)", g.advisor_consults),
     };
     let failures = failure_summary(&g.outcomes);
     let tail = if failures.is_empty() {
@@ -463,6 +470,35 @@ mod tests {
         b.cost = RunCost::Unpriced;
         let md = render_markdown(&[a, b]);
         assert!(md.contains("(+1 unpriced)"), "incomplete total is loud: {md}");
+    }
+
+    #[test]
+    fn test_advisor_cost_goes_incomplete_with_any_unpriced_rollout() {
+        let mut a = result("basic", "t1", "l1", Outcome::Passed);
+        a.cost = RunCost::Priced(0.05);
+        a.advisor_consult_count = Some(2);
+        a.advisor_cost_usd = Some(0.01);
+        let mut b = result("basic", "t2", "l1", Outcome::Passed);
+        b.cost = RunCost::Unpriced; // its advisor share is unknown too
+        b.advisor_consult_count = Some(1);
+        let rows = [a, b];
+        let md = render_markdown(&rows);
+        // Consults still counted; the dollar figure is withheld rather than shown as a partial sum.
+        assert!(md.contains("advisor consults 3 (cost incomplete)"), "{md}");
+        let agg = aggregate(&rows);
+        let json = agg.to_json();
+        assert!(json["per_lane"][0]["advisor_cost_usd"].is_null());
+        assert_eq!(json["per_lane"][0]["advisor_consults"], 3);
+    }
+
+    #[test]
+    fn test_advisor_stats_render_when_fully_priced() {
+        let mut a = result("basic", "t1", "l1", Outcome::Passed);
+        a.cost = RunCost::Priced(0.05);
+        a.advisor_consult_count = Some(2);
+        a.advisor_cost_usd = Some(0.0123);
+        let md = render_markdown(&[a]);
+        assert!(md.contains("advisor consults 2 ($0.0123)"), "{md}");
     }
 
     #[test]

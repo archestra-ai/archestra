@@ -391,10 +391,21 @@ class AgentToolModel {
     const dbx = tx ?? db;
 
     // Row locks are taken in the order this VALUES list names them, so a stable
-    // order keeps two concurrent batches with overlapping pairs from deadlocking.
-    const ordered = [...values].sort((a, b) =>
-      `${a.agentId}:${a.toolId}`.localeCompare(`${b.agentId}:${b.toolId}`),
-    );
+    // order keeps two concurrent upserts with overlapping pairs from deadlocking
+    // against each other. It says nothing about a caller that also DELETEs rows
+    // in a separate statement of the same transaction — that order is not
+    // coordinated with this one.
+    //
+    // Byte order, not locale collation: the keys are UUID pairs, so there is no
+    // collation question to answer, and a locale-sensitive comparator would make
+    // the lock order depend on the process's resolved ICU locale.
+    const sortKey = (v: { agentId: string; toolId: string }) =>
+      `${v.agentId}:${v.toolId}`;
+    const ordered = [...values].sort((a, b) => {
+      const keyA = sortKey(a);
+      const keyB = sortKey(b);
+      return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+    });
 
     const rows = await dbx
       .insert(schema.agentToolsTable)

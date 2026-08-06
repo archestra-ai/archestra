@@ -403,10 +403,20 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Removals run before assignments so a tool being re-pinned to a
           // different credential in the same save cannot have its fresh
           // assignment deleted by a stale removal.
-          // Sorted so every request locks agents in the same order: two
-          // concurrent saves listing overlapping agents cannot deadlock.
+          //
+          // Sorted so the removal phase visits agents in the same order in every
+          // request — that is all the sort buys. Removals and assignments are
+          // separate phases whose locks are not ordered against each other, and
+          // one `DELETE ... IN (...)` locks its rows in plan order rather than
+          // in the order the list names them. Two saves that mirror each other's
+          // add/remove sets on one agent can therefore still deadlock; Postgres
+          // aborts one with 40P01 and that save rolls back.
+          //
+          // Byte order, not locale collation: agent ids are UUIDs, and a
+          // locale-sensitive comparator would make this order depend on the
+          // process's resolved ICU locale.
           for (const [agentId, toolIdSet] of [...removalToolIdsByAgent].sort(
-            ([a], [b]) => a.localeCompare(b),
+            ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
           )) {
             const toolIds = [...toolIdSet];
             const deletedToolIds = new Set(

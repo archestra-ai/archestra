@@ -528,7 +528,7 @@ args:
       says it without depending on which line Helm printed first.
     */}}
     if [ "$result" = blocked ]; then
-      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY CHECK INCONCLUSIVE  ⚠️ ⚠️ ⚠️  Could not reach {{ .host }}:9000 — disregard any enforcement result reported for this release"
+      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY CHECK INCONCLUSIVE  ⚠️ ⚠️ ⚠️  Could not reach {{ .host }}:9000, so enforcement was never measured — environment egress rules (MCP servers, code sandboxes) may be accepted and then silently ignored. Disregard any enforcement result reported for this release"
     fi
     exit 0
 {{- end }}
@@ -578,7 +578,7 @@ args:
       which is what carries the emphasis instead.
     */}}
     if [ "$result" = reachable ]; then
-      echo "[archestra] 🚨 🚨 🚨  NETWORK POLICY NOT ENFORCED  🚨 🚨 🚨  Egress rules are accepted and then silently ignored — see https://archestra.ai/docs/platform-environments#network-egress-policies"
+      echo "[archestra] 🚨 🚨 🚨  NETWORK POLICY NOT ENFORCED  🚨 🚨 🚨  Environment egress rules (MCP servers, code sandboxes) are accepted and then silently ignored — see https://archestra.ai/docs/platform-environments#network-egress-policies"
     else
       echo "[archestra] ✅ Network policy enforced"
     fi

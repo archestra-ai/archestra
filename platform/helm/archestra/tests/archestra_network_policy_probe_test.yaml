@@ -242,7 +242,12 @@ tests:
           pattern: 'NETWORK POLICY NOT ENFORCED'
         documentIndex: 2
       # The warning is one line with nowhere to explain itself, so it has to
-      # carry the way out.
+      # carry both what silently stops working and the way out. Helm output
+      # reaches an operator who has no environment editor in front of them.
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'MCP servers, code sandboxes'
+        documentIndex: 2
       - matchRegex:
           path: spec.containers[0].args[0]
           pattern: 'https://archestra\.ai/docs/platform-environments#network-egress-policies'
@@ -289,7 +294,14 @@ tests:
         documentIndex: 1
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'disregard any enforcement result reported for this release'
+          pattern: '[Dd]isregard any enforcement result reported for this release'
+        documentIndex: 1
+      # Unmeasured and unenforced leave the operator equally exposed, so this
+      # arm names the same consequence rather than only reporting that the
+      # probe could not run.
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'MCP servers, code sandboxes'
         documentIndex: 1
 
   # The platform looks for the verdict in the namespace it manages workloads in.

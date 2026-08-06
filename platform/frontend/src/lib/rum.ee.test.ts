@@ -398,6 +398,30 @@ describe("rumClient", () => {
     expect(eventsNamed("archestra.client_error")).toHaveLength(2);
   });
 
+  test("bounds throttle memory: after 256 distinct errors the map purges and repeats re-report", async () => {
+    rumClient.start();
+    const boom = (message: string) =>
+      window.dispatchEvent(
+        new ErrorEvent("error", {
+          error: new Error(message),
+          message,
+        }),
+      );
+    // 26 pages × 10 errors (the per-page cap) = 260 distinct fingerprints,
+    // crossing the 256-entry bound and triggering a purge.
+    for (let page = 0; page < 26; page++) {
+      rumClient.trackPageView(`/errpage-${page}`);
+      for (let k = 0; k < 10; k++) boom(`e-${page}-${k}`);
+    }
+    // The very first fingerprint's throttle entry was purged, so an
+    // immediate repeat reports again instead of being throttled.
+    rumClient.trackPageView("/errpage-final");
+    boom("e-0-0");
+    await vi.advanceTimersByTimeAsync(11_000);
+
+    expect(eventsNamed("archestra.client_error")).toHaveLength(261);
+  });
+
   test("auto-captures interactions with structural targets, never element text", async () => {
     rumClient.start();
     const button = document.createElement("button");

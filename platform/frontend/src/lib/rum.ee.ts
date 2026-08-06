@@ -521,6 +521,11 @@ class RumClient {
     if (lastSentAt !== undefined && now - lastSentAt < 1000) {
       return;
     }
+    // Bound the throttle memory for long-lived sessions with many distinct
+    // errors. A purge only means one extra report per repeating fingerprint.
+    if (this.lastErrorSentAt.size >= MAX_TRACKED_ERROR_FINGERPRINTS) {
+      this.lastErrorSentAt.clear();
+    }
     this.lastErrorSentAt.set(errorFingerprint, now);
     this.errorsOnPage += 1;
     this.track("archestra.client_error", {
@@ -589,6 +594,7 @@ const MAX_LONG_TASKS_PER_PAGE = 50;
 const MAX_CLIENT_ERRORS_PER_PAGE = 10;
 const MAX_API_REQUESTS_PER_PAGE = 200;
 const MAX_INTERACTIONS_PER_PAGE = 500;
+const MAX_TRACKED_ERROR_FINGERPRINTS = 256;
 // Splunk-parity set minus raw key/pointer chatter; keydown is captured as "a
 // key was pressed on this element", never which key.
 const INTERACTION_EVENT_TYPES = [

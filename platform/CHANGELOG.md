@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.28](https://github.com/archestra-ai/archestra/compare/platform-v1.3.27...platform-v1.3.28) (2026-08-06)
+
+
+### Features
+
+* **advisor:** consult a stronger model as a subagent ([#7088](https://github.com/archestra-ai/archestra/issues/7088)) ([f0a61c9](https://github.com/archestra-ai/archestra/commit/f0a61c9ccaa572a5759b5b6348c611f7e2d07012))
+* **agents:** browse and restore config versions for agents, gateways, and proxies ([#7121](https://github.com/archestra-ai/archestra/issues/7121)) ([21c9dd3](https://github.com/archestra-ai/archestra/commit/21c9dd3f6f22199c72be885856bc88d1993a0579))
+* **agents:** restore an agent's config to an earlier version ([#7112](https://github.com/archestra-ai/archestra/issues/7112)) ([0de74bb](https://github.com/archestra-ai/archestra/commit/0de74bbe84bfc0e73ca57aa85950652c759d216e))
+* **environments:** rename egress mode labels to Block all/Allowlist/Allow all ([#7110](https://github.com/archestra-ai/archestra/issues/7110)) ([7969cc8](https://github.com/archestra-ai/archestra/commit/7969cc85d607f1d69d2fe691a34fe615f676619e))
+* **trash:** permanent delete in the UI, and a trash view for projects ([#7120](https://github.com/archestra-ai/archestra/issues/7120)) ([83258fb](https://github.com/archestra-ai/archestra/commit/83258fb6028bf9608a78def23085b3f1656b894d))
+* **trash:** permanently delete an agent, skill, or project ([#7117](https://github.com/archestra-ai/archestra/issues/7117)) ([4b97ce3](https://github.com/archestra-ai/archestra/commit/4b97ce316815c49b3a35ffaaddbf840c89232637))
+
+
+### Bug Fixes
+
+* **frontend:** make visibility scope badges consistent across the app ([#7123](https://github.com/archestra-ai/archestra/issues/7123)) ([8c1a273](https://github.com/archestra-ai/archestra/commit/8c1a273a1a3036bd40095249bf4c73b73b065255))
+* **frontend:** registry a11y follow-ups — contrast and accessible names ([#7126](https://github.com/archestra-ai/archestra/issues/7126)) ([87c2e67](https://github.com/archestra-ai/archestra/commit/87c2e674ad8ef84e411e6bc30f82735567bb0215))
+* **frontend:** stop MCP catalog icons stretching on non-square SVGs ([#7109](https://github.com/archestra-ai/archestra/issues/7109)) ([b5b01d1](https://github.com/archestra-ai/archestra/commit/b5b01d17d3b86e34816d94a88014b6f047358228))
+* **k8s:** stop reporting enforcement the cluster was never measured for ([#7106](https://github.com/archestra-ai/archestra/issues/7106)) ([21b05c2](https://github.com/archestra-ai/archestra/commit/21b05c28a3d7b0cebd9da810d284382f3f26715f))
+* **llm-proxy:** keep Claude request delta-compression working under content encryption at rest ([#7125](https://github.com/archestra-ai/archestra/issues/7125)) ([3b243ed](https://github.com/archestra-ai/archestra/commit/3b243edf0f44941fe4b80fe20e88abbf65ff6188))
+* **mcp:** don't overwrite custom static Authorization headers with the caller's IdP JWT ([#7127](https://github.com/archestra-ai/archestra/issues/7127)) ([0dcffa1](https://github.com/archestra-ai/archestra/commit/0dcffa1f17c577056121099825fbb1d294256737))
+* prevent horizontal overflow in agent editor ([#7113](https://github.com/archestra-ai/archestra/issues/7113)) ([d3fd523](https://github.com/archestra-ai/archestra/commit/d3fd52301eac1f940e0b8a1c806c29211e555f0d))
+* **skills:** show the personal badge on a user's own skills ([#7118](https://github.com/archestra-ai/archestra/issues/7118)) ([4449461](https://github.com/archestra-ai/archestra/commit/4449461dae8d8e70beeb2ec55ca004e8e3639237))
+
 ## [1.3.27](https://github.com/archestra-ai/archestra/compare/platform-v1.3.26...platform-v1.3.27) (2026-08-05)
 
 

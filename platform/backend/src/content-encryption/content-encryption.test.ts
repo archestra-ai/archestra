@@ -35,6 +35,9 @@ function setKeys(current?: string, previous?: string) {
 
 async function dropTrgmIndex() {
   await db.execute(sql`DROP INDEX IF EXISTS "messages_content_trgm_idx"`);
+  await db.execute(
+    sql`DROP INDEX IF EXISTS "mcp_tool_calls_tool_result_trgm_idx"`,
+  );
 }
 
 const request = {
@@ -57,6 +60,27 @@ async function seedPlaintextInteraction(): Promise<string> {
 async function rawInteraction(id: string) {
   const result = await db.execute<{ request: unknown; response: unknown }>(
     sql`SELECT request, response FROM interactions WHERE id = ${id}::uuid`,
+  );
+  return result.rows[0];
+}
+
+const toolCall = {
+  id: "call-1",
+  name: "read_email",
+  arguments: { folder: "inbox" },
+};
+const toolResult = {
+  id: "call-1",
+  content: [{ type: "text", text: "top secret email body" }],
+  isError: false,
+};
+
+async function rawMcpToolCall(id: string) {
+  const result = await db.execute<{
+    tool_call: unknown;
+    tool_result: unknown;
+  }>(
+    sql`SELECT tool_call, tool_result FROM mcp_tool_calls WHERE id = ${id}::uuid`,
   );
   return result.rows[0];
 }
@@ -177,6 +201,77 @@ describe("content encryption", () => {
       );
       expect(byContentId?.id).toBe(message.id);
     });
+
+    test("mcp tool calls are encrypted at rest, reads and search stay coherent", async () => {
+      setKeys(SECRET_A);
+      const { McpToolCallModel } = await import("@/models");
+      const created = await McpToolCallModel.create({
+        mcpServerName: "email-server",
+        method: "tools/call",
+        toolCall,
+        toolResult,
+      });
+      // Public return value is plaintext…
+      expect(created.toolCall).toEqual(toolCall);
+      expect(created.toolResult).toEqual(toolResult);
+
+      // …while the stored row is an envelope for both content columns.
+      const raw = await rawMcpToolCall(created.id);
+      expect(isContentEnvelope(raw.tool_call)).toBe(true);
+      expect(isContentEnvelope(raw.tool_result)).toBe(true);
+
+      const found = await McpToolCallModel.findById(created.id);
+      expect(found?.toolCall).toEqual(toolCall);
+      expect(found?.toolResult).toEqual(toolResult);
+
+      const pagination = { limit: 10, offset: 0, page: 1 };
+      const listed = await McpToolCallModel.findAllPaginated(pagination);
+      expect(listed.data[0].toolResult).toEqual(toolResult);
+
+      // Search degrades to metadata: the ciphertext cannot match result
+      // content, but server-name search still works.
+      const byContent = await McpToolCallModel.findAllPaginated(
+        pagination,
+        undefined,
+        undefined,
+        undefined,
+        { search: "secret email body" },
+      );
+      expect(byContent.data).toHaveLength(0);
+      const byServer = await McpToolCallModel.findAllPaginated(
+        pagination,
+        undefined,
+        undefined,
+        undefined,
+        { search: "email-server" },
+      );
+      expect(byServer.data).toHaveLength(1);
+    });
+
+    test("first-successful-call scan decrypts results instead of trusting SQL isError", async () => {
+      setKeys(SECRET_A);
+      const { McpToolCallModel } = await import("@/models");
+      // Oldest row is an encrypted ERROR — the plain SQL predicate cannot see
+      // into the envelope and would misread it as the first success.
+      const errorCall = await McpToolCallModel.create({
+        mcpServerName: "email-server",
+        method: "tools/call",
+        toolCall,
+        toolResult: { ...toolResult, isError: true },
+      });
+      expect(await McpToolCallModel.getFirstSuccessfulToolCallAt()).toBeNull();
+
+      const successCall = await McpToolCallModel.create({
+        mcpServerName: "email-server",
+        method: "tools/call",
+        toolCall,
+        toolResult,
+      });
+      const firstSuccessAt =
+        await McpToolCallModel.getFirstSuccessfulToolCallAt();
+      expect(firstSuccessAt).toEqual(successCall.createdAt);
+      expect(firstSuccessAt).not.toEqual(errorCall.createdAt);
+    });
   });
 
   describe("backfill + rotation sweep", () => {
@@ -198,6 +293,40 @@ describe("content encryption", () => {
       // Steady state is an O(1) no-op.
       const again = await runContentEncryptionBackfill({});
       expect(again).toEqual({ status: "completed", rowsRewritten: 0 });
+    });
+
+    test("encrypts pre-existing plaintext tool-call rows and re-encrypts them on rotation", async () => {
+      const [seeded] = await db
+        .insert(schema.mcpToolCallsTable)
+        .values({
+          mcpServerName: "email-server",
+          method: "tools/call",
+          toolCall,
+          toolResult,
+        })
+        .returning({ id: schema.mcpToolCallsTable.id });
+      setKeys(SECRET_A);
+      await dropTrgmIndex();
+
+      const result = await runContentEncryptionBackfill({});
+      expect(result.status).toBe("completed");
+      const raw = await rawMcpToolCall(seeded.id);
+      expect(isContentEnvelope(raw.tool_call)).toBe(true);
+      expect(isContentEnvelope(raw.tool_result)).toBe(true);
+      expect(
+        decryptContentValue(raw.tool_result, "mcp_tool_calls.tool_result"),
+      ).toEqual(toolResult);
+
+      // Rotation re-encrypts under the new key; the old key can then go.
+      setKeys(SECRET_B, SECRET_A);
+      expect((await runContentEncryptionBackfill({})).status).toBe("completed");
+      setKeys(SECRET_B, undefined);
+      expect(
+        decryptContentValue(
+          (await rawMcpToolCall(seeded.id)).tool_result,
+          "mcp_tool_calls.tool_result",
+        ),
+      ).toEqual(toolResult);
     });
 
     test("restartIfCompleted re-sweeps plaintext rows stranded behind a completed sweep", async () => {
@@ -230,6 +359,54 @@ describe("content encryption", () => {
       );
     });
 
+    test("resumes after upgrade: clearing completed_at sweeps mcp_tool_calls without an operator run", async () => {
+      // Pre-upgrade state: encryption enabled and the interactions+messages
+      // sweep finished (completed_at set, cursors at their final positions).
+      const interactionId = await seedPlaintextInteraction();
+      setKeys(SECRET_A);
+      await dropTrgmIndex();
+      await runContentEncryptionBackfill({});
+
+      // A tool-call row the pre-upgrade binary never encrypted.
+      const [seeded] = await db
+        .insert(schema.mcpToolCallsTable)
+        .values({
+          mcpServerName: "email-server",
+          method: "tools/call",
+          toolCall,
+          toolResult,
+        })
+        .returning({ id: schema.mcpToolCallsTable.id });
+
+      // Migration 0400's data statement.
+      await db.execute(
+        sql`UPDATE content_encryption_state SET completed_at = NULL WHERE completed_at IS NOT NULL`,
+      );
+
+      // The ordinary background sweep — no restartIfCompleted — resumes and
+      // encrypts the historical tool call. The already-encrypted interaction
+      // is skipped, not rewritten.
+      const resumed = await runContentEncryptionBackfill({});
+      expect(resumed.status).toBe("completed");
+      const raw = await rawMcpToolCall(seeded.id);
+      expect(isContentEnvelope(raw.tool_call)).toBe(true);
+      expect(
+        decryptContentValue(raw.tool_result, "mcp_tool_calls.tool_result"),
+      ).toEqual(toolResult);
+      expect(
+        decryptContentValue(
+          (await rawInteraction(interactionId)).request,
+          "interactions.request",
+        ),
+      ).toEqual(request);
+
+      // Steady state again afterwards.
+      expect(await runContentEncryptionBackfill({})).toEqual({
+        status: "completed",
+        rowsRewritten: 0,
+      });
+    });
+
     test("re-encrypts previous-key rows after rotation", async () => {
       const interactionId = await seedPlaintextInteraction();
       setKeys(SECRET_A);
@@ -256,10 +433,16 @@ describe("content encryption", () => {
       });
 
       setKeys(SECRET_A);
-      // The sweep must refuse to rewrite message rows while an index with
-      // this name exists (detection is by name via to_regclass).
+      // The sweep must refuse to rewrite rows while an index with either
+      // encrypted-content name exists (detection is by name via to_regclass).
       await db.execute(
         sql`CREATE INDEX IF NOT EXISTS "messages_content_trgm_idx" ON messages (id)`,
+      );
+      expect((await runContentEncryptionBackfill({})).status).toBe("deferred");
+      await dropTrgmIndex();
+
+      await db.execute(
+        sql`CREATE INDEX IF NOT EXISTS "mcp_tool_calls_tool_result_trgm_idx" ON mcp_tool_calls (id)`,
       );
       expect((await runContentEncryptionBackfill({})).status).toBe("deferred");
       await dropTrgmIndex();

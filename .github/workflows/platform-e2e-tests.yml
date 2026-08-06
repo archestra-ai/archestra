@@ -469,8 +469,17 @@ jobs:
           projects: api-k8s --project=vault-k8s
           timeout: "20"
 
+      # continue-on-error: this artifact is diagnostics for the NON-required
+      # `Publish E2E Report` job — the required gate ("Merge E2E Test Reports")
+      # reads `needs.*.result` only and never touches the blob. Without this, a
+      # transient artifact-service outage fails the job on the upload step even
+      # when the whole suite passed, and the real verdict below never gets to
+      # speak: a green run ("25 passed") was ejected from the merge queue that
+      # way. Test failures are still fatal — they are gated by "Fail if K8s-bound
+      # E2E tests failed" further down, which reads steps.e2e.outcome.
       - name: Upload blob report
         if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: ./.github/actions/github-upload-artifact
         with:
           # Suffixed so the report job's blob-report-* download glob (which
@@ -676,8 +685,13 @@ jobs:
           timeout: "20"
           env_file: /tmp/lite-e2e.env
 
+      # continue-on-error: see the note on the K8s leg's upload. Diagnostics for
+      # the non-required report job must not be able to fail this one. A red
+      # suite is still fatal here — unlike the K8s leg, the e2e step above is
+      # not continue-on-error, so a test failure fails the job at that step.
       - name: Upload blob report
         if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-lite-${{ matrix.name }}
@@ -1012,8 +1026,12 @@ jobs:
           extra_args: "--grep '@quickstart'"
           env_file: /tmp/quickstart-e2e.env
 
+      # continue-on-error: see the note on the K8s leg's upload. As with the lite
+      # leg, the e2e step above is not continue-on-error, so a failing suite
+      # still fails this job before the upload ever runs.
       - name: Upload blob report
         if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-quickstart

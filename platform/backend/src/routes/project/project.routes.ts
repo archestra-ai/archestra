@@ -353,33 +353,24 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/projects/:id/permanent",
     {
       schema: {
-        operationId: RouteId.PurgeProject,
+        operationId: RouteId.PermanentlyDeleteProject,
         description:
-          "Permanently delete a soft-deleted project (admins only). Destroys " +
-          "its retained files (rows and stored bytes) and scheduled tasks; " +
-          "the data cannot be recovered. A trash action, never a shortcut: " +
-          "404 unless the project is already soft-deleted.",
+          "Permanently destroy a soft-deleted project (global admins only). " +
+          "Irreversible, with no grace period: the project, its files (records " +
+          "and stored contents), pins, share configuration, and scheduled " +
+          "tasks are all destroyed. Its chats are unaffected — they detached " +
+          "when it was deleted and survive as ordinary conversations. 404 if " +
+          "there is no soft-deleted project with that id in the org, which is " +
+          "also the answer when the project is still live or the caller is not " +
+          "a global admin. Restore wins a race: if a restore commits first, " +
+          "this returns 404 and the project stays.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
     },
-    async ({ params: { id }, organizationId }) => {
-      const project = await ProjectModel.findDeletedByIdForOrganization({
-        id,
-        organizationId,
-      });
-      if (!project) {
-        throw new ApiError(404, "Project not found");
-      }
-      // 0 days: any soft-deleted row qualifies; the in-transaction FOR UPDATE
-      // re-check makes a concurrent restore win over the purge.
-      const purged = await ProjectModel.hardDelete(id, {
-        onlyIfDeletedForDays: 0,
-      });
-      if (!purged) {
-        throw new ApiError(404, "Project not found");
-      }
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.purge({ id, organizationId, userId: user.id });
       return { ok: true as const };
     },
   );

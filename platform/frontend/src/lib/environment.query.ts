@@ -63,6 +63,9 @@ export function useCreateEnvironment() {
     onSuccess: (environment) => {
       if (!environment) return;
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
+      // Creating an environment also creates its advisor agent, so a cached
+      // agent list would not show it.
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
       toast.success(`${environment.name} added`);
     },
   });
@@ -112,6 +115,9 @@ export function useDeleteEnvironment() {
       // virtual Default target (FK set null), so refresh catalog views too.
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       queryClient.invalidateQueries({ queryKey: ["internal-mcp-catalog"] });
+      // The environment's advisor agent goes with it, and the agents that were
+      // in it fall back to the Default environment by the same FK.
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
       toast.success("Environment deleted");
     },
   });

@@ -71,6 +71,10 @@ export interface ChatPromptInputToolsProps {
     compactedTokenEstimate?: number;
     trigger?: "auto" | "manual";
   } | null;
+  /** Summarize earlier turns on demand, from the context window panel */
+  onCompactConversation?: () => Promise<void> | void;
+  /** A compaction is already running (manual or automatic) */
+  isContextCompacting?: boolean;
   /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
@@ -137,6 +141,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   maxContextLength,
   contextWindow,
   lastCompaction,
+  onCompactConversation,
+  isContextCompacting = false,
   agentLlmApiKeyId,
   selectorAgentId,
   onAgentChange,
@@ -382,18 +388,19 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       cachedTokens={cachedTokens}
                       maxTokens={maxContextLength}
                       lastCompaction={lastCompaction}
+                      onCompact={onCompactConversation}
+                      isCompacting={isContextCompacting}
                     >
                       <button
                         type="button"
                         aria-label="Context usage"
                         data-testid={E2eTestId.ChatContextUsageTrigger}
-                        className="inline-flex items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <ContextIndicator
                           tokensUsed={tokensUsed}
                           maxTokens={maxContextLength}
                           size="sm"
-                          hideTooltip
                         />
                       </button>
                     </ContextWindowDialog>
@@ -570,18 +577,19 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               cachedTokens={cachedTokens}
               maxTokens={maxContextLength}
               lastCompaction={lastCompaction}
+              onCompact={onCompactConversation}
+              isCompacting={isContextCompacting}
             >
               <button
                 type="button"
                 aria-label="Context usage"
                 data-testid={E2eTestId.ChatContextUsageTrigger}
-                className="inline-flex items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ContextIndicator
                   tokensUsed={tokensUsed}
                   maxTokens={maxContextLength}
                   size="sm"
-                  hideTooltip
                 />
               </button>
             </ContextWindowDialog>

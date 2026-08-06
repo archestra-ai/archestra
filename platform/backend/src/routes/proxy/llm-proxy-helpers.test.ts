@@ -78,6 +78,7 @@ vi.mock("@/observability");
 
 // Import after mocks
 import { metrics } from "@/observability";
+import { upstreamHttpError } from "./adapters/upstream-http-error";
 import {
   buildInteractionRecord,
   calculateInteractionCosts,
@@ -730,6 +731,43 @@ describe("handleError", () => {
     expect(throwStatusFor(new TypeError("cannot read x of undefined"))).toBe(
       500,
     );
+  });
+
+  // The fetch-based adapters (Cohere, MiniMax, Zhipu) throw upstreamHttpError
+  // for non-OK responses. The attached status must reach the client (a
+  // provider 429 relays as 429, not 500), and a provider 5xx must be marked
+  // upstream so error tracking drops the relay as expected noise.
+  test("relays a provider 429 thrown as upstreamHttpError with its own status and body", () => {
+    const rateLimited = upstreamHttpError(
+      "Error from Cohere API : 429 - trial key limit",
+      429,
+    );
+
+    const { reply, sent } = makeReply(false);
+    handleError(rateLimited, reply, extractMessage, false, () => undefined);
+
+    expect(sent.statusCode).toBe(429);
+    expect(sent.body).toEqual({
+      error: { message: "Error from Cohere API : 429 - trial key limit" },
+    });
+  });
+
+  test("marks a provider 5xx thrown as upstreamHttpError as an upstream failure", () => {
+    const providerDown = upstreamHttpError(
+      "MiniMax API error: 503 Service Unavailable",
+      503,
+    );
+
+    const { reply } = makeReply(false);
+    let thrown: unknown;
+    try {
+      handleError(providerDown, reply, extractMessage, false, () => undefined);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect((thrown as ApiError).statusCode).toBe(503);
+    expect((thrown as ApiError).upstream).toBe(true);
   });
 
   test("classifies a downstream client abort as a 499", () => {

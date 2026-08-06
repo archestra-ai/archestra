@@ -736,6 +736,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
+      if (restBody.dynamicConnectionMcpServerId) {
+        const pinned = await McpServerModel.findByIdInOrg(
+          restBody.dynamicConnectionMcpServerId,
+          request.organizationId,
+        );
+        if (pinned?.scope === "personal") {
+          throw new ApiError(
+            400,
+            "Personal connections cannot be set as the default credential. Use on-behalf-of-user resolution instead.",
+          );
+        }
+      }
+
       // Re-authorize and re-sync teams only when scope, team assignments, or
       // their access levels actually change. A content-only edit that echoes
       // the existing teams must not 403 a non-admin author/team-admin or

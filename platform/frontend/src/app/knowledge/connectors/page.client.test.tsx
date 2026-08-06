@@ -26,7 +26,7 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
     mutate: mockRestoreMutate,
     isPending: false,
   }),
-  usePurgeConnector: () => ({
+  usePermanentlyDeleteConnector: () => ({
     mutateAsync: mockPurgeMutateAsync,
     isPending: false,
   }),

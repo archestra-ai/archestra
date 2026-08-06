@@ -19,6 +19,7 @@ import {
   ToolModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
+import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { Skill } from "@/types";
 
@@ -44,7 +45,7 @@ async function seedSkill(organizationId: string, name: string): Promise<Skill> {
   return skill;
 }
 
-describe("SkillModel.hardDelete", () => {
+describe("SkillModel.purge", () => {
   test("deletes the skill and its version rows", async ({
     makeOrganization,
   }) => {
@@ -52,7 +53,9 @@ describe("SkillModel.hardDelete", () => {
     const skill = await seedSkill(org.id, "purgeable");
     await SkillModel.delete(skill.id);
 
-    expect(await SkillModel.hardDelete(skill.id)).toBe(true);
+    expect(
+      await SkillModel.purge({ id: skill.id, organizationId: org.id }),
+    ).toBe(true);
 
     const versions = await db
       .select()
@@ -96,8 +99,15 @@ describe("SkillModel.hardDelete", () => {
     });
     await SkillModel.delete(skill.id);
 
-    expect(await SkillModel.hasSandboxVersionPin(skill.id)).toBe(true);
-    expect(await SkillModel.hardDelete(skill.id)).toBe(false);
+    expect(await SkillVersionModel.hasSandboxMountsForSkill(skill.id)).toBe(
+      true,
+    );
+    // The RESTRICT foreign key is the guard, and it aborts the transaction —
+    // callers pre-check (see the route's 409 and the sweep's skip) and map this
+    // to their own answer.
+    await expect(
+      SkillModel.purge({ id: skill.id, organizationId: org.id }),
+    ).rejects.toThrow();
 
     // Skill and version rows survive the refused purge intact.
     expect(await SkillModel.findDeletedById(skill.id, org.id)).not.toBeNull();
@@ -112,8 +122,12 @@ describe("SkillModel.hardDelete", () => {
     await db
       .delete(schema.skillSandboxesTable)
       .where(eq(schema.skillSandboxesTable.id, sandbox.id));
-    expect(await SkillModel.hasSandboxVersionPin(skill.id)).toBe(false);
-    expect(await SkillModel.hardDelete(skill.id)).toBe(true);
+    expect(await SkillVersionModel.hasSandboxMountsForSkill(skill.id)).toBe(
+      false,
+    );
+    expect(
+      await SkillModel.purge({ id: skill.id, organizationId: org.id }),
+    ).toBe(true);
   });
 
   test("drops the skill's queued GitHub-sync tasks", async ({
@@ -127,7 +141,9 @@ describe("SkillModel.hardDelete", () => {
     });
     await SkillModel.delete(skill.id);
 
-    expect(await SkillModel.hardDelete(skill.id)).toBe(true);
+    expect(
+      await SkillModel.purge({ id: skill.id, organizationId: org.id }),
+    ).toBe(true);
 
     const tasks = await db
       .select()
@@ -144,13 +160,19 @@ describe("SkillModel.hardDelete", () => {
 
     // Active row: even a 0-day guard refuses (it is not soft-deleted).
     expect(
-      await SkillModel.hardDelete(skill.id, { onlyIfDeletedForDays: 0 }),
+      await SkillModel.purge(
+        { id: skill.id, organizationId: org.id },
+        { onlyIfDeletedForDays: 0 },
+      ),
     ).toBe(false);
 
     // Freshly deleted: inside a 30-day window.
     await SkillModel.delete(skill.id);
     expect(
-      await SkillModel.hardDelete(skill.id, { onlyIfDeletedForDays: 30 }),
+      await SkillModel.purge(
+        { id: skill.id, organizationId: org.id },
+        { onlyIfDeletedForDays: 30 },
+      ),
     ).toBe(false);
     expect(await SkillModel.findDeletedById(skill.id, org.id)).not.toBeNull();
 
@@ -160,7 +182,10 @@ describe("SkillModel.hardDelete", () => {
       .set({ deletedAt: FORTY_DAYS_AGO() })
       .where(eq(schema.skillsTable.id, skill.id));
     expect(
-      await SkillModel.hardDelete(skill.id, { onlyIfDeletedForDays: 30 }),
+      await SkillModel.purge(
+        { id: skill.id, organizationId: org.id },
+        { onlyIfDeletedForDays: 30 },
+      ),
     ).toBe(true);
   });
 });
@@ -276,7 +301,7 @@ describe("file-store byte purge (filesystem provider)", () => {
     return { row, onDisk };
   }
 
-  test("ProjectModel.hardDelete purges file rows, bytes, and queued trigger tasks", async ({
+  test("purges file rows, bytes, and queued trigger tasks", async ({
     makeOrganization,
     makeUser,
     makeAgent,
@@ -321,7 +346,10 @@ describe("file-store byte purge (filesystem provider)", () => {
       .where(eq(schema.projectsTable.id, project.id));
 
     expect(
-      await ProjectModel.hardDelete(project.id, { onlyIfDeletedForDays: 30 }),
+      await projectService.purgeUnchecked(
+        { id: project.id, organizationId: org.id },
+        { onlyIfDeletedForDays: 30 },
+      ),
     ).toBe(true);
 
     expect(await FileModel.findById(row.id)).toBeNull();
@@ -377,7 +405,7 @@ describe("file-store byte purge (filesystem provider)", () => {
   });
 });
 
-describe("AgentModel.hardDelete", () => {
+describe("AgentModel.purge", () => {
   test("unlinks interactions, clears org defaults, then deletes the row", async ({
     makeOrganization,
     makeAgent,
@@ -396,7 +424,7 @@ describe("AgentModel.hardDelete", () => {
       .where(eq(schema.agentsTable.id, agent.id));
 
     expect(
-      await AgentModel.hardDelete(agent.id, { onlyIfDeletedForDays: 30 }),
+      await AgentModel.purge(agent.id, org.id, { onlyIfDeletedForDays: 30 }),
     ).toBe(true);
 
     const [interactionRow] = await db
@@ -425,7 +453,7 @@ describe("AgentModel.hardDelete", () => {
     await AgentModel.delete(agent.id);
 
     expect(
-      await AgentModel.hardDelete(agent.id, { onlyIfDeletedForDays: 30 }),
+      await AgentModel.purge(agent.id, org.id, { onlyIfDeletedForDays: 30 }),
     ).toBe(false);
 
     const [agentRow] = await db
@@ -454,7 +482,7 @@ describe("AgentModel.hardDelete", () => {
       .where(eq(schema.agentsTable.id, agent.id));
 
     expect(
-      await AgentModel.hardDelete(agent.id, { onlyIfDeletedForDays: 30 }),
+      await AgentModel.purge(agent.id, org.id, { onlyIfDeletedForDays: 30 }),
     ).toBe(true);
 
     const tasks = await db
@@ -482,27 +510,17 @@ describe("AgentModel.hardDelete", () => {
       .set({ deletedAt: FORTY_DAYS_AGO() })
       .where(eq(schema.agentsTable.id, agent.id));
 
-    // Simulate a restore committing in the window between the eligibility
-    // pre-check and the purge transaction — the batched interaction unlink
-    // runs in exactly that window.
-    const unlinkSpy = vi
-      .spyOn(
-        AgentModel as unknown as { nullReferencesInBatches: () => void },
-        "nullReferencesInBatches",
-      )
-      .mockImplementation(async () => {
-        await db
-          .update(schema.agentsTable)
-          .set({ deletedAt: null })
-          .where(eq(schema.agentsTable.id, agent.id));
-      });
-    try {
-      expect(
-        await AgentModel.hardDelete(agent.id, { onlyIfDeletedForDays: 30 }),
-      ).toBe(false);
-    } finally {
-      unlinkSpy.mockRestore();
-    }
+    // The restore commits first, so the purge's FOR UPDATE re-check finds no
+    // soft-deleted row and takes nothing. Everything destructive runs after
+    // that check, inside the same transaction, so a lost race costs nothing.
+    await db
+      .update(schema.agentsTable)
+      .set({ deletedAt: null })
+      .where(eq(schema.agentsTable.id, agent.id));
+
+    expect(
+      await AgentModel.purge(agent.id, org.id, { onlyIfDeletedForDays: 30 }),
+    ).toBe(false);
 
     // The restored agent survives with its queued scheduled run intact.
     const [agentRow] = await db

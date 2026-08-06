@@ -23,6 +23,7 @@ import { expandQuery } from "./query-expansion";
 let server: ReturnType<typeof useMswServer>;
 
 const MOCK_RERANKER_CONFIG = {
+  kind: "llm" as const,
   llmModel: createOpenAI({
     baseURL: TEST_BASE_URL,
     apiKey: "test-key",
@@ -81,6 +82,27 @@ describe("expandQuery", () => {
 
   it("returns single query when no reranker config", async () => {
     mockResolveRerankerConfig.mockResolvedValue(null);
+
+    const result = await expandQuery({
+      queryText: "test query",
+      organizationId: "org-1",
+    });
+
+    expect(result).toEqual([
+      { queryText: "test query", weight: 1.0, type: "semantic" },
+    ]);
+  });
+
+  it("skips expansion when the reranker is a native rerank model", async () => {
+    // A dedicated rerank-API model can only score documents, not generate
+    // rephrasings — expansion degrades like an unconfigured reranker.
+    mockResolveRerankerConfig.mockResolvedValue({
+      kind: "native-rerank",
+      apiKey: "azure-key",
+      baseUrl: "https://my-resource.cognitiveservices.azure.com/openai/v1",
+      modelName: "Cohere-rerank-v4.0-fast",
+      provider: "azure",
+    });
 
     const result = await expandQuery({
       queryText: "test query",

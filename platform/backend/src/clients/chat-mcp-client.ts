@@ -2,6 +2,7 @@ import {
   ApiError,
   isAgentTool,
   isBrowserMcpTool,
+  LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   TimeInMs,
 } from "@archestra/shared";
@@ -50,8 +51,13 @@ import { buildMcpClientInfo } from "@/utils/mcp-client-info";
  * MCP Gateway base URL (internal)
  * Chat connects to the MCP Gateway endpoint with profile ID in path.
  * Derives from the configured API port to work in multi-pod deployments.
+ *
+ * The gateway is served by this same process — the worker pod registers it on
+ * its own listener too — so the dial never leaves the loopback interface.
+ * Addressed by {@link LOOPBACK_HOST} rather than `localhost`, which resolves to
+ * the `::1` address this IPv4-only server never listens on.
  */
-const MCP_GATEWAY_BASE_URL = `http://localhost:${config.api.port}/v1/mcp`;
+const MCP_GATEWAY_BASE_URL = `http://${LOOPBACK_HOST}:${config.api.port}/v1/mcp`;
 
 /**
  * Build the MCP client transport for the loopback gateway.

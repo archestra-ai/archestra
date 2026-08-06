@@ -3,6 +3,7 @@ import {
   Copy,
   Download,
   Eye,
+  History,
   MessageSquare,
   Pencil,
   Plug,
@@ -10,11 +11,13 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
 import type { useProfilesPaginated } from "@/lib/agent.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 
 type Agent = NonNullable<
   ReturnType<typeof useProfilesPaginated>["data"]
@@ -28,10 +31,16 @@ type AgentActionsProps = {
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
-  onPurge: (agent: Agent) => void;
+  onPermanentlyDelete: (agent: Agent) => void;
   onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
+  /**
+   * Carries `canModify` with the id: the history dialog offers a restore,
+   * which is an update, so it needs the same scope check the row's own
+   * mutating buttons apply rather than RBAC alone.
+   */
+  onHistory: (agentId: string, canModify: boolean) => void;
 };
 
 export function AgentActions({
@@ -42,11 +51,13 @@ export function AgentActions({
   onView,
   onDelete,
   onRestore,
-  onPurge,
+  onPermanentlyDelete,
   onClone,
   onExport,
   onConvertToSkill,
+  onHistory,
 }: AgentActionsProps) {
+  const admin = useIsGlobalAdmin();
   const isBuiltIn = Boolean(agent.builtIn);
   const isDeleted = Boolean(agent.deletedAt);
 
@@ -62,13 +73,10 @@ export function AgentActions({
             disabled: !canModify,
             onClick: () => onRestore(agent.id),
           },
-          {
-            icon: <Trash2 className="h-4 w-4" />,
-            label: "Delete permanently",
-            permissions: { agent: ["admin"] },
-            variant: "destructive",
-            onClick: () => onPurge(agent),
-          },
+          permanentDeleteRowAction({
+            admin,
+            onClick: () => onPermanentlyDelete(agent),
+          }),
         ]}
       />
     );
@@ -133,6 +141,13 @@ export function AgentActions({
           ? "Only internal agents can be exported"
           : undefined,
       onClick: () => onExport(agent),
+    },
+    {
+      icon: <History className="h-4 w-4" />,
+      label: "Version history",
+      permissions: { agent: ["read"] },
+      testId: `${E2eTestId.AgentVersionHistoryButton}-${agent.name}`,
+      onClick: () => onHistory(agent.id, canModify),
     },
     {
       icon: <Sparkles className="h-4 w-4" />,

@@ -41,6 +41,7 @@ const testPatterns = {
 };
 
 const uiTestMatch = [
+  "**/agent-version-history.spec.ts",
   "**/agents.spec.ts",
   "**/apps.spec.ts",
   "**/audit-log.spec.ts",
@@ -48,14 +49,17 @@ const uiTestMatch = [
   "**/auth-redirect.spec.ts",
   "**/chat-permissions.spec.ts",
   "**/chat.spec.ts",
+  "**/context-window.spec.ts",
   "**/credentials-with-vault.ee.spec.ts",
   "**/dynamic-credentials.spec.ts",
   "**/identity-providers.ee.spec.ts",
   "**/invitation.spec.ts",
+  "**/llm-logs-slack-source.spec.ts",
   "**/mcp-edit.spec.ts",
   "**/mcp-install.spec.ts",
   "**/quickstart.spec.ts",
   "**/skill-share.spec.ts",
+  "**/skill-version-history.spec.ts",
   "**/static-credentials-management.spec.ts",
   "**/users-role-filter.spec.ts",
 ];

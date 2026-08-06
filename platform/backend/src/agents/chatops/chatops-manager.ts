@@ -5,7 +5,7 @@ import {
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
-import { A2AManager } from "@/agents/a2a/a2a-manager";
+import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
@@ -55,7 +55,7 @@ import type {
 import {
   buildWelcomeMessage,
   ensureProvisionedUser,
-  isSsoConfigured,
+  resolveSignupWelcomeMode,
 } from "./auto-provision";
 import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
 import { chatOpsRunRegistry } from "./chatops-run-registry";
@@ -905,10 +905,11 @@ export class ChatOpsManager {
   }): Promise<void> {
     const { provider, message, invitationId, displayName } = params;
     try {
-      // Skip welcome message when SSO is enabled — users just sign in via their IdP
-      if (await isSsoConfigured()) return;
+      const welcomeMode = await resolveSignupWelcomeMode();
+      if (welcomeMode === "none") return;
 
       const welcome = await buildWelcomeMessage({
+        mode: welcomeMode,
         invitationId,
         email: message.senderEmail || "",
         name: displayName,
@@ -2215,10 +2216,10 @@ export class ChatOpsManager {
     });
     const source: InteractionSource =
       CHATOPS_PROVIDER_SOURCES[provider.providerId];
-    const systemParams = {
+    const systemParams: A2ASystemParams = {
       sessionId,
       source,
-      route: RouteCategory.CHATOPS,
+      routeCategory: RouteCategory.CHATOPS,
       chatOpsBindingId: binding.id,
       chatOpsThreadId: effectiveThreadId,
       ephemeralExecutionPrefix,
@@ -2401,6 +2402,9 @@ export class ChatOpsManager {
             originalMessage.threadId,
           ),
           source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
+          // Resuming after an approval is still a ChatOps run; without this it
+          // would fall back to the A2A route category like the initial send did.
+          routeCategory: RouteCategory.CHATOPS,
         },
       });
 

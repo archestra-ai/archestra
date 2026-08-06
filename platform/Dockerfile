@@ -292,7 +292,21 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 ENV ARCHESTRA_VERSION=${VERSION}
-ENV ARCHESTRA_INTERNAL_API_BASE_URL="http://localhost:9000"
+# 127.0.0.1, not `localhost`: the API and the Next.js server both bind IPv4
+# only (backend config.ts pins the API to 0.0.0.0; supervisord starts Next with
+# HOSTNAME=0.0.0.0), while `localhost` resolves to ::1 first — getaddrinfo
+# applies RFC 6724 precedence regardless of /etc/hosts order, and musl has no
+# /etc/gai.conf to retune it. Naming it would start every hop to the backend on
+# an address with no listener. See issues #4917 and #6933, and LOOPBACK_HOST in
+# shared/consts.ts.
+#
+# This is read at runtime by the SSR/API-route consumers (frontend proxy.ts,
+# the generated API client, lib/config/config.ts). The Next.js `rewrites()`
+# destination is NOT one of them: with output "standalone" it is resolved
+# during `pnpm build` in the builder stage — where this variable does not
+# exist — and frozen into .next/routes-manifest.json, so that path is governed
+# by DEFAULT_INTERNAL_API_BASE_URL in shared/consts.ts instead.
+ENV ARCHESTRA_INTERNAL_API_BASE_URL="http://127.0.0.1:9000"
 ENV ARCHESTRA_API_BASE_URL=""
 ENV ARCHESTRA_ANALYTICS="enabled"
 ENV ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED="false"

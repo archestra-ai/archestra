@@ -14,6 +14,22 @@
  *     this app last read it — pass { ifRevision: null } to force last-writer-wins,
  *     or a number to guard on that exact revision — and { code: "forbidden" } on
  *     an owned-key violation; delete clears a key)
+ *   archestra.files.list(query?)    — the app's persistent files, [{ id, ref, filename,
+ *                                     mimeType, sizeBytes, createdAt }] (optionally filtered
+ *                                     by a filename substring); re-list to pick up files an
+ *                                     agent copied in since the last call
+ *   archestra.files.read(file)      — resolves to a browser File (name, type, bytes) for a
+ *                                     filename string or an { id } / { filename } object (a
+ *                                     list() entry spreads straight in); feed it to
+ *                                     URL.createObjectURL, .text(), .arrayBuffer(), …
+ *   archestra.files.save(filename, data, opts) — write a string, Blob/File, ArrayBuffer, or
+ *                                     typed array; replaces a same-named file by default
+ *                                     (opts: { overwrite: false } to fail instead, { mimeType });
+ *                                     resolves to { id, filename, mimeType, sizeBytes, overwritten }
+ *   archestra.files.delete(file)    — permanently remove a file (filename string or { id })
+ *   archestra.files.onChange(cb)    — subscribe to store changes (host signal when the chat
+ *                                     agent copies a file in, plus this instance's own
+ *                                     save/delete); no payload — re-list. Returns unsubscribe.
  *   archestra.llm.complete(prompt, opts) — one host LLM completion (opts: { system, jsonMode });
  *                                     resolves to the text, rejects with { code: "llm_quota" }
  *                                     on a usage limit or { code: "llm_unavailable" } otherwise
@@ -28,6 +44,9 @@
  *                                     server needs (re)authentication
  *   archestra.tools.list()          — the app's assigned tools (name/description/inputSchema)
  *   archestra.ui.openLink(url) / archestra.ui.requestDisplayMode(mode)
+ *   archestra.ui.updateModelContext(text) — report what the app is showing so the
+ *                                     chat model can answer "this file" questions;
+ *                                     files.read auto-reports until the app calls this
  *   archestra.context               — { appId, version } of the running app (sync)
  *
  * Delivery contract (both globals are injected before this file loads):
@@ -256,6 +275,12 @@
     delete: "archestra__app_data_delete",
   };
   const LLM_COMPLETE_TOOL = "archestra__llm_complete";
+  const FILE_TOOLS = {
+    search: "archestra__search_files",
+    readRaw: "archestra__read_file_raw",
+    save: "archestra__save_file",
+    delete: "archestra__delete_file",
+  };
 
   // Upper bound for one host tool round-trip, overriding the MCP SDK's 60s
   // default request timeout. A reasoning model spends minutes thinking before
@@ -451,6 +476,188 @@
     });
   };
 
+  // The app's persistent file store (private to this app + viewer), as typed
+  // sugar over the built-in file tools — the same tools remain callable through
+  // archestra.tools.call for anything the sugar doesn't cover (read_file's
+  // paged text window, edit_file, the sandbox transfer pair). Files an agent
+  // copies in from the chat land here under their own names; subscribe with
+  // files.onChange to re-list the moment that happens (and still re-list when
+  // the user opens a picker — not every host sends the signal).
+
+  // Model-context reporting: the host relays this to the chat model so "the
+  // file I'm looking at" resolves. files.read auto-reports the file it just
+  // returned — right for the common picker/viewer app — until the app calls
+  // archestra.ui.updateModelContext itself; an explicit report is richer and
+  // permanently wins over the heuristic. Both are fire-and-forget: a host
+  // without the handler (standalone page, some external hosts) just rejects
+  // and the app never notices.
+  let explicitModelContext = false;
+  const reportModelContext = (text) => {
+    connectPromise
+      .then((app) =>
+        app.updateModelContext({ content: [{ type: "text", text }] }),
+      )
+      .catch(() => {});
+  };
+
+  const fileChangeListeners = new Set();
+  // A throwing subscriber must not starve the other listeners or break the
+  // notification path.
+  const notifyFileChange = () => {
+    for (const listener of fileChangeListeners) {
+      try {
+        listener();
+      } catch (err) {
+        postDiagnostic(
+          "error",
+          "archestra.files.onChange listener threw: " +
+            ((err && (err.stack || err.message)) || String(err)),
+        );
+      }
+    }
+  };
+  connectPromise
+    .then((app) => {
+      // resources/list_changed has no dedicated handler in the guest bridge, so
+      // it reaches the protocol's fallback slot; other unhandled notification
+      // methods are ignored here on purpose.
+      app.fallbackNotificationHandler = async (notification) => {
+        if (
+          notification &&
+          notification.method === "notifications/resources/list_changed"
+        ) {
+          notifyFileChange();
+        }
+      };
+    })
+    .catch(() => {});
+  const fileSelector = (file) => {
+    if (typeof file === "string" && file) return { filename: file };
+    if (file && typeof file === "object") {
+      if (typeof file.id === "string" && file.id) return { id: file.id };
+      if (typeof file.filename === "string" && file.filename) {
+        return { filename: file.filename };
+      }
+    }
+    throw new TypeError(
+      "archestra.files: identify a file by a filename string, or { id } / { filename }",
+    );
+  };
+  const bytesFromBase64 = (b64) => {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  };
+  const base64FromBytes = (bytes) => {
+    // chunked: String.fromCharCode over a whole large file overflows the
+    // argument limit, and per-byte string concatenation is quadratic
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  };
+  const filesApi = Object.freeze({
+    list: async (query) => {
+      const sc = (
+        await callTool(FILE_TOOLS.search, query ? { query } : {})
+      ).structuredContent;
+      return (sc && sc.files) || [];
+    },
+    // Resolves to a browser File — name, type, and bytes together — so the app
+    // hands it straight to URL.createObjectURL / .text() / .arrayBuffer()
+    // whatever the format (3D models, PDFs, images, text alike).
+    read: async (file) => {
+      const sc = (await callTool(FILE_TOOLS.readRaw, fileSelector(file)))
+        .structuredContent;
+      // callTool already threw on isError; a success without the structured
+      // payload is a platform-contract break — fail with a named error, not a
+      // null-property crash.
+      if (!sc || typeof sc.contentBase64 !== "string") {
+        throw Object.assign(
+          new Error("archestra.files.read: the file tool returned no content"),
+          { code: "tool_error" },
+        );
+      }
+      if (!explicitModelContext) {
+        reportModelContext(
+          'The app is showing the file "' +
+            sc.filename +
+            '" (' +
+            sc.mimeType +
+            ", " +
+            sc.sizeBytes +
+            " bytes) from its file store.",
+        );
+      }
+      return new File([bytesFromBase64(sc.contentBase64)], sc.filename, {
+        type: sc.mimeType || "application/octet-stream",
+      });
+    },
+    // Upserts by default: a same-named file is replaced in place, keeping its
+    // id — the natural "save" of an app writing the same document repeatedly.
+    // Pass { overwrite: false } to make an existing name an error instead.
+    save: async (filename, data, opts) => {
+      const args = {
+        filename,
+        overwrite: !(opts && opts.overwrite === false),
+      };
+      let mimeType = opts && opts.mimeType;
+      if (typeof data === "string") {
+        args.content = data;
+      } else {
+        let bytes;
+        if (typeof Blob !== "undefined" && data instanceof Blob) {
+          if (!mimeType && data.type) mimeType = data.type;
+          bytes = new Uint8Array(await data.arrayBuffer());
+        } else if (data instanceof ArrayBuffer) {
+          bytes = new Uint8Array(data);
+        } else if (ArrayBuffer.isView(data)) {
+          bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        } else {
+          throw new TypeError(
+            "archestra.files.save: data must be a string, Blob, ArrayBuffer, or typed array",
+          );
+        }
+        args.contentBase64 = base64FromBytes(bytes);
+      }
+      if (mimeType) args.mimeType = mimeType;
+      const sc = (await callTool(FILE_TOOLS.save, args)).structuredContent;
+      if (!sc || !sc.fileId) {
+        throw Object.assign(
+          new Error("archestra.files.save: the file tool returned no result"),
+          { code: "tool_error" },
+        );
+      }
+      notifyFileChange();
+      return {
+        id: sc.fileId,
+        filename: sc.filename,
+        mimeType: sc.mimeType,
+        sizeBytes: sc.sizeBytes,
+        overwritten: !!sc.overwritten,
+      };
+    },
+    delete: async (file) => {
+      await callTool(FILE_TOOLS.delete, fileSelector(file));
+      notifyFileChange();
+    },
+    // Subscribe to file-store changes; returns an unsubscribe function. Fires
+    // after this instance's own save/delete, and when the host signals that
+    // something else changed the store (in Archestra chat: the agent copied a
+    // file in). The event carries no payload — re-list to see what changed.
+    onChange: (listener) => {
+      if (typeof listener !== "function") {
+        throw new TypeError("archestra.files.onChange: pass a function");
+      }
+      fileChangeListeners.add(listener);
+      return () => {
+        fileChangeListeners.delete(listener);
+      };
+    },
+  });
+
   // A single host LLM completion. Runs as the viewer through the org's app
   // runtime model (the app can't pick one); jsonMode steers the model to emit
   // a single JSON value the app then parses. Rejects with { code: "llm_quota" }
@@ -480,6 +687,7 @@
       user: storagePartition("user"),
       shared: storagePartition("app"),
     }),
+    files: filesApi,
     llm: Object.freeze({
       complete: llmComplete,
       prompt: llmPrompt,
@@ -497,6 +705,21 @@
       },
       requestDisplayMode: async (mode) => {
         await (await connectPromise).requestDisplayMode({ mode });
+      },
+      // Tell the host — and through it the chat model — what the app is
+      // currently showing ("Viewing invoice-2026.pdf, page 3"). One short line
+      // of plain text; the latest call replaces earlier reports. Calling this
+      // once turns off files.read's automatic "showing file X" heuristic for
+      // the rest of the session — an app that reports explicitly knows its own
+      // state better. Fire-and-forget on hosts without the capability.
+      updateModelContext: (text) => {
+        if (typeof text !== "string" || !text.trim()) {
+          throw new TypeError(
+            "archestra.ui.updateModelContext: pass a non-empty string",
+          );
+        }
+        explicitModelContext = true;
+        reportModelContext(text);
       },
     }),
     // Read-only app metadata so an app can reference itself (e.g. build a link

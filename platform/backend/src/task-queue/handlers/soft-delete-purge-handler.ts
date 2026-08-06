@@ -95,7 +95,7 @@ async function sweepEntity(
       try {
         // Snapshot the identity BEFORE the delete — afterwards it is gone.
         const identity = await entity.identity(candidate);
-        const purged = await entity.hardDelete(candidate.id, {
+        const purged = await entity.purge(candidate, {
           onlyIfDeletedForDays: retentionDays,
           // Audit row in the delete transaction: the purge and its trail
           // commit atomically. A failed insert rolls the delete back (caught

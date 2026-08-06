@@ -11,20 +11,18 @@ import {
   sql,
 } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import db, { schema, withDbTransaction } from "@/database";
+
+import db, { schema, type Transaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   findExpiredSoftDeleted,
-  type HardDeleteOpts,
-  hardDelete as hardDeleteRows,
+  hardDelete,
   lockRowForPurge,
   restore as restoreRows,
   softDelete,
 } from "@/database/soft-delete";
-import { deleteRowsBytesBestEffort } from "@/skills-sandbox/file-storage";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
-import FileModel from "./file";
 import ProjectShareModel from "./project-share";
 import TaskModel from "./task";
 
@@ -261,69 +259,6 @@ class ProjectModel {
     });
   }
 
-  /**
-   * Physically delete a project and everything the soft delete retained. The
-   * purge paths pass `onlyIfDeletedForDays` so only an aged-out soft-deleted
-   * row is removed, re-checked under FOR UPDATE so a concurrent restore wins.
-   *
-   * File ROWS cascade with the project, but their bytes live in the external
-   * file store — collect the storage pointers inside the transaction and
-   * delete the bytes after commit, so bytes never vanish for rows a rollback
-   * resurrects. Schedule triggers (and their runs) cascade too; their queued
-   * tasks have no FK (ids live in the payload), so they are dropped
-   * explicitly or the worker keeps dequeuing work whose rows are gone. Chats
-   * already detached at soft-delete (`project_id` → NULL).
-   */
-  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
-    let purgeBytes: (() => Promise<void>) | null = null;
-    const deleted = await withDbTransaction(async (tx) => {
-      if (
-        !(await lockRowForPurge(
-          tx,
-          schema.projectsTable,
-          eq(schema.projectsTable.id, id),
-          opts,
-        ))
-      ) {
-        return false;
-      }
-
-      const triggers = await tx
-        .select({ id: schema.scheduleTriggersTable.id })
-        .from(schema.scheduleTriggersTable)
-        .where(eq(schema.scheduleTriggersTable.projectId, id));
-      for (const trigger of triggers) {
-        await TaskModel.deleteQueuedForPayloadValue(
-          {
-            taskType: "schedule_trigger_run_execute",
-            key: "triggerId",
-            value: trigger.id,
-          },
-          tx,
-        );
-      }
-
-      const files = await FileModel.listAllByProject(id, tx);
-      for (const file of files) {
-        await FileModel.deleteById(file.id, tx);
-      }
-      purgeBytes = () => deleteRowsBytesBestEffort(files);
-
-      const count = await hardDeleteRows(
-        tx,
-        schema.projectsTable,
-        eq(schema.projectsTable.id, id),
-      );
-      if (count === 0) return false;
-      await opts?.onPurged?.(tx);
-      return true;
-    });
-    if (deleted && purgeBytes) {
-      await (purgeBytes as () => Promise<void>)();
-    }
-    return deleted;
-  }
-
   /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
   static async findExpiredDeleted(params: {
     retentionDays: number;
@@ -459,6 +394,69 @@ class ProjectModel {
         ),
       );
     return row ?? null;
+  }
+
+  /**
+   * Take a row lock on a SOFT-DELETED project, or return null if there isn't
+   * one. This is what makes restore win a race with permanent deletion: a
+   * concurrent restore either commits first, in which case `deleted_at` is
+   * already NULL and this finds nothing, or it blocks on the lock until the
+   * purge commits and then finds no row at all. Either way exactly one of the
+   * two takes effect, and the caller answers 404.
+   *
+   * Runs on the caller's transaction so the lock, the byte capture, and the
+   * delete are one unit — a lock released before the delete would be no lock.
+   *
+   * The retention sweep additionally passes `onlyIfDeletedForDays`, so the
+   * window is re-checked under the same lock: a project restored and deleted
+   * again mid-sweep is no longer expired and is left alone.
+   */
+  static async lockIfDeleted(
+    tx: Transaction,
+    params: { id: string; organizationId: string },
+    opts?: { onlyIfDeletedForDays?: number },
+  ): Promise<{ id: string } | null> {
+    const locked = await lockRowForPurge(
+      tx,
+      schema.projectsTable,
+      and(
+        eq(schema.projectsTable.id, params.id),
+        eq(schema.projectsTable.organizationId, params.organizationId),
+        isNotNull(schema.projectsTable.deletedAt),
+      ),
+      opts,
+    );
+    return locked ? { id: params.id } : null;
+  }
+
+  /**
+   * Physically delete a project already locked by {@link lockIfDeleted}. The
+   * cascade takes its files, pins, share config, and scheduled triggers (with
+   * their runs); its chats detached at soft-delete time and are unaffected.
+   * Queued trigger-run tasks are dropped explicitly — they carry the trigger id
+   * in their payload rather than an FK, so the cascade misses them and the
+   * worker would keep dequeuing work whose rows are gone.
+   *
+   * Externally-stored file bytes are NOT covered — capture them before this
+   * runs and delete them after it (see `fileStore.captureProjectFileBytes`).
+   */
+  static async hardDeleteLocked(tx: Transaction, id: string): Promise<void> {
+    const triggers = await tx
+      .select({ id: schema.scheduleTriggersTable.id })
+      .from(schema.scheduleTriggersTable)
+      .where(eq(schema.scheduleTriggersTable.projectId, id));
+    for (const trigger of triggers) {
+      await TaskModel.deleteQueuedForPayloadValue(
+        {
+          taskType: "schedule_trigger_run_execute",
+          key: "triggerId",
+          value: trigger.id,
+        },
+        tx,
+      );
+    }
+
+    await hardDelete(tx, schema.projectsTable, eq(schema.projectsTable.id, id));
   }
 
   /**

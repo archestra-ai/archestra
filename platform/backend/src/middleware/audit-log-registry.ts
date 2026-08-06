@@ -141,8 +141,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.restored",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
-  // Identity-only snapshot, same as the retention sweep's purge audit rows: a
-  // purge records that the row is gone, never a full copy of deleted content.
+  // Restoring a config version rewrites the agent's whole config surface.
+  // Registered explicitly because the walk-up to "/api/agents/:id" resolves
+  // with viaWalkUp set, and the hook discards every walk-up POST — without
+  // this entry the restore produces no audit record at all.
+  "/api/agents/:id/versions/:version/restore": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+  // Permanent deletion. Registered explicitly for two reasons: the walk-up to
+  // `/api/agents/:id` would log it as `agent.deleted` (indistinguishable from a
+  // recoverable soft delete), and it would attach that route's FULL snapshot as
+  // `before` — a copy of exactly the config the caller asked to destroy. The
+  // identity fetcher is the guarantee that a purge is audited by who/what/when
+  // and nothing more.
   "/api/agents/:id/permanent": {
     resourceType: "agent",
     action: "agent.purged",
@@ -476,7 +489,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "project.restored",
     fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
   },
-  // Identity-only snapshot, same as the retention sweep's purge audit rows.
+  // Identity-only, like the other purges — see the agent entry above.
   "/api/projects/:id/permanent": {
     resourceType: "project",
     action: "project.purged",
@@ -506,7 +519,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "skill.restored",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
-  // Identity-only snapshot, same as the retention sweep's purge audit rows.
+  // Identity-only, like the other purges — see the agent entry above.
   "/api/skills/:id/permanent": {
     resourceType: "skill",
     action: "skill.purged",

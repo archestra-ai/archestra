@@ -48,7 +48,7 @@ import {
   useDeleteKnowledgeBase,
   useKnowledgeBase,
   useKnowledgeBasesPaginated,
-  usePurgeKnowledgeBase,
+  usePermanentlyDeleteKnowledgeBase,
   useRestoreKnowledgeBase,
 } from "@/lib/knowledge/knowledge-base.query";
 import { cn, formatDate } from "@/lib/utils";
@@ -105,9 +105,10 @@ function KnowledgeBasesList() {
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [purgingKb, setPurgingKb] = useState<KnowledgeBaseItem | null>(null);
+  const [permanentlyDeletingKb, setPermanentlyDeletingKb] =
+    useState<KnowledgeBaseItem | null>(null);
   const restoreKnowledgeBase = useRestoreKnowledgeBase();
-  const purgeKnowledgeBase = usePurgeKnowledgeBase();
+  const permanentlyDeleteKnowledgeBase = usePermanentlyDeleteKnowledgeBase();
   const editId = searchParams.get("edit");
   const { data: editingItemFromUrl } = useKnowledgeBase(editId ?? undefined);
   const {
@@ -285,7 +286,7 @@ function KnowledgeBasesList() {
               label: "Delete permanently",
               permissions: { knowledgeSource: ["manage-deleted"] },
               variant: "destructive",
-              onClick: () => setPurgingKb(row.original),
+              onClick: () => setPermanentlyDeletingKb(row.original),
             },
           ]}
         />
@@ -365,18 +366,20 @@ function KnowledgeBasesList() {
           isLoading={isFetching}
         />
 
-        {purgingKb && (
+        {permanentlyDeletingKb && (
           <DeleteConfirmDialog
-            open={!!purgingKb}
+            open={!!permanentlyDeletingKb}
             onOpenChange={(open) => {
-              if (!open) setPurgingKb(null);
+              if (!open) setPermanentlyDeletingKb(null);
             }}
             title="Delete knowledge base permanently"
-            description={`This permanently deletes "${purgingKb.name}" and its assignments. The data cannot be recovered.`}
-            isPending={purgeKnowledgeBase.isPending}
+            description={`This permanently deletes "${permanentlyDeletingKb.name}" and its assignments. The data cannot be recovered.`}
+            isPending={permanentlyDeleteKnowledgeBase.isPending}
             onConfirm={async () => {
-              const ok = await purgeKnowledgeBase.mutateAsync(purgingKb.id);
-              if (ok) setPurgingKb(null);
+              const ok = await permanentlyDeleteKnowledgeBase.mutateAsync(
+                permanentlyDeletingKb.id,
+              );
+              if (ok) setPermanentlyDeletingKb(null);
             }}
             confirmLabel="Delete permanently"
             pendingLabel="Deleting..."

@@ -8,13 +8,14 @@ import {
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
+import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   ConnectDialog,
@@ -25,6 +26,7 @@ import { DeletedRowMeta } from "@/components/deleted-row-meta";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
@@ -35,6 +37,7 @@ import {
 } from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -42,16 +45,19 @@ import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
   useDeleteProfile,
   useExportAgent,
+  usePermanentlyDeleteProfile,
   useProfile,
   useProfilesPaginated,
-  usePurgeProfile,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
 import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
@@ -166,6 +172,16 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const currentUserId = session?.user?.id;
   const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
 
+  const { data: environmentList } = useEnvironments();
+  const environments = useMemo(
+    () => environmentList?.environments ?? [],
+    [environmentList],
+  );
+  const defaultEnvironment = useDefaultEnvironment();
+  // Every agent sits in the default environment until someone defines another,
+  // so the column would be a wall of one repeated value.
+  const showEnvironmentColumn = environments.length > 0;
+
   // Users can always create personal agents, no team requirement needed
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -198,14 +214,21 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     entityFromUrl: viewAgentFromUrl ?? null,
   });
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
-  const [purgingAgent, setPurgingAgent] = useState<AgentData | null>(null);
+  const [permanentlyDeletingAgent, setPermanentlyDeletingAgent] =
+    useState<AgentData | null>(null);
 
   const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
-  const purgeAgent = usePurgeProfile();
+  const permanentlyDeleteAgent = usePermanentlyDeleteProfile();
 
+  // The row's scope check travels with the id: it is computed per row, and the
+  // dialog's restore is an update that has to answer to it.
+  const [history, setHistory] = useState<{
+    id: string;
+    canModify: boolean;
+  } | null>(null);
   const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
     null,
   );
@@ -331,12 +354,36 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         />
       ),
     },
+    ...(showEnvironmentColumn
+      ? [
+          {
+            id: "environment",
+            header: "Environment",
+            enableSorting: false,
+            size: 160,
+            cell: ({ row }) => {
+              const label =
+                resolveCatalogEnvironmentLabel({
+                  environmentId: row.original.environmentId ?? null,
+                  environments,
+                  defaultEnvironmentName: defaultEnvironment.name,
+                }) ?? defaultEnvironment.name;
+              return (
+                <Badge variant="outline" className="text-muted-foreground">
+                  <span className="max-w-32 truncate">{label}</span>
+                </Badge>
+              );
+            },
+          } satisfies ColumnDef<AgentData>,
+        ]
+      : []),
     ...(isDeletedView
       ? [
           {
             id: "deleted",
             header: "Deleted",
             enableSorting: false,
+            size: 240,
             cell: ({ row }) => (
               <DeletedRowMeta deletedAt={row.original.deletedAt} />
             ),
@@ -379,9 +426,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 },
               });
             }}
-            onPurge={setPurgingAgent}
+            onPermanentlyDelete={setPermanentlyDeletingAgent}
             onClone={setCloningAgent}
             onConvertToSkill={setConvertingAgent}
+            onHistory={(id, historyCanModify) =>
+              setHistory({ id, canModify: historyCanModify })
+            }
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
                 onSuccess: (data) => {
@@ -553,19 +603,22 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               />
             )}
 
-            {purgingAgent && (
+            {permanentlyDeletingAgent && (
               <DeleteConfirmDialog
-                open={!!purgingAgent}
-                onOpenChange={(open) => !open && setPurgingAgent(null)}
+                open={!!permanentlyDeletingAgent}
+                onOpenChange={(open) =>
+                  !open && setPermanentlyDeletingAgent(null)
+                }
                 title="Delete agent permanently"
-                description={`This permanently deletes "${purgingAgent.name}" and unlinks its LLM interaction history. The data cannot be recovered.`}
-                isPending={purgeAgent.isPending}
+                description={`This destroys "${permanentlyDeletingAgent.name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`}
+                isPending={permanentlyDeleteAgent.isPending}
                 onConfirm={async () => {
-                  const ok = await purgeAgent.mutateAsync(purgingAgent.id);
-                  if (ok) setPurgingAgent(null);
+                  const ok = await permanentlyDeleteAgent.mutateAsync(
+                    permanentlyDeletingAgent.id,
+                  );
+                  if (ok) setPermanentlyDeletingAgent(null);
                 }}
-                confirmLabel="Delete permanently"
-                pendingLabel="Deleting..."
+                confirmLabel={PERMANENT_DELETE_LABEL}
               />
             )}
 
@@ -590,6 +643,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onCloned={(cloned) => {
                 // Open edit dialog for the cloned agent so user can rename immediately
                 editDialog.open(cloned as AgentData);
+              }}
+            />
+
+            <AgentVersionHistoryDialog
+              agentId={history?.id ?? null}
+              canModify={!!history?.canModify}
+              onOpenChange={(open) => {
+                if (!open) setHistory(null);
               }}
             />
           </div>

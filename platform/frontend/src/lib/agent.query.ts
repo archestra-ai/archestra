@@ -22,7 +22,7 @@ const {
   getDefaultLlmProxy,
   getAgent,
   importAgent,
-  purgeAgent,
+  permanentlyDeleteAgent,
   restoreAgent,
   updateAgent,
   getLabelKeys,
@@ -42,6 +42,32 @@ export async function fetchInternalAgents() {
   });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
+}
+
+const delegationTargetAgentsQuery = {
+  agentType: "agent",
+  excludeBuiltIn: true,
+  includeAdvisor: true,
+} as const;
+
+/**
+ * Agents that can be picked as a subagent. Separate from
+ * {@link useInternalAgents} because the advisor belongs here and nowhere else:
+ * it is a target to delegate to, not an agent to start a conversation with.
+ */
+export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["agents", "all", delegationTargetAgentsQuery],
+    queryFn: async () => {
+      const { data, error } = await getAllAgents({
+        query: delegationTargetAgentsQuery,
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: params?.enabled,
+    staleTime: 0,
+  });
 }
 
 // Returns all agents as an array
@@ -376,22 +402,31 @@ export function useRestoreProfile() {
   });
 }
 
-/** Permanently delete a soft-deleted agent (admin-only trash action). */
-export function usePurgeProfile() {
+/**
+ * Permanently destroy a soft-deleted agent. Irreversible: the row and
+ * everything it owns go, while its LLM interaction history survives detached.
+ *
+ * One endpoint serves every agent type, so callers pass the label their
+ * surface uses ("MCP Gateway", "LLM Proxy") to keep the toast in the language
+ * of the page the user is on.
+ */
+export function usePermanentlyDeleteProfile(entityLabel = "Agent") {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await purgeAgent({ path: { id } });
+      const { data, error } = await permanentlyDeleteAgent({ path: { id } });
       if (error) {
         handleApiError(error);
         return null;
       }
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, id) => {
       if (!data) return;
-      toast.success("Agent permanently deleted");
+      toast.success(`${entityLabel} permanently deleted`);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      // The detail query for a now-nonexistent id would 404 on its next fetch.
+      queryClient.removeQueries({ queryKey: ["agents", id] });
     },
   });
 }

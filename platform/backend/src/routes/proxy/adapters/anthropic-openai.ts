@@ -14,6 +14,7 @@ import {
   anthropicResponseToOpenai,
   mapStopReason,
 } from "./anthropic-openai-translator";
+import { formatOpenAiChunkSse, toOpenAiStreamUsage } from "./openai-sse-chunk";
 
 type AnthropicRequest = Anthropic.Types.MessagesRequest;
 type AnthropicResponse = Anthropic.Types.MessagesResponse;
@@ -194,6 +195,7 @@ class AnthropicOpenaiStreamAdapter
     return `${this.formatChunk({
       delta: {},
       finishReason,
+      usage: this.state.usage,
     })}data: [DONE]\n\n`;
   }
 
@@ -274,21 +276,17 @@ class AnthropicOpenaiStreamAdapter
   private formatChunk(params: {
     delta: Record<string, unknown>;
     finishReason: string | null;
+    /** Only the final chunk passes this; delta chunks must stay usage-free. */
+    usage?: UsageView | null;
   }): string {
-    return `data: ${JSON.stringify({
+    return formatOpenAiChunkSse({
       id: this.ctx.chatcmplId,
-      object: "chat.completion.chunk",
       created: this.ctx.createdUnix,
       model: this.ctx.requestedModel,
-      choices: [
-        {
-          index: 0,
-          delta: params.delta,
-          finish_reason: params.finishReason,
-          logprobs: null,
-        },
-      ],
-    })}\n\n`;
+      delta: params.delta,
+      finishReason: params.finishReason,
+      usage: toOpenAiStreamUsage(params.usage),
+    });
   }
 }
 

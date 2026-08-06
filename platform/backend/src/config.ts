@@ -2735,6 +2735,15 @@ const config = {
     // the config endpoint rejects updates, and the frontend hides the
     // Telegram messaging channel.
     telegramEnabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED !== "false",
+    // Signup welcome for auto-provisioned chatops users: on by default, with
+    // ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false as the operator opt-out
+    // for deployments whose chatops users don't get web app access — the
+    // "finish signing up to use the web app" DM/link is just noise there.
+    // Off = users are still auto-provisioned, but no welcome message is ever
+    // sent. See resolveSignupWelcomeMode for how the welcome adapts to SSO
+    // and disabled invitations/basic sign-in when this is on.
+    signupWelcomeEnabled:
+      process.env.ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED !== "false",
     // Per-process cap on concurrent chatops file downloads + image shrinking.
     // Chatops events are acked to the provider before processing, so an OOM
     // during a burst of attachment-heavy messages means silent message loss —

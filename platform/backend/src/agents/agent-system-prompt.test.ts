@@ -20,6 +20,7 @@ import type { OpenedApp } from "@/services/apps/opened-app-context";
 import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import { describe, expect, test } from "@/test";
 import {
+  APP_BUILD_CONDUCT_INSTRUCTION,
   buildAgentSystemPrompt,
   OPENED_APP_PREFIX,
   PROJECT_FILES_PREFIX,
@@ -72,6 +73,26 @@ async function seedSkill(organizationId: string) {
     },
     files: [],
   });
+}
+
+/**
+ * An owned-app OpenedApp literal with quiet defaults, so each test states only
+ * the fields it asserts on — and a new OpenedApp field is a one-line edit here
+ * instead of one per literal.
+ */
+function ownedApp(
+  overrides: Partial<Extract<OpenedApp, { kind: "owned" }>> &
+    Pick<Extract<OpenedApp, { kind: "owned" }>, "id" | "name">,
+): OpenedApp {
+  return {
+    kind: "owned",
+    description: null,
+    tools: [],
+    files: [],
+    hasFileStore: false,
+    reportedContext: null,
+    ...overrides,
+  };
 }
 
 describe("buildAgentSystemPrompt", () => {
@@ -295,6 +316,53 @@ describe("buildAgentSystemPrompt", () => {
     expect(
       await buildAgentSystemPrompt({ ...common, mcpTools: {} }),
     ).not.toContain(TOOL_UI_RESULT_INSTRUCTION);
+  });
+
+  test("adds the app-build conduct instruction when the agent can build apps", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const common = {
+      agent,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    };
+
+    // Direct exposure: keyed off the scaffold_app tool being assigned.
+    const withScaffoldApp: Record<string, Tool> = {
+      [brand(TOOL_SCAFFOLD_APP_SHORT_NAME)]: {} as Tool,
+    };
+    expect(
+      await buildAgentSystemPrompt({ ...common, mcpTools: withScaffoldApp }),
+    ).toContain(APP_BUILD_CONDUCT_INSTRUCTION);
+    expect(
+      await buildAgentSystemPrompt({ ...common, mcpTools: someTool }),
+    ).not.toContain(APP_BUILD_CONDUCT_INSTRUCTION);
+
+    // search_and_run_only can dispatch scaffold_app without it being listed,
+    // so the mode alone qualifies.
+    const searchAgent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "search_and_run_only",
+    });
+    await makeMember(user.id, searchAgent.organizationId);
+    expect(
+      await buildAgentSystemPrompt({
+        agent: searchAgent,
+        mcpTools: {},
+        organizationId: searchAgent.organizationId,
+        userId: user.id,
+        agentId: searchAgent.id,
+      }),
+    ).toContain(APP_BUILD_CONDUCT_INSTRUCTION);
   });
 
   test("adds the tool-loading instruction only in search_and_run_only mode", async ({
@@ -674,13 +742,11 @@ describe("buildAgentSystemPrompt", () => {
       organizationId: agent.organizationId,
       userId: user.id,
       agentId: agent.id,
-      openedApp: {
-        kind: "owned",
+      openedApp: ownedApp({
         id: "opened-app-1",
         name: "Expense Tracker",
         description: "Logs receipts.",
-        tools: [],
-      },
+      }),
     });
 
     expect(prompt).toContain(`${OPENED_APP_PREFIX} "Expense Tracker".`);
@@ -690,6 +756,175 @@ describe("buildAgentSystemPrompt", () => {
     // A toolless app (a game, a static tracker) gets no tool sentence at all —
     // an empty list would only send the model looking for capabilities.
     expect(prompt).not.toContain("It is built on these tools");
+  });
+
+  test("names each file in the open app's per-viewer store with its size", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      openedApp: ownedApp({
+        id: "opened-app-5",
+        name: "Expense Tracker",
+        files: [
+          { filename: "budget.xlsx", sizeBytes: 2048 },
+          { filename: "receipts.csv", sizeBytes: 12 },
+        ],
+        hasFileStore: true,
+      }),
+    });
+
+    // Filenames are app/user-authored, so they render quoted as data; the size
+    // is what lets the model answer "how big is it" without a lookup.
+    expect(prompt).toContain(
+      'Its per-user file store currently holds: "budget.xlsx" (2048 bytes), "receipts.csv" (12 bytes).',
+    );
+    // The inventory must read as authoritative for this turn, not as a stale
+    // hint the model should re-derive.
+    expect(prompt).toContain("This inventory is current as of this turn");
+    expect(prompt).not.toContain("and 0 more");
+  });
+
+  test("caps a long file inventory without reading as the complete one", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const files = Array.from({ length: 54 }, (_, i) => ({
+      filename: `file_${i}.txt`,
+      sizeBytes: i,
+    }));
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      openedApp: ownedApp({
+        id: "opened-app-6",
+        name: "Kitchen Sink",
+        files,
+        hasFileStore: true,
+      }),
+    });
+
+    expect(prompt).toContain('"file_0.txt"');
+    expect(prompt).toContain('"file_49.txt"');
+    expect(prompt).not.toContain('"file_50.txt"');
+    // Silent truncation would read as "these are all of them" and let the
+    // model deny a file that exists.
+    expect(prompt).toContain(", and 4 more.");
+  });
+
+  test("states that the open app's file store is empty rather than staying silent", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      openedApp: ownedApp({
+        id: "opened-app-7",
+        name: "Expense Tracker",
+        hasFileStore: true,
+      }),
+    });
+
+    // "No files" is a real answer — without the line the model would go
+    // hunting or guess, exactly what the inventory exists to prevent.
+    expect(prompt).toContain("Its per-user file store is currently empty");
+  });
+
+  test("says nothing about files when the deployment has no file store", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      openedApp: ownedApp({ id: "opened-app-8", name: "Expense Tracker" }),
+    });
+
+    // "No file feature" must not read as "no files": a deployment without the
+    // sandbox says nothing rather than describing a store that does not exist.
+    expect(prompt).not.toContain("per-user file store");
+  });
+
+  test("quotes what the open app reports it is currently showing", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "You are helpful.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+      openedApp: ownedApp({
+        id: "opened-app-9",
+        name: "Expense Tracker",
+        reportedContext: "Viewing receipts.csv",
+      }),
+    });
+
+    // App-authored text stays quoted as data, and the block anchors the user's
+    // deictic "this file" / "what I'm looking at" to it.
+    expect(prompt).toContain(
+      'The app reports what it is currently showing as: "Viewing receipts.csv".',
+    );
+    expect(prompt).toContain(
+      `When the user says "this file" or "what I'm looking at", they mean this.`,
+    );
   });
 
   test("names an open owned app's assigned tools", async ({
@@ -704,13 +939,12 @@ describe("buildAgentSystemPrompt", () => {
     const user = await makeUser();
     await makeMember(user.id, agent.organizationId);
 
-    const openedApp: OpenedApp = {
-      kind: "owned",
+    const openedApp = ownedApp({
       id: "opened-app-2",
       name: "Notification Triage",
       description: "A notification-style inbox.",
       tools: ["github__search_issues", "github__search_pull_requests"],
-    };
+    });
     const common = {
       agent,
       organizationId: agent.organizationId,
@@ -777,11 +1011,9 @@ describe("buildAgentSystemPrompt", () => {
       organizationId: agent.organizationId,
       userId: user.id,
       agentId: agent.id,
-      openedApp: {
-        kind: "owned",
+      openedApp: ownedApp({
         id: "opened-app-3",
         name: "Cross-poster",
-        description: null,
         // Two upstream servers plus a recognized archestra built-in: the
         // built-in is already directly available and must not become a search
         // target (its short name is in the registered set, so it is excluded).
@@ -790,7 +1022,7 @@ describe("buildAgentSystemPrompt", () => {
           "linear__list_issues",
           searchToolsToolName,
         ],
-      },
+      }),
     });
 
     // Both real servers are named as domains and get a scoped discovery regex.
@@ -819,13 +1051,7 @@ describe("buildAgentSystemPrompt", () => {
       organizationId: agent.organizationId,
       userId: user.id,
       agentId: agent.id,
-      openedApp: {
-        kind: "owned",
-        id: "opened-app-4",
-        name: "Kitchen Sink",
-        description: null,
-        tools,
-      },
+      openedApp: ownedApp({ id: "opened-app-4", name: "Kitchen Sink", tools }),
     });
 
     expect(prompt).toContain("`srv__tool_0`");

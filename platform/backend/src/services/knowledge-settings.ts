@@ -5,6 +5,10 @@ import { createDirectLLMModel } from "@/clients/llm-client";
 import { callEmbedding } from "@/knowledge-base/embedding-clients";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
+import {
+  callNativeRerank,
+  isNativeRerankModel,
+} from "@/knowledge-base/native-rerank";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelModel } from "@/models";
 
@@ -105,13 +109,33 @@ class KnowledgeSettingsService {
     }
 
     try {
+      // Dedicated rerank models are exercised through the provider's native
+      // rerank route; everything else through the chat + structured-output
+      // capability reranking relies on.
+      if (isNativeRerankModel({ provider: resolved.provider, model })) {
+        const scores = await callNativeRerank({
+          provider: resolved.provider,
+          apiKey: resolved.apiKey,
+          baseUrl: resolved.baseUrl,
+          model,
+          query: "hello",
+          documents: ["hello world"],
+        });
+        if (scores.length > 0) {
+          return { ok: true };
+        }
+        return {
+          ok: false,
+          error: "The rerank API returned no relevance scores.",
+        };
+      }
+
       const llmModel = createDirectLLMModel({
         provider: resolved.provider,
         apiKey: resolved.apiKey ?? undefined,
         modelName: model,
         baseUrl: resolved.baseUrl,
       });
-      // Exercise the exact capability reranking relies on: structured output.
       const result = await generateObject({
         model: llmModel,
         schema: RERANKER_VALIDATION_SCHEMA,
@@ -129,9 +153,18 @@ class KnowledgeSettingsService {
         { err: error },
         "[KnowledgeSettings] Reranker validation failed",
       );
+      // A rerank-named model on a provider with no native rerank surface went
+      // through the chat-completions probe, which such deployments reject with
+      // an unhelpful raw error — explain the mismatch when the name gives it
+      // away.
+      const rerankApiHint =
+        /rerank/i.test(model) &&
+        !isNativeRerankModel({ provider: resolved.provider, model })
+          ? " — this looks like a dedicated rerank-API model, which is supported with Cohere and Azure AI Foundry keys. With this provider, select a chat model instead."
+          : "";
       return {
         ok: false,
-        error: `Failed to verify reranker model. Raw error: ${knowledgeValidationErrorMessage(error)}`,
+        error: `Failed to verify reranker model. Raw error: ${knowledgeValidationErrorMessage(error)}${rerankApiHint}`,
       };
     }
   }

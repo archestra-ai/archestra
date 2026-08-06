@@ -55,10 +55,9 @@ export const McpExecutedAsSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("personal"),
       /**
-       * Owner of the personal connection the call ran through — the caller
-       * themselves, or another user whose connection an admin pinned as a
-       * service account. Null once the owning user is deleted (the connection
-       * row's owner is cleared).
+       * Owner of the personal connection the call ran through — always the
+       * caller themselves. Null once the owning user is deleted (the
+       * connection row's owner is cleared).
        */
       ownerUserId: z.string().nullable(),
       ownerName: z.string().nullable(),

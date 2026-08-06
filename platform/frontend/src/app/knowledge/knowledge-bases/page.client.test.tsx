@@ -28,7 +28,7 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
     mutate: mockRestoreMutate,
     isPending: false,
   }),
-  usePurgeKnowledgeBase: () => ({
+  usePermanentlyDeleteKnowledgeBase: () => ({
     mutateAsync: mockPurgeMutateAsync,
     isPending: false,
   }),

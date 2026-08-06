@@ -41,6 +41,16 @@ export const CONTEXT_WINDOW_BREAKDOWN_EVENT =
   "data-context-window-breakdown" as const;
 
 /**
+ * Share of the model's context window at which auto-compaction fires.
+ *
+ * Owned here rather than in the backend because the chat UI quotes it: the
+ * context indicator tells the user how much headroom is left *before*
+ * auto-compaction, not before the window is full, so both sides must gate on
+ * exactly the same number.
+ */
+export const CONTEXT_COMPACTION_AUTO_THRESHOLD = 0.8;
+
+/**
  * Canonical display order of context window categories, matching the
  * top-to-bottom stack in the assembled request:
  *   system_prompt → tools → messages → tool_results → files
@@ -579,7 +589,16 @@ export type ChatAppDiagnosticsMetadata = z.infer<
  * id can only ever surface an app the caller could already see.
  */
 export const ChatOpenedAppMetadataSchema = z.union([
-  z.object({ appId: z.string().uuid() }),
+  z.object({
+    appId: z.string().uuid(),
+    /**
+     * State the running app last reported for the model via the MCP-Apps
+     * `ui/update-model-context` request (e.g. which file it is displaying).
+     * App-authored free text — untrusted; the backend sanitizes and quotes it
+     * as data before it reaches the prompt.
+     */
+    modelContext: z.string().max(2000).optional(),
+  }),
   z.object({ appMcpServerId: z.string().uuid() }),
 ]);
 

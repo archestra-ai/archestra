@@ -11,6 +11,8 @@
 // this list right after `worker.start()` and replays each descriptor via
 // `worker.use(...)`, so a single POST covers both runtimes.
 
+import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
+
 export const dynamic = "force-dynamic";
 
 type HttpMethod = "get" | "post" | "put" | "patch" | "delete";
@@ -35,7 +37,7 @@ const ENABLED =
   process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
   process.env.NODE_ENV !== "production";
 const BACKEND_ORIGIN =
-  process.env.ARCHESTRA_INTERNAL_API_BASE_URL || "http://localhost:9000";
+  process.env.ARCHESTRA_INTERNAL_API_BASE_URL || DEFAULT_INTERNAL_API_BASE_URL;
 
 export async function POST(req: Request): Promise<Response> {
   if (!ENABLED) return notFound();

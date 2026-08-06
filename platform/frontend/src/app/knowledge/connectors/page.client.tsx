@@ -37,7 +37,7 @@ import {
   useConnector,
   useConnectorsPaginated,
   useDeleteConnector,
-  usePurgeConnector,
+  usePermanentlyDeleteConnector,
   useRestoreConnector,
 } from "@/lib/knowledge/connector.query";
 import { formatDate } from "@/lib/utils";
@@ -117,10 +117,10 @@ function ConnectorsList() {
   const [deletingConnectorId, setDeletingConnectorId] = useState<string | null>(
     null,
   );
-  const [purgingConnector, setPurgingConnector] =
+  const [permanentlyDeletingConnector, setPermanentlyDeletingConnector] =
     useState<ConnectorItem | null>(null);
   const restoreConnector = useRestoreConnector();
-  const purgeConnector = usePurgeConnector();
+  const permanentlyDeleteConnector = usePermanentlyDeleteConnector();
 
   const items = connectors?.data ?? [];
   const pagination = connectors?.pagination;
@@ -313,7 +313,7 @@ function ConnectorsList() {
               label: "Delete permanently",
               permissions: { knowledgeSource: ["manage-deleted"] },
               variant: "destructive",
-              onClick: () => setPurgingConnector(row.original),
+              onClick: () => setPermanentlyDeletingConnector(row.original),
             },
           ]}
         />
@@ -391,18 +391,20 @@ function ConnectorsList() {
           />
         )}
 
-        {purgingConnector && (
+        {permanentlyDeletingConnector && (
           <DeleteConfirmDialog
-            open={!!purgingConnector}
+            open={!!permanentlyDeletingConnector}
             onOpenChange={(open) => {
-              if (!open) setPurgingConnector(null);
+              if (!open) setPermanentlyDeletingConnector(null);
             }}
             title="Delete connector permanently"
-            description={`This permanently deletes "${purgingConnector.name}" along with its synced documents, run history, and access mappings. The data cannot be recovered.`}
-            isPending={purgeConnector.isPending}
+            description={`This permanently deletes "${permanentlyDeletingConnector.name}" along with its synced documents, run history, and access mappings. The data cannot be recovered.`}
+            isPending={permanentlyDeleteConnector.isPending}
             onConfirm={async () => {
-              const ok = await purgeConnector.mutateAsync(purgingConnector.id);
-              if (ok) setPurgingConnector(null);
+              const ok = await permanentlyDeleteConnector.mutateAsync(
+                permanentlyDeletingConnector.id,
+              );
+              if (ok) setPermanentlyDeletingConnector(null);
             }}
             confirmLabel="Delete permanently"
             pendingLabel="Deleting..."

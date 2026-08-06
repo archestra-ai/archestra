@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import {
   BUILT_IN_AGENT_IDS,
+  CONTEXT_COMPACTION_AUTO_THRESHOLD,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   getModelReadableMimeTypes,
   type SupportedProvider,
@@ -24,7 +25,6 @@ import {
   ATTR_GENAI_REQUEST_MODEL,
 } from "@/observability/tracing";
 import {
-  CONTEXT_COMPACTION_AUTO_THRESHOLD,
   CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,
   CONTEXT_COMPACTION_SUMMARY_TAG,
   CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,

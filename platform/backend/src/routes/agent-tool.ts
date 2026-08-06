@@ -28,6 +28,7 @@ import {
 import {
   assignToolToAgent,
   type PrefetchedMcpServer,
+  type ToolAssignmentError,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
 import type { InternalMcpCatalog, Tool } from "@/types";
@@ -955,9 +956,11 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 function mapAgentToolAssignmentErrorCodeToHttpStatus(
-  code: "not_found" | "validation_error",
-): 400 | 404 {
-  return code === "not_found" ? 404 : 400;
+  code: ToolAssignmentError["code"],
+): 400 | 403 | 404 {
+  if (code === "not_found") return 404;
+  if (code === "forbidden") return 403;
+  return 400;
 }
 
 export default agentToolRoutes;

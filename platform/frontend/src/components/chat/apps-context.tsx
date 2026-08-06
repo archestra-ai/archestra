@@ -85,12 +85,26 @@ interface AppsContextValue {
    */
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
+  /**
+   * Per-app count of agent-side writes into the app's file store (successful
+   * chat `copy_file` results targeting it), derived from the messages by the
+   * chat page. A bump makes the mounted runtime nudge the running app to
+   * re-list its files.
+   */
+  appFilesRevisions: ReadonlyMap<string, number>;
+  /**
+   * Relay of an app's ui/update-model-context report ("showing file X") to the
+   * chat page, which stamps the latest report per app onto outgoing message
+   * metadata so the backend can restate it in the turn's system prompt.
+   */
+  reportAppModelContext: (appId: string, text: string) => void;
 }
 
 const AppsContext = createContext<AppsContextValue | null>(null);
 
 const EMPTY_SET: ReadonlySet<string> = new Set();
 const EMPTY_MAP: ReadonlyMap<string, string> = new Map();
+const EMPTY_REVISIONS: ReadonlyMap<string, number> = new Map();
 
 const NOOP_VALUE: AppsContextValue = {
   apps: [],
@@ -106,12 +120,16 @@ const NOOP_VALUE: AppsContextValue = {
   closePanel: () => {},
   settingsOpen: false,
   setSettingsOpen: () => {},
+  appFilesRevisions: EMPTY_REVISIONS,
+  reportAppModelContext: () => {},
 };
 
 export function AppsProvider({
   apps,
   onShowInPanel,
   onClosePanel,
+  appFilesRevisions,
+  onAppModelContext,
   children,
 }: {
   /** Apps for this conversation, derived from its messages by the caller. */
@@ -120,6 +138,10 @@ export function AppsProvider({
   onShowInPanel?: () => void;
   /** Called to close the right panel — wire this to collapse the panel. */
   onClosePanel?: () => void;
+  /** Per-app agent-write revisions, derived from the messages by the caller. */
+  appFilesRevisions?: ReadonlyMap<string, number>;
+  /** Receives each app's latest ui/update-model-context report. */
+  onAppModelContext?: (appId: string, text: string) => void;
   children: ReactNode;
 }) {
   // Apps the user explicitly collapsed, keyed per app (an `AppGroup.key`).
@@ -301,6 +323,9 @@ export function AppsProvider({
       closePanel,
       settingsOpen,
       setSettingsOpen,
+      appFilesRevisions: appFilesRevisions ?? EMPTY_REVISIONS,
+      reportAppModelContext:
+        onAppModelContext ?? NOOP_VALUE.reportAppModelContext,
     }),
     [
       apps,
@@ -315,6 +340,8 @@ export function AppsProvider({
       closePanel,
       settingsOpen,
       setSettingsOpen,
+      appFilesRevisions,
+      onAppModelContext,
     ],
   );
 

@@ -178,6 +178,13 @@ export function LocalServerInstallDialog({
       env.promptOnInstallation !== false &&
       (env as { mounted?: boolean }).mounted === true,
   );
+  const personalOnly =
+    personalOnlyProp ||
+    (catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false);
+  const hasPromptedConfiguration =
+    promptedEnvVars.length > 0 ||
+    Object.keys(promptableUserConfig).length > 0 ||
+    catalogItem?.localConfig?.serviceAccount !== undefined;
   const nonSecretEnvVars = promptedEnvVars.filter(
     (env) => env.type !== "secret",
   );
@@ -280,6 +287,10 @@ export function LocalServerInstallDialog({
   const handleInstall = async () => {
     if (!catalogItem) return;
 
+    // personalOnly is a security/product invariant, not merely selector UI.
+    // Enforce it again at the payload boundary so async dialog state cannot
+    // submit a stale team/org scope (notably for the Playwright preview).
+    const submittedScope = personalOnly ? "personal" : scope;
     const finalEnvironmentValues: Record<string, string> = {};
     const finalUserConfigValues: Record<string, string> = {};
 
@@ -343,8 +354,8 @@ export function LocalServerInstallDialog({
       catalogId: catalogItem.id,
       environmentValues: finalEnvironmentValues,
       userConfigValues: finalUserConfigValues,
-      scope,
-      teamId: selectedTeamId,
+      scope: submittedScope,
+      teamId: submittedScope === "team" ? selectedTeamId : null,
       isByosVault:
         useVaultSecrets &&
         (secretEnvVars.length > 0 ||
@@ -570,6 +581,13 @@ export function LocalServerInstallDialog({
         </Alert>
       )}
 
+      {!isReauth && personalOnly && !hasPromptedConfiguration && (
+        <p className="text-sm text-muted-foreground">
+          This server needs no credentials or configuration. Install creates a
+          private hosted instance available only to you.
+        </p>
+      )}
+
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
         catalogId={isReinstall || isReauth ? undefined : catalogItem?.id}
@@ -579,10 +597,7 @@ export function LocalServerInstallDialog({
         isReauth={isReauth}
         existingTeamId={existingTeamId}
         existingScope={existingScope}
-        personalOnly={
-          personalOnlyProp ||
-          (catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false)
-        }
+        personalOnly={personalOnly}
         orgOnly={orgOnly}
         preselectedTeamId={preselectedTeamId}
       />

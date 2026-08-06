@@ -15,8 +15,10 @@ export function OAuthReauthIndicator({
   onActivate?: () => void;
   className?: string;
 }) {
+  // amber-800 in light mode: amber-600 measures ~3.1:1 on the card background,
+  // below the 4.5:1 minimum for small text (WCAG 1.4.3).
   const containerClassName = cn(
-    "inline-flex items-center gap-1 text-xs text-amber-600",
+    "inline-flex items-center gap-1 text-xs text-amber-800 dark:text-amber-400",
     className,
   );
 
@@ -41,7 +43,7 @@ export function OAuthReauthIndicator({
       onClick={onActivate}
       className={cn(
         containerClassName,
-        "cursor-pointer rounded-sm underline-offset-2 hover:text-amber-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
+        "cursor-pointer rounded-sm underline-offset-2 hover:text-amber-900 dark:hover:text-amber-300 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
       )}
       data-testid="oauth-reauth-state"
       aria-label="Needs re-authentication, open credentials"

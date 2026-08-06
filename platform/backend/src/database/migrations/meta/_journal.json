@@ -2763,8 +2763,50 @@
     {
       "idx": 394,
       "version": "7",
-      "when": 1785708730045,
-      "tag": "0394_odd_black_panther",
+      "when": 1785756813025,
+      "tag": "0394_purge_orphaned_personal_mcp_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 395,
+      "version": "7",
+      "when": 1785783742289,
+      "tag": "0395_purge_ex_member_personal_mcp_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 396,
+      "version": "7",
+      "when": 1785800057394,
+      "tag": "0396_purge_membershipless_personal_mcp_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 397,
+      "version": "7",
+      "when": 1785841780161,
+      "tag": "0397_credential_connection_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 398,
+      "version": "7",
+      "when": 1785918805135,
+      "tag": "0398_crazy_sally_floyd",
+      "breakpoints": true
+    },
+    {
+      "idx": 399,
+      "version": "7",
+      "when": 1785954195482,
+      "tag": "0399_broken_lady_ursula",
+      "breakpoints": true
+    },
+    {
+      "idx": 400,
+      "version": "7",
+      "when": 1786003260705,
+      "tag": "0400_deleted_at_purge_indexes",
       "breakpoints": true
     }
   ]

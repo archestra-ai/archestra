@@ -139,7 +139,7 @@ describe("validateAssignment", () => {
     expect(result?.error.message).toContain("MCP server installation");
   });
 
-  test("allows local server tool with mcpServerId", async ({
+  test("allows shared local server tool with mcpServerId", async ({
     makeAgent,
     makeTool,
     makeMcpServer,
@@ -150,7 +150,10 @@ describe("validateAssignment", () => {
     });
     const agent = await makeAgent();
     const tool = await makeTool({ catalogId: catalogItem.id });
-    const server = await makeMcpServer({ catalogId: catalogItem.id });
+    const server = await makeMcpServer({
+      catalogId: catalogItem.id,
+      scope: "org",
+    });
 
     const data = {
       existingAgentIds: new Set([agent.id]),
@@ -669,7 +672,7 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
     });
   });
 
-  test("allows assigning a personal connection to an org-scoped agent when the owner is in the organization", async ({
+  test("rejects a personal connection for an org-scoped agent", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -699,11 +702,13 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       payload: { mcpServerId: mcpServer.id },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ success: true });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "dynamic credential resolution",
+    );
   });
 
-  test("allows assigning a personal connection to a team-scoped agent when the owner is in the team", async ({
+  test("rejects a personal connection for a team-scoped agent", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -740,11 +745,13 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       payload: { mcpServerId: mcpServer.id },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ success: true });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "dynamic credential resolution",
+    );
   });
 
-  test("allows assigning a personal connection to a team-scoped MCP gateway when the owner is in the team", async ({
+  test("rejects a personal connection for a team-scoped MCP gateway", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -781,8 +788,10 @@ describe("POST /api/agents/:agentId/tools/:toolId", () => {
       payload: { mcpServerId: mcpServer.id },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ success: true });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "dynamic credential resolution",
+    );
   });
 });
 

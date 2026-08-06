@@ -73,6 +73,21 @@ class IdentityProviderModel {
   );
 
   /**
+   * Process-local cache for {@link findAllPublic}. Backs the unauthenticated
+   * SSO-provider list the login page fetches on every render, so without a
+   * cache each login-page view costs a database query for a list that only
+   * changes when an admin edits identity providers. Same invalidation story
+   * as {@link trustedProviderIdsCache}: writes in this process clear it
+   * immediately; other pods converge within the TTL.
+   */
+  private static readonly publicProvidersCache = registerProcessLocalCache(
+    new LRUCacheManager<PublicIdentityProvider[]>({
+      maxSize: 1,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
+
+  /**
    * Evaluates role mapping rules against SSO user data using Handlebars templates.
    *
    * @example
@@ -485,6 +500,13 @@ class IdentityProviderModel {
    * Does NOT expose any sensitive configuration data.
    */
   static async findAllPublic(): Promise<PublicIdentityProvider[]> {
+    const cached = IdentityProviderModel.publicProvidersCache.get(
+      PUBLIC_PROVIDERS_CACHE_KEY,
+    );
+    if (cached) {
+      return cached;
+    }
+
     const idpProviders = await db
       .select({
         id: schema.identityProvidersTable.id,
@@ -493,6 +515,10 @@ class IdentityProviderModel {
       .from(schema.identityProvidersTable)
       .where(eq(schema.identityProvidersTable.ssoLoginEnabled, true));
 
+    IdentityProviderModel.publicProvidersCache.set(
+      PUBLIC_PROVIDERS_CACHE_KEY,
+      idpProviders,
+    );
     return idpProviders;
   }
 
@@ -754,6 +780,7 @@ class IdentityProviderModel {
     }
 
     IdentityProviderModel.trustedProviderIdsCache.clear();
+    IdentityProviderModel.publicProvidersCache.clear();
 
     return {
       ...updatedProvider,
@@ -835,6 +862,7 @@ class IdentityProviderModel {
     if (!updatedProvider) return null;
 
     IdentityProviderModel.trustedProviderIdsCache.clear();
+    IdentityProviderModel.publicProvidersCache.clear();
 
     return {
       ...updatedProvider,
@@ -899,6 +927,7 @@ class IdentityProviderModel {
     });
 
     IdentityProviderModel.trustedProviderIdsCache.clear();
+    IdentityProviderModel.publicProvidersCache.clear();
 
     return true;
   }
@@ -996,6 +1025,7 @@ export default IdentityProviderModel;
 const OIDC_DISCOVERY_TIMEOUT_MS = 10_000;
 const SSO_REGISTRATION_PLACEHOLDER_DOMAIN = "sso-placeholder.example.com";
 const TRUSTED_PROVIDER_IDS_CACHE_KEY = "trusted-provider-ids";
+const PUBLIC_PROVIDERS_CACHE_KEY = "public-providers";
 
 function serializeConfigValue(
   value: string | object | null | undefined,

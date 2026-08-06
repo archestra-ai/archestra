@@ -113,7 +113,14 @@ function UsersPageContent() {
       loadingFallback={<LoadingSpinner />}
     >
       {activeOrg ? (
-        <div className="space-y-6">
+        <div
+          className="space-y-6"
+          // Single always-mounted panel keeps each tab's aria-controls
+          // pointing at an element that exists (the panel's content swaps).
+          role="tabpanel"
+          id={USERS_TABPANEL_ID}
+          aria-labelledby={`${activeTab}-tab`}
+        >
           {activeTab === "users" ? (
             <MembersTab activeTab={activeTab} onTabChange={setActiveTab} />
           ) : (
@@ -130,6 +137,13 @@ function UsersPageContent() {
   );
 }
 
+const USERS_TABPANEL_ID = "users-tabpanel";
+
+const USER_TABS = [
+  { id: "users", label: "Users" },
+  { id: "invitations", label: "Invitations" },
+] as const;
+
 function TabButtons({
   activeTab,
   onTabChange,
@@ -137,24 +151,47 @@ function TabButtons({
   activeTab: string;
   onTabChange: (tab: string) => void;
 }) {
+  // Switching tabs swaps the whole MembersTab/InvitationsTab subtree —
+  // including this component — so the newly active tab button must be
+  // re-focused after the replacement mounts or keyboard focus drops to <body>.
+  const selectTab = (tabId: string) => {
+    onTabChange(tabId);
+    requestAnimationFrame(() => {
+      document.getElementById(`${tabId}-tab`)?.focus();
+    });
+  };
+
   return (
-    <div className="flex gap-1 rounded-lg bg-muted p-1">
-      <Button
-        variant={activeTab === "users" ? "secondary" : "ghost"}
-        size="sm"
-        onClick={() => onTabChange("users")}
-        className={cn("px-3", activeTab === "users" && "shadow-sm")}
-      >
-        Users
-      </Button>
-      <Button
-        variant={activeTab === "invitations" ? "secondary" : "ghost"}
-        size="sm"
-        onClick={() => onTabChange("invitations")}
-        className={cn("px-3", activeTab === "invitations" && "shadow-sm")}
-      >
-        Invitations
-      </Button>
+    <div
+      role="tablist"
+      aria-label="Users and invitations"
+      className="flex gap-1 rounded-lg bg-muted p-1"
+    >
+      {USER_TABS.map((tab) => {
+        const isActive = activeTab === tab.id;
+        return (
+          <Button
+            key={tab.id}
+            role="tab"
+            id={`${tab.id}-tab`}
+            aria-selected={isActive}
+            aria-controls={USERS_TABPANEL_ID}
+            tabIndex={isActive ? 0 : -1}
+            variant={isActive ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => selectTab(tab.id)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                e.preventDefault();
+                selectTab(tab.id === "users" ? "invitations" : "users");
+              }
+            }}
+            className={cn("px-3", isActive && "shadow-sm")}
+          >
+            {tab.label}
+          </Button>
+        );
+      })}
     </div>
   );
 }

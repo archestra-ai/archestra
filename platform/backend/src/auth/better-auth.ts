@@ -41,11 +41,13 @@ import AccountModel from "@/models/account";
 import AgentModel from "@/models/agent";
 import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
+import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
+import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
 import type { AuditEventName } from "@/types/audit-log";
 import { devAutoLoginPlugin } from "./dev-auto-login";
 // SPDX-SnippetBegin
@@ -72,6 +74,36 @@ const {
     trustedOrigins: staticTrustedOrigins,
   },
 } = config;
+
+/**
+ * Options for the JWT plugin, which owns the JWKS keypair that signs OIDC
+ * id_tokens.
+ *
+ * Extracted so the startup JWKS guard can mint a replacement key with exactly
+ * the same key-pair configuration as the plugin itself — a guard that minted a
+ * key under different options would hand better-auth a keypair it never agreed
+ * to sign with. See `auth/jwks-signing-key-guard.ts`.
+ *
+ * @public — shared with the JWKS startup guard
+ */
+export const JWT_PLUGIN_OPTIONS = {
+  jwt: {
+    // Pydantic's AnyHttpUrl (used by MCP/Open WebUI OAuthMetadata model)
+    // normalizes URLs by appending a trailing slash when the path is empty.
+    // The JWT iss claim must match the normalized issuer from the well-known
+    // metadata to pass authlib's claim validation.
+    issuer: `${frontendBaseUrl}/`,
+  },
+  jwks: {
+    keyPairConfig: { alg: "RS256", modulusLength: 2048 },
+  },
+  // Without this, the plugin's /get-session after-hook mints a JWT — a
+  // jwks table read plus an RS256 signature — on EVERY authenticated
+  // request (the auth middleware calls getSession per request) just to
+  // set a `set-auth-jwt` response header nothing consumes. The /token
+  // and /jwks endpoints (used by the OAuth/OIDC flows) are unaffected.
+  disableSettingJwtHeader: true,
+} as const satisfies Parameters<typeof jwt>[0];
 
 const ac = createAccessControl(allAvailableActions);
 
@@ -223,24 +255,7 @@ export const auth = betterAuth({
       issuer: APP_NAME,
     }),
     ...(ssoConfig ? [sso(ssoConfig)] : []),
-    jwt({
-      jwt: {
-        // Pydantic's AnyHttpUrl (used by MCP/Open WebUI OAuthMetadata model)
-        // normalizes URLs by appending a trailing slash when the path is empty.
-        // The JWT iss claim must match the normalized issuer from the well-known
-        // metadata to pass authlib's claim validation.
-        issuer: `${frontendBaseUrl}/`,
-      },
-      jwks: {
-        keyPairConfig: { alg: "RS256", modulusLength: 2048 },
-      },
-      // Without this, the plugin's /get-session after-hook mints a JWT — a
-      // jwks table read plus an RS256 signature — on EVERY authenticated
-      // request (the auth middleware calls getSession per request) just to
-      // set a `set-auth-jwt` response header nothing consumes. The /token
-      // and /jwks endpoints (used by the OAuth/OIDC flows) are unaffected.
-      disableSettingJwtHeader: true,
-    }),
+    jwt(JWT_PLUGIN_OPTIONS),
     oauthProvider({
       loginPage: OAUTH_PAGES.login,
       consentPage: OAUTH_PAGES.consent,
@@ -375,6 +390,32 @@ export const auth = betterAuth({
             logger.error(
               { err: error, userId: user.id },
               "[databaseHooks:user] Failed to delete personal LLM proxies",
+            );
+          }
+          // Personal apps first: purging their backing install without
+          // deleting the app leaves the app detached with a live catalog and
+          // launch tool (`apps.mcp_server_id` only nulls). Handled here rather
+          // than in UserModel.delete because the app teardown is a service the
+          // model layer cannot import; the raw UserModel.delete callers only
+          // ever delete pending/shell users, who cannot own apps.
+          try {
+            await purgePersonalAppsForUser({ userId: user.id });
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to purge personal apps",
+            );
+          }
+          // Mirrors UserModel.delete — the app-driven deletion paths are raw
+          // Drizzle deletes that bypass this hook, while better-auth's
+          // self-service delete-user endpoint reaches ONLY this hook. The
+          // purge is idempotent, so both paths calling it is harmless.
+          try {
+            await McpServerModel.purgePersonalServersForUser(user.id);
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to purge personal MCP credentials",
             );
           }
         },
@@ -520,6 +561,13 @@ type MemberRemoveStash = {
 };
 
 const memberRemoveByRequest = new WeakMap<Request, MemberRemoveStash>();
+
+/**
+ * Same shape for `/organization/leave` — the self-service twin of
+ * remove-member, which better-auth mounts unconditionally. Stashed separately
+ * so each after-hook consumes only its own path's snapshot.
+ */
+const memberLeaveByRequest = new WeakMap<Request, MemberRemoveStash>();
 
 type ImpersonationStash = {
   impersonatorId: string;
@@ -1075,7 +1123,26 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     beforeRequest
   ) {
     const memberIdOrEmail = body.memberIdOrEmail as string | undefined;
-    if (memberIdOrEmail) {
+    // Resolve the organization the way the endpoint itself does (explicit
+    // body value, else the caller's active organization) and scope the
+    // snapshot to it — an unscoped lookup could stash a same-email membership
+    // from a different organization than the one the removal targets.
+    let requestOrganizationId = body.organizationId as string | undefined;
+    if (memberIdOrEmail && !requestOrganizationId) {
+      try {
+        const resolved = await auth.api.getSession({
+          headers: new Headers(beforeRequest.headers as HeadersInit),
+        });
+        requestOrganizationId =
+          resolved?.session?.activeOrganizationId ?? undefined;
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to resolve organization before member removal",
+        );
+      }
+    }
+    if (memberIdOrEmail && requestOrganizationId) {
       const [existing] = await db
         .select({
           id: schema.membersTable.id,
@@ -1091,9 +1158,12 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
           eq(schema.membersTable.userId, schema.usersTable.id),
         )
         .where(
-          memberIdOrEmail.includes("@")
-            ? eq(schema.usersTable.email, memberIdOrEmail)
-            : eq(schema.membersTable.id, memberIdOrEmail),
+          and(
+            memberIdOrEmail.includes("@")
+              ? eq(schema.usersTable.email, memberIdOrEmail)
+              : eq(schema.membersTable.id, memberIdOrEmail),
+            eq(schema.membersTable.organizationId, requestOrganizationId),
+          ),
         )
         .limit(1);
       if (existing) {
@@ -1105,6 +1175,55 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
           email: existing.email,
           name: existing.name ?? null,
         });
+      }
+    }
+  }
+
+  if (path === "/organization/leave" && method === "POST" && beforeRequest) {
+    const organizationId = body.organizationId as string | undefined;
+    if (organizationId) {
+      try {
+        const resolved = await auth.api.getSession({
+          headers: new Headers(beforeRequest.headers as HeadersInit),
+        });
+        if (resolved?.user) {
+          const [existing] = await db
+            .select({
+              id: schema.membersTable.id,
+              userId: schema.membersTable.userId,
+              organizationId: schema.membersTable.organizationId,
+              role: schema.membersTable.role,
+              email: schema.usersTable.email,
+              name: schema.usersTable.name,
+            })
+            .from(schema.membersTable)
+            .innerJoin(
+              schema.usersTable,
+              eq(schema.membersTable.userId, schema.usersTable.id),
+            )
+            .where(
+              and(
+                eq(schema.membersTable.userId, resolved.user.id),
+                eq(schema.membersTable.organizationId, organizationId),
+              ),
+            )
+            .limit(1);
+          if (existing) {
+            memberLeaveByRequest.set(beforeRequest, {
+              memberId: existing.id,
+              userId: existing.userId,
+              organizationId: existing.organizationId,
+              role: existing.role,
+              email: existing.email,
+              name: existing.name ?? null,
+            });
+          }
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to snapshot membership before organization leave",
+        );
       }
     }
   }
@@ -1678,7 +1797,12 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   if (path === "/organization/remove-member" && method === "POST" && request) {
     const stash = memberRemoveByRequest.get(request);
     memberRemoveByRequest.delete(request);
-    if (stash) {
+    // After-hooks also run when better-auth REJECTED the operation (it turns
+    // the endpoint's APIError into a response before dispatching them), so the
+    // stash alone doesn't prove a removal happened. Re-check the membership —
+    // otherwise a failed removal would still write a member.deleted audit row
+    // and purge a member's personal resources.
+    if (stash && !(await membershipStillExists(stash))) {
       try {
         const headers = new Headers(request.headers as HeadersInit);
         const resolved = await auth.api.getSession({ headers });
@@ -1728,6 +1852,63 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           "[auth] failed to sync system role after member removal",
         );
       }
+      await cleanupAfterMembershipRemoval(stash);
+    }
+  }
+
+  // Self-service leave: better-auth mounts this endpoint unconditionally, and
+  // it removes the membership exactly like remove-member — audit it and clean
+  // up the same way.
+  if (path === "/organization/leave" && method === "POST" && request) {
+    const stash = memberLeaveByRequest.get(request);
+    memberLeaveByRequest.delete(request);
+    // Same rejected-operation guard as remove-member above.
+    if (stash && !(await membershipStillExists(stash))) {
+      try {
+        await AuditLogModel.create({
+          organizationId: stash.organizationId,
+          actorId: stash.userId,
+          actorType: "user",
+          actorName: stash.name,
+          actorEmail: stash.email,
+          action: "member.deleted",
+          outcome: "success",
+          resourceType: "member",
+          resourceId: stash.memberId,
+          before: {
+            email: stash.email,
+            name: stash.name,
+            role: stash.role,
+          },
+          after: null,
+          httpMethod: "POST",
+          httpPath: path,
+          httpRoute: null,
+          httpStatus: null,
+          requestId: null,
+          sourceIp: resolveAuthClientIp(request),
+          userAgent: request.headers.get("user-agent") ?? null,
+          occurredAt: new Date(),
+        });
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write organization-leave audit row",
+        );
+        reportAuditWriteFailure({ source: "auth", resourceType: "member" });
+      }
+      try {
+        await syncSystemRoleWithOrgPermissions(
+          stash.userId,
+          stash.organizationId,
+        );
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to sync system role after organization leave",
+        );
+      }
+      await cleanupAfterMembershipRemoval(stash);
     }
   }
 
@@ -2134,6 +2315,60 @@ async function assertSsoEmailDomainAllowed(params: {
   throw new APIError("FORBIDDEN", {
     message: "Your email domain is not allowed for this identity provider.",
   });
+}
+
+/**
+ * Whether the stashed membership still exists — the discriminator between a
+ * removal that succeeded and one better-auth rejected after the before-hook
+ * had already stashed its snapshot.
+ */
+async function membershipStillExists(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  return (
+    (await MemberModel.getByUserId(params.userId, params.organizationId)) !=
+    null
+  );
+}
+
+/**
+ * Resource cleanup after a membership was removed (`remove-member` or
+ * `leave`) — the removal itself already succeeded, so everything here is
+ * best-effort. Personal apps go first (their backing catalog and launch tool
+ * come down with them), then the remaining personal installs for the
+ * organization's catalogs. When that was the user's LAST membership, the
+ * account itself is unreachable residue — no organization can ever list or
+ * restore it — so it is deleted outright, which also sweeps any cross-org
+ * leftovers (installs on org-less catalogs, personal gateways/proxies) and
+ * cascades sessions and accounts.
+ */
+async function cleanupAfterMembershipRemoval(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { userId, organizationId } = params;
+  try {
+    await purgePersonalAppsForUser({ userId, organizationId });
+    await McpServerModel.purgePersonalServersForUserInOrganization(
+      userId,
+      organizationId,
+    );
+    // Known micro-race, accepted: a membership created between this check and
+    // the delete would be cascaded away. The window is a few milliseconds, the
+    // failure mode is bounded and recoverable (re-invite the user), and
+    // closing it would force the transaction-scoped purge variant, which
+    // cannot tear down K8s deployments or Vault-backed secrets — a worse
+    // everyday trade than the race.
+    if (!(await MemberModel.hasAnyMembership(userId))) {
+      await UserModel.delete(userId);
+    }
+  } catch (err) {
+    logger.error(
+      { err, userId, organizationId },
+      "[auth] failed to clean up personal resources after membership removal",
+    );
+  }
 }
 
 async function cleanupRejectedSsoLogin(params: {

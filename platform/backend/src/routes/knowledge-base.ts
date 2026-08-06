@@ -422,7 +422,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/knowledge-bases/:id/permanent",
     {
       schema: {
-        operationId: RouteId.PurgeKnowledgeBase,
+        operationId: RouteId.PermanentlyDeleteKnowledgeBase,
         description:
           "Permanently delete a soft-deleted knowledge base (requires the " +
           "manage-deleted permission). Destroys the row and its assignments; " +
@@ -1373,7 +1373,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/connectors/:id/permanent",
     {
       schema: {
-        operationId: RouteId.PurgeConnector,
+        operationId: RouteId.PermanentlyDeleteConnector,
         description:
           "Permanently delete a soft-deleted connector (requires the " +
           "manage-deleted permission). Destroys its documents, chunks, runs, " +

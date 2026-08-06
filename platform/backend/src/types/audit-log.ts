@@ -20,6 +20,10 @@ export const AuditEventNameSchema = z.enum([
   "agent.deleted",
   "agent.restored",
   "agent.imported",
+  // `.purged` = permanent deletion from the trash. Deliberately distinct from
+  // `.deleted` (which soft-deletes and is recoverable), and deliberately
+  // recorded with identity only — a purge record must not preserve a copy of
+  // the content the caller asked to destroy.
   "agent.purged",
   "agentTool.created",
   "agentTool.updated",
@@ -111,6 +115,7 @@ export const AuditEventNameSchema = z.enum([
   "project.deleted",
   "project.purged",
   "project.restored",
+  "project.purged",
   "role.created",
   "role.updated",
   "role.deleted",
@@ -126,6 +131,7 @@ export const AuditEventNameSchema = z.enum([
   "skill.deleted",
   "skill.purged",
   "skill.restored",
+  "skill.purged",
   "skill.imported",
   "team.created",
   "team.updated",

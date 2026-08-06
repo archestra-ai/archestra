@@ -1,9 +1,15 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Action, Permissions, Resource } from "@archestra/shared";
+import {
+  type Action,
+  ADMIN_ROLE_NAME,
+  type Permissions,
+  PLATFORM_ADMIN_ROLE_NAME,
+  type Resource,
+} from "@archestra/shared";
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
 import { auth as betterAuth } from "@/auth/better-auth";
 import logger from "@/logging";
-import { ServiceAccountModel, UserModel } from "@/models";
+import { MemberModel, ServiceAccountModel, UserModel } from "@/models";
 import type { SelectServiceAccount } from "@/types";
 
 /**
@@ -126,6 +132,31 @@ export const userHasPermission = async (
   });
 
   return permissions[resource]?.includes(action) ?? false;
+};
+
+/**
+ * Whether the caller holds one of the organization's built-in admin roles.
+ *
+ * This is a ROLE check, deliberately not a permission check: it is the gate for
+ * irreversible actions (permanent deletion) where "someone was granted this
+ * capability" is not enough — a custom role carrying, say, `project:admin` is
+ * an oversight role, not an owner of the deployment. Both built-in admin roles
+ * qualify; every custom role, however broad, does not.
+ *
+ * Membership is read from the database on every call, matching the rest of
+ * authorization here (never the session cookie, which can carry a stale
+ * organization snapshot). A service account has no member row, so it is never a
+ * global admin — automation cannot destroy data past the point of recovery.
+ */
+export const isGlobalAdmin = async (
+  userId: string,
+  organizationId: string,
+): Promise<boolean> => {
+  const member = await MemberModel.getByUserId(userId, organizationId);
+  return (
+    member?.role === ADMIN_ROLE_NAME ||
+    member?.role === PLATFORM_ADMIN_ROLE_NAME
+  );
 };
 
 export const getPermissionsForUserContext = async (params: {

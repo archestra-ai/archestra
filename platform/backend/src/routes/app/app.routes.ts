@@ -1275,7 +1275,11 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (isAssignmentError(result)) {
         throw new ApiError(
-          result.code === "not_found" ? 404 : 400,
+          result.code === "not_found"
+            ? 404
+            : result.code === "forbidden"
+              ? 403
+              : 400,
           result.error.message,
         );
       }

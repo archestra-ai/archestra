@@ -321,10 +321,15 @@ const PromptInputContent = ({
   const hooksDebugEnabled = conversation?.hooksDebugEnabled ?? false;
   const canDebug = Boolean(conversationId && isAgentAdmin && agentHooksEnabled);
 
+  // Compaction needs a persisted conversation to summarize, so both of its
+  // entry points — /compact and the context window panel's action — share this
+  // gate.
+  const compactConversation =
+    conversationId && onCompactConversation ? onCompactConversation : undefined;
+
   // /compact and /debug apply to an existing conversation; skill commands work anywhere.
   const slashCommands = useMemo<SlashCommand[]>(() => {
-    const compact =
-      conversationId && onCompactConversation ? [COMPACT_COMMAND] : [];
+    const compact = compactConversation ? [COMPACT_COMMAND] : [];
     const debug: SlashCommand[] = canDebug
       ? [
           {
@@ -337,13 +342,7 @@ const PromptInputContent = ({
         ]
       : [];
     return [...compact, ...debug, ...skillCommands];
-  }, [
-    conversationId,
-    onCompactConversation,
-    canDebug,
-    hooksDebugEnabled,
-    skillCommands,
-  ]);
+  }, [compactConversation, canDebug, hooksDebugEnabled, skillCommands]);
 
   // Keyed by conversation only — NOT by agentId. Keying the new-chat draft by
   // agent made the restore effect below re-run on every agent switch and clear
@@ -951,6 +950,8 @@ const PromptInputContent = ({
             textareaRef={textareaRef}
             contextWindow={contextWindow}
             lastCompaction={lastCompaction}
+            onCompactConversation={compactConversation}
+            isContextCompacting={isContextCompacting}
           />
           {/* shrink-0: the send/mic cluster is a fixed unit and must never
               compress. When the toolbar runs out of room the collapse hook

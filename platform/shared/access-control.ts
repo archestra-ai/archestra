@@ -728,12 +728,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
   [RouteId.RestoreAgent]: {},
-  // Permanent delete: per-agent-type `admin` checked dynamically in handler,
-  // like every other agent route.
-  [RouteId.PurgeAgent]: {},
+  [RouteId.PermanentlyDeleteAgent]: {},
   // Version history: agent-type read permission checked dynamically in handler
   [RouteId.GetAgentVersions]: {},
   [RouteId.GetAgentVersion]: {},
+  [RouteId.RestoreAgentVersion]: {},
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
@@ -1641,7 +1640,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Deleted-resource lifecycle is its own capability, granted by default to
   // admins only — delete does not imply the ability to see or revive tombstones.
   [RouteId.RestoreKnowledgeBase]: { knowledgeSource: ["manage-deleted"] },
-  [RouteId.PurgeKnowledgeBase]: { knowledgeSource: ["manage-deleted"] },
+  [RouteId.PermanentlyDeleteKnowledgeBase]: {
+    knowledgeSource: ["manage-deleted"],
+  },
   [RouteId.GetKnowledgeBaseHealth]: { knowledgeSource: ["read"] },
 
   // Knowledge Base Connector Routes
@@ -1655,7 +1656,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Deleted-resource lifecycle is its own capability, granted by default to
   // admins only — delete does not imply the ability to see or revive tombstones.
   [RouteId.RestoreConnector]: { knowledgeSource: ["manage-deleted"] },
-  [RouteId.PurgeConnector]: { knowledgeSource: ["manage-deleted"] },
+  [RouteId.PermanentlyDeleteConnector]: { knowledgeSource: ["manage-deleted"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },
@@ -1696,9 +1697,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
   [RouteId.RestoreSkill]: { skill: ["delete"] },
-  // Permanent delete is a trash action (the row must already be soft-deleted)
-  // and destroys data irrecoverably — admin-only, unlike delete/restore.
-  [RouteId.PurgeSkill]: { skill: ["admin"] },
+  // Permanent deletion is irreversible, so the handler narrows this further to
+  // a built-in admin ROLE — no skill permission, `skill:admin` included, gets
+  // you past the trash.
+  [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
@@ -1727,9 +1729,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // Restore is the inverse of delete and, like the deleted-projects view, an
   // oversight action — the handler further narrows it to `project:admin`.
   [RouteId.RestoreProject]: { project: ["delete"] },
-  // Permanent delete is a trash action (the row must already be soft-deleted)
-  // and destroys data irrecoverably — admin-only.
-  [RouteId.PurgeProject]: { project: ["admin"] },
+  // Irreversible, so the handler narrows to a built-in admin ROLE — further
+  // than restore's `project:admin`, which a custom oversight role can hold.
+  // That also settles the org-wide-share question delete/restore have to ask:
+  // an admin role always holds `project:share-org`, so there is no separate
+  // branch here to answer 403 and leak a trashed project's existence.
+  [RouteId.PermanentlyDeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   // Project file surfaces combine project-level access with the files gate:
   // `file:manage` covers the file operations, while project membership is

@@ -40,10 +40,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateAccountNameMutation } from "@/lib/auth/account.query";
 import { useAllPermissions, useSession } from "@/lib/auth/auth.query";
-import {
-  useActiveMemberRole,
-  useActiveOrganization,
-} from "@/lib/organization.query";
+import { useActiveMemberRole } from "@/lib/organization.query";
 
 const NameFormSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -71,21 +68,19 @@ const actionLabels: Record<Action, string> = {
 };
 
 export function RolePermissionsCard() {
-  const { data: session } = useSession();
-  const { data: activeOrg, isPending: isOrgPending } = useActiveOrganization();
-  const { data: role, isPending: isRolePending } = useActiveMemberRole(
-    activeOrg?.id,
-  );
+  const { data: session, isPending: isSessionPending } = useSession();
+  const hasActiveOrganization = !!session?.session?.activeOrganizationId;
+  const { data: role, isPending: isRolePending } = useActiveMemberRole();
   const { data: permissions, isLoading: isPermissionsLoading } =
     useAllPermissions();
 
-  // The role query only enables once the organization resolves, and a disabled
-  // query reports isLoading false with no data — gating on that renders the
-  // card, then snaps it back to a skeleton when the role finally fetches.
-  // isPending stays true across both waits; guard it on the organization id so
-  // a user without one is not stuck on a skeleton the role can never clear.
+  // The role query stays pending forever for a user with no active
+  // organization (it never enables), so its wait only counts when the session
+  // says there is an organization to have a role in.
   const isLoading =
-    isOrgPending || (!!activeOrg?.id && isRolePending) || isPermissionsLoading;
+    isSessionPending ||
+    (hasActiveOrganization && isRolePending) ||
+    isPermissionsLoading;
 
   if (isLoading) {
     return (

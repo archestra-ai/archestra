@@ -22,5 +22,6 @@ export const {
   betterAuth,
   fastifyAuthPlugin,
   hasPermission,
+  isGlobalAdmin,
   userHasPermission,
 } = mock;

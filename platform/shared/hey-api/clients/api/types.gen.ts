@@ -12154,6 +12154,8 @@ export type GetAgentsResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'advisor-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -12275,6 +12277,8 @@ export type CreateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
@@ -12407,6 +12411,8 @@ export type CreateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -12497,6 +12503,10 @@ export type GetAllAgentsData = {
          * Exclude built-in agents from the results. Defaults to false.
          */
         excludeBuiltIn?: boolean;
+        /**
+         * Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to.
+         */
+        includeAdvisor?: boolean;
         /**
          * Filter by scope: personal, team, org, or built_in.
          */
@@ -12623,6 +12633,8 @@ export type GetAllAgentsResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -12814,6 +12826,8 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -13005,6 +13019,8 @@ export type GetDefaultLlmProxyResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -13275,6 +13291,8 @@ export type ImportAgentResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
+            } | {
+                name: 'advisor-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -13559,6 +13577,8 @@ export type GetAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -13671,6 +13691,8 @@ export type UpdateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
@@ -13805,6 +13827,8 @@ export type UpdateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -14131,6 +14155,204 @@ export type GetAgentVersionResponses = {
 
 export type GetAgentVersionResponse = GetAgentVersionResponses[keyof GetAgentVersionResponses];
 
+export type RestoreAgentVersionData = {
+    body: {
+        baseVersion?: number;
+    } | null;
+    path: {
+        id: string;
+        version: number;
+    };
+    query?: never;
+    url: '/api/agents/{id}/versions/{version}/restore';
+};
+
+export type RestoreAgentVersionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RestoreAgentVersionError = RestoreAgentVersionErrors[keyof RestoreAgentVersionErrors];
+
+export type RestoreAgentVersionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        slug: string | null;
+        isDefault: boolean;
+        isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
+        considerContextUntrusted: boolean;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        systemPrompt: string | null;
+        description: string | null;
+        icon: string | null;
+        incomingEmailEnabled: boolean;
+        incomingEmailSecurityMode: 'private' | 'internal' | 'public';
+        incomingEmailAllowedDomain: string | null;
+        llmApiKeyId: string | null;
+        llmModel: string | null;
+        modelId: string | null;
+        identityProviderId: string | null;
+        environmentId: string | null;
+        passthroughHeaders: Array<string> | null;
+        toolExposureMode: 'full' | 'search_and_run_only';
+        accessAllTools: boolean;
+        accessAllSubagents: boolean;
+        builtInAgentConfig: {
+            name: 'policy-configuration-subagent';
+            autoConfigureOnToolDiscovery: boolean;
+        } | {
+            name: 'dual-llm-main-agent';
+            maxRounds: number;
+        } | {
+            name: 'dual-llm-quarantine-agent';
+        } | {
+            name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
+        } | {
+            name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
+        } | null;
+        builtIn: boolean | null;
+        latestVersion: number;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        tools: Array<{
+            id: string;
+            agentId: string | null;
+            catalogId: string | null;
+            delegateToAgentId: string | null;
+            name: string;
+            rawName: string | null;
+            /**
+             *
+             * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+             *
+             * The parameters the functions accepts, described as a JSON Schema object. See the
+             * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+             * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+             * documentation about the format.
+             *
+             * Omitting parameters defines a function with an empty parameter list.
+             *
+             */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            description: string | null;
+            meta: string | number | boolean | null | {
+                [key: string]: unknown;
+            } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
+            policiesAutoConfiguredAt: string | null;
+            policiesAutoConfiguringStartedAt: string | null;
+            policiesAutoConfiguredReasoning: string | null;
+            policiesAutoConfiguredModel: string | null;
+            createdAt: string;
+            updatedAt: string;
+            deletedAt: string | null;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+        authorName?: string | null;
+        authorEmail?: string | null;
+        knowledgeBaseIds: Array<string>;
+        connectorIds: Array<string>;
+        suggestedPrompts: Array<{
+            summaryTitle: string;
+            prompt: string;
+        }>;
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        resolvedLlmModelName?: string | null;
+        llmProviderRequiresPerUserCredential?: boolean;
+        sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
+    };
+};
+
+export type RestoreAgentVersionResponse = RestoreAgentVersionResponses[keyof RestoreAgentVersionResponses];
+
 export type CloneAgentData = {
     body: {
         /**
@@ -14259,6 +14481,8 @@ export type CloneAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -14975,6 +15199,8 @@ export type RestoreAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
+        } | {
+            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -15049,7 +15275,7 @@ export type RestoreAgentResponses = {
 
 export type RestoreAgentResponse = RestoreAgentResponses[keyof RestoreAgentResponses];
 
-export type PurgeAgentData = {
+export type PermanentlyDeleteAgentData = {
     body?: never;
     path: {
         id: string;
@@ -15058,7 +15284,7 @@ export type PurgeAgentData = {
     url: '/api/agents/{id}/permanent';
 };
 
-export type PurgeAgentErrors = {
+export type PermanentlyDeleteAgentErrors = {
     /**
      * Default Response
      */
@@ -15121,9 +15347,9 @@ export type PurgeAgentErrors = {
     };
 };
 
-export type PurgeAgentError = PurgeAgentErrors[keyof PurgeAgentErrors];
+export type PermanentlyDeleteAgentError = PermanentlyDeleteAgentErrors[keyof PermanentlyDeleteAgentErrors];
 
-export type PurgeAgentResponses = {
+export type PermanentlyDeleteAgentResponses = {
     /**
      * Default Response
      */
@@ -15132,7 +15358,7 @@ export type PurgeAgentResponses = {
     };
 };
 
-export type PurgeAgentResponse = PurgeAgentResponses[keyof PurgeAgentResponses];
+export type PermanentlyDeleteAgentResponse = PermanentlyDeleteAgentResponses[keyof PermanentlyDeleteAgentResponses];
 
 export type GetLabelKeysData = {
     body?: never;
@@ -22926,7 +23152,7 @@ export type AzureEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -23036,7 +23262,7 @@ export type AzureEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -33978,7 +34204,7 @@ export type GeminiEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -34088,7 +34314,7 @@ export type GeminiEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -38087,7 +38313,7 @@ export type GetInteractionsResponses = {
                 data: Array<{
                     object: 'embedding';
                     embedding: Array<number>;
-                    index: number;
+                    index?: number;
                     truncatedFrom?: number;
                 }>;
                 model: string;
@@ -38198,7 +38424,7 @@ export type GetInteractionsResponses = {
                 data: Array<{
                     object: 'embedding';
                     embedding: Array<number>;
-                    index: number;
+                    index?: number;
                     truncatedFrom?: number;
                 }>;
                 model: string;
@@ -38309,7 +38535,7 @@ export type GetInteractionsResponses = {
                 data: Array<{
                     object: 'embedding';
                     embedding: Array<number>;
-                    index: number;
+                    index?: number;
                     truncatedFrom?: number;
                 }>;
                 model: string;
@@ -43725,7 +43951,10 @@ export type GetInteractionSessionsResponses = {
             authMethods: Array<'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown'>;
             authenticatedAppNames: Array<string>;
             userNames: Array<string>;
-            lastInteractionRequest: unknown;
+            /**
+             * Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.
+             */
+            lastUserMessagePreview: string | null;
             lastInteractionType: string | null;
             conversationTitle: string | null;
             claudeCodeTitle: string | null;
@@ -44314,7 +44543,7 @@ export type GetInteractionResponses = {
             data: Array<{
                 object: 'embedding';
                 embedding: Array<number>;
-                index: number;
+                index?: number;
                 truncatedFrom?: number;
             }>;
             model: string;
@@ -44425,7 +44654,7 @@ export type GetInteractionResponses = {
             data: Array<{
                 object: 'embedding';
                 embedding: Array<number>;
-                index: number;
+                index?: number;
                 truncatedFrom?: number;
             }>;
             model: string;
@@ -44536,7 +44765,7 @@ export type GetInteractionResponses = {
             data: Array<{
                 object: 'embedding';
                 embedding: Array<number>;
-                index: number;
+                index?: number;
                 truncatedFrom?: number;
             }>;
             model: string;
@@ -52567,6 +52796,7 @@ export type GetK8sCapabilitiesResponses = {
             supportsHttpMethods: boolean;
             message: string | null;
             enforcementSource: 'probe' | 'api-discovery';
+            enforcementStatus: 'verified-enforced' | 'verified-not-enforced' | 'unknown';
             probe: 'enforced' | 'not-enforced' | 'inconclusive' | 'absent';
             probedAt: string | null;
         };
@@ -54044,7 +54274,7 @@ export type RestoreKnowledgeBaseResponses = {
 
 export type RestoreKnowledgeBaseResponse = RestoreKnowledgeBaseResponses[keyof RestoreKnowledgeBaseResponses];
 
-export type PurgeKnowledgeBaseData = {
+export type PermanentlyDeleteKnowledgeBaseData = {
     body?: never;
     path: {
         id: string;
@@ -54053,7 +54283,7 @@ export type PurgeKnowledgeBaseData = {
     url: '/api/knowledge-bases/{id}/permanent';
 };
 
-export type PurgeKnowledgeBaseErrors = {
+export type PermanentlyDeleteKnowledgeBaseErrors = {
     /**
      * Default Response
      */
@@ -54116,9 +54346,9 @@ export type PurgeKnowledgeBaseErrors = {
     };
 };
 
-export type PurgeKnowledgeBaseError = PurgeKnowledgeBaseErrors[keyof PurgeKnowledgeBaseErrors];
+export type PermanentlyDeleteKnowledgeBaseError = PermanentlyDeleteKnowledgeBaseErrors[keyof PermanentlyDeleteKnowledgeBaseErrors];
 
-export type PurgeKnowledgeBaseResponses = {
+export type PermanentlyDeleteKnowledgeBaseResponses = {
     /**
      * Default Response
      */
@@ -54127,7 +54357,7 @@ export type PurgeKnowledgeBaseResponses = {
     };
 };
 
-export type PurgeKnowledgeBaseResponse = PurgeKnowledgeBaseResponses[keyof PurgeKnowledgeBaseResponses];
+export type PermanentlyDeleteKnowledgeBaseResponse = PermanentlyDeleteKnowledgeBaseResponses[keyof PermanentlyDeleteKnowledgeBaseResponses];
 
 export type GetKnowledgeBaseHealthData = {
     body?: never;
@@ -56001,7 +56231,7 @@ export type RestoreConnectorResponses = {
 
 export type RestoreConnectorResponse = RestoreConnectorResponses[keyof RestoreConnectorResponses];
 
-export type PurgeConnectorData = {
+export type PermanentlyDeleteConnectorData = {
     body?: never;
     path: {
         id: string;
@@ -56010,7 +56240,7 @@ export type PurgeConnectorData = {
     url: '/api/connectors/{id}/permanent';
 };
 
-export type PurgeConnectorErrors = {
+export type PermanentlyDeleteConnectorErrors = {
     /**
      * Default Response
      */
@@ -56073,9 +56303,9 @@ export type PurgeConnectorErrors = {
     };
 };
 
-export type PurgeConnectorError = PurgeConnectorErrors[keyof PurgeConnectorErrors];
+export type PermanentlyDeleteConnectorError = PermanentlyDeleteConnectorErrors[keyof PermanentlyDeleteConnectorErrors];
 
-export type PurgeConnectorResponses = {
+export type PermanentlyDeleteConnectorResponses = {
     /**
      * Default Response
      */
@@ -56084,7 +56314,7 @@ export type PurgeConnectorResponses = {
     };
 };
 
-export type PurgeConnectorResponse = PurgeConnectorResponses[keyof PurgeConnectorResponses];
+export type PermanentlyDeleteConnectorResponse = PermanentlyDeleteConnectorResponses[keyof PermanentlyDeleteConnectorResponses];
 
 export type SyncConnectorData = {
     body?: never;
@@ -63290,7 +63520,7 @@ export type MistralEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -63400,7 +63630,7 @@ export type MistralEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -64212,7 +64442,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -64322,7 +64552,7 @@ export type ModelRouterEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -65029,7 +65259,7 @@ export type OllamaEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -65139,7 +65369,7 @@ export type OllamaEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -65853,7 +66083,7 @@ export type OpenAiEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -65963,7 +66193,7 @@ export type OpenAiEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -72354,7 +72584,7 @@ export type RestoreProjectResponses = {
 
 export type RestoreProjectResponse = RestoreProjectResponses[keyof RestoreProjectResponses];
 
-export type PurgeProjectData = {
+export type PermanentlyDeleteProjectData = {
     body?: never;
     path: {
         id: string;
@@ -72363,7 +72593,7 @@ export type PurgeProjectData = {
     url: '/api/projects/{id}/permanent';
 };
 
-export type PurgeProjectErrors = {
+export type PermanentlyDeleteProjectErrors = {
     /**
      * Default Response
      */
@@ -72426,9 +72656,9 @@ export type PurgeProjectErrors = {
     };
 };
 
-export type PurgeProjectError = PurgeProjectErrors[keyof PurgeProjectErrors];
+export type PermanentlyDeleteProjectError = PermanentlyDeleteProjectErrors[keyof PermanentlyDeleteProjectErrors];
 
-export type PurgeProjectResponses = {
+export type PermanentlyDeleteProjectResponses = {
     /**
      * Default Response
      */
@@ -72437,7 +72667,7 @@ export type PurgeProjectResponses = {
     };
 };
 
-export type PurgeProjectResponse = PurgeProjectResponses[keyof PurgeProjectResponses];
+export type PermanentlyDeleteProjectResponse = PermanentlyDeleteProjectResponses[keyof PermanentlyDeleteProjectResponses];
 
 export type GetProjectFilesData = {
     body?: never;
@@ -76561,6 +76791,10 @@ export type UpdateSkillData = {
          * Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.
          */
         allowedTools?: Array<string>;
+        /**
+         * The skill's `latestVersion` when this edit was composed. Rejected with 409 if the skill has moved past it. Omit only when the payload owes nothing to a prior read of the skill.
+         */
+        baseVersion?: number;
     };
     path: {
         id: string;
@@ -76878,6 +77112,7 @@ export type GetSkillVersionsResponses = {
             skillId: string | null;
             version: number;
             contentHash: string;
+            sourceCommit: string | null;
             createdAt: string;
         }>;
         pagination: {
@@ -76978,6 +77213,7 @@ export type GetSkillVersionResponses = {
         version: number;
         content: string;
         contentHash: string;
+        sourceCommit: string | null;
         createdAt: string;
         files: Array<{
             id: string;
@@ -77212,7 +77448,7 @@ export type RestoreSkillResponses = {
 
 export type RestoreSkillResponse = RestoreSkillResponses[keyof RestoreSkillResponses];
 
-export type PurgeSkillData = {
+export type PermanentlyDeleteSkillData = {
     body?: never;
     path: {
         id: string;
@@ -77221,7 +77457,7 @@ export type PurgeSkillData = {
     url: '/api/skills/{id}/permanent';
 };
 
-export type PurgeSkillErrors = {
+export type PermanentlyDeleteSkillErrors = {
     /**
      * Default Response
      */
@@ -77284,9 +77520,9 @@ export type PurgeSkillErrors = {
     };
 };
 
-export type PurgeSkillError = PurgeSkillErrors[keyof PurgeSkillErrors];
+export type PermanentlyDeleteSkillError = PermanentlyDeleteSkillErrors[keyof PermanentlyDeleteSkillErrors];
 
-export type PurgeSkillResponses = {
+export type PermanentlyDeleteSkillResponses = {
     /**
      * Default Response
      */
@@ -77295,7 +77531,7 @@ export type PurgeSkillResponses = {
     };
 };
 
-export type PurgeSkillResponse = PurgeSkillResponses[keyof PurgeSkillResponses];
+export type PermanentlyDeleteSkillResponse = PermanentlyDeleteSkillResponses[keyof PermanentlyDeleteSkillResponses];
 
 export type ResetSkillData = {
     body?: never;
@@ -82742,7 +82978,7 @@ export type VllmEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -82852,7 +83088,7 @@ export type VllmEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -83328,7 +83564,7 @@ export type ZhipuaiEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {
@@ -83438,7 +83674,7 @@ export type ZhipuaiEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index: number;
+            index?: number;
         }>;
         model: string;
         usage: {

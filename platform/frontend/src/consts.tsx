@@ -16,13 +16,16 @@ export const SHORTCUT_NEW_CHAT = {
   label: "N",
 } as const;
 
+// Alt-qualified (matching SHORTCUT_NEW_CHAT) so the palette has no bare
+// character-key shortcuts (WCAG 2.1.4) and the keys still work while a search
+// query is being typed. `code` dodges macOS Option dead-key characters.
 export const SHORTCUT_DELETE = {
-  key: "d",
+  code: "KeyD",
   label: "D",
 } as const;
 
 export const SHORTCUT_PIN = {
-  key: "p",
+  code: "KeyP",
   label: "P",
 } as const;
 

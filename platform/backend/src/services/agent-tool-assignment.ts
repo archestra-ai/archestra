@@ -23,7 +23,7 @@ import type {
 } from "@/types";
 
 export type ToolAssignmentError = {
-  code: "not_found" | "validation_error";
+  code: "not_found" | "validation_error" | "forbidden";
   error: { message: string; type: string };
 };
 
@@ -33,6 +33,7 @@ export type PrefetchedMcpServer = {
   catalogId: string | null;
   teamId?: string | null;
   scope: ResourceVisibilityScope;
+  serverType?: "app" | "builtin" | "local" | "remote";
 };
 
 type AgentToolAssignmentPrefetchedData = {
@@ -64,6 +65,18 @@ interface AgentToolAssignmentRequest {
    * one version, not one per tool.
    */
   deferVersionFork?: boolean;
+}
+
+/** Whether the user holds the exact predefined Admin role. */
+export async function isPredefinedAdmin(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const membership = await MemberModel.getByUserId(
+    params.userId,
+    params.organizationId,
+  );
+  return membership?.role === "admin";
 }
 
 export async function assignToolToAgent(
@@ -459,7 +472,7 @@ async function validateAssignedMcpServer(params: {
   tool: Tool;
   preFetchedServer?: Pick<
     PrefetchedMcpServer,
-    "id" | "ownerId" | "catalogId" | "teamId" | "scope"
+    "id" | "ownerId" | "catalogId" | "serverType" | "teamId" | "scope"
   > | null;
 }): Promise<ToolAssignmentError | null> {
   const { getOwnerContext, mcpServerId, tool, preFetchedServer } = params;
@@ -485,6 +498,19 @@ async function validateAssignedMcpServer(params: {
       error: {
         message:
           "Assigned MCP server must come from the same catalog item as the tool",
+        type: "validation_error",
+      },
+    };
+  }
+
+  // Personal installations are always caller-bound, regardless of whether
+  // they represent remote credentials or a hosted local runtime.
+  if (mcpServer.scope === "personal") {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Personal connections cannot be assigned statically. Use dynamic credential resolution instead.",
         type: "validation_error",
       },
     };
@@ -554,7 +580,10 @@ async function isOrgAdmin(
 
 /** @public — exported for testability */
 export async function isMcpServerAssignableToTarget(params: {
-  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
+  mcpServer: Pick<
+    PrefetchedMcpServer,
+    "ownerId" | "serverType" | "teamId" | "scope"
+  >;
   target: {
     organizationId: string;
     scope: AgentScope;
@@ -563,6 +592,9 @@ export async function isMcpServerAssignableToTarget(params: {
   };
 }): Promise<boolean> {
   const { mcpServer, target } = params;
+  if (mcpServer.scope === "personal") {
+    return false;
+  }
 
   if (mcpServer.scope === "org") {
     return true;
@@ -606,7 +638,10 @@ export async function isMcpServerAssignableToTarget(params: {
 }
 
 export async function filterMcpServersAssignableToTarget<
-  TMcpServer extends Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">,
+  TMcpServer extends Pick<
+    PrefetchedMcpServer,
+    "ownerId" | "serverType" | "teamId" | "scope"
+  >,
 >(params: {
   mcpServers: TMcpServer[];
   target: {
@@ -616,7 +651,12 @@ export async function filterMcpServersAssignableToTarget<
     teamIds: string[];
   };
 }): Promise<TMcpServer[]> {
-  const { mcpServers, target } = params;
+  const { target } = params;
+  // Personal connections always resolve from the caller at runtime. They are
+  // never valid static choices, including for their owner or an Admin.
+  const mcpServers = params.mcpServers.filter(
+    (mcpServer) => mcpServer.scope !== "personal",
+  );
   if (mcpServers.length === 0) {
     return [];
   }
@@ -711,6 +751,10 @@ function isMcpServerAssignableToPrefetchedTarget(params: {
     target,
     targetTeamMemberOwnerIdSet,
   } = params;
+
+  if (mcpServer.scope === "personal") {
+    return false;
+  }
 
   if (mcpServer.scope === "org") {
     return true;

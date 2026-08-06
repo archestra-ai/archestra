@@ -8,8 +8,10 @@ import {
   McpServerModel,
   ProjectModel,
   SkillModel,
+  SkillVersionModel,
   ToolModel,
 } from "@/models";
+import { projectService } from "@/services/project";
 import type { AuditableSnapshot, AuditEventName } from "@/types/audit-log";
 
 /**
@@ -52,14 +54,16 @@ export type PurgeableEntity = {
    */
   countUnresolvable?: (params: { retentionDays: number }) => Promise<number>;
   /**
-   * The same hardDelete the manual permanent-delete routes use. Resolves
-   * false when the row was skipped — restored or aged back under the window
-   * (the FOR UPDATE re-check), or still referenced (a catalog with installs,
-   * a skill pinned by a sandbox mount); the next sweep retries. The sweep
-   * writes its purge audit row via `onPurged`, inside the delete transaction.
+   * The same purge the manual permanent-delete routes use — which is why this
+   * takes the whole candidate: the org-scoped entities lock on
+   * `(id, organization_id)`, exactly as the routes do. Resolves false when the
+   * row was skipped — restored or aged back under the window (the FOR UPDATE
+   * re-check), or still referenced (a catalog with installs, a skill pinned by
+   * a sandbox mount); the next sweep retries. The sweep writes its purge audit
+   * row via `onPurged`, inside the delete transaction.
    */
-  hardDelete: (
-    id: string,
+  purge: (
+    candidate: { id: string; organizationId: string },
     opts: HardDeleteOpts & { onlyIfDeletedForDays: number },
   ) => Promise<boolean>;
   /**
@@ -89,7 +93,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     findExpired: (params) => ToolModel.findExpiredDeleted(params),
     countUnresolvable: (params) =>
       ToolModel.countExpiredDeletedUnresolvable(params),
-    hardDelete: (id, opts) => ToolModel.hardDelete(id, opts),
+    purge: ({ id }, opts) => ToolModel.hardDelete(id, opts),
     identity: ({ id }) => ToolModel.findIdentityForAudit(id),
   },
   {
@@ -99,7 +103,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     findExpired: (params) => McpServerModel.findExpiredDeleted(params),
     countUnresolvable: (params) =>
       McpServerModel.countExpiredDeletedUnresolvable(params),
-    hardDelete: (id, opts) => McpServerModel.hardDelete(id, opts),
+    purge: ({ id }, opts) => McpServerModel.hardDelete(id, opts),
     identity: ({ id }) => McpServerModel.findIdentityForAudit(id),
   },
   {
@@ -107,7 +111,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     resourceType: "internalMcpCatalog",
     auditAction: "internalMcpCatalog.purged",
     findExpired: (params) => InternalMcpCatalogModel.findExpiredDeleted(params),
-    hardDelete: (id, opts) => InternalMcpCatalogModel.hardDelete(id, opts),
+    purge: ({ id }, opts) => InternalMcpCatalogModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
       InternalMcpCatalogModel.findIdentityForAudit(id, organizationId),
   },
@@ -117,7 +121,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     auditAction: "connector.purged",
     findExpired: (params) =>
       KnowledgeBaseConnectorModel.findExpiredDeleted(params),
-    hardDelete: (id, opts) => KnowledgeBaseConnectorModel.hardDelete(id, opts),
+    purge: ({ id }, opts) => KnowledgeBaseConnectorModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
       KnowledgeBaseConnectorModel.findIdentityForAudit(id, organizationId),
   },
@@ -126,7 +130,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     resourceType: "knowledgeBase",
     auditAction: "knowledgeBase.purged",
     findExpired: (params) => KnowledgeBaseModel.findExpiredDeleted(params),
-    hardDelete: (id, opts) => KnowledgeBaseModel.hardDelete(id, opts),
+    purge: ({ id }, opts) => KnowledgeBaseModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
       KnowledgeBaseModel.findIdentityForAudit(id, organizationId),
   },
@@ -135,7 +139,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     resourceType: "app",
     auditAction: "app.purged",
     findExpired: (params) => AppModel.findExpiredDeleted(params),
-    hardDelete: (id, opts) => AppModel.hardDelete(id, opts),
+    purge: ({ id }, opts) => AppModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
       AppModel.findIdentityForAudit(id, organizationId),
   },
@@ -144,7 +148,15 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     resourceType: "skill",
     auditAction: "skill.purged",
     findExpired: (params) => SkillModel.findExpiredDeleted(params),
-    hardDelete: (id, opts) => SkillModel.hardDelete(id, opts),
+    // The mount check is advisory, exactly as on the manual route: the RESTRICT
+    // foreign key is the real guard. Checking here keeps a pinned skill a quiet
+    // "skipped" instead of a warned-about 23503 on every daily sweep; a sandbox
+    // that mounts it in the gap still raises, and the sweep's per-row catch
+    // counts that as skipped too.
+    purge: async ({ id, organizationId }, opts) =>
+      (await SkillVersionModel.hasSandboxMountsForSkill(id))
+        ? false
+        : SkillModel.purge({ id, organizationId }, opts),
     identity: ({ id, organizationId }) =>
       SkillModel.findIdentityForAudit(id, organizationId),
   },
@@ -153,7 +165,8 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     resourceType: "agent",
     auditAction: "agent.purged",
     findExpired: (params) => AgentModel.findExpiredDeleted(params),
-    hardDelete: (id, opts) => AgentModel.hardDelete(id, opts),
+    purge: ({ id, organizationId }, opts) =>
+      AgentModel.purge(id, organizationId, opts),
     identity: ({ id, organizationId }) =>
       AgentModel.findIdentityForAudit(id, organizationId),
   },
@@ -162,7 +175,8 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     resourceType: "project",
     auditAction: "project.purged",
     findExpired: (params) => ProjectModel.findExpiredDeleted(params),
-    hardDelete: (id, opts) => ProjectModel.hardDelete(id, opts),
+    purge: ({ id, organizationId }, opts) =>
+      projectService.purgeUnchecked({ id, organizationId }, opts),
     identity: ({ id, organizationId }) =>
       ProjectModel.findIdentityForAudit(id, organizationId),
   },

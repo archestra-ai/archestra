@@ -6,6 +6,7 @@ import { ArchiveRestore, Pencil, Pin, PinOff, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeletedRowMeta } from "@/components/deleted-row-meta";
+import { permanentDeleteRowAction } from "@/components/permanent-delete";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { ScopeBadge } from "@/components/scope-badge";
 import {
@@ -15,10 +16,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   canDeleteProject,
   canManageProject,
 } from "@/lib/projects/project-permissions";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
 
@@ -166,19 +169,21 @@ export function ProjectsTable({
   );
 }
 
-// The trash view: soft-deleted projects, org-wide (the backend returns them to
-// project admins only). Rows do not navigate — the project page would 404 on a
-// deleted id — and the actions collapse to Restore + Delete permanently,
-// matching the agents and skills trash views.
+// The trash view: soft-deleted projects org-wide (the backend serves this slice
+// to project admins only). Rows deliberately do not navigate — the project page
+// would 404 on a deleted id — and the actions collapse to Restore + Delete
+// permanently, matching the agents and skills trash views.
 export function DeletedProjectsTable({
   projects,
   onRestore,
-  onPurge,
+  onPermanentlyDelete,
 }: {
   projects: ProjectListItem[];
   onRestore: (project: ProjectListItem) => void;
-  onPurge: (project: ProjectListItem) => void;
+  onPermanentlyDelete: (project: ProjectListItem) => void;
 }) {
+  const admin = useIsGlobalAdmin();
+
   const columns: ColumnDef<ProjectListItem>[] = [
     {
       id: "name",
@@ -229,16 +234,17 @@ export function DeletedProjectsTable({
               {
                 icon: <ArchiveRestore className="h-4 w-4" />,
                 label: "Restore",
-                permissions: { project: ["delete"] },
+                // The route gates restore on `project:admin`, not
+                // `project:delete` — the same bar that serves this slice at
+                // all. A lower one here would disable Restore for exactly the
+                // oversight role the trash is built for.
+                permissions: { project: ["admin"] },
                 onClick: () => onRestore(row.original),
               },
-              {
-                icon: <Trash2 className="h-4 w-4" />,
-                label: "Delete permanently",
-                permissions: { project: ["admin"] },
-                variant: "destructive",
-                onClick: () => onPurge(row.original),
-              },
+              permanentDeleteRowAction({
+                admin,
+                onClick: () => onPermanentlyDelete(row.original),
+              }),
             ]}
           />
         </div>
@@ -251,7 +257,6 @@ export function DeletedProjectsTable({
       columns={columns}
       data={projects}
       getRowId={(row) => row.id}
-      emptyMessage="No deleted projects"
       hidePaginationWhenSinglePage
     />
   );

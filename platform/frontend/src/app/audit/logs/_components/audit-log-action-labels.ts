@@ -198,8 +198,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
 
 /**
  * Derive a badge variant from the event name's verb suffix. Auth and unknown
- * events use `outline`; created → `default`; deleted → `destructive`;
- * everything else (updates, rotations, syncs, etc.) → `secondary`.
+ * events use `outline`; created → `default`; deleted and purged →
+ * `destructive`; everything else (updates, rotations, syncs, etc.) →
+ * `secondary`.
  */
 function verbVariant(eventName: AuditEventName): BadgeVariant {
   if (eventName.startsWith("auth.") || eventName.startsWith("unknown.")) {
@@ -207,7 +208,9 @@ function verbVariant(eventName: AuditEventName): BadgeVariant {
   }
   const verb = eventName.split(".")[1] ?? "";
   if (verb === "created") return "default";
-  if (verb === "deleted") return "destructive";
+  // `purged` is permanent deletion — the one action nothing recovers from, so
+  // it must not read as quieter than the soft delete it follows.
+  if (verb === "deleted" || verb === "purged") return "destructive";
   return "secondary";
 }
 

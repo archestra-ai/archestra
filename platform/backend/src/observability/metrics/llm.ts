@@ -23,7 +23,7 @@ import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini
 import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapters/minimax";
 import { getUsageTokens as getOllamaNativeUsage } from "@/routes/proxy/adapters/ollama-native";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
-import { getUsageTokens as getPerplexityResponsesUsage } from "@/routes/proxy/adapters/perplexity-responses";
+import { responsesUsageTokens } from "@/routes/proxy/adapters/responses-usage";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
 import type { GatewayAgent } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
@@ -39,13 +39,30 @@ type UsageExtractor =
   | null;
 
 /**
+ * Extractor for a provider that serves BOTH the chat-completions and the
+ * Responses wire shape, whose usage objects name their fields differently
+ * (`prompt_tokens` vs `input_tokens`). It sniffs which body arrived rather than
+ * assuming one.
+ *
+ * Assuming one is not a near miss: run the chat extractor on a Responses body
+ * and it subtracts from `undefined`, so `input` comes back NaN and `output`
+ * undefined. `reportLLMTokens` skips falsy counts, so the turn is not reported
+ * wrong — it vanishes from the token metric entirely.
+ */
+function getChatOrResponsesUsage(usage: Record<string, unknown>) {
+  return "input_tokens" in usage
+    ? responsesUsageTokens(usage as Parameters<typeof responsesUsageTokens>[0])
+    : getOpenAIUsage(usage as Parameters<typeof getOpenAIUsage>[0]);
+}
+
+/**
  * Maps each provider to its usage token extraction function for fetch-based observability.
  * Providers mapped to `null` use their own observability wrappers (e.g. Gemini uses getObservableGenAI,
  * Bedrock uses its own client) and should not extract tokens here to avoid double-reporting.
  * Using Record<SupportedProvider, ...> ensures TypeScript enforces adding new providers here.
  */
 const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
-  openai: getOpenAIUsage,
+  openai: getChatOrResponsesUsage,
   archestra: getOpenAIUsage,
   cerebras: getOpenAIUsage,
   vllm: getOpenAIUsage,
@@ -54,19 +71,12 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   // `rootUsageExtractors` below, which handles it before the `data.usage` guard.
   "ollama-native": null,
   mistral: getOpenAIUsage,
-  // The provider serves two wire shapes — chat completions for the `sonar*`
-  // models and Responses for the Agent API models — whose usage objects differ
-  // (`prompt_tokens` vs `input_tokens`), so the extractor sniffs which body
-  // arrived rather than assuming one.
-  perplexity: (usage) =>
-    "input_tokens" in usage
-      ? getPerplexityResponsesUsage(usage)
-      : getOpenAIUsage(usage),
+  perplexity: getChatOrResponsesUsage,
   groq: getOpenAIUsage,
   xai: getOpenAIUsage,
   openrouter: getOpenAIUsage,
   anthropic: getAnthropicUsage,
-  azure: getOpenAIUsage,
+  azure: getChatOrResponsesUsage,
   cohere: getCohereUsage,
   zhipuai: getZhipuaiUsage,
   minimax: getMinimaxUsage,

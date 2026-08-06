@@ -5,7 +5,24 @@ import { ResourceVisibilityBadge } from "./resource-visibility-badge";
 const ME = "user-me";
 
 describe("ResourceVisibilityBadge", () => {
-  it("hides the badge for the current user's own personal resource by default", () => {
+  it("renders nothing rather than guessing when the scope is unknown", () => {
+    const { container } = render(
+      <ResourceVisibilityBadge
+        scope={undefined}
+        teams={[]}
+        authorId="user-other"
+        authorName="Someone"
+        currentUserId={ME}
+        showSelfAsMe
+      />,
+    );
+
+    // Never fall through to "Team": a badge asserting the wrong audience is
+    // believed, whereas a missing one gets questioned.
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("hides the badge for the current user's own personal resource when showSelfAsMe is false", () => {
     const { container } = render(
       <ResourceVisibilityBadge
         scope="personal"
@@ -13,6 +30,7 @@ describe("ResourceVisibilityBadge", () => {
         authorId={ME}
         authorName="My Name"
         currentUserId={ME}
+        showSelfAsMe={false}
       />,
     );
 
@@ -106,6 +124,7 @@ describe("ResourceVisibilityBadge per-user shares", () => {
         authorId={ME}
         authorName="My Name"
         currentUserId={ME}
+        showSelfAsMe={false}
       />,
     );
 
@@ -124,6 +143,7 @@ describe("ResourceVisibilityBadge per-user shares", () => {
         authorId={ME}
         authorName="My Name"
         currentUserId={ME}
+        showSelfAsMe={false}
       />,
     );
 

@@ -27,6 +27,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
   Avatar,
   AvatarFallback,
@@ -65,6 +66,7 @@ import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catal
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
+import { isCardShowingInstallInProgress } from "./card-install-state";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { clearCatalogEditParam } from "./catalog-edit-link";
 import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
@@ -375,13 +377,15 @@ export function McpServerCard({
     />
   ) : null;
 
-  const isInstalling = Boolean(
-    !isDeploymentFailed &&
-      (installingItemId === item.id ||
-        (variant === "local" &&
-          (installationStatus === "pending" ||
-            (installationStatus === "discovering-tools" && installedServer)))),
-  );
+  const isInstalling = isCardShowingInstallInProgress({
+    deploymentFailed: isDeploymentFailed,
+    viewerTriggeredInstall: installingItemId === item.id,
+    variant,
+    installationStatus,
+    hasInstalledServer: !!installedServer,
+    installationOwnedByViewer:
+      !!currentUserId && installedServer?.ownerId === currentUserId,
+  });
 
   const isCurrentUserAuthenticated =
     currentUserId && installedServer?.users
@@ -562,11 +566,19 @@ export function McpServerCard({
   }
   const extraCount = connectionAvatars.length - MAX_AVATARS;
 
-  const showAuthorAvatar =
-    item.scope === "personal" && Boolean(item.authorName);
+  // Who can reach this catalog item. Personal items of the viewer's own say
+  // nothing new — the grid already groups them under a "Personal" heading, so
+  // the badge is asked not to label them "Me" (`showSelfAsMe={false}`) and
+  // renders null for that case; the gate mirrors it to keep the row (and its
+  // separator) from reserving space for an empty badge.
+  const showScopeBadge =
+    item.scope !== "personal" ||
+    Boolean(item.authorId && item.authorId !== currentUserId);
 
-  const hasCompactInfoContent =
-    showAuthorAvatar ||
+  // Whether anything follows the badge in the row. Shared by the row's "is there
+  // anything at all to show" gate and the badge's trailing divider so the two
+  // can't drift and leave a divider hanging at the end of the row.
+  const hasCompactInfoAfterScopeBadge =
     toolsCount > 0 ||
     totalAgentCount > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
@@ -575,26 +587,21 @@ export function McpServerCard({
         hasOrgConnection ||
         Boolean(oauthReauthIndicator)));
 
+  const hasCompactInfoContent = showScopeBadge || hasCompactInfoAfterScopeBadge;
+
   const compactInfoRow = hasCompactInfoContent ? (
     <div className="flex items-center gap-3 text-sm text-muted-foreground">
-      {showAuthorAvatar && (
+      {showScopeBadge && (
         <>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Avatar className="size-6 border-2 border-background">
-                  <AvatarFallback className="text-[10px]">
-                    {item.authorName?.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-              </TooltipTrigger>
-              <TooltipContent>Author: {item.authorName}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          {(toolsCount > 0 ||
-            (variant === "local" && deploymentServerIds.length > 0) ||
-            (!isBuiltinVariant &&
-              (connectionAvatars.length > 0 || hasOrgConnection))) && (
+          <ResourceVisibilityBadge
+            scope={item.scope}
+            teams={item.teams}
+            authorId={item.authorId}
+            authorName={item.authorName}
+            currentUserId={currentUserId}
+            showSelfAsMe={false}
+          />
+          {hasCompactInfoAfterScopeBadge && (
             <div className="h-4 w-px bg-border" />
           )}
         </>
@@ -694,7 +701,7 @@ export function McpServerCard({
                         onClick={() => goToItemPage("credentials")}
                       >
                         <Avatar className="size-6 border-2 border-background cursor-pointer">
-                          <AvatarFallback className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                          <AvatarFallback className="bg-amber-500/10 text-amber-800 dark:text-amber-400">
                             <Globe className="h-3 w-3" />
                           </AvatarFallback>
                         </Avatar>
@@ -990,7 +997,7 @@ export function McpServerCard({
       <CardContent className="flex flex-col gap-4 flex-grow">
         {showApprovalPanel && (
           <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-500">
               <span>
                 {isInstallAdmin
                   ? "Image needs approval"

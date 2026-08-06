@@ -354,9 +354,9 @@ describe("knowledge base + connector trash routes", () => {
     );
     for (const routeId of [
       "restoreKnowledgeBase",
-      "purgeKnowledgeBase",
+      "permanentlyDeleteKnowledgeBase",
       "restoreConnector",
-      "purgeConnector",
+      "permanentlyDeleteConnector",
     ] as const) {
       expect(requiredEndpointPermissionsMap[routeId]).toEqual({
         knowledgeSource: ["manage-deleted"],

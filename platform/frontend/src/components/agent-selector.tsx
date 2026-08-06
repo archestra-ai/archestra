@@ -3,6 +3,7 @@
 import { Check, ChevronDown, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
+import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -491,7 +492,15 @@ function AgentSelectorRow({
         className="text-muted-foreground"
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate">{agent.name}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate">{agent.name}</span>
+          {agent.scope ? (
+            <ScopeBadge
+              scope={agent.scope}
+              teamNames={agent.teams?.map((team) => team.name)}
+            />
+          ) : null}
+        </span>
         {description && (
           <span className="block truncate text-xs text-muted-foreground">
             {description}
@@ -537,16 +546,14 @@ function agentSearchText(agent: AgentSelectorAgent) {
     .join(" ");
 }
 
+// Identity only — scope (personal/team/org, with the team names in its tooltip)
+// is carried by the ScopeBadge beside the name. The email still disambiguates
+// other users' personal gateways/proxies, which an admin genuinely sees in the
+// connect settings picker.
 function getOwnerLabel(agent: AgentSelectorAgent) {
-  if (agent.scope !== "personal") {
-    if (agent.scope === "team" && agent.teams?.length) {
-      return agent.teams.map((team) => team.name).join(", ");
-    }
-
-    return null;
-  }
-
-  return agent.authorEmail ?? agent.authorName ?? "Personal";
+  return agent.scope === "personal"
+    ? (agent.authorEmail ?? agent.authorName ?? null)
+    : null;
 }
 
 function matchesSearch(value: string, search: string) {

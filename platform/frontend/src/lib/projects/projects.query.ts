@@ -16,6 +16,7 @@ import {
 import { scheduleTriggerKeys } from "@/lib/schedule-trigger.query";
 import {
   getApiErrorMessage,
+  getApiErrorType,
   handleApiError,
   throwOnApiError,
 } from "@/lib/utils";
@@ -30,8 +31,8 @@ const {
   getProjectFiles,
   getProjectInstructions,
   getProjects,
+  permanentlyDeleteProject,
   pinProject,
-  purgeProject,
   restoreProject,
   setProjectInstructions,
   setProjectShare,
@@ -343,7 +344,20 @@ export function useRestoreProject() {
         body: null,
       });
       if (error) {
-        // A 409 (name re-taken while deleted) surfaces its own message.
+        // The only 409 this route answers is the name collision: deleting
+        // frees the display name, so the owner may hold an active project
+        // under it by now. The API's own message ends by telling the caller to
+        // pass `name` — an instruction with no UI behind it until restore
+        // grows a rename field, so the remedy that does exist is named here
+        // instead. Everything else keeps the server's wording.
+        if (getApiErrorType(error) === "api_conflict_error") {
+          toast.error(
+            "Its owner already has an active project under this name. " +
+              "Rename that project, then restore this one.",
+            { duration: 12000 },
+          );
+          return null;
+        }
         handleApiError(error);
         return null;
       }
@@ -353,28 +367,36 @@ export function useRestoreProject() {
       if (!project) return;
       toast.success(`Project "${project.name}" restored`);
       queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
-      // Its retained scheduled tasks resume with it.
+      // Its scheduled tasks were retained-but-paused, and resume with it.
       queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
     },
   });
 }
 
-/** Permanently delete a soft-deleted project (admin-only trash action). */
-export function usePurgeProject() {
+/**
+ * Permanently destroy a soft-deleted project: its files (records and stored
+ * bytes), pins, share configuration, and scheduled tasks. Its chats detached
+ * at soft-delete time and survive as ordinary conversations.
+ */
+export function usePermanentlyDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
-      const { error } = await purgeProject({ path: { id } });
+      const { error } = await permanentlyDeleteProject({ path: { id } });
       if (error) {
         handleApiError(error);
         return null;
       }
       return true;
     },
-    onSuccess: (ok) => {
+    onSuccess: (ok, { id }) => {
       if (!ok) return;
       toast.success("Project permanently deleted");
       queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+      // Drop the detail/conversations/files queries for an id that no longer
+      // resolves, rather than letting them refetch into a 404.
+      queryClient.removeQueries({ queryKey: ["projects", id] });
+      queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
     },
   });
 }

@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-08-01
+lastUpdated: 2026-08-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -67,7 +67,13 @@ Installations can be personal or team-scoped.
 - **Personal installations** are owned by one user and are useful when each person needs their own upstream account.
 - **Team installations** are shared with a team and are useful for shared service accounts or team-owned integrations.
 
-When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time resolves deterministically from the caller identity and the available personal or team-scoped credentials. If no credential can be resolved, Archestra returns an error with an install link.
+A personal installation is a hard usage boundary: its credential can only ever authenticate calls made by the person who added it. It cannot be assigned, pinned, or borrowed by another user — not even by an Admin. Predefined Admins can see limited connection metadata and revoke a connection for operational oversight, but cannot use its credential.
+
+If a static credential is intended to be shared, add it explicitly as a **team or organization service account**. This makes the shared intent and audience visible instead of turning a person's identity into an implicit service account.
+
+Personal installations are removed — credentials included — when their owner is deleted or leaves the organization. Team and organization installations survive their installer.
+
+When assigning tools to an Agent or MCP Gateway, you can pin a team or organization service account, or use **Resolve at call time**. Personal installations are available only through resolve-at-call-time, which resolves deterministically from the caller identity and never exposes a person's credential as a reusable static option. If no credential can be resolved, Archestra returns an error with an install link.
 
 See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for the resolution order and missing credential behavior.
 

@@ -1,3 +1,4 @@
+import { beforeEach, vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { Minimax } from "@/types/llm-providers";
 import { minimaxAdapterFactory } from "./minimax";
@@ -287,5 +288,37 @@ describe("MinimaxRequestAdapter reasoning_split", () => {
       .toProviderRequest() as Record<string, unknown>;
 
     expect(request.reasoning_split).toBe(false);
+  });
+});
+
+describe("MinimaxClient upstream HTTP errors", () => {
+  // Stubs auto-revert after each test; re-apply per test via beforeEach.
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("rate limited", { status: 429 })),
+    );
+  });
+
+  test("attaches the provider's HTTP status to the thrown error", async () => {
+    const client = minimaxAdapterFactory.createClient(undefined, {
+      source: "api",
+    });
+
+    let thrown: unknown;
+    try {
+      await minimaxAdapterFactory.execute(client, {
+        model: "MiniMax-M2.5",
+        messages: [],
+      } as unknown as Minimax.Types.ChatCompletionsRequest);
+    } catch (error) {
+      thrown = error;
+    }
+
+    // The status must live on the error as a number — the proxy error
+    // boundary relays it to the client; without it a provider 429
+    // surfaced as a 500 and was reported as a crash of ours.
+    expect((thrown as Error & { status?: number }).status).toBe(429);
+    expect((thrown as Error).message).toContain("429");
   });
 });

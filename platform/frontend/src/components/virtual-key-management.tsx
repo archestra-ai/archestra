@@ -8,6 +8,7 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
 import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Button } from "@/components/ui/button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -80,7 +81,7 @@ export function VirtualKeyManagement({
             {keyType === "standard" && (
               <th className="px-3 py-1.5 font-medium">Providers</th>
             )}
-            <th className="px-3 py-1.5 font-medium">Owner</th>
+            <th className="px-3 py-1.5 font-medium">Accessible to</th>
             {(canUpdate || canDelete) && <th className="w-8 px-2 py-1.5" />}
           </tr>
         </thead>
@@ -102,10 +103,15 @@ export function VirtualKeyManagement({
                   {formatProviderKeySummary(key.providerApiKeys)}
                 </td>
               )}
-              <td className="px-3 py-1.5 text-muted-foreground">
-                {key.authorId === currentUserId
-                  ? "Me"
-                  : (key.authorName ?? "—")}
+              <td className="max-w-[180px] px-3 py-1.5">
+                <ResourceVisibilityBadge
+                  scope={key.scope}
+                  teams={key.teams}
+                  authorId={key.authorId}
+                  authorName={key.authorName}
+                  currentUserId={currentUserId}
+                  showSelfAsMe
+                />
               </td>
               {(canUpdate || canDelete) && (
                 <td className="px-2 py-1.5">

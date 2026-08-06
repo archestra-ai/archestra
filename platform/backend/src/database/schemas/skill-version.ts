@@ -36,6 +36,17 @@ const skillVersionsTable = pgTable(
     content: text("content").notNull(),
     /** sha256 of the canonical payload (body + files); used to suppress no-op forks. */
     contentHash: text("content_hash").notNull(),
+    /**
+     * Git commit the bytes came from, for versions forked by a GitHub import or
+     * a scheduled sync; null for everything else (authored edits, restores,
+     * built-in skills). Provenance only — nothing reads it to resolve content.
+     *
+     * Callers pass it explicitly rather than it being copied from
+     * `skills.source_commit`: built-in skills fill that column with a content
+     * hash, so an implicit read would stamp SHAs resolving to nothing on every
+     * built-in reset and seed-time refresh.
+     */
+    sourceCommit: text("source_commit"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

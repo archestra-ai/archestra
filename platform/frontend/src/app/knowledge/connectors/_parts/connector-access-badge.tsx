@@ -59,6 +59,9 @@ export function ConnectorAccessBadge({
       authorId={undefined}
       authorName={undefined}
       currentUserId={undefined}
+      // Inert here: a connector is only ever org- or team-scoped, so the
+      // personal-scope branch this flag controls is unreachable.
+      showSelfAsMe={false}
     />
   );
 }

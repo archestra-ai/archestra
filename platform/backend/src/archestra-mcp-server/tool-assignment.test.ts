@@ -210,6 +210,69 @@ describe("tool assignment tool execution", () => {
       },
     ]);
   });
+
+  test("binding a personal connection fails with a validation entry", async ({
+    makeAgent,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    // Editors hold agent/tool management permissions, so credential scope is
+    // the only thing blocking this assignment.
+    const editor = await makeUser();
+    await makeMember(editor.id, org.id, { role: "editor" });
+    const colleague = await makeUser();
+    await makeMember(colleague.id, org.id, { role: "member" });
+
+    // The editor's own personal agent, so every agent-modify check passes and
+    // the credential gate is the only thing the assignment can trip on.
+    const agent = await makeAgent({
+      name: "Editor Agent",
+      organizationId: org.id,
+      scope: "personal",
+      authorId: editor.id,
+    });
+    const tool = await makeTool({ name: "forbidden-test-tool" });
+    const theirConnection = await makeMcpServer({
+      scope: "personal",
+      ownerId: colleague.id,
+      serverType: "remote",
+    });
+
+    const result = await executeArchestraTool(
+      AGENTS_TOOL,
+      {
+        assignments: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            mcpServerId: theirConnection.id,
+          },
+        ],
+      },
+      {
+        agent: { id: agent.id, name: agent.name },
+        userId: editor.id,
+        organizationId: org.id,
+      },
+    );
+
+    // isError false means the structured failure passed output validation.
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.failed).toMatchObject([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        errorCode: "validation_error",
+        errorType: "validation_error",
+      },
+    ]);
+    expect(parsed.failed[0].error).toContain("dynamic credential resolution");
+  });
 });
 
 describe("bulk_remove_tools_from_agents tool execution", () => {

@@ -79,7 +79,9 @@ export function RegistrySortMenu({
       <DropdownMenuTrigger asChild>
         <Button variant="outline" className="gap-2 font-normal">
           <ArrowDownUp className="h-4 w-4" />
-          <span className="text-muted-foreground">Sort:</span>
+          {/* Inherits the button's foreground: muted-foreground dips below the
+              4.5:1 contrast minimum on some themes (WCAG 1.4.3). */}
+          <span>Sort:</span>
           {current.label}
         </Button>
       </DropdownMenuTrigger>
@@ -231,15 +233,16 @@ export function RegistryFilterChips({
           variant="secondary"
           className="gap-1.5 py-1 font-normal"
         >
-          <span className="text-muted-foreground">
-            {GROUP_LABELS[entry.group]}:
-          </span>
+          {/* The chip's prefix and dismiss icon inherit secondary-foreground —
+              muted-foreground on the secondary fill falls below the 4.5:1
+              contrast minimum on some themes (WCAG 1.4.3). */}
+          <span>{GROUP_LABELS[entry.group]}:</span>
           {entry.label}
           <button
             type="button"
             aria-label={`Remove ${entry.label} filter`}
             onClick={() => onRemove(entry.group, entry.value)}
-            className="ml-0.5 rounded-full p-0.5 text-muted-foreground hover:bg-background/60 hover:text-foreground"
+            className="ml-0.5 rounded-full p-0.5 hover:bg-background/60"
           >
             <X className="h-3 w-3" />
           </button>
@@ -248,7 +251,7 @@ export function RegistryFilterChips({
       <button
         type="button"
         onClick={onClearAll}
-        className="text-sm text-muted-foreground hover:text-foreground"
+        className="text-sm text-foreground underline-offset-2 hover:underline"
       >
         Clear all
       </button>

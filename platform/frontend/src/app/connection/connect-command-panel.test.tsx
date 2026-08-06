@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { CONNECT_CLIENTS } from "./clients";
@@ -131,6 +131,9 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as ReturnType<typeof useSession>);
   availableKeysMock.mockReturnValue({
     data: [{ provider: "anthropic" }, { provider: "bedrock" }],
   });
@@ -138,8 +141,17 @@ beforeEach(() => {
   modelsByProviderMock.mockReturnValue({});
   allSkillsMock.mockReturnValue({
     data: [
-      { id: "s1", name: "warehouse-postgres" },
-      { id: "s2", name: "billing-pipeline" },
+      { id: "s1", name: "warehouse-postgres", scope: "org", teams: [] },
+      // A colleague's personal skill: the picker lists these for skill admins
+      // and preselects them, so the row must name whose it is.
+      {
+        id: "s2",
+        name: "billing-pipeline",
+        scope: "personal",
+        authorId: "user-2",
+        authorName: "Dana",
+        teams: [],
+      },
     ],
   });
   createSetupMock.mockResolvedValue({
@@ -294,7 +306,12 @@ describe("ConnectCommandPanel", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByTestId("connect-change-skills"));
-    await user.click(screen.getByLabelText("billing-pipeline"));
+    // The picker preselects skills an admin can see, including other people's
+    // personal ones, so each row must say whose it is before it is installed.
+    expect(screen.getByText("Dana")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: /billing-pipeline/ }),
+    );
 
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(

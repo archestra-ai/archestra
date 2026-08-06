@@ -96,6 +96,97 @@ describe("PUT /api/skills/:id", () => {
     expect(body.files[0].path).toBe("references/NEW.md");
   });
 
+  test("baseVersion rejects an edit composed from a superseded head", async () => {
+    const created = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST },
+      })
+    ).json();
+
+    // someone else's edit moves the head past what our caller read
+    const theirs = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: `${MANIFEST}\nTheir edit.` },
+    });
+    expect(theirs.statusCode).toBe(200);
+    expect(theirs.json().latestVersion).toBeGreaterThan(created.latestVersion);
+
+    const stale = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: {
+        content: `${MANIFEST}\nOur edit.`,
+        baseVersion: created.latestVersion,
+      },
+    });
+
+    expect(stale.statusCode).toBe(409);
+    // machine-readable so a client can offer a reload, which it cannot do off
+    // the status alone — this route's other 409s are not reload-able
+    expect(stale.json().error.internal_code).toBe("skill_version_conflict");
+
+    // the rejected edit rolled back: their content survives intact
+    const after = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/${created.id}`,
+    });
+    expect(after.json().content).toContain("Their edit.");
+    expect(after.json().content).not.toContain("Our edit.");
+  });
+
+  test("a name-collision 409 carries no version-conflict code", async () => {
+    const created = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: manifestNamed("first-skill") },
+      })
+    ).json();
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: manifestNamed("second-skill") },
+    });
+
+    const renamed = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: manifestNamed("second-skill") },
+    });
+
+    expect(renamed.statusCode).toBe(409);
+    expect(renamed.json().error.internal_code).toBeUndefined();
+  });
+
+  test("omitting baseVersion keeps last-write-wins", async () => {
+    const created = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: MANIFEST },
+      })
+    ).json();
+
+    await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: `${MANIFEST}\nTheir edit.` },
+    });
+
+    // same stale starting point as above, but unguarded — the write lands
+    const unguarded = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/skills/${created.id}`,
+      payload: { content: `${MANIFEST}\nOur edit.` },
+    });
+
+    expect(unguarded.statusCode).toBe(200);
+    expect(unguarded.json().content).toContain("Our edit.");
+  });
+
   test("explicit allowedTools overrides the frontmatter on update", async () => {
     const created = (
       await ctx.app.inject({

@@ -15,7 +15,7 @@ const {
   updateConnector,
   deleteConnector,
   restoreConnector,
-  purgeConnector,
+  permanentlyDeleteConnector,
   syncConnector,
   forceResyncConnector,
   testConnectorConnection,
@@ -245,11 +245,13 @@ export function useRestoreConnector() {
 }
 
 /** Permanently delete a soft-deleted connector (admin-only trash action). */
-export function usePurgeConnector() {
+export function usePermanentlyDeleteConnector() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await purgeConnector({ path: { id } });
+      const { data, error } = await permanentlyDeleteConnector({
+        path: { id },
+      });
       if (error) {
         handleApiError(error);
         return null;

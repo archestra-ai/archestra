@@ -48,6 +48,7 @@ import {
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import {
+  buildBulkToolUpdate,
   computeMcpEnvConflicts,
   computeSharedPersonalPins,
   filterDefaultArchestraToolIds,
@@ -59,6 +60,7 @@ import {
   shouldResetCredentialPin,
   sortAndFilterTools,
   sortCatalogItems,
+  summarizeBulkFailure,
 } from "./agent-tools-editor.utils";
 import { McpCatalogIcon } from "./mcp-catalog-icon";
 import { McpServerPillShell } from "./mcp-server-pill-shell";
@@ -544,138 +546,28 @@ const AgentToolsEditorContent = forwardRef<
       const resourceLabel = params?.resourceLabel ?? "resource";
       if (!targetAgentId) return;
 
-      const allChanges = Array.from(pendingChangesRef.current.entries());
-      let hasChanges = false;
-
       // Every catalog's edits are accumulated and sent as ONE request. Looping
       // per tool (the previous shape) forked an agent config version per
       // request, so adding a 30-tool server burned 30 of the 100 retained
       // versions and an add-then-remove cycle evicted the edits a human made.
-      const assignments: NonNullable<
-        archestraApiTypes.BulkUpdateAgentToolsData["body"]
-      >["assignments"] = [];
-      const removals: NonNullable<
-        archestraApiTypes.BulkUpdateAgentToolsData["body"]
-      >["removals"] = [];
+      const { assignments, removals, hasChanges } = buildBulkToolUpdate({
+        targetAgentId,
+        pendingChanges: pendingChangesRef.current,
+        assignedToolsByCatalog,
+        isNewAgent: !agentId,
+        creationDefaultToolIds: creationDefaultTools?.toolIds,
+      });
 
-      for (const [catalogId, changes] of allChanges) {
-        const currentAssigned = assignedToolsByCatalog.get(catalogId) ?? [];
-        const currentAssignedIds = new Set(
-          currentAssigned.map((at) => at.tool.id),
-        );
-        // A just-created agent already has the creation-default built-ins:
-        // AgentModel.create auto-assigned them, but the assigned-tools query
-        // still reflects the pre-create (empty) state. Diff the built-in
-        // catalog against that set so unchecking a pre-selected default
-        // produces a real unassign, and defaults left checked are not
-        // redundantly re-assigned.
-        if (!agentId && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
-          for (const id of creationDefaultTools?.toolIds ?? []) {
-            currentAssignedIds.add(id);
-          }
-        }
-
-        const toAdd = [...changes.selectedToolIds].filter(
-          (id) => !currentAssignedIds.has(id),
-        );
-        const toRemove = [...currentAssignedIds].filter(
-          (id) => !changes.selectedToolIds.has(id),
-        );
-
-        if (toAdd.length > 0 || toRemove.length > 0) {
-          hasChanges = true;
-        }
-
-        const _isLocal = changes.catalogItem.serverType === "local";
-        const prefersEnterpriseManaged =
-          changes.catalogItem.enterpriseManagedConfig != null;
-
-        // Apps resolve their launch tool in-process per viewer, so they bind
-        // dynamically like Playwright — there is no credential to pick.
-        const useDynamicCredential =
-          isPlaywrightCatalogItem(changes.catalogItem.id) ||
-          changes.catalogItem.serverType === "app" ||
-          changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
-        const useEnterpriseManagedCredential =
-          prefersEnterpriseManaged && useDynamicCredential;
-
-        const credentialResolutionMode = useEnterpriseManagedCredential
-          ? "enterprise_managed"
-          : useDynamicCredential
-            ? "dynamic"
-            : "static";
-        // A late-bound mode resolves the server per call, so any previously
-        // pinned server is cleared rather than carried over.
-        const mcpServerId =
-          !useDynamicCredential && !useEnterpriseManagedCredential
-            ? (changes.credentialSourceId ?? null)
-            : null;
-
-        for (const toolId of toRemove) {
-          removals.push({ agentId: targetAgentId, toolId });
-        }
-        for (const toolId of toAdd) {
-          assignments.push({
-            agentId: targetAgentId,
-            toolId,
-            mcpServerId,
-            resolveAtCallTime: useDynamicCredential,
-            credentialResolutionMode,
-          });
-        }
-
-        // Tools that stay assigned but whose credential changed. Re-assigning
-        // is the correct upsert — the bulk write reports these as `updated`.
-        const toKeep = currentAssigned.filter((at) =>
-          changes.selectedToolIds.has(at.tool.id),
-        );
-        for (const agentTool of toKeep) {
-          const currentCred =
-            agentTool.credentialResolutionMode === "dynamic"
-              ? DYNAMIC_CREDENTIAL_VALUE
-              : agentTool.credentialResolutionMode === "enterprise_managed"
-                ? DYNAMIC_CREDENTIAL_VALUE
-                : (agentTool.mcpServerId ?? null);
-          if (currentCred !== changes.credentialSourceId) {
-            hasChanges = true;
-            assignments.push({
-              agentId: targetAgentId,
-              toolId: agentTool.tool.id,
-              mcpServerId,
-              resolveAtCallTime: useDynamicCredential,
-              credentialResolutionMode,
-            });
-          }
-        }
-      }
-
-      let failure: { error: string } | undefined;
+      // `failed` is the only part of the response that is an error — see
+      // summarizeBulkFailure, which is deliberately the only thing read off it.
+      let failure: string | undefined;
       if (assignments.length > 0 || removals.length > 0) {
         const result = await bulkUpdateTools.mutateAsync({
           assignments,
           removals,
           skipInvalidation: true,
         });
-
-        // Only `failed` is an error. `notAssigned` means the row was already
-        // gone (a concurrent edit, or a stale view) and `duplicates` that it
-        // already matched — both are benign. Throwing on them would surface a
-        // no-op as a save failure, and on the create path agent-dialog reacts
-        // to a throw by DELETING the agent it just created.
-        //
-        // The batch spans every catalog, so one save can fail several tools for
-        // unrelated reasons. Report the first and count the rest — dropping
-        // them silently would have the user fix one problem, re-save, and meet
-        // the next.
-        const failures = result?.failed ?? [];
-        if (failures[0]) {
-          failure = {
-            error:
-              failures.length > 1
-                ? `${failures[0].error} (and ${failures.length - 1} more)`
-                : failures[0].error,
-          };
-        }
+        failure = summarizeBulkFailure(result?.failed);
       }
 
       // Invalidate once at the end — before any throw, because a partial
@@ -687,10 +579,7 @@ const AgentToolsEditorContent = forwardRef<
 
       if (failure) {
         throw new Error(
-          formatToolAssignmentErrorMessage(
-            resourceLabel,
-            new Error(failure.error),
-          ),
+          formatToolAssignmentErrorMessage(resourceLabel, new Error(failure)),
         );
       }
 

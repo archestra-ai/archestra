@@ -701,7 +701,7 @@ export function McpServerCard({
                         onClick={() => goToItemPage("credentials")}
                       >
                         <Avatar className="size-6 border-2 border-background cursor-pointer">
-                          <AvatarFallback className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                          <AvatarFallback className="bg-amber-500/10 text-amber-800 dark:text-amber-400">
                             <Globe className="h-3 w-3" />
                           </AvatarFallback>
                         </Avatar>
@@ -997,7 +997,7 @@ export function McpServerCard({
       <CardContent className="flex flex-col gap-4 flex-grow">
         {showApprovalPanel && (
           <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2.5">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-600 dark:text-amber-500">
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-500">
               <span>
                 {isInstallAdmin
                   ? "Image needs approval"

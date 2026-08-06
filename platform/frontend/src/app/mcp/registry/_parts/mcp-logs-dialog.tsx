@@ -654,6 +654,7 @@ export function McpLogsContent({
                     variant="ghost"
                     size="sm"
                     onClick={handleCopyCommand}
+                    aria-label="Copy command"
                     className="absolute top-1/2 -translate-y-1/2 right-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
                   >
                     <Copy className="h-3 w-3" />

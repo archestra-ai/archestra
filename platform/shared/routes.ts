@@ -57,6 +57,9 @@ export const RouteId = {
   GetConfig: "getConfig",
   GetPublicConfig: "getPublicConfig",
 
+  // RUM Routes
+  IngestRumEvents: "ingestRumEvents",
+
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
   GetAuthState: "getAuthState",
@@ -601,6 +604,8 @@ export const RouteId = {
   GetKnowledgeBase: "getKnowledgeBase",
   UpdateKnowledgeBase: "updateKnowledgeBase",
   DeleteKnowledgeBase: "deleteKnowledgeBase",
+  RestoreKnowledgeBase: "restoreKnowledgeBase",
+  PermanentlyDeleteKnowledgeBase: "permanentlyDeleteKnowledgeBase",
   GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
 
   // Knowledge Base Connector Routes
@@ -611,6 +616,8 @@ export const RouteId = {
   GetConnectorDocument: "getConnectorDocument",
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
+  RestoreConnector: "restoreConnector",
+  PermanentlyDeleteConnector: "permanentlyDeleteConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
   TriggerPermissionSync: "triggerPermissionSync",

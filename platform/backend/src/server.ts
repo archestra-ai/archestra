@@ -86,6 +86,9 @@ import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { rumExporter } from "@/observability/rum/exporter.ee";
+import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -1309,6 +1312,8 @@ const startWebServer = async () => {
       logger.warn({ err: error }, "Failed to track instance analytics");
     });
 
+    rumExporter.initialize();
+
     posthogErrorTrackingService.init().catch((error) => {
       logger.warn(
         { err: error },
@@ -1479,8 +1484,12 @@ const startWebServer = async () => {
     await registerSwaggerPlugin(fastify);
 
     // Register routes
-    fastify.get("/openapi.json", async () =>
-      enrichOpenApiWithRbac(fastify.swagger()),
+    fastify.get(
+      "/openapi.json",
+      createCachedOpenApiRouteHandler({
+        buildDocument: () => enrichOpenApiWithRbac(fastify.swagger()),
+        getCacheKey: () => JSON.stringify(archestraMcpBranding.identity),
+      }),
     );
 
     if (enableE2eTestEndpoints) {
@@ -1623,6 +1632,9 @@ function registerWebServerShutdown(
       mcpGatewayTaskReaper.stop();
 
       instanceAnalyticsService.stop();
+
+      // Flush any buffered RUM events before the process exits.
+      await rumExporter.shutdown();
 
       metrics.activeUsers.activeUsersMetricCollector.stop();
 

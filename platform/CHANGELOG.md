@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.29](https://github.com/archestra-ai/archestra/compare/platform-v1.3.28...platform-v1.3.29) (2026-08-07)
+
+
+### Features
+
+* **encryption:** extend content encryption at rest to mcp_tool_calls ([#7107](https://github.com/archestra-ai/archestra/issues/7107)) ([4e6b15c](https://github.com/archestra-ai/archestra/commit/4e6b15c32f444c9cceb6bf0f7a5618516ef53585))
+* **observability:** Real User Monitoring — product-usage events exported as OTLP logs ([#7134](https://github.com/archestra-ai/archestra/issues/7134)) ([3f03d24](https://github.com/archestra-ai/archestra/commit/3f03d245cfe8910a056ccbee66282a8f11786b2d))
+* **projects:** pin a default agent per project ([#7132](https://github.com/archestra-ai/archestra/issues/7132)) ([1083945](https://github.com/archestra-ai/archestra/commit/108394585117707deac36738ed2023bf4ee9f1b3))
+
+
+### Bug Fixes
+
+* **auth:** let SSO sign-in link onto existing unverified password accounts ([#7137](https://github.com/archestra-ai/archestra/issues/7137)) ([596a18a](https://github.com/archestra-ai/archestra/commit/596a18aa85019433ade3bef2b3745e75ccea5ddc))
+* **chat:** stop nesting the clear control inside the model selector trigger ([#7116](https://github.com/archestra-ai/archestra/issues/7116)) ([4300e9f](https://github.com/archestra-ai/archestra/commit/4300e9fe79957a42a275044874efbe7ac4bf8831))
+* **deps:** pin js-yaml 4.3.1 for GHSA-5p4m-2wfm-xmqj ([#7140](https://github.com/archestra-ai/archestra/issues/7140)) ([e6aa726](https://github.com/archestra-ai/archestra/commit/e6aa72621e7c2a3dc1c4b8d0324e36031d14603b))
+
+
+### Miscellaneous Chores
+
+* **mcp:** improve MCP logging ([#7138](https://github.com/archestra-ai/archestra/issues/7138)) ([3317eea](https://github.com/archestra-ai/archestra/commit/3317eea19ea86921820b5b36038ce9a4bf92174a))
+
 ## [1.3.28](https://github.com/archestra-ai/archestra/compare/platform-v1.3.27...platform-v1.3.28) (2026-08-06)
 
 

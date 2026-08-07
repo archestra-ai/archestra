@@ -1,4 +1,7 @@
-import type { PaginationQuery } from "@archestra/shared";
+import {
+  type PaginationQuery,
+  redactCatalogToolArguments,
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -63,7 +66,7 @@ class McpToolCallModel {
       .insert(schema.mcpToolCallsTable)
       // Spread first: the encrypt helper mutates in place, and callers must
       // keep their plaintext copy (e.g. to build the JSON-RPC response).
-      .values(encryptMcpToolCallInsert({ ...data }))
+      .values(encryptMcpToolCallInsert(redactToolCallArguments({ ...data })))
       .returning();
 
     return decryptMcpToolCallRow(mcpToolCall);
@@ -524,4 +527,21 @@ function toVisibleMcpToolCall(
     appId: row.appDeletedAt ? null : toolCall.appId,
     appName: row.appDeletedAt ? null : toolCall.appName,
   };
+}
+
+/**
+ * Strips credential values out of the logged arguments. Reassigns `toolCall`
+ * rather than editing it, so the caller's plaintext copy — which the gateway
+ * still needs for its JSON-RPC response — is left intact.
+ */
+function redactToolCallArguments(values: InsertMcpToolCall): InsertMcpToolCall {
+  const toolCall = values.toolCall;
+  if (!toolCall?.arguments) return values;
+
+  const redacted = redactCatalogToolArguments(toolCall.arguments);
+  // Same reference back means nothing matched; skip the rewrite entirely.
+  if (redacted === toolCall.arguments) return values;
+
+  values.toolCall = { ...toolCall, arguments: redacted };
+  return values;
 }

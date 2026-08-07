@@ -465,6 +465,18 @@ tests:
               value: "true"
             - name: ARCHESTRA_CODE_RUNTIME_ENABLED
               value: "true"
+            - name: ARCHESTRA_NODE_MEMORY_REQUEST_MIB
+              valueFrom:
+                resourceFieldRef:
+                  containerName: archestra-platform
+                  resource: requests.memory
+                  divisor: 1Mi
+            - name: ARCHESTRA_NODE_MEMORY_LIMIT_MIB
+              valueFrom:
+                resourceFieldRef:
+                  containerName: archestra-platform
+                  resource: limits.memory
+                  divisor: 1Mi
             - name: ARCHESTRA_PROCESS_TYPE
               value: "web"
 
@@ -1686,6 +1698,24 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: "3Gi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_REQUEST_MIB
+            valueFrom:
+              resourceFieldRef:
+                containerName: archestra-platform
+                resource: requests.memory
+                divisor: 1Mi
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_LIMIT_MIB
+            valueFrom:
+              resourceFieldRef:
+                containerName: archestra-platform
+                resource: limits.memory
+                divisor: 1Mi
 
   - it: should allow overriding resource requests and limits
     documentIndex: 1

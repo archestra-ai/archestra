@@ -30,6 +30,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agentTool.deleted": "Agent tool removed",
   "agentTool.bulk_assigned": "Agent tools bulk assigned",
   "agentTool.bulk_removed": "Agent tools bulk removed",
+  "agentTool.bulk_updated": "Agent tools bulk updated",
   // API key
   "apiKey.created": "API key created",
   "apiKey.deleted": "API key deleted",
@@ -48,6 +49,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  "connector.purged": "Connector permanently deleted",
+  "connector.restored": "Connector restored",
   "connector.permission_sync_triggered": "Connector permission sync triggered",
   "connector.synced": "Connector synced",
   // Default user limit
@@ -82,6 +85,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "knowledgeBase.created": "Knowledge base created",
   "knowledgeBase.updated": "Knowledge base updated",
   "knowledgeBase.deleted": "Knowledge base deleted",
+  "knowledgeBase.purged": "Knowledge base permanently deleted",
+  "knowledgeBase.restored": "Knowledge base restored",
   // Limit
   "limit.created": "Limit created",
   "limit.updated": "Limit updated",

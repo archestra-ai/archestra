@@ -59,15 +59,15 @@ test.describe("Add Remote MCP Server", () => {
 
     await page.getByRole("button", { name: "Add Server" }).click();
 
-    // Creating the item continues on the setup wizard's "Test connection"
-    // step. Its Install button installs a no-auth remote directly (no
+    // Creating the item continues on the setup wizard's "Connect & Verify"
+    // step. Its Connect button installs a no-auth remote directly (no
     // dialog), then refetches the servers list — which now reports the
     // successful connection.
-    const installButton = page.getByRole("button", {
-      name: "Install",
+    const connectButton = page.getByRole("button", {
+      name: "Connect",
       exact: true,
     });
-    await expect(installButton).toBeVisible();
+    await expect(connectButton).toBeVisible();
     await mswControl.use({
       method: "get",
       url: "/api/mcp_server",
@@ -78,7 +78,7 @@ test.describe("Add Remote MCP Server", () => {
     // silently lost (same next-dev quirk skill-share.spec works around).
     // Installing is idempotent against the mocked POST, so re-clicking is safe.
     await expect(async () => {
-      await installButton.click();
+      await connectButton.click();
       await expect(page.getByText("Connected", { exact: true })).toBeVisible({
         timeout: 3_000,
       });
@@ -158,18 +158,18 @@ test.describe("Add Remote MCP Server", () => {
     // The setup wizard's "Test connection" step opens the install dialog to
     // collect the token (the item has promptable userConfig). Retry the
     // click: a click landing before React attaches the handler is silently
-    // lost (same next-dev quirk skill-share.spec works around). "Install" is
-    // matched exactly — the form's auth/env labels contain "installation".
+    // lost (same next-dev quirk skill-share.spec works around). "Connect" is
+    // matched exactly — the step renders other Connect-adjacent copy.
     const installDialog = page
       .getByRole("dialog")
       .filter({ hasText: /Install Server/ });
-    const stepInstallButton = page.getByRole("button", {
-      name: "Install",
+    const stepConnectButton = page.getByRole("button", {
+      name: "Connect",
       exact: true,
     });
-    await expect(stepInstallButton).toBeVisible();
+    await expect(stepConnectButton).toBeVisible();
     await expect(async () => {
-      await stepInstallButton.click();
+      await stepConnectButton.click();
       await expect(installDialog).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 30_000 });
 

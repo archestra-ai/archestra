@@ -590,6 +590,103 @@ describe("ModelModel", () => {
       );
       expect(updated?.defaultParameters).toEqual({ num_ctx: 8192 });
     });
+
+    test("clears the proxy-discovery flag when a provider catalog returns the model", async () => {
+      // The proxy saw this id before any key had synced it, so the row exists
+      // as proxy-discovered.
+      await ModelModel.ensureModelExists("claude-opus-4-7", "anthropic");
+      const discovered = await ModelModel.findByProviderAndModelId(
+        "anthropic",
+        "claude-opus-4-7",
+      );
+      expect(discovered?.discoveredViaLlmProxy).toBe(true);
+
+      // A configured provider's own catalog now returns it, which makes it a
+      // synced model that key deletion should be able to clean up.
+      await ModelModel.bulkUpsert(
+        [
+          {
+            externalId: "anthropic/claude-opus-4-7",
+            provider: "anthropic",
+            modelId: "claude-opus-4-7",
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            promptPricePerToken: "0.000005",
+            completionPricePerToken: "0.000025",
+            lastSyncedAt: new Date(),
+          },
+        ],
+        { fromProviderCatalog: true },
+      );
+
+      const synced = await ModelModel.findByProviderAndModelId(
+        "anthropic",
+        "claude-opus-4-7",
+      );
+      expect(synced?.discoveredViaLlmProxy).toBe(false);
+    });
+
+    test("keeps the proxy-discovery flag when the registry import names the model", async () => {
+      // The models.dev import upserts the whole registry regardless of which
+      // providers are configured, so a model appearing there is no evidence the
+      // caller can actually reach it. Only a configured provider's own catalog
+      // is, so this path must leave the row's protection alone.
+      await ModelModel.ensureModelExists("gpt-4o", "openai");
+
+      await ModelModel.bulkUpsert([
+        {
+          externalId: "openai/gpt-4o",
+          provider: "openai",
+          modelId: "gpt-4o",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          promptPricePerToken: "0.0000025",
+          completionPricePerToken: "0.00001",
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      const stillProxyDiscovered = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "gpt-4o",
+      );
+      expect(stillProxyDiscovered?.discoveredViaLlmProxy).toBe(true);
+    });
+
+    test("preserves custom price overrides on conflict", async () => {
+      const created = await ModelModel.create({
+        externalId: "openai/custom-priced",
+        provider: "openai",
+        modelId: "custom-priced",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.update(created.id, {
+        customPricePerMillionInput: "12.00",
+        customPricePerMillionOutput: "36.00",
+      });
+
+      await ModelModel.bulkUpsert([
+        {
+          externalId: "openai/custom-priced",
+          provider: "openai",
+          modelId: "custom-priced",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          promptPricePerToken: "0.000001",
+          completionPricePerToken: "0.000002",
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      const after = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "custom-priced",
+      );
+      expect(after?.customPricePerMillionInput).toBe("12.00");
+      expect(after?.customPricePerMillionOutput).toBe("36.00");
+    });
   });
 
   describe("bulkUpsertFull", () => {
@@ -645,6 +742,69 @@ describe("ModelModel", () => {
         "llama3-full",
       );
       expect(refreshed?.defaultParameters).toEqual({ num_ctx: 8192 });
+    });
+
+    test("clears the proxy-discovery flag when a catalog sync returns the model", async () => {
+      await ModelModel.ensureModelExists("gpt-4o-full", "openai");
+      const discovered = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "gpt-4o-full",
+      );
+      expect(discovered?.discoveredViaLlmProxy).toBe(true);
+
+      await ModelModel.bulkUpsertFull([
+        {
+          externalId: "openai/gpt-4o-full",
+          provider: "openai",
+          modelId: "gpt-4o-full",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          promptPricePerToken: "0.0000025",
+          completionPricePerToken: "0.00001",
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      const synced = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "gpt-4o-full",
+      );
+      expect(synced?.discoveredViaLlmProxy).toBe(false);
+    });
+
+    test("resets custom price overrides on full refresh", async () => {
+      const created = await ModelModel.create({
+        externalId: "openai/full-custom-priced",
+        provider: "openai",
+        modelId: "full-custom-priced",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.update(created.id, {
+        customPricePerMillionInput: "12.00",
+        customPricePerMillionOutput: "36.00",
+      });
+
+      await ModelModel.bulkUpsertFull([
+        {
+          externalId: "openai/full-custom-priced",
+          provider: "openai",
+          modelId: "full-custom-priced",
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          promptPricePerToken: "0.000001",
+          completionPricePerToken: "0.000002",
+          lastSyncedAt: new Date(),
+        },
+      ]);
+
+      const after = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "full-custom-priced",
+      );
+      expect(after?.customPricePerMillionInput).toBeNull();
+      expect(after?.customPricePerMillionOutput).toBeNull();
     });
   });
 

@@ -30,6 +30,10 @@ export const AuditEventNameSchema = z.enum([
   "agentTool.deleted",
   "agentTool.bulk_assigned",
   "agentTool.bulk_removed",
+  // One editor save applies adds and removals together, so it is neither a
+  // pure grant nor a pure revocation — `.bulk_updated` covers the combined
+  // operation that `/api/agents/tools/bulk-update` performs.
+  "agentTool.bulk_updated",
   "apiKey.created",
   "apiKey.deleted",
   "app.created",
@@ -43,6 +47,8 @@ export const AuditEventNameSchema = z.enum([
   "connector.created",
   "connector.updated",
   "connector.deleted",
+  "connector.restored",
+  "connector.purged",
   "connector.permission_sync_triggered",
   "connector.synced",
   "defaultUserLimit.created",
@@ -70,6 +76,8 @@ export const AuditEventNameSchema = z.enum([
   "knowledgeBase.created",
   "knowledgeBase.updated",
   "knowledgeBase.deleted",
+  "knowledgeBase.restored",
+  "knowledgeBase.purged",
   "limit.created",
   "limit.updated",
   "limit.deleted",

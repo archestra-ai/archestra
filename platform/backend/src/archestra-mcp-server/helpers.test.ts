@@ -4,6 +4,7 @@ import {
   deduplicateLabels,
   fencedBlock,
   formatAssignmentSummary,
+  formatZodError,
   formatZodErrorWithSchema,
   isAbortLikeError,
 } from "./helpers";
@@ -292,5 +293,80 @@ describe("formatZodErrorWithSchema", () => {
     expect(formatZodErrorWithSchema(error, schema)).toContain(
       'nested: unrecognized key "timeout"',
     );
+  });
+});
+
+/**
+ * `catchError` gives every failure a generic message except a ZodError, whose
+ * text it forwards to the model verbatim as the tool result. A tool argument
+ * can hold a credential, so the rejected value must never appear in the
+ * message. Zod's own formatting is what keeps it out — a Zod upgrade, a custom
+ * error map, or a `.refine()` message that interpolates its input would put it
+ * back.
+ */
+describe("Zod error text never echoes the rejected value", () => {
+  const rejected = "sk-rejected-secret-value";
+
+  function errorFor(schema: z.ZodType, value: unknown): z.ZodError {
+    const result = schema.safeParse(value);
+    if (result.success) throw new Error("expected a validation failure");
+    return result.error;
+  }
+
+  test.each([
+    [
+      "enum",
+      z.object({ mode: z.enum(["a", "b"]) }),
+      { mode: rejected },
+      "mode",
+    ],
+    [
+      "literal",
+      z.object({ kind: z.literal("fixed") }),
+      { kind: rejected },
+      "kind",
+    ],
+    [
+      "string length",
+      z.object({ token: z.string().max(3) }),
+      { token: rejected },
+      "token",
+    ],
+    [
+      "url format",
+      z.object({ endpoint: z.url() }),
+      { endpoint: rejected },
+      "endpoint",
+    ],
+    ["number type", z.object({ port: z.number() }), { port: rejected }, "port"],
+  ])("formatZodError on a %s failure", (_label, schema, value, path) => {
+    const message = formatZodError(errorFor(schema, value));
+    expect(message).not.toContain(rejected);
+    // names the offending field, so the assertion above is not passing on an
+    // empty message.
+    expect(message).toContain(path);
+  });
+
+  test("formatZodErrorWithSchema on an unrecognized key holding a credential", () => {
+    const schema = z.strictObject({ ok: z.string() });
+    const message = formatZodErrorWithSchema(
+      errorFor(schema, { ok: "x", extra: rejected }),
+      schema,
+    );
+    expect(message).not.toContain(rejected);
+    expect(message).toContain('unrecognized key "extra"');
+  });
+
+  test("formatZodErrorWithSchema on a discriminator holding a credential", () => {
+    const schema = z.discriminatedUnion("type", [
+      z.strictObject({ type: z.literal("base64"), data: z.string() }),
+      z.strictObject({ type: z.literal("text"), data: z.string() }),
+    ]);
+    const message = formatZodErrorWithSchema(
+      errorFor(schema, { type: rejected, data: "x" }),
+      schema,
+    );
+    expect(message).not.toContain(rejected);
+    expect(message).toContain('set "type" to one of: "base64", "text"');
   });
 });

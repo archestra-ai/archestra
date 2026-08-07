@@ -148,6 +148,7 @@ spec:
             {{- end }}
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
+            {{- include "archestra-platform.nodeMemoryEnv" (dict "resources" .Values.archestra.resources "containerName" .Chart.Name) | nindent 12 }}
             {{- if .Values.archestra.worker.enabled }}
             - name: ARCHESTRA_PROCESS_TYPE
               value: "web"

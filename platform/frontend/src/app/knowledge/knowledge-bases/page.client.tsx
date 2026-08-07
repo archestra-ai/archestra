@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
+  ArchiveRestore,
   ArrowLeft,
   Check,
   ChevronDown,
@@ -23,7 +24,12 @@ import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layou
 import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  PERMANENT_DELETE_LABEL,
+  permanentDeleteRowAction,
+} from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import {
@@ -45,8 +51,12 @@ import {
   useDeleteKnowledgeBase,
   useKnowledgeBase,
   useKnowledgeBasesPaginated,
+  usePermanentlyDeleteKnowledgeBase,
+  useRestoreKnowledgeBase,
 } from "@/lib/knowledge/knowledge-base.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { cn, formatDate } from "@/lib/utils";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 import { ConnectorTypeIcon } from "./_parts/connector-icons";
 import { CreateConnectorDialog } from "./_parts/create-connector-dialog";
@@ -79,6 +89,9 @@ function KnowledgeBasesList() {
   const pageFromUrl = searchParams.get("page");
   const pageSizeFromUrl = searchParams.get("pageSize");
   const search = searchParams.get("search") || "";
+  // The trash view; the backend gates the deleted slice on
+  // `knowledgeSource:delete`, and the status filter itself is gated the same way.
+  const isDeletedView = searchParams.get("status") === "deleted";
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
   const offset = pageIndex * pageSize;
@@ -93,9 +106,17 @@ function KnowledgeBasesList() {
     limit: pageSize,
     offset,
     search: search || undefined,
+    status: isDeletedView ? "deleted" : undefined,
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [permanentlyDeletingKb, setPermanentlyDeletingKb] =
+    useState<KnowledgeBaseItem | null>(null);
+  const restoreKnowledgeBase = useRestoreKnowledgeBase();
+  const permanentlyDeleteKnowledgeBase = usePermanentlyDeleteKnowledgeBase();
+  // Resolved once here rather than inside a cell renderer, as the shared
+  // permanent-delete action requires.
+  const admin = useIsGlobalAdmin();
   const editId = searchParams.get("edit");
   const { data: editingItemFromUrl } = useKnowledgeBase(editId ?? undefined);
   const {
@@ -130,9 +151,12 @@ function KnowledgeBasesList() {
 
   const items = knowledgeBases?.data ?? [];
   const pagination = knowledgeBases?.pagination;
+  const hasActiveFilters = !!search || isDeletedView;
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("search");
+    for (const key of ["search", "status"]) {
+      params.delete(key);
+    }
     params.set("page", "1");
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [pathname, router, searchParams]);
@@ -227,6 +251,61 @@ function KnowledgeBasesList() {
     },
   ];
 
+  // The trash view. Rows do not expand — the connector sub-table is an
+  // active-KB surface — and the actions collapse to Restore + Delete
+  // permanently, matching the agents, skills, and projects trash views.
+  const deletedColumns: ColumnDef<KnowledgeBaseItem>[] = [
+    {
+      id: "name",
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => {
+        const kb = row.original;
+        return (
+          <div>
+            <div className="font-medium">{kb.name}</div>
+            {kb.description && (
+              <div className="text-xs text-muted-foreground truncate max-w-md">
+                {kb.description}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      id: "deleted",
+      header: "Deleted",
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {formatRelativeTimeFromNow(row.original.deletedAt)}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => (
+        <TableRowActions
+          itemName={row.original.name}
+          actions={[
+            {
+              icon: <ArchiveRestore className="h-4 w-4" />,
+              label: "Restore",
+              permissions: { knowledgeSource: ["delete"] },
+              onClick: () => restoreKnowledgeBase.mutate(row.original.id),
+            },
+            permanentDeleteRowAction({
+              admin,
+              onClick: () => setPermanentlyDeletingKb(row.original),
+            }),
+          ]}
+        />
+      ),
+    },
+  ];
+
   if (isKnowledgeBasesLoadError) {
     return (
       <KnowledgePageLayout
@@ -256,21 +335,34 @@ function KnowledgeBasesList() {
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex items-center gap-4">
             <SearchInput paramName="search" className="relative w-[370px]" />
+            <ResourceDeletedStatusFilter
+              deletePermission={{ knowledgeSource: ["delete"] }}
+            />
           </div>
         </div>
 
         <DataTable
-          columns={columns}
+          columns={isDeletedView ? deletedColumns : columns}
           data={items}
-          renderSubComponent={({ row }) => (
-            <ExpandedConnectors
-              knowledgeBaseId={row.original.id}
-              onEditConnector={openEditConnector}
-            />
-          )}
+          renderSubComponent={
+            isDeletedView
+              ? undefined
+              : ({ row }) => (
+                  <ExpandedConnectors
+                    knowledgeBaseId={row.original.id}
+                    onEditConnector={openEditConnector}
+                  />
+                )
+          }
+          // The deleted view always counts as filtered (see hasActiveFilters),
+          // so its empty state is the filtered one below.
           emptyMessage="No knowledge bases found"
-          hasActiveFilters={!!search}
-          filteredEmptyMessage="No knowledge bases match your filters. Try adjusting your search."
+          hasActiveFilters={hasActiveFilters}
+          filteredEmptyMessage={
+            isDeletedView
+              ? "No deleted knowledge bases found."
+              : "No knowledge bases match your filters. Try adjusting your search."
+          }
           onClearFilters={clearFilters}
           hideSelectedCount
           manualPagination
@@ -287,6 +379,25 @@ function KnowledgeBasesList() {
           }}
           isLoading={isFetching}
         />
+
+        {permanentlyDeletingKb && (
+          <DeleteConfirmDialog
+            open={!!permanentlyDeletingKb}
+            onOpenChange={(open) => {
+              if (!open) setPermanentlyDeletingKb(null);
+            }}
+            title="Delete knowledge base permanently"
+            description={`This destroys "${permanentlyDeletingKb.name}" along with its agent and connector assignments. Its connectors survive and keep working. Nothing recovers the knowledge base.`}
+            isPending={permanentlyDeleteKnowledgeBase.isPending}
+            onConfirm={async () => {
+              const ok = await permanentlyDeleteKnowledgeBase.mutateAsync(
+                permanentlyDeletingKb.id,
+              );
+              if (ok) setPermanentlyDeletingKb(null);
+            }}
+            confirmLabel={PERMANENT_DELETE_LABEL}
+          />
+        )}
 
         <CreateKnowledgeBaseDialog
           open={isCreateDialogOpen}
@@ -794,7 +905,7 @@ function DeleteKnowledgeBaseDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Delete Knowledge Base"
-      description="Are you sure you want to delete this knowledge base? Connectors will not be deleted but will be unlinked from this knowledge base. This action cannot be undone."
+      description="Are you sure you want to delete this knowledge base? Its connectors are not deleted and keep working. An admin can restore it from the Deleted view until it is permanently removed."
       isPending={deleteKnowledgeBase.isPending}
       onConfirm={handleDelete}
       confirmLabel="Delete Knowledge Base"

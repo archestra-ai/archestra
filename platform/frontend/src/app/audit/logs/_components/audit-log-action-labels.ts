@@ -49,6 +49,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  "connector.purged": "Connector permanently deleted",
+  "connector.restored": "Connector restored",
   "connector.permission_sync_triggered": "Connector permission sync triggered",
   "connector.synced": "Connector synced",
   // Default user limit
@@ -83,6 +85,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "knowledgeBase.created": "Knowledge base created",
   "knowledgeBase.updated": "Knowledge base updated",
   "knowledgeBase.deleted": "Knowledge base deleted",
+  "knowledgeBase.purged": "Knowledge base permanently deleted",
+  "knowledgeBase.restored": "Knowledge base restored",
   // Limit
   "limit.created": "Limit created",
   "limit.updated": "Limit updated",

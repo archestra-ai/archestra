@@ -75025,6 +75025,8 @@
                 "connector.created",
                 "connector.updated",
                 "connector.deleted",
+                "connector.restored",
+                "connector.purged",
                 "connector.permission_sync_triggered",
                 "connector.synced",
                 "defaultUserLimit.created",
@@ -75052,6 +75054,8 @@
                 "knowledgeBase.created",
                 "knowledgeBase.updated",
                 "knowledgeBase.deleted",
+                "knowledgeBase.restored",
+                "knowledgeBase.purged",
                 "limit.created",
                 "limit.updated",
                 "limit.deleted",
@@ -75319,6 +75323,8 @@
                                   "connector.created",
                                   "connector.updated",
                                   "connector.deleted",
+                                  "connector.restored",
+                                  "connector.purged",
                                   "connector.permission_sync_triggered",
                                   "connector.synced",
                                   "defaultUserLimit.created",
@@ -75346,6 +75352,8 @@
                                   "knowledgeBase.created",
                                   "knowledgeBase.updated",
                                   "knowledgeBase.deleted",
+                                  "knowledgeBase.restored",
+                                  "knowledgeBase.purged",
                                   "limit.created",
                                   "limit.updated",
                                   "limit.deleted",
@@ -75916,6 +75924,8 @@
                             "connector.created",
                             "connector.updated",
                             "connector.deleted",
+                            "connector.restored",
+                            "connector.purged",
                             "connector.permission_sync_triggered",
                             "connector.synced",
                             "defaultUserLimit.created",
@@ -75943,6 +75953,8 @@
                             "knowledgeBase.created",
                             "knowledgeBase.updated",
                             "knowledgeBase.deleted",
+                            "knowledgeBase.restored",
+                            "knowledgeBase.purged",
                             "limit.created",
                             "limit.updated",
                             "limit.deleted",
@@ -210926,7 +210938,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "List all knowledge bases for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "description": "List all knowledge bases for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and pagination behave identically on both slices, but the deleted slice carries identity only: `connectors` and `assignedAgents` come back empty and `totalDocsIndexed` zero, since those links resolve to nothing while the knowledge base is in the trash.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -210957,6 +210969,20 @@
             "in": "query",
             "name": "search",
             "required": false
+          },
+          {
+            "schema": {
+              "default": "active",
+              "type": "string",
+              "enum": [
+                "active",
+                "deleted"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "description": "Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires `knowledgeSource:delete`."
           }
         ],
         "responses": {
@@ -210995,6 +211021,11 @@
                             "format": "date-time"
                           },
                           "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "deletedAt": {
+                            "nullable": true,
                             "type": "string",
                             "format": "date-time"
                           },
@@ -211153,6 +211184,7 @@
                           "status",
                           "createdAt",
                           "updatedAt",
+                          "deletedAt",
                           "connectors",
                           "totalDocsIndexed",
                           "assignedAgents"
@@ -211507,6 +211539,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -211516,7 +211553,8 @@
                     "description",
                     "status",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -211812,6 +211850,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -211821,7 +211864,8 @@
                     "description",
                     "status",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -212135,6 +212179,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -212144,7 +212193,8 @@
                     "description",
                     "status",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -212392,7 +212442,559 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Delete a knowledge base and remove its connector assignments\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
+        "description": "Delete a knowledge base and remove its connector assignments\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSource:delete"
+          ]
+        }
+      }
+    },
+    "/api/knowledge-bases/{id}/restore": {
+      "post": {
+        "operationId": "restoreKnowledgeBase",
+        "tags": [
+          "Knowledge Bases"
+        ],
+        "description": "Restore a soft-deleted knowledge base. Agent assignments and connector links survive deletion, so the restored knowledge base is immediately live for previously-assigned agents. 404 if there is no soft-deleted knowledge base with that id in the org.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSource:delete"
+          ]
+        }
+      }
+    },
+    "/api/knowledge-bases/{id}/permanent": {
+      "delete": {
+        "operationId": "permanentlyDeleteKnowledgeBase",
+        "tags": [
+          "Knowledge Bases"
+        ],
+        "description": "Permanently destroy a soft-deleted knowledge base (global admins only — a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: the row and its agent and connector assignments are destroyed. Its connectors survive, detached. 404 if there is no soft-deleted knowledge base with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "parameters": [
           {
             "schema": {
@@ -212951,7 +213553,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List all connectors for the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "description": "List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`. The deleted slice carries identity only: `assignedAgents` comes back empty, since those links resolve to nothing while the connector is in the trash. It is also the one slice that never hides a row whose stored `config` no longer matches a known connector shape — the trash is the only place restore and permanent delete are offered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -213095,6 +213697,20 @@
             "in": "query",
             "name": "connectorType",
             "required": false
+          },
+          {
+            "schema": {
+              "default": "active",
+              "type": "string",
+              "enum": [
+                "active",
+                "deleted"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "description": "Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`."
           }
         ],
         "responses": {
@@ -213240,706 +213856,714 @@
                             ]
                           },
                           "config": {
-                            "oneOf": [
+                            "anyOf": [
                               {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "jira"
-                                    ]
-                                  },
-                                  "jiraBaseUrl": {},
-                                  "isCloud": {
-                                    "type": "boolean"
-                                  },
-                                  "projectKey": {
-                                    "type": "string"
-                                  },
-                                  "jqlQuery": {
-                                    "type": "string"
-                                  },
-                                  "commentEmailBlacklist": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "labelsToSkip": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "jiraBaseUrl",
-                                  "isCloud"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "confluence"
-                                    ]
-                                  },
-                                  "confluenceUrl": {},
-                                  "isCloud": {
-                                    "type": "boolean"
-                                  },
-                                  "spaceKeys": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "pageIds": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "cqlQuery": {
-                                    "type": "string"
-                                  },
-                                  "labelsToSkip": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "batchSize": {
-                                    "type": "number"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "confluenceUrl",
-                                  "isCloud"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "github"
-                                    ]
-                                  },
-                                  "githubUrl": {},
-                                  "owner": {
-                                    "type": "string"
-                                  },
-                                  "authMethod": {
-                                    "type": "string",
-                                    "enum": [
-                                      "pat",
-                                      "github_app"
-                                    ]
-                                  },
-                                  "githubAppConfigId": {
-                                    "anyOf": [
-                                      {
-                                        "type": "string",
-                                        "format": "uuid",
-                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                                      },
-                                      {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
                                         "type": "string",
                                         "enum": [
-                                          ""
+                                          "jira"
                                         ]
+                                      },
+                                      "jiraBaseUrl": {},
+                                      "isCloud": {
+                                        "type": "boolean"
+                                      },
+                                      "projectKey": {
+                                        "type": "string"
+                                      },
+                                      "jqlQuery": {
+                                        "type": "string"
+                                      },
+                                      "commentEmailBlacklist": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "labelsToSkip": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
                                       }
-                                    ]
+                                    },
+                                    "required": [
+                                      "type",
+                                      "jiraBaseUrl",
+                                      "isCloud"
+                                    ],
+                                    "additionalProperties": false
                                   },
-                                  "repos": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "confluence"
+                                        ]
+                                      },
+                                      "confluenceUrl": {},
+                                      "isCloud": {
+                                        "type": "boolean"
+                                      },
+                                      "spaceKeys": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "pageIds": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "cqlQuery": {
+                                        "type": "string"
+                                      },
+                                      "labelsToSkip": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "batchSize": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "confluenceUrl",
+                                      "isCloud"
+                                    ],
+                                    "additionalProperties": false
                                   },
-                                  "includeIssues": {
-                                    "type": "boolean"
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "github"
+                                        ]
+                                      },
+                                      "githubUrl": {},
+                                      "owner": {
+                                        "type": "string"
+                                      },
+                                      "authMethod": {
+                                        "type": "string",
+                                        "enum": [
+                                          "pat",
+                                          "github_app"
+                                        ]
+                                      },
+                                      "githubAppConfigId": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "format": "uuid",
+                                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": [
+                                              ""
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "repos": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "includeIssues": {
+                                        "type": "boolean"
+                                      },
+                                      "includePullRequests": {
+                                        "type": "boolean"
+                                      },
+                                      "includeRepositoryFiles": {
+                                        "type": "boolean"
+                                      },
+                                      "fileTypes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "includePaths": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "labelsToSkip": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "githubUrl",
+                                      "owner"
+                                    ],
+                                    "additionalProperties": false
                                   },
-                                  "includePullRequests": {
-                                    "type": "boolean"
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "gitlab"
+                                        ]
+                                      },
+                                      "gitlabUrl": {},
+                                      "projectIds": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "groupId": {
+                                        "type": "string"
+                                      },
+                                      "includeIssues": {
+                                        "type": "boolean"
+                                      },
+                                      "includeMergeRequests": {
+                                        "type": "boolean"
+                                      },
+                                      "includeMarkdownFiles": {
+                                        "type": "boolean"
+                                      },
+                                      "labelsToSkip": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "gitlabUrl"
+                                    ],
+                                    "additionalProperties": false
                                   },
-                                  "includeRepositoryFiles": {
-                                    "type": "boolean"
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "servicenow"
+                                        ]
+                                      },
+                                      "instanceUrl": {},
+                                      "includeIncidents": {
+                                        "type": "boolean"
+                                      },
+                                      "includeChanges": {
+                                        "type": "boolean"
+                                      },
+                                      "includeChangeRequests": {
+                                        "type": "boolean"
+                                      },
+                                      "includeProblems": {
+                                        "type": "boolean"
+                                      },
+                                      "includeBusinessApps": {
+                                        "type": "boolean"
+                                      },
+                                      "states": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "assignmentGroups": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "batchSize": {
+                                        "type": "number"
+                                      },
+                                      "syncDataForLastMonths": {
+                                        "type": "number",
+                                        "minimum": 1,
+                                        "maximum": 12
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "instanceUrl"
+                                    ],
+                                    "additionalProperties": false
                                   },
-                                  "fileTypes": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "notion"
+                                        ]
+                                      },
+                                      "databaseIds": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "pageIds": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "batchSize": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
                                   },
-                                  "includePaths": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "sharepoint"
+                                        ]
+                                      },
+                                      "tenantId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "siteUrl": {},
+                                      "driveIds": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "folderPath": {
+                                        "type": "string"
+                                      },
+                                      "recursive": {
+                                        "type": "boolean"
+                                      },
+                                      "maxDepth": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 100
+                                      },
+                                      "includePages": {
+                                        "type": "boolean"
+                                      },
+                                      "batchSize": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "tenantId",
+                                      "siteUrl"
+                                    ],
+                                    "additionalProperties": false
                                   },
-                                  "labelsToSkip": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "gdrive"
+                                        ]
+                                      },
+                                      "driveId": {
+                                        "type": "string"
+                                      },
+                                      "driveIds": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "folderId": {
+                                        "type": "string"
+                                      },
+                                      "recursive": {
+                                        "type": "boolean"
+                                      },
+                                      "maxDepth": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 100
+                                      },
+                                      "fileTypes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "batchSize": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "dropbox"
+                                        ]
+                                      },
+                                      "rootPath": {
+                                        "type": "string"
+                                      },
+                                      "fileTypes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "batchSize": {
+                                        "type": "number"
+                                      },
+                                      "recursive": {
+                                        "type": "boolean"
+                                      },
+                                      "maxDepth": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "onedrive"
+                                        ]
+                                      },
+                                      "tenantId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "userIds": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "folderId": {
+                                        "type": "string"
+                                      },
+                                      "recursive": {
+                                        "type": "boolean"
+                                      },
+                                      "maxDepth": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 100
+                                      },
+                                      "fileTypes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "batchSize": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "tenantId",
+                                      "userIds"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "asana"
+                                        ]
+                                      },
+                                      "workspaceGid": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "projectGids": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "tagsToSkip": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "workspaceGid"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "linear"
+                                        ]
+                                      },
+                                      "linearApiUrl": {
+                                        "default": "https://api.linear.app"
+                                      },
+                                      "teamIds": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "projectIds": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "states": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "includeComments": {
+                                        "type": "boolean"
+                                      },
+                                      "includeProjects": {
+                                        "type": "boolean"
+                                      },
+                                      "includeCycles": {
+                                        "type": "boolean"
+                                      },
+                                      "batchSize": {
+                                        "type": "integer",
+                                        "exclusiveMinimum": true,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "linearApiUrl"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "outline"
+                                        ]
+                                      },
+                                      "outlineUrl": {},
+                                      "collectionIds": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "batchSize": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "outlineUrl"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "salesforce"
+                                        ]
+                                      },
+                                      "loginUrl": {
+                                        "default": "https://login.salesforce.com"
+                                      },
+                                      "objects": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "advancedObjectConfigJson": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "loginUrl"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "web_crawler"
+                                        ]
+                                      },
+                                      "startUrl": {},
+                                      "includePathPrefixes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "excludePathPatterns": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "contentSelector": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 500
+                                      },
+                                      "excludeSelectors": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 500
+                                        }
+                                      },
+                                      "maxPages": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 10000
+                                      },
+                                      "maxDepth": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 50
+                                      },
+                                      "batchSize": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 100
+                                      },
+                                      "requestDelayMs": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 10000
+                                      },
+                                      "userAgent": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "allowPrivateNetwork": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "startUrl"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "perforce"
+                                        ]
+                                      },
+                                      "serverUrl": {},
+                                      "depotPaths": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "excludePaths": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "fileTypes": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "pattern": "^\\.?[A-Za-z0-9_-]+$"
+                                        }
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "serverUrl",
+                                      "depotPaths"
+                                    ],
+                                    "additionalProperties": false
                                   }
-                                },
-                                "required": [
-                                  "type",
-                                  "githubUrl",
-                                  "owner"
-                                ],
-                                "additionalProperties": false
+                                ]
                               },
                               {
                                 "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "gitlab"
-                                    ]
-                                  },
-                                  "gitlabUrl": {},
-                                  "projectIds": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "number"
-                                    }
-                                  },
-                                  "groupId": {
-                                    "type": "string"
-                                  },
-                                  "includeIssues": {
-                                    "type": "boolean"
-                                  },
-                                  "includeMergeRequests": {
-                                    "type": "boolean"
-                                  },
-                                  "includeMarkdownFiles": {
-                                    "type": "boolean"
-                                  },
-                                  "labelsToSkip": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "gitlabUrl"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "servicenow"
-                                    ]
-                                  },
-                                  "instanceUrl": {},
-                                  "includeIncidents": {
-                                    "type": "boolean"
-                                  },
-                                  "includeChanges": {
-                                    "type": "boolean"
-                                  },
-                                  "includeChangeRequests": {
-                                    "type": "boolean"
-                                  },
-                                  "includeProblems": {
-                                    "type": "boolean"
-                                  },
-                                  "includeBusinessApps": {
-                                    "type": "boolean"
-                                  },
-                                  "states": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "assignmentGroups": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "batchSize": {
-                                    "type": "number"
-                                  },
-                                  "syncDataForLastMonths": {
-                                    "type": "number",
-                                    "minimum": 1,
-                                    "maximum": 12
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "instanceUrl"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "notion"
-                                    ]
-                                  },
-                                  "databaseIds": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "pageIds": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "batchSize": {
-                                    "type": "number"
-                                  }
-                                },
-                                "required": [
-                                  "type"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "sharepoint"
-                                    ]
-                                  },
-                                  "tenantId": {
-                                    "type": "string",
-                                    "minLength": 1
-                                  },
-                                  "siteUrl": {},
-                                  "driveIds": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "folderPath": {
-                                    "type": "string"
-                                  },
-                                  "recursive": {
-                                    "type": "boolean"
-                                  },
-                                  "maxDepth": {
-                                    "type": "integer",
-                                    "minimum": 1,
-                                    "maximum": 100
-                                  },
-                                  "includePages": {
-                                    "type": "boolean"
-                                  },
-                                  "batchSize": {
-                                    "type": "number"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "tenantId",
-                                  "siteUrl"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "gdrive"
-                                    ]
-                                  },
-                                  "driveId": {
-                                    "type": "string"
-                                  },
-                                  "driveIds": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "folderId": {
-                                    "type": "string"
-                                  },
-                                  "recursive": {
-                                    "type": "boolean"
-                                  },
-                                  "maxDepth": {
-                                    "type": "integer",
-                                    "minimum": 1,
-                                    "maximum": 100
-                                  },
-                                  "fileTypes": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "batchSize": {
-                                    "type": "number"
-                                  }
-                                },
-                                "required": [
-                                  "type"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "dropbox"
-                                    ]
-                                  },
-                                  "rootPath": {
-                                    "type": "string"
-                                  },
-                                  "fileTypes": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "batchSize": {
-                                    "type": "number"
-                                  },
-                                  "recursive": {
-                                    "type": "boolean"
-                                  },
-                                  "maxDepth": {
-                                    "type": "number"
-                                  }
-                                },
-                                "required": [
-                                  "type"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "onedrive"
-                                    ]
-                                  },
-                                  "tenantId": {
-                                    "type": "string",
-                                    "minLength": 1
-                                  },
-                                  "userIds": {
-                                    "minItems": 1,
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "folderId": {
-                                    "type": "string"
-                                  },
-                                  "recursive": {
-                                    "type": "boolean"
-                                  },
-                                  "maxDepth": {
-                                    "type": "integer",
-                                    "minimum": 1,
-                                    "maximum": 100
-                                  },
-                                  "fileTypes": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "batchSize": {
-                                    "type": "number"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "tenantId",
-                                  "userIds"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "asana"
-                                    ]
-                                  },
-                                  "workspaceGid": {
-                                    "type": "string",
-                                    "minLength": 1
-                                  },
-                                  "projectGids": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "tagsToSkip": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "workspaceGid"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "linear"
-                                    ]
-                                  },
-                                  "linearApiUrl": {
-                                    "default": "https://api.linear.app"
-                                  },
-                                  "teamIds": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "projectIds": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "states": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "includeComments": {
-                                    "type": "boolean"
-                                  },
-                                  "includeProjects": {
-                                    "type": "boolean"
-                                  },
-                                  "includeCycles": {
-                                    "type": "boolean"
-                                  },
-                                  "batchSize": {
-                                    "type": "integer",
-                                    "exclusiveMinimum": true,
-                                    "maximum": 9007199254740991
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "linearApiUrl"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "outline"
-                                    ]
-                                  },
-                                  "outlineUrl": {},
-                                  "collectionIds": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "batchSize": {
-                                    "type": "number"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "outlineUrl"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "salesforce"
-                                    ]
-                                  },
-                                  "loginUrl": {
-                                    "default": "https://login.salesforce.com"
-                                  },
-                                  "objects": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string",
-                                      "minLength": 1
-                                    }
-                                  },
-                                  "advancedObjectConfigJson": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "loginUrl"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "web_crawler"
-                                    ]
-                                  },
-                                  "startUrl": {},
-                                  "includePathPrefixes": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string",
-                                      "minLength": 1
-                                    }
-                                  },
-                                  "excludePathPatterns": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string",
-                                      "minLength": 1
-                                    }
-                                  },
-                                  "contentSelector": {
-                                    "type": "string",
-                                    "minLength": 1,
-                                    "maxLength": 500
-                                  },
-                                  "excludeSelectors": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string",
-                                      "minLength": 1,
-                                      "maxLength": 500
-                                    }
-                                  },
-                                  "maxPages": {
-                                    "type": "integer",
-                                    "minimum": 1,
-                                    "maximum": 10000
-                                  },
-                                  "maxDepth": {
-                                    "type": "integer",
-                                    "minimum": 0,
-                                    "maximum": 50
-                                  },
-                                  "batchSize": {
-                                    "type": "integer",
-                                    "minimum": 1,
-                                    "maximum": 100
-                                  },
-                                  "requestDelayMs": {
-                                    "type": "integer",
-                                    "minimum": 0,
-                                    "maximum": 10000
-                                  },
-                                  "userAgent": {
-                                    "type": "string",
-                                    "minLength": 1
-                                  },
-                                  "allowPrivateNetwork": {
-                                    "type": "boolean"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "startUrl"
-                                ],
-                                "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "perforce"
-                                    ]
-                                  },
-                                  "serverUrl": {},
-                                  "depotPaths": {
-                                    "minItems": 1,
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "excludePaths": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "fileTypes": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "string",
-                                      "pattern": "^\\.?[A-Za-z0-9_-]+$"
-                                    }
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "serverUrl",
-                                  "depotPaths"
-                                ],
-                                "additionalProperties": false
+                                "additionalProperties": {}
                               }
                             ]
                           },
@@ -214052,6 +214676,11 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
                           "assignedAgents": {
                             "type": "array",
                             "items": {
@@ -214099,6 +214728,7 @@
                           "aclConfigEpoch",
                           "createdAt",
                           "updatedAt",
+                          "deletedAt",
                           "assignedAgents"
                         ],
                         "additionalProperties": false
@@ -216249,6 +216879,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -216273,7 +216908,8 @@
                     "checkpoint",
                     "aclConfigEpoch",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -217486,6 +218122,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "totalDocsIngested": {
                       "type": "number"
                     }
@@ -217513,6 +218154,7 @@
                     "aclConfigEpoch",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "totalDocsIngested"
                   ],
                   "additionalProperties": false
@@ -219513,6 +220155,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -219537,7 +220184,8 @@
                     "checkpoint",
                     "aclConfigEpoch",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -219785,7 +220433,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Delete a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
+        "description": "Delete a connector\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "parameters": [
           {
             "schema": {
@@ -221059,7 +221707,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Delete a connector document\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors",
+        "description": "Delete a connector document\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "parameters": [
           {
             "schema": {
@@ -221079,6 +221727,558 @@
             },
             "in": "path",
             "name": "docId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSource:delete"
+          ]
+        }
+      }
+    },
+    "/api/connectors/{id}/restore": {
+      "post": {
+        "operationId": "restoreConnector",
+        "tags": [
+          "Connectors"
+        ],
+        "description": "Restore a soft-deleted connector. The stored credential was destroyed when the connector was deleted, so it is restored DISABLED — re-authenticate, then re-enable it to resume syncing. 404 if there is no soft-deleted connector with that id in the org that the caller may manage — restoring one is gated on the same visibility as editing or deleting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSource:delete"
+          ]
+        }
+      }
+    },
+    "/api/connectors/{id}/permanent": {
+      "delete": {
+        "operationId": "permanentlyDeleteConnector",
+        "tags": [
+          "Connectors"
+        ],
+        "description": "Permanently destroy a soft-deleted connector (global admins only — a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: its synced documents and their chunks, run history, access mappings, and assignments are all destroyed. 404 if there is no soft-deleted connector with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
             "required": true
           }
         ],
@@ -224052,6 +225252,11 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -224061,7 +225266,8 @@
                           "description",
                           "status",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "deletedAt"
                         ],
                         "additionalProperties": false
                       }

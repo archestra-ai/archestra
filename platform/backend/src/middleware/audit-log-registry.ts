@@ -340,6 +340,23 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "knowledgeBase",
     fetchById: (id, orgId) => KnowledgeBaseModel.findByIdForAudit(id, orgId),
   },
+  // findIdentityForAudit, not findByIdForAudit: the full snapshot is
+  // notDeleted-filtered (deliberately, for delete records), so it cannot see
+  // the still-deleted "before" state of a restore. The identity read sees both
+  // states, capturing the deletedAt → null diff.
+  "/api/knowledge-bases/:id/restore": {
+    resourceType: "knowledgeBase",
+    action: "knowledgeBase.restored",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseModel.findIdentityForAudit(id, orgId),
+  },
+  // Identity-only snapshot, same as the retention sweep's purge audit rows.
+  "/api/knowledge-bases/:id/permanent": {
+    resourceType: "knowledgeBase",
+    action: "knowledgeBase.purged",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseModel.findIdentityForAudit(id, orgId),
+  },
 
   // Connectors
   "/api/connectors": {
@@ -351,6 +368,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "connector",
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  // findIdentityForAudit for the same reason as the knowledge-base restore
+  // entry: the full snapshot cannot see the still-deleted "before" state.
+  "/api/connectors/:id/restore": {
+    resourceType: "connector",
+    action: "connector.restored",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findIdentityForAudit(id, orgId),
+  },
+  // Identity-only snapshot, same as the retention sweep's purge audit rows.
+  "/api/connectors/:id/permanent": {
+    resourceType: "connector",
+    action: "connector.purged",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findIdentityForAudit(id, orgId),
   },
   // Member overrides change who a connector's grants resolve to. Explicit
   // entries pin both mutations to connector.updated — a walk-up to

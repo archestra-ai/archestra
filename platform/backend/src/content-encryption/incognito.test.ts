@@ -9,7 +9,9 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { isContentEnvelope } from "@/utils/crypto";
 import {
   decryptIncognitoMessageRow,
+  decryptIncognitoValue,
   encryptIncognitoMessageContent,
+  encryptIncognitoValue,
   incognitoDekFingerprint,
   incognitoDekMatches,
   isIncognitoChatEnabled,
@@ -20,7 +22,6 @@ import {
   produceIncognitoEscrow,
   verifyIncognitoChatConfig,
   wrapIncognitoDek,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 } from "./incognito-escrow";
 
 const { publicKey, privateKey } = generateKeyPairSync("rsa", {
@@ -32,12 +33,19 @@ const CONVERSATION_A = "11111111-1111-4111-8111-111111111111";
 const CONVERSATION_B = "22222222-2222-4222-8222-222222222222";
 
 describe("incognito chat crypto", () => {
-  test("enabled by default with NO license and NO escrow key; env flag disables", () => {
-    // Free feature: nothing enterprise, nothing escrow.
+  test("escrow is the enablement switch; the env flag still force-disables", () => {
+    // No escrow key: the audit trail these conversations produce would be
+    // encrypted under a key only one browser holds, so the feature is OFF.
     config.enterpriseFeatures.core = false;
     config.chatIncognito.escrowPublicKey = undefined;
+    expect(isIncognitoChatEnabled()).toBe(false);
+
+    // An escrow key alone turns it on — the default `db` sink is free, so no
+    // enterprise license is involved.
+    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
     expect(isIncognitoChatEnabled()).toBe(true);
 
+    // An operator can still opt out explicitly even with escrow configured.
     config.chatIncognito.enabled = false;
     expect(isIncognitoChatEnabled()).toBe(false);
   });
@@ -121,30 +129,107 @@ describe("incognito chat crypto", () => {
       ),
     ).toThrow();
   });
+
+  test("audit-column values roundtrip, including arrays and primitives", () => {
+    const dek = randomBytes(32);
+    const key = { dek, conversationId: CONVERSATION_A };
+
+    for (const value of [
+      { model: "claude", messages: [{ role: "user", content: "secret ask" }] },
+      [1, "two", { three: 3 }],
+      "a bare string",
+      0,
+      false,
+    ]) {
+      const stored = encryptIncognitoValue(value, {
+        ...key,
+        context: "interactions.request",
+      });
+      // Envelope-shaped exactly like the at-rest layer's, so the backfill
+      // sweep recognizes (and skips) it.
+      expect(isContentEnvelope(stored)).toBe(true);
+      expect(
+        decryptIncognitoValue(stored, {
+          ...key,
+          context: "interactions.request",
+        }),
+      ).toEqual(value);
+    }
+  });
+
+  test("AAD binds an audit envelope to its column and its conversation", () => {
+    const dek = randomBytes(32);
+    const stored = encryptIncognitoValue(
+      { messages: ["the request"] },
+      { dek, conversationId: CONVERSATION_A, context: "interactions.request" },
+    );
+
+    // Same DEK, same conversation, WRONG column: a database-level writer
+    // cannot move a request into the response column.
+    expect(() =>
+      decryptIncognitoValue(stored, {
+        dek,
+        conversationId: CONVERSATION_A,
+        context: "interactions.response",
+      }),
+    ).toThrow();
+
+    // Same column, WRONG conversation: a leaked DEK shared between two
+    // conversations still cannot open the other one's rows.
+    expect(() =>
+      decryptIncognitoValue(stored, {
+        dek,
+        conversationId: CONVERSATION_B,
+        context: "interactions.request",
+      }),
+    ).toThrow();
+  });
+
+  test("messages.content AAD is unchanged by the generalized helpers", () => {
+    // Backward compatibility for rows written before the audit surfaces were
+    // generalized: the message helper and the generic helper must agree on
+    // the AAD, or every stored incognito message becomes unreadable.
+    const dek = randomBytes(32);
+    const content = { id: "m1", parts: [{ type: "text", text: "secret" }] };
+
+    const stored = encryptIncognitoMessageContent(content, {
+      dek,
+      conversationId: CONVERSATION_A,
+    });
+    expect(
+      decryptIncognitoValue(stored, {
+        dek,
+        conversationId: CONVERSATION_A,
+        context: "messages.content",
+      }),
+    ).toEqual(content);
+  });
 });
 
-describe("incognito escrow (enterprise)", () => {
+describe("incognito escrow", () => {
   beforeEach(() => {
     config.enterpriseFeatures.core = true;
     config.chatIncognito.escrowPublicKey = ESCROW_PEM;
   });
 
-  test("escrow is configured only with both an EE license and a valid key", () => {
+  test("escrow is configured by a valid key alone — no license needed", () => {
     expect(isIncognitoEscrowConfigured()).toBe(true);
 
+    // The default `db` sink is a free feature.
     config.enterpriseFeatures.core = false;
-    expect(isIncognitoEscrowConfigured()).toBe(false);
+    expect(isIncognitoEscrowConfigured()).toBe(true);
 
     config.enterpriseFeatures.core = true;
     config.chatIncognito.escrowPublicKey = undefined;
     expect(isIncognitoEscrowConfigured()).toBe(false);
   });
 
-  test("boot guard rejects a key without a license, bad PEMs, and small keys", () => {
+  test("boot guard accepts an unlicensed db-sink key, rejects bad PEMs and small keys", () => {
     expect(() => verifyIncognitoChatConfig()).not.toThrow();
 
+    // A valid key with no license is the ordinary free configuration.
     config.enterpriseFeatures.core = false;
-    expect(() => verifyIncognitoChatConfig()).toThrow(/enterprise license/);
+    expect(() => verifyIncognitoChatConfig()).not.toThrow();
 
     config.enterpriseFeatures.core = true;
     config.chatIncognito.escrowPublicKey = "not-a-pem";
@@ -169,7 +254,7 @@ kt2mqWURg9/ZzdQ7GwIDAQAB
     }) as string;
     expect(() => verifyIncognitoChatConfig()).toThrow(/must be an RSA/);
 
-    // Unset is always fine — the free feature runs without escrow.
+    // Unset boots fine — the feature is simply unavailable.
     config.chatIncognito.escrowPublicKey = undefined;
     expect(() => verifyIncognitoChatConfig()).not.toThrow();
   });
@@ -177,26 +262,26 @@ kt2mqWURg9/ZzdQ7GwIDAQAB
   test("boot guard names each missing piece for the vault sink", () => {
     config.chatIncognito.escrowSink = "vault";
 
-    // Missing license.
+    // Missing license — the Vault sink stays enterprise.
     config.enterpriseFeatures.core = false;
     expect(() => verifyIncognitoChatConfig()).toThrow(/enterprise license/);
 
-    // Missing escrow key.
-    config.enterpriseFeatures.core = true;
-    config.chatIncognito.escrowPublicKey = undefined;
-    expect(() => verifyIncognitoChatConfig()).toThrow(
-      /ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY/,
-    );
-
     // Missing Vault secrets backend.
-    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
+    config.enterpriseFeatures.core = true;
     config.secretsManager.type = "DB";
     expect(() => verifyIncognitoChatConfig()).toThrow(
       /ARCHESTRA_SECRETS_MANAGER=Vault/,
     );
 
-    // All three present: fine.
+    // Missing escrow key: there is no blob to write to Vault without one.
     config.secretsManager.type = "VAULT";
+    config.chatIncognito.escrowPublicKey = undefined;
+    expect(() => verifyIncognitoChatConfig()).toThrow(
+      /ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY/,
+    );
+
+    // All three present: fine.
+    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
     expect(() => verifyIncognitoChatConfig()).not.toThrow();
   });
 

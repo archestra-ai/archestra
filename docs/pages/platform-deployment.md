@@ -1350,6 +1350,16 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `600`
   - Set to `0` to disable.
 
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED`** - Offers idle hibernation on this deployment. Hibernation is a beta feature and ships off by default.
+  - Default: unset (falls back to the `ARCHESTRA_BETA` master switch)
+  - Set to `true` to offer the feature; an explicit `false` keeps it off even with `ARCHESTRA_BETA` on.
+  - Organizations still enable it in **Settings > MCP**; it requires an Enterprise license.
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`** - How long an MCP server pod can sit unused before the platform hibernates it, with nonzero values floored at 120 seconds so servers are never hibernated between normal consecutive tool calls.
+  - Default: `1800` (30 minutes)
+  - Sets the idle window only. Enable hibernation in **Settings > MCP**; it requires an Enterprise license.
+  - Set to `0` to disable hibernation platform-wide, regardless of the organization setting.
+
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
   - Default: `true`
   - Set to `false` when Archestra is deployed in the different cluster and specify the `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`.

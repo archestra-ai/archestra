@@ -3,7 +3,7 @@ title: Pricing Model
 category: Archestra Platform
 order: 2
 description: How Archestra Platform is priced and licensed
-lastUpdated: 2026-06-23
+lastUpdated: 2026-08-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,5 +29,6 @@ The following components are licensed under the Enterprise License and are not p
 - Real User Monitoring (product-usage and web-performance telemetry exported to your own OTLP collector)
 - Content encryption at rest (LLM logs and chat messages under a separate, operator-held key)
 - Two-factor authentication (TOTP enrollment, organization-wide enforcement, and session lifetime caps)
+- Idle hibernation for self-hosted MCP servers, in beta (scale-to-zero of unused servers with wake on demand)
 
 If you'd like to pilot the Enterprise feature set, reach out to sales@archestra.ai for a PoC license.

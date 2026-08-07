@@ -1,1 +1,0 @@
-ALTER TABLE "models" ADD COLUMN "parameter_count" bigint;

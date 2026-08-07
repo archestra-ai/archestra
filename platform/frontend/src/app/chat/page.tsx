@@ -165,9 +165,9 @@ import {
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
 import {
+  agentNotRecommendedForModel,
   agentRequiresPerUserConnect,
   agentToolsUnavailableForModel,
-  agentToolsUnreliableOnSmallModel,
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
@@ -972,9 +972,9 @@ export function ChatPageContent({
   // A small local model (e.g. a 4B Ollama tag) paired with a tooled agent will
   // usually still run the loop, just unreliably — so this warns where the
   // no-tools notice states, and defers to it when both would apply.
-  const initialSmallModel = useMemo(
+  const initialNotRecommended = useMemo(
     () =>
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: internalAgents.find((a) => a.id === initialAgentId),
         selectedModelId: initialModel,
         models: chatModels,
@@ -982,9 +982,9 @@ export function ChatPageContent({
     [internalAgents, initialAgentId, initialModel, chatModels],
   );
 
-  const conversationSmallModel = useMemo(
+  const conversationNotRecommended = useMemo(
     () =>
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: conversationAgent,
         selectedModelId: conversationModelId,
         models: chatModels,
@@ -3139,7 +3139,9 @@ export function ChatPageContent({
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               toolsUnavailable={conversationToolsUnavailable}
-                              smallModel={conversationSmallModel}
+                              notRecommendedForAgents={
+                                conversationNotRecommended
+                              }
                               onStop={handleStopStreaming}
                               status={status}
                               selectedModel={conversationModelId ?? ""}
@@ -3325,7 +3327,9 @@ export function ChatPageContent({
                                 <ArchestraPromptInput
                                   onSubmit={handleInitialSubmit}
                                   toolsUnavailable={initialToolsUnavailable}
-                                  smallModel={initialSmallModel}
+                                  notRecommendedForAgents={
+                                    initialNotRecommended
+                                  }
                                   status={
                                     createConversationMutation.isPending
                                       ? "submitted"

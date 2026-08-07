@@ -3,7 +3,6 @@ import type {
   SupportedProvider,
 } from "@archestra/shared";
 import {
-  bigint,
   boolean,
   index,
   integer,
@@ -135,16 +134,25 @@ const modelsTable = pgTable(
     ).$type<SupportedEmbeddingDimension>(),
 
     /**
-     * Total parameter count reported by the serving backend (Ollama
-     * `/api/show`, GGUF `general.parameter_count`). Null for every provider
-     * that does not report one — which is all of them except Ollama, vLLM
-     * included: its OpenAI-compatible `ModelCard` carries no size field and
-     * there is no second endpoint to ask.
+     * Whether this model is worth pointing an agent at. Tri-state, the same
+     * shape as `supports_tool_calling`: an explicit `false` is a claim backed by
+     * evidence, `true` is the default, and null means a sync ran and learned
+     * nothing. Only `false` is ever surfaced — `true` cannot distinguish "known
+     * good" from "no evidence", so it stays silent.
      *
-     * `bigint` rather than `integer`: `integer` caps at 2,147,483,647, which is
-     * smaller than an 8B model.
+     * Derived at sync time, not reported by any provider. Today the only
+     * evidence is Ollama's parameter count (`/api/show`, GGUF
+     * `general.parameter_count`) against `SMALL_MODEL_MAX_PARAMETERS`; every
+     * other provider reports nothing usable, vLLM included — its
+     * OpenAI-compatible `ModelCard` carries no size field and there is no second
+     * endpoint to ask.
+     *
+     * Nullable despite the default: `/api/show` is time-boxed and degrades to
+     * null per model, so the upsert needs a value that means "no evidence this
+     * round" and can be COALESCEd away. A non-null column would derive `true`
+     * on a timeout and silently un-flag a 4B model.
      */
-    parameterCount: bigint("parameter_count", { mode: "number" }),
+    recommendedForAgents: boolean("recommended_for_agents").default(true),
 
     /**
      * Provider-reported default generation parameters (Ollama `/api/show`).

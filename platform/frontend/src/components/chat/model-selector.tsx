@@ -5,7 +5,6 @@ import {
   E2eTestId,
   isLegacyGeminiModel,
   isOpenRouterLatestAlias,
-  isSmallModel,
   type ModelInputModality,
   providerDisplayNames,
   requiresPerplexityAgentApi,
@@ -43,8 +42,8 @@ import {
   FreeModelBadge,
   LatestModelBadge,
   NoToolsBadge,
+  NotRecommendedForAgentsBadge,
   OldModelBadge,
-  SmallModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { Button } from "@/components/ui/button";
@@ -249,13 +248,14 @@ function ModelCapabilityBadges({
   // known to take no tools, which gets its own marker below.
   const lacksToolCalling = capabilities?.supportsToolCalling === false;
 
-  // Size is reported independently of the capability fields, so it is usually
-  // the only marker an Ollama row carries: those models are synced with an
+  // Derived by the sync, independently of the capability fields, so it is
+  // usually the only marker an Ollama row carries: those models sync with an
   // inferred "text" modality and no tool-calling verdict (models.dev lists no
-  // Ollama entry to supply one), which without this would render nothing. Size
-  // is not itself capability data — a row reporting only a count still falls to
-  // the unknown badge below.
-  const isSmall = isSmallModel(capabilities?.parameterCount ?? null);
+  // Ollama entry to supply one), which without this would render nothing.
+  // Strictly `=== false` — `true` is the column default and says nothing. The
+  // verdict is not itself capability data, so a row carrying only one still
+  // falls to the unknown badge below.
+  const notRecommended = capabilities?.recommendedForAgents === false;
 
   const hasAnyCapability =
     hasVision || hasAudio || hasVideo || hasPdf || hasToolCalling;
@@ -271,7 +271,7 @@ function ModelCapabilityBadges({
   if (!hasCapabilityData) {
     return <UnknownCapabilitiesBadge />;
   }
-  if (!hasAnyCapability && !lacksToolCalling && !isSmall) {
+  if (!hasAnyCapability && !lacksToolCalling && !notRecommended) {
     return null;
   }
 
@@ -288,7 +288,7 @@ function ModelCapabilityBadges({
         {hasPdf && (
           <CapabilityIcon icon={FileText} label="Supports PDF input" />
         )}
-        {isSmall && <SmallModelBadge />}
+        {notRecommended && <NotRecommendedForAgentsBadge />}
         {lacksToolCalling && <NoToolsBadge />}
         {hasToolCalling && (
           <CapabilityIcon icon={Settings2} label="Supports tool calling" />

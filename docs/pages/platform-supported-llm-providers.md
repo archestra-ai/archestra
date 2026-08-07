@@ -427,13 +427,13 @@ Ollama often runs a model with a smaller context window than the model architect
 
 A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama's model API and cannot be detected. If you run a capped server, set `num_ctx` on the model — a request-level value takes precedence.
 
-### Model Size
+### Agent Suitability
 
-Ollama reports each model's parameter count. Archestra marks any model under 8B as a **small model**. An 8B build stays unmarked.
+Ollama reports each model's parameter count. Archestra marks any model of 8B or fewer parameters as **not recommended for agents**. An 8B build stays unmarked.
 
 The marker shows on the model in the picker. It also shows next to the composer when the agent in that chat brings tools. A 4B model, for example, often calls those tools unreliably over a multi-step task — switch to a larger model for tool-heavy work.
 
-The marker describes size, not quality. No other provider reports a parameter count, so no model outside Ollama carries it.
+The marker is advice, not a quality verdict. Models are treated as suitable unless something says otherwise, and no provider other than Ollama reports a parameter count today — so no model outside Ollama carries the marker.
 
 ### Environment Variables
 

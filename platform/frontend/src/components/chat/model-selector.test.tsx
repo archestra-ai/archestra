@@ -298,8 +298,8 @@ describe("ModelSelector coverage matrix", () => {
     expect(onModelChange).not.toHaveBeenCalled();
   });
 
-  // Only Ollama reports a size, and its rows are synced with an inferred "text"
-  // modality and no tool-calling verdict — so the size marker is the only thing
+  // Only Ollama rows get a verdict today, and they sync with an inferred "text"
+  // modality and no tool-calling verdict — so this marker is the only thing
   // standing between such a row and an empty badge column.
   const ollamaRow = (capabilities: Record<string, unknown>) =>
     model({
@@ -311,13 +311,13 @@ describe("ModelSelector coverage matrix", () => {
       capabilities,
     });
 
-  it("badges a small model in the picker list", () => {
+  it("badges a flagged model in the picker list", () => {
     setQuery({
       modelsByProvider: {
         ollama: [
           ollamaRow({
             inputModalities: ["text"],
-            parameterCount: 4_022_468_096,
+            recommendedForAgents: false,
           }),
         ],
       },
@@ -325,18 +325,18 @@ describe("ModelSelector coverage matrix", () => {
     renderSelector({ selectedModel: "o1", variant: "default" });
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
-    expect(screen.getByText("small model")).toBeInTheDocument();
+    expect(screen.getByText("not recommended for agents")).toBeInTheDocument();
   });
 
-  // The threshold sits just below the count a real 8B build reports, so the
-  // nominal-8B tier stays unmarked.
-  it("leaves an 8B model unbadged", () => {
+  // `true` is the column default, so it says nothing and must stay silent —
+  // there is no positive counterpart to this badge.
+  it("shows nothing for a recommended model", () => {
     setQuery({
       modelsByProvider: {
         ollama: [
           ollamaRow({
             inputModalities: ["text"],
-            parameterCount: 8_030_261_248,
+            recommendedForAgents: true,
           }),
         ],
       },
@@ -344,12 +344,14 @@ describe("ModelSelector coverage matrix", () => {
     renderSelector({ selectedModel: "o1", variant: "default" });
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
-    expect(screen.queryByText("small model")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("not recommended for agents"),
+    ).not.toBeInTheDocument();
   });
 
-  // Every provider but Ollama reports no size; the row must make no claim
-  // rather than assume the model is large.
-  it("makes no size claim when the provider reports no parameter count", () => {
+  // A null verdict means no sync evaluated the model; the row must make no
+  // claim rather than assume either way.
+  it("makes no claim when no verdict was recorded", () => {
     setQuery({
       modelsByProvider: {
         openai: [model({ capabilities: { inputModalities: ["text"] } })],
@@ -358,21 +360,25 @@ describe("ModelSelector coverage matrix", () => {
     renderSelector({ selectedModel: "m1", variant: "default" });
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
-    expect(screen.queryByText("small model")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("not recommended for agents"),
+    ).not.toBeInTheDocument();
   });
 
-  // A size is not capability data: a row that reports one and nothing else is
+  // The verdict is not capability data: a row carrying one and nothing else is
   // still a row whose capabilities were never recorded.
-  it("still calls a size-only row's capabilities unknown", () => {
+  it("still calls a verdict-only row's capabilities unknown", () => {
     setQuery({
       modelsByProvider: {
-        ollama: [ollamaRow({ parameterCount: 4_022_468_096 })],
+        ollama: [ollamaRow({ recommendedForAgents: false })],
       },
     });
     renderSelector({ selectedModel: "o1", variant: "default" });
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
     expect(screen.getByText("capabilities unknown")).toBeInTheDocument();
-    expect(screen.queryByText("small model")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("not recommended for agents"),
+    ).not.toBeInTheDocument();
   });
 });

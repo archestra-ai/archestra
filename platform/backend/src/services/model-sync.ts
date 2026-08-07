@@ -1,4 +1,5 @@
 import {
+  isSmallModel,
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
   requiresPerplexityAgentApi,
@@ -363,7 +364,13 @@ export function buildModelsToUpsert(params: {
         fetched: model.capabilities,
       }),
       defaultParameters: model.capabilities?.defaultParameters ?? null,
-      parameterCount: model.capabilities?.parameterCount ?? null,
+      // The one place the size threshold is applied. Null (not `true`) when the
+      // provider reported no count, so the upsert can tell "no evidence this
+      // round" from "evidence says fine" and COALESCE the former away.
+      recommendedForAgents:
+        model.capabilities?.parameterCount == null
+          ? null
+          : !isSmallModel(model.capabilities.parameterCount),
       lastSyncedAt: new Date(),
     };
   });

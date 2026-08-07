@@ -240,7 +240,7 @@ const PromptInputContent = ({
   onAgentChange,
   modelSource,
   toolsUnavailable,
-  smallModel,
+  notRecommendedForAgents,
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
@@ -941,7 +941,7 @@ const PromptInputContent = ({
             onAgentChange={onAgentChange}
             modelSource={modelSource}
             toolsUnavailable={toolsUnavailable}
-            smallModel={smallModel}
+            notRecommendedForAgents={notRecommendedForAgents}
             onResetModelOverride={onResetModelOverride}
             agentRequiresPerUserConnect={agentRequiresPerUserConnect}
             subscriptionConnectRequired={subscriptionConnectRequired}
@@ -1041,7 +1041,7 @@ const ArchestraPromptInput = ({
   onAgentChange,
   modelSource,
   toolsUnavailable,
-  smallModel,
+  notRecommendedForAgents,
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
@@ -1148,7 +1148,7 @@ const ArchestraPromptInput = ({
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}
-          smallModel={smallModel}
+          notRecommendedForAgents={notRecommendedForAgents}
           onResetModelOverride={onResetModelOverride}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+  agentNotRecommendedForModel,
   agentRequiresPerUserConnect,
   agentToolsUnavailableForModel,
-  agentToolsUnreliableOnSmallModel,
   CHAT_STORAGE_KEYS,
   deriveModelSource,
   getSavedAgent,
@@ -478,29 +478,34 @@ describe("deriveModelSource", () => {
   });
 });
 
-describe("agentToolsUnreliableOnSmallModel", () => {
-  const smallModel = {
+describe("agentNotRecommendedForModel", () => {
+  const flaggedModel = {
     dbId: "uuid-qwen-4b",
-    capabilities: { parameterCount: 4_022_468_096, supportsToolCalling: true },
+    capabilities: { recommendedForAgents: false, supportsToolCalling: true },
   };
-  const largeModel = {
+  const recommendedModel = {
     dbId: "uuid-llama-70b",
-    capabilities: { parameterCount: 70_000_000_000, supportsToolCalling: true },
+    capabilities: { recommendedForAgents: true, supportsToolCalling: true },
   };
-  // Every provider but Ollama reports no size.
-  const unsizedModel = {
+  // Nothing evaluated this model, so the sync left the verdict null.
+  const unjudgedModel = {
     dbId: "uuid-anthropic",
     capabilities: { supportsToolCalling: true },
   };
-  const smallAndToolless = {
+  const flaggedAndToolless = {
     dbId: "uuid-tiny-no-tools",
-    capabilities: { parameterCount: 751_632_384, supportsToolCalling: false },
+    capabilities: { recommendedForAgents: false, supportsToolCalling: false },
   };
-  const models = [smallModel, largeModel, unsizedModel, smallAndToolless];
+  const models = [
+    flaggedModel,
+    recommendedModel,
+    unjudgedModel,
+    flaggedAndToolless,
+  ];
 
-  test("true for a tooled agent on a small model", () => {
+  test("true for a tooled agent on a flagged model", () => {
     expect(
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: { accessAllTools: false, tools: [{}] },
         selectedModelId: "uuid-qwen-4b",
         models,
@@ -508,9 +513,9 @@ describe("agentToolsUnreliableOnSmallModel", () => {
     ).toBe(true);
   });
 
-  test("true for an Auto-mode agent (no assignments) on a small model", () => {
+  test("true for an Auto-mode agent (no assignments) on a flagged model", () => {
     expect(
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: { accessAllTools: true, tools: [] },
         selectedModelId: "uuid-qwen-4b",
         models,
@@ -518,10 +523,11 @@ describe("agentToolsUnreliableOnSmallModel", () => {
     ).toBe(true);
   });
 
-  // A small model doing plain chat is fine; size only matters for agentic use.
-  test("false for a tool-less Custom agent on a small model", () => {
+  // A flagged model doing plain chat is fine; the verdict only matters for
+  // agentic use.
+  test("false for a tool-less Custom agent on a flagged model", () => {
     expect(
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: { accessAllTools: false, tools: [] },
         selectedModelId: "uuid-qwen-4b",
         models,
@@ -529,9 +535,9 @@ describe("agentToolsUnreliableOnSmallModel", () => {
     ).toBe(false);
   });
 
-  test("false for a large model", () => {
+  test("false for a recommended model", () => {
     expect(
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: { accessAllTools: true, tools: [{}] },
         selectedModelId: "uuid-llama-70b",
         models,
@@ -539,9 +545,9 @@ describe("agentToolsUnreliableOnSmallModel", () => {
     ).toBe(false);
   });
 
-  test("false when the provider reports no parameter count", () => {
+  test("false when no verdict was recorded", () => {
     expect(
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: { accessAllTools: true, tools: [{}] },
         selectedModelId: "uuid-anthropic",
         models,
@@ -551,9 +557,9 @@ describe("agentToolsUnreliableOnSmallModel", () => {
 
   // "No tools" is the stronger, more actionable statement, and two chips side
   // by side in the composer is noise.
-  test("defers to the no-tools notice when the small model takes no tools", () => {
+  test("defers to the no-tools notice when the flagged model takes no tools", () => {
     expect(
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: { accessAllTools: true, tools: [{}] },
         selectedModelId: "uuid-tiny-no-tools",
         models,
@@ -570,14 +576,14 @@ describe("agentToolsUnreliableOnSmallModel", () => {
 
   test("false without an agent or a selection", () => {
     expect(
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: undefined,
         selectedModelId: "uuid-qwen-4b",
         models,
       }),
     ).toBe(false);
     expect(
-      agentToolsUnreliableOnSmallModel({
+      agentNotRecommendedForModel({
         agent: { accessAllTools: true, tools: [] },
         selectedModelId: null,
         models,

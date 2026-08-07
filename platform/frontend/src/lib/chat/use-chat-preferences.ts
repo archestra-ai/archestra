@@ -1,7 +1,6 @@
 import {
   type archestraApiTypes,
   deriveModelSource as deriveModelSourceShared,
-  isSmallModel,
   type ModelSelection,
   type ModelSource,
   pickBestModel,
@@ -310,24 +309,28 @@ export function agentToolsUnavailableForModel(params: {
 }
 
 /**
- * True when the selected model is small enough that multi-step tool use is
- * likely to be unreliable, while the selected agent brings tools. Gated on the
- * agent having tools for the same reason as
- * {@link agentToolsUnavailableForModel}: size only matters here because the
- * turn is agentic, and a small model doing plain chat needs no warning.
+ * True when the backend's sync judged the selected model a poor fit for agent
+ * work, while the selected agent brings tools. Gated on the agent having tools
+ * for the same reason as {@link agentToolsUnavailableForModel}: the verdict only
+ * matters because the turn is agentic, and such a model doing plain chat needs
+ * no warning.
+ *
+ * Strictly `=== false`: `true` is the column default and cannot distinguish a
+ * model with no evidence from one known to be fine, so only an explicit
+ * negative verdict is surfaced.
  *
  * Suppressed when the model already reports no tool calling at all — that is
  * the stronger, more actionable statement, and two chips side by side in the
  * composer is noise.
  */
-export function agentToolsUnreliableOnSmallModel(params: {
+export function agentNotRecommendedForModel(params: {
   /** Structural subset of the agents-API row (AgentLlmConfig). */
   agent: { accessAllTools: boolean; tools: readonly unknown[] } | undefined;
   selectedModelId: string | null | undefined;
   models: Array<{
     dbId: string;
     capabilities?: {
-      parameterCount?: number | null;
+      recommendedForAgents?: boolean | null;
       supportsToolCalling?: boolean | null;
     } | null;
   }>;
@@ -338,7 +341,7 @@ export function agentToolsUnreliableOnSmallModel(params: {
   if (!selectedModelId) return false;
   const model = models.find((m) => m.dbId === selectedModelId);
   if (model?.capabilities?.supportsToolCalling === false) return false;
-  return isSmallModel(model?.capabilities?.parameterCount ?? null);
+  return model?.capabilities?.recommendedForAgents === false;
 }
 
 // ===== Model source =====

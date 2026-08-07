@@ -82,16 +82,19 @@ export function NoToolsBadge() {
 }
 
 /**
- * Marks a model small enough that multi-step tool use is likely to be
- * unreliable. Deliberately states size, not quality: parameter count is a weak
- * predictor of agentic skill, so the copy stops short of calling the model bad.
- * Only self-hosted backends report a size today, so in practice this is an
- * Ollama-only marker.
+ * Marks a model the sync judged a poor fit for agent work. Phrased as advice
+ * rather than a verdict on the model: the only evidence today is parameter
+ * count, which is a weak predictor of agentic skill, so the copy stops short of
+ * calling the model bad. Muted rather than amber for the same reason — this is
+ * a suggestion to pick something else, not an error.
+ *
+ * There is deliberately no positive counterpart: `recommendedForAgents` is
+ * `true` by default, so it cannot distinguish "known good" from "no evidence".
  */
-export function SmallModelBadge() {
+export function NotRecommendedForAgentsBadge() {
   return (
     <InlineTag className="text-muted-foreground bg-muted">
-      small model
+      not recommended for agents
     </InlineTag>
   );
 }

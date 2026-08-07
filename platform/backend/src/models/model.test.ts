@@ -576,18 +576,22 @@ describe("ModelModel", () => {
       expect(updated?.defaultParameters).toEqual({ num_ctx: 4096 });
     });
 
-    test("keeps the last known parameter count when a non-full sync omits it", async () => {
+    test("keeps the last known agent verdict when a non-full sync omits it", async () => {
       await ModelModel.bulkUpsert([
-        { ...ollamaBase, parameterCount: 8_030_261_248 },
+        { ...ollamaBase, recommendedForAgents: false },
       ]);
-      // A time-boxed /api/show miss reports no size; the known one must survive.
-      await ModelModel.bulkUpsert([{ ...ollamaBase, parameterCount: null }]);
+      // A time-boxed /api/show miss reports no size, so the sync derives no
+      // verdict. The known one must survive rather than fall back to the
+      // column default and silently un-flag the model.
+      await ModelModel.bulkUpsert([
+        { ...ollamaBase, recommendedForAgents: null },
+      ]);
 
       const updated = await ModelModel.findByProviderAndModelId(
         "ollama",
         "llama3",
       );
-      expect(updated?.parameterCount).toBe(8_030_261_248);
+      expect(updated?.recommendedForAgents).toBe(false);
     });
 
     test("refreshes default parameters on non-full sync when the provider reports new values", async () => {
@@ -661,7 +665,7 @@ describe("ModelModel", () => {
       expect(refreshed?.defaultParameters).toEqual({ num_ctx: 8192 });
     });
 
-    test("clears a stale parameter count on full refresh", async () => {
+    test("clears a stale agent verdict on full refresh", async () => {
       const base = {
         externalId: "ollama/llama3-resize",
         provider: "ollama" as const,
@@ -675,16 +679,18 @@ describe("ModelModel", () => {
         completionPricePerToken: null,
         lastSyncedAt: new Date(),
       };
-      await ModelModel.bulkUpsert([{ ...base, parameterCount: 8_030_261_248 }]);
-      // A full refresh is the way to correct a size that went stale because the
-      // tag was repointed at a different model.
-      await ModelModel.bulkUpsertFull([{ ...base, parameterCount: null }]);
+      await ModelModel.bulkUpsert([{ ...base, recommendedForAgents: false }]);
+      // A full refresh is the way to correct a verdict that went stale because
+      // the tag was repointed at a different model.
+      await ModelModel.bulkUpsertFull([
+        { ...base, recommendedForAgents: null },
+      ]);
 
       const refreshed = await ModelModel.findByProviderAndModelId(
         "ollama",
         "llama3-resize",
       );
-      expect(refreshed?.parameterCount).toBeNull();
+      expect(refreshed?.recommendedForAgents).toBeNull();
     });
   });
 

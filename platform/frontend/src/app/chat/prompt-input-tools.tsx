@@ -15,6 +15,7 @@ import {
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
 import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
+import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-recommendation-notice";
 import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
@@ -22,7 +23,6 @@ import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
-import { SmallModelNoticeBadge } from "@/components/chat/small-model-notice";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -95,7 +95,7 @@ export interface ChatPromptInputToolsProps {
    * unreliably over a multi-step task. Same compact-chip treatment as
    * {@link toolsUnavailable}, and mutually exclusive with it.
    */
-  smallModel?: boolean;
+  notRecommendedForAgents?: boolean;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
   /**
@@ -155,7 +155,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
-  smallModel = false,
+  notRecommendedForAgents = false,
   onResetModelOverride,
   agentRequiresPerUserConnect = false,
   subscriptionConnectRequired = false,
@@ -318,9 +318,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                         <NoToolsModelBadge />
                       </div>
                     )}
-                    {smallModel && (
+                    {notRecommendedForAgents && (
                       <div className="flex items-center gap-1.5">
-                        <SmallModelNoticeBadge />
+                        <NotRecommendedForAgentsNoticeBadge />
                       </div>
                     )}
                     {(conversationId || onApiKeyChange) && (
@@ -583,7 +583,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </div>
           )}
           {toolsUnavailable && <NoToolsModelBadge />}
-          {smallModel && <SmallModelNoticeBadge />}
+          {notRecommendedForAgents && <NotRecommendedForAgentsNoticeBadge />}
           {tokensUsed > 0 && maxContextLength && (
             <ContextWindowDialog
               breakdown={contextWindow ?? null}

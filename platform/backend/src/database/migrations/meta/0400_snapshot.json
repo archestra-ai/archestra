@@ -1,5 +1,5 @@
 {
-  "id": "af0c6a65-d0d9-4005-a24d-7472c9711b5a",
+  "id": "5f3c1683-5c1c-4c07-a0ed-36a8c6e82be0",
   "prevId": "4601c8c7-bb51-438a-ac00-0660a13a5d76",
   "version": "7",
   "dialect": "postgresql",
@@ -12076,11 +12076,12 @@
           "primaryKey": false,
           "notNull": false
         },
-        "parameter_count": {
-          "name": "parameter_count",
-          "type": "bigint",
+        "recommended_for_agents": {
+          "name": "recommended_for_agents",
+          "type": "boolean",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": true
         },
         "default_parameters": {
           "name": "default_parameters",

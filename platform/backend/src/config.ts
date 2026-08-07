@@ -88,12 +88,23 @@ const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
  * Returns undefined if authentication is not properly configured
  * @public — exported for testability
  */
-export const getOtlpAuthHeaders = (): Record<string, string> | undefined => {
-  const username =
-    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME?.trim();
-  const password =
-    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD?.trim();
-  const bearer = process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER?.trim();
+export const getOtlpAuthHeaders = (): Record<string, string> | undefined =>
+  buildOtlpAuthHeaders("ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH");
+
+/**
+ * OTLP authentication headers for the RUM (product-usage telemetry) export
+ * pipeline — same contract as getOtlpAuthHeaders, separate credentials.
+ * @public — exported for testability
+ */
+export const getRumOtlpAuthHeaders = (): Record<string, string> | undefined =>
+  buildOtlpAuthHeaders("ARCHESTRA_RUM_EXPORTER_OTLP_AUTH");
+
+const buildOtlpAuthHeaders = (
+  envPrefix: string,
+): Record<string, string> | undefined => {
+  const username = process.env[`${envPrefix}_USERNAME`]?.trim();
+  const password = process.env[`${envPrefix}_PASSWORD`]?.trim();
+  const bearer = process.env[`${envPrefix}_BEARER`]?.trim();
 
   // Bearer token takes precedence
   if (bearer) {
@@ -106,7 +117,7 @@ export const getOtlpAuthHeaders = (): Record<string, string> | undefined => {
   if (username || password) {
     if (!username || !password) {
       logger.warn(
-        "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+        `OTEL authentication misconfigured: both ${envPrefix}_USERNAME and ${envPrefix}_PASSWORD must be provided for basic auth`,
       );
       return undefined;
     }
@@ -416,6 +427,11 @@ const MAX_TCP_PORT = 65_535;
 const OTEL_TRACES_PATH = "/v1/traces";
 const OTEL_LOGS_PATH = "/v1/logs";
 
+// RUM export is opt-in: no endpoint means the feature is off entirely (the
+// frontend never loads its RUM module, the ingest route accepts nothing).
+const rumExporterOtlpEndpoint =
+  process.env.ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT?.trim() || "";
+
 /**
  * Get OTEL exporter endpoint for traces.
  * Reads from ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT and intelligently ensures
@@ -507,6 +523,35 @@ export const parseContentMaxLength = (
     return DEFAULT_OTEL_CONTENT_MAX_LENGTH;
   }
 
+  return parsed;
+};
+
+/**
+ * Fraction of RUM sessions to record, 0–1. Invalid or out-of-range values
+ * fall back to 1 (record everything) so a typo never silently disables RUM.
+ *
+ * @public — exercised by config.rum.test.ts
+ */
+export const parseRumSampleRate = (value?: string): number => {
+  if (!value) return 1;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) return 1;
+  return parsed;
+};
+
+/**
+ * A positive-integer RUM setting (batch tuning, ingest budget); anything
+ * else falls back to the given default.
+ *
+ * @public — exercised by config.rum.test.ts
+ */
+export const parseRumBatchSetting = (
+  value: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!value) return defaultValue;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return defaultValue;
   return parsed;
 };
 
@@ -2550,6 +2595,48 @@ const config = {
         url: getOtelExporterOtlpLogEndpoint(),
         headers: getOtlpAuthHeaders(),
       } satisfies Partial<OTLPExporterNodeConfigBase>,
+    },
+    /**
+     * RUM (Real User Monitoring): product-usage events emitted by the web
+     * frontend, forwarded as OTLP log records to a customer-controlled
+     * collector. Off unless an endpoint is configured, and deliberately a
+     * separate pipeline from `otel` above — that one carries this backend's
+     * traces/logs, this one carries browser usage events.
+     */
+    rum: {
+      enabled: Boolean(rumExporterOtlpEndpoint),
+      sampleRate: parseRumSampleRate(process.env.ARCHESTRA_RUM_SAMPLE_RATE),
+      logExporter: {
+        url: rumExporterOtlpEndpoint
+          ? getOtelExporterOtlpLogEndpoint(rumExporterOtlpEndpoint)
+          : "",
+        headers: getRumOtlpAuthHeaders(),
+        // OTLP/HTTP with gzip: log-record batches are highly repetitive and
+        // compress roughly an order of magnitude.
+        compression: "gzip" as OTLPExporterNodeConfigBase["compression"],
+      } satisfies Partial<OTLPExporterNodeConfigBase>,
+      // BatchLogRecordProcessor knobs. The SDK defaults drain ~100 records/s;
+      // large deployments raise batch size / lower the delay to keep up.
+      batchProcessor: {
+        maxQueueSize: parseRumBatchSetting(
+          process.env.ARCHESTRA_RUM_EXPORTER_MAX_QUEUE_SIZE,
+          2048,
+        ),
+        maxExportBatchSize: parseRumBatchSetting(
+          process.env.ARCHESTRA_RUM_EXPORTER_MAX_EXPORT_BATCH_SIZE,
+          512,
+        ),
+        scheduledDelayMillis: parseRumBatchSetting(
+          process.env.ARCHESTRA_RUM_EXPORTER_SCHEDULE_DELAY_MS,
+          5000,
+        ),
+      },
+      // Per-user ceiling on accepted ingest batches; with the per-batch event
+      // cap this bounds what one runaway client can push to the collector.
+      ingestMaxBatchesPerMinute: parseRumBatchSetting(
+        process.env.ARCHESTRA_RUM_INGEST_MAX_BATCHES_PER_MINUTE,
+        120,
+      ),
     },
     metrics: {
       endpoint: "/metrics",

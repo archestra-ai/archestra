@@ -1394,6 +1394,28 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - When disabled, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view
   - Set to `true` to include infrastructure spans for debugging request flows
 
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT`** - OTLP endpoint for [Real User Monitoring](/docs/platform-observability#real-user-monitoring) export. Product-usage events from the web UI go to this collector as OTLP log records. Requires an active [enterprise license](/docs/platform-pricing-model); the backend refuses to start when this is set without one.
+  - Default: unset (RUM is off)
+  - Setting the endpoint turns the feature on
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME`** - Username for RUM export basic authentication.
+  - Optional: Only used if both username and password are provided
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for RUM export basic authentication.
+  - Optional: Only used if both username and password are provided
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for RUM export authentication.
+  - Optional: Takes precedence over basic authentication if provided
+
+- **`ARCHESTRA_RUM_SAMPLE_RATE`** - Fraction of RUM sessions to record, 0 to 1. Whole sessions are kept or skipped, so funnels stay coherent. Client errors are always reported.
+  - Default: 1 (record every session)
+
+- **`ARCHESTRA_RUM_EXPORTER_MAX_QUEUE_SIZE`** / **`ARCHESTRA_RUM_EXPORTER_MAX_EXPORT_BATCH_SIZE`** / **`ARCHESTRA_RUM_EXPORTER_SCHEDULE_DELAY_MS`** - RUM OTLP batch tuning. Raise batch size and lower the delay for deployments with thousands of concurrent users. Export uses gzip.
+  - Defaults: 2048 / 512 / 5000
+
+- **`ARCHESTRA_RUM_INGEST_MAX_BATCHES_PER_MINUTE`** - How many RUM event batches one user may submit per minute. Batches over the limit are rejected and their events dropped.
+  - Default: 120
+
 - **`ARCHESTRA_METRICS_PORT`** - TCP port for the metrics server.
   - Default: `9050`
   - Must be an integer between `1` and `65535`; invalid values fall back to the default with a warning

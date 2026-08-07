@@ -125,3 +125,13 @@ name = "mimo-25-adv-glm"
 provider = "openrouter"
 model = "xiaomi/mimo-v2.5"
 advisor = "glm"
+
+# Consult-behavior baseline arm: the pair the advisor consult-policy work is
+# measured against (qwen fails ~9/27 tasks solo; deepseek-flash is the
+# strongest OpenRouter-served lane). Runs on the OpenRouter key alone. Pair
+# with qwen36-35b-a3b and deepseek-flash for the three-arm comparison.
+[[lane]]
+name = "qwen36-35b-a3b-adv-ds"
+provider = "openrouter"
+model = "qwen/qwen3.6-35b-a3b"
+advisor = "deepseek-flash"

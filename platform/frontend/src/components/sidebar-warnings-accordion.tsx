@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_ADMIN_EMAIL } from "@archestra/shared";
+import { DEFAULT_ADMIN_EMAIL, DocsPage } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import {
@@ -23,7 +23,15 @@ import {
   useSession,
 } from "@/lib/auth/auth.query";
 import { useDisableBasicAuth } from "@/lib/config/config.query";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useK8sCapabilities } from "@/lib/environment.query";
 import { cn } from "@/lib/utils";
+
+interface Warning {
+  label: string;
+  href: string;
+  external: boolean;
+}
 
 export function SidebarWarningsAccordion() {
   const { data: session } = useSession();
@@ -34,6 +42,14 @@ export function SidebarWarningsAccordion() {
   const { data: canUpdateOrg } = useHasPermissions({
     organization: ["update"],
   });
+  // Reading capabilities needs environment:update, so gating the query on the
+  // same permission keeps it from 403-ing for everyone else on every page.
+  const { data: canUpdateEnvironment } = useHasPermissions({
+    environment: ["update"],
+  });
+  const { data: capabilities } = useK8sCapabilities(
+    canUpdateEnvironment === true,
+  );
   const { state: sidebarState } = useSidebar();
 
   const showDefaultCredsWarning =
@@ -44,12 +60,30 @@ export function SidebarWarningsAccordion() {
     defaultCredentialsEnabled &&
     userEmail === DEFAULT_ADMIN_EMAIL;
 
+  // Only a measured verdict warns. "unknown" means nothing tested the cluster,
+  // which is not evidence that egress rules are inert.
+  const showNetworkPolicyWarning =
+    capabilities?.networkPolicy.enforcementStatus === "verified-not-enforced";
+
+  // Null under full white-labeling, where the environments screen carries the
+  // same explanation and stays reachable.
+  const networkPolicyDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformEnvironments,
+    "network-egress-policies",
+  );
+
   const warnings = [
     showDefaultCredsWarning && {
       label: "Change default credentials",
       href: "/account?highlight=change-password",
+      external: false,
     },
-  ].filter((w): w is { label: string; href: string } => Boolean(w));
+    showNetworkPolicyWarning && {
+      label: "Network policy not enforced",
+      href: networkPolicyDocsUrl ?? "/settings/environments",
+      external: networkPolicyDocsUrl !== null,
+    },
+  ].filter((w): w is Warning => Boolean(w));
 
   if (warnings.length === 0) {
     return null;
@@ -77,7 +111,12 @@ export function SidebarWarningsAccordion() {
                       key={w.label}
                       className="cursor-pointer"
                     >
-                      <Link href={w.href}>{w.label}</Link>
+                      <Link
+                        href={w.href}
+                        {...externalLinkProps(w.label, w.external)}
+                      >
+                        <span>{w.label}</span>
+                      </Link>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -114,7 +153,7 @@ export function SidebarWarningsAccordion() {
   );
 }
 
-function WarningItem({ label, href }: { label: string; href: string }) {
+function WarningItem({ label, href, external }: Warning) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -122,11 +161,24 @@ function WarningItem({ label, href }: { label: string; href: string }) {
         tooltip={label}
         className="text-destructive hover:text-destructive"
       >
-        <Link href={href}>
+        <Link href={href} {...externalLinkProps(label, external)}>
           <AlertTriangle className="shrink-0" />
           <span>{label}</span>
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
+}
+
+// The new-tab hint rides on aria-label rather than an sr-only sibling, because
+// SidebarMenuButton truncates its last span child and a second span would take
+// that rule off the label, wrapping it to two lines.
+function externalLinkProps(label: string, external: boolean) {
+  return external
+    ? ({
+        target: "_blank",
+        rel: "noopener noreferrer",
+        "aria-label": `${label} (opens in new tab)`,
+      } as const)
+    : {};
 }

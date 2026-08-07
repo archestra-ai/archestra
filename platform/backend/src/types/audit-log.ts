@@ -98,6 +98,7 @@ export const AuditEventNameSchema = z.enum([
   "mcpServer.deleted",
   "mcpServer.restored",
   "mcpServer.reinstalled",
+  "mcpServer.hardReset",
   // Retired with the MCP server installation request feature. Kept in the
   // vocabulary because audit rows written before its removal still carry these
   // names — dropping them would render that history as raw dotted keys. No

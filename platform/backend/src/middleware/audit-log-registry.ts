@@ -229,6 +229,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "mcpServer.reinstalled",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
   },
+  // Destroys and recreates the physical deployment. Registered explicitly so it
+  // is not logged as `mcpServer.created` by the walk-up to `/api/mcp_server/:id`
+  // — a hard reset is the one MCP action an operator has to be able to find
+  // after the fact, and it must not be indistinguishable from an install.
+  "/api/mcp_server/:id/hard-reset": {
+    resourceType: "mcpServer",
+    action: "mcpServer.hardReset",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+  },
   // Restore is a POST carrying :id — register directly so the POST walk-up
   // isn't dropped (which would mis-log it as unknown.created). findByIdForAudit
   // does NOT filter soft-deleted rows, so `before` captures the deleted install

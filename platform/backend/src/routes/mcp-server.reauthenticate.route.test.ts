@@ -29,7 +29,11 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
   McpServerRuntimeManager: {
     isEnabled: true,
     restartServer: k8sRestartServerMock,
+    ensureAwake: vi.fn(),
+    isDeploymentDormant: vi.fn(() => false),
+    registerHibernationListener: vi.fn(),
   },
+  McpServerWakeError: class McpServerWakeError extends Error {},
 }));
 
 const hasPermissionMock = vi.mocked(hasPermission);

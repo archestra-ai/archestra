@@ -944,6 +944,15 @@ export const requiredEndpointPermissionsMap: Partial<
     // more. Requiring :update here locked owners out of reinstalling their own.
     mcpServerInstallation: ["create"],
   },
+  [RouteId.HardResetMcpServer]: {
+    // The recovery escape hatch for a wedged deployment: it destroys and
+    // recreates the pod for EVERY install sharing it, so it is gated on the
+    // org-wide :admin capability rather than the per-connection scope rules
+    // the other lifecycle routes use. A connection's own owner must not be
+    // able to reset a shared multitenant deployment out from under the other
+    // installs on it.
+    mcpServerInstallation: ["admin"],
+  },
   [RouteId.ReloadMcpServerTools]: {
     // Reloading tools is a strict subset of reinstalling (tool re-sync with no
     // redeploy), so it is gated identically; the handler's

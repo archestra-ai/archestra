@@ -15,6 +15,10 @@ import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
 } from "@/clients/mcp-client";
+import {
+  enterpriseTier,
+  MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE,
+} from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
@@ -59,6 +63,7 @@ import {
   InsertMcpServerSchema,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
+  McpServerHibernationModeSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   SelectMcpServerSchema,
@@ -836,6 +841,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 if (!k8sDeployment) {
                   throw new Error("Deployment manager not found");
                 }
+
+                // An install can adopt an existing shared (multitenant)
+                // deployment that idle hibernation scaled to zero; wake it so
+                // the readiness wait below isn't a guaranteed timeout.
+                await McpServerRuntimeManager.ensureAwake(mcpServer.id);
 
                 fastify.log.info(
                   `Waiting for deployment to be ready: ${mcpServer.name}`,
@@ -1857,6 +1867,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override
           serviceAccount: z.string().optional(),
+          // Per-install idle-hibernation override (enterprise; gated below).
+          hibernationMode: McpServerHibernationModeSchema.optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -1867,7 +1879,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userConfigValues,
         isByosVault,
         serviceAccount,
+        hibernationMode,
       } = body;
+
+      // Idle hibernation is enterprise-licensed at both ends: the org toggle
+      // and this per-install override. Refuse rather than ignore, so an
+      // unlicensed deployment never believes it pinned a server awake.
+      if ("hibernationMode" in body && !enterpriseTier.isCoreActive()) {
+        throw new ApiError(403, MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE);
+      }
 
       // Get the existing MCP server
       const mcpServer = await McpServerModel.findById(id);
@@ -2202,6 +2222,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await McpServerModel.update(id, {
         localInstallationStatus: "pending",
         localInstallationError: null,
+        // Persisted alongside the reinstall so the sweeper's next tick sees
+        // it; omitted from the body leaves the stored mode untouched.
+        ...(hibernationMode !== undefined ? { hibernationMode } : {}),
       });
       broadcastMcpInstallationStatus(id, "pending", null);
 
@@ -2270,6 +2293,140 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Hard-reset a stuck MCP server deployment: destroy it (force-killing pods
+   * that refuse to terminate), erase the runtime's derived state for it, and
+   * redeploy from current configuration with a fresh image pull.
+   *
+   * The escape hatch for a deployment that no ordinary lifecycle action —
+   * restart, reinstall — can move any more. It exists so recovering one does
+   * not require a Kubernetes administrator, a database session, or an engineer,
+   * which is why it reports what it actually did rather than only that it was
+   * asked for.
+   *
+   * A whole reset can run for minutes (pod-termination grace, then a fresh
+   * image pull), so the request waits {@link HARD_RESET_RESPONSE_BUDGET_MS} for
+   * it and no longer. Waiting it out would exceed the connection timeout every
+   * shipped ingress default allows and hand the administrator a dropped
+   * connection instead of a report. A reset that outlasts the budget keeps
+   * running and is reported as unfinished; its outcome always lands on the
+   * install's status, live over the websocket and on the row afterwards.
+   */
+  fastify.post(
+    "/api/mcp_server/:id/hard-reset",
+    {
+      schema: {
+        operationId: RouteId.HardResetMcpServer,
+        description:
+          "Destroy and redeploy a stuck MCP server deployment from a clean slate",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(McpServerHardResetResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, headers }, reply) => {
+      const mcpServer = await McpServerModel.findByIdInOrg(id, organizationId);
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      if (mcpServer.serverType !== "local") {
+        throw new ApiError(
+          400,
+          "This MCP server does not run in a Kubernetes deployment; there is nothing to reset.",
+        );
+      }
+
+      // Deliberately NOT assertScopedLifecycleAuthorization: a hard reset
+      // destroys the pod that every install on a multitenant catalog shares, so
+      // owning one connection cannot be enough to authorize it.
+      const { success: isMcpServerInstallationAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        headers,
+      );
+      if (!isMcpServerInstallationAdmin) {
+        throw new ApiError(
+          403,
+          "Only mcpServerInstallation admins can hard-reset an MCP server deployment",
+        );
+      }
+
+      // Preconditions first: everything below this point moves the install row
+      // off whatever it was, and a reset that never reaches the cluster must
+      // not leave a previously-healthy install marked broken.
+      if (!McpServerRuntimeManager.isEnabled) {
+        throw new ApiError(
+          503,
+          "The Kubernetes runtime is not available on this instance; this MCP server cannot be reset.",
+        );
+      }
+      if (!(await McpServerRuntimeManager.hasResolvableDeployment(id))) {
+        throw new ApiError(
+          409,
+          "This MCP server is no longer backed by a local MCP catalog entry, so the runtime has no deployment to reset.",
+        );
+      }
+
+      // The install row carries the outcome, exactly as a reinstall does — a
+      // reset that recovers a wedged server has to clear the error the
+      // administrator was looking at when they reached for it.
+      await McpServerModel.update(id, {
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      });
+      broadcastMcpInstallationStatus(id, "pending", null);
+
+      let reset: HardResetHandle;
+      try {
+        reset = await McpServerRuntimeManager.hardResetDeployment(id);
+      } catch (error) {
+        throw new ApiError(
+          500,
+          `Hard reset failed: ${await failHardReset(id, error)}`,
+        );
+      }
+
+      // Attached before anything can time out, and never conditionally: the
+      // reset outlives this request, so the install status — not the response —
+      // is what an administrator is always able to read the outcome from.
+      const reported = reset.completion.then(
+        async (result) => {
+          await recordHardResetOutcome(id, result);
+          return result;
+        },
+        async (error) => {
+          throw new Error(await failHardReset(id, error));
+        },
+      );
+
+      let result: Awaited<typeof reported> | null;
+      try {
+        result = await withHardResetResponseBudget(reported);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        throw new ApiError(500, `Hard reset failed: ${message}`);
+      }
+
+      if (!result) {
+        // From here the reset is answerable only through the install status,
+        // and a failure has already been recorded and logged there — this
+        // catch exists so a rejection arriving after the response cannot
+        // surface as an unhandled one.
+        reported.catch(() => {});
+        return reply.send({
+          status: "in-progress" as const,
+          mcpServerId: id,
+          physicalDeployment: reset.physicalDeployment,
+          resetServerIds: reset.resetServerIds,
+        });
+      }
+      return reply.send({ status: "completed" as const, ...result });
+    },
+  );
+
+  /**
    * Re-discover an MCP server's tools from the LIVE upstream server and
    * reconcile the stored tool snapshot — no pod restart, no reinstall.
    * Adds newly-advertised tools, updates changed descriptions/input schemas,
@@ -2332,6 +2489,51 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 export default mcpServerRoutes;
 
+/**
+ * What a hard reset did, as the administrator who asked for it sees it — or,
+ * when the reset is still running, what it is doing and where to watch.
+ *
+ * The `status` discriminant is what keeps the report honest: a reset that has
+ * not finished cannot say how the teardown went or whether the rebuild came up,
+ * so those fields are absent rather than guessed. The teardown discriminant is
+ * the load-bearing part of a finished one: "force-killed" means the old pod had
+ * to be killed outright, which is the difference between a deployment that was
+ * slow and one that was genuinely wedged.
+ */
+const McpServerHardResetResponseSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("completed"),
+    mcpServerId: z.string(),
+    physicalDeployment: z.string(),
+    resetServerIds: z.array(z.string()),
+    teardown: z.discriminatedUnion("outcome", [
+      z.object({ outcome: z.literal("terminated") }),
+      z.object({
+        outcome: z.literal("force-killed"),
+        pods: z.array(z.string()),
+      }),
+      z.object({ outcome: z.literal("unverified"), reason: z.string() }),
+    ]),
+    recreated: z.discriminatedUnion("target", [
+      z.object({
+        target: z.literal("shared-catalog-deployment"),
+        catalogId: z.string(),
+      }),
+      z.object({ target: z.literal("install-deployment") }),
+    ]),
+    rebuild: z.discriminatedUnion("outcome", [
+      z.object({ outcome: z.literal("ready") }),
+      z.object({ outcome: z.literal("not-ready"), reason: z.string() }),
+    ]),
+  }),
+  z.object({
+    status: z.literal("in-progress"),
+    mcpServerId: z.string(),
+    physicalDeployment: z.string(),
+    resetServerIds: z.array(z.string()),
+  }),
+]);
+
 async function findAccessibleMcpServer(params: {
   mcpServerId: string;
   userId: string;
@@ -2352,6 +2554,103 @@ async function findAccessibleMcpServer(params: {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/**
+ * The runtime's handle on a reset that is under way. Taken from the method
+ * rather than restated, so the two can never drift.
+ */
+type HardResetHandle = Awaited<
+  ReturnType<typeof McpServerRuntimeManager.hardResetDeployment>
+>;
+
+/**
+ * How long the hard-reset endpoint waits for a reset before answering that it
+ * is still running.
+ *
+ * A whole reset takes minutes; no ingress in front of this API allows a request
+ * anywhere near that. The shipped chart leaves the load balancer's request
+ * timeout at its provider default of 30 s (`archestra.gkeBackendConfig` sets
+ * one only if an operator supplies it), so a default install cuts the
+ * connection long before a reset finishes, and the administrator is left with a
+ * dropped request and a reset still running behind it. Sitting well inside that
+ * 30 s leaves room for the auth, database and serialization work around it.
+ */
+const HARD_RESET_RESPONSE_BUDGET_MS = 20_000;
+
+/**
+ * The reset's report if it arrives within the response budget, null once the
+ * budget elapses — the reset itself is untouched either way and keeps running.
+ */
+function withHardResetResponseBudget<T>(
+  reported: Promise<T>,
+): Promise<T | null> {
+  return new Promise<T | null>((resolve, reject) => {
+    const timer = setTimeout(
+      () => resolve(null),
+      HARD_RESET_RESPONSE_BUDGET_MS,
+    );
+    timer.unref?.();
+    reported.then(
+      (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * Put a finished reset's verdict on the install row (and on the wire to anyone
+ * watching it). This is the channel the outcome always reaches, whether or not
+ * the request that asked for the reset is still around to be answered.
+ */
+async function recordHardResetOutcome(
+  mcpServerId: string,
+  result: Awaited<HardResetHandle["completion"]>,
+): Promise<void> {
+  if (result.rebuild.outcome === "ready") {
+    await McpServerModel.update(mcpServerId, {
+      localInstallationStatus: "success",
+      localInstallationError: null,
+    });
+    broadcastMcpInstallationStatus(mcpServerId, "success", null);
+    return;
+  }
+  // The reset ran and the report of it is worth having, but the server is
+  // still down: say so on the row rather than clearing the error the
+  // administrator reached for the reset over.
+  const rebuildError = `The deployment was reset but did not come back up: ${result.rebuild.reason}`;
+  await McpServerModel.update(mcpServerId, {
+    localInstallationStatus: "error",
+    localInstallationError: rebuildError,
+  });
+  broadcastMcpInstallationStatus(mcpServerId, "error", rebuildError);
+}
+
+/**
+ * {@link recordHardResetOutcome} for a reset that threw instead of reporting.
+ * Returns the failure as a message, for whoever is still there to be told.
+ */
+async function failHardReset(
+  mcpServerId: string,
+  error: unknown,
+): Promise<string> {
+  const message = error instanceof Error ? error.message : "Unknown error";
+  await McpServerModel.update(mcpServerId, {
+    localInstallationStatus: "error",
+    localInstallationError: message,
+  });
+  broadcastMcpInstallationStatus(mcpServerId, "error", message);
+  logger.error(
+    { err: error, mcpServerId },
+    "Hard reset of an MCP server deployment failed",
+  );
+  return message;
+}
 
 /**
  * Gate the three destructive lifecycle actions (revoke / reauth / reinstall)

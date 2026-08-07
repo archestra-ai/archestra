@@ -24,6 +24,25 @@ interface K8sClients {
 }
 
 /**
+ * Deployment annotation marking an MCP server the idle-hibernation manager
+ * scaled to 0 replicas (value "true" when set). Presence with replicas 0 means
+ * "hibernated"; presence with replicas >= 1 means "waking" (the annotation is
+ * only removed once the woken deployment is ready). A zero-replica deployment
+ * WITHOUT this annotation was scaled down externally — not ours to wake.
+ */
+export const MCP_HIBERNATED_ANNOTATION = "archestra.io/hibernated";
+
+/**
+ * Companion annotation recording the deployment's `spec.replicas` at the
+ * moment it was hibernated (stringified integer). Written in the same merge
+ * patch as {@link MCP_HIBERNATED_ANNOTATION}; the wake path restores this
+ * count instead of assuming 1, and both annotations are removed together once
+ * the woken deployment is ready.
+ */
+export const MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION =
+  "archestra.io/pre-hibernation-replicas";
+
+/**
  * Validates kubeconfig file and throws descriptive errors for various failure scenarios
  * @public — exported for testability
  */

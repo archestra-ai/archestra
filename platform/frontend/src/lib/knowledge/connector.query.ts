@@ -14,6 +14,8 @@ const {
   createConnector,
   updateConnector,
   deleteConnector,
+  restoreConnector,
+  permanentlyDeleteConnector,
   syncConnector,
   forceResyncConnector,
   testConnectorConnection,
@@ -40,7 +42,7 @@ type ConnectorsListParams = Pick<
 };
 type ConnectorsPaginatedParams = Pick<
   ConnectorsQuery,
-  "limit" | "offset" | "search" | "connectorType"
+  "limit" | "offset" | "search" | "connectorType" | "status"
 >;
 
 /** One synced upstream group, as `useConnectorUserGroups` returns it. */
@@ -211,6 +213,59 @@ export function useDeleteConnector() {
       queryClient.invalidateQueries({ queryKey: ["connectors"] });
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       toast.success("Connector deleted successfully");
+    },
+  });
+}
+
+/**
+ * Restore a soft-deleted connector from the trash view (admins). The stored
+ * credential was destroyed at delete, so the connector comes back disabled —
+ * the toast tells the admin the follow-up steps.
+ */
+export function useRestoreConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await restoreConnector({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      toast.success(
+        "Connector restored as disabled — re-authenticate it, then enable it to resume syncing",
+      );
+    },
+  });
+}
+
+/** Permanently delete a soft-deleted connector (admin-only trash action). */
+export function usePermanentlyDeleteConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await permanentlyDeleteConnector({
+        path: { id },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, id) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      // Drop the detail and document queries for an id that no longer
+      // resolves, rather than letting a stale URL remount them into a 404.
+      queryClient.removeQueries({ queryKey: ["connectors", id] });
+      toast.success("Connector permanently deleted");
     },
   });
 }

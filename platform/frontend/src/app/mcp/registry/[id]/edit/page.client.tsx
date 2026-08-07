@@ -146,7 +146,7 @@ function SetupWizard({ item }: { item: CatalogItem }) {
                   </Button>
                 ) : (
                   <Button type="button" onClick={() => goToStep("test")}>
-                    Test Connection
+                    Connect &amp; Verify
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 )}

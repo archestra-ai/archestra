@@ -176,12 +176,18 @@ const interactionsTable = pgTable(
     processedRequestSharedPrefix: integer("processed_request_shared_prefix"),
     /**
      * Index of the last message of the FULL request (messages.length - 1), used
-     * to find a parent on the write path. The matching last-message hash is NOT
-     * stored: a delta row always ends at the full request's last message, so it
-     * is compared directly against the candidate's stored delta. (The hash is
-     * kept only in the in-memory tip cache for the fast-path validity check.)
+     * to find a parent on the write path.
      */
     requestLastMessageIdx: integer("request_last_message_idx"),
+    /**
+     * sha256 hex of the FULL request's last message (the message at
+     * requestLastMessageIdx). Like threadId it is always stored in plaintext —
+     * a hash only supports equality checks — so write-path parent resolution
+     * can match candidates without reading `request`, which content encryption
+     * at rest may have replaced with ciphertext. NULL on rows written before
+     * this column existed; such rows are simply never matched as parents.
+     */
+    requestLastMessageHash: varchar("request_last_message_hash"),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
     dualLlmAnalyses: jsonb("dual_llm_analyses").$type<DualLlmAnalysis[]>(),
     unsafeContextBoundary: jsonb(

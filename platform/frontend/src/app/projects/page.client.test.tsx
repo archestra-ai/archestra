@@ -1,13 +1,21 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 const mockRouterPush = vi.fn();
 const mockDeleteMutateAsync = vi.fn();
 const mockUpdateMutateAsync = vi.fn();
+const mockSetShareMutateAsync = vi.fn();
+/** The detail the edit dialog loads; tests override the pin and sharing. */
+let mockEditingProject: Record<string, unknown> = {};
 const mockPinMutate = vi.fn();
+const mockRestoreMutate = vi.fn();
+const mockPermanentlyDeleteMutateAsync = vi.fn();
+const mockUseProjects = vi.fn();
 
 let mockProjects: ProjectFixture[] = [];
 
@@ -30,6 +38,7 @@ type ProjectFixture = {
   visibility: "organization" | "team" | null;
   pinnedAt: string | null;
   createdAt: string;
+  deletedAt: string | null;
 };
 
 vi.mock("next/navigation");
@@ -54,6 +63,7 @@ vi.mock("@/components/search-input", () => ({
 
 vi.mock("@/components/resource-scope-filter", () => ({
   ResourceScopeFilter: () => <div>scope filter</div>,
+  ResourceDeletedStatusFilter: () => <div>status filter</div>,
   useScopeFilterParams: () => ({
     scope: undefined,
     teamIds: undefined,
@@ -132,14 +142,16 @@ vi.mock("@/components/standard-dialog", () => ({
     title,
     children,
     footer,
+    onSubmit,
   }: {
     open: boolean;
     title: string;
     children: React.ReactNode;
     footer?: React.ReactNode;
+    onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   }) =>
     open ? (
-      <form>
+      <form onSubmit={onSubmit}>
         <h2>{title}</h2>
         {children}
         {footer}
@@ -220,8 +232,17 @@ vi.mock("@/components/api-key-load-error", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 
+vi.mock("@/lib/organization.query");
+
 vi.mock("@/lib/projects/projects.query", () => ({
-  useProjects: () => ({ data: mockProjects, isPending: false }),
+  // Records its filters: which slice the page asks for is the whole difference
+  // between the trash and the active list, so a mock that dropped them would
+  // stay green if the page stopped passing `status: "deleted"` and listed live
+  // projects with Restore and Delete permanently on them.
+  useProjects: (filters?: { status?: string }) => {
+    mockUseProjects(filters);
+    return { data: mockProjects, isPending: false };
+  },
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteProject: () => ({
     mutateAsync: mockDeleteMutateAsync,
@@ -232,18 +253,21 @@ vi.mock("@/lib/projects/projects.query", () => ({
     isPending: false,
   }),
   usePinProject: () => ({ mutate: mockPinMutate }),
-  // The edit dialog fetches the project detail by id; return a minimal one.
-  useProject: () => ({
-    data: {
-      id: "owner",
-      name: "Owner project",
-      description: null,
-      icon: null,
-      visibility: null,
-      shareTeamIds: null,
-    },
+  useRestoreProject: () => ({ mutate: mockRestoreMutate, isPending: false }),
+  usePermanentlyDeleteProject: () => ({
+    mutateAsync: mockPermanentlyDeleteMutateAsync,
+    isPending: false,
   }),
-  useSetProjectShare: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  // The edit dialog fetches the project detail by id; return a minimal one.
+  useProject: () => ({ data: mockEditingProject }),
+  useSetProjectShare: () => ({
+    mutateAsync: mockSetShareMutateAsync,
+    isPending: false,
+  }),
+}));
+
+vi.mock("@/lib/agent.query", () => ({
+  useInternalAgents: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/teams/team.query");
@@ -271,6 +295,10 @@ describe("ProjectsPageClient", () => {
     vi.mocked(useTeams).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useTeams>);
+    vi.mocked(useIsGlobalAdmin).mockReturnValue({
+      isGlobalAdmin: true,
+      isLoading: false,
+    });
     mockProjects = [];
     mockApiKeyState = {
       hasAnyApiKey: true,
@@ -280,6 +308,18 @@ describe("ProjectsPageClient", () => {
     };
     mockDeleteMutateAsync.mockResolvedValue(true);
     mockUpdateMutateAsync.mockResolvedValue(true);
+    mockSetShareMutateAsync.mockResolvedValue(true);
+    mockEditingProject = {
+      id: "owner",
+      name: "Owner project",
+      description: null,
+      icon: null,
+      visibility: null,
+      shareTeamIds: null,
+      shareUserIds: null,
+      viewerRole: "owner",
+      defaultAgent: null,
+    };
     window.localStorage.clear();
   });
 
@@ -339,6 +379,111 @@ describe("ProjectsPageClient", () => {
 
     fireEvent.click(screen.getByText("Delete"));
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
+  });
+
+  it("hides the default-agent field from an editor without agent:read", () => {
+    mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
+
+    render(<ProjectsPageClient />);
+    fireEvent.click(screen.getByText("Edit details"));
+
+    // An empty picker would read as "this org has no agents" rather than
+    // "not yours to set".
+    expect(screen.queryByText("Default agent")).not.toBeInTheDocument();
+    expect(useInternalAgents).toHaveBeenCalledWith({ enabled: false });
+  });
+
+  it("shows the default-agent field to an editor with agent:read", () => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: permissions.agent?.includes("read") === true,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
+
+    render(<ProjectsPageClient />);
+    fireEvent.click(screen.getByText("Edit details"));
+
+    expect(screen.getByText("Default agent")).toBeInTheDocument();
+    expect(useInternalAgents).toHaveBeenCalledWith({ enabled: true });
+  });
+
+  describe("default agent, with agent:read granted", () => {
+    const PINNED = { id: "pinned", name: "Pinned Agent", scope: "org" };
+
+    /** Visibility options render label and description in one control. */
+    function clickOptionStartingWith(label: string) {
+      const option = screen
+        .getAllByRole("button")
+        .find((button) => button.textContent?.startsWith(label));
+      if (!option) throw new Error(`no visibility option for "${label}"`);
+      fireEvent.click(option);
+    }
+
+    beforeEach(() => {
+      // share-org too, or the Organization option renders disabled.
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions) =>
+          ({
+            data:
+              permissions.agent?.includes("read") === true ||
+              permissions.project?.includes("share-org") === true,
+          }) as ReturnType<typeof useHasPermissions>,
+      );
+      mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
+      mockEditingProject = {
+        ...mockEditingProject,
+        defaultAgent: { id: PINNED.id, name: PINNED.name },
+      };
+    });
+
+    it("keeps the saved pin selected once the agent list arrives", () => {
+      vi.mocked(useInternalAgents).mockReturnValue({
+        data: [PINNED],
+        isPending: false,
+      } as unknown as ReturnType<typeof useInternalAgents>);
+
+      render(<ProjectsPageClient />);
+      fireEvent.click(screen.getByText("Edit details"));
+
+      expect(screen.getByText("Pinned Agent")).toBeInTheDocument();
+    });
+
+    it("does not clear the saved pin while the agent list is still loading", () => {
+      // Every agent looks unreachable against an empty list, so an unguarded
+      // reset wipes the project's pin the moment the dialog opens.
+      vi.mocked(useInternalAgents).mockReturnValue({
+        data: undefined,
+        isPending: true,
+      } as unknown as ReturnType<typeof useInternalAgents>);
+
+      render(<ProjectsPageClient />);
+      fireEvent.click(screen.getByText("Edit details"));
+
+      expect(screen.queryByText("Default")).not.toBeInTheDocument();
+    });
+
+    it("saves the sharing change before the agent, which is judged against it", async () => {
+      vi.mocked(useInternalAgents).mockReturnValue({
+        data: [PINNED],
+        isPending: false,
+      } as unknown as ReturnType<typeof useInternalAgents>);
+
+      render(<ProjectsPageClient />);
+      fireEvent.click(screen.getByText("Edit details"));
+      // The visibility selector shows only the current choice until expanded.
+      clickOptionStartingWith("Personal");
+      clickOptionStartingWith("Organization");
+      fireEvent.click(screen.getByText("Save"));
+
+      await waitFor(() => expect(mockSetShareMutateAsync).toHaveBeenCalled());
+      await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalled());
+      // Sending the agent first would validate it against the old audience.
+      expect(mockSetShareMutateAsync.mock.invocationCallOrder[0]).toBeLessThan(
+        mockUpdateMutateAsync.mock.invocationCallOrder[0],
+      );
+    });
   });
 
   it("shows the load-error retry state, not the add-key prompt, when the keys request fails", () => {
@@ -428,6 +573,79 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Plain project")).toBeInTheDocument();
   });
 
+  it("offers restore and permanent delete in the trash view", () => {
+    // ?status=deleted is the trash. A deleted project has no card view and no
+    // route to navigate to, so it renders as a table of Restore + Delete
+    // permanently and nothing else.
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockProjects = [
+      makeProject({
+        id: "trashed",
+        name: "Trashed project",
+        deletedAt: "2026-01-02T00:00:00.000Z",
+      }),
+    ];
+
+    render(<ProjectsPageClient />);
+
+    // The deleted slice is a different request, not a client-side filter of
+    // the active list — without this the rows below would be live projects.
+    expect(mockUseProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "deleted" }),
+    );
+    expect(screen.getByText("Trashed project")).toBeInTheDocument();
+    expect(screen.queryByText("Edit details")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Pin")).not.toBeInTheDocument();
+    // The backend serves the deleted slice whole, ignoring search and scope, so
+    // leaving those controls live would read as filters that do nothing.
+    expect(screen.queryByLabelText("Search projects")).not.toBeInTheDocument();
+    expect(screen.queryByText("scope filter")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Restore Trashed project"));
+    expect(mockRestoreMutate).toHaveBeenCalledWith({ id: "trashed" });
+
+    fireEvent.click(
+      screen.getByLabelText("Delete permanently Trashed project"),
+    );
+    expect(screen.getByText("Delete project permanently")).toBeInTheDocument();
+  });
+
+  it("says the trash is empty rather than showing the no-projects prompt", () => {
+    // "No projects yet" would read as an empty deployment; an empty trash is
+    // a different, unalarming fact.
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("status=deleted") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockProjects = [];
+
+    render(<ProjectsPageClient />);
+
+    expect(mockUseProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "deleted" }),
+    );
+    expect(screen.getByText("No deleted projects")).toBeInTheDocument();
+    expect(screen.queryByText("No projects yet")).not.toBeInTheDocument();
+  });
+
+  it("asks for the active slice everywhere but the trash", () => {
+    mockProjects = [makeProject({ id: "plain", name: "Plain project" })];
+
+    render(<ProjectsPageClient />);
+
+    // The counterpart to the trash assertions: `status` left unset is what
+    // makes the default view the live list rather than the deleted one.
+    expect(mockUseProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ status: undefined }),
+    );
+    expect(screen.getByText("Plain project")).toBeInTheDocument();
+  });
+
   it("shows unpin in pinned project card menus", () => {
     mockProjects = [
       makeProject({
@@ -459,6 +677,7 @@ function makeProject(overrides: Partial<ProjectFixture>): ProjectFixture {
     visibility: null,
     pinnedAt: null,
     createdAt: "2026-01-01T00:00:00.000Z",
+    deletedAt: null,
     ...overrides,
   };
 }

@@ -23,6 +23,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageLayout } from "@/components/page-layout";
+import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,6 +65,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
 import { shouldShowMcpCardChatButton } from "../_parts/chat-button-visibility";
+import { ConfigurationTab } from "../_parts/configuration-tab";
 import { DeleteCatalogDialog } from "../_parts/delete-catalog-dialog";
 import {
   computeDeploymentStatusSummary,
@@ -82,6 +84,7 @@ import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 
 type DetailTab =
   | "overview"
+  | "configuration"
   | "usage"
   | "credentials"
   | "logs"
@@ -270,14 +273,15 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   );
   // Diagnostics need at least one install to read from.
   const diagnosticTabs = allInstalls.length > 0 ? diagnosticPanels : [];
-  // Credentials get their own tab for every non-builtin server (built-ins need
-  // none), mirroring the old settings dialog's Connections nav item.
+  // Remote servers manage credentials; local servers manage hosted
+  // installations. Built-ins need neither.
   const showConnectionsTab = variant !== "builtin";
 
   // Every tab beyond the always-present Overview dashboard. Usage is always
   // present: "nothing uses this yet" is itself an answer, and it keeps the
   // ?tab=usage deep link from the registry card's hover card always resolvable.
   const tabIds: DetailTab[] = [
+    "configuration",
     "usage",
     ...(showConnectionsTab ? (["credentials"] as DetailTab[]) : []),
     ...diagnosticTabs.map((panel) => panel.id),
@@ -312,6 +316,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
 
   const tabs: { label: React.ReactNode; href: string; testId?: string }[] = [
     { label: "Overview", href: tabHref("overview") },
+    { label: "Configuration", href: tabHref("configuration") },
     {
       label: <TabLabel title="Usage" count={agentUsageCount} />,
       href: tabHref("usage"),
@@ -319,7 +324,12 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     ...(showConnectionsTab
       ? [
           {
-            label: <TabLabel title="Credentials" count={connectionsCount} />,
+            label: (
+              <TabLabel
+                title={variant === "local" ? "Installations" : "Credentials"}
+                count={connectionsCount}
+              />
+            ),
             href: tabHref("credentials"),
             testId: E2eTestId.McpServerSettingsConnectionsNavButton,
           },
@@ -372,10 +382,10 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     variant === "local"
       ? deploymentSummary
         ? `${deploymentSummary.running}/${deploymentSummary.total} ${getDeploymentLabel(deploymentSummary.overallState).toLowerCase()}`
-        : "Not installed"
+        : "Not connected"
       : connectionsCount > 0
         ? "Connected"
-        : "Not installed";
+        : "Not connected";
 
   const endpoint =
     variant === "remote"
@@ -410,7 +420,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
           {!hasPersonalConnection && variant !== "builtin" && (
             <Button variant="outline" onClick={openInstall}>
               <PlugZap className="h-4 w-4" />
-              Install
+              Connect
             </Button>
           )}
           {showChatButton && (
@@ -489,6 +499,10 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
       <div className="space-y-4">
         {effectiveTab === "usage" && (
           <McpServerUsageTab serversForCatalog={allServersForCatalog} />
+        )}
+
+        {effectiveTab === "configuration" && (
+          <ConfigurationTab item={item} canModify={canModify} />
         )}
 
         {effectiveTab === "overview" && (
@@ -594,6 +608,22 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
                       {environmentLabel ?? defaultEnvironment.name}
                     </OverviewField>
                   )}
+                  <OverviewField label="Accessible to">
+                    {/*
+                      `showSelfAsMe` because this is a labelled field rather
+                      than one badge among many in a list: the viewer's own
+                      personal server must still say "Me" instead of leaving
+                      the field blank.
+                    */}
+                    <ResourceVisibilityBadge
+                      scope={item.scope}
+                      teams={item.teams}
+                      authorId={item.authorId}
+                      authorName={item.authorName}
+                      currentUserId={currentUserId}
+                      showSelfAsMe
+                    />
+                  </OverviewField>
                   {endpoint && (
                     <OverviewField
                       label={variant === "remote" ? "Server URL" : "Command"}
@@ -630,7 +660,9 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
         {effectiveTab === "credentials" && showConnectionsTab && (
           <Card>
             <CardHeader>
-              <h2 className="text-base font-semibold">Credentials</h2>
+              <h2 className="text-base font-semibold">
+                {variant === "local" ? "Installations" : "Credentials"}
+              </h2>
             </CardHeader>
             <CardContent>
               <ManageUsersContent
@@ -648,6 +680,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
                 deploymentStatuses={deploymentStatuses}
                 hideHeader
                 bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
+                isInstalling={install.installingItemId === item.id}
                 onOpenPodLogs={variant === "local" ? openPodLogs : undefined}
               />
             </CardContent>

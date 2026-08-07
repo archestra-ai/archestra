@@ -58,14 +58,14 @@ export function McpServerPillShell({
 }: McpServerPillShellProps) {
   return (
     <Popover open={open} onOpenChange={onOpenChange} modal>
-      <div className="flex items-center">
+      <div className="flex max-w-full min-w-0 items-center">
         <PopoverTrigger asChild>
           <Button
             type="button"
             variant="outline"
             size="sm"
             className={cn(
-              "h-8 px-3 gap-1.5 text-xs",
+              "h-8 min-w-0 max-w-full flex-1 gap-1.5 px-3 text-xs",
               isEmpty && "border-dashed opacity-50",
               isEmpty && "rounded-r-none border-r-0",
               highlighted && "border-primary opacity-100",
@@ -73,8 +73,8 @@ export function McpServerPillShell({
             data-testid={triggerTestId}
           >
             {icon}
-            <span className="font-medium">{displayName}</span>
-            <span className="text-muted-foreground">({count})</span>
+            <span className="min-w-0 truncate font-medium">{displayName}</span>
+            <span className="shrink-0 text-muted-foreground">({count})</span>
             {note ? (
               <span className="shrink-0 font-normal text-muted-foreground">
                 {note}
@@ -100,18 +100,18 @@ export function McpServerPillShell({
         )}
       </div>
       <PopoverContent
-        className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
+        className="flex max-h-[min(500px,var(--radix-popover-content-available-height))] w-[420px] max-w-[calc(100vw-2rem)] min-w-0 flex-col overflow-hidden p-0"
         side="bottom"
         align="start"
         sideOffset={8}
         avoidCollisions
         collisionPadding={16}
       >
-        <div className="p-4 border-b flex items-start justify-between gap-2 shrink-0">
-          <div>
-            <h4 className="font-semibold">{displayName}</h4>
+        <div className="flex min-w-0 shrink-0 items-start justify-between gap-2 border-b p-4">
+          <div className="min-w-0 flex-1">
+            <h4 className="truncate font-semibold">{displayName}</h4>
             {description && (
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="mt-1 [overflow-wrap:anywhere] text-sm text-muted-foreground">
                 {description}
                 {docsUrl ? (
                   <>

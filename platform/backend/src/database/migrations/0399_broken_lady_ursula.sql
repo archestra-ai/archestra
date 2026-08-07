@@ -1,0 +1,1 @@
+ALTER TABLE "interactions" ADD COLUMN "request_last_message_hash" varchar;

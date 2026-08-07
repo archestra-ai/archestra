@@ -9,12 +9,12 @@ import {
   ChartColumn,
   ChevronDown,
   ChevronUp,
+  History,
   Info,
   MessageSquare,
   Pencil,
   Plus,
   RefreshCw,
-  RotateCcw,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -24,6 +24,10 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
+import {
+  PERMANENT_DELETE_LABEL,
+  permanentDeleteRowAction,
+} from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
@@ -57,18 +61,21 @@ import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
   useDeleteSkill,
-  useResetSkill,
+  usePermanentlyDeleteSkill,
   useRestoreSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
+import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { withOpenEditRewritten } from "./_parts/editor-url";
 import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
 import { SkillUsageDialog } from "./_parts/skill-usage-dialog";
+import { SkillVersionHistoryDialog } from "./_parts/skill-version-history-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
 
@@ -140,6 +147,7 @@ function SkillsList() {
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
   const restoreSkill = useRestoreSkill();
+  const admin = useIsGlobalAdmin();
 
   const setSourceRepoFilter = useCallback(
     (value: string) => {
@@ -197,7 +205,9 @@ function SkillsList() {
   });
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
-  const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
+  const [permanentlyDeletingSkill, setPermanentlyDeletingSkill] =
+    useState<SkillItem | null>(null);
+  const [historySkillId, setHistorySkillId] = useState<string | null>(null);
   const [usageSkill, setUsageSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -351,6 +361,7 @@ function SkillsList() {
           authorId={row.original.authorId}
           authorName={row.original.authorName}
           currentUserId={currentUserId}
+          showSelfAsMe
         />
       ),
     },
@@ -425,7 +436,6 @@ function SkillsList() {
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const skill = row.original;
-        const isBuiltIn = skill.sourceType === "built_in";
         // A soft-deleted skill can only be restored; edit/chat/usage/delete all
         // act on active rows and would 404.
         const actions: TableRowAction[] = isDeletedView
@@ -436,6 +446,17 @@ function SkillsList() {
                 permissions: { skill: ["delete"] },
                 onClick: () => restoreSkill.mutate(skill.id),
               },
+              permanentDeleteRowAction({
+                admin,
+                onClick: () => setPermanentlyDeletingSkill(skill),
+                // A built-in's deleted row IS the opt-out: it is what stops the
+                // startup seeder recreating the skill, so the API refuses to
+                // destroy it and deleting it already removed it for good.
+                disabledReason:
+                  skill.sourceType === "built_in"
+                    ? "A deleted built-in skill is already gone for good; its record is what stops it coming back on the next restart"
+                    : undefined,
+              }),
             ]
           : [
               {
@@ -456,16 +477,12 @@ function SkillsList() {
                 permissions: { skill: ["read"] },
                 onClick: () => setUsageSkill(skill),
               },
-              ...(isBuiltIn
-                ? [
-                    {
-                      icon: <RotateCcw className="h-4 w-4" />,
-                      label: "Reset to default",
-                      permissions: { skill: ["update"] },
-                      onClick: () => setResettingSkill(skill),
-                    } satisfies TableRowAction,
-                  ]
-                : []),
+              {
+                icon: <History className="h-4 w-4" />,
+                label: "Version history",
+                permissions: { skill: ["read"] },
+                onClick: () => setHistorySkillId(skill.id),
+              },
               {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete",
@@ -618,11 +635,19 @@ function SkillsList() {
         />
       )}
 
-      {resettingSkill && (
-        <ResetSkillDialog
-          skill={resettingSkill}
-          open={!!resettingSkill}
-          onOpenChange={(open) => !open && setResettingSkill(null)}
+      {permanentlyDeletingSkill && (
+        <PermanentlyDeleteSkillDialog
+          skill={permanentlyDeletingSkill}
+          open={!!permanentlyDeletingSkill}
+          onOpenChange={(open) => !open && setPermanentlyDeletingSkill(null)}
+        />
+      )}
+
+      {historySkillId && (
+        <SkillVersionHistoryDialog
+          skillId={historySkillId}
+          open={!!historySkillId}
+          onOpenChange={(open) => !open && setHistorySkillId(null)}
         />
       )}
 
@@ -653,18 +678,6 @@ function SortIcon({ isSorted }: { isSorted: "asc" | "desc" | false }) {
       <span className="mt-[-4px]">{downArrow}</span>
     </div>
   );
-}
-
-/** Extract `owner/repo` from a `source_ref` shaped like `owner/repo@ref:path`. */
-function parseRepoFromSourceRef(sourceRef: string | null): string | null {
-  if (!sourceRef) return null;
-  // Built-in skills carry an internal `builtin:<id>` ref (e.g.
-  // `builtin:archestra-platform-operations`); it is an identity token, not a
-  // source repo, and would leak the unbranded "archestra" id into the UI. The
-  // app-name badge already marks these as built-in, so show nothing here.
-  if (sourceRef.startsWith("builtin:")) return null;
-  const atIdx = sourceRef.indexOf("@");
-  return atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
 }
 
 function SkillsEmptyState() {
@@ -724,7 +737,7 @@ function DeleteSkillDialog({
   );
 }
 
-function ResetSkillDialog({
+function PermanentlyDeleteSkillDialog({
   skill,
   open,
   onOpenChange,
@@ -733,26 +746,24 @@ function ResetSkillDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const resetSkill = useResetSkill();
-  const appName = useAppName();
+  const permanentlyDeleteSkill = usePermanentlyDeleteSkill();
 
-  const handleReset = useCallback(async () => {
-    const result = await resetSkill.mutateAsync(skill.id);
+  const handleDelete = useCallback(async () => {
+    const result = await permanentlyDeleteSkill.mutateAsync(skill.id);
     if (result) {
       onOpenChange(false);
     }
-  }, [skill.id, resetSkill, onOpenChange]);
+  }, [skill.id, permanentlyDeleteSkill, onOpenChange]);
 
   return (
     <DeleteConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Reset Skill"
-      description={`Reset "${skill.name}" to the version ${appName} ships? Any local edits to its instructions and resource files will be overwritten.`}
-      isPending={resetSkill.isPending}
-      onConfirm={handleReset}
-      confirmLabel="Reset to default"
-      pendingLabel="Resetting..."
+      title="Delete skill permanently"
+      description={`This destroys "${skill.name}" along with every version and resource file, its grants and environment assignments, and any public share link for it. Nothing recovers it.`}
+      isPending={permanentlyDeleteSkill.isPending}
+      onConfirm={handleDelete}
+      confirmLabel={PERMANENT_DELETE_LABEL}
     />
   );
 }

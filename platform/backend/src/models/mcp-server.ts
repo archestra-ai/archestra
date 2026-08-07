@@ -305,6 +305,7 @@ class McpServerModel {
     isMcpServerAdmin?: boolean,
     organizationId?: string,
     environmentId?: string | null,
+    isPredefinedAdmin?: boolean,
   ): Promise<McpServer[]> {
     // Single query with LEFT JOINs for all related data including assigned users,
     // eliminating the consecutive DB query for user details.
@@ -352,6 +353,16 @@ class McpServerModel {
       notDeleted(schema.mcpServersTable),
     ];
 
+    if (organizationId) {
+      const catalogBelongsToOrganization = or(
+        isNull(schema.internalMcpCatalogTable.organizationId),
+        eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+      );
+      if (catalogBelongsToOrganization) {
+        conditions.push(catalogBelongsToOrganization);
+      }
+    }
+
     if (environmentId !== undefined) {
       // A server inherits its environment from the joined catalog row; the LEFT
       // JOIN leaves that NULL for catalog-less rows, which `is not distinct
@@ -359,8 +370,15 @@ class McpServerModel {
       conditions.push(catalogInEnvironmentPredicate(environmentId));
     }
 
-    // Apply access control filtering for non-MCP server admins
-    if (userId && !isMcpServerAdmin) {
+    // Only the predefined Admin role may see another user's personal
+    // connection. Installation admins still manage every shared installation.
+    if (userId && !isPredefinedAdmin && isMcpServerAdmin) {
+      const sharedOrOwnedInstall = or(
+        ne(schema.mcpServersTable.scope, "personal"),
+        eq(schema.mcpServersTable.ownerId, userId),
+      );
+      if (sharedOrOwnedInstall) conditions.push(sharedOrOwnedInstall);
+    } else if (userId && !isPredefinedAdmin) {
       // Get MCP servers accessible through:
       // 1. Team membership (servers assigned to user's teams)
       // 2. Personal access (user's own servers)

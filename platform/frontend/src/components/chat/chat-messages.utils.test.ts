@@ -9,6 +9,7 @@ import type { PanelApp } from "./apps-context";
 import {
   collectBrowserToolCallIds,
   collectSubagentToolCalls,
+  deriveAppFilesRevisions,
   deriveAppsFromMessages,
   extractFileAttachments,
   extractOwnedAppRender,
@@ -1516,6 +1517,189 @@ describe("isBlankReasoningPart", () => {
 
   it("ignores non-reasoning parts", () => {
     expect(isBlankReasoningPart({ type: "text", text: "" })).toBe(false);
+  });
+});
+
+describe("deriveAppFilesRevisions", () => {
+  const APP_A = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+  const APP_B = "11111111-ea8e-48ed-8077-a3cc904d9d61";
+
+  let nextId = 0;
+  const userOpens = (appId: string): UIMessage =>
+    ({
+      id: `user-${nextId++}`,
+      role: "user",
+      metadata: { openedApp: { appId } },
+      parts: [{ type: "text", text: "hi" }],
+    }) as UIMessage;
+
+  const userPlain = (): UIMessage =>
+    ({
+      id: `user-${nextId++}`,
+      role: "user",
+      parts: [{ type: "text", text: "hi" }],
+    }) as UIMessage;
+
+  // Mirrors the REAL persisted chat part shape: the chat flattens tool outputs
+  // to a text `content` for the model (no structuredContent ever reaches the
+  // part), so the copy's direction is only observable on the call input.
+  const copyFilePart = (overrides: Record<string, unknown> = {}) => ({
+    type: "tool-archestra__copy_file",
+    toolCallId: `call-${nextId++}`,
+    state: "output-available",
+    input: {
+      from: { type: "chat_attachment", filename: "model.stl" },
+      to: { scope: "app" },
+    },
+    output: { _meta: {}, content: "Copied model.stl to the open app's files." },
+    ...overrides,
+  });
+
+  const assistant = (parts: unknown[]): UIMessage =>
+    ({ id: `assistant-${nextId++}`, role: "assistant", parts }) as UIMessage;
+
+  it("counts a delivered copy_file call into the app for the open app", () => {
+    const revisions = deriveAppFilesRevisions(
+      [userOpens(APP_A), assistant([copyFilePart()])],
+      getToolShortName,
+    );
+
+    expect(revisions.get(APP_A)).toBe(1);
+    expect(revisions.size).toBe(1);
+  });
+
+  it("accumulates qualifying copies for the same app across turns", () => {
+    const revisions = deriveAppFilesRevisions(
+      [
+        userOpens(APP_A),
+        assistant([copyFilePart()]),
+        userOpens(APP_A),
+        assistant([
+          // A dynamic-tool part identifies the tool via toolName instead of
+          // the type suffix; both shapes must count.
+          copyFilePart({
+            type: "dynamic-tool",
+            toolName: "archestra__copy_file",
+          }),
+        ]),
+      ],
+      getToolShortName,
+    );
+
+    expect(revisions.get(APP_A)).toBe(2);
+  });
+
+  it("ignores copies OUT of the app (to.scope chat) and inputs with no scope", () => {
+    const revisions = deriveAppFilesRevisions(
+      [
+        userOpens(APP_A),
+        assistant([
+          copyFilePart({
+            input: {
+              from: { type: "app_file", filename: "a.stl" },
+              to: { scope: "chat" },
+            },
+          }),
+          copyFilePart({ input: {} }),
+          copyFilePart({ input: undefined }),
+        ]),
+      ],
+      getToolShortName,
+    );
+
+    expect(revisions.size).toBe(0);
+  });
+
+  it("ignores parts that have not delivered a result yet", () => {
+    const revisions = deriveAppFilesRevisions(
+      [
+        userOpens(APP_A),
+        assistant([
+          copyFilePart({ state: "input-available", output: undefined }),
+        ]),
+      ],
+      getToolShortName,
+    );
+
+    expect(revisions.size).toBe(0);
+  });
+
+  it("ignores failed copies (errorText)", () => {
+    const revisions = deriveAppFilesRevisions(
+      [
+        userOpens(APP_A),
+        assistant([copyFilePart({ errorText: "copy failed" })]),
+      ],
+      getToolShortName,
+    );
+
+    expect(revisions.size).toBe(0);
+  });
+
+  it("ignores copies whose output carries an MCP tool error", () => {
+    const revisions = deriveAppFilesRevisions(
+      [
+        userOpens(APP_A),
+        assistant([
+          copyFilePart({
+            output: {
+              content: "refused",
+              structuredContent: {
+                archestraError: { type: "generic", message: "boom" },
+              },
+            },
+          }),
+        ]),
+      ],
+      getToolShortName,
+    );
+
+    expect(revisions.size).toBe(0);
+  });
+
+  it("ignores non-copy tools and copies before any app was opened", () => {
+    const revisions = deriveAppFilesRevisions(
+      [
+        // No openedApp yet — nothing to attribute this copy to.
+        userPlain(),
+        assistant([copyFilePart()]),
+        userOpens(APP_A),
+        assistant([copyFilePart({ type: "tool-google__search" })]),
+      ],
+      getToolShortName,
+    );
+
+    expect(revisions.size).toBe(0);
+  });
+
+  it("stops attributing once a later user message carries no openedApp", () => {
+    const revisions = deriveAppFilesRevisions(
+      [
+        userOpens(APP_A),
+        assistant([copyFilePart()]),
+        userPlain(),
+        assistant([copyFilePart()]),
+      ],
+      getToolShortName,
+    );
+
+    expect(revisions.get(APP_A)).toBe(1);
+    expect(revisions.size).toBe(1);
+  });
+
+  it("attributes copies to the newly opened app after a switch", () => {
+    const revisions = deriveAppFilesRevisions(
+      [
+        userOpens(APP_A),
+        assistant([copyFilePart()]),
+        userOpens(APP_B),
+        assistant([copyFilePart()]),
+      ],
+      getToolShortName,
+    );
+
+    expect(revisions.get(APP_A)).toBe(1);
+    expect(revisions.get(APP_B)).toBe(1);
   });
 });
 

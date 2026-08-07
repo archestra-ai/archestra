@@ -20,11 +20,20 @@ export const AuditEventNameSchema = z.enum([
   "agent.deleted",
   "agent.restored",
   "agent.imported",
+  // `.purged` = permanent deletion from the trash. Deliberately distinct from
+  // `.deleted` (which soft-deletes and is recoverable), and deliberately
+  // recorded with identity only — a purge record must not preserve a copy of
+  // the content the caller asked to destroy.
+  "agent.purged",
   "agentTool.created",
   "agentTool.updated",
   "agentTool.deleted",
   "agentTool.bulk_assigned",
   "agentTool.bulk_removed",
+  // One editor save applies adds and removals together, so it is neither a
+  // pure grant nor a pure revocation — `.bulk_updated` covers the combined
+  // operation that `/api/agents/tools/bulk-update` performs.
+  "agentTool.bulk_updated",
   "apiKey.created",
   "apiKey.deleted",
   "app.created",
@@ -38,6 +47,8 @@ export const AuditEventNameSchema = z.enum([
   "connector.created",
   "connector.updated",
   "connector.deleted",
+  "connector.restored",
+  "connector.purged",
   "connector.permission_sync_triggered",
   "connector.synced",
   "defaultUserLimit.created",
@@ -65,6 +76,8 @@ export const AuditEventNameSchema = z.enum([
   "knowledgeBase.created",
   "knowledgeBase.updated",
   "knowledgeBase.deleted",
+  "knowledgeBase.restored",
+  "knowledgeBase.purged",
   "limit.created",
   "limit.updated",
   "limit.deleted",
@@ -102,6 +115,7 @@ export const AuditEventNameSchema = z.enum([
   "project.updated",
   "project.deleted",
   "project.restored",
+  "project.purged",
   "role.created",
   "role.updated",
   "role.deleted",
@@ -116,6 +130,7 @@ export const AuditEventNameSchema = z.enum([
   "skill.updated",
   "skill.deleted",
   "skill.restored",
+  "skill.purged",
   "skill.imported",
   "team.created",
   "team.updated",

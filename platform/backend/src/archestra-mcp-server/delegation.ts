@@ -1,8 +1,14 @@
-import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
+import {
+  ADVISOR_DELEGATION_GUIDANCE,
+  AGENT_TOOL_PREFIX,
+  BUILT_IN_AGENT_IDS,
+  slugify,
+} from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
@@ -12,6 +18,7 @@ import {
   ToolModel,
 } from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
+import type { Agent } from "@/types";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -428,13 +435,25 @@ function noDelegationConfiguredError(targetAgentSlug: string): CallToolResult {
 
 function buildDelegationToolDescriptor(params: {
   name: string;
-  targetAgent: { id: string; name: string; description?: string | null };
+  targetAgent: {
+    id: string;
+    name: string;
+    description?: string | null;
+    builtInAgentConfig?: Agent["builtInAgentConfig"];
+  };
   inputSchema: Tool["inputSchema"];
 }): Tool {
   const { name, targetAgent, inputSchema } = params;
-  const description = targetAgent.description
-    ? `Delegate task to agent: ${targetAgent.name}. ${targetAgent.description.substring(0, 400)}`
-    : `Delegate task to agent: ${targetAgent.name}`;
+  // The advisor answers with shipped guidance rather than the administrator's
+  // description: that field is a one-line summary written for a person, while
+  // the calling model needs the cases where consulting pays for itself. Being
+  // ours, it is not truncated the way a user-authored description is.
+  const description =
+    targetAgent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
+      ? archestraMcpBranding.brandBuiltInText(ADVISOR_DELEGATION_GUIDANCE)
+      : targetAgent.description
+        ? `Delegate task to agent: ${targetAgent.name}. ${targetAgent.description.substring(0, 400)}`
+        : `Delegate task to agent: ${targetAgent.name}`;
 
   return {
     name,

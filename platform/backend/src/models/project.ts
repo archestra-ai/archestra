@@ -11,10 +11,14 @@ import {
   sql,
 } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { restore as restoreRows, softDelete } from "@/database/soft-delete";
+import {
+  hardDelete,
+  restore as restoreRows,
+  softDelete,
+} from "@/database/soft-delete";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
 import ProjectShareModel from "./project-share";
 
@@ -187,8 +191,10 @@ class ProjectModel {
 
   /**
    * Update the owner-editable fields. Only the keys present in `fields` are
-   * written, so a caller can change name, description, and/or icon
-   * independently. A duplicate name surfaces as {@link ProjectNameExistsError}.
+   * written, so a caller can change name, description, icon, and/or the default
+   * agent independently. A duplicate name surfaces as {@link ProjectNameExistsError}.
+   *
+   * `defaultAgentId` is validated by the service before it reaches here.
    */
   static async update(params: {
     id: string;
@@ -196,6 +202,7 @@ class ProjectModel {
       name?: string;
       description?: string | null;
       icon?: string | null;
+      defaultAgentId?: string | null;
     };
   }): Promise<void> {
     try {
@@ -214,6 +221,21 @@ class ProjectModel {
       }
       throw error;
     }
+  }
+
+  /**
+   * Unpin an agent from every project that named it as their default.
+   *
+   * Agents soft-delete, so the column's `ON DELETE SET NULL` never fires and
+   * the pin would outlive the agent — invisible on reads, but restoring the
+   * agent would silently re-pin those projects. Deliberately includes
+   * soft-deleted projects, whose pins would come back with them.
+   */
+  static async clearDefaultAgent(agentId: string): Promise<void> {
+    await db
+      .update(schema.projectsTable)
+      .set({ defaultAgentId: null, updatedAt: new Date() })
+      .where(eq(schema.projectsTable.defaultAgentId, agentId));
   }
 
   /**
@@ -342,6 +364,73 @@ class ProjectModel {
           isNotNull(schema.projectsTable.deletedAt),
         ),
       );
+    return row ?? null;
+  }
+
+  /**
+   * Take a row lock on a SOFT-DELETED project, or return null if there isn't
+   * one. This is what makes restore win a race with permanent deletion: a
+   * concurrent restore either commits first, in which case `deleted_at` is
+   * already NULL and this finds nothing, or it blocks on the lock until the
+   * purge commits and then finds no row at all. Either way exactly one of the
+   * two takes effect, and the caller answers 404.
+   *
+   * Runs on the caller's transaction so the lock, the byte capture, and the
+   * delete are one unit — a lock released before the delete would be no lock.
+   */
+  static async lockIfDeleted(
+    tx: Transaction,
+    params: { id: string; organizationId: string },
+  ): Promise<{ id: string } | null> {
+    const [row] = await tx
+      .select({ id: schema.projectsTable.id })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.id, params.id),
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          isNotNull(schema.projectsTable.deletedAt),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Physically delete a project already locked by {@link lockIfDeleted}. The
+   * cascade takes its files, pins, share config, and scheduled tasks (with
+   * their runs); its chats detached at soft-delete time and are unaffected.
+   * Externally-stored file bytes are NOT covered — capture them before this
+   * runs and delete them after it (see `fileStore.captureProjectFileBytes`).
+   */
+  static async hardDeleteLocked(tx: Transaction, id: string): Promise<void> {
+    await hardDelete(tx, schema.projectsTable, eq(schema.projectsTable.id, id));
+  }
+
+  /**
+   * Identity of a project for the audit trail, and nothing else. The
+   * permanent-delete route uses this rather than {@link findByIdForAudit}: a
+   * purge is audited by identity only, never by keeping a copy of what it
+   * destroyed. Soft-deleted rows are included — the purge target is always one.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.projectsTable.id,
+        name: schema.projectsTable.name,
+      })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.id, id),
+          eq(schema.projectsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
     return row ?? null;
   }
 

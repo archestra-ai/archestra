@@ -66,8 +66,8 @@ import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import {
+  dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
-  dropMessagesContentTrgmIndexUnderEncryption,
 } from "@/database/index-maintenance";
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -83,6 +83,10 @@ import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
+import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { rumExporter } from "@/observability/rum/exporter.ee";
+import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -1305,6 +1309,8 @@ const startWebServer = async () => {
       logger.warn({ err: error }, "Failed to track instance analytics");
     });
 
+    rumExporter.initialize();
+
     posthogErrorTrackingService.init().catch((error) => {
       logger.warn(
         { err: error },
@@ -1361,7 +1367,7 @@ const startWebServer = async () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      void dropMessagesContentTrgmIndexUnderEncryption();
+      void dropContentTrgmIndexesUnderEncryption();
       // SPDX-SnippetEnd
     }
 
@@ -1475,8 +1481,12 @@ const startWebServer = async () => {
     await registerSwaggerPlugin(fastify);
 
     // Register routes
-    fastify.get("/openapi.json", async () =>
-      enrichOpenApiWithRbac(fastify.swagger()),
+    fastify.get(
+      "/openapi.json",
+      createCachedOpenApiRouteHandler({
+        buildDocument: () => enrichOpenApiWithRbac(fastify.swagger()),
+        getCacheKey: () => JSON.stringify(archestraMcpBranding.identity),
+      }),
     );
 
     if (enableE2eTestEndpoints) {
@@ -1490,6 +1500,10 @@ const startWebServer = async () => {
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
+
+    // If the previous container instance died abnormally (e.g. OOMKilled),
+    // it could not report its own death — surface it now. Fire-and-forget.
+    void reportAbnormalPreviousTermination();
 
     // Optional dedicated listener aliasing the MS Teams webhook on its own
     // port (see startPublicEndpointsServer).
@@ -1616,6 +1630,9 @@ function registerWebServerShutdown(
 
       instanceAnalyticsService.stop();
 
+      // Flush any buffered RUM events before the process exits.
+      await rumExporter.shutdown();
+
       metrics.activeUsers.activeUsersMetricCollector.stop();
 
       const completedCleanups = new Set<
@@ -1722,7 +1739,7 @@ const startWorker = async () => {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    void dropMessagesContentTrgmIndexUnderEncryption();
+    void dropContentTrgmIndexesUnderEncryption();
     // SPDX-SnippetEnd
 
     posthogErrorTrackingService.init().catch((error) => {

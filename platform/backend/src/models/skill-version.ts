@@ -60,6 +60,8 @@ class SkillVersionModel {
       content: string;
       contentHash: string;
       files: VersionFileInput[];
+      /** Commit these bytes were pulled from; only GitHub import/sync sets it. */
+      sourceCommit?: string | null;
     },
   ): Promise<SkillVersion> {
     const [version] = await tx
@@ -69,6 +71,7 @@ class SkillVersionModel {
         version: params.version,
         content: params.content,
         contentHash: params.contentHash,
+        sourceCommit: params.sourceCommit ?? null,
       })
       .returning();
     if (!version) {
@@ -184,6 +187,34 @@ class SkillVersionModel {
       .where(eq(schema.skillVersionFilesTable.versionId, versionId))
       .orderBy(asc(schema.skillVersionFilesTable.path));
   }
+
+  /**
+   * Whether any sandbox still mounts a version of this skill.
+   *
+   * `skill_sandbox_skill_mounts.skill_version_id` is `ON DELETE RESTRICT`, so
+   * this is exactly the set of rows that would refuse a permanent delete of the
+   * skill's versions. Matched through the version ids rather than the mount's
+   * denormalized `skill_id` so the check tests the constraint that actually
+   * fires, not a copy of the identity beside it.
+   *
+   * Advisory only: a mount can be created between this check and the delete, so
+   * the caller must still map the resulting FK violation to the same 409.
+   */
+  static async hasSandboxMountsForSkill(skillId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.skillSandboxSkillMountsTable.id })
+      .from(schema.skillSandboxSkillMountsTable)
+      .innerJoin(
+        schema.skillVersionsTable,
+        eq(
+          schema.skillSandboxSkillMountsTable.skillVersionId,
+          schema.skillVersionsTable.id,
+        ),
+      )
+      .where(eq(schema.skillVersionsTable.skillId, skillId))
+      .limit(1);
+    return row !== undefined;
+  }
 }
 
 export default SkillVersionModel;
@@ -196,5 +227,6 @@ const skillVersionMetadataColumns = {
   skillId: schema.skillVersionsTable.skillId,
   version: schema.skillVersionsTable.version,
   contentHash: schema.skillVersionsTable.contentHash,
+  sourceCommit: schema.skillVersionsTable.sourceCommit,
   createdAt: schema.skillVersionsTable.createdAt,
 };

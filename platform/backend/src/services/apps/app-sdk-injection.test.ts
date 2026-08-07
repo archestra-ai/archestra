@@ -7,6 +7,10 @@ import {
   TOOL_APP_DATA_LIST_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
+  TOOL_DELETE_FILE_SHORT_NAME,
+  TOOL_READ_FILE_RAW_SHORT_NAME,
+  TOOL_SAVE_FILE_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { buildPlatformCspContent } from "./app-sdk-injection";
@@ -77,6 +81,10 @@ describe("the Apps SDK static file", () => {
       TOOL_APP_DATA_LIST_SHORT_NAME,
       TOOL_APP_DATA_DELETE_SHORT_NAME,
       TOOL_APP_LLM_COMPLETE_SHORT_NAME,
+      TOOL_SEARCH_FILES_SHORT_NAME,
+      TOOL_READ_FILE_RAW_SHORT_NAME,
+      TOOL_SAVE_FILE_SHORT_NAME,
+      TOOL_DELETE_FILE_SHORT_NAME,
     ]) {
       expect(sdk).toContain(`"${ARCHESTRA_TOOL_PREFIX}${shortName}"`);
     }
@@ -100,6 +108,7 @@ describe("the Apps SDK static file", () => {
       "window.archestra",
       ...ARCHESTRA_APP_SDK_SURFACE.storage.partitions,
       ...ARCHESTRA_APP_SDK_SURFACE.storage.methods,
+      ...ARCHESTRA_APP_SDK_SURFACE.files,
       ...ARCHESTRA_APP_SDK_SURFACE.tools,
       ...ARCHESTRA_APP_SDK_SURFACE.llm,
       ...ARCHESTRA_APP_SDK_SURFACE.ui,

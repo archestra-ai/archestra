@@ -50,6 +50,7 @@ import {
 import { ChatMessages } from "@/components/chat/chat-messages";
 import {
   collectBrowserToolCallIds,
+  deriveAppFilesRevisions,
   openedAppMetadataFromApps,
 } from "@/components/chat/chat-messages.utils";
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
@@ -183,9 +184,10 @@ import {
   useAvailableLlmProviderApiKeys,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
-import { useProjectFiles } from "@/lib/projects/projects.query";
+import { useProject, useProjectFiles } from "@/lib/projects/projects.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -428,6 +430,13 @@ export function ChatPageContent({
   // for a new chat ("member" level).
   const { data: memberDefault } = useMemberDefaultModel();
 
+  // A new chat started from a project (`/chat?project=<id>`) takes the
+  // project's pinned agent. `isPending` stays true while the query is disabled,
+  // so the loading gate only applies when there is a project to wait for.
+  const newChatProjectId = searchParams.get("project");
+  const { data: newChatProject, isPending: isNewChatProjectPending } =
+    useProject(newChatProjectId ?? undefined);
+
   // Shared new-chat initialization (agent/model/key resolution + persistence).
   const {
     agentId: initialAgentId,
@@ -448,9 +457,11 @@ export function ChatPageContent({
     chatApiKeys,
     memberDefault: memberDefault ?? null,
     urlAgentId: searchParams.get("agentId"),
+    projectDefaultAgentId: newChatProject?.defaultAgent?.id ?? null,
     canUseSavedAgent: canSeeAgentPicker === true,
     isPermissionResolving: isAgentPickerPermissionLoading,
     isOrgLoading,
+    isProjectLoading: !!newChatProjectId && isNewChatProjectPending,
     routeConversationId,
   });
 
@@ -1283,6 +1294,23 @@ export function ChatPageContent({
     earlyToolUiStarts: chatSession?.earlyToolUiStarts ?? {},
     filterDeleted: true,
   });
+  // Count of agent copies into each open app's file store, recomputed as tool
+  // results stream in; a bump makes the mounted app runtime nudge the running
+  // app to re-list (no manual refresh to see a file the agent just copied in).
+  const { getToolShortName } = useArchestraMcpIdentity();
+  const appFilesRevisions = useMemo(
+    () => deriveAppFilesRevisions(messages, getToolShortName),
+    [messages, getToolShortName],
+  );
+  // Latest ui/update-model-context report per app ("showing file X"), stamped
+  // onto outgoing message metadata at send time so the backend can tell the
+  // model what the open app is displaying. A ref, not state: an app can
+  // report on every file it reads, and the only reader is the send path —
+  // re-rendering the whole chat page per report would be pure waste.
+  const appModelContextsRef = useRef<Map<string, string>>(new Map());
+  const handleAppModelContext = useCallback((appId: string, text: string) => {
+    appModelContextsRef.current.set(appId, text);
+  }, []);
   // The owned apps this conversation renders. Sharing a chat does not share
   // them, so the share dialog uses this to warn when recipients won't be able
   // to open one.
@@ -2004,6 +2032,12 @@ export function ChatPageContent({
     // Attach-once: captured app render diagnostics ride this message's
     // metadata and the store is drained — a regenerate never re-attaches.
     const appDiagnostics = drainAppDiagnostics();
+    // The open app's latest display report (owned apps only) rides along,
+    // read from the ref at send time so "this file" resolves for the model.
+    const openedAppModelContext =
+      openedAppMetadata && "appId" in openedAppMetadata
+        ? appModelContextsRef.current.get(openedAppMetadata.appId)
+        : undefined;
     sendMessage?.({
       role: "user",
       parts: ensureNonEmptyParts(parts),
@@ -2012,7 +2046,13 @@ export function ChatPageContent({
         ...(skillToAttach ? { skill: skillToAttach } : {}),
         ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
-        ...(openedAppMetadata ? { openedApp: openedAppMetadata } : {}),
+        ...(openedAppMetadata
+          ? {
+              openedApp: openedAppModelContext
+                ? { ...openedAppMetadata, modelContext: openedAppModelContext }
+                : openedAppMetadata,
+            }
+          : {}),
       },
     });
     // Mark the turn as in flight synchronously so follow-up submits queue
@@ -2810,6 +2850,8 @@ export function ChatPageContent({
       apps={mcpApps}
       onShowInPanel={() => openRightPanelTab("apps" as RightPanelTab)}
       onClosePanel={closeRightPanel}
+      appFilesRevisions={appFilesRevisions}
+      onAppModelContext={handleAppModelContext}
     >
       <div className="flex flex-col h-full w-full min-h-0">
         <ChatStatusAnnouncer status={status} />

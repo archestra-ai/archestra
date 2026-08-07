@@ -139,7 +139,7 @@ If none of the authentication environment variables are configured, traces will 
 
 ### Content Capture
 
-Archestra can capture prompt/completion content and tool call arguments/results as span events for full audit trail visibility. This is enabled by default and can be disabled via the `ARCHESTRA_OTEL_CAPTURE_CONTENT` [environment variable](/docs/platform-deployment#observability--metrics). When [content encryption at rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) is configured, capture defaults to **off** instead — encrypted database content should not leave for the telemetry backend in plaintext — and only an explicit `ARCHESTRA_OTEL_CAPTURE_CONTENT=true` re-enables it (with a startup warning).
+Archestra can capture prompt/completion content and tool call arguments/results as span events for full audit trail visibility. This is enabled by default and can be disabled via the `ARCHESTRA_OTEL_CAPTURE_CONTENT` [environment variable](/docs/platform-deployment#observability--metrics). When [content encryption at rest](/docs/platform-content-encryption) is configured, capture defaults to **off** instead — encrypted database content should not leave for the telemetry backend in plaintext — and only an explicit `ARCHESTRA_OTEL_CAPTURE_CONTENT=true` re-enables it (with a startup warning).
 
 When enabled, traces include:
 
@@ -326,6 +326,51 @@ Labels are key-value pairs that can be configured when creating or updating agen
 
 - **Metrics** - As additional label dimensions on all LLM and MCP metrics. Use them to drill down into charts. _Note that `kebab-case` labels will be converted to `snake_case` here because of Prometheus naming rules._
 - **Traces** - As `archestra.agent.label.<key>` span attributes. Use them to filter traces.
+
+## Real User Monitoring
+
+Archestra can export product-usage telemetry from the web UI — how much your users engage with the platform, not what your infrastructure does. Events go to your own OTLP-compatible collector, so you can build usage dashboards in the observability stack you already run (Splunk Observability or Grafana, for example). Real User Monitoring is an [Enterprise feature](/docs/platform-pricing-model) and requires an active enterprise license.
+
+![RUM events queried by event name in Grafana Explore, backed by Loki](/docs/automated_screenshots/platform-observability_rum-events-explore.webp)
+
+### RUM Configuration
+
+Set the collector endpoint to turn the feature on:
+
+```bash
+ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
+```
+
+The `/v1/logs` path is appended automatically. Authentication works like [trace export](#authentication), with `ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_*` variables. This pipeline is separate from trace export — you can send usage events to a different collector, with different credentials.
+
+For high-traffic deployments, `ARCHESTRA_RUM_SAMPLE_RATE` records a fraction of sessions — whole sessions, so funnels stay coherent, and client errors are always reported. Export batches are gzip-compressed.
+
+Restart the backend after changing these variables. On startup it logs `RUM export pipeline initialized`. To verify end to end, sign in and open a few pages — events arrive at your collector under the service name `Archestra Web`. In Grafana with Loki, for example, query `{service_name="Archestra Web"}` and filter on structured metadata like `| event_name="archestra.page_view"`.
+
+### How It Works
+
+The browser batches events and posts them to the Archestra backend on the same origin. The backend forwards them to your collector as OTLP log records. Your collector credentials stay server-side, and browsers never talk to the collector directly — no CORS or ad-blocker concerns. Ingestion is rate-limited per user, so a runaway client cannot flood your collector.
+
+### What's Captured
+
+Each event is an OTLP log record with an `event.name`, a `session.id`, and the user's opaque id (`user.id`). Sessions rotate after 30 minutes of inactivity.
+
+- **`session.start`** - A user began a session
+- **`archestra.session.heartbeat`** - Emitted once a minute while the tab is visible. Aggregate these for time spent.
+- **`archestra.page_view`** - A navigation, with the route pattern as `url.path`. Ids are collapsed to `:id`, so views aggregate by page.
+- **`browser.web_vital`** - A Core Web Vital (LCP, CLS, INP, FCP, TTFB) with its value and rating
+- **`archestra.page_load`** - Document load timing: time to first byte, DOM ready, and full load
+- **`archestra.long_task`** - A main-thread task over 50 ms, with its duration
+- **`archestra.client_error`** - An uncaught error: its type and a grouping fingerprint, never the message or stack. Repeats of the same error report at most once per second.
+- **`archestra.api_request`** - A same-origin API call: method, normalized path, status code, and duration
+- **`archestra.interaction`** - An auto-captured DOM interaction (click, submit, key press): the event type and a structural target, never element text or key values
+- **`archestra.*` product events** - Feature usage, such as `archestra.message_sent` or `archestra.mcp_server_installed`
+
+The event list is a closed allowlist, and so are the attributes each event may carry. Performance coverage stops at the measurements above — no browser or device details, no error messages or stack traces, and no third-party or static-resource network data. Events never contain chat content, emails, names, raw URLs, or entity ids — user identity is the opaque `user.id`, which you can join to your IdP on your side.
+
+### Example: Sessions per Day in Splunk
+
+Ingest the OTLP logs with your OpenTelemetry Collector and export them to your Splunk index. Counting `session.start` events by day gives daily sessions; summing `archestra.session.heartbeat` events gives minutes of active use per user.
 
 ## Grafana Dashboards
 

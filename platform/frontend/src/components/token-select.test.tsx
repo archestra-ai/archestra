@@ -5,52 +5,17 @@ import {
   TokenSelect,
 } from "@/components/token-select";
 
-const { useMcpServersGroupedByCatalogMock, selectState, confirmDialogSpy } =
-  vi.hoisted(() => ({
-    useMcpServersGroupedByCatalogMock: vi.fn(),
-    // Captures the mocked Select's onValueChange so a SelectItem "click" can
-    // drive it (the real Radix Select can't be exercised in jsdom).
-    selectState: {
-      onValueChange: undefined as ((v: string) => void) | undefined,
-    },
-    confirmDialogSpy: vi.fn(),
-  }));
+const { useMcpServersGroupedByCatalogMock, selectState } = vi.hoisted(() => ({
+  useMcpServersGroupedByCatalogMock: vi.fn(),
+  // Captures the mocked Select's onValueChange so a SelectItem "click" can
+  // drive it (the real Radix Select can't be exercised in jsdom).
+  selectState: {
+    onValueChange: undefined as ((v: string) => void) | undefined,
+  },
+}));
 
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServersGroupedByCatalog: useMcpServersGroupedByCatalogMock,
-}));
-
-// TokenSelect reads the current user to label the selector's own connection in
-// the personal-pin confirmation.
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: () => ({ data: { user: { id: "current-user" } } }),
-}));
-
-// Stub the confirm dialog: record its props and, when open, expose confirm /
-// cancel buttons so the selection gate can be driven without the real dialog.
-vi.mock("@/components/static-credential-confirm-dialog", () => ({
-  StaticCredentialConfirmDialog: (props: {
-    open: boolean;
-    pins: Array<{
-      mcpName: string;
-      ownerEmail: string;
-      isCurrentUser: boolean;
-    }>;
-    onConfirm: () => void;
-    onCancel: () => void;
-  }) => {
-    confirmDialogSpy(props);
-    return props.open ? (
-      <div data-testid="confirm-dialog">
-        <button type="button" onClick={props.onConfirm}>
-          confirm-pin
-        </button>
-        <button type="button" onClick={props.onCancel}>
-          cancel-pin
-        </button>
-      </div>
-    ) : null;
-  },
 }));
 
 vi.mock("@/lib/utils", () => ({
@@ -114,15 +79,6 @@ const personalCred = {
   name: "Everything",
   teamDetails: null,
 };
-const ownPersonalCred = {
-  id: "own-cred",
-  ownerEmail: "me@example.com",
-  ownerId: "current-user",
-  scope: "personal",
-  catalogName: "Everything",
-  name: "Everything",
-  teamDetails: null,
-};
 const orgCred = {
   id: "org-cred",
   ownerEmail: "admin@example.com",
@@ -133,14 +89,8 @@ const orgCred = {
   teamDetails: null,
 };
 
-const lastPins = () =>
-  confirmDialogSpy.mock.calls.at(-1)?.[0]?.pins as
-    | Array<{ mcpName: string; ownerEmail: string; isCurrentUser: boolean }>
-    | undefined;
-
 describe("TokenSelect", () => {
   beforeEach(() => {
-    confirmDialogSpy.mockClear();
     selectState.onValueChange = undefined;
   });
 
@@ -162,7 +112,7 @@ describe("TokenSelect", () => {
     expect(onValueChange).toHaveBeenCalledWith(DYNAMIC_CREDENTIAL_VALUE);
   });
 
-  it("renders separate team, organization, and user static credential groups by scope", () => {
+  it("renders shared credentials but never personal connections", () => {
     const groupedCredentials = {
       "catalog-1": [
         {
@@ -181,6 +131,8 @@ describe("TokenSelect", () => {
           id: "user-credential",
           ownerEmail: "member@example.com",
           scope: "personal",
+          serverType: "local",
+          name: "personal-local-installation",
           teamDetails: null,
         },
       ],
@@ -209,70 +161,22 @@ describe("TokenSelect", () => {
       screen.getByText("Shared with team Scope Repro Team"),
     ).toBeInTheDocument();
     expect(screen.getByText("Scope Repro Team")).toBeInTheDocument();
-    expect(screen.getByText("Static - User Credentials")).toBeInTheDocument();
-    expect(screen.getByText("member@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Owned by member@example.com")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Static - User Credentials"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("member@example.com")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("personal-local-installation"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Static - Local Installation"),
+    ).not.toBeInTheDocument();
   });
 
-  it("confirms before applying a personal credential, and applies it on confirm", () => {
+  it("shows no static option when only personal connections exist", () => {
     useMcpServersGroupedByCatalogMock.mockReturnValue({
       "catalog-1": [personalCred],
     });
-    const onValueChange = vi.fn();
-
-    render(
-      <TokenSelect
-        value={DYNAMIC_CREDENTIAL_VALUE}
-        onValueChange={onValueChange}
-        catalogId="catalog-1"
-        shouldSetDefaultValue={false}
-      />,
-    );
-
-    fireEvent.click(screen.getByText("member@example.com"));
-
-    // Gated: selection not applied yet, dialog shown with the right pin.
-    expect(onValueChange).not.toHaveBeenCalled();
-    expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
-    expect(lastPins()).toEqual([
-      {
-        mcpName: "Everything",
-        ownerEmail: "member@example.com",
-        isCurrentUser: false,
-      },
-    ]);
-
-    fireEvent.click(screen.getByText("confirm-pin"));
-    expect(onValueChange).toHaveBeenCalledWith("user-cred");
-  });
-
-  it("does not apply the personal credential when the confirmation is cancelled", () => {
-    useMcpServersGroupedByCatalogMock.mockReturnValue({
-      "catalog-1": [personalCred],
-    });
-    const onValueChange = vi.fn();
-
-    render(
-      <TokenSelect
-        value={DYNAMIC_CREDENTIAL_VALUE}
-        onValueChange={onValueChange}
-        catalogId="catalog-1"
-        shouldSetDefaultValue={false}
-      />,
-    );
-
-    fireEvent.click(screen.getByText("member@example.com"));
-    fireEvent.click(screen.getByText("cancel-pin"));
-
-    expect(onValueChange).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
-  });
-
-  it("marks the selector's own connection as the current user in the confirmation", () => {
-    useMcpServersGroupedByCatalogMock.mockReturnValue({
-      "catalog-1": [ownPersonalCred],
-    });
-
     render(
       <TokenSelect
         value={DYNAMIC_CREDENTIAL_VALUE}
@@ -282,28 +186,10 @@ describe("TokenSelect", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("me@example.com"));
-    expect(lastPins()?.[0]?.isCurrentUser).toBe(true);
-  });
-
-  it("confirms before applying the selector's own personal credential", () => {
-    useMcpServersGroupedByCatalogMock.mockReturnValue({
-      "catalog-1": [ownPersonalCred],
-    });
-    const onValueChange = vi.fn();
-
-    render(
-      <TokenSelect
-        value={DYNAMIC_CREDENTIAL_VALUE}
-        onValueChange={onValueChange}
-        catalogId="catalog-1"
-        shouldSetDefaultValue={false}
-      />,
-    );
-
-    fireEvent.click(screen.getByText("me@example.com"));
-    expect(onValueChange).not.toHaveBeenCalled();
-    expect(screen.getByTestId("confirm-dialog")).toBeInTheDocument();
+    expect(
+      screen.getByText("No shared credentials for this server."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("member@example.com")).not.toBeInTheDocument();
   });
 
   it("applies an org/team credential without confirmation", () => {
@@ -323,6 +209,5 @@ describe("TokenSelect", () => {
 
     fireEvent.click(screen.getByText("Organization"));
     expect(onValueChange).toHaveBeenCalledWith("org-cred");
-    expect(screen.queryByTestId("confirm-dialog")).not.toBeInTheDocument();
   });
 });

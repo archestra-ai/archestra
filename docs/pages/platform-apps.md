@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -109,15 +109,19 @@ Each app has its own key-to-document store, exposed to the app's HTML as `arches
 
 ## App Files
 
-An app can also keep files. It calls the built-in file tools through `archestra.tools.call` — `archestra__save_file`, `archestra__read_file`, `archestra__search_files`, `archestra__edit_file`, `archestra__delete_file`, plus `archestra__upload_file` and `archestra__download_file` for moving bytes through the app's own execution sandbox.
+An app can also keep files. Its HTML works with them through `archestra.files`: `list()` names the files, `read()` returns a browser `File`, `save()` writes one, `delete()` removes one. `read` returns exact bytes whatever the type — the way a program opens a 3D model or PDF it saved earlier. `save` replaces a same-named file by default. The lower-level built-in file tools stay callable through `archestra.tools.call` — `archestra__read_file` for a paged text window, `archestra__edit_file` for in-place edits, plus `archestra__upload_file` and `archestra__download_file` for the app's own execution sandbox.
 
 The file store is private to each viewer of the app. Two people using the same app never see each other's files, and an app never sees a chat's or a project's files. The store is the same wherever the app runs — inline in chat, on its standalone page, or in an external MCP client — so a document the app writes is there on the next visit. The app's sandbox is scoped the same way, so what an app does never clutters the sandbox of a conversation, another app, or another viewer.
 
-Apps additionally get `archestra__read_file_raw`, which returns a file's exact bytes base64-encoded, whatever the type — the way a program reads a 3D model or PDF it saved earlier. It exists only inside app runtimes: agents read the same store through `archestra__read_file`'s paged text window and never see the raw variant.
+Agents read the same store through `archestra__read_file`'s paged text window; the raw-bytes read exists only inside app runtimes.
 
 Use files for documents the app produces or the viewer keeps — a generated report, for example. Use the data store for structured state like settings and records.
 
 An agent moves files between a chat and the app you have open there. Ask it to open a file in the app, and it copies the file across — an attachment, or something from the chat's Files panel. The copy keeps its own filename, so the app finds it by listing its files and opening that name. Copies go the other way too: a file the app made lands in your Files panel, ready to download.
+
+An app that opens viewer files should offer a picker — a dropdown filled from `files.list()`. The app subscribes to `files.onChange` to refresh it: a file you just generated in chat shows up the moment the agent copies it across, with no refresh button.
+
+The agent knows the open app's files too. Each turn lists them in its context, and the app reports what it is showing — automatically on `files.read`, or explicitly via `archestra.ui.updateModelContext`. Ask about "this file" in chat and the agent knows which one you mean.
 
 An app's files are all an agent can see of it. It lists them to find what the app has produced, and it cannot observe what the app is showing you or doing. Name the file you want, and it copies that one.
 

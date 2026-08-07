@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // A stable, mutable stand-in for the router's search params so a test can flip
@@ -24,6 +25,9 @@ vi.mock("@/lib/mcp/enterprise-managed-install-auth", () => ({
   clearPendingEnterpriseManagedInstall: vi.fn(),
 }));
 vi.mock("@/lib/websocket/websocket", () => ({ default: { send: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 // The install dialogs are stubbed to a single testid so the test asserts the
 // hook's open/re-open/clear behavior, not each dialog's internals. Every
@@ -35,6 +39,12 @@ type StubDialogProps = {
   onClose?: () => void;
   onCancel?: () => void;
   onOpenChange?: (open: boolean) => void;
+  onConfirm?: (result: {
+    catalogId: string;
+    environmentValues: Record<string, string>;
+    scope: "personal";
+  }) => Promise<void>;
+  catalogItem?: CatalogItem;
 };
 function StubDialog({
   open,
@@ -42,6 +52,8 @@ function StubDialog({
   onClose,
   onCancel,
   onOpenChange,
+  onConfirm,
+  catalogItem,
 }: StubDialogProps) {
   if (!(open || isOpen)) return null;
   const dismiss = onCancel ?? onClose ?? (() => onOpenChange?.(false));
@@ -54,6 +66,21 @@ function StubDialog({
       >
         dismiss
       </button>
+      {onConfirm && catalogItem && (
+        <button
+          type="button"
+          data-testid="install-dialog-confirm"
+          onClick={() =>
+            onConfirm({
+              catalogId: catalogItem.id,
+              environmentValues: {},
+              scope: "personal",
+            })
+          }
+        >
+          confirm
+        </button>
+      )}
     </div>
   );
 }
@@ -98,6 +125,14 @@ const oauthItem = {
   userConfig: {},
 } as unknown as CatalogItem;
 
+const localItem = {
+  id: "cat-local-1",
+  name: "Playwright Browser",
+  serverType: "local",
+  localConfig: { command: "playwright" },
+  userConfig: {},
+} as unknown as CatalogItem;
+
 // Mirrors how InternalMCPCatalog drives the deep link: fire the consume-params
 // handler on mount. The durable re-open lives inside the hook itself.
 function Harness() {
@@ -118,6 +153,15 @@ function renderHarness() {
       <Harness />
     </QueryClientProvider>,
   );
+}
+
+function LocalInstallHarness() {
+  const install = useCatalogInstall();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: open once on mount like the registry action
+  useEffect(() => {
+    install.addPersonalConnection(localItem);
+  }, []);
+  return <>{install.dialogs}</>;
 }
 
 describe("useCatalogInstall — deep-link install", () => {
@@ -201,5 +245,55 @@ describe("useCatalogInstall — deep-link install", () => {
 
     expect(screen.queryByTestId("install-dialog")).not.toBeInTheDocument();
     clearPendingInstall();
+  });
+});
+
+describe("useCatalogInstall — local install completion", () => {
+  beforeEach(() => {
+    nav.search = new URLSearchParams();
+    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      data: [localItem],
+    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    vi.mocked(useMcpServers).mockReturnValue({
+      data: [
+        {
+          id: "installed-local-1",
+          name: "Playwright Browser-internal-owner-suffix",
+          catalogId: localItem.id,
+          localInstallationStatus: "success",
+        },
+      ],
+    } as unknown as ReturnType<typeof useMcpServers>);
+    vi.mocked(useInstallMcpServer).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({
+        installedServer: { id: "installed-local-1" },
+      }),
+      isPending: false,
+    } as unknown as ReturnType<typeof useInstallMcpServer>);
+    vi.mocked(useInitiateOAuth).mockReturnValue({
+      mutateAsync: vi.fn(),
+    } as unknown as ReturnType<typeof useInitiateOAuth>);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("uses the catalog display name in the success toast", async () => {
+    const user = userEvent.setup();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <LocalInstallHarness />
+      </QueryClientProvider>,
+    );
+
+    await user.click(await screen.findByTestId("install-dialog-confirm"));
+
+    expect(toast.success).toHaveBeenCalledWith(
+      "Successfully installed Playwright Browser",
+    );
   });
 });

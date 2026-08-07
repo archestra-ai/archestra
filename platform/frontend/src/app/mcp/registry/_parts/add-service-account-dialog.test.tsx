@@ -24,6 +24,29 @@ describe("AddServiceAccountDialog", () => {
     expect(screen.getByText("Fallback")).toBeInTheDocument();
   });
 
+  it("describes local shared targets as installations, not service accounts", () => {
+    render(
+      <AddServiceAccountDialog
+        open
+        onOpenChange={() => {}}
+        availableTeams={[]}
+        canAddOrg
+        resourceKind="installation"
+        onConfirm={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Add a shared installation" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Who should own this installation?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/This connection is shared/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("confirms an organization service account (the default when org is allowed)", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();

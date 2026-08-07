@@ -122,7 +122,9 @@ class ModelSyncService {
 
       const upsertedModels = forceRefresh
         ? await ModelModel.bulkUpsertFull(modelsToUpsert)
-        : await ModelModel.bulkUpsert(modelsToUpsert);
+        : await ModelModel.bulkUpsert(modelsToUpsert, {
+            fromProviderCatalog: true,
+          });
 
       logger.info(
         { provider, apiKeyId, upsertedCount: upsertedModels.length },

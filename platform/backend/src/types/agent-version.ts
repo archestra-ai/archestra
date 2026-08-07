@@ -90,3 +90,14 @@ export const AgentVersionMetadataSchema = SelectAgentVersionSchema.omit({
 });
 
 export type AgentVersionMetadata = z.infer<typeof AgentVersionMetadataSchema>;
+
+export const RestoreAgentVersionBodySchema = z.object({
+  /**
+   * The agent's `latestVersion` at the moment the restore was composed. When
+   * present the restore is a compare-and-set: a head that has moved since is
+   * rejected with 409 (`agent_version_conflict`) instead of burying whoever
+   * wrote in between. Omitted keeps last-write-wins, matching the rest of the
+   * agent write surface. Named to match `PUT /api/skills/:id`.
+   */
+  baseVersion: z.number().int().positive().optional(),
+});

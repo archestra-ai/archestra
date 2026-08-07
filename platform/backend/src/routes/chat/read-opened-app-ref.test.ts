@@ -25,9 +25,24 @@ function assistantMessage(metadata?: unknown): ChatMessage {
 
 describe("readOpenedAppRef", () => {
   test("reads an owned app from the last user message", () => {
+    // No reported display state on the message → null, not undefined.
     expect(
       readOpenedAppRef([userMessage({ openedApp: { appId: APP_ID } })]),
-    ).toEqual({ appId: APP_ID, appMcpServerId: null });
+    ).toEqual({ appId: APP_ID, appMcpServerId: null, modelContext: null });
+  });
+
+  test("passes the app-reported display state through with an owned app", () => {
+    expect(
+      readOpenedAppRef([
+        userMessage({
+          openedApp: { appId: APP_ID, modelContext: "Viewing receipts.csv" },
+        }),
+      ]),
+    ).toEqual({
+      appId: APP_ID,
+      appMcpServerId: null,
+      modelContext: "Viewing receipts.csv",
+    });
   });
 
   test("reads an external app from the last user message", () => {
@@ -35,7 +50,30 @@ describe("readOpenedAppRef", () => {
       readOpenedAppRef([
         userMessage({ openedApp: { appMcpServerId: MCP_SERVER_ID } }),
       ]),
-    ).toEqual({ appId: null, appMcpServerId: MCP_SERVER_ID });
+    ).toEqual({
+      appId: null,
+      appMcpServerId: MCP_SERVER_ID,
+      modelContext: null,
+    });
+  });
+
+  test("drops a display state reported alongside an external app", () => {
+    // The metadata schema's external variant has no modelContext field, so the
+    // union parse strips it: the reference survives, the state does not.
+    expect(
+      readOpenedAppRef([
+        userMessage({
+          openedApp: {
+            appMcpServerId: MCP_SERVER_ID,
+            modelContext: "Viewing receipts.csv",
+          },
+        }),
+      ]),
+    ).toEqual({
+      appId: null,
+      appMcpServerId: MCP_SERVER_ID,
+      modelContext: null,
+    });
   });
 
   test("reads the latest user message, not an earlier one", () => {
@@ -47,7 +85,11 @@ describe("readOpenedAppRef", () => {
         assistantMessage(),
         userMessage({ openedApp: { appMcpServerId: MCP_SERVER_ID } }),
       ]),
-    ).toEqual({ appId: null, appMcpServerId: MCP_SERVER_ID });
+    ).toEqual({
+      appId: null,
+      appMcpServerId: MCP_SERVER_ID,
+      modelContext: null,
+    });
   });
 
   test("ignores an open app reported on an assistant message", () => {

@@ -493,13 +493,13 @@ Archestra protects every MCP server pod from Server-Side Request Forgery (SSRF) 
 
 Each pod gets one policy, chosen by its environment's egress mode:
 
-- **Unrestricted** (the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
-- **Restricted** — only the CIDRs and domains the environment allow-lists, plus DNS.
-- **Off** — all egress is denied.
+- **Allow all** (`unrestricted`, the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
+- **Allowlist** (`restricted`) — only the CIDRs and domains the environment allow-lists, plus DNS.
+- **Block all** (`off`) — all egress is denied.
 
 A namespace-wide default-deny baseline also selects every MCP pod, so a pod that is still starting up is denied by default rather than left open.
 
-**Blocked reserved ranges** (the unrestricted floor):
+**Blocked reserved ranges** (the Allow all floor):
 
 - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
@@ -511,7 +511,7 @@ A namespace-wide default-deny baseline also selects every MCP pod, so a pod that
 
 **Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
 
-To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's network policy to `restricted` and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
+To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's egress mode to **Allowlist** (`restricted`) and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
 
 ### Accessing the Platform
 
@@ -874,12 +874,12 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Startup verifies this key against previously encrypted secrets and aborts on a mismatch (see `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`).
   - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets on startup, decrypting each with the previous key and re-encrypting with the new one (idempotent, and a no-op when the key is unchanged). You can also run it explicitly with `pnpm --filter backend db:reencrypt-secrets`. Vault-managed secrets are unaffected.
 
-- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Enables enterprise content encryption at rest: LLM interaction payloads and chat message content are encrypted in the database with a key derived from this secret, separate from the stored-secrets key.
+- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Enables enterprise content encryption at rest: LLM interaction payloads, chat message content, and MCP tool call arguments/results are encrypted in the database with a key derived from this secret, separate from the stored-secrets key.
   - Default: not set (disabled). Operator-supplied only — never auto-generated.
   - Requires an enterprise license; startup fails when set without one.
   - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
   - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
-  - See [Content Encryption at Rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) for the enable and rotation procedures.
+  - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
@@ -1376,7 +1376,7 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Example: `your-bearer-token`
 
 - **`ARCHESTRA_OTEL_CAPTURE_CONTENT`** - Enable or disable prompt/completion content capture in trace spans.
-  - Default: `true` (enabled) — **unless [content encryption at rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) is configured, in which case the default flips to `false`**: exporting the same content in plaintext to a telemetry backend would bypass the at-rest guarantee. Setting `true` explicitly still enables capture (for telemetry pipelines protected to the same standard) and logs a startup warning.
+  - Default: `true` (enabled) — **unless [content encryption at rest](/docs/platform-content-encryption) is configured, in which case the default flips to `false`**: exporting the same content in plaintext to a telemetry backend would bypass the at-rest guarantee. Setting `true` explicitly still enables capture (for telemetry pipelines protected to the same standard) and logs a startup warning.
   - Set to `false` to disable content capture for privacy or to reduce span sizes
 
 - **`ARCHESTRA_OTEL_CONTENT_MAX_LENGTH`** - Maximum character length for captured content in span events (prompt messages, completions, tool arguments, tool results).
@@ -1393,6 +1393,28 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `false` (disabled)
   - When disabled, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view
   - Set to `true` to include infrastructure spans for debugging request flows
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT`** - OTLP endpoint for [Real User Monitoring](/docs/platform-observability#real-user-monitoring) export. Product-usage events from the web UI go to this collector as OTLP log records. Requires an active [enterprise license](/docs/platform-pricing-model); the backend refuses to start when this is set without one.
+  - Default: unset (RUM is off)
+  - Setting the endpoint turns the feature on
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME`** - Username for RUM export basic authentication.
+  - Optional: Only used if both username and password are provided
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for RUM export basic authentication.
+  - Optional: Only used if both username and password are provided
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for RUM export authentication.
+  - Optional: Takes precedence over basic authentication if provided
+
+- **`ARCHESTRA_RUM_SAMPLE_RATE`** - Fraction of RUM sessions to record, 0 to 1. Whole sessions are kept or skipped, so funnels stay coherent. Client errors are always reported.
+  - Default: 1 (record every session)
+
+- **`ARCHESTRA_RUM_EXPORTER_MAX_QUEUE_SIZE`** / **`ARCHESTRA_RUM_EXPORTER_MAX_EXPORT_BATCH_SIZE`** / **`ARCHESTRA_RUM_EXPORTER_SCHEDULE_DELAY_MS`** - RUM OTLP batch tuning. Raise batch size and lower the delay for deployments with thousands of concurrent users. Export uses gzip.
+  - Defaults: 2048 / 512 / 5000
+
+- **`ARCHESTRA_RUM_INGEST_MAX_BATCHES_PER_MINUTE`** - How many RUM event batches one user may submit per minute. Batches over the limit are rejected and their events dropped.
+  - Default: 120
 
 - **`ARCHESTRA_METRICS_PORT`** - TCP port for the metrics server.
   - Default: `9050`
@@ -1445,6 +1467,12 @@ These environment variables configure the Incoming Email feature, which allows e
 ### ChatOps Configuration
 
 These environment variables configure the ChatOps feature, which allows users to interact with agents through messaging platforms like Microsoft Teams. See [Agents - ChatOps: Microsoft Teams](/docs/platform-agents#chatops-microsoft-teams) for setup instructions.
+
+- **`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED`** - Opt-out switch for the welcome message sent to auto-provisioned chatops users.
+  - Default: `true`
+  - `false` skips the welcome entirely. Use it when your chatops users don't get web app access. Users are still auto-provisioned.
+  - When an SSO identity provider is configured, the welcome carries a sign-in link instead of the finish-signup link.
+  - Without SSO, the welcome is skipped automatically when the finish-signup flow is unavailable — `ARCHESTRA_AUTH_DISABLE_INVITATIONS` or `ARCHESTRA_AUTH_DISABLE_BASIC_AUTH` set to `true`.
 
 #### Microsoft Teams
 

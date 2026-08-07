@@ -4,8 +4,16 @@ import {
   LEGACY_CLAUDE_DESKTOP_SESSION_SOURCE,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import config from "@/config";
+import {
+  _resetContentKeys,
+  isContentEnvelope,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
+} from "@/content-encryption/index.ee";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
+import { decryptInteractionRow } from "@/content-encryption/rows.ee";
 import db, { schema } from "@/database";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { InsertInteraction } from "@/types";
 import InteractionModel from "./interaction";
 import InteractionDeltaManager from "./interaction-delta-manager";
@@ -900,5 +908,92 @@ describe("InteractionDeltaManager", () => {
     await assertEnvelopes();
     InteractionDeltaManager.reset();
     await assertEnvelopes();
+  });
+
+  // ===========================================================================
+  // content encryption compatibility
+  //
+  // With content encryption at rest enabled, `request`/`processedRequest` are
+  // stored as opaque ciphertext envelopes. Delta encoding must keep working:
+  // the write path computes deltas BEFORE encryption, parent resolution matches
+  // on the always-plaintext request_last_message_hash column (never on
+  // `request`), and the read path decrypts each ancestor row before folding.
+  // ===========================================================================
+
+  describe("content encryption compatibility", () => {
+    beforeEach(() => {
+      config.enterpriseFeatures.core = true;
+      config.contentEncryption.secret = "delta-content-secret-0123456789012345";
+      _resetContentKeys();
+    });
+
+    afterEach(() => {
+      config.enterpriseFeatures.core = false;
+      config.contentEncryption.secret = undefined;
+      _resetContentKeys();
+    });
+
+    test("chains, stores encrypted deltas, and reconstructs the full request", async () => {
+      const sessionId = "sess-encrypted";
+      const m0 = userMsg("encrypted turn 0 with enough text");
+      const msgs2 = [m0, assistantMsg("ea0"), userMsg("encrypted turn 1")];
+      const msgs3 = [
+        ...msgs2,
+        assistantMsg("ea1"),
+        userMsg("encrypted turn 2"),
+      ];
+
+      const r1 = await createClaude([m0], { sessionId });
+      const r2 = await createClaude(msgs2, { sessionId });
+      const r3 = await createClaude(msgs3, { sessionId });
+
+      // Rows chain exactly as they do without encryption.
+      expect(r1.parentId).toBeNull();
+      expect(r2.parentId).toBe(r1.id);
+      expect(r3.parentId).toBe(r2.id);
+
+      // At rest the request is ciphertext, while the parent-resolution metadata
+      // columns stay plaintext; decrypting the row yields only the 2-message
+      // delta, so storage stays O(new messages) even under encryption.
+      const raw3 = await rawRow(r3.id);
+      expect(isContentEnvelope(raw3.request)).toBe(true);
+      expect(raw3.threadId).toBe(r1.threadId);
+      expect(raw3.requestLastMessageHash).not.toBeNull();
+      expect(
+        reconstructedMessages(decryptInteractionRow(raw3).request),
+      ).toHaveLength(2);
+
+      // A fully cold read loads the chain, decrypts each row, and folds.
+      InteractionDeltaManager.reset();
+      const full3 = await InteractionModel.findById(r3.id);
+      expect(reconstructedMessages(full3?.request)).toEqual(msgs3);
+    });
+
+    // Regression test for the original bug: the DB-fallback candidate query
+    // used to read the last message out of `request` in SQL, which ciphertext
+    // navigates to NULL — so with a cold tip cache no candidate ever matched
+    // and every row stored the full conversation.
+    test("resolves the parent through the DB with a cold cache", async () => {
+      const sessionId = "sess-encrypted-cold";
+      const m0 = userMsg("encrypted cold turn 0 with enough text");
+      const r1 = await createClaude([m0], { sessionId });
+
+      // Another pod (or a restarted one) handles the next request: no tip cache.
+      InteractionDeltaManager.reset();
+
+      const msgs2 = [m0, assistantMsg("ca0"), userMsg("encrypted cold turn 1")];
+      const r2 = await createClaude(msgs2, { sessionId });
+
+      expect(r2.parentId).toBe(r1.id);
+      expect(r2.requestSharedPrefix).toBe(1);
+      expect(
+        reconstructedMessages(
+          decryptInteractionRow(await rawRow(r2.id)).request,
+        ),
+      ).toHaveLength(2);
+
+      const full2 = await InteractionModel.findById(r2.id);
+      expect(reconstructedMessages(full2?.request)).toEqual(msgs2);
+    });
   });
 });

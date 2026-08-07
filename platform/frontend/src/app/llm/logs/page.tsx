@@ -5,7 +5,6 @@ import {
 } from "@archestra/shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
-import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { handleApiError } from "@/lib/utils";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import LlmProxyLogsPage from "./page.client";
@@ -13,58 +12,26 @@ import LlmProxyLogsPage from "./page.client";
 export const dynamic = "force-dynamic";
 
 export default async function LlmProxyLogsPageServer() {
+  // Only the agent list is prefetched. The table is session-based
+  // (useInteractionSessions in page.client.tsx) and has never read an
+  // interactions prop, so prefetching /api/interactions here only served to
+  // serialize ~10 fully reconstructed LLM request/response bodies into the RSC
+  // payload that nothing consumes — tens of MB per render on a busy instance.
   let initialData: {
-    interactions: archestraApiTypes.GetInteractionsResponses["200"];
     agents: archestraApiTypes.GetAllAgentsResponses["200"];
   } = {
-    interactions: {
-      data: [],
-      pagination: {
-        currentPage: 1,
-        limit: DEFAULT_TABLE_LIMIT,
-        total: 0,
-        totalPages: 0,
-        hasNext: false,
-        hasPrev: false,
-      },
-    },
     agents: [],
   };
   try {
     const headers = await getServerApiHeaders();
-    const [interactionsResponse, agentsResponse] = await Promise.all([
-      archestraApiSdk.getInteractions({
-        headers,
-        query: {
-          limit: DEFAULT_TABLE_LIMIT,
-          offset: 0,
-          sortBy: "createdAt",
-          sortDirection: "desc",
-        },
-      }),
-      archestraApiSdk.getAllAgents({
-        headers,
-        query: { excludeBuiltIn: true, agentTypes: ["agent", "llm_proxy"] },
-      }),
-    ]);
-    if (interactionsResponse.error) {
-      handleApiError(interactionsResponse.error);
-    }
+    const agentsResponse = await archestraApiSdk.getAllAgents({
+      headers,
+      query: { excludeBuiltIn: true, agentTypes: ["agent", "llm_proxy"] },
+    });
     if (agentsResponse.error) {
       handleApiError(agentsResponse.error);
     }
     initialData = {
-      interactions: interactionsResponse.data || {
-        data: [],
-        pagination: {
-          currentPage: 1,
-          limit: DEFAULT_TABLE_LIMIT,
-          total: 0,
-          totalPages: 0,
-          hasNext: false,
-          hasPrev: false,
-        },
-      },
       agents: agentsResponse.data || [],
     };
   } catch (error) {

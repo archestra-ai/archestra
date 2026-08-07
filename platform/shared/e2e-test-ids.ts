@@ -2,7 +2,9 @@ export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
   CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
+  ConsultAdvisorSwitch: "consult-advisor-switch",
   CloneAgentButton: "clone-agent-button",
+  AgentVersionHistoryButton: "agent-version-history-button",
   DeleteAgentButton: "delete-agent-button",
   OnboardingNextButton: "onboarding-next-button",
   OnboardingSkipButton: "onboarding-skip-button",
@@ -119,6 +121,8 @@ export const E2eTestId = {
   ChatDisabledFileUploadButton: "chat-disabled-file-upload-button",
   ChatContextUsageTrigger: "chat-context-usage-trigger",
   ChatContextUsagePanel: "chat-context-usage-panel",
+  ChatContextUsageTooltip: "chat-context-usage-tooltip",
+  ChatContextCompactButton: "chat-context-compact-button",
   ChatApiKeySelectorTrigger: "chat-api-key-selector-trigger",
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector

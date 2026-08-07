@@ -10,8 +10,10 @@ export const RouteId = {
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
   RestoreAgent: "restoreAgent",
+  PermanentlyDeleteAgent: "permanentlyDeleteAgent",
   GetAgentVersions: "getAgentVersions",
   GetAgentVersion: "getAgentVersion",
+  RestoreAgentVersion: "restoreAgentVersion",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
   GetAgentToolExclusions: "getAgentToolExclusions",
@@ -54,6 +56,9 @@ export const RouteId = {
   // Config Routes
   GetConfig: "getConfig",
   GetPublicConfig: "getPublicConfig",
+
+  // RUM Routes
+  IngestRumEvents: "ingestRumEvents",
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
@@ -599,6 +604,8 @@ export const RouteId = {
   GetKnowledgeBase: "getKnowledgeBase",
   UpdateKnowledgeBase: "updateKnowledgeBase",
   DeleteKnowledgeBase: "deleteKnowledgeBase",
+  RestoreKnowledgeBase: "restoreKnowledgeBase",
+  PermanentlyDeleteKnowledgeBase: "permanentlyDeleteKnowledgeBase",
   GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
 
   // Knowledge Base Connector Routes
@@ -609,6 +616,8 @@ export const RouteId = {
   GetConnectorDocument: "getConnectorDocument",
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
+  RestoreConnector: "restoreConnector",
+  PermanentlyDeleteConnector: "permanentlyDeleteConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
   TriggerPermissionSync: "triggerPermissionSync",
@@ -649,6 +658,7 @@ export const RouteId = {
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
   RestoreSkill: "restoreSkill",
+  PermanentlyDeleteSkill: "permanentlyDeleteSkill",
   ResetSkill: "resetSkill",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
@@ -670,6 +680,7 @@ export const RouteId = {
   SetProjectShare: "setProjectShare",
   DeleteProject: "deleteProject",
   RestoreProject: "restoreProject",
+  PermanentlyDeleteProject: "permanentlyDeleteProject",
   GetProjectConversations: "getProjectConversations",
   GetProjectFiles: "getProjectFiles",
   UploadProjectFiles: "uploadProjectFiles",

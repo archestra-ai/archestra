@@ -646,7 +646,8 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:read": "View Knowledge Bases and Connectors",
   "knowledgeSource:create": "Create Knowledge Bases and Connectors",
   "knowledgeSource:update": "Modify Knowledge Bases and Connectors",
-  "knowledgeSource:delete": "Delete Knowledge Bases and Connectors",
+  "knowledgeSource:delete":
+    "Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
     "View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions",
@@ -725,9 +726,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
   [RouteId.RestoreAgent]: {},
+  [RouteId.PermanentlyDeleteAgent]: {},
   // Version history: agent-type read permission checked dynamically in handler
   [RouteId.GetAgentVersions]: {},
   [RouteId.GetAgentVersion]: {},
+  [RouteId.RestoreAgentVersion]: {},
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
@@ -755,9 +758,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Tool-assignment routes: agent-type update checked dynamically in handler
   [RouteId.AssignToolToAgent]: {},
   [RouteId.BulkAssignTools]: {},
-  [RouteId.BulkUpdateAgentTools]: {
-    toolPolicy: ["update"],
-  },
+  [RouteId.BulkUpdateAgentTools]: {},
   [RouteId.AutoConfigureAgentToolPolicies]: {
     toolPolicy: ["update"],
   },
@@ -1425,6 +1426,11 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicConfig]: {},
+  /**
+   * Ingest product-usage (RUM) events from the web client.
+   * Any authenticated user — every signed-in browser session reports usage.
+   */
+  [RouteId.IngestRumEvents]: {},
   // Public: reports only whether a two-factor sign-in challenge is pending,
   // so the auth pages can redirect when they don't apply. Auth is skipped in
   // middleware for this path.
@@ -1632,6 +1638,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetKnowledgeBase]: { knowledgeSource: ["read"] },
   [RouteId.UpdateKnowledgeBase]: { knowledgeSource: ["update"] },
   [RouteId.DeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
+  // Restore is the inverse of delete — same gate, as for skills and projects.
+  [RouteId.RestoreKnowledgeBase]: { knowledgeSource: ["delete"] },
+  // Permanent deletion is irreversible, so the handler narrows this further to
+  // a built-in admin ROLE — no knowledgeSource permission, `admin` included,
+  // gets you past the trash.
+  [RouteId.PermanentlyDeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
   [RouteId.GetKnowledgeBaseHealth]: { knowledgeSource: ["read"] },
 
   // Knowledge Base Connector Routes
@@ -1642,6 +1654,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorDocument]: { knowledgeSource: ["read"] },
   [RouteId.UpdateConnector]: { knowledgeSource: ["update"] },
   [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
+  // Same gates as the knowledge-base pair above.
+  [RouteId.RestoreConnector]: { knowledgeSource: ["delete"] },
+  [RouteId.PermanentlyDeleteConnector]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },
@@ -1682,6 +1697,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
   [RouteId.RestoreSkill]: { skill: ["delete"] },
+  // Permanent deletion is irreversible, so the handler narrows this further to
+  // a built-in admin ROLE — no skill permission, `skill:admin` included, gets
+  // you past the trash.
+  [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
@@ -1710,6 +1729,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // Restore is the inverse of delete and, like the deleted-projects view, an
   // oversight action — the handler further narrows it to `project:admin`.
   [RouteId.RestoreProject]: { project: ["delete"] },
+  // Irreversible, so the handler narrows to a built-in admin ROLE — further
+  // than restore's `project:admin`, which a custom oversight role can hold.
+  // That also settles the org-wide-share question delete/restore have to ask:
+  // an admin role always holds `project:share-org`, so there is no separate
+  // branch here to answer 403 and leak a trashed project's existence.
+  [RouteId.PermanentlyDeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   // Project file surfaces combine project-level access with the files gate:
   // `file:manage` covers the file operations, while project membership is

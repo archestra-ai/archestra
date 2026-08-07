@@ -141,6 +141,26 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.restored",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  // Restoring a config version rewrites the agent's whole config surface.
+  // Registered explicitly because the walk-up to "/api/agents/:id" resolves
+  // with viaWalkUp set, and the hook discards every walk-up POST — without
+  // this entry the restore produces no audit record at all.
+  "/api/agents/:id/versions/:version/restore": {
+    resourceType: "agent",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+  // Permanent deletion. Registered explicitly for two reasons: the walk-up to
+  // `/api/agents/:id` would log it as `agent.deleted` (indistinguishable from a
+  // recoverable soft delete), and it would attach that route's FULL snapshot as
+  // `before` — a copy of exactly the config the caller asked to destroy. The
+  // identity fetcher is the guarantee that a purge is audited by who/what/when
+  // and nothing more.
+  "/api/agents/:id/permanent": {
+    resourceType: "agent",
+    action: "agent.purged",
+    fetchById: (id, orgId) => AgentModel.findIdentityForAudit(id, orgId),
+  },
   "/api/agents/:agentId": {
     resourceType: "agent",
     resourceIdParam: "agentId",
@@ -320,6 +340,23 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "knowledgeBase",
     fetchById: (id, orgId) => KnowledgeBaseModel.findByIdForAudit(id, orgId),
   },
+  // findIdentityForAudit, not findByIdForAudit: the full snapshot is
+  // notDeleted-filtered (deliberately, for delete records), so it cannot see
+  // the still-deleted "before" state of a restore. The identity read sees both
+  // states, capturing the deletedAt → null diff.
+  "/api/knowledge-bases/:id/restore": {
+    resourceType: "knowledgeBase",
+    action: "knowledgeBase.restored",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseModel.findIdentityForAudit(id, orgId),
+  },
+  // Identity-only snapshot, same as the retention sweep's purge audit rows.
+  "/api/knowledge-bases/:id/permanent": {
+    resourceType: "knowledgeBase",
+    action: "knowledgeBase.purged",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseModel.findIdentityForAudit(id, orgId),
+  },
 
   // Connectors
   "/api/connectors": {
@@ -331,6 +368,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "connector",
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+  // findIdentityForAudit for the same reason as the knowledge-base restore
+  // entry: the full snapshot cannot see the still-deleted "before" state.
+  "/api/connectors/:id/restore": {
+    resourceType: "connector",
+    action: "connector.restored",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findIdentityForAudit(id, orgId),
+  },
+  // Identity-only snapshot, same as the retention sweep's purge audit rows.
+  "/api/connectors/:id/permanent": {
+    resourceType: "connector",
+    action: "connector.purged",
+    fetchById: (id, orgId) =>
+      KnowledgeBaseConnectorModel.findIdentityForAudit(id, orgId),
   },
   // Member overrides change who a connector's grants resolve to. Explicit
   // entries pin both mutations to connector.updated — a walk-up to
@@ -437,6 +489,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "project.restored",
     fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
   },
+  // Identity-only, like the other purges — see the agent entry above.
+  "/api/projects/:id/permanent": {
+    resourceType: "project",
+    action: "project.purged",
+    fetchById: (id, orgId) => ProjectModel.findIdentityForAudit(id, orgId),
+  },
   // Visibility lives in `project_shares`, captured by the project snapshot.
   "/api/projects/:id/share": {
     resourceType: "project",
@@ -460,6 +518,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     action: "skill.restored",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
+  // Identity-only, like the other purges — see the agent entry above.
+  "/api/skills/:id/permanent": {
+    resourceType: "skill",
+    action: "skill.purged",
+    fetchById: (id, orgId) => SkillModel.findIdentityForAudit(id, orgId),
   },
   // Reset is a POST carrying :id, so the hook suppresses the parent walk-up.
   // Register it directly to capture the target id and before/after snapshots of
@@ -661,6 +725,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     fetchById: (id, _orgId) =>
       AgentToolModel.countAssignmentsForOrganization(id),
+  },
+  // Deliberately no `fetchById`: the snapshot must be per-agent, and only the
+  // handler can derive it (the affected agents come from the request body,
+  // which fetchById never sees). Omitting it also leaves `auditBefore` unset by
+  // the preHandler, so the handler owns both sides. See
+  // buildBulkToolUpdateAuditSnapshot in routes/agent-tool.ts.
+  "/api/agents/tools/bulk-update": {
+    resourceType: "agentTool",
+    action: "agentTool.bulk_updated",
+    resourceIdSource: "organizationContext",
   },
   "/api/agent-tools/auto-configure-policies": {
     resourceType: "toolInvocationPolicy",

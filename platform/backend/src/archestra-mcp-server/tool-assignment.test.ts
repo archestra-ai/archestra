@@ -17,9 +17,14 @@ const REMOVE_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATO
 describe("tool assignment tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
+  // Target agents must be created in this org: the assignment lookup is
+  // org-fenced, so an agent left in the fixture default org is a foreign tenant
+  // and is correctly reported as not found.
+  let contextOrgId: string;
 
   beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
     const org = await makeOrganization();
+    contextOrgId = org.id;
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     testAgent = await makeAgent({ name: "Test Agent", organizationId: org.id });
@@ -74,8 +79,14 @@ describe("tool assignment tool execution", () => {
     makeAgent,
     makeTool,
   }) => {
-    const agent1 = await makeAgent({ name: "Agent One" });
-    const agent2 = await makeAgent({ name: "Agent Two" });
+    const agent1 = await makeAgent({
+      name: "Agent One",
+      organizationId: contextOrgId,
+    });
+    const agent2 = await makeAgent({
+      name: "Agent Two",
+      organizationId: contextOrgId,
+    });
     const tool1 = await makeTool({ name: "assign_test_tool_1" });
     const tool2 = await makeTool({ name: "assign_test_tool_2" });
 
@@ -111,7 +122,10 @@ describe("tool assignment tool execution", () => {
     makeAgent,
     makeTool,
   }) => {
-    const agent = await makeAgent({ name: "Dup Agent" });
+    const agent = await makeAgent({
+      name: "Dup Agent",
+      organizationId: contextOrgId,
+    });
     const tool = await makeTool({ name: "dup_test_tool" });
 
     // First assignment succeeds
@@ -183,7 +197,10 @@ describe("tool assignment tool execution", () => {
   test("bulk_assign_tools_to_agents preserves structured validation error metadata", async ({
     makeAgent,
   }) => {
-    const agent = await makeAgent({ name: "Missing Tool Agent" });
+    const agent = await makeAgent({
+      name: "Missing Tool Agent",
+      organizationId: contextOrgId,
+    });
 
     const result = await executeArchestraTool(
       AGENTS_TOOL,
@@ -209,6 +226,69 @@ describe("tool assignment tool execution", () => {
         errorType: "not_found",
       },
     ]);
+  });
+
+  test("binding a personal connection fails with a validation entry", async ({
+    makeAgent,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    // Editors hold agent/tool management permissions, so credential scope is
+    // the only thing blocking this assignment.
+    const editor = await makeUser();
+    await makeMember(editor.id, org.id, { role: "editor" });
+    const colleague = await makeUser();
+    await makeMember(colleague.id, org.id, { role: "member" });
+
+    // The editor's own personal agent, so every agent-modify check passes and
+    // the credential gate is the only thing the assignment can trip on.
+    const agent = await makeAgent({
+      name: "Editor Agent",
+      organizationId: org.id,
+      scope: "personal",
+      authorId: editor.id,
+    });
+    const tool = await makeTool({ name: "forbidden-test-tool" });
+    const theirConnection = await makeMcpServer({
+      scope: "personal",
+      ownerId: colleague.id,
+      serverType: "remote",
+    });
+
+    const result = await executeArchestraTool(
+      AGENTS_TOOL,
+      {
+        assignments: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            mcpServerId: theirConnection.id,
+          },
+        ],
+      },
+      {
+        agent: { id: agent.id, name: agent.name },
+        userId: editor.id,
+        organizationId: org.id,
+      },
+    );
+
+    // isError false means the structured failure passed output validation.
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.failed).toMatchObject([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        errorCode: "validation_error",
+        errorType: "validation_error",
+      },
+    ]);
+    expect(parsed.failed[0].error).toContain("dynamic credential resolution");
   });
 });
 
@@ -365,9 +445,12 @@ describe("bulk_remove_tools_from_agents tool execution", () => {
 describe("tool assignment with late-bound resolution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
+  /** See the note on the same field in the suite above. */
+  let contextOrgId: string;
 
   beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
     const org = await makeOrganization();
+    contextOrgId = org.id;
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     testAgent = await makeAgent({
@@ -386,7 +469,10 @@ describe("tool assignment with late-bound resolution", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const agent = await makeAgent({ name: "Dynamic Cred Agent" });
+    const agent = await makeAgent({
+      name: "Dynamic Cred Agent",
+      organizationId: contextOrgId,
+    });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
       name: "remote_dynamic_tool",
@@ -430,7 +516,10 @@ describe("tool assignment with late-bound resolution", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const agent = await makeAgent({ name: "Local Dynamic Agent" });
+    const agent = await makeAgent({
+      name: "Local Dynamic Agent",
+      organizationId: contextOrgId,
+    });
     const catalog = await makeInternalMcpCatalog({ serverType: "local" });
     const tool = await makeTool({
       name: "local_dynamic_tool",
@@ -474,7 +563,10 @@ describe("tool assignment with late-bound resolution", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const agent = await makeAgent({ name: "No Cred Agent" });
+    const agent = await makeAgent({
+      name: "No Cred Agent",
+      organizationId: contextOrgId,
+    });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
       name: "remote_no_cred_tool",
@@ -501,7 +593,10 @@ describe("tool assignment with late-bound resolution", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const agent = await makeAgent({ name: "No Exec Agent" });
+    const agent = await makeAgent({
+      name: "No Exec Agent",
+      organizationId: contextOrgId,
+    });
     const catalog = await makeInternalMcpCatalog({ serverType: "local" });
     const tool = await makeTool({
       name: "local_no_exec_tool",
@@ -529,7 +624,10 @@ describe("tool assignment with late-bound resolution", () => {
     makeTool,
   }) => {
     // MCP gateways are agents internally — the gateway tool uses mcpGatewayId which maps to agentId
-    const gateway = await makeAgent({ name: "Dynamic Cred Gateway" });
+    const gateway = await makeAgent({
+      name: "Dynamic Cred Gateway",
+      organizationId: contextOrgId,
+    });
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
     const tool = await makeTool({
       name: "gateway_dynamic_tool",
@@ -571,7 +669,10 @@ describe("tool assignment with late-bound resolution", () => {
     makeAgent,
     makeTool,
   }) => {
-    const agent = await makeAgent({ name: "Update Cred Agent" });
+    const agent = await makeAgent({
+      name: "Update Cred Agent",
+      organizationId: contextOrgId,
+    });
     // Tool without catalogId so no credential/execution source is required
     const tool = await makeTool({ name: "update_cred_tool" });
 
@@ -824,5 +925,105 @@ describe("tool assignment respects the agent's environment", () => {
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.succeeded).toEqual([]);
     expect(parsed.failed[0].error).toContain("different environment");
+  });
+});
+
+/**
+ * Tenant isolation on the assignment writes. Agent ids arrive straight from tool
+ * input, and the scope checks cannot reject a foreign tenant on their own: they
+ * short-circuit for an admin, and "admin" means admin of the CALLER's org. So the
+ * lookup itself is org-fenced, which makes a foreign agent indistinguishable from
+ * one that does not exist. The environment check rejects these too, but only as a
+ * side effect — this pins the fence that does not depend on that.
+ */
+describe("tool assignment respects the organization boundary", () => {
+  let callerContext: ArchestraContext;
+
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const caller = await makeAgent({
+      name: "Tenant Caller",
+      organizationId: org.id,
+    });
+    callerContext = {
+      agent: { id: caller.id, name: caller.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+  });
+
+  test("bulk_assign_tools_to_agents reports a foreign-org target as not found", async ({
+    makeAgent,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const foreignOrg = await makeOrganization();
+    const foreignAgent = await makeAgent({
+      name: "Foreign Target",
+      organizationId: foreignOrg.id,
+    });
+    const tool = await makeTool({ name: "cross_org_assign_tool" });
+
+    const result = await executeArchestraTool(
+      AGENTS_TOOL,
+      { assignments: [{ agentId: foreignAgent.id, toolId: tool.id }] },
+      callerContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.succeeded).toEqual([]);
+    expect(parsed.failed[0].error).toContain("not found");
+
+    const rows = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, foreignAgent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toEqual([]);
+  });
+
+  test("bulk_remove_tools_from_agents reports a foreign-org target as not found", async ({
+    makeAgent,
+    makeAgentTool,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const foreignOrg = await makeOrganization();
+    const foreignAgent = await makeAgent({
+      name: "Foreign Removal Target",
+      organizationId: foreignOrg.id,
+    });
+    const tool = await makeTool({ name: "cross_org_remove_tool" });
+    await makeAgentTool(foreignAgent.id, tool.id);
+
+    const result = await executeArchestraTool(
+      REMOVE_TOOL,
+      { removals: [{ agentId: foreignAgent.id, toolId: tool.id }] },
+      callerContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.succeeded).toEqual([]);
+    expect(parsed.failed[0].error).toContain("not found");
+
+    // The foreign tenant's assignment survives untouched.
+    const rows = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, foreignAgent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toHaveLength(1);
   });
 });

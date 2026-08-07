@@ -22,6 +22,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agent.updated": "Agent updated",
   "agent.deleted": "Agent deleted",
   "agent.restored": "Agent restored",
+  "agent.purged": "Agent permanently deleted",
   "agent.imported": "Agent imported",
   // Agent tool assignment
   "agentTool.created": "Agent tool added",
@@ -29,6 +30,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agentTool.deleted": "Agent tool removed",
   "agentTool.bulk_assigned": "Agent tools bulk assigned",
   "agentTool.bulk_removed": "Agent tools bulk removed",
+  "agentTool.bulk_updated": "Agent tools bulk updated",
   // API key
   "apiKey.created": "API key created",
   "apiKey.deleted": "API key deleted",
@@ -47,6 +49,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  "connector.purged": "Connector permanently deleted",
+  "connector.restored": "Connector restored",
   "connector.permission_sync_triggered": "Connector permission sync triggered",
   "connector.synced": "Connector synced",
   // Default user limit
@@ -81,6 +85,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "knowledgeBase.created": "Knowledge base created",
   "knowledgeBase.updated": "Knowledge base updated",
   "knowledgeBase.deleted": "Knowledge base deleted",
+  "knowledgeBase.purged": "Knowledge base permanently deleted",
+  "knowledgeBase.restored": "Knowledge base restored",
   // Limit
   "limit.created": "Limit created",
   "limit.updated": "Limit updated",
@@ -127,6 +133,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "project.updated": "Project updated",
   "project.deleted": "Project deleted",
   "project.restored": "Project restored",
+  "project.purged": "Project permanently deleted",
   // Role
   "role.created": "Role created",
   "role.updated": "Role updated",
@@ -145,6 +152,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "skill.updated": "Skill updated",
   "skill.deleted": "Skill deleted",
   "skill.restored": "Skill restored",
+  "skill.purged": "Skill permanently deleted",
   "skill.imported": "Skill imported",
   // Team
   "team.created": "Team created",
@@ -187,8 +195,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
 
 /**
  * Derive a badge variant from the event name's verb suffix. Auth and unknown
- * events use `outline`; created → `default`; deleted → `destructive`;
- * everything else (updates, rotations, syncs, etc.) → `secondary`.
+ * events use `outline`; created → `default`; deleted and purged →
+ * `destructive`; everything else (updates, rotations, syncs, etc.) →
+ * `secondary`.
  */
 function verbVariant(eventName: AuditEventName): BadgeVariant {
   if (eventName.startsWith("auth.") || eventName.startsWith("unknown.")) {
@@ -196,7 +205,9 @@ function verbVariant(eventName: AuditEventName): BadgeVariant {
   }
   const verb = eventName.split(".")[1] ?? "";
   if (verb === "created") return "default";
-  if (verb === "deleted") return "destructive";
+  // `purged` is permanent deletion — the one action nothing recovers from, so
+  // it must not read as quieter than the soft delete it follows.
+  if (verb === "deleted" || verb === "purged") return "destructive";
   return "secondary";
 }
 

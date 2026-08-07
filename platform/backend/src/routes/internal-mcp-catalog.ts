@@ -44,6 +44,11 @@ import {
   assertValuesMatchEnvironmentRegex,
 } from "@/services/environments/environment";
 import {
+  extractLocalConfigSecrets,
+  getCatalogClientSecretValues,
+  upsertCatalogClientSecretValue,
+} from "@/services/mcp-catalog-secrets";
+import {
   flagImageApprovalRequired,
   holdInstallIfImageGated,
 } from "@/services/mcp-install-policy";
@@ -408,42 +413,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.localConfig?.imagePullSecrets ||
         restBody.userConfig
       ) {
-        const localConfig = restBody.localConfig;
-        // Extract secret env vars from localConfig.environment
-        const secretEnvVars: Record<string, string> = {};
-        if (localConfig?.environment) {
-          for (const envVar of localConfig.environment) {
-            if (
-              envVar.type === "secret" &&
-              envVar.value &&
-              !envVar.promptOnInstallation
-            ) {
-              secretEnvVars[envVar.key] = envVar.value;
-              delete envVar.value; // Remove value from catalog template
-            }
-          }
+        const extraction = await extractLocalConfigSecrets({
+          localConfig: restBody.localConfig,
+          existingSecretId: null,
+          catalogName: restBody.name,
+        });
+        if (extraction.localConfig !== undefined) {
+          restBody.localConfig = extraction.localConfig;
         }
-
-        // Extract image pull secret passwords from credentials entries
-        // Keyed by server:username (stable across reorder, unique per account)
-        if (localConfig?.imagePullSecrets) {
-          for (const entry of localConfig.imagePullSecrets) {
-            if (entry.source === "credentials" && entry.password) {
-              secretEnvVars[
-                `__regcred_password:${entry.server}:${entry.username}`
-              ] = entry.password;
-              delete entry.password; // Strip from catalog template
-            }
-          }
-        }
-
-        // Store secret env vars if any exist
-        if (Object.keys(secretEnvVars).length > 0) {
-          const secret = await secretManager().createSecret(
-            secretEnvVars,
-            `${restBody.name}-local-config-env`,
-          );
-          localConfigSecretId = secret.id;
+        if (extraction.secretId) {
+          localConfigSecretId = extraction.secretId;
           restBody.localConfigSecretId = localConfigSecretId;
         }
       }
@@ -736,6 +715,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
       });
 
+      if (restBody.dynamicConnectionMcpServerId) {
+        const pinned = await McpServerModel.findByIdInOrg(
+          restBody.dynamicConnectionMcpServerId,
+          request.organizationId,
+        );
+        if (pinned?.scope === "personal") {
+          throw new ApiError(
+            400,
+            "Personal connections cannot be set as the default credential. Use on-behalf-of-user resolution instead.",
+          );
+        }
+      }
+
       // Re-authorize and re-sync teams only when scope, team assignments, or
       // their access levels actually change. A content-only edit that echoes
       // the existing teams must not 403 a non-admin author/team-admin or
@@ -970,106 +962,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.localConfig?.imagePullSecrets ||
         restBody.userConfig
       ) {
-        const localConfig = restBody.localConfig;
-        // Get existing secret values to preserve keys that are still in the request
-        const existingSecretValues: Record<string, string> = {};
-        if (localConfigSecretId) {
-          const existingSecret =
-            await secretManager().getSecret(localConfigSecretId);
-          if (existingSecret?.secret) {
-            for (const [key, value] of Object.entries(existingSecret.secret)) {
-              existingSecretValues[key] = String(value);
-            }
-          }
+        const extraction = await extractLocalConfigSecrets({
+          localConfig: restBody.localConfig,
+          existingSecretId: localConfigSecretId,
+          catalogName: originalCatalogItem.name,
+        });
+        // A userConfig-only edit reaches here with no localConfig. Assigning
+        // the (undefined) result would still create the key, and `update()`
+        // resets the image approval on `"localConfig" in dbValues` alone —
+        // re-blocking installs behind the trusted-image gate.
+        if (extraction.localConfig !== undefined) {
+          restBody.localConfig = extraction.localConfig;
         }
-
-        // Extract secret env vars from localConfig.environment
-        // Preserve existing values for keys that are in the request but have no new value
-        const secretEnvVars: Record<string, string> = {};
-
-        for (const envVar of localConfig?.environment ?? []) {
-          if (envVar.type === "secret" && !envVar.promptOnInstallation) {
-            if (envVar.value) {
-              // New value provided - use it
-              if (existingSecretValues[envVar.key] !== envVar.value) {
-                catalogSharedSecretValuesRotated = true;
-              }
-              secretEnvVars[envVar.key] = envVar.value;
-              delete envVar.value; // Remove value from catalog template
-            } else if (existingSecretValues[envVar.key]) {
-              // No new value but key exists in existing secret - preserve it
-              secretEnvVars[envVar.key] = existingSecretValues[envVar.key];
-            }
-            // If no value and not in existing secret, skip (user added key without value)
-          }
-        }
-
-        // Extract image pull secret passwords from credentials entries
-        // Keyed by server:username (stable across reorder, unique per account)
-        // Preserve existing passwords for entries that don't provide a new one
-        if (localConfig?.imagePullSecrets) {
-          for (const entry of localConfig.imagePullSecrets) {
-            if (entry.source === "credentials") {
-              const regcredKey = `__regcred_password:${entry.server}:${entry.username}`;
-              if (entry.password) {
-                // New password provided - use it
-                if (existingSecretValues[regcredKey] !== entry.password) {
-                  catalogSharedSecretValuesRotated = true;
-                }
-                secretEnvVars[regcredKey] = entry.password;
-                delete entry.password; // Strip from catalog template
-              } else if (existingSecretValues[regcredKey]) {
-                // No new password but key exists in existing secret - preserve it
-                secretEnvVars[regcredKey] = existingSecretValues[regcredKey];
-              }
-            }
-          }
-        }
-        // A key that lived in the existing bag but is no longer
-        // referenced by either env vars or image-pull-secrets gets
-        // implicitly dropped on `updateSecret` below — that's a value
-        // change on the bag, so flag it as rotation.
-        //
-        // Gated on whether the request actually supplied either
-        // local-config surface that produces bag keys. A userConfig-
-        // only edit enters this `else if` branch (because the outer
-        // condition matches `restBody.userConfig`) without supplying
-        // a `localConfig`, leaving `secretEnvVars` empty solely
-        // because there were no env-var/imagePullSecret entries to
-        // iterate — not because keys were dropped. Without this
-        // gate, a userConfig-only edit (e.g. adding an optional
-        // header) would falsely force the auto path on a catalog
-        // with any pre-existing local secret bag.
-        const localBagSurfaceTouched =
-          restBody.localConfig?.environment !== undefined ||
-          restBody.localConfig?.imagePullSecrets !== undefined;
-        if (localBagSurfaceTouched) {
-          for (const existingKey of Object.keys(existingSecretValues)) {
-            if (!(existingKey in secretEnvVars)) {
-              catalogSharedSecretValuesRotated = true;
-              break;
-            }
-          }
-        }
-        // Orphaned __regcred_password:* keys (from removed entries) are implicitly
-        // dropped since they won't be in secretEnvVars when the secret is updated
-
-        // Store secret env vars if any exist
-        if (Object.keys(secretEnvVars).length > 0) {
-          if (localConfigSecretId) {
-            // Update existing secret
-            await secretManager().updateSecret(
-              localConfigSecretId,
-              secretEnvVars,
-            );
-          } else {
-            // Create new secret
-            const secret = await secretManager().createSecret(
-              secretEnvVars,
-              `${originalCatalogItem.name}-local-config-env`,
-            );
-            localConfigSecretId = secret.id;
-          }
+        if (extraction.rotated) catalogSharedSecretValuesRotated = true;
+        if (extraction.secretId) {
+          localConfigSecretId = extraction.secretId;
           restBody.localConfigSecretId = localConfigSecretId;
         }
       }
@@ -1907,60 +1814,6 @@ async function callerCanDeployToRestricted(
     headers,
   );
   return hasDeploy;
-}
-
-async function upsertCatalogClientSecretValue(params: {
-  clientSecretId: string | null | undefined;
-  catalogName: string;
-  key: string;
-  value: string;
-}): Promise<{ id: string; rotated: boolean }> {
-  const existingSecretValues = await getCatalogClientSecretValues(
-    params.clientSecretId,
-  );
-  // `rotated` distinguishes "value actually changed on an existing bag"
-  // from "writing the same value back". The cascade gate uses this to
-  // decide whether to force a pod restart (the bag content lives
-  // outside the catalog row, so a same-id-different-content write is
-  // invisible to the row-diff gate). For new bags the caller's row
-  // diff covers the cascade via the new `clientSecretId`, so `rotated`
-  // is irrelevant there.
-  const rotated = existingSecretValues[params.key] !== params.value;
-  const secretValue = {
-    ...existingSecretValues,
-    [params.key]: params.value,
-  };
-
-  if (params.clientSecretId) {
-    await secretManager().updateSecret(params.clientSecretId, secretValue);
-    return { id: params.clientSecretId, rotated };
-  }
-
-  const secret = await secretManager().createSecret(
-    secretValue,
-    `${params.catalogName}-client-secrets`,
-  );
-  return { id: secret.id, rotated };
-}
-
-async function getCatalogClientSecretValues(
-  clientSecretId: string | null | undefined,
-): Promise<Record<string, string>> {
-  if (!clientSecretId) {
-    return {};
-  }
-
-  const existingSecret = await secretManager().getSecret(clientSecretId);
-  if (!existingSecret?.secret) {
-    return {};
-  }
-
-  return Object.fromEntries(
-    Object.entries(existingSecret.secret).map(([key, value]) => [
-      key,
-      String(value),
-    ]),
-  );
 }
 
 /**

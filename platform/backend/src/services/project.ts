@@ -3,8 +3,13 @@ import {
   MAX_PROJECT_UPLOAD_MB,
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
-import { userHasPermission } from "@/auth";
+import { sql } from "drizzle-orm";
+import { isGlobalAdmin, userHasPermission } from "@/auth";
+import { withDbTransaction } from "@/database";
+import logger from "@/logging";
 import {
+  AgentModel,
+  AgentTeamModel,
   ConversationModel,
   ConversationNotOwnedError,
   FileNameExistsError,
@@ -19,6 +24,7 @@ import {
 import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
 import type {
+  AgentScope,
   Project,
   ProjectConversationItem,
   ProjectDetail,
@@ -35,6 +41,13 @@ import {
   sanitizeUploadFilename,
 } from "@/utils/upload-filename";
 
+/** Who a project reaches, which is what its default agent must cover. */
+type ProjectShareAudience = {
+  visibility: ProjectShareVisibility | null;
+  teamIds: string[];
+  userIds: string[];
+};
+
 /**
  * Projects: named collections of chats that own a set of result files
  * (`files.project_id`). Mutations are owner-only; access to the project (and so
@@ -47,11 +60,21 @@ class ProjectService {
     name: string;
     description: string | null;
     icon?: string | null;
+    defaultAgentId?: string | null;
   }): Promise<Project> {
     const name = params.name.trim();
     const invalid = validateProjectName(name);
     if (invalid) {
       throw new ApiError(400, `project name is invalid: ${invalid}`);
+    }
+    if (params.defaultAgentId) {
+      // A project is unshared at creation, so the creator is its whole audience.
+      await this.requirePinnableDefaultAgent({
+        agentId: params.defaultAgentId,
+        organizationId: params.organizationId,
+        ownerUserId: params.userId,
+        share: { visibility: null, teamIds: [], userIds: [] },
+      });
     }
     try {
       return await ProjectModel.create({
@@ -60,6 +83,7 @@ class ProjectService {
         name,
         description: params.description,
         icon: params.icon ?? null,
+        defaultAgentId: params.defaultAgentId ?? null,
       });
     } catch (error) {
       if (error instanceof ProjectNameExistsError) {
@@ -360,18 +384,48 @@ class ProjectService {
     allowAdminOversight?: boolean;
   }): Promise<ProjectDetail> {
     const { project, viewerRole } = await this.requireViewable(params);
-    const [share, counts, pins, ownerNames, shareTeams, shareUsers] =
-      await Promise.all([
-        ProjectShareModel.findByProjectId(project.id),
-        ProjectModel.countConversations([project.id]),
-        ProjectPinModel.getPinnedAtForProjects({
-          userId: params.userId,
-          projectIds: [project.id],
-        }),
-        UserModel.getNamesByIds([project.userId]),
-        ProjectShareModel.getShareTeamsForProjects([project.id]),
-        ProjectShareModel.getShareUsersForProjects([project.id]),
-      ]);
+    const [
+      share,
+      counts,
+      pins,
+      ownerNames,
+      shareTeams,
+      shareUsers,
+      defaultAgent,
+    ] = await Promise.all([
+      ProjectShareModel.findByProjectId(project.id),
+      ProjectModel.countConversations([project.id]),
+      ProjectPinModel.getPinnedAtForProjects({
+        userId: params.userId,
+        projectIds: [project.id],
+      }),
+      UserModel.getNamesByIds([project.userId]),
+      ProjectShareModel.getShareTeamsForProjects([project.id]),
+      ProjectShareModel.getShareUsersForProjects([project.id]),
+      project.defaultAgentId
+        ? AgentModel.findPinnableProjectDefault({
+            id: project.defaultAgentId,
+            organizationId: project.organizationId,
+          })
+        : null,
+    ]);
+    // Re-checked rather than returned raw: a pin can outlive its eligibility —
+    // the agent soft-deleted, rescoped, or the project shared more widely than
+    // the agent reaches — and reporting a stale one would preselect an agent
+    // the member cannot actually use.
+    const reachableDefaultAgent =
+      defaultAgent &&
+      (await this.agentReachesAudience({
+        agent: defaultAgent,
+        ownerUserId: project.userId,
+        share: {
+          visibility: share?.visibility ?? null,
+          teamIds: share?.teamIds ?? [],
+          userIds: share?.userIds ?? [],
+        },
+      }))
+        ? { id: defaultAgent.id, name: defaultAgent.name }
+        : null;
     // Share targets are visible to whoever can manage the project (so the edit
     // dialog can populate sharing): the owner, or a project admin — including on
     // a project merely shared with them (viewerRole "shared"), so they still get
@@ -405,12 +459,16 @@ class ProjectService {
           ? (shareUsers.get(project.id) ?? []).map((u) => u.name)
           : null,
       pinnedAt: pins.get(project.id) ?? null,
+      defaultAgent: reachableDefaultAgent,
       createdAt: project.createdAt,
       deletedAt: project.deletedAt,
     };
   }
 
-  /** Update name/description/icon (owner or project admin); only provided keys change. */
+  /**
+   * Update name/description/icon/default agent (owner or project admin); only
+   * provided keys change.
+   */
   async update(params: {
     id: string;
     organizationId: string;
@@ -418,12 +476,14 @@ class ProjectService {
     name?: string;
     description?: string | null;
     icon?: string | null;
+    defaultAgentId?: string | null;
   }): Promise<void> {
-    await this.requireManageable(params);
+    const project = await this.requireManageable(params);
     const fields: {
       name?: string;
       description?: string | null;
       icon?: string | null;
+      defaultAgentId?: string | null;
     } = {};
     if (params.name !== undefined) {
       const name = params.name.trim();
@@ -436,6 +496,29 @@ class ProjectService {
     if (params.description !== undefined)
       fields.description = params.description;
     if (params.icon !== undefined) fields.icon = params.icon;
+    if (params.defaultAgentId !== undefined) {
+      if (params.defaultAgentId !== null) {
+        await this.requirePinnableDefaultAgent({
+          agentId: params.defaultAgentId,
+          organizationId: params.organizationId,
+          ownerUserId: project.userId,
+          share: await this.loadShareAudience(params.id),
+        });
+      }
+      fields.defaultAgentId = params.defaultAgentId;
+    } else if (project.defaultAgentId) {
+      // Repair a pin that outlived its eligibility. The read path hides such a
+      // pin, so the editor is shown "no default" and cannot clear what it
+      // cannot see — leaving the row set means re-widening the agent's scope
+      // silently resurrects a pin the user was last told was absent.
+      const stillReachable = await this.agentReachesProjectAudience({
+        agentId: project.defaultAgentId,
+        organizationId: params.organizationId,
+        ownerUserId: project.userId,
+        share: await this.loadShareAudience(params.id),
+      });
+      if (!stillReachable) fields.defaultAgentId = null;
+    }
     if (Object.keys(fields).length === 0) return;
     try {
       await ProjectModel.update({ id: params.id, fields });
@@ -503,7 +586,7 @@ class ProjectService {
     teamIds: string[];
     userIds?: string[];
   }): Promise<void> {
-    await this.requireManageable(params);
+    const project = await this.requireManageable(params);
     // Org-wide visibility is a broadcast to the whole organization, so both
     // entering and leaving it are gated behind `project:share-org` — otherwise
     // any owner could publish to (or silently withdraw from) everyone.
@@ -520,6 +603,8 @@ class ProjectService {
     }
     if (params.visibility === null) {
       await ProjectShareModel.remove(params.id);
+      // Unsharing only ever narrows the audience, so a pin that was reachable
+      // before still is.
       return;
     }
     if (params.visibility === "team") {
@@ -532,6 +617,38 @@ class ProjectService {
       visibility: params.visibility,
       teamIds: params.teamIds,
       userIds: params.userIds ?? [],
+    });
+    await this.clearDefaultAgentBeyondAudience({
+      project,
+      share: {
+        visibility: params.visibility,
+        teamIds: params.teamIds,
+        userIds: params.userIds ?? [],
+      },
+    });
+  }
+
+  /**
+   * Widening a project's sharing can outgrow its pinned agent. Drop the pin
+   * rather than leave a row pointing at an agent the new audience cannot run —
+   * the read path would hide it anyway, and a stale row resurfaces if the
+   * project is later narrowed again.
+   */
+  private async clearDefaultAgentBeyondAudience(params: {
+    project: Project;
+    share: ProjectShareAudience;
+  }): Promise<void> {
+    if (!params.project.defaultAgentId) return;
+    const stillReachable = await this.agentReachesProjectAudience({
+      agentId: params.project.defaultAgentId,
+      organizationId: params.project.organizationId,
+      ownerUserId: params.project.userId,
+      share: params.share,
+    });
+    if (stillReachable) return;
+    await ProjectModel.update({
+      id: params.project.id,
+      fields: { defaultAgentId: null },
     });
   }
 
@@ -646,6 +763,113 @@ class ProjectService {
     // Now active again; the caller is a project:admin (checked above) but not
     // necessarily an owner/share recipient, so read it back via admin oversight.
     return this.get({ ...params, allowAdminOversight: true });
+  }
+
+  /**
+   * Permanently destroy a soft-deleted project. Irreversible, no grace period:
+   * the row goes, and the cascade takes its files, pins, share configuration,
+   * and scheduled tasks (with their runs). Chats are untouched — they detached
+   * at soft-delete time and survive as ordinary conversations.
+   *
+   * Global admins only, checked before anything is read. Unknown ids, live
+   * projects, other tenants' projects, and callers who are not global admins
+   * all read as the same 404: a distinct error on any of them would confirm
+   * that a trashed project with that id exists.
+   *
+   * `project:admin` deliberately does NOT reach here. It is the oversight grant
+   * — see, restore, tidy up after other members — and a custom role can carry
+   * it without holding {@link delete}'s `project:share-org` gate on org-wide
+   * projects. Destroying a project outright is the deployment owner's call, so
+   * the built-in admin roles are the whole gate and the share-org branch has
+   * nothing left to protect.
+   *
+   * File BYTES living outside Postgres are removed by row, INSIDE the
+   * transaction and as its last step. Two things follow from that, both
+   * deliberate:
+   *
+   * The conversation equivalent (`fileStore.purgeConversationFileRows`, as used
+   * by the retention job) defers its byte deletion to AFTER commit, and that is
+   * right there — a conversation's object key contains a UUID, which is never
+   * handed out twice. A project's key contains its SLUG, and committing this
+   * delete frees that slug for the next project of the same name
+   * ({@link ProjectModel.generateUniqueSlug} counts only existing rows). Delete
+   * after commit and a project created in that window owns these paths while
+   * they are still being removed. Deleting before commit keeps the row — and so
+   * the slug — held, which closes it.
+   *
+   * Byte deletion goes LAST because an object store cannot roll back. Anything
+   * that fails ahead of it (the lock, the cascade, a deadlock between them)
+   * rolls back for free; only a commit failure, the one step after, can leave a
+   * restored project whose bytes are gone.
+   *
+   * Nothing bounds the object-store round-trips, so the transaction is capped
+   * by `idle_in_transaction_session_timeout` — `statement_timeout` does not
+   * cover time spent between statements. Hitting the cap aborts the purge and
+   * leaves the project in the trash, possibly minus some bytes.
+   *
+   * Objects sitting in the project's folder with no `files` row are NOT
+   * removed; nothing attributes them to a project. See
+   * {@link FileStore.captureProjectFileBytes}.
+   *
+   * An object the store refuses to delete does not fail the purge — the rows
+   * are gone by then, so the only alternative is a project that can never be
+   * purged. It is reported instead: each one warns with its object key and
+   * increments `file_storage_orphaned_objects_total`, and a surviving count
+   * warns once more here. Alert on the counter; a "permanent" delete that left
+   * bytes behind is not something to discover by reading logs.
+   */
+  async purge(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<void> {
+    if (!(await isGlobalAdmin(params.userId, params.organizationId))) {
+      throw new ApiError(404, "Project not found");
+    }
+
+    const purged = await withDbTransaction(async (tx) => {
+      // `sql.raw`, not an interpolated value: SET is a utility command and
+      // takes no bind parameters. The value is a module constant.
+      await tx.execute(
+        sql.raw(
+          `SET LOCAL idle_in_transaction_session_timeout = ${PURGE_IDLE_TIMEOUT_MS}`,
+        ),
+      );
+
+      // The lock is the race guard: a concurrent restore either wins (no
+      // soft-deleted row here, so we stop) or waits and then finds nothing.
+      const locked = await ProjectModel.lockIfDeleted(tx, {
+        id: params.id,
+        organizationId: params.organizationId,
+      });
+      if (!locked) return false;
+
+      // Captured while the rows still exist — the cascade below removes them.
+      const purgeBytes = await fileStore.captureProjectFileBytes(
+        { organizationId: params.organizationId, projectId: params.id },
+        tx,
+      );
+      await ProjectModel.hardDeleteLocked(tx, params.id);
+      return { orphaned: await purgeBytes() };
+    });
+
+    if (!purged) throw new ApiError(404, "Project not found");
+
+    // A byte delete that fails does NOT fail the purge: the rows are already
+    // gone, so refusing to commit would only trade leftover bytes for a project
+    // that cannot be purged at all. It must not pass silently either — this is
+    // the one line that says a "permanent" delete was not total, and it names a
+    // count so a store-wide outage reads differently from one stubborn object.
+    if (purged.orphaned > 0) {
+      logger.warn(
+        {
+          projectId: params.id,
+          organizationId: params.organizationId,
+          orphaned: purged.orphaned,
+        },
+        "Project permanently deleted, but some stored file contents could not be removed and are now orphaned; see the preceding warnings for their object keys",
+      );
+    }
   }
 
   /**
@@ -794,6 +1018,123 @@ class ProjectService {
       userId: params.userId,
       projectId: params.id,
     });
+  }
+
+  /**
+   * A project's default agent must be one every member of the project can
+   * actually use, however widely the project is shared. Org scope is what
+   * guarantees that, so it is enforced here rather than left to the picker.
+   */
+  private async requirePinnableDefaultAgent(params: {
+    agentId: string;
+    organizationId: string;
+    ownerUserId: string;
+    share: ProjectShareAudience;
+  }): Promise<void> {
+    if (
+      !(await this.agentReachesProjectAudience({
+        agentId: params.agentId,
+        organizationId: params.organizationId,
+        ownerUserId: params.ownerUserId,
+        share: params.share,
+      }))
+    ) {
+      throw new ApiError(
+        400,
+        "A project's default agent must be usable by everyone the project is shared with",
+      );
+    }
+  }
+
+  /**
+   * Whether every person the project reaches can actually run the agent. A pin
+   * nobody but the owner can see would silently drop those members back to the
+   * organization default, so eligibility is a function of the project's sharing
+   * rather than a fixed scope.
+   *
+   * An `org` agent always qualifies. Otherwise the audience decides: a team
+   * share needs a team agent covering every shared team, while a private or
+   * named-user share is small enough to check person by person.
+   */
+  private async agentReachesProjectAudience(params: {
+    agentId: string;
+    organizationId: string;
+    ownerUserId: string;
+    share: ProjectShareAudience;
+  }): Promise<boolean> {
+    const agent = await AgentModel.findPinnableProjectDefault({
+      id: params.agentId,
+      organizationId: params.organizationId,
+    });
+    if (!agent) return false;
+    return this.agentReachesAudience({
+      agent,
+      ownerUserId: params.ownerUserId,
+      share: params.share,
+    });
+  }
+
+  private async agentReachesAudience(params: {
+    agent: { id: string; scope: AgentScope };
+    ownerUserId: string;
+    share: ProjectShareAudience;
+  }): Promise<boolean> {
+    const { agent } = params;
+    if (agent.scope === "org") return true;
+
+    switch (params.share.visibility) {
+      // Nothing narrower than an `org` agent covers the whole organization.
+      case "organization":
+        return false;
+      case "team": {
+        if (agent.scope !== "team") return false;
+        const agentTeamIds = new Set(
+          await AgentTeamModel.getTeamsForAgent(agent.id),
+        );
+        const coversSharedTeams = params.share.teamIds.every((teamId) =>
+          agentTeamIds.has(teamId),
+        );
+        // The owner chats here too and may not belong to the teams the project
+        // is shared with. Leaving them out would accept a pin they cannot run,
+        // which unsharing would then have to take away again.
+        return (
+          coversSharedTeams &&
+          (await this.everyUserHasAgentAccess([params.ownerUserId], agent.id))
+        );
+      }
+      case "user":
+        return this.everyUserHasAgentAccess(
+          [params.ownerUserId, ...params.share.userIds],
+          agent.id,
+        );
+      // Unshared: the owner is the only person who ever starts a chat here.
+      default:
+        return this.everyUserHasAgentAccess([params.ownerUserId], agent.id);
+    }
+  }
+
+  private async everyUserHasAgentAccess(
+    userIds: string[],
+    agentId: string,
+  ): Promise<boolean> {
+    const checks = await Promise.all(
+      [...new Set(userIds)].map((userId) =>
+        AgentTeamModel.userHasAgentAccess(userId, agentId, false),
+      ),
+    );
+    return checks.every(Boolean);
+  }
+
+  /** The project's current sharing, as the pin-eligibility rule reads it. */
+  private async loadShareAudience(
+    projectId: string,
+  ): Promise<ProjectShareAudience> {
+    const share = await ProjectShareModel.findByProjectId(projectId);
+    return {
+      visibility: share?.visibility ?? null,
+      teamIds: share?.teamIds ?? [],
+      userIds: share?.userIds ?? [],
+    };
   }
 
   /** Project the caller may read, by id; "no access" reads as 404. */
@@ -964,6 +1305,15 @@ export const projectService = new ProjectService();
 // Bounded so a pathological collision (or a hostile client racing the same name)
 // can't spin forever; 50 distinct " (n)" candidates is far beyond any real case.
 const MAX_UPLOAD_RENAME_ATTEMPTS = 50;
+
+/**
+ * Ceiling for {@link ProjectService.purge}'s transaction. Its object-store
+ * deletes run between statements, where `statement_timeout` does not reach, so
+ * without this a slow store could hold the transaction — and a pool connection,
+ * and vacuum — open indefinitely. Generous rather than tight: hitting it aborts
+ * a purge that was already partway through deleting bytes.
+ */
+const PURGE_IDLE_TIMEOUT_MS = 300_000;
 
 /**
  * Decode an upload's base64 body to bytes. Tolerates an accidental `data:` URL

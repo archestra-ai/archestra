@@ -97,6 +97,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/auth/default-credentials-status", { enabled: false }),
   ...getJson("/api/auth/organization/list", []),
   ...getJson("/api/auth/organization/get-full-organization", betterAuthOrgSeed),
+  // The role behind `useIsGlobalAdmin` — admin, matching the session identity,
+  // so admin-only affordances (permanent delete) render.
+  ...getJson("/api/auth/organization/get-active-member-role", {
+    role: sessionSeed.user.role,
+  }),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
@@ -162,6 +167,17 @@ export const handlers: HttpHandler[] = [
     },
   }),
   ...getJson("/api/internal_mcp_catalog", catalogSeed),
+  // Online-catalog proxy (browser baseUrl of the archestra-catalog SDK).
+  // The create form's template auto-fill searches it as soon as a
+  // connection field carries an identity; an empty result set keeps the
+  // auto-fill inert unless a test overrides this with a fixture.
+  ...getJson("/api/archestra-catalog/search", {
+    servers: [],
+    totalCount: 0,
+    limit: 10,
+    offset: 0,
+    hasMore: false,
+  }),
   ...getJson("/api/internal_mcp_catalog/labels/keys", []),
   ...getJson("/api/internal_mcp_catalog/:catalogId/children", []),
   ...getJson("/api/mcp_server", installedServersSeed),
@@ -178,6 +194,7 @@ export const handlers: HttpHandler[] = [
       supportsHttpMethods: false,
       message: null,
       enforcementSource: "probe",
+      enforcementStatus: "verified-enforced",
       probe: "enforced",
       probedAt: "2026-01-01T00:00:00.000Z",
     },

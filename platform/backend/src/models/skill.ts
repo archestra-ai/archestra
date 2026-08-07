@@ -17,7 +17,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { restore, softDelete } from "@/database/soft-delete";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
@@ -279,6 +279,11 @@ class SkillModel {
       teamIds?: string[];
       /** Environments the skill is restricted to; empty/omitted = every environment. */
       environmentIds?: string[];
+      /**
+       * Git commit the initial bytes came from, stamped on version 1. Passed
+       * only by the GitHub import; see `skill_versions.source_commit`.
+       */
+      versionSourceCommit?: string;
     },
     tx?: Transaction,
   ): Promise<Skill | null> {
@@ -325,6 +330,7 @@ class SkillModel {
           files: versionFiles,
         }),
         files: versionFiles,
+        sourceCommit: params.versionSourceCommit,
       });
 
       return skill;
@@ -346,11 +352,13 @@ class SkillModel {
    * change can never be committed with a team set that leaves the skill
    * orphaned.
    *
-   * When `expectedLatestVersion` is set, the update is a compare-and-set: it
-   * throws `ApiError(409)` (rolling back) if the skill's head has already moved
-   * past that version, so an edit computed from a stale snapshot cannot clobber
-   * a concurrent update. Omit it to keep last-write-wins (the full-manifest
-   * `update_skill` path, whose payload is self-contained).
+   * `expectedLatestVersion` anchors the edit to the head it was computed from:
+   * the update is a compare-and-set that throws `ApiError(409)` (rolling back)
+   * if the skill has already moved past it, so a stale snapshot cannot clobber
+   * a concurrent write. It is opt-in per caller: `edit_skill` always passes one
+   * (its schema requires `baseVersion`), the REST update route forwards one only
+   * when the client sends it, and `update_skill` never does — it composes a whole
+   * manifest from its arguments and owes nothing to a prior read.
    */
   static async updateWithFiles(params: {
     id: string;
@@ -360,6 +368,12 @@ class SkillModel {
     /** Replaces the environment assignments; [] clears them (every environment). */
     environmentIds?: string[];
     expectedLatestVersion?: number;
+    /**
+     * Git commit the new bytes came from, stamped on the forked version and
+     * dropped when the payload is unchanged and nothing forks. Passed only by
+     * the GitHub sync; see `skill_versions.source_commit`.
+     */
+    versionSourceCommit?: string;
   }): Promise<Skill | null> {
     return await withDbTransaction(async (tx) => {
       const [skill] = await tx
@@ -382,9 +396,16 @@ class SkillModel {
         params.expectedLatestVersion !== undefined &&
         skill.latestVersion !== params.expectedLatestVersion
       ) {
+        // Carries an internal code because the update route raises other 409s
+        // (a name collision, a read-only GitHub-synced skill) and a client that
+        // has to offer a reload cannot tell them apart on the status alone.
+        // The message stays client-neutral: it reaches both the REST route and
+        // `edit_skill`, so the caller appends its own way back rather than
+        // being named here.
         throw new ApiError(
           409,
-          `Skill "${skill.name}" has moved to version ${skill.latestVersion}; the edit was based on version ${params.expectedLatestVersion}. Reload the skill with load_skill and retry.`,
+          `Skill "${skill.name}" has moved to version ${skill.latestVersion}; the edit was based on version ${params.expectedLatestVersion}.`,
+          "skill_version_conflict",
         );
       }
 
@@ -457,6 +478,7 @@ class SkillModel {
           content: skill.content,
           contentHash,
           files: versionFiles,
+          sourceCommit: params.versionSourceCommit,
         });
         const [bumped] = await tx
           .update(schema.skillsTable)
@@ -652,6 +674,61 @@ class SkillModel {
   }
 
   /**
+   * Permanently destroy a soft-deleted skill: every version (and, by cascade,
+   * every version file), then the skill row itself — which cascades its files,
+   * team/user grants, environment assignments, usage events, share links, and
+   * connection-setup links. Irreversible.
+   *
+   * Versions must go FIRST and explicitly. `skill_versions.skill_id` is
+   * `ON DELETE SET NULL`, so deleting the skill alone would silently ORPHAN the
+   * version rows and their file contents — leaving the skill's actual bytes
+   * behind, unreachable and undeletable, which is the opposite of what a purge
+   * is for.
+   *
+   * That delete can fail: `skill_sandbox_skill_mounts.skill_version_id` is
+   * `ON DELETE RESTRICT`, so a sandbox still holding this skill blocks it. The
+   * violation is deliberately NOT caught here — an aborted Postgres transaction
+   * cannot be continued from the inside, so the caller catches it outside this
+   * transaction and answers 409.
+   *
+   * Returns false if there was no soft-deleted row to take, which is how a
+   * restore that won the race reports itself.
+   */
+  static async purge(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    return withDbTransaction(async (tx) => {
+      // The row lock is the race guard: a concurrent restore either commits
+      // first (leaving no soft-deleted row for us to find) or blocks until this
+      // transaction commits and then finds no row at all.
+      const [locked] = await tx
+        .select({ id: schema.skillsTable.id })
+        .from(schema.skillsTable)
+        .where(
+          and(
+            eq(schema.skillsTable.id, params.id),
+            eq(schema.skillsTable.organizationId, params.organizationId),
+            isNotNull(schema.skillsTable.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!locked) return false;
+
+      await tx
+        .delete(schema.skillVersionsTable)
+        .where(eq(schema.skillVersionsTable.skillId, params.id));
+      await hardDelete(
+        tx,
+        schema.skillsTable,
+        eq(schema.skillsTable.id, params.id),
+      );
+      return true;
+    });
+  }
+
+  /**
    * The soft-deleted row scoped to its org — the restore route's lookup, used
    * to authorize and conflict-check before un-deleting. `findById`/`findByIds`
    * filter deleted rows, so they cannot serve this path.
@@ -721,6 +798,32 @@ class SkillModel {
     return conflict
       ? `Cannot restore: a shared skill named "${skill.name}" already exists.`
       : null;
+  }
+
+  /**
+   * Identity of a skill for the audit trail, and nothing else. The
+   * permanent-delete route uses this rather than {@link findByIdForAudit}: a
+   * purge is audited by identity only, never by keeping a copy of the content
+   * it destroyed. Includes soft-deleted rows — the purge target is always one.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.skillsTable.id,
+        name: schema.skillsTable.name,
+      })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          eq(schema.skillsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */

@@ -83,7 +83,7 @@ export class VaultClient {
     const listPath = this.getListPath(folderPath);
 
     try {
-      const result = await this.executeWithK8sTokenRefresh(
+      const result = await this.executeWithTokenRefresh(
         () => this.client.list(listPath),
         "listSecretsInFolder",
       );
@@ -137,7 +137,7 @@ export class VaultClient {
     }
 
     try {
-      const vaultResponse = await this.executeWithK8sTokenRefresh(
+      const vaultResponse = await this.executeWithTokenRefresh(
         () => this.client.read(vaultPath),
         "getSecretFromPath",
       );
@@ -180,7 +180,7 @@ export class VaultClient {
     const listPath = this.getListPath(folderPath);
 
     try {
-      const result = await this.executeWithK8sTokenRefresh(
+      const result = await this.executeWithTokenRefresh(
         () => this.client.list(listPath),
         "checkFolderConnectivity",
       );
@@ -246,11 +246,13 @@ export class VaultClient {
       this.initialized = true;
     } catch (error) {
       logger.error({ error }, "VaultClient: initialization failed");
-      throw new ApiError(
+      const apiError = new ApiError(
         503,
         extractVaultErrorMessage(error),
         SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
       );
+      apiError.cause = error;
+      throw apiError;
     }
   }
 
@@ -268,11 +270,13 @@ export class VaultClient {
       throw error;
     }
 
-    throw new ApiError(
+    const apiError = new ApiError(
       503,
       extractVaultErrorMessage(error),
       SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
     );
+    apiError.cause = error;
+    throw apiError;
   }
 
   /**
@@ -289,51 +293,51 @@ export class VaultClient {
   }
 
   /**
-   * Write data to a Vault path with auth and K8s token refresh.
+   * Write data to a Vault path with auth and token refresh.
    */
   protected async writeToPath(
     path: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
     await this.ensureInitialized();
-    await this.executeWithK8sTokenRefresh(
+    await this.executeWithTokenRefresh(
       () => this.client.write(path, payload),
       "writeToPath",
     );
   }
 
   /**
-   * Delete a secret at a Vault path with auth and K8s token refresh.
+   * Delete a secret at a Vault path with auth and token refresh.
    */
   protected async deleteAtPath(path: string): Promise<void> {
     await this.ensureInitialized();
-    await this.executeWithK8sTokenRefresh(
+    await this.executeWithTokenRefresh(
       () => this.client.delete(path),
       "deleteAtPath",
     );
   }
 
   /**
-   * Read a secret from a Vault path with auth and K8s token refresh.
+   * Read a secret from a Vault path with auth and token refresh.
    */
   protected async readFromPath(
     path: string,
   ): Promise<{ data: Record<string, unknown> }> {
     await this.ensureInitialized();
-    return await this.executeWithK8sTokenRefresh(
+    return await this.executeWithTokenRefresh(
       () => this.client.read(path),
       "readFromPath",
     );
   }
 
   /**
-   * List keys at a Vault path with auth and K8s token refresh.
+   * List keys at a Vault path with auth and token refresh.
    * Returns an empty array if the path does not exist (404).
    */
   protected async listKeysAtPath(path: string): Promise<string[]> {
     await this.ensureInitialized();
     try {
-      const result = await this.executeWithK8sTokenRefresh(
+      const result = await this.executeWithTokenRefresh(
         () => this.client.list(path),
         "listKeysAtPath",
       );
@@ -387,27 +391,28 @@ export class VaultClient {
   }
 
   /**
-   * Execute a Vault operation with automatic token refresh for K8s auth.
-   * If a 4xx error occurs and K8s auth is used, re-authenticate and retry once.
+   * Execute a Vault operation with automatic token refresh.
+   * If a 4xx error occurs under an auth method that can mint a fresh client
+   * token (Kubernetes or AWS IAM login), re-authenticate and retry once.
+   * Static token auth has nothing to refresh, so its errors propagate as-is.
    */
-  private async executeWithK8sTokenRefresh<T>(
+  private async executeWithTokenRefresh<T>(
     operation: () => Promise<T>,
     operationName: string,
   ): Promise<T> {
     try {
       return await operation();
     } catch (error) {
-      // Only retry for K8s auth method and 4xx errors
-      if (
-        this.config.authMethod !== "kubernetes" ||
-        !this.isVault4xxError(error)
-      ) {
+      const canReauthenticate =
+        this.config.authMethod === "kubernetes" ||
+        this.config.authMethod === "aws";
+      if (!canReauthenticate || !this.isVault4xxError(error)) {
         throw error;
       }
 
       logger.info(
-        { operationName },
-        "VaultClient: received 4xx error with K8s auth, re-authenticating",
+        { operationName, authMethod: this.config.authMethod },
+        "VaultClient: received 4xx error, re-authenticating",
       );
 
       // Reset initialization state and re-authenticate
@@ -452,11 +457,9 @@ export class VaultClient {
         { error, tokenPath, role: this.config.k8sRole },
         "VaultClient: Kubernetes authentication failed",
       );
-      throw new ApiError(
-        503,
-        extractVaultErrorMessage(error),
-        SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
-      );
+      // Throw raw (like loginWithAws): ensureInitialized owns the single
+      // ApiError wrap, so wrapping here would only bury the Vault detail.
+      throw error;
     }
   }
 

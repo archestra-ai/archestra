@@ -58,6 +58,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .nullable()
             .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
+          defaultAgentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
       },
@@ -69,6 +70,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name,
         description: body.description ?? null,
         icon: body.icon ?? null,
+        defaultAgentId: body.defaultAgentId ?? null,
       });
       return {
         id: project.id,
@@ -223,8 +225,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateProject,
         description:
-          "Update a project's name, description, and/or icon (owner or a " +
-          "project admin). Only the provided fields change.",
+          "Update a project's name, description, icon, and/or default agent " +
+          "(owner or a project admin). Only the provided fields change. The " +
+          "default agent must be an organization-wide chat agent; null clears " +
+          "it.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
@@ -235,6 +239,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .nullable()
             .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
+          defaultAgentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
@@ -247,6 +252,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name,
         description: body.description,
         icon: body.icon,
+        defaultAgentId: body.defaultAgentId,
       });
       return { ok: true as const };
     },
@@ -345,6 +351,32 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         name: body?.name,
       }),
+  );
+
+  fastify.delete(
+    "/api/projects/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeleteProject,
+        description:
+          "Permanently destroy a soft-deleted project (global admins only). " +
+          "Irreversible, with no grace period: the project, its files (records " +
+          "and stored contents), pins, share configuration, and scheduled " +
+          "tasks are all destroyed. Its chats are unaffected — they detached " +
+          "when it was deleted and survive as ordinary conversations. 404 if " +
+          "there is no soft-deleted project with that id in the org, which is " +
+          "also the answer when the project is still live or the caller is not " +
+          "a global admin. Restore wins a race: if a restore commits first, " +
+          "this returns 404 and the project stays.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.purge({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
   );
 
   fastify.get(

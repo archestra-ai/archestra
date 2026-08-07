@@ -45,8 +45,9 @@ async function main(): Promise<void> {
     if (result.status !== "in_progress") {
       if (result.status === "deferred") {
         logger.error(
-          "sweep deferred: drop messages_content_trgm_idx first (a worker " +
-            "boot with encryption enabled does this automatically)",
+          "sweep deferred: drop messages_content_trgm_idx and " +
+            "mcp_tool_calls_tool_result_trgm_idx first (a worker boot with " +
+            "encryption enabled does this automatically)",
         );
         process.exit(1);
       }

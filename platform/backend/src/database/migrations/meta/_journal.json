@@ -2780,6 +2780,55 @@
       "when": 1785800057394,
       "tag": "0396_purge_membershipless_personal_mcp_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 397,
+      "version": "7",
+      "when": 1785841780161,
+      "tag": "0397_credential_connection_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 398,
+      "version": "7",
+      "when": 1785918805135,
+      "tag": "0398_crazy_sally_floyd",
+      "breakpoints": true
+    },
+    {
+      "idx": 399,
+      "version": "7",
+      "when": 1785954195482,
+      "tag": "0399_broken_lady_ursula",
+      "breakpoints": true
+    },
+    {
+      "idx": 400,
+      "version": "7",
+      "when": 1785979524658,
+      "tag": "0400_brave_mystique",
+      "breakpoints": true
+    },
+    {
+      "idx": 401,
+      "version": "7",
+      "when": 1786015823588,
+      "tag": "0401_project_default_agent",
+      "breakpoints": true
+    },
+    {
+      "idx": 402,
+      "version": "7",
+      "when": 1786089936635,
+      "tag": "0402_resweep-stale-context-variant-proxy-models",
+      "breakpoints": true
+    },
+    {
+      "idx": 403,
+      "version": "7",
+      "when": 1786099394141,
+      "tag": "0403_resweep-context-variant-pricing-by-price",
+      "breakpoints": true
     }
   ]
 }

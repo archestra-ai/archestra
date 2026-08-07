@@ -281,7 +281,7 @@ describe("mcp server inspect route", () => {
     ]);
   });
 
-  test("filters out personal connections whose owner is not in the selected assignment team", async ({
+  test("filters out all personal connections for team assignments", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTeam,
@@ -300,13 +300,15 @@ describe("mcp server inspect route", () => {
       organizationId,
       serverType: "remote",
     });
-    const ownPersonalServer = await makeMcpServer({
+    await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
     await makeMcpServer({
       ownerId: otherUser.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
 
     const response = await app.inject({
@@ -315,12 +317,10 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().map((server: { id: string }) => server.id)).toEqual([
-      ownPersonalServer.id,
-    ]);
+    expect(response.json()).toEqual([]);
   });
 
-  test("filters personal connections by organization membership for org assignment scope", async ({
+  test("does not expose member-owned personal connections for org assignment scope", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeMember,
@@ -339,11 +339,12 @@ describe("mcp server inspect route", () => {
       organizationId,
       serverType: "remote",
     });
-    const memberOwnedServer = await makeMcpServer({
+    await makeMcpServer({
       ownerId: memberOwner.id,
       catalogId: catalog.id,
     });
     const orgOwnedServer = await makeMcpServer({
+      scope: "org",
       catalogId: catalog.id,
     });
     await makeMcpServer({
@@ -362,7 +363,7 @@ describe("mcp server inspect route", () => {
         .json()
         .map((server: { id: string }) => server.id)
         .sort(),
-    ).toEqual([memberOwnedServer.id, orgOwnedServer.id].sort());
+    ).toEqual([orgOwnedServer.id]);
   });
 
   test("filters connections for personal assignment scope", async ({
@@ -390,15 +391,18 @@ describe("mcp server inspect route", () => {
       organizationId,
       serverType: "remote",
     });
-    const ownPersonalServer = await makeMcpServer({
+    await makeMcpServer({
       ownerId: user.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
     await makeMcpServer({
       ownerId: otherUser.id,
       catalogId: catalog.id,
+      serverType: "remote",
     });
     const authorTeamServer = await makeMcpServer({
+      scope: "team",
       ownerId: otherUser.id,
       catalogId: catalog.id,
       teamId: authorTeam.id,
@@ -409,6 +413,7 @@ describe("mcp server inspect route", () => {
       teamId: otherTeam.id,
     });
     const orgOwnedServer = await makeMcpServer({
+      scope: "org",
       catalogId: catalog.id,
     });
 
@@ -423,9 +428,7 @@ describe("mcp server inspect route", () => {
         .json()
         .map((server: { id: string }) => server.id)
         .sort(),
-    ).toEqual(
-      [ownPersonalServer.id, authorTeamServer.id, orgOwnedServer.id].sort(),
-    );
+    ).toEqual([authorTeamServer.id, orgOwnedServer.id].sort());
   });
 
   test("automatically retries protected remote MCP server installation with the current identity-provider access token", async ({

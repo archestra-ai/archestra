@@ -53,6 +53,7 @@ class ContentEncryptionStateModel {
         interactionsCursorCreatedAt: null,
         interactionsCursorId: null,
         messagesCursorId: null,
+        mcpToolCallsCursorId: null,
         completedAt: null,
       })
       .where(eq(schema.contentEncryptionStateTable.id, SINGLETON_ID))
@@ -80,6 +81,13 @@ class ContentEncryptionStateModel {
       .where(eq(schema.contentEncryptionStateTable.id, SINGLETON_ID));
   }
 
+  static async advanceMcpToolCallsCursor(toolCallId: string): Promise<void> {
+    await db
+      .update(schema.contentEncryptionStateTable)
+      .set({ mcpToolCallsCursorId: toolCallId })
+      .where(eq(schema.contentEncryptionStateTable.id, SINGLETON_ID));
+  }
+
   static async markCompleted(): Promise<void> {
     await db
       .update(schema.contentEncryptionStateTable)
@@ -101,6 +109,7 @@ class ContentEncryptionStateModel {
         interactionsCursorCreatedAt: null,
         interactionsCursorId: null,
         messagesCursorId: null,
+        mcpToolCallsCursorId: null,
         completedAt: null,
       })
       .where(eq(schema.contentEncryptionStateTable.id, SINGLETON_ID));

@@ -382,6 +382,24 @@ archestra:
     limits:
       memory: "3Gi"
 
+  # Memory inside the web container that is NOT available to the backend's V8
+  # heap, because the same container also runs the Next.js server (and
+  # supervisord) under one memory limit.
+  #
+  # The launcher sizes --max-old-space-size as a percentage of the container's
+  # memory limit. Without this, that percentage is taken over memory the backend
+  # does not solely own, so the heap ceiling it is granted plus the co-located
+  # processes can exceed the limit — and the cgroup kills the container before V8
+  # ever reaches its own ceiling. That turns a diagnosable JS heap OOM into an
+  # opaque SIGKILL, and the stall while it happens fails the probes too.
+  # Subtracting the reservation first restores the intended ordering: V8 reaches
+  # its ceiling, throws, and leaves a stack behind.
+  #
+  # Sized from a measured Next.js server (~150 MiB resident) plus headroom for
+  # growth under load and for supervisord. Only the web container sets this — the
+  # worker and renderer run a single Node process and reserve nothing.
+  webContainerReservedMemoryMib: 384
+
   # Kubernetes probe configuration for the platform and worker containers.
   # See: https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/
   #

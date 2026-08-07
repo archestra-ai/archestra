@@ -432,6 +432,20 @@ archestra:
     # Leave empty for the default (600). Set to 0 to disable the reaper.
     failedPodReapIntervalSeconds: ""
 
+    # BETA: idle hibernation for self-hosted MCP servers (scale-to-zero).
+    # "true" offers the feature on this deployment, "false" keeps it off even
+    # when the ARCHESTRA_BETA master switch is on, and empty falls back to that
+    # master switch. Organizations still opt in under Settings > MCP, behind
+    # the enterprise licence.
+    mcpIdleHibernationEnabled: ""
+
+    # How long (in seconds) an idle MCP server pod sits unused before the
+    # platform scales it to zero, waking it again on the next tool call.
+    # Leave empty for the default (1800). Values are floored at 120 so a
+    # server is never hibernated between two normal consecutive tool calls;
+    # an explicit 0 is the operator's kill switch.
+    mcpIdleHibernationSeconds: ""
+
     # Kubernetes configuration for MCP Server Runtime
     # This controls how the Archestra platform connects to Kubernetes to manage MCP server pods
     kubernetes:

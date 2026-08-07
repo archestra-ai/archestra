@@ -761,6 +761,70 @@ tests:
           content:
             name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
 
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS when configured
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpIdleHibernationSeconds: 900
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS
+            value: "900"
+
+  # 0 is a meaningful value (hibernation off), not an absent one, so an
+  # operator who sets it explicitly must get it on the pod.
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS when set to 0 (disabled)
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpIdleHibernationSeconds: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS
+            value: "0"
+
+  - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS
+
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED when the beta flag is configured
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpIdleHibernationEnabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
+            value: "true"
+
+  # "false" wins over the ARCHESTRA_BETA master switch, so an operator who
+  # sets it explicitly must get it on the pod.
+  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED when explicitly disabled
+    documentIndex: 1
+    set:
+      archestra.orchestrator.mcpIdleHibernationEnabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
+            value: "false"
+
+  - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED by default
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
+
   # Kubeconfig volume mount tests
   - it: should not mount kubeconfig volume when kubeconfig is disabled
     documentIndex: 1

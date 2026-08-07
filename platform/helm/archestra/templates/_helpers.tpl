@@ -191,6 +191,19 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS
   value: {{ .Values.archestra.orchestrator.failedPodReapIntervalSeconds | quote }}
 {{- end }}
+{{/* "false" is a meaningful value — beta feature explicitly off, winning over
+     the ARCHESTRA_BETA master switch — so compare against the empty string
+     instead of relying on truthiness. */}}
+{{- if ne (toString .Values.archestra.orchestrator.mcpIdleHibernationEnabled) "" }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
+  value: {{ .Values.archestra.orchestrator.mcpIdleHibernationEnabled | quote }}
+{{- end }}
+{{/* "0" is a meaningful value — the operator's kill switch — so compare
+     against the empty string instead of relying on truthiness. */}}
+{{- if ne (toString .Values.archestra.orchestrator.mcpIdleHibernationSeconds) "" }}
+- name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS
+  value: {{ .Values.archestra.orchestrator.mcpIdleHibernationSeconds | quote }}
+{{- end }}
 {{- if and .Values.archestra.orchestrator.kubernetes.kubeconfig.enabled .Values.archestra.orchestrator.kubernetes.kubeconfig.secretName }}
 - name: ARCHESTRA_ORCHESTRATOR_KUBECONFIG
   value: {{ printf "%s/config" .Values.archestra.orchestrator.kubernetes.kubeconfig.mountPath | quote }}

@@ -17,7 +17,7 @@ pub struct ExtractionOutcome {
     pub errors: Vec<String>,
 }
 
-pub fn extract_effective_prompts(interactions: &[Value]) -> ExtractionOutcome {
+pub fn extract_effective_prompts(interactions: &[Value], advisor_agent_id: Option<&str>) -> ExtractionOutcome {
     let mut prompts: Vec<EffectivePromptData> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
 
@@ -30,6 +30,13 @@ pub fn extract_effective_prompts(interactions: &[Value]) -> ExtractionOutcome {
 
         // Skip non-chat calls outright — they carry no model-facing system prompt.
         if type_tag.ends_with(":embeddings") {
+            continue;
+        }
+
+        // The Advisor's own turns run under its own system prompt in the same session. That is the
+        // feature, not a context anomaly — only the lane agent's context is "the" effective prompt.
+        // Keyed on `profileId` because delegation rows carry no distinguishing `source`.
+        if advisor_agent_id.is_some_and(|id| interaction.get("profileId").and_then(Value::as_str) == Some(id)) {
             continue;
         }
 
@@ -103,6 +110,12 @@ pub struct RunUsage {
     /// Distinct `model` values across the chat rows; more than one means the session mixed models
     /// (e.g. cost-optimization or dual-LLM), which a single lane slug cannot price.
     pub models: BTreeSet<String>,
+    /// The advisor's share of this usage — rows whose `profileId` is the built-in Advisor agent,
+    /// which bill at the advisor model's own rates. Present only for an advised lane (the caller
+    /// passed the advisor's agent id); its counts are already included in the flat totals above,
+    /// which remain the rollout's whole spend. Keyed by agent rather than model so the split
+    /// survives an executor and advisor that happen to share a model id.
+    pub advisor: Option<Box<RunUsage>>,
 }
 
 impl RunUsage {
@@ -114,6 +127,11 @@ impl RunUsage {
         self.chat_rows += other.chat_rows;
         self.rows_with_null_tokens += other.rows_with_null_tokens;
         self.models.extend(other.models.iter().cloned());
+        if let Some(other_advisor) = &other.advisor {
+            self.advisor
+                .get_or_insert_with(|| Box::new(RunUsage::default()))
+                .add(other_advisor);
+        }
     }
 
     /// True when at least one billed LLM step was recorded. Distinguishes a real $0 (no call) from
@@ -131,29 +149,44 @@ impl RunUsage {
 /// are skipped (matching `extract_effective_prompts`); every other row is a billed step. Negative
 /// counts clamp to zero. A chat row missing `inputTokens`/`outputTokens` is recorded as a telemetry
 /// gap (`rows_with_null_tokens`) rather than summed as zero.
-pub fn sum_usage(interactions: &[Value]) -> RunUsage {
+///
+/// With `advisor_agent_id` set (an advised lane), rows whose `profileId` is the Advisor agent are
+/// additionally accumulated into `usage.advisor` — the flat totals still cover every row, so the
+/// advisor share is a breakdown, not a partition.
+pub fn sum_usage(interactions: &[Value], advisor_agent_id: Option<&str>) -> RunUsage {
     let mut usage = RunUsage::default();
+    if advisor_agent_id.is_some() {
+        usage.advisor = Some(Box::new(RunUsage::default()));
+    }
     for interaction in interactions {
         let type_tag = interaction.get("type").and_then(Value::as_str).unwrap_or("");
         if type_tag.ends_with(":embeddings") {
             continue;
         }
-        usage.chat_rows += 1;
-        if let Some(model) = interaction.get("model").and_then(Value::as_str) {
-            usage.models.insert(model.to_string());
-        }
-        let token = |key: &str| interaction.get(key).and_then(Value::as_i64);
-        match (token("inputTokens"), token("outputTokens")) {
-            (Some(input), Some(output)) => {
-                usage.prompt_tokens += input.max(0);
-                usage.completion_tokens += output.max(0);
-                usage.cache_read_tokens += token("cacheReadTokens").unwrap_or(0).max(0);
-                // `cacheWriteTokens` is the full cache-creation count; `cacheWrite1hTokens` is the
-                // 1h-TTL *subset* of it (the platform's premium-pricing breakdown), so it must not be
-                // added on top or the 1h portion is double-counted.
-                usage.cache_write_tokens += token("cacheWriteTokens").unwrap_or(0).max(0);
+        let is_advisor_row =
+            advisor_agent_id.is_some_and(|id| interaction.get("profileId").and_then(Value::as_str) == Some(id));
+        let apply = |usage: &mut RunUsage| {
+            usage.chat_rows += 1;
+            if let Some(model) = interaction.get("model").and_then(Value::as_str) {
+                usage.models.insert(model.to_string());
             }
-            _ => usage.rows_with_null_tokens += 1,
+            let token = |key: &str| interaction.get(key).and_then(Value::as_i64);
+            match (token("inputTokens"), token("outputTokens")) {
+                (Some(input), Some(output)) => {
+                    usage.prompt_tokens += input.max(0);
+                    usage.completion_tokens += output.max(0);
+                    usage.cache_read_tokens += token("cacheReadTokens").unwrap_or(0).max(0);
+                    // `cacheWriteTokens` is the full cache-creation count; `cacheWrite1hTokens` is the
+                    // 1h-TTL *subset* of it (the platform's premium-pricing breakdown), so it must not be
+                    // added on top or the 1h portion is double-counted.
+                    usage.cache_write_tokens += token("cacheWriteTokens").unwrap_or(0).max(0);
+                }
+                _ => usage.rows_with_null_tokens += 1,
+            }
+        };
+        apply(&mut usage);
+        if is_advisor_row && let Some(advisor) = &mut usage.advisor {
+            apply(advisor.as_mut());
         }
     }
     usage
@@ -340,7 +373,7 @@ mod tests {
                 "temperature": 0.0, "max_tokens": 8192
             }
         });
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts.len(), 1);
         let p = &out.prompts[0];
@@ -360,7 +393,7 @@ mod tests {
                 "temperature": 1.0, "max_tokens": 4096, "top_p": 0.9
             }
         });
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "denial rule");
         assert_eq!(out.prompts[0].tools, vec!["run_tool"]);
@@ -377,7 +410,7 @@ mod tests {
                 "generationConfig": {"temperature": 0.5, "maxOutputTokens": 2048, "topP": 0.8}
             }
         });
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "sys a\nsys b");
         assert_eq!(out.prompts[0].tools, vec!["f1", "f2"]);
@@ -394,7 +427,7 @@ mod tests {
                 "temperature": 0.2, "max_output_tokens": 1000
             }
         });
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "responses sys");
         assert_eq!(out.prompts[0].tools, vec!["t1"]);
@@ -408,7 +441,7 @@ mod tests {
             "request": {"system": "original", "max_tokens": 1},
             "processedRequest": {"system": "mutated", "max_tokens": 2}
         });
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert_eq!(out.prompts[0].system_prompt, "mutated");
         assert_eq!(out.prompts[0].sampling.max_tokens, Some(2));
     }
@@ -420,7 +453,7 @@ mod tests {
             "request": {"system": "original", "max_tokens": 1},
             "processedRequest": null
         });
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert_eq!(out.prompts[0].system_prompt, "original");
     }
 
@@ -430,7 +463,7 @@ mod tests {
             "type": "anthropic:messages",
             "request": {"system": "s", "tools": [{"name": "a"}], "max_tokens": 10}
         });
-        let out = extract_effective_prompts(&[it.clone(), it.clone(), it]);
+        let out = extract_effective_prompts(&[it.clone(), it.clone(), it], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts.len(), 1);
         assert_eq!(out.prompts[0].interaction_count, 3);
@@ -440,7 +473,7 @@ mod tests {
     fn varying_context_is_flagged_as_an_anomaly() {
         let a = json!({"type": "anthropic:messages", "request": {"system": "A"}});
         let b = json!({"type": "anthropic:messages", "request": {"system": "B"}});
-        let out = extract_effective_prompts(&[a, b]);
+        let out = extract_effective_prompts(&[a, b], None);
         assert_eq!(out.prompts.len(), 2);
         assert_eq!(out.errors.len(), 1);
         assert!(out.errors[0].contains("varied"));
@@ -449,7 +482,7 @@ mod tests {
     #[test]
     fn unhandled_type_is_an_explicit_error() {
         let it = json!({"type": "bedrock:converse", "request": {}});
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert!(out.prompts.is_empty());
         assert_eq!(out.errors.len(), 1);
         assert!(out.errors[0].contains("bedrock:converse"));
@@ -458,7 +491,7 @@ mod tests {
     #[test]
     fn empty_system_for_handled_type_is_an_error_not_a_null() {
         let it = json!({"type": "anthropic:messages", "request": {"max_tokens": 10}});
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert!(out.prompts.is_empty());
         assert_eq!(out.errors.len(), 1);
         assert!(out.errors[0].contains("could not extract a system prompt"));
@@ -471,7 +504,7 @@ mod tests {
             "request": {"messages": [{"role": "system", "content": "s"}]}
         });
         let emb = json!({"type": "openai:embeddings", "request": {"input": "x"}});
-        let out = extract_effective_prompts(&[emb, chat]);
+        let out = extract_effective_prompts(&[emb, chat], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts.len(), 1);
         assert_eq!(out.prompts[0].system_prompt, "s");
@@ -496,7 +529,7 @@ mod tests {
             "source": "chat:compaction",
             "request": {"system": "summarizer rules", "max_tokens": 10}
         });
-        let out = extract_effective_prompts(&[main.clone(), repair, compaction, main]);
+        let out = extract_effective_prompts(&[main.clone(), repair, compaction, main], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts.len(), 1);
         assert_eq!(out.prompts[0].system_prompt, "agent context");
@@ -510,7 +543,7 @@ mod tests {
             "source": "chat:tool_call_repair",
             "request": {"messages": [{"role": "user", "content": "re-emit"}]}
         });
-        let out = extract_effective_prompts(&[repair]);
+        let out = extract_effective_prompts(&[repair], None);
         assert!(out.prompts.is_empty());
         assert_eq!(out.errors.len(), 1);
         assert!(out.errors[0].contains("no model-facing prompt"));
@@ -519,7 +552,7 @@ mod tests {
     #[test]
     fn only_embeddings_is_flagged_not_silent() {
         let emb = json!({"type": "openai:embeddings", "request": {"input": "x"}});
-        let out = extract_effective_prompts(&[emb.clone(), emb]);
+        let out = extract_effective_prompts(&[emb.clone(), emb], None);
         assert!(out.prompts.is_empty());
         assert_eq!(out.errors.len(), 1);
         assert!(out.errors[0].contains("no model-facing prompt"));
@@ -531,7 +564,7 @@ mod tests {
             "type": "openai:chatCompletions",
             "request": {"messages": [{"role": "developer", "content": "dev rules"}]}
         });
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "dev rules");
     }
@@ -548,7 +581,7 @@ mod tests {
                 "tools": [{"type": "function", "name": "t1"}]
             }
         });
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "from input");
         assert_eq!(out.prompts[0].tools, vec!["t1"]);
@@ -564,7 +597,7 @@ mod tests {
                 "generationConfig": {"temperature": 0.5}
             }
         });
-        let out = extract_effective_prompts(&[it]);
+        let out = extract_effective_prompts(&[it], None);
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].tools, vec!["f1"]);
     }
@@ -590,7 +623,7 @@ mod tests {
                 "cacheReadTokens": 90, "cacheWriteTokens": 50, "cacheWrite1hTokens": 25,
             }),
         ];
-        let u = sum_usage(&rows);
+        let u = sum_usage(&rows, None);
         assert_eq!(u.chat_rows, 2);
         assert_eq!(u.prompt_tokens, 400);
         assert_eq!(u.completion_tokens, 50);
@@ -610,7 +643,7 @@ mod tests {
             json!({"type": "openai:embeddings", "model": "embed", "inputTokens": 999, "outputTokens": 0}),
             usage_row("claude", 100, 10, 0, 0),
         ];
-        let u = sum_usage(&rows);
+        let u = sum_usage(&rows, None);
         assert_eq!(u.chat_rows, 1);
         assert_eq!(u.prompt_tokens, 100);
         assert!(!u.models.contains("embed"));
@@ -620,7 +653,7 @@ mod tests {
     fn sum_usage_flags_missing_token_fields_as_a_gap() {
         // A chat row with no token fields is a telemetry gap, not a measured zero.
         let rows = vec![json!({"type": "anthropic:messages", "model": "claude"})];
-        let u = sum_usage(&rows);
+        let u = sum_usage(&rows, None);
         assert_eq!(u.chat_rows, 1);
         assert_eq!(u.rows_with_null_tokens, 1);
         assert_eq!(u.prompt_tokens, 0);
@@ -629,7 +662,7 @@ mod tests {
     #[test]
     fn sum_usage_clamps_negatives_and_unions_models() {
         let rows = vec![usage_row("a", -5, -5, -5, -5), usage_row("b", 10, 10, 0, 0)];
-        let u = sum_usage(&rows);
+        let u = sum_usage(&rows, None);
         assert_eq!(u.prompt_tokens, 10);
         assert_eq!(u.completion_tokens, 10);
         assert_eq!(u.models.len(), 2);
@@ -637,8 +670,80 @@ mod tests {
 
     #[test]
     fn sum_usage_empty_is_no_spend() {
-        let u = sum_usage(&[]);
+        let u = sum_usage(&[], None);
         assert!(!u.had_spend());
         assert_eq!(u.total_tokens(), 0);
+    }
+
+    fn advisor_row(profile_id: &str, model: &str, input: i64, output: i64) -> Value {
+        json!({
+            "type": "anthropic:messages",
+            "model": model,
+            "profileId": profile_id,
+            "inputTokens": input,
+            "outputTokens": output,
+        })
+    }
+
+    #[test]
+    fn sum_usage_splits_advisor_rows_by_profile_id() {
+        let rows = vec![
+            advisor_row("executor-agent", "vendor/cheap", 1000, 500),
+            advisor_row("advisor-agent-id", "vendor/strong", 200, 100),
+        ];
+        let u = sum_usage(&rows, Some("advisor-agent-id"));
+        // Flat totals cover every row; the advisor bucket is the breakdown.
+        assert_eq!(u.prompt_tokens, 1200);
+        assert_eq!(u.chat_rows, 2);
+        let advisor = u.advisor.as_deref().unwrap();
+        assert_eq!(advisor.prompt_tokens, 200);
+        assert_eq!(advisor.completion_tokens, 100);
+        assert_eq!(advisor.chat_rows, 1);
+    }
+
+    #[test]
+    fn sum_usage_advisor_split_survives_shared_model_id() {
+        // Executor and advisor on the same model id: the model set collapses to one, but the
+        // profileId-keyed split still separates the spend.
+        let rows = vec![
+            advisor_row("executor-agent", "vendor/same", 1000, 500),
+            advisor_row("advisor-agent-id", "vendor/same", 200, 100),
+        ];
+        let u = sum_usage(&rows, Some("advisor-agent-id"));
+        assert_eq!(u.models.len(), 1);
+        assert_eq!(u.advisor.as_deref().unwrap().prompt_tokens, 200);
+    }
+
+    #[test]
+    fn sum_usage_advised_with_no_consult_has_empty_advisor_bucket() {
+        let rows = vec![advisor_row("executor-agent", "vendor/cheap", 1000, 500)];
+        let u = sum_usage(&rows, Some("advisor-agent-id"));
+        let advisor = u.advisor.as_deref().unwrap();
+        assert!(!advisor.had_spend());
+    }
+
+    #[test]
+    fn extract_skips_advisor_rows_so_context_does_not_vary() {
+        let lane_row = json!({
+            "type": "anthropic:messages",
+            "profileId": "executor-agent",
+            "request": {"system": "lane prompt", "tools": [], "temperature": 0.0},
+        });
+        let advisor_row = json!({
+            "type": "anthropic:messages",
+            "profileId": "advisor-agent-id",
+            "request": {"system": "advisor prompt", "tools": [], "temperature": 0.0},
+        });
+        let rows = vec![lane_row.clone(), advisor_row.clone()];
+
+        // Without the advisor id the two system prompts read as a context anomaly…
+        let outcome = extract_effective_prompts(&rows, None);
+        assert!(outcome.errors.iter().any(|e| e.contains("effective context varied")));
+
+        // …with it, the advisor's turns are recognized as the feature, not an anomaly.
+        let outcome = extract_effective_prompts(&rows, Some("advisor-agent-id"));
+        assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
+        assert_eq!(outcome.prompts.len(), 1);
+        assert_eq!(outcome.prompts[0].system_prompt, "lane prompt");
     }
 }

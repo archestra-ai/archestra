@@ -10,11 +10,16 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
   DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+  DEFAULT_CHUNK_SIZE_TOKENS,
+  DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
+  MAX_CHUNK_SIZE_TOKENS,
+  MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
+  MIN_CHUNK_SIZE_TOKENS,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -863,6 +868,27 @@ export const parseNonNegativeInt = (
   if (!envValue) return defaultValue;
   const parsed = Number.parseInt(envValue, 10);
   return !Number.isNaN(parsed) && parsed >= 0 ? parsed : defaultValue;
+};
+
+/**
+ * Parse an integer knob that only makes sense inside a fixed range, clamping
+ * out-of-range values to the nearest bound rather than falling back to the
+ * default. A chunk size of 8 is a typo, not a request for 512 — clamping keeps
+ * the corpus indexable and the intent ("smaller") visible, where a silent
+ * fallback to the default would look like the setting was ignored.
+ *
+ * @public — exported for testability
+ */
+export const parseClampedInt = (
+  envValue: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseInt(envValue, 10);
+  if (Number.isNaN(parsed)) return defaultValue;
+  return Math.min(Math.max(parsed, min), max);
 };
 
 /** @public — exported for testability */
@@ -2606,6 +2632,39 @@ const config = {
     ),
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
+    /**
+     * Token budget for one chunk, inclusive of its title prefix and metadata
+     * suffix. Applies at ingest only: existing chunks keep the size they were
+     * written at until their connector re-syncs.
+     */
+    chunkSizeTokens: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS,
+      DEFAULT_CHUNK_SIZE_TOKENS,
+      MIN_CHUNK_SIZE_TOKENS,
+      MAX_CHUNK_SIZE_TOKENS,
+    ),
+    /**
+     * How many neighbouring chunks either side of a search hit are stitched
+     * back onto it before the result is returned. Retrieval still ranks single
+     * chunks — this only widens what the model gets to read, so a hit that
+     * lands mid-sentence or mid-table still arrives with the passage around it.
+     * 0 disables it and returns bare chunks.
+     */
+    contextExpansionRadius: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS,
+      DEFAULT_CONTEXT_EXPANSION_RADIUS,
+      0,
+      MAX_CONTEXT_EXPANSION_RADIUS,
+    ),
+    /**
+     * Contextual retrieval: summarize each document once at ingest and index
+     * that summary alongside every one of its chunks, so a chunk that never
+     * names its subject still matches a query that does. Costs one LLM call per
+     * document per sync, billed against the configured reranking model.
+     */
+    contextualRetrievalEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED ===
+      "true",
     taskWorkerPollIntervalSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
       5,

@@ -1,5 +1,6 @@
 import { RecursiveChunker, Tokenizer } from "@chonkiejs/core";
 import type { Tiktoken } from "tiktoken";
+import config from "@/config";
 import { buildMetadataSuffixes } from "./metadata-suffix";
 import { countTokens, encodeText, getEncoding } from "./tokenizer";
 
@@ -15,9 +16,13 @@ interface DocumentInput {
   title: string;
   content: string;
   metadata?: Record<string, unknown>;
+  /**
+   * Token budget for one chunk. Defaults to the deployment's configured chunk
+   * size; passed explicitly by tests so they do not depend on env state.
+   */
+  maxTokens?: number;
 }
 
-const MAX_TOKENS = 512;
 const MIN_CONTENT_BUDGET = 50;
 
 export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
@@ -25,6 +30,7 @@ export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
     return [];
   }
 
+  const MAX_TOKENS = document.maxTokens ?? config.kb.chunkSizeTokens;
   const encoding = getEncoding();
   const titlePrefix = buildTitlePrefix(document.title);
   const titlePrefixTokens = countTokens(encoding, titlePrefix);
@@ -52,7 +58,7 @@ export async function chunkDocument(document: DocumentInput): Promise<Chunk[]> {
 
   const effectiveTitlePrefix =
     contentBudget < MIN_CONTENT_BUDGET
-      ? truncateTitlePrefix(encoding, document.title)
+      ? truncateTitlePrefix(encoding, document.title, MAX_TOKENS)
       : titlePrefix;
   const effectiveBudget =
     contentBudget < MIN_CONTENT_BUDGET
@@ -88,8 +94,12 @@ function buildTitlePrefix(title: string): string {
   return `TITLE: ${title}\n\n`;
 }
 
-function truncateTitlePrefix(encoding: Tiktoken, title: string): string {
-  const budget = Math.floor(MAX_TOKENS * 0.1);
+function truncateTitlePrefix(
+  encoding: Tiktoken,
+  title: string,
+  maxTokens: number,
+): string {
+  const budget = Math.floor(maxTokens * 0.1);
   const prefix = "TITLE: ";
   const suffix = "\n\n";
   const overhead = countTokens(encoding, prefix + suffix);

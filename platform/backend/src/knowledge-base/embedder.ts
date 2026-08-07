@@ -69,7 +69,12 @@ class EmbeddingService {
       for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
         const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
         const inputs = batch.map((c) =>
-          chunkToEmbeddingInput(ctx.model, c.content, c.metadataSuffixSemantic),
+          chunkToEmbeddingInput({
+            model: ctx.model,
+            content: c.content,
+            metadataSuffix: c.metadataSuffixSemantic,
+            contextualHeader: c.contextualHeader,
+          }),
         );
 
         const response = await this.callEmbeddingApiWithRetry({
@@ -141,6 +146,7 @@ class EmbeddingService {
       chunkId: string;
       content: string;
       metadataSuffix: string | null;
+      contextualHeader: string | null;
       connectorId: string;
     }> = [];
 
@@ -187,6 +193,7 @@ class EmbeddingService {
           chunkId: chunk.id,
           content: chunk.content,
           metadataSuffix: chunk.metadataSuffixSemantic,
+          contextualHeader: chunk.contextualHeader,
           connectorId: document.connectorId,
         });
       }
@@ -241,7 +248,12 @@ class EmbeddingService {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
       try {
         const inputs = batch.map((c) =>
-          chunkToEmbeddingInput(ctx.model, c.content, c.metadataSuffix),
+          chunkToEmbeddingInput({
+            model: ctx.model,
+            content: c.content,
+            metadataSuffix: c.metadataSuffix,
+            contextualHeader: c.contextualHeader,
+          }),
         );
         const response = await this.callEmbeddingApiWithRetry({
           ctx,
@@ -429,12 +441,20 @@ function singleConnectorId(
  * Convert a raw chunk content string to an EmbeddingInput.
  * Image data URLs (`data:image/...;base64,...`) are returned as inline image objects;
  * all other content is returned as text with the appropriate nomic task prefix.
+ *
+ * The embedded text is the chunk sandwiched between its contextual header
+ * (document-level context, when contextual retrieval is on) and its metadata
+ * suffix. Only the chunk's own `content` is returned to the model at query
+ * time; the header and suffix exist purely to make the vector easier to hit.
  */
-function chunkToEmbeddingInput(
-  model: string,
-  content: string,
-  metadataSuffix: string | null | undefined,
-): EmbeddingInput {
+function chunkToEmbeddingInput(params: {
+  model: string;
+  content: string;
+  metadataSuffix: string | null | undefined;
+  contextualHeader: string | null | undefined;
+}): EmbeddingInput {
+  const { model, content, metadataSuffix, contextualHeader } = params;
+
   if (content.startsWith("data:image/")) {
     // Parse the data URL: data:<mimeType>;base64,<data>
     const semicolonIdx = content.indexOf(";base64,");
@@ -446,7 +466,7 @@ function chunkToEmbeddingInput(
   }
   return addNomicTaskPrefix(
     model,
-    content + (metadataSuffix ?? ""),
+    (contextualHeader ?? "") + content + (metadataSuffix ?? ""),
     "search_document",
   );
 }

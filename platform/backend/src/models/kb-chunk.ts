@@ -225,17 +225,25 @@ class KbChunkModel {
 
     const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
 
+    // Both the stored tsvector and the query are built with the chunk's OWN
+    // text-search configuration, so a German chunk is matched by a German-parsed
+    // query and an English one by an English-parsed query — within a single
+    // search across a mixed-language corpus.
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
-        ts_rank(c.search_vector, websearch_to_tsquery('english', ${orQuery})) AS score
+        ts_rank(c.search_vector, websearch_to_tsquery(c.fts_language, ${orQuery})) AS score
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
-        AND c.search_vector @@ websearch_to_tsquery('english', ${orQuery})
+        -- Mirrors the same guard in vectorSearch: retrieval is a security
+        -- surface, so never serve chunks from a soft-deleted connector even if
+        -- a stale connectorId reaches this far.
+        AND kbc.deleted_at IS NULL
+        AND c.search_vector @@ websearch_to_tsquery(c.fts_language, ${orQuery})
         ${envFilter}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY score DESC
@@ -243,6 +251,105 @@ class KbChunkModel {
     `);
 
     return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  /**
+   * Fetch the chunks surrounding a set of search hits, for context expansion.
+   *
+   * Re-applies the full ACL, environment, and soft-delete filters rather than
+   * trusting that a neighbour of a visible chunk is itself visible: chunk ACLs
+   * are per-row and a permission-sync pass can legitimately leave two chunks of
+   * one document with different audiences. A neighbour the user cannot read is
+   * simply absent from the result.
+   *
+   * Media chunks (base64 data URLs) are excluded — stitching one into a prose
+   * neighbour would emit megabytes of base64 into the model's context.
+   */
+  static async findNeighbors(params: {
+    /** The hits to expand around, as (documentId, chunkIndex) pairs. */
+    anchors: Array<{ documentId: string; chunkIndex: number }>;
+    radius: number;
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    environmentId?: string | null;
+  }): Promise<
+    Array<{
+      id: string;
+      documentId: string;
+      chunkIndex: number;
+      content: string;
+    }>
+  > {
+    const {
+      anchors,
+      radius,
+      userAcl,
+      bypassAcl = false,
+      environmentId,
+    } = params;
+    if (anchors.length === 0 || radius <= 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
+
+    // Explicit (documentId, chunkIndex) pairs rather than per-document ranges:
+    // the pair list is bounded by anchors x 2*radius and lets Postgres use the
+    // document_id index without over-fetching a whole document.
+    const pairs: Array<{ documentId: string; chunkIndex: number }> = [];
+    const seen = new Set<string>();
+    for (const anchor of anchors) {
+      for (
+        let index = anchor.chunkIndex - radius;
+        index <= anchor.chunkIndex + radius;
+        index++
+      ) {
+        if (index < 0 || index === anchor.chunkIndex) continue;
+        const key = `${anchor.documentId}:${index}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        pairs.push({ documentId: anchor.documentId, chunkIndex: index });
+      }
+    }
+    if (pairs.length === 0) return [];
+
+    const pairList = sql.join(
+      pairs.map((p) => sql`(${p.documentId}::uuid, ${p.chunkIndex})`),
+      sql`, `,
+    );
+    const documentIds = sql.join(
+      [...new Set(pairs.map((p) => p.documentId))].map((id) => sql`${id}::uuid`),
+      sql`, `,
+    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
+    const envFilter =
+      environmentId !== undefined
+        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
+        : sql``;
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.document_id AS "documentId",
+        c.chunk_index AS "chunkIndex", c.content
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE c.document_id IN (${documentIds})
+        AND (c.document_id, c.chunk_index) IN (${pairList})
+        AND kbc.deleted_at IS NULL
+        AND c.content NOT LIKE 'data:image/%'
+        ${envFilter}
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
+    `);
+
+    return rows.rows as unknown as Array<{
+      id: string;
+      documentId: string;
+      chunkIndex: number;
+      content: string;
+    }>;
   }
 
   static async updateEmbeddings(

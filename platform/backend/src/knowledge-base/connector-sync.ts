@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
-import type { ModelInputModality } from "@archestra/shared";
+import type {
+  ModelInputModality,
+  TextSearchLanguage,
+} from "@archestra/shared";
 import type pino from "pino";
 import config from "@/config";
 import defaultLogger from "@/logging";
@@ -26,6 +29,7 @@ import {
   extractErrorMessage,
 } from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
+import { buildDocumentContext } from "./contextual-retrieval";
 import { resolveEmbeddingConfig } from "./kb-llm-client";
 import { enqueuePermissionSyncAfterContentSync } from "./permission-sync-trigger";
 import { knowledgeSourceAccessControlService } from "./source-access-control";
@@ -289,6 +293,7 @@ class ConnectorSyncService {
               connectorId,
               connectorType: connector.connectorType,
               organizationId: connector.organizationId,
+              ftsLanguage: connector.ftsLanguage,
               acl: documentAcl,
               // Auto-sync connectors: the permission-sync pass owns per-doc ACLs.
               // Content-sync must never author them — create fail-closed ([]) and
@@ -594,6 +599,7 @@ class ConnectorSyncService {
     connectorId: string;
     connectorType: string;
     organizationId: string;
+    ftsLanguage: TextSearchLanguage;
     acl: AclEntry[];
     isAutoSync: boolean;
     log: pino.Logger;
@@ -603,6 +609,7 @@ class ConnectorSyncService {
       connectorId,
       connectorType,
       organizationId,
+      ftsLanguage,
       acl,
       isAutoSync,
       log,
@@ -659,6 +666,9 @@ class ConnectorSyncService {
             mediaContent: doc.mediaContent,
             metadata: doc.metadata,
             connectorType,
+            connectorId,
+            organizationId,
+            ftsLanguage,
             acl: effectiveAcl,
             log,
           });
@@ -714,6 +724,9 @@ class ConnectorSyncService {
         mediaContent: doc.mediaContent,
         metadata: doc.metadata,
         connectorType,
+        connectorId,
+        organizationId,
+        ftsLanguage,
         acl: chunkAcl,
         log,
       });
@@ -748,6 +761,9 @@ class ConnectorSyncService {
       mediaContent: doc.mediaContent,
       metadata: doc.metadata,
       connectorType,
+      connectorId,
+      organizationId,
+      ftsLanguage,
       acl,
       log,
     });
@@ -768,6 +784,9 @@ class ConnectorSyncService {
     mediaContent?: { mimeType: string; data: string };
     metadata?: Record<string, unknown>;
     connectorType: string;
+    connectorId: string;
+    organizationId: string;
+    ftsLanguage: TextSearchLanguage;
     acl: AclEntry[];
     log: pino.Logger;
   }): Promise<void> {
@@ -778,6 +797,9 @@ class ConnectorSyncService {
       mediaContent,
       metadata,
       connectorType,
+      connectorId,
+      organizationId,
+      ftsLanguage,
       acl,
       log,
     } = params;
@@ -794,6 +816,11 @@ class ConnectorSyncService {
           chunkIndex: 0,
           metadataSuffixSemantic: null,
           metadataSuffixKeyword: null,
+          // A media chunk's content is a base64 data URL, not prose: there is
+          // nothing for a stemmer to stem and no document context worth
+          // indexing against it. It is retrieved by multimodal vector search.
+          contextualHeader: null,
+          ftsLanguage,
           acl,
         },
       ]);
@@ -806,6 +833,15 @@ class ConnectorSyncService {
 
     if (chunks.length === 0) return;
 
+    // Best-effort and non-fatal: a document indexes without context rather than
+    // failing the sync. Generated once here and copied onto every chunk.
+    const contextualHeader = await buildDocumentContext({
+      title,
+      content,
+      organizationId,
+      connectorId,
+    });
+
     await KbChunkModel.insertMany(
       chunks.map((chunk) => ({
         documentId,
@@ -813,6 +849,8 @@ class ConnectorSyncService {
         chunkIndex: chunk.chunkIndex,
         metadataSuffixSemantic: chunk.metadataSuffixSemantic,
         metadataSuffixKeyword: chunk.metadataSuffixKeyword,
+        contextualHeader,
+        ftsLanguage,
         acl,
       })),
     );
@@ -820,7 +858,12 @@ class ConnectorSyncService {
     metrics.rag.reportChunksCreated(connectorType, chunks.length);
 
     log.debug(
-      { documentId, chunkCount: chunks.length },
+      {
+        documentId,
+        chunkCount: chunks.length,
+        contextualHeader: contextualHeader !== null,
+        ftsLanguage,
+      },
       "Document chunked and stored",
     );
   }

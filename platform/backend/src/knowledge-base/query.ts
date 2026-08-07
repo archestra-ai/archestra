@@ -5,6 +5,7 @@ import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
+import { expandChunkContext } from "./context-expansion";
 import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
 import {
   EmbeddingDimensionMismatchError,
@@ -143,11 +144,24 @@ class QueryService {
     });
     topResults = topResults.slice(0, limit);
 
+    // Widen each surviving hit with its neighbouring chunks. Deliberately after
+    // the rerank and the slice: expansion must not change what ranks or how
+    // many results come back, and expanding chunks the rerank was about to drop
+    // would be wasted queries.
+    topResults = await expandChunkContext({
+      results: topResults,
+      radius: config.kb.contextExpansionRadius,
+      userAcl: params.userAcl,
+      bypassAcl,
+      environmentId,
+    });
+
     logger.info(
       {
         preRerankCount,
         postRerankCount: topResults.length,
         expandedQueryCount: expandedQueries.length,
+        contextExpansionRadius: config.kb.contextExpansionRadius,
         resultIds: topResults.map((r) => r.id),
       },
       "[QueryService] Final results (after rerank)",

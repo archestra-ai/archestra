@@ -32,6 +32,7 @@ import {
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
 import {
@@ -830,6 +831,7 @@ export async function getChatMcpTools({
   taskBridge,
   repeatTracker,
   suppressContentLogging,
+  incognitoAudit,
 }: {
   agentName: string;
   agentId: string;
@@ -887,12 +889,19 @@ export async function getChatMcpTools({
    */
   repeatTracker?: ToolCallRepeatTracker;
   /**
-   * Incognito conversation: tool-call logs, execution-claim results, and span
-   * content are redacted, and long calls never detach into durable tasks.
-   * Stable per scope key (the incognito flag is immutable per conversation),
-   * so the cached tool context can safely retain it.
+   * Incognito conversation: span content is suppressed and long calls never
+   * detach into durable tasks. Stable per scope key (the incognito flag is
+   * immutable per conversation), so the cached tool context can safely retain
+   * it.
    */
   suppressContentLogging?: boolean;
+  /**
+   * Encrypts tool-call logs and execution-claim results under the
+   * conversation key instead of redacting them; absent when the conversation
+   * has no escrow record. Stable per scope key for the same reason
+   * `suppressContentLogging` is — escrow is settled at creation.
+   */
+  incognitoAudit?: IncognitoAuditContext | null;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -1038,6 +1047,7 @@ export async function getChatMcpTools({
       mcpGwToken,
       considerContextUntrusted,
       suppressContentLogging,
+      incognitoAudit,
       teams,
       userTeams,
       // One tracker per run: the caller's instance when it owns a stop policy,

@@ -79,6 +79,7 @@ import {
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import db, { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { dualLlmProgressBus } from "@/guardrails/dual-llm-progress-bus";
@@ -251,12 +252,14 @@ function buildStreamErrorPayload(params: {
   conversationId: string;
   slimChatErrorUi: boolean;
   /**
-   * Incognito conversation: the persisted chat-error row keeps only the code
-   * and retryability with a generic message — provider error text routinely
-   * echoes prompt/model content. The payload streamed to the client is
-   * unaffected (it is not persisted).
+   * Incognito conversation: provider error text routinely echoes prompt/model
+   * content, so the persisted row must not hold it in the clear. With an
+   * `incognitoAudit` it is encrypted under the conversation key; without one
+   * the row keeps only the code and retryability with a generic message. The
+   * payload streamed to the client is unaffected (it is not persisted).
    */
   redactPersistedError: boolean;
+  incognitoAudit?: IncognitoAuditContext | null;
   /** Log label distinguishing the pre-stream and mid-stream error paths. */
   stage: "before stream starts" | "via stream";
 }): string {
@@ -266,6 +269,7 @@ function buildStreamErrorPayload(params: {
     conversationId,
     slimChatErrorUi,
     redactPersistedError,
+    incognitoAudit,
     stage,
   } = params;
   const traceContext = getActiveTraceContext();
@@ -292,9 +296,11 @@ function buildStreamErrorPayload(params: {
 
   persistConversationChatError({
     conversationId,
-    error: redactPersistedError
-      ? redactChatErrorForIncognito(errorForFrontend)
-      : errorForFrontend,
+    error:
+      redactPersistedError && !incognitoAudit
+        ? redactChatErrorForIncognito(errorForFrontend)
+        : errorForFrontend,
+    incognitoAudit,
   });
 
   logger.info(
@@ -398,18 +404,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // into this request's closure — every persistence call below receives
       // it explicitly, including the detached onFinish/onError callbacks that
       // outlive the client connection.
-      const incognitoKey: ConversationContentKey | null = conversation.incognito
-        ? requireIncognitoKey({
-            request,
-            conversation: (await ConversationModel.getIncognitoKeyInfo(
-              conversationId,
-            )) ?? {
-              id: conversationId,
-              incognito: true,
-              incognitoDekFingerprint: null,
-            },
+      const incognitoKeyInfo = conversation.incognito
+        ? ((await ConversationModel.getIncognitoKeyInfo(conversationId)) ?? {
+            id: conversationId,
+            incognito: true,
+            incognitoDekFingerprint: null,
+            hasEscrow: false,
           })
         : null;
+      const incognitoKey: ConversationContentKey | null = incognitoKeyInfo
+        ? requireIncognitoKey({ request, conversation: incognitoKeyInfo })
+        : null;
+      // Encrypting the audit trail is only worth doing when an escrow record
+      // exists to open it later — otherwise the rows would be readable by
+      // nobody, which is strictly worse than an honest, uniform gap. Without
+      // one these surfaces deliberately fall back to redaction.
+      const incognitoAudit: IncognitoAuditContext | null =
+        incognitoKey && incognitoKeyInfo?.hasEscrow ? incognitoKey : null;
       if (conversation.incognito) {
         if (messagesHaveNewInlineAttachments(messages as ChatMessage[])) {
           // Attachment bytes and previews are stored in plaintext
@@ -713,6 +724,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 conversationId,
                 slimChatErrorUi: sandboxSlimChatErrorUi,
                 redactPersistedError: conversation.incognito,
+                incognitoAudit,
                 stage: "via stream",
               }),
           });
@@ -865,9 +877,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               subagentToolStream,
               taskBridge: chatTaskBridge,
               abortSignal: chatAbortController.signal,
-              // Incognito: tool-call logs / claim results / span content are
-              // redacted, and long calls never detach into durable tasks.
+              // Incognito: span content is suppressed and long calls never
+              // detach into durable tasks; tool-call logs and claim results
+              // are encrypted under the conversation key when it can be
+              // recovered from escrow, redacted otherwise.
               suppressContentLogging: conversation.incognito,
+              incognitoAudit,
             }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
@@ -1026,6 +1041,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   conversationId,
                   slimChatErrorUi,
                   redactPersistedError: conversation.incognito,
+                  incognitoAudit,
                   stage: "before stream starts",
                 });
               },
@@ -1642,6 +1658,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       conversationId,
                       slimChatErrorUi,
                       redactPersistedError: conversation.incognito,
+                      incognitoAudit,
                       stage: "via stream",
                     });
                     returnedChatErrorPayloads.add(serializedChatError);
@@ -1815,6 +1832,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               conversationId,
                               slimChatErrorUi,
                               redactPersistedError: conversation.incognito,
+                              incognitoAudit,
                               stage: "via stream",
                             }),
                           };
@@ -2165,13 +2183,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id,
             incognito: true,
             incognitoDekFingerprint: null,
+            hasEscrow: false,
           },
         });
         if (access.state === "unlocked") {
-          const rows = await MessageModel.findByConversation(id, access.key);
+          // Chat errors are loaded locked-safe by the model (it has no key),
+          // so re-read them here now that one is in hand.
+          const [rows, chatErrors] = await Promise.all([
+            MessageModel.findByConversation(id, access.key),
+            ConversationChatErrorModel.findByConversation(id, access.key),
+          ]);
           conversation.messages = toConversationApiMessages(
             rows,
           ) as typeof conversation.messages;
+          conversation.chatErrors = chatErrors;
         } else {
           conversation.messages = [];
           conversation.contentLocked = true;
@@ -4268,13 +4293,17 @@ async function persistNewMessages(
 function persistConversationChatError(params: {
   conversationId: string;
   error: ChatErrorResponse;
+  incognitoAudit?: IncognitoAuditContext | null;
 }) {
   const chatError = getSerializableChatError(params.error);
 
-  void ConversationChatErrorModel.create({
-    conversationId: params.conversationId,
-    error: chatError,
-  }).catch((error) => {
+  void ConversationChatErrorModel.create(
+    {
+      conversationId: params.conversationId,
+      error: chatError,
+    },
+    params.incognitoAudit,
+  ).catch((error) => {
     logger.error(
       { error, conversationId: params.conversationId },
       "Failed to persist chat error event on conversation",

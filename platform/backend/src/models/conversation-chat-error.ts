@@ -2,29 +2,54 @@ import {
   ChatErrorCode,
   type ChatErrorResponse,
   ChatErrorResponseSchema,
+  incognitoLockedContent,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import {
+  decryptIncognitoValue,
+  encryptIncognitoValue,
+  type IncognitoAuditContext,
+} from "@/content-encryption/incognito";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
   ConversationChatError,
   InsertConversationChatError,
 } from "@/types";
+import { isContentEnvelope } from "@/utils/crypto";
 
 class ConversationChatErrorModel {
   static async create(
     data: InsertConversationChatError,
+    auditContext?: IncognitoAuditContext | null,
   ): Promise<ConversationChatError> {
     const [chatError] = await db
       .insert(schema.conversationChatErrorsTable)
-      .values(data)
+      .values(
+        auditContext
+          ? {
+              ...data,
+              error: encryptIncognitoValue(data.error, {
+                ...auditContext,
+                context: CHAT_ERROR_CONTEXT,
+              }) as ChatErrorResponse,
+            }
+          : data,
+      )
       .returning();
 
     return chatError;
   }
 
+  /**
+   * `auditContext` is only for callers holding the conversation key. Every
+   * other reader (the conversation load, share views, scheduled-run summaries)
+   * omits it and gets the locked sentinel for incognito rows rather than an
+   * exception — one unopenable error row must not fail the whole read.
+   */
   static async findByConversation(
     conversationId: string,
+    auditContext?: IncognitoAuditContext | null,
   ): Promise<ConversationChatError[]> {
     const chatErrors = await db
       .select()
@@ -36,7 +61,11 @@ class ConversationChatErrorModel {
 
     return chatErrors.map((chatError) => ({
       ...chatError,
-      error: normalizeChatErrorResponse(chatError.error),
+      error: readChatError({
+        stored: chatError.error,
+        conversationId,
+        auditContext: auditContext ?? null,
+      }),
     }));
   }
 
@@ -47,6 +76,50 @@ class ConversationChatErrorModel {
         eq(schema.conversationChatErrorsTable.conversationId, conversationId),
       );
   }
+}
+
+const CHAT_ERROR_CONTEXT = "conversation_chat_errors.error" as const;
+
+/**
+ * Decrypt an incognito error row, or degrade it to something serializable.
+ *
+ * The response schema is a strict `ChatErrorResponse`, so the locked sentinel
+ * cannot be the column value itself — it rides in `originalError.raw`, where
+ * the UI matches it with `isIncognitoLockedContent`. A DEK that cannot open
+ * the row lands here too: the content is stored and escrow-recoverable, so
+ * "locked" is the honest answer, and throwing would take the whole
+ * conversation load down with it.
+ */
+function readChatError(params: {
+  stored: ChatErrorResponse;
+  conversationId: string;
+  auditContext: IncognitoAuditContext | null;
+}): ChatErrorResponse {
+  const { stored, conversationId, auditContext } = params;
+  if (!isContentEnvelope(stored)) {
+    return normalizeChatErrorResponse(stored);
+  }
+  if (auditContext) {
+    try {
+      return normalizeChatErrorResponse(
+        decryptIncognitoValue(stored, {
+          ...auditContext,
+          context: CHAT_ERROR_CONTEXT,
+        }) as ChatErrorResponse,
+      );
+    } catch (error) {
+      logger.warn(
+        { error, conversationId },
+        "[ConversationChatError] incognito error row could not be decrypted with the presented key",
+      );
+    }
+  }
+  return {
+    code: ChatErrorCode.Unknown,
+    message: "Error details are encrypted for this incognito conversation.",
+    isRetryable: false,
+    originalError: { raw: incognitoLockedContent(conversationId) },
+  };
 }
 
 function normalizeChatErrorResponse(

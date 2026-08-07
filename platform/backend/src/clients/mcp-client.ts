@@ -4,6 +4,7 @@ import {
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
   getArchestraAppResourceUri,
+  INCOGNITO_REDACTED_MARKER,
   LINKED_IDP_SSO_MODE,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
@@ -37,6 +38,7 @@ import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-re
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
@@ -306,10 +308,29 @@ interface ExecuteToolCallForOwnerOptions {
   availableTool?: CatalogTool;
   /**
    * Incognito chat conversation: the persisted mcp_tool_calls row keeps the
-   * tool name but stores redacted arguments and result content.
+   * tool name but never stores plaintext arguments or result content.
    */
   suppressContentLogging?: boolean;
+  /**
+   * Present only for an incognito conversation that has an escrow record: the
+   * row's content is encrypted under the conversation key instead of being
+   * thrown away. Without it a suppressed call falls back to redaction.
+   */
+  incognitoAudit?: IncognitoAuditContext | null;
 }
+
+/**
+ * How one call's persisted `mcp_tool_calls` row must handle content, resolved
+ * once from the caller's options and threaded down every persist path.
+ * `undefined` means "not an incognito call, store normally".
+ *
+ * Deliberately a parameter rather than a call-id-keyed registry: ids come from
+ * the model, and a collision between two conversations would encrypt one's
+ * content under the other's key — unreadable by either escrow record.
+ */
+type ToolCallContentDisposition =
+  | { kind: "encrypt"; audit: IncognitoAuditContext }
+  | { kind: "redact" };
 
 class McpClient {
   private static readonly TOOL_NAME_CACHE_MAX_ENTRIES = 1_000;
@@ -348,12 +369,6 @@ class McpClient {
   // calls (e.g. browser stream ticks) detect a stale session simultaneously.
   // Only the first caller performs cleanup + retry; others wait and reuse.
   private sessionRecoveryLocks = new Map<string, Promise<void>>();
-  // Tool-call ids whose persisted log row must be content-redacted (incognito
-  // chat conversations). Registered for the duration of the owning
-  // executeToolCallForOwner call so every persistToolCall along that call's
-  // paths (success, error, cancellation, retries) sees the flag without
-  // threading it through every helper.
-  private suppressedContentToolCallIds = new Set<string>();
   // Per-secretId lock to prevent concurrent OAuth refresh attempts from
   // thrashing rotating refresh tokens when multiple tool calls arrive at once.
   private oauthRefreshLocks = new Map<
@@ -446,38 +461,11 @@ class McpClient {
     tokenAuth?: TokenAuthContext,
     options?: ExecuteToolCallForOwnerOptions,
   ): Promise<CommonToolResult> {
-    // Incognito chat calls register their tool-call id so persistToolCall —
-    // reached through many helpers on the success, error, retry, and
-    // cancellation paths — stores a content-redacted row. The id is minted
-    // per call (validateAndGetTool may rewrite the name, never the id), so
-    // registration cannot bleed across concurrent calls.
-    if (options?.suppressContentLogging) {
-      this.suppressedContentToolCallIds.add(toolCall.id);
-      try {
-        return await this.executeToolCallForOwnerImpl(
-          toolCall,
-          owner,
-          tokenAuth,
-          options,
-        );
-      } finally {
-        this.suppressedContentToolCallIds.delete(toolCall.id);
-      }
-    }
-    return this.executeToolCallForOwnerImpl(
-      toolCall,
-      owner,
-      tokenAuth,
-      options,
-    );
-  }
+    // Decided once here and handed to every path that persists a row (success,
+    // error, retry, cancellation), so a concurrent call on another
+    // conversation can never influence how this one's content is stored.
+    const incognitoContent = resolveContentDisposition(options);
 
-  private async executeToolCallForOwnerImpl(
-    toolCall: CommonToolCall,
-    owner: ToolOwner,
-    tokenAuth?: TokenAuthContext,
-    options?: ExecuteToolCallForOwnerOptions,
-  ): Promise<CommonToolResult> {
     // Derive auth info for logging. Until a credential resolves, the call is
     // one the platform is serving itself (it may never reach a server — an app
     // launch, or a refusal), so it starts attributed to the caller and is
@@ -496,6 +484,7 @@ class McpClient {
       toolCall,
       owner,
       options?.availableTool,
+      incognitoContent,
     );
     if ("error" in validationResult) {
       return validationResult.error;
@@ -559,6 +548,7 @@ class McpClient {
         isError: false,
         ...(resourceUri ? { _meta: { ui: { resourceUri } } } : {}),
         authInfo,
+        incognitoContent,
       });
     }
 
@@ -570,6 +560,7 @@ class McpClient {
         tokenAuth,
         catalogItem,
         authInfo,
+        incognitoContent,
       });
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
@@ -582,13 +573,15 @@ class McpClient {
       tool.credentialResolutionMode === "enterprise_managed" &&
       !effectiveEnterpriseManagedConfig
     ) {
-      return this.createErrorResult(
+      return this.createErrorResult({
         toolCall,
         owner,
-        "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
+        error:
+          "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
         mcpServerName,
         authInfo,
-      );
+        incognitoContent,
+      });
     }
     // A catalog-level enterprise-managed config is authoritative: assignments
     // created before enterprise mode existed (or via paths that didn't infer
@@ -615,20 +608,22 @@ class McpClient {
           tokenAuth,
           options,
         );
-      return this.createErrorResult(
+      return this.createErrorResult({
         toolCall,
         owner,
-        authError.message,
+        error: authError.message,
         mcpServerName,
         authInfo,
-        authError,
-      );
+        structuredError: authError,
+        incognitoContent,
+      });
     }
 
     const secretsResult = await this.getSecretsForMcpServer({
       targetMcpServerId: targetMcpServerId,
       toolCall,
       owner,
+      incognitoContent,
     });
     if ("error" in secretsResult) {
       return secretsResult.error;
@@ -719,6 +714,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             tokenAuth,
+            incognitoContent,
             enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
@@ -802,6 +798,7 @@ class McpClient {
             isError: false,
             _meta: { resourceUri },
             authInfo,
+            incognitoContent,
             structuredContent: {
               contents: result.contents as unknown,
             },
@@ -854,6 +851,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             tokenAuth,
+            incognitoContent,
             enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
@@ -874,14 +872,15 @@ class McpClient {
             mcpServerId: targetMcpServerId,
             tokenAuth,
           });
-          return await this.createErrorResult(
+          return await this.createErrorResult({
             toolCall,
             owner,
-            authError.message,
+            error: authError.message,
             mcpServerName,
             authInfo,
-            authError,
-          );
+            structuredError: authError,
+            incognitoContent,
+          });
         }
 
         // Apply template and return
@@ -893,6 +892,7 @@ class McpClient {
           isError: !!result.isError,
           _meta: result._meta,
           authInfo,
+          incognitoContent,
           structuredContent: result.structuredContent as
             | Record<string, unknown>
             | undefined,
@@ -915,13 +915,14 @@ class McpClient {
         // process shutdown; for a background-task cancel the promise is held
         // by the task's detached continuation and the write is reliable.
         if (options?.abortSignal?.aborted) {
-          await this.persistToolCall(
+          await this.persistToolCall({
             owner,
             mcpServerName,
             toolCall,
-            this.buildCancelledResult(toolCall, authInfo),
+            toolResult: this.buildCancelledResult(toolCall, authInfo),
             authInfo,
-          );
+            incognitoContent,
+          });
           throw error;
         }
 
@@ -1048,6 +1049,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             tokenAuth,
+            incognitoContent,
             enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
@@ -1109,14 +1111,15 @@ class McpClient {
                   catalogDisplayName,
                   tool.catalogId,
                 );
-              return await this.createErrorResult(
+              return await this.createErrorResult({
                 toolCall,
                 owner,
-                assignmentError.message,
+                error: assignmentError.message,
                 mcpServerName,
                 authInfo,
-                assignmentError,
-              );
+                structuredError: assignmentError,
+                incognitoContent,
+              });
             }
             const authError = await this.buildExpiredAuthMessage({
               catalogDisplayName,
@@ -1125,14 +1128,15 @@ class McpClient {
               tokenAuth,
               resolvedServer: targetServer,
             });
-            return await this.createErrorResult(
+            return await this.createErrorResult({
               toolCall,
               owner,
-              authError.message,
+              error: authError.message,
               mcpServerName,
               authInfo,
-              authError,
-            );
+              structuredError: authError,
+              incognitoContent,
+            });
           }
           // No server resolved → "auth required" message with install link
           const authError = this.buildAuthRequiredMessage(
@@ -1140,23 +1144,25 @@ class McpClient {
             tool.catalogId,
             tokenAuth,
           );
-          return await this.createErrorResult(
+          return await this.createErrorResult({
             toolCall,
             owner,
-            authError.message,
+            error: authError.message,
             mcpServerName,
             authInfo,
-            authError,
-          );
+            structuredError: authError,
+            incognitoContent,
+          });
         }
 
-        return await this.createErrorResult(
+        return await this.createErrorResult({
           toolCall,
           owner,
-          errorMessage,
+          error: errorMessage,
           mcpServerName,
           authInfo,
-        );
+          incognitoContent,
+        });
       }
     };
 
@@ -1443,6 +1449,7 @@ class McpClient {
     toolCall: CommonToolCall,
     owner: ToolOwner,
     availableTool?: CatalogTool,
+    incognitoContent?: ToolCallContentDisposition,
   ): Promise<
     | {
         tool: McpToolAssignment;
@@ -1542,19 +1549,19 @@ class McpClient {
     if (!tool) {
       const message = unavailableThirdPartyToolMessage(toolCall.name);
       return {
-        error: await this.createErrorResult(
+        error: await this.createErrorResult({
           toolCall,
           owner,
-          message,
-          "unknown",
-          undefined,
-          {
+          error: message,
+          mcpServerName: "unknown",
+          structuredError: {
             type: "tool_state",
             code: "unknown_tool",
             message,
             toolName: toolCall.name,
           },
-        ),
+          incognitoContent,
+        }),
       };
     }
 
@@ -1573,19 +1580,19 @@ class McpClient {
     ) {
       const message = unavailableThirdPartyToolMessage(toolCall.name);
       return {
-        error: await this.createErrorResult(
+        error: await this.createErrorResult({
           toolCall,
           owner,
-          message,
-          tool.catalogName || "unknown",
-          undefined,
-          {
+          error: message,
+          mcpServerName: tool.catalogName || "unknown",
+          structuredError: {
             type: "tool_state",
             code: "unknown_tool",
             message,
             toolName: toolCall.name,
           },
-        ),
+          incognitoContent,
+        }),
       };
     }
 
@@ -1615,12 +1622,13 @@ class McpClient {
     // Validate catalogId
     if (!tool.catalogId) {
       return {
-        error: await this.createErrorResult(
+        error: await this.createErrorResult({
           toolCall,
           owner,
-          "Tool is missing catalogId",
-          tool.catalogName || "unknown",
-        ),
+          error: "Tool is missing catalogId",
+          mcpServerName: tool.catalogName || "unknown",
+          incognitoContent,
+        }),
       };
     }
 
@@ -1628,12 +1636,13 @@ class McpClient {
     const catalogItem = await InternalMcpCatalogModel.findById(tool.catalogId);
     if (!catalogItem) {
       return {
-        error: await this.createErrorResult(
+        error: await this.createErrorResult({
           toolCall,
           owner,
-          `No catalog item found for tool catalog ID ${tool.catalogId}`,
-          tool.catalogName || "unknown",
-        ),
+          error: `No catalog item found for tool catalog ID ${tool.catalogId}`,
+          mcpServerName: tool.catalogName || "unknown",
+          incognitoContent,
+        }),
       };
     }
 
@@ -1646,10 +1655,12 @@ class McpClient {
     targetMcpServerId,
     toolCall,
     owner,
+    incognitoContent,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
     owner: ToolOwner;
+    incognitoContent?: ToolCallContentDisposition;
   }): Promise<
     | {
         secrets: Record<string, unknown>;
@@ -1667,12 +1678,13 @@ class McpClient {
     ]);
     if (!mcpServer) {
       return {
-        error: await this.createErrorResult(
+        error: await this.createErrorResult({
           toolCall,
           owner,
-          `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
-          "unknown",
-        ),
+          error: `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
+          mcpServerName: "unknown",
+          incognitoContent,
+        }),
       };
     }
 
@@ -1734,12 +1746,14 @@ class McpClient {
     owner,
     catalogItem,
     authInfo,
+    incognitoContent,
   }: {
     tool: McpToolAssignment;
     toolCall: CommonToolCall;
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
+    incognitoContent?: ToolCallContentDisposition;
     // Identity of the caller, so a refusal here is recorded and rendered like
     // any other result rather than as an anonymous error.
     authInfo?: ToolCallAuthInfo;
@@ -1798,14 +1812,15 @@ class McpClient {
           catalogItem.id,
         );
         return {
-          error: await this.createErrorResult(
+          error: await this.createErrorResult({
             toolCall,
             owner,
-            reconnectError.message,
-            fallbackName,
+            error: reconnectError.message,
+            mcpServerName: fallbackName,
             authInfo,
-            reconnectError,
-          ),
+            structuredError: reconnectError,
+            incognitoContent,
+          }),
         };
       }
       // Only the display name is needed here, so avoid the heavier findById().
@@ -1849,13 +1864,15 @@ class McpClient {
       const resolvedServer = allServers[0];
       if (!resolvedServer) {
         return {
-          error: await this.createErrorResult(
+          error: await this.createErrorResult({
             toolCall,
             owner,
-            "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
-            fallbackName,
+            error:
+              "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
+            mcpServerName: fallbackName,
             authInfo,
-          ),
+            incognitoContent,
+          }),
         };
       }
 
@@ -1870,24 +1887,28 @@ class McpClient {
     // tokenAuth are profile tokens autocreated when team is assigned to a profile
     if (!tokenAuth) {
       return {
-        error: await this.createErrorResult(
+        error: await this.createErrorResult({
           toolCall,
           owner,
-          "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
-          fallbackName,
+          error:
+            "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
+          mcpServerName: fallbackName,
           authInfo,
-        ),
+          incognitoContent,
+        }),
       };
     }
     if (!tool.catalogId) {
       return {
-        error: await this.createErrorResult(
+        error: await this.createErrorResult({
           toolCall,
           owner,
-          "Dynamic team credential is enabled but tool has no catalogId.",
-          fallbackName,
+          error:
+            "Dynamic team credential is enabled but tool has no catalogId.",
+          mcpServerName: fallbackName,
           authInfo,
-        ),
+          incognitoContent,
+        }),
       };
     }
 
@@ -1957,13 +1978,15 @@ class McpClient {
     // Org-wide token is incompatible with dynamic credential resolution
     if (tokenAuth.isOrganizationToken) {
       return {
-        error: await this.createErrorResult(
+        error: await this.createErrorResult({
           toolCall,
           owner,
-          "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
-          fallbackName,
+          error:
+            "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
+          mcpServerName: fallbackName,
           authInfo,
-        ),
+          incognitoContent,
+        }),
       };
     }
 
@@ -2017,14 +2040,15 @@ class McpClient {
           tool.catalogId,
         );
     return {
-      error: await this.createErrorResult(
+      error: await this.createErrorResult({
         toolCall,
         owner,
-        authError.message,
-        fallbackName,
+        error: authError.message,
+        mcpServerName: fallbackName,
         authInfo,
-        authError,
-      ),
+        structuredError: authError,
+        incognitoContent,
+      }),
     };
   }
 
@@ -2550,14 +2574,24 @@ class McpClient {
   /**
    * Create and persist an error result
    */
-  private async createErrorResult(
-    toolCall: CommonToolCall,
-    owner: ToolOwner,
-    error: string,
-    mcpServerName: string = "unknown",
-    authInfo?: ToolCallAuthInfo,
-    structuredError?: McpToolError,
-  ): Promise<CommonToolResult> {
+  private async createErrorResult(opts: {
+    toolCall: CommonToolCall;
+    owner: ToolOwner;
+    error: string;
+    mcpServerName?: string;
+    authInfo?: ToolCallAuthInfo;
+    structuredError?: McpToolError;
+    incognitoContent?: ToolCallContentDisposition;
+  }): Promise<CommonToolResult> {
+    const {
+      toolCall,
+      owner,
+      error,
+      mcpServerName = "unknown",
+      authInfo,
+      structuredError,
+      incognitoContent,
+    } = opts;
     const normalizedError: McpToolError = structuredError ?? {
       type: "generic",
       message: error,
@@ -2578,13 +2612,14 @@ class McpClient {
       },
     };
 
-    await this.persistToolCall(
+    await this.persistToolCall({
       owner,
       mcpServerName,
       toolCall,
-      errorResult,
+      toolResult: errorResult,
       authInfo,
-    );
+      incognitoContent,
+    });
     return errorResult;
   }
 
@@ -2600,6 +2635,7 @@ class McpClient {
     _meta?: Record<string, unknown>;
     authInfo?: ToolCallAuthInfo;
     structuredContent?: Record<string, unknown>;
+    incognitoContent?: ToolCallContentDisposition;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -2610,6 +2646,7 @@ class McpClient {
       _meta,
       authInfo,
       structuredContent,
+      incognitoContent,
     } = opts;
 
     // `archestraError`, the seeded-app-render marker and the executed-as
@@ -2634,13 +2671,14 @@ class McpClient {
       structuredContent: stripReservedPlatformMeta(structuredContent),
     };
 
-    await this.persistToolCall(
+    await this.persistToolCall({
       owner,
       mcpServerName,
       toolCall,
       toolResult,
       authInfo,
-    );
+      incognitoContent,
+    });
     return toolResult;
   }
 
@@ -2663,6 +2701,7 @@ class McpClient {
     enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential | null;
     toolCatalogId: string | null;
     toolCatalogName: string | null;
+    incognitoContent?: ToolCallContentDisposition;
     executeRetry: (
       getTransport: () => Promise<Transport>,
       secrets: Record<string, unknown>,
@@ -2682,6 +2721,7 @@ class McpClient {
       toolCatalogId,
       toolCatalogName,
       executeRetry,
+      incognitoContent,
     } = params;
 
     logger.info(
@@ -2780,22 +2820,23 @@ class McpClient {
           mcpServerId: targetMcpServerId,
           tokenAuth,
         });
-        return await this.createErrorResult(
+        return await this.createErrorResult({
           toolCall,
           owner,
-          authError.message,
+          error: authError.message,
           mcpServerName,
-          undefined,
-          authError,
-        );
+          structuredError: authError,
+          incognitoContent,
+        });
       }
 
-      return await this.createErrorResult(
+      return await this.createErrorResult({
         toolCall,
         owner,
-        retryErrorMsg,
+        error: retryErrorMsg,
         mcpServerName,
-      );
+        incognitoContent,
+      });
     }
   }
 
@@ -3274,46 +3315,59 @@ class McpClient {
    * Skips browser tools to prevent DB bloat from frequent screenshot calls.
    * Truncates large tool results to prevent excessive storage.
    */
-  private async persistToolCall(
-    owner: ToolOwner,
-    mcpServerName: string,
-    toolCall: CommonToolCall,
-    toolResult: CommonToolResult,
-    authInfo?: ToolCallAuthInfo,
-  ): Promise<void> {
+  private async persistToolCall(params: {
+    owner: ToolOwner;
+    mcpServerName: string;
+    toolCall: CommonToolCall;
+    toolResult: CommonToolResult;
+    authInfo?: ToolCallAuthInfo;
+    incognitoContent?: ToolCallContentDisposition;
+  }): Promise<void> {
+    const { owner, mcpServerName, toolCall, toolResult, authInfo } = params;
     // Skip high-frequency browser tool logging to prevent DB bloat
     // (screenshots every ~2s, tab list checks, viewport resizes)
     if (isHighFrequencyBrowserTool(toolCall.name)) {
       return;
     }
 
-    // Incognito chat calls persist a content-redacted row: the tool name (and
-    // owner/user metadata) stay for the audit surface, the arguments and the
-    // result do not.
-    const suppressContent = this.suppressedContentToolCallIds.has(toolCall.id);
+    // Incognito chat calls keep the tool name and owner/user metadata on the
+    // audit surface either way; what differs is the content. With an audit
+    // context the real arguments and result are handed to the model, which
+    // encrypts them under the conversation key (never encrypt here — that
+    // would nest envelopes). Without one there is no key that could ever open
+    // them, so the row is redacted instead.
+    const isIncognito = params.incognitoContent !== undefined;
+    const audit =
+      params.incognitoContent?.kind === "encrypt"
+        ? params.incognitoContent.audit
+        : null;
+    const suppressContent = isIncognito && audit === null;
     const storedToolCall: CommonToolCall = suppressContent
       ? {
           id: toolCall.id,
           name: toolCall.name,
-          arguments: { __redacted: "incognito" },
+          arguments: INCOGNITO_REDACTED_MARKER,
         }
       : toolCall;
     const storedToolResult: unknown = suppressContent
-      ? { __redacted: "incognito" }
+      ? INCOGNITO_REDACTED_MARKER
       : toolResult;
 
     try {
-      const savedToolCall = await McpToolCallModel.create({
-        ownerType: owner.type,
-        agentId: owner.type === "agent" ? owner.id : null,
-        appId: owner.type === "app" ? owner.id : null,
-        mcpServerName,
-        method: "tools/call",
-        toolCall: storedToolCall,
-        toolResult: storedToolResult,
-        userId: authInfo?.userId ?? null,
-        authMethod: authInfo?.authMethod ?? null,
-      });
+      const savedToolCall = await McpToolCallModel.create(
+        {
+          ownerType: owner.type,
+          agentId: owner.type === "agent" ? owner.id : null,
+          appId: owner.type === "app" ? owner.id : null,
+          mcpServerName,
+          method: "tools/call",
+          toolCall: storedToolCall,
+          toolResult: storedToolResult,
+          userId: authInfo?.userId ?? null,
+          authMethod: authInfo?.authMethod ?? null,
+        },
+        audit,
+      );
 
       const logData: {
         id: string;
@@ -3325,7 +3379,9 @@ class McpClient {
         toolName: toolCall.name,
       };
 
-      if (suppressContent) {
+      // The app log stays content-free for every incognito call, encrypted
+      // rows included: the row is protected at rest, the log line is not.
+      if (isIncognito) {
         logData.resultContent = "[redacted: incognito]";
       } else if (toolResult.isError) {
         // Tool errors routinely echo request/response payloads — cap them
@@ -4924,6 +4980,15 @@ function applyEnterpriseCredentialHeader(
   }
 
   headers[credential.headerName] = credential.headerValue;
+}
+
+function resolveContentDisposition(
+  options?: ExecuteToolCallForOwnerOptions,
+): ToolCallContentDisposition | undefined {
+  if (!options?.suppressContentLogging) return undefined;
+  return options.incognitoAudit
+    ? { kind: "encrypt", audit: options.incognitoAudit }
+    : { kind: "redact" };
 }
 
 function buildDefaultAuthorizationHeaders(

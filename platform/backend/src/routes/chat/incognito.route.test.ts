@@ -82,7 +82,9 @@ describe("incognito conversation routes", () => {
     // otherwise leak into the next test.
     config.enterpriseFeatures.core = false;
     config.chatIncognito.enabled = true;
-    config.chatIncognito.escrowPublicKey = undefined;
+    // Escrow is what enables incognito, and the db sink needs no license — so
+    // this IS the unlicensed default posture, not an enterprise one.
+    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
     config.chatIncognito.escrowSink = "db";
     // Force at-rest content encryption OFF (a local .env may set
     // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): incognito must be exercised on a
@@ -193,7 +195,27 @@ describe("incognito conversation routes", () => {
       expect(response.json().error.message).toContain("project");
     });
 
-    test("escrow-less creation (free): fingerprint stored, escrow NULL, static title, never the raw key", async () => {
+    test("refuses creation when no escrow key is configured", async () => {
+      // Escrow is the enablement switch. Without it the chat's audit trail
+      // would be encrypted under a key nobody could recover, so the feature
+      // is simply unavailable rather than silently unrecoverable.
+      config.chatIncognito.escrowPublicKey = undefined;
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat/conversations",
+        headers: dekHeader(),
+        payload: { agentId, incognito: true },
+      });
+      expect(response.statusCode).toBe(403);
+
+      const rows = await db.execute(
+        sql`SELECT id FROM conversations WHERE incognito = true`,
+      );
+      expect(rows.rows).toHaveLength(0);
+    });
+
+    test("creation stores the fingerprint and escrow blob, a static title, and never the raw key", async () => {
       const id = await createIncognitoConversation();
 
       const body = (
@@ -216,14 +238,11 @@ describe("incognito conversation routes", () => {
       expect(row.incognito_dek_fingerprint).not.toContain(
         dek.toString("base64url"),
       );
-      // No escrow key configured: NO recoverable copy of the key exists.
-      expect(row.incognito_escrow).toBeNull();
+      // Escrow is mandatory, so every incognito row carries a wrapped copy.
+      expect(row.incognito_escrow).not.toBeNull();
     });
 
-    test("with enterprise escrow configured: recoverable blob stored", async () => {
-      config.enterpriseFeatures.core = true;
-      config.chatIncognito.escrowPublicKey = ESCROW_PEM;
-
+    test("the stored escrow blob is recoverable with the offline private key", async () => {
       const id = await createIncognitoConversation();
       const row = await readIncognitoRow(id);
       expect(row.incognito_dek_fingerprint).toBeTruthy();

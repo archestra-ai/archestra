@@ -8,7 +8,7 @@
  *   encryption envelope, never plaintext
  * - the same key decrypts the transcript back through the GET route
  */
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
@@ -107,6 +107,12 @@ vi.mock("./context-compaction", async (importOriginal) => {
   };
 });
 
+// Escrow is the incognito enablement switch, so these tests need a key. The
+// db sink requires no license, which is the posture asserted below.
+const ESCROW_PEM = generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+}).publicKey.export({ type: "spki", format: "pem" }) as string;
+
 describe("POST /api/chat (incognito)", () => {
   let app: FastifyInstanceWithZod;
   let currentUser: User;
@@ -119,10 +125,10 @@ describe("POST /api/chat (incognito)", () => {
   let executionPromise: Promise<void> | undefined;
 
   beforeEach(async ({ makeAgent, makeMember, makeOrganization, makeUser }) => {
-    // Free-feature posture: no enterprise license, no escrow key — incognito
-    // streaming must work without either.
+    // Unlicensed posture: escrow enables incognito and its db sink needs no
+    // enterprise license, so streaming must work with the key and no license.
     config.enterpriseFeatures.core = false;
-    config.chatIncognito.escrowPublicKey = undefined;
+    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
     // Force server-side content encryption at rest OFF (a local .env may set
     // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): the envelope these tests assert on
     // must be the browser-DEK one — with a server key active, a broken DEK

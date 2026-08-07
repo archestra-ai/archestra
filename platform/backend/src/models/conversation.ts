@@ -457,11 +457,17 @@ class ConversationModel {
    * Incognito key bookkeeping for a conversation the caller has already
    * authorized: the flag plus the stored key fingerprint (the fingerprint is
    * deliberately absent from API response shapes).
+   *
+   * `hasEscrow` reports only that an escrow record was CREATED — with the
+   * Vault sink the blob itself is deliberately unreadable by the app, so a
+   * deleted or rotated one still reads as present. It gates whether this
+   * conversation's audit trail may be encrypted rather than redacted.
    */
   static async getIncognitoKeyInfo(id: string): Promise<{
     id: string;
     incognito: boolean;
     incognitoDekFingerprint: string | null;
+    hasEscrow: boolean;
   } | null> {
     const [row] = await db
       .select({
@@ -469,10 +475,17 @@ class ConversationModel {
         incognito: schema.conversationsTable.incognito,
         incognitoDekFingerprint:
           schema.conversationsTable.incognitoDekFingerprint,
+        incognitoEscrow: schema.conversationsTable.incognitoEscrow,
       })
       .from(schema.conversationsTable)
       .where(and(notDeletedConversation, eq(schema.conversationsTable.id, id)));
-    return row ?? null;
+    if (!row) return null;
+    return {
+      id: row.id,
+      incognito: row.incognito,
+      incognitoDekFingerprint: row.incognitoDekFingerprint,
+      hasEscrow: row.incognitoEscrow !== null,
+    };
   }
 
   /**

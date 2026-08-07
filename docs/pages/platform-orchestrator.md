@@ -70,6 +70,14 @@ Logs stay available while a server sleeps. The pod is gone. The view shows the d
 
 ![Logs for a hibernated MCP server](/docs/automated_screenshots/platform-orchestrator_hibernated-logs.webp)
 
+### What Wakes a Server
+
+A tool call wakes the server it targets. Browsing does not.
+
+Agents still see every tool of a sleeping server, because Archestra lists tools from its database. Listing resources or prompts across a gateway skips the servers that sleep. One such listing would otherwise wake every sleeping server at once — a gateway with fifty of them would start fifty pods to answer a question nobody asked. Their resources and prompts reappear once a tool call wakes the server.
+
+Background work never wakes a server either. Periodic tool re-discovery and health checks read what they can and leave a sleeping server asleep.
+
 ### Cluster Capacity
 
 Hibernation returns pod capacity to the cluster. Other workloads can take that capacity while a server sleeps. Pods may then wait for room when many servers wake at once.

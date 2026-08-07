@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, mustExist, test } from "@/test";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
-import McpServerModel from "./mcp-server";
+import McpServerModel, {
+  MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
+} from "./mcp-server";
 import McpServerUserModel from "./mcp-server-user";
 import SecretModel from "./secret";
 
@@ -1205,6 +1207,123 @@ describe("McpServerModel", () => {
       expect(cleared?.oauthRefreshErrorMessage).toBeNull();
       expect(cleared?.oauthRefreshErrorDescription).toBeNull();
       expect(cleared?.oauthRefreshFailedAt).toBeNull();
+    });
+  });
+
+  describe("lastUsedAt tracking", () => {
+    const getRow = async (id: string) => {
+      const [row] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, id));
+      return mustExist(row);
+    };
+
+    const setLastUsedAt = (id: string, lastUsedAt: Date | null) =>
+      db
+        .update(schema.mcpServersTable)
+        .set({ lastUsedAt })
+        .where(eq(schema.mcpServersTable.id, id));
+
+    describe("updateLastUsed", () => {
+      test("collapses repeated refreshes into one write per staleness window", async ({
+        makeMcpServer,
+      }) => {
+        const server = await makeMcpServer();
+
+        // The column defaults to now(), so a fresh row is already inside the
+        // staleness window and the first refresh is a no-op
+        const initial = (await getRow(server.id)).lastUsedAt;
+        expect(initial).not.toBeNull();
+
+        await McpServerModel.updateLastUsed(server.id);
+        const afterFresh = (await getRow(server.id)).lastUsedAt;
+        expect(afterFresh?.getTime()).toBe(initial?.getTime());
+
+        // Stale timestamp: the refresh writes again
+        const staleDate = new Date(
+          Date.now() - 2 * MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
+        );
+        await setLastUsedAt(server.id, staleDate);
+
+        await McpServerModel.updateLastUsed(server.id);
+        const afterStale = (await getRow(server.id)).lastUsedAt;
+        expect(afterStale?.getTime()).toBeGreaterThan(staleDate.getTime());
+
+        // Freshly refreshed: the follow-up refresh inside the window skips
+        await McpServerModel.updateLastUsed(server.id);
+        const afterRepeat = (await getRow(server.id)).lastUsedAt;
+        expect(afterRepeat?.getTime()).toBe(afterStale?.getTime());
+      });
+
+      test("refreshes a NULL lastUsedAt", async ({ makeMcpServer }) => {
+        const server = await makeMcpServer();
+        await setLastUsedAt(server.id, null);
+
+        await McpServerModel.updateLastUsed(server.id);
+        expect((await getRow(server.id)).lastUsedAt).not.toBeNull();
+      });
+
+      test("does not churn updatedAt", async ({ makeMcpServer }) => {
+        const server = await makeMcpServer();
+        const staleDate = new Date(
+          Date.now() - 2 * MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
+        );
+        await setLastUsedAt(server.id, staleDate);
+        const before = await getRow(server.id);
+
+        await McpServerModel.updateLastUsed(server.id);
+
+        const after = await getRow(server.id);
+        // The refresh provably wrote lastUsedAt...
+        expect(after.lastUsedAt?.getTime()).toBeGreaterThan(
+          staleDate.getTime(),
+        );
+        // ...without drizzle's $onUpdate bumping updatedAt
+        expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+      });
+    });
+
+    describe("getLatestUsageAt", () => {
+      test("returns max over COALESCE(last_used_at, created_at), ignoring soft-deleted rows", async ({
+        makeMcpServer,
+      }) => {
+        const neverUsed = await makeMcpServer({ name: "Never Used" });
+        const usedEarlier = await makeMcpServer({ name: "Used Earlier" });
+        const usedLater = await makeMcpServer({ name: "Used Later" });
+        const ids = [neverUsed.id, usedEarlier.id, usedLater.id];
+
+        // neverUsed falls back to createdAt, which is the overall max
+        const newestCreatedAt = new Date("2026-01-04T00:00:00Z");
+        await db
+          .update(schema.mcpServersTable)
+          .set({ lastUsedAt: null, createdAt: newestCreatedAt })
+          .where(eq(schema.mcpServersTable.id, neverUsed.id));
+        await setLastUsedAt(usedEarlier.id, new Date("2026-01-02T00:00:00Z"));
+        await setLastUsedAt(usedLater.id, new Date("2026-01-03T00:00:00Z"));
+
+        const latest = await McpServerModel.getLatestUsageAt(ids);
+        expect(latest?.getTime()).toBe(newestCreatedAt.getTime());
+
+        // Soft-deleting the max holder drops it from the aggregate
+        await db
+          .update(schema.mcpServersTable)
+          .set({ deletedAt: new Date() })
+          .where(eq(schema.mcpServersTable.id, neverUsed.id));
+        const afterDelete = await McpServerModel.getLatestUsageAt(ids);
+        expect(afterDelete?.getTime()).toBe(
+          new Date("2026-01-03T00:00:00Z").getTime(),
+        );
+
+        // Only soft-deleted / unknown ids -> null
+        expect(
+          await McpServerModel.getLatestUsageAt([neverUsed.id]),
+        ).toBeNull();
+      });
+
+      test("returns null for empty input", async () => {
+        expect(await McpServerModel.getLatestUsageAt([])).toBeNull();
+      });
     });
   });
 

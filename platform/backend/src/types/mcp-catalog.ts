@@ -17,6 +17,7 @@ import {
   CatalogTeamInputSchema,
 } from "./catalog-team-level";
 import { EnterpriseManagedCredentialConfigSchema } from "./enterprise-managed-credentials";
+import { McpServerHibernationModeSchema } from "./mcp-hibernation";
 
 export const InternalMcpCatalogServerTypeSchema = z.enum([
   "local",
@@ -242,6 +243,10 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     name: z.string().trim().min(1, "Name cannot be empty"),
     serverType: InternalMcpCatalogServerTypeSchema,
     dynamicConnectionMcpServerId: z.string().uuid().nullable().optional(),
+    // Operational per-server idle-hibernation override, cascaded by the PUT
+    // route onto every live install of the catalog — never stored on the
+    // catalog row itself.
+    hibernationMode: McpServerHibernationModeSchema.optional(),
     authFields: z.array(AuthFieldSchema).nullable().optional(),
     userConfig: z
       .record(z.string(), UserConfigFieldSchema)

@@ -36,6 +36,23 @@ class OrganizationModel {
   );
 
   /**
+   * Process-local mirror of {@link getMcpIdleHibernationEnabled}, for the two
+   * callers that cannot await: the MCP demand stamp on the tool-call hot path
+   * and the runtime manager's dormancy check. Both run per request, so even
+   * the shared (Postgres-backed) cache would be too expensive — and neither
+   * can block. Same one-minute convergence as the appearance cache.
+   */
+  private static readonly mcpIdleHibernationCache = registerProcessLocalCache(
+    new LRUCacheManager<boolean>({
+      maxSize: 1,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
+
+  /** De-dupes the background hydration a cold sync read kicks off. */
+  private static mcpIdleHibernationHydration: Promise<boolean> | null = null;
+
+  /**
    * Get the first organization in the database (fallback for various operations)
    */
   static async getFirst(): Promise<Organization | null> {
@@ -203,7 +220,12 @@ class OrganizationModel {
     );
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
+    // Suffixed keys are stored (and therefore deleted) exactly, not by prefix
+    // — a new one has to be dropped here explicitly or the sweeper would keep
+    // acting on the toggle's previous value for a full cache TTL.
+    await cacheManager.delete(getOrganizationMcpIdleHibernationCacheKey());
     OrganizationModel.appearanceSettingsCache.clear();
+    OrganizationModel.mcpIdleHibernationCache.clear();
     return updatedOrganization || null;
   }
 
@@ -449,6 +471,79 @@ class OrganizationModel {
   }
 
   /**
+   * Whether the organization has opted into idle hibernation of MCP servers.
+   * Single-org table, so this is a `limit 1` projected read behind the shared
+   * settings cache — the idle sweeper asks on every tick (a change must take
+   * effect without a restart) and it must not cost a query each time.
+   *
+   * Also refreshes the process-local mirror {@link
+   * getMcpIdleHibernationEnabledSync} serves, so the synchronous hot paths
+   * converge for free whenever the sweeper runs.
+   */
+  static async getMcpIdleHibernationEnabled(): Promise<boolean> {
+    const cacheKey = getOrganizationMcpIdleHibernationCacheKey();
+    const cached = await cacheManager.get<boolean>(cacheKey);
+    if (cached !== undefined) {
+      OrganizationModel.mcpIdleHibernationCache.set(
+        MCP_IDLE_HIBERNATION_CACHE_KEY,
+        cached,
+      );
+      return cached;
+    }
+
+    const [organization] = await db
+      .select({
+        mcpIdleHibernationEnabled:
+          schema.organizationsTable.mcpIdleHibernationEnabled,
+      })
+      .from(schema.organizationsTable)
+      .limit(1);
+
+    const enabled = organization?.mcpIdleHibernationEnabled ?? false;
+    try {
+      await cacheManager.set(cacheKey, enabled);
+    } catch {
+      // Cache writes are best-effort here; tests and early startup may not
+      // have the distributed cache initialized yet.
+    }
+    OrganizationModel.mcpIdleHibernationCache.set(
+      MCP_IDLE_HIBERNATION_CACHE_KEY,
+      enabled,
+    );
+    return enabled;
+  }
+
+  /**
+   * The same answer without awaiting, for callers on synchronous hot paths.
+   * `undefined` means "not known in this process yet" — a cold read schedules
+   * the hydration itself, so the caller only has to decide what to do while
+   * the answer is missing (both current callers choose the do-nothing branch).
+   */
+  static getMcpIdleHibernationEnabledSync(): boolean | undefined {
+    const cached = OrganizationModel.mcpIdleHibernationCache.get(
+      MCP_IDLE_HIBERNATION_CACHE_KEY,
+    );
+    if (
+      cached === undefined &&
+      !OrganizationModel.mcpIdleHibernationHydration
+    ) {
+      OrganizationModel.mcpIdleHibernationHydration =
+        OrganizationModel.getMcpIdleHibernationEnabled()
+          .catch((error) => {
+            logger.warn(
+              { err: error },
+              "Failed to hydrate the MCP idle-hibernation organization toggle",
+            );
+            return false;
+          })
+          .finally(() => {
+            OrganizationModel.mcpIdleHibernationHydration = null;
+          });
+    }
+    return cached;
+  }
+
+  /**
    * Get appearance settings, cached process-locally for the unauthenticated
    * white-labeling hot path (login page, every page load).
    * Returns default appearance settings if no organization exists.
@@ -576,6 +671,7 @@ class OrganizationModel {
       compressionScope: org.compressionScope,
       convertToolResultsToToon: org.convertToolResultsToToon,
       onlineMcpCatalogEnabled: org.onlineMcpCatalogEnabled,
+      mcpIdleHibernationEnabled: org.mcpIdleHibernationEnabled,
       onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
       appsHackathonRecorderEnabled: org.appsHackathonRecorderEnabled,
@@ -611,6 +707,13 @@ export default OrganizationModel;
 
 /** Single-org table (`limit 1` read), so one fixed key is enough. */
 const APPEARANCE_SETTINGS_CACHE_KEY = "appearance-settings";
+
+/** Ditto — the toggle is read for the installation, not per organization. */
+const MCP_IDLE_HIBERNATION_CACHE_KEY = "mcp-idle-hibernation";
+
+function getOrganizationMcpIdleHibernationCacheKey() {
+  return `${CacheKey.OrganizationSettings}-mcp-idle-hibernation` as const;
+}
 
 function getOrganizationSettingsCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-${organizationId}` as const;

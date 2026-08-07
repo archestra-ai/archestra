@@ -7,6 +7,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lt,
   ne,
   or,
   type SQL,
@@ -27,6 +28,7 @@ import type {
   InsertMcpServer,
   McpServer,
   McpServerAgentUsage,
+  McpServerHibernationMode,
   ResourceVisibilityScope,
   ToolParametersContent,
   UpdateMcpServer,
@@ -51,6 +53,16 @@ const assignedUsersTable = alias(schema.usersTable, "assigned_users");
 const SCOPE_PRECEDENCE: ResourceVisibilityScope[] = ["personal", "team", "org"];
 const scopeRank = (scope: ResourceVisibilityScope): number =>
   SCOPE_PRECEDENCE.indexOf(scope);
+
+/**
+ * Minimum age of `lastUsedAt` before {@link McpServerModel.updateLastUsed}
+ * refreshes it. Every proxied MCP request touches the server row, so an
+ * unconditional write would turn the row into a lock hot spot — the staleness
+ * window collapses a burst into at most one write.
+ *
+ * @public — consumed by the idle-hibernation sweeper and tests
+ */
+export const MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS = 30_000;
 
 /**
  * Data-access layer for `mcp_server` — an installation of an
@@ -1205,6 +1217,116 @@ class McpServerModel {
   }
 
   /**
+   * Refresh `lastUsedAt` for a server that just handled a request.
+   *
+   * Skips the write when `lastUsedAt` is already fresh (see
+   * {@link MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS}); concurrent callers that
+   * lose the race re-check the condition after the winner commits and skip
+   * too. `updatedAt` is deliberately pinned to its current value so a pure
+   * usage touch never churns it (drizzle's `$onUpdate` would otherwise bump it
+   * on every update).
+   */
+  static async updateLastUsed(id: string): Promise<void> {
+    const cutoff = new Date(
+      Date.now() - MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
+    );
+    await db
+      .update(schema.mcpServersTable)
+      .set({
+        lastUsedAt: new Date(),
+        // No-op self-assignment: overrides the column's $onUpdate bump.
+        updatedAt: sql`${schema.mcpServersTable.updatedAt}`,
+      })
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          or(
+            isNull(schema.mcpServersTable.lastUsedAt),
+            lt(schema.mcpServersTable.lastUsedAt, cutoff),
+          ),
+        ),
+      );
+  }
+
+  /**
+   * Latest usage timestamp across the given (non-deleted) servers, treating a
+   * NULL `lastUsedAt` as "never used since creation" via `createdAt`. Returns
+   * null for empty input or when none of the ids match an active row.
+   */
+  static async getLatestUsageAt(ids: string[]): Promise<Date | null> {
+    if (ids.length === 0) return null;
+
+    const [row] = await db
+      .select({
+        // mapWith reuses the timestamp column's decoder so the aggregate's
+        // driver string is parsed as UTC, exactly like a plain column read
+        latest:
+          sql`max(coalesce(${schema.mcpServersTable.lastUsedAt}, ${schema.mcpServersTable.createdAt}))`.mapWith(
+            schema.mcpServersTable.createdAt,
+          ),
+      })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, ids),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+
+    return row?.latest ?? null;
+  }
+
+  /**
+   * The per-install idle-hibernation modes of the given (non-deleted)
+   * servers. Projected to the one column the sweeper resolves the group's
+   * verdict from — it runs over every loaded deployment on a timer, so it
+   * must not pull whole rows to read a single enum.
+   */
+  static async getHibernationModes(
+    ids: string[],
+  ): Promise<McpServerHibernationMode[]> {
+    if (ids.length === 0) return [];
+
+    const rows = await db
+      .select({ hibernationMode: schema.mcpServersTable.hibernationMode })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, ids),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+
+    return rows.map((row) => row.hibernationMode);
+  }
+
+  /**
+   * Cascade the idle-hibernation override onto every live install of a
+   * catalog. The registry's server settings dialog is catalog-scoped, so its
+   * PUT writes through here; the reinstall route remains the path for setting
+   * a single installation apart. `updatedAt` is deliberately pinned — an
+   * operational toggle is not a config edit.
+   */
+  static async setHibernationModeForCatalog(
+    catalogId: string,
+    hibernationMode: McpServerHibernationMode,
+  ): Promise<void> {
+    await db
+      .update(schema.mcpServersTable)
+      .set({
+        hibernationMode,
+        // No-op self-assignment: overrides the column's $onUpdate bump.
+        updatedAt: sql`${schema.mcpServersTable.updatedAt}`,
+      })
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+  }
+
+  /**
    * Set the visibility scope of an MCP server. For installed servers scope is
    * install-time-only (changed via uninstall+reinstall), but an app backing
    * server is in-process with no deployment, so its scope can be re-pointed in
@@ -1888,6 +2010,7 @@ class McpServerModel {
       // (flag-only) restore flips deletedAt → null and reinstallRequired → true.
       deletedAt: s.deletedAt ? s.deletedAt.toISOString() : null,
       reinstallRequired: s.reinstallRequired,
+      hibernationMode: s.hibernationMode,
       createdAt: s.createdAt.toISOString(),
     };
   }

@@ -58,6 +58,13 @@ export type McpServerReinstallReason = z.infer<
   typeof McpServerReinstallReasonSchema
 >;
 
+export {
+  type McpServerHibernationMode,
+  McpServerHibernationModeSchema,
+} from "./mcp-hibernation";
+
+import { McpServerHibernationModeSchema } from "./mcp-hibernation";
+
 export const SelectMcpServerSchema = createSelectSchema(
   schema.mcpServersTable,
 ).extend({
@@ -98,6 +105,7 @@ export const SelectMcpServerSchema = createSelectSchema(
   autoModeAgents: z.array(McpServerAgentUsageSchema).optional(),
   localInstallationStatus: LocalMcpServerInstallationStatusSchema,
   secretStorageType: SecretStorageTypeSchema.optional(),
+  hibernationMode: McpServerHibernationModeSchema,
 });
 
 export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
@@ -129,6 +137,14 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     oauthRefreshFailedAt: true,
     // Server-owned reinstall bookkeeping — a fresh install is never flagged.
     reinstallReason: true,
+    // Server-owned idle-hibernation bookkeeping, written only via
+    // McpServerModel.updateLastUsed — accepting it from input would let a
+    // caller exempt a server (and its multitenant siblings) from hibernation.
+    lastUsedAt: true,
+    // Enterprise-gated, so it is set through the (licence-checking) update
+    // route rather than smuggled in at install time. A fresh install inherits
+    // the organization's toggle.
+    hibernationMode: true,
   });
 
 export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
@@ -139,10 +155,14 @@ export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
     deploymentName: true,
     // Soft-delete bookkeeping, written only by delete/restore, never from input.
     deletedAt: true,
+    // Server-owned idle-hibernation bookkeeping, never from input.
+    lastUsedAt: true,
   })
   .extend({
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
     reinstallReason: McpServerReinstallReasonSchema.nullable().optional(),
+    // Settable: the enterprise licence check lives on the route that accepts it.
+    hibernationMode: McpServerHibernationModeSchema.optional(),
   });
 
 export type LocalMcpServerInstallationStatus = z.infer<

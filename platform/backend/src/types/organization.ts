@@ -441,6 +441,8 @@ export const UpdateLlmSettingsSchema = z.object({
 
 export const UpdateMcpSettingsSchema = z.object({
   onlineMcpCatalogEnabled: z.boolean().optional(),
+  // Enterprise-gated on the route: scaling idle MCP servers to zero replicas.
+  mcpIdleHibernationEnabled: z.boolean().optional(),
 });
 
 export const UpdateSkillsSettingsSchema = z.object({

@@ -1607,7 +1607,15 @@ class InternalMcpCatalogModel {
     // are the installs affected, so the count belongs in the summary snapshot
     // (findByCatalogId is `notDeleted`, so it drops to 0 while soft-deleted and
     // returns on restore — giving the restore diff a non-empty change).
-    const installCount = (await McpServerModel.findByCatalogId(id)).length;
+    const installs = await McpServerModel.findByCatalogId(id);
+    const installCount = installs.length;
+    // The PUT cascades the idle-hibernation override onto these rows, so the
+    // audit diff for that change must be visible HERE — the catalog row
+    // itself never carries the field. Distinct + sorted keeps the snapshot
+    // stable however many installs exist.
+    const installHibernationModes = [
+      ...new Set(installs.map((install) => install.hibernationMode)),
+    ].sort();
 
     const transportType = row.localConfig?.transportType ?? "stdio";
     const envKeys = Array.isArray(row.localConfig?.environment)
@@ -1644,6 +1652,7 @@ class InternalMcpCatalogModel {
       hasEnterpriseManagedConfig: row.enterpriseManagedConfig !== null,
       toolCount,
       installCount,
+      installHibernationModes,
       // Lifecycle fields so the cascade delete/restore summary diffs: a restore
       // flips deletedAt → null and (multitenant) catalogReinstallRequired → true.
       deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,

@@ -2829,6 +2829,13 @@
       "when": 1786099394141,
       "tag": "0403_resweep-context-variant-pricing-by-price",
       "breakpoints": true
+    },
+    {
+      "idx": 404,
+      "version": "7",
+      "when": 1786113360405,
+      "tag": "0404_mcp_idle_hibernation",
+      "breakpoints": true
     }
   ]
 }

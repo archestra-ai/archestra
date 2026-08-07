@@ -194,6 +194,7 @@ async function makeOrganization(
       | "defaultEnvironmentNamespace"
       | "defaultMemberRole"
       | "defaultNetworkPolicy"
+      | "mcpIdleHibernationEnabled"
     >
   > = {},
 ) {

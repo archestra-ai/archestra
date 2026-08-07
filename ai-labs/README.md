@@ -289,13 +289,18 @@ three tasks —
 
 `advisor` is a routing regression suite for the **Advisor** feature, run with advised lanes only (see
 the advisor lane attribute under "Run"): each task is engineered so consulting the Advisor is the
-right move — a ship/no-ship code verdict whose deciding fact hides off the main path
-(`advisor-verdict-escalation`), and a data rollup whose obvious parse keeps failing
-(`advisor-recovery-loop`) — and each verifier asserts, via the tool-call snapshot, that a consult
-actually happened alongside the correct answer. An unadvised lane fails these by construction; that
-is the suite's contract, not a defect. Pass criteria are deliberately about *routing* (did the cheap
-executor escalate when it should), so a model that happens to one-shot the answer without consulting
-still fails — the suite measures the behavior, not the answer alone.
+right move, and each probes a different escalation regime. `advisor-verdict-escalation` is the
+*explicit judgment call* — a ship/no-ship code verdict whose deciding fact hides off the main path.
+`advisor-recovery-loop` is the *silent workaround* — a data rollup whose input quietly defeats the
+obvious parse; models don't surface the errors (the first attempt is already a skip-bad-lines
+workaround that exits cleanly), so they submit a confidently wrong total unless a consultation
+carrying the raw skipped lines lets the Advisor catch it. Each verifier asserts, via the tool-call
+snapshot, that a consult actually happened alongside the correct answer. An unadvised lane fails
+these by construction; that is the suite's contract, not a defect. Pass criteria are deliberately
+about *routing* (did the cheap executor escalate when it should), so a model that happens to
+one-shot the answer without consulting still fails — the suite measures the behavior, not the
+answer alone. The silent-workaround task is the harder bar by design: it stays red until the
+platform's consult delivery handles the case where the model feels no uncertainty at all.
 
 ## Lifecycle: fresh backend over shared infra
 

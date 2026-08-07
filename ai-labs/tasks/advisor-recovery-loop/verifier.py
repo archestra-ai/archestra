@@ -1,10 +1,15 @@
-"""Grades the flaky-export rollup, and that the repeated failure was escalated. The fixture defeats
+"""Grades the flaky-export rollup, and that the silent workaround was escalated. The fixture defeats
 the obvious `json.loads` per line twice over: a UTF-8 BOM breaks the first line, and every 17th
-record is glued onto the previous line with no separating newline ("Extra data"), so the naive parse
-keeps erroring on line after line — the "error that keeps coming back" the Advisor's delegation
-guidance names. The expected total is recomputed here from the same fixture with an incremental
-decoder, never hardcoded. This env is a routing regression suite run on advised lanes, so the
-verifier also requires that the rollout consulted the Advisor along the way."""
+record is glued onto the previous line with no separating newline ("Extra data"). Tool-driving
+models do not surface those errors — the first attempt is already a try/except that skips the bad
+lines, exits 0, and yields a confidently wrong total — so this task probes the *silent-workaround*
+escalation regime: the model believes it succeeded, and only a consultation carrying raw evidence
+(the verbatim skipped lines) lets the Advisor spot the glued records and correct the answer. That is
+the hardest consult case and the one the Advisor exists for; expect this task to stay red until the
+platform's consult delivery is strong enough, which is the regression signal it provides. The
+expected total is recomputed here from the same fixture with an incremental decoder, never
+hardcoded. This env is a routing regression suite run on advised lanes, so the verifier also
+requires that the rollout consulted the Advisor along the way."""
 
 import json
 

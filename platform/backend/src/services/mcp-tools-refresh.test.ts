@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import McpServerModel from "@/models/mcp-server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { mcpToolsRefreshManager } from "./mcp-tools-refresh";
@@ -97,5 +98,48 @@ describe("mcpToolsRefreshManager", () => {
     await mcpToolsRefreshManager.refreshAll();
 
     expect(getTools).toHaveBeenCalledTimes(1);
+  });
+
+  test("skips dormant (hibernated or waking) servers without waking or connecting to them", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const hibernatedCatalog = await makeInternalMcpCatalog({
+      name: "refresh-hibernated-catalog",
+      serverType: "local",
+    });
+    const hibernatedServer = await makeMcpServer({
+      catalogId: hibernatedCatalog.id,
+      name: "hibernated-server",
+    });
+
+    const awakeCatalog = await makeInternalMcpCatalog({
+      name: "refresh-awake-catalog",
+      serverType: "remote",
+    });
+    const awakeServer = await makeMcpServer({
+      catalogId: awakeCatalog.id,
+      name: "awake-server",
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "isDeploymentDormant").mockImplementation(
+      (id) => id === hibernatedServer.id,
+    );
+    const ensureAwake = vi
+      .spyOn(McpServerRuntimeManager, "ensureAwake")
+      .mockResolvedValue(undefined);
+    const getTools = vi
+      .spyOn(McpServerModel, "getToolsFromServer")
+      .mockResolvedValue([
+        { name: "t", description: "", inputSchema: { type: "object" } },
+      ]);
+
+    await mcpToolsRefreshManager.refreshAll();
+
+    // Only the awake catalog was re-synced; the hibernated one was skipped
+    // before any wake or connection attempt.
+    expect(getTools).toHaveBeenCalledTimes(1);
+    expect(getTools.mock.calls[0]?.[0]?.id).toBe(awakeServer.id);
+    expect(ensureAwake).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,8 @@ import { AppShell } from "./_parts/app-shell";
 import { MswInit } from "./_parts/msw-init";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; renders null unless the deployment enables RUM
+import { RumTracker } from "./_parts/rum-tracker.ee";
 import { ThemeProvider } from "./_parts/theme-provider";
 import { VisualViewportHeight } from "./_parts/visual-viewport-height";
 import "./globals.css";
@@ -215,6 +217,7 @@ export default function RootLayout({
                   <DynamicHead />
                   <WithAuthCheck>
                     <WebsocketInitializer />
+                    <RumTracker />
                     <AppShell>
                       <WithPagePermissions>{children}</WithPagePermissions>
                     </AppShell>

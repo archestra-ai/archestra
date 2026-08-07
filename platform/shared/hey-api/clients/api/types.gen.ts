@@ -32681,6 +32681,10 @@ export type GetPublicConfigResponses = {
                 host: string;
             };
         };
+        rum: {
+            enabled: boolean;
+            sampleRate: number;
+        };
     };
 };
 
@@ -85109,6 +85113,99 @@ export type UpdateIdentityProviderResponses = {
 };
 
 export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[keyof UpdateIdentityProviderResponses];
+
+export type IngestRumEventsData = {
+    body: {
+        events: Array<{
+            name: 'session.start' | 'archestra.session.heartbeat' | 'archestra.page_view' | 'browser.web_vital' | 'archestra.page_load' | 'archestra.long_task' | 'archestra.client_error' | 'archestra.api_request' | 'archestra.interaction' | 'archestra.user_authenticated' | 'archestra.onboarding_completed' | 'archestra.mcp_server_installed' | 'archestra.mcp_server_uninstalled' | 'archestra.mcp_server_installation_cancelled' | 'archestra.mcp_server_installation_failed' | 'archestra.knowledge_base_connector_installation_failed' | 'archestra.message_sent' | 'archestra.message_queued' | 'archestra.prompt_selected' | 'archestra.skill_created' | 'archestra.file_uploaded';
+            timestampMs: number;
+            sessionId: string;
+            previousSessionId?: string;
+            attributes?: {
+                [key: string]: string | number | boolean;
+            };
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/rum/events';
+};
+
+export type IngestRumEventsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type IngestRumEventsError = IngestRumEventsErrors[keyof IngestRumEventsErrors];
+
+export type IngestRumEventsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        accepted: number;
+    };
+};
+
+export type IngestRumEventsResponse = IngestRumEventsResponses[keyof IngestRumEventsResponses];
 
 export type DeleteTeamVaultFolderData = {
     body?: never;

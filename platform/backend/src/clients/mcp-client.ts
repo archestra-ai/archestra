@@ -37,7 +37,11 @@ import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-re
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
-import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import {
+  McpServerDeploymentFailedError,
+  McpServerRuntimeManager,
+  McpServerWakeError,
+} from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -67,6 +71,8 @@ import {
   resolveEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
 import { findExternalIdentityProviderById } from "@/services/identity-providers/oidc";
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 import {
   classifyThrownRefreshError,
   type OAuthRefreshOutcome,
@@ -102,6 +108,26 @@ const MCP_CLIENT_EXTENSION_CAPABILITIES = {
   ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
 } as const;
+
+// A deployment scaled to zero by idle hibernation leaves its pooled clients
+// and stored HTTP sessions pointing at a pod that no longer exists, so the
+// runtime manager must be able to invalidate them. The manager module sits in
+// an import cycle with this one (manager → models/mcp-server → mcp-client),
+// so the wiring happens from server startup — after the module graph has
+// settled — rather than at module scope. Idempotent; called from both the web
+// and worker startup paths.
+let hibernationInvalidationRegistered = false;
+export function registerMcpClientHibernationInvalidation(): void {
+  if (hibernationInvalidationRegistered) {
+    return;
+  }
+  hibernationInvalidationRegistered = true;
+  McpServerRuntimeManager.registerHibernationListener(async (mcpServerIds) => {
+    for (const mcpServerId of mcpServerIds) {
+      await mcpClient.invalidateConnectionsForServer(mcpServerId);
+    }
+  });
+}
 
 export class McpServerNotReadyError extends Error {
   constructor(message: string) {
@@ -530,6 +556,38 @@ class McpClient {
     }
     const { targetMcpServerId, mcpServerName, resolvedServer } =
       targetMcpServerIdResult;
+
+    // Idle hibernation may have scaled the local deployment to zero; wake it
+    // before any secret/transport work. Every wake failure — retryable,
+    // terminal, or unforeseen — has to come back as a tool error result: the
+    // only catch that builds them wraps the upstream call below, so throwing
+    // from here would reach the gateway as a protocol-level exception and skip
+    // the audit row and error funnel every other tool failure goes through.
+    if (catalogItem.serverType === "local") {
+      try {
+        await McpServerRuntimeManager.ensureAwake(targetMcpServerId);
+      } catch (error) {
+        const { agentMessage, unexpected } = describeWakeFailure(
+          error,
+          mcpServerName,
+        );
+        // The whole diagnostic — including the cluster object names the
+        // agent-facing message drops — lives here, the only place an operator
+        // can act on it.
+        logger[unexpected ? "error" : "warn"](
+          { err: error, mcpServerId: targetMcpServerId, mcpServerName },
+          "MCP server wake failed; answering the tool call with the failure",
+        );
+        return await this.createErrorResult(
+          toolCall,
+          owner,
+          agentMessage,
+          mcpServerName,
+          authInfo,
+        );
+      }
+    }
+
     const effectiveEnterpriseManagedConfig =
       catalogItem.enterpriseManagedConfig ?? null;
     if (
@@ -1114,61 +1172,73 @@ class McpClient {
       }
     };
 
-    if (!this.shouldLimitConcurrency()) {
-      return executeToolCall(
+    const dispatchToolCall = async (): Promise<CommonToolResult> => {
+      if (!this.shouldLimitConcurrency()) {
+        return executeToolCall(
+          () =>
+            this.getTransport(
+              catalogItem,
+              targetMcpServerId,
+              secrets,
+              secretId,
+              connectionKey,
+              tokenAuth,
+              enterpriseTransportCredential ?? undefined,
+            ),
+          secrets,
+        );
+      }
+
+      const transportKind = await this.getTransportKind(
+        catalogItem,
+        targetMcpServerId,
+      );
+      // The MCP SDK stores request handlers on the client by method. Serialize
+      // elicitation-capable calls so a cached client's elicitation handler is
+      // not replaced while another tool call on the same connection is active.
+      const concurrencyLimit = options?.elicitationHandler
+        ? 1
+        : this.getConcurrencyLimit(transportKind);
+
+      return this.connectionLimiter.runWithLimit(
+        connectionKey,
+        concurrencyLimit,
         () =>
-          this.getTransport(
-            catalogItem,
-            targetMcpServerId,
-            secrets,
-            secretId,
-            connectionKey,
-            tokenAuth,
-            enterpriseTransportCredential ?? undefined,
-          ),
-        secrets,
+          executeToolCall(async () => {
+            const resolvedSecrets = await this.resolveSecretsForTransport({
+              catalogItem,
+              secrets,
+              secretId,
+            });
+            if (resolvedSecrets !== secrets) {
+              this.secretsCache.set(targetMcpServerId, {
+                secrets: resolvedSecrets,
+                ...(secretId ? { secretId } : {}),
+              });
+            }
+
+            return this.getTransportWithKind(
+              catalogItem,
+              targetMcpServerId,
+              resolvedSecrets,
+              transportKind,
+              connectionKey,
+              tokenAuth,
+              enterpriseTransportCredential ?? undefined,
+            );
+          }, secrets),
+      );
+    };
+
+    // Count the call as active demand so the idle-hibernation sweeper leaves
+    // the local deployment alone while it runs.
+    if (catalogItem.serverType === "local") {
+      return mcpActiveUseTracker.trackActiveUse(
+        targetMcpServerId,
+        dispatchToolCall,
       );
     }
-
-    const transportKind = await this.getTransportKind(
-      catalogItem,
-      targetMcpServerId,
-    );
-    // The MCP SDK stores request handlers on the client by method. Serialize
-    // elicitation-capable calls so a cached client's elicitation handler is
-    // not replaced while another tool call on the same connection is active.
-    const concurrencyLimit = options?.elicitationHandler
-      ? 1
-      : this.getConcurrencyLimit(transportKind);
-
-    return this.connectionLimiter.runWithLimit(
-      connectionKey,
-      concurrencyLimit,
-      () =>
-        executeToolCall(async () => {
-          const resolvedSecrets = await this.resolveSecretsForTransport({
-            catalogItem,
-            secrets,
-            secretId,
-          });
-          if (resolvedSecrets !== secrets) {
-            this.secretsCache.set(targetMcpServerId, {
-              secrets: resolvedSecrets,
-              ...(secretId ? { secretId } : {}),
-            });
-          }
-
-          return this.getTransportWithKind(
-            catalogItem,
-            targetMcpServerId,
-            resolvedSecrets,
-            transportKind,
-            connectionKey,
-            tokenAuth,
-            enterpriseTransportCredential ?? undefined,
-          );
-        }, secrets),
-    );
+    return dispatchToolCall();
   }
 
   /**
@@ -3491,53 +3561,63 @@ class McpClient {
       enterpriseTransportCredential,
     } = params;
 
-    const transport = await this.getTransport(
-      catalogItem,
-      mcpServerId,
-      secrets,
-      undefined,
-      undefined,
-      undefined,
-      enterpriseTransportCredential,
-    );
-
-    const client = new Client(buildMcpClientInfo("archestra-inspector"), {
-      capabilities: {},
-    });
-
-    try {
-      await this.raceWithTimeout(
-        client.connect(transport),
-        30000,
-        new McpServerConnectionTimeoutError(),
+    const runInspection = async (): Promise<unknown> => {
+      const transport = await this.getTransport(
+        catalogItem,
+        mcpServerId,
+        secrets,
+        undefined,
+        undefined,
+        undefined,
+        enterpriseTransportCredential,
       );
 
-      if (method === "tools/list") {
-        return await this.raceWithTimeout(
-          client.listTools(),
+      const client = new Client(buildMcpClientInfo("archestra-inspector"), {
+        capabilities: {},
+      });
+
+      try {
+        await this.raceWithTimeout(
+          client.connect(transport),
           30000,
-          "List tools timeout",
+          new McpServerConnectionTimeoutError(),
         );
-      }
 
-      if (!params.toolName) {
-        throw new Error("toolName is required for tools/call");
+        if (method === "tools/list") {
+          return await this.raceWithTimeout(
+            client.listTools(),
+            30000,
+            "List tools timeout",
+          );
+        }
+
+        if (!params.toolName) {
+          throw new Error("toolName is required for tools/call");
+        }
+        return await this.raceWithTimeout(
+          client.callTool(
+            {
+              name: params.toolName,
+              arguments: params.toolArguments ?? {},
+            },
+            undefined,
+            { timeout: config.mcpGateway.toolCallTimeoutMs },
+          ),
+          config.mcpGateway.toolCallTimeoutMs,
+          "Tool call timeout",
+        );
+      } finally {
+        await client.close().catch(() => {});
       }
-      return await this.raceWithTimeout(
-        client.callTool(
-          {
-            name: params.toolName,
-            arguments: params.toolArguments ?? {},
-          },
-          undefined,
-          { timeout: config.mcpGateway.toolCallTimeoutMs },
-        ),
-        config.mcpGateway.toolCallTimeoutMs,
-        "Tool call timeout",
-      );
-    } finally {
-      await client.close().catch(() => {});
+    };
+
+    // Wake a hibernated local deployment on demand and count the inspection
+    // as active use while it runs.
+    if (catalogItem.serverType === "local") {
+      await McpServerRuntimeManager.ensureAwake(mcpServerId);
+      return mcpActiveUseTracker.trackActiveUse(mcpServerId, runInspection);
     }
+    return runInspection();
   }
 
   /**
@@ -3569,25 +3649,35 @@ class McpClient {
       id: mcpServerId,
       secretId: server.secretId,
     });
-    const transport = await this.getTransport(
-      catalogItem,
-      mcpServerId,
-      secrets,
-      server.secretId ?? undefined,
-    );
-    const client = new Client(buildMcpClientInfo("archestra-app-runner"), {
-      capabilities: {},
-    });
-    try {
-      await this.raceWithTimeout(
-        client.connect(transport),
-        30000,
-        new McpServerConnectionTimeoutError(),
+    const runWithClient = async (): Promise<T> => {
+      const transport = await this.getTransport(
+        catalogItem,
+        mcpServerId,
+        secrets,
+        server.secretId ?? undefined,
       );
-      return await run(client);
-    } finally {
-      await client.close().catch(() => {});
+      const client = new Client(buildMcpClientInfo("archestra-app-runner"), {
+        capabilities: {},
+      });
+      try {
+        await this.raceWithTimeout(
+          client.connect(transport),
+          30000,
+          new McpServerConnectionTimeoutError(),
+        );
+        return await run(client);
+      } finally {
+        await client.close().catch(() => {});
+      }
+    };
+
+    // Wake a hibernated local deployment on demand and count the run as
+    // active use while it holds the connection.
+    if (catalogItem.serverType === "local") {
+      await McpServerRuntimeManager.ensureAwake(mcpServerId);
+      return mcpActiveUseTracker.trackActiveUse(mcpServerId, runWithClient);
     }
+    return runWithClient();
   }
 
   /** Read a UI (`ui://`) resource directly from one installed server. */
@@ -4022,25 +4112,34 @@ class McpClient {
       );
     }
 
-    const transport = await this.getTransport(
-      catalogItem,
-      server.id,
-      secrets,
-      secretId,
-      undefined,
-      tokenAuth,
-      enterpriseTransportCredential ?? undefined,
-    );
-    const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
-    const client = await this.getOrCreateClient(
-      connectionKey,
-      transport,
-      server.id,
-      secretResult.serverState,
-    );
+    const readFromServer = async (): Promise<ResourceContents> => {
+      const transport = await this.getTransport(
+        catalogItem,
+        server.id,
+        secrets,
+        secretId,
+        undefined,
+        tokenAuth,
+        enterpriseTransportCredential ?? undefined,
+      );
+      const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
+      const client = await this.getOrCreateClient(
+        connectionKey,
+        transport,
+        server.id,
+        secretResult.serverState,
+      );
 
-    const result = await client.readResource({ uri });
-    return result;
+      return await client.readResource({ uri });
+    };
+
+    // Wake a hibernated local deployment on demand and count the read as
+    // active use while it runs.
+    if (catalogItem.serverType === "local") {
+      await McpServerRuntimeManager.ensureAwake(server.id);
+      return mcpActiveUseTracker.trackActiveUse(server.id, readFromServer);
+    }
+    return readFromServer();
   }
 
   private async refreshResourceInBackground(
@@ -4060,6 +4159,20 @@ class McpClient {
         logger.debug(
           { uri, agentId },
           "readResource: Background refresh - no server found",
+        );
+        return;
+      }
+
+      // A background refresh must never wake a dormant deployment (hibernated,
+      // or waking and not yet serving); the cache entry stays stale until real
+      // demand wakes the server.
+      if (
+        mcpServer.catalogItem.serverType === "local" &&
+        McpServerRuntimeManager.isDeploymentDormant(mcpServer.server.id)
+      ) {
+        logger.debug(
+          { uri, agentId, serverId: mcpServer.server.id },
+          "readResource: Skipping background refresh for dormant MCP server",
         );
         return;
       }
@@ -4147,6 +4260,22 @@ class McpClient {
         if ("error" in targetResult) continue;
 
         const { targetMcpServerId } = targetResult;
+        // One pooled listing must not wake every idle deployment; a dormant
+        // server's resources/prompts simply stay unlisted until real demand
+        // wakes it (documented product decision).
+        if (catalogItem.serverType === "local") {
+          if (McpServerRuntimeManager.isDeploymentDormant(targetMcpServerId)) {
+            logger.debug(
+              { agentId, catalogId, targetMcpServerId },
+              "Skipping dormant MCP server in list operation",
+            );
+            continue;
+          }
+          // An AWAKE server included in a pooled listing is being used:
+          // continuous legitimate listing must not let the sweeper classify
+          // it as idle.
+          mcpActiveUseTracker.stamp(targetMcpServerId);
+        }
         // Catalog-level enterprise-managed config is authoritative — see
         // executeToolCall for why stale assignment modes are overridden.
         const usesEnterpriseManagedCredential =
@@ -4551,6 +4680,44 @@ function makeSyntheticResourceToolName(uri: string): string {
     .replace(/^_+|_+$/g, "")
     .toLowerCase();
   return `read_resource_${slug || "resource"}`.slice(0, 128);
+}
+
+/**
+ * Phrase a failed wake for the calling agent, and say whether it is the kind
+ * of failure an operator has to look at. The three outcomes stay
+ * distinguishable on purpose: a wake still progressing in the cluster is worth
+ * retrying shortly, a deployment that cannot start is not (only an operator
+ * clears it), and a platform-side failure says nothing about the server at all.
+ */
+function describeWakeFailure(
+  error: unknown,
+  mcpServerName: string,
+): { agentMessage: string; unexpected: boolean } {
+  if (error instanceof McpServerWakeError) {
+    // Already phrased for a caller, and names the server rather than any
+    // cluster object.
+    return { agentMessage: error.message, unexpected: false };
+  }
+  if (error instanceof McpServerDeploymentFailedError) {
+    return {
+      agentMessage: `MCP server ${mcpServerName} cannot start, and retrying will not help until its image or configuration is fixed — edit or reinstall it from the registry. ${deploymentFailureCause(error.message)}`,
+      unexpected: false,
+    };
+  }
+  return {
+    agentMessage: `MCP server ${mcpServerName} could not be woken from idle hibernation: the platform failed to complete the wake. This is not a problem with the tool call — retrying may work, and an administrator can see the full failure in the platform logs.`,
+    unexpected: true,
+  };
+}
+
+/**
+ * A deployment failure names the Kubernetes object it observed
+ * (`Deployment <name> failed: <cause>`). That name is absent from every product
+ * surface and nobody on the calling side can act on it, so only the cause
+ * travels to the agent; the operator log keeps the whole message.
+ */
+function deploymentFailureCause(message: string): string {
+  return message.replace(/^Deployment \S+ failed: /, "");
 }
 
 function isMethodNotFoundError(error: unknown): boolean {

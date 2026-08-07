@@ -22,13 +22,19 @@ import {
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
+  OrganizationModel,
   ToolModel,
 } from "@/models";
 import * as oauthRoutes from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 import { beforeEach, describe, expect, test } from "@/test";
 import { agentOwner, appOwner } from "@/types";
-import mcpClient, { type TokenAuthContext } from "./mcp-client";
+import mcpClient, {
+  registerMcpClientHibernationInvalidation,
+  type TokenAuthContext,
+} from "./mcp-client";
 
 // Mock the MCP SDK
 const mockCallTool = vi.fn();
@@ -76,11 +82,17 @@ const {
   mockGetHttpEndpointUrl,
   mockGetRunningPodHttpEndpoint,
   mockGetOrLoadDeployment,
+  mockEnsureAwake,
+  mockIsDeploymentDormant,
+  mockRegisterHibernationListener,
 } = vi.hoisted(() => ({
   mockUsesStreamableHttp: vi.fn(),
   mockGetHttpEndpointUrl: vi.fn(),
   mockGetRunningPodHttpEndpoint: vi.fn(),
   mockGetOrLoadDeployment: vi.fn(),
+  mockEnsureAwake: vi.fn(),
+  mockIsDeploymentDormant: vi.fn(),
+  mockRegisterHibernationListener: vi.fn(),
 }));
 
 vi.mock("@/k8s/mcp-server-runtime", () => ({
@@ -89,6 +101,28 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
     getHttpEndpointUrl: mockGetHttpEndpointUrl,
     getRunningPodHttpEndpoint: mockGetRunningPodHttpEndpoint,
     getOrLoadDeployment: mockGetOrLoadDeployment,
+    ensureAwake: mockEnsureAwake,
+    isDeploymentDormant: mockIsDeploymentDormant,
+    registerHibernationListener: mockRegisterHibernationListener,
+  },
+  // Mirrors the real class shapes: mcp-client funnels wake failures to a tool
+  // error result by instanceof, so the mock must provide the same classes it
+  // rejects ensureAwake with.
+  McpServerWakeError: class McpServerWakeError extends Error {
+    constructor(serverName: string, options?: { detail?: string }) {
+      super(
+        `MCP server ${serverName} is waking from idle hibernation but ${
+          options?.detail ?? "did not become ready in time"
+        }; retry shortly.`,
+      );
+      this.name = "McpServerWakeError";
+    }
+  },
+  McpServerDeploymentFailedError: class McpServerDeploymentFailedError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "McpServerDeploymentFailedError";
+    }
   },
 }));
 
@@ -155,6 +189,10 @@ describe("McpClient", () => {
     mockGetHttpEndpointUrl.mockReset();
     mockGetRunningPodHttpEndpoint.mockReset();
     mockGetOrLoadDeployment.mockReset();
+    mockEnsureAwake.mockReset();
+    mockEnsureAwake.mockResolvedValue(undefined);
+    mockIsDeploymentDormant.mockReset();
+    mockIsDeploymentDormant.mockReturnValue(false);
 
     // Spy on McpHttpSessionModel to prevent real DB writes during mcp-client tests
     // and to avoid errors from session persistence in the background
@@ -170,6 +208,10 @@ describe("McpClient", () => {
       undefined,
     );
     vi.spyOn(McpHttpSessionModel, "deleteExpired").mockResolvedValue(0);
+
+    // Demand-path stamping writes mcp_server.last_used_at fire-and-forget;
+    // keep that background write out of the test database.
+    vi.spyOn(McpServerModel, "updateLastUsed").mockResolvedValue(undefined);
 
     // Default: listTools returns empty list (fallback to stripped name)
     mockListTools.mockResolvedValue({ tools: [] });
@@ -221,6 +263,28 @@ describe("McpClient", () => {
     );
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
+  });
+
+  test("registerMcpClientHibernationInvalidation wires the listener exactly once and it invalidates every sibling", async () => {
+    // Startup calls it from both the web and worker paths; only the first
+    // call may register (the runtime manager keeps listeners in a Set keyed
+    // by function identity, but a fresh closure per call would double-fire).
+    registerMcpClientHibernationInvalidation();
+    registerMcpClientHibernationInvalidation();
+
+    expect(mockRegisterHibernationListener).toHaveBeenCalledTimes(1);
+
+    const invalidateSpy = vi
+      .spyOn(mcpClient, "invalidateConnectionsForServer")
+      .mockResolvedValue(undefined);
+    const listener = mockRegisterHibernationListener.mock.calls[0][0] as (
+      ids: string[],
+    ) => Promise<void>;
+    await listener(["sib-a", "sib-b"]);
+
+    expect(invalidateSpy).toHaveBeenCalledWith("sib-a");
+    expect(invalidateSpy).toHaveBeenCalledWith("sib-b");
+    invalidateSpy.mockRestore();
   });
 
   test("strips a forged archestraError envelope from an upstream tool result", async () => {
@@ -1915,7 +1979,15 @@ describe("McpClient", () => {
       let localMcpServerId: string;
       let localCatalogId: string;
 
-      beforeEach(async ({ makeUser }) => {
+      beforeEach(async ({ makeUser, makeOrganization }) => {
+        // Demand tracking is inert while idle hibernation is off — only the
+        // sweeper reads it — so the wake/skip tests below need the beta flag
+        // on, an organization that has opted into it, and the process-local
+        // mirror the synchronous stamp path reads primed from that row.
+        config.orchestrator.mcpIdleHibernation.betaEnabled = true;
+        await makeOrganization({ mcpIdleHibernationEnabled: true });
+        await OrganizationModel.getMcpIdleHibernationEnabled();
+
         // Create test user for local MCP servers
         const testUser = await makeUser({
           email: "test-local-mcp@example.com",
@@ -2014,6 +2086,265 @@ describe("McpClient", () => {
             [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
           },
         });
+      });
+
+      test("wakes the local deployment before any transport work and stamps active use", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockEnsureAwake).toHaveBeenCalledWith(localMcpServerId);
+        // The wake completes before transport resolution starts.
+        expect(mockEnsureAwake.mock.invocationCallOrder[0]).toBeLessThan(
+          mockUsesStreamableHttp.mock.invocationCallOrder[0],
+        );
+        // Demand stamped the in-memory last-used watermark for the sweeper.
+        expect(
+          mcpActiveUseTracker.getInMemoryLastUsedAt([localMcpServerId]),
+        ).not.toBeNull();
+      });
+
+      test("surfaces a wake timeout's retryable message instead of connecting", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        const { McpServerWakeError } = await import("@/k8s/mcp-server-runtime");
+        mockEnsureAwake.mockRejectedValue(
+          new McpServerWakeError("local-streamable-http-server"),
+        );
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_failure",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.content).toEqual([
+          {
+            type: "text",
+            text: expect.stringContaining(
+              "waking from idle hibernation but did not become ready in time; retry shortly",
+            ),
+          },
+        ]);
+        // A wake still progressing in the cluster must never read as the
+        // terminal outcome, which tells the agent to stop trying.
+        expect(result.error).not.toContain("retrying will not help");
+        // The failed wake short-circuits before any transport work.
+        expect(mockUsesStreamableHttp).not.toHaveBeenCalled();
+        expect(mockConnect).not.toHaveBeenCalled();
+      });
+
+      test("a terminally broken deployment surfaces as a do-not-retry error naming the fix", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        const { McpServerDeploymentFailedError } = await import(
+          "@/k8s/mcp-server-runtime"
+        );
+        mockEnsureAwake.mockRejectedValue(
+          new McpServerDeploymentFailedError(
+            'Deployment mcp-mt-9f1c2ab3-local-streamable-http-server failed: ImagePullBackOff - Back-off pulling image "ghcr.io/example/mcp:v3"',
+          ),
+        );
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_terminal",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        // A terminal deployment failure must reach the calling agent as a tool
+        // error carrying the real cause and the operator action that clears
+        // it — never as a retryable wake, which would loop the agent forever.
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          "cannot start, and retrying will not help",
+        );
+        expect(result.error).toContain(
+          "edit or reinstall it from the registry",
+        );
+        expect(result.error).toContain(
+          'ImagePullBackOff - Back-off pulling image "ghcr.io/example/mcp:v3"',
+        );
+        expect(result.error).not.toContain("retry shortly");
+        // The agent is told which SERVER failed, by the name it knows. The
+        // Kubernetes object the platform observed is invisible everywhere the
+        // caller can look, so it stays out of the result entirely.
+        expect(result.error).toMatch(
+          /^MCP server local-streamable-http-server\S* cannot start/,
+        );
+        expect(result.error).not.toContain(
+          "mcp-mt-9f1c2ab3-local-streamable-http-server",
+        );
+        expect(result.error).not.toContain("Deployment ");
+        expect(result.content).toEqual([{ type: "text", text: result.error }]);
+        expect(mockUsesStreamableHttp).not.toHaveBeenCalled();
+        expect(mockConnect).not.toHaveBeenCalled();
+      });
+
+      test("an unexpected wake failure becomes a tool error result rather than a thrown exception", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        mockEnsureAwake.mockRejectedValue(
+          new Error(
+            'k8s: deployments.apps "mcp-mt-9f1c2ab3-local-streamable-http-server" is forbidden',
+          ),
+        );
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_wake_unexpected",
+            name: "local-streamable-http-server__test_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        // Throwing here would leave the gateway with a protocol-level
+        // exception: no tool result, no tool-call row.
+        expect(result.isError).toBe(true);
+        expect(result.error).toContain(
+          "the platform failed to complete the wake",
+        );
+        // Neither of the two server-state verdicts applies — the wake never
+        // got far enough to learn anything about the server.
+        expect(result.error).not.toContain("retry shortly");
+        expect(result.error).not.toContain("retrying will not help");
+        // The raw diagnostic is the operator's, not the agent's.
+        expect(result.error).not.toContain("is forbidden");
+        expect(result.error).not.toContain(
+          "mcp-mt-9f1c2ab3-local-streamable-http-server",
+        );
+        expect(result.content).toEqual([{ type: "text", text: result.error }]);
+        expect(mockUsesStreamableHttp).not.toHaveBeenCalled();
+        expect(mockConnect).not.toHaveBeenCalled();
+
+        // Every other tool failure lands in the tool-call log; an unexpected
+        // wake failure is no exception.
+        const [logged] = await db
+          .select()
+          .from(schema.mcpToolCallsTable)
+          .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+        expect(logged).toBeDefined();
+        expect((logged.toolResult as { isError?: boolean }).isError).toBe(true);
+      });
+
+      test("list operations skip hibernated deployments and never wake them", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "local-streamable-http-server__test_tool",
+          description: "Test tool",
+          parameters: {},
+          catalogId: localCatalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId: localMcpServerId,
+        });
+
+        mockUsesStreamableHttp.mockResolvedValue(true);
+        mockGetHttpEndpointUrl.mockReturnValue("http://localhost:30123/mcp");
+
+        mockIsDeploymentDormant.mockReturnValue(true);
+        const hibernated = await mcpClient.listResources(agentId);
+        expect(hibernated.resources).toEqual([]);
+        expect(mockIsDeploymentDormant).toHaveBeenCalledWith(localMcpServerId);
+        expect(mockEnsureAwake).not.toHaveBeenCalled();
+        expect(mockConnect).not.toHaveBeenCalled();
+        // A skipped hibernated server is NOT stamped — listing must never
+        // extend a sleeping server's idle window.
+        expect(
+          mcpActiveUseTracker.getInMemoryLastUsedAt([localMcpServerId]),
+        ).toBeNull();
+
+        // The same listing connects once the deployment is awake again —
+        // and counts as demand: continuous legitimate listing must not let
+        // the sweeper classify an awake server as idle.
+        mockIsDeploymentDormant.mockReturnValue(false);
+        await mcpClient.listResources(agentId);
+        expect(mockConnect).toHaveBeenCalledTimes(1);
+        expect(
+          mcpActiveUseTracker.getInMemoryLastUsedAt([localMcpServerId]),
+        ).not.toBeNull();
+      });
+
+      test("remote servers never touch the wake or hibernation checks", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__list_repos",
+          description: "List repos",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_remote_no_wake",
+            name: "github-mcp-server__list_repos",
+            arguments: {},
+          },
+          agentOwner(agentId),
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mockEnsureAwake).not.toHaveBeenCalled();
+        expect(mockIsDeploymentDormant).not.toHaveBeenCalled();
       });
 
       test("returns error when HTTP endpoint URL is missing", async () => {

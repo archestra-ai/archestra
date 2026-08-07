@@ -556,7 +556,7 @@ args:
       says it without depending on which line Helm printed first.
     */}}
     if [ "$result" = blocked ]; then
-      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY CHECK INCONCLUSIVE  ⚠️ ⚠️ ⚠️  Could not reach {{ .host }}:9000, so enforcement was never measured — environment egress rules (MCP servers, code sandboxes) may be accepted and then silently ignored. Re-run once the platform is up to get a verdict"
+      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY CHECK INCONCLUSIVE  ⚠️ ⚠️ ⚠️  Could not reach {{ .host }}:9000, so enforcement was never measured — environment egress rules (MCP servers, code sandboxes) may be accepted and then silently ignored, leaving pods able to reach cloud metadata endpoints and private cluster ranges. Re-run once the platform is up to get a verdict — see https://archestra.ai/docs/platform-deployment#ssrf-protection-for-mcp-server-pods"
     fi
     exit 0
 {{- end }}

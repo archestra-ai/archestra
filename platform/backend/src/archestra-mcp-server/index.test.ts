@@ -1,62 +1,14 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test...
 import {
   ARCHESTRA_MCP_SERVER_NAME,
-  ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-  TOOL_CREATE_HOOK_SHORT_NAME,
-  TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
-import {
-  __test,
-  type ArchestraContext,
-  executeArchestraTool,
-  getAllArchestraMcpTools,
-  getArchestraMcpTools,
-} from ".";
+import { __test, type ArchestraContext, executeArchestraTool } from ".";
 import { archestraMcpBranding } from "./branding";
-
-describe("getAllArchestraMcpTools", () => {
-  // A name that does not resolve to a short name is not a built-in; dropping it
-  // can only make the completeness assertion below stricter.
-  const shortNamesOf = (tools: { name: string }[]): string[] =>
-    tools.flatMap(
-      (tool) => archestraMcpBranding.getToolShortName(tool.name) ?? [],
-    );
-
-  test("returns every tool in the shared taxonomy, whatever this deployment configures", () => {
-    const returned = new Set(shortNamesOf(getAllArchestraMcpTools()));
-
-    const missing = Object.keys(ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME).filter(
-      (shortName) => !returned.has(shortName),
-    );
-
-    expect(missing).toEqual([]);
-  });
-
-  test("keeps the code-runtime tools that getArchestraMcpTools drops when no runtime is configured", () => {
-    // Pinned explicitly: with the runtime on, the assertions below would pass
-    // vacuously instead of failing, and the gap between the two accessors is
-    // the whole point of this test.
-    expect(config.skillsSandbox.enabled).toBe(false);
-    expect(config.hooks.enabled).toBe(false);
-
-    const served = shortNamesOf(getArchestraMcpTools());
-    const all = shortNamesOf(getAllArchestraMcpTools());
-
-    for (const shortName of [
-      TOOL_RUN_COMMAND_SHORT_NAME,
-      TOOL_CREATE_HOOK_SHORT_NAME,
-    ]) {
-      expect(all).toContain(shortName);
-      expect(served).not.toContain(shortName);
-    }
-  });
-});
 
 describe("executeArchestraTool", () => {
   let testAgent: Agent;

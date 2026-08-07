@@ -152,6 +152,62 @@ describe("ModelSelector coverage matrix", () => {
     expect(screen.getByText("GPT-4o")).toBeInTheDocument();
   });
 
+  // The badge sits in the trigger, not only in the picker list, so the warning
+  // stays visible once the dropdown is closed.
+  it("badges a small selected model beside its name in the trigger", () => {
+    setQuery({
+      modelsByProvider: {
+        ollama: [
+          model({
+            displayName: "qwen3:4b",
+            capabilities: { parameterCount: 4_022_468_096 },
+          }),
+        ],
+      },
+    });
+    renderSelector({ selectedModel: "m1", variant: "default" });
+    expect(screen.getByText("qwen3:4b")).toBeInTheDocument();
+    expect(screen.getByText("small model")).toBeInTheDocument();
+  });
+
+  it("badges a small selected model in the outline trigger too", () => {
+    setQuery({
+      modelsByProvider: {
+        ollama: [
+          model({
+            displayName: "qwen3:0.6b",
+            capabilities: { parameterCount: 751_632_384 },
+          }),
+        ],
+      },
+    });
+    renderSelector({ selectedModel: "m1", variant: "outline" });
+    expect(screen.getByText("small model")).toBeInTheDocument();
+  });
+
+  it("leaves a large model unbadged", () => {
+    setQuery({
+      modelsByProvider: {
+        ollama: [
+          model({
+            displayName: "llama3.3:70b",
+            capabilities: { parameterCount: 70_000_000_000 },
+          }),
+        ],
+      },
+    });
+    renderSelector({ selectedModel: "m1", variant: "default" });
+    expect(screen.queryByText("small model")).not.toBeInTheDocument();
+  });
+
+  // Every provider but Ollama reports no size, so the trigger must make no
+  // claim rather than assume the model is large.
+  it("makes no size claim when the provider reports no parameter count", () => {
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    renderSelector({ selectedModel: "m1", variant: "default" });
+    expect(screen.queryByText("small model")).not.toBeInTheDocument();
+  });
+
   it("auto-selects the best model when the selected one is unavailable", async () => {
     setQuery({ modelsByProvider: { openai: [model({ isBest: true })] } });
     const { onModelChange } = renderSelector({

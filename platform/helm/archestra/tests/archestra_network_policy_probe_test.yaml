@@ -230,9 +230,9 @@ tests:
 
   - it: warns in one self-contained line and stays silent otherwise
     asserts:
-      # Helm emits a pod's whole log as one record and the two arms arrive in no
-      # guaranteed order, so a message that refers to the other arm, or spans
-      # lines, arrives unreadable.
+      # The two arms arrive in no guaranteed order, and Helm 4 collapses each
+      # pod's log into one record, so a message that refers to the other arm, or
+      # spans lines, arrives unreadable.
       - matchRegex:
           path: spec.containers[0].args[0]
           pattern: 'NETWORK POLICY NOT ENFORCED'
@@ -261,9 +261,13 @@ tests:
           pattern: 'https://archestra\.ai/docs/platform-environments#network-egress-policies'
         documentIndex: 2
 
-  # Helm renders an embedded newline as a literal \n inside the single quoted
-  # record, so a stacked banner reaches the operator as one line of escapes. The
-  # emphasis has to come from emoji on one line instead.
+  # Helm 4 routes hook output through its structured logger, so a stacked banner
+  # reaches the operator as one record of \n escapes; Helm 3 copies the stream
+  # verbatim and renders it. One line is the only shape correct on both.
+  #
+  # Guarded from both directions, because a banner can be built two ways: a
+  # newline inside one echo, or consecutive echoes. The second is the shape
+  # someone reaches for first, and it leaves every quoted run newline-free.
   - it: keeps every operator-facing message on one line
     asserts:
       - notMatchRegex:
@@ -273,6 +277,14 @@ tests:
       - notMatchRegex:
           path: spec.containers[0].args[0]
           pattern: 'echo "[^"]*\n[^"]*"'
+        documentIndex: 2
+      - notMatchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'echo "[^"]*"[\s\S]*echo "'
+        documentIndex: 1
+      - notMatchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'echo "[^"]*"[\s\S]*echo "'
         documentIndex: 2
       - matchRegex:
           path: spec.containers[0].args[0]

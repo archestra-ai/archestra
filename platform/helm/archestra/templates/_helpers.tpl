@@ -579,9 +579,11 @@ args:
       termination message, where the platform resolves it against the control arm
       and can claim enforcement holding both halves of the evidence.
 
-      Helm emits a pod's whole log as a single `level=... msg="..."` record, so an
-      embedded newline arrives as a literal \n inside one quoted string — a
-      stacked banner renders as garbage. Emoji carry the emphasis instead.
+      One line, because the two supported Helm majors disagree about hook output:
+      Helm 4 routes it through its structured logger, where the whole pod log
+      becomes one `level=... msg="..."` record and every newline arrives as a
+      literal \n, while Helm 3 copies the stream verbatim. A stacked banner
+      renders on 3 and reaches 4 as a row of escapes. Emoji survive both.
     */}}
     if [ "$result" = reachable ]; then
       echo "[archestra] 🚨 🚨 🚨  NETWORK POLICY NOT ENFORCED  🚨 🚨 🚨  Environment egress rules (MCP servers, code sandboxes) are accepted and then silently ignored — see https://archestra.ai/docs/platform-environments#network-egress-policies"

@@ -416,7 +416,7 @@ sum of both models' spend — advisor rows are split off by the Advisor agent's 
 advisor lane's slug, the rest at the lane's own — and each advised rollout's `run.json` carries
 `advisor_consult_count`, the advisor token share, and the advisor cost share (aggregated per group in
 `aggregate.json` and the report). The canonical A/B is three arms in one run: cheap alone,
-cheap+advisor, strong alone (e.g. `--lanes gemini-35-flash,gemini-35-flash-adv-glm,glm`). The
+cheap+advisor, strong alone (e.g. `--lanes qwen36-35b-a3b,qwen36-35b-a3b-adv-deepseek-flash,deepseek-flash`). The
 `--lanes` flag selects lane names from the catalog (default: every lane), so you can define many and run
 one; `--lanes-file` overrides the catalog path. `--max-workers` runs that many lanes concurrently
 (default: one worker per selected lane, capped at 4); tasks within a lane stay serial. On `benchmark`,

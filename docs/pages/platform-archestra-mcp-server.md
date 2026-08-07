@@ -213,7 +213,7 @@ Required RBAC permission: `agent:update`
 
 Required RBAC permission: `agent:read`
 
-Availability: Served only when the code runtime is enabled (the same prerequisite as the [Skill Sandbox](#skill-sandbox) tools), because a hook executes in the conversation sandbox.
+Availability: Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.
 
 ##### Input
 
@@ -240,7 +240,7 @@ Availability: Served only when the code runtime is enabled (the same prerequisit
 
 Required RBAC permission: `agent:update`
 
-Availability: Served only when the code runtime is enabled (the same prerequisite as the [Skill Sandbox](#skill-sandbox) tools), because a hook executes in the conversation sandbox.
+Availability: Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.
 
 ##### Input
 
@@ -272,7 +272,7 @@ Availability: Served only when the code runtime is enabled (the same prerequisit
 
 Required RBAC permission: `agent:update`
 
-Availability: Served only when the code runtime is enabled (the same prerequisite as the [Skill Sandbox](#skill-sandbox) tools), because a hook executes in the conversation sandbox.
+Availability: Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.
 
 ##### Input
 
@@ -304,7 +304,7 @@ Availability: Served only when the code runtime is enabled (the same prerequisit
 
 Required RBAC permission: `agent:update`
 
-Availability: Served only when the code runtime is enabled (the same prerequisite as the [Skill Sandbox](#skill-sandbox) tools), because a hook executes in the conversation sandbox.
+Availability: Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.
 
 ##### Input
 
@@ -2190,9 +2190,9 @@ Required RBAC permission: `skill:update`
 | `replacementContent` | `string` | No | The complete new content of the target, replacing it outright with no old_str matching — use it for a small file or a full rewrite. Prefer edits for the SKILL.md body so you don't resend the whole thing. Pass either edits or replacementContent, never both. |
 
 
-### Skill Sandbox
+### Code Sandbox
 
-These tools are served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`. See [Code Sandbox](/docs/platform-code-sandbox).
+These tools are served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`. The [Code Sandbox](/docs/platform-code-sandbox) page covers what the runtime is and how an agent uses it.
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|

@@ -79,11 +79,11 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
  */
 const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
   skill_sandbox:
-    "These tools are served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`. See [Code Sandbox](/docs/platform-code-sandbox).",
+    "These tools are served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`. The [Code Sandbox](/docs/platform-code-sandbox) page covers what the runtime is and how an agent uses it.",
 };
 
 const HOOK_RUNTIME_NOTE =
-  "Served only when the code runtime is enabled (the same prerequisite as the [Skill Sandbox](#skill-sandbox) tools), because a hook executes in the conversation sandbox.";
+  "Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.";
 
 /**
  * Availability notes for individual tools whose group is otherwise

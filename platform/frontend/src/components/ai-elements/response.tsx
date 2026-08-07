@@ -99,6 +99,16 @@ const REHYPE_PLUGINS: ResponseProps["rehypePlugins"] = [
   rehypeFocusablePre,
 ];
 
+// Streamdown completes half-written markdown while streaming (`remend`), and its
+// KaTeX handler closes a dangling `$$` so a formula renders as it arrives. That
+// runs *after* the passes below, so it reinstates exactly what they decline:
+// "Save $$ on your bill." gains a closer and becomes a formula. Its `$$` counter
+// also reaches inside fenced code, so a shell snippet echoing `$$` appends a
+// stray delimiter to the whole message. Off, display math stays literal until
+// its own closer arrives — the same fail-safe direction as the rest of this file.
+// Module scope because it feeds a `useMemo` inside Streamdown.
+const REMEND_OPTIONS = { katex: false };
+
 /**
  * Check if a URL points to the same origin as the current page.
  * Same-origin links should bypass the "Open external link?" confirmation dialog.
@@ -127,12 +137,17 @@ export const Response = memo(
     // has to be told apart from prices (preprocess-latex.ts), bracket math has
     // to be caught before CommonMark eats its backslashes (normalize-math.ts).
     // Currency first, so it works on the original text.
+    //
+    // `isStreaming` is a dependency, not just an argument: at the end of a
+    // stream the last token has already arrived, so `children` is final and
+    // unchanged. Without it here the memo never recomputes and the finished
+    // reply keeps the streaming pass's cheaper, more approximate code regions.
     const normalizedChildren = useMemo(
       () =>
         typeof children === "string"
-          ? normalizeMathDelimiters(preprocessLaTeX(children))
+          ? normalizeMathDelimiters(preprocessLaTeX(children, isStreaming))
           : children,
-      [children],
+      [children, isStreaming],
     );
 
     const mergedLinkSafety = useMemo(
@@ -151,6 +166,7 @@ export const Response = memo(
     return (
       <Streamdown
         mode={isStreaming ? "streaming" : "static"}
+        remend={REMEND_OPTIONS}
         isAnimating={isStreaming}
         animated={isStreaming ? { animation: "fadeIn", sep: "word" } : false}
         caret={isStreaming ? "block" : undefined}

@@ -7,9 +7,13 @@ const APP_ID = "7b0839a1-4663-4371-a739-e5dac7f8c33e";
 
 // linkSafety off makes Streamdown render a real <a href> we can read, instead of
 // the safe-link <button> whose target lives in an onClick closure.
-function renderResponse(markdown: string) {
+function renderResponse(markdown: string, isStreaming = false) {
   return render(
-    createElement(Response, { linkSafety: { enabled: false } }, markdown),
+    createElement(
+      Response,
+      { linkSafety: { enabled: false }, isStreaming },
+      markdown,
+    ),
   );
 }
 
@@ -299,6 +303,20 @@ describe("Response dollar-sign safety", () => {
     "The ticker is $AAPL and $MSFT today.",
     "Use $1 and $2 as positional args in bash.",
     "Save $$ on your bill.",
+    // Shapes a blacklist of closing punctuation kept missing: the closer is a
+    // whitelist now, and adjacency alone must not pair two variables.
+    "Run $FOO$BAR to see the value.",
+    "Run $A$B to see the value.",
+    "Set $FOO=$BAR in the env file.",
+    "Use $HOME+$USER as the key.",
+    "Compare $A*$B and $C^$D here.",
+    "In PHP, $foo.$bar concatenates.",
+    // `${` opens an interpolation, never a formula. These are prose *about*
+    // interpolation, so the literal syntax is the point of the case.
+    // biome-ignore-start lint/suspicious/noTemplateCurlyInString: the interpolation syntax is the input under test
+    "Use ${HOME}${USER} as the target.",
+    "Use ${a}${b} in the template string.",
+    // biome-ignore-end lint/suspicious/noTemplateCurlyInString: the interpolation syntax is the input under test
   ])("renders no math in: %s", (markdown) => {
     const { container } = renderResponse(markdown);
     expect(container.querySelector(".katex")).toBeNull();
@@ -347,5 +365,74 @@ describe("Response dollar-sign safety", () => {
   it("keeps prose intact next to a stray display delimiter", () => {
     const { container } = renderResponse("Save $$ when $x$ is high.");
     expect(container.textContent).toBe("Save $$ when $x$ is high.");
+  });
+});
+
+// Rewriting inside a code block is the one failure this component cannot have:
+// a shell snippet that mentions `$HOME` is not a formula, and a developer
+// copying it out must get back what the model wrote. Both render paths are
+// exercised because they find code regions differently — a finished reply is
+// parsed, a streaming one is scanned — and a shape can pass in one and fail in
+// the other.
+describe.each([
+  ["finished", false],
+  ["streaming", true],
+])("Response code-region safety (%s)", (_label, isStreaming) => {
+  it.each([
+    ["a fenced block", "```sh\ncost = $x$ and $5\n```"],
+    ["a fence with a blank line", "```py\na = 1\n\ncost = $x$\n```"],
+    ["a tilde fence", "~~~sh\ncost = $x$ and $5\n~~~"],
+    ["an inline span", "Run `cost = $x$` verbatim."],
+    ["a double-backtick span", "Run ``cost = $x$`` verbatim."],
+    [
+      "a longer fence around a shorter one",
+      "````md\n```\ncost = $x$\n```\n````",
+    ],
+    ["a fence that has not closed yet", "```py\ncost = $x$ and $5"],
+  ])("leaves %s untouched", (_shape, markdown) => {
+    const { container } = renderResponse(markdown, isStreaming);
+    const code = container.querySelector("code");
+
+    expect(code).not.toBeNull();
+    expect(code?.textContent).toContain("$x$");
+    expect(code?.textContent).not.toContain("$$");
+    expect(code?.textContent).not.toContain("\\$");
+    expect(container.querySelector(".katex")).toBeNull();
+  });
+});
+
+// Shapes that are still wrong, pinned so the behaviour is visible in the diff if
+// it ever changes. Each needs a content gate — a rule about what a formula may
+// contain — which is a larger change than the delimiter rules above and buys
+// only these cases.
+describe("Response known limitations", () => {
+  // `$$` twice in one line pairs natively in remark-math, before any of our
+  // passes see it. Every markdown-math parser tested has this bug: markdown-it
+  // -dollarmath, marked-katex, @vscode/markdown-it-katex and remark-math all
+  // render it as a formula.
+  it("still reads doubled money slang as display math", () => {
+    const { container } = renderResponse("Save $$ today, spend $$ tomorrow.");
+    expect(container.querySelector(".katex")).not.toBeNull();
+  });
+
+  // normalize-math rewrites bracket delimiters with no test of what is between
+  // them, so escaped brackets in prose become formulas.
+  it.each([
+    "Escaped \\[brackets\\] in markdown.",
+    "See footnote \\[1\\] for details.",
+    "The class \\[a-z\\] matches letters.",
+    "Escaped \\(parens\\) in markdown.",
+  ])("still reads %s as math", (markdown) => {
+    const { container } = renderResponse(markdown);
+    expect(container.querySelector(".katex")).not.toBeNull();
+  });
+
+  // The closer may not be followed by a letter, which is what stops `$FOO$BAR`
+  // from pairing. `$n$th` is the price: VS Code and marked-katex make the same
+  // trade.
+  it("no longer renders the $n$th idiom as math", () => {
+    const { container } = renderResponse("The $n$th term follows.");
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.textContent).toBe("The $n$th term follows.");
   });
 });

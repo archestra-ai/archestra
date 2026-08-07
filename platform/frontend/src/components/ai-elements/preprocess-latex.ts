@@ -1,3 +1,5 @@
+import { fromMarkdown } from "mdast-util-from-markdown";
+
 /**
  * Currency-safe single-dollar math.
  *
@@ -23,10 +25,12 @@
  *    markdown-it-dollarmath ships as `allow_space: false` / `allow_digits:
  *    false`.
  *
- * Rule 2 alone leaves the shell-variable shapes, where the closing candidate
- * is pinned against punctuation rather than a space (`$HOME/$USER`,
- * `$PATH:$HOME`, `"$USER@$HOST"`), so the closer additionally rejects the path
- * and list punctuation that no inline formula ends on.
+ * Rule 2 alone leaves the shell-variable shapes, where the closing candidate is
+ * pinned against punctuation rather than a space (`$HOME/$USER`, `$PATH:$HOME`,
+ * `"$USER@$HOST"`). Blacklisting that punctuation is not enough either — every
+ * operator has to be listed, and `$FOO+$BAR`, `$A*$B`, `$FOO^$BAR` were all
+ * missed. The closer is therefore a *whitelist*: a formula ends on a letter,
+ * digit, or closing bracket, and nothing else.
  *
  * Complements `normalize-math.ts`, which covers the bracket forms. Run this
  * first: it works on the original text, and the `$$` regions it produces are
@@ -39,11 +43,11 @@
  * sequence either way — but left intact it renders as `\ce` in the plugin's
  * errorColor, which at least reads as a command that failed.
  */
-export function preprocessLaTeX(content: string): string {
+export function preprocessLaTeX(content: string, isStreaming = false): string {
   // Early return for most common case
   if (!content.includes("$")) return content;
 
-  return promoteInlineMath(escapeCurrency(content));
+  return promoteInlineMath(escapeCurrency(content, isStreaming), isStreaming);
 }
 
 // A `$` that introduces a number — `$5`, `$1,250.50`, `$3.2M` — and is not
@@ -52,21 +56,27 @@ export function preprocessLaTeX(content: string): string {
 const CURRENCY_REGEX =
   /(?<![\\$])\$(?!\$)(?=\d+(?:,\d{3})*(?:\.\d+)?(?:[KMBkmb])?(?:\s|$|[^a-zA-Z\d$]))/g;
 
-// Pandoc's rule, plus the punctuation guard. Reading the parts:
-//   (?<![\\$])\$(?![$\s])  opener: not escaped, not part of `$$`, non-space right
-//   ([^$\n]*?)             body: one line, no `$` — lazy, so pairs stay tight
-//   (?<![\s\\/:@|&;,])     closer: non-space left, and not pinned against the
-//                          path/list punctuation a formula never ends on
-//   \$(?![$\d])            closer: not part of `$$`, not followed by a digit
+// Pandoc's rule, tightened at both delimiters. Reading the parts:
+//   (?<![\\$])\$(?![$\s{])  opener: not escaped, not part of `$$`, non-space
+//                           right, and not `${` — that is shell/JS
+//                           interpolation (`${a}${b}`, `${HOME}${USER}`)
+//   ([^$\n]*?)              body: one line, no `$` — lazy, so pairs stay tight
+//   (?<=[A-Za-z0-9)}\]|])   closer: a formula ends on a letter, digit or closing
+//                           bracket. A whitelist, because blacklisting operators
+//                           kept missing one (`$A*$B`, `$FOO^$BAR`, `$FOO=$BAR`)
+//   \$(?![$\da-zA-Z])       closer: not part of `$$`, and not followed by a
+//                           digit or letter — `$FOO$BAR` is two variables, not a
+//                           formula. Costs the `$n$th` idiom, which is the same
+//                           trade VS Code and marked-katex ship.
 // The opener lookahead also makes an empty body impossible: an empty body puts
-// a `$` immediately to the opener's right, which `(?![$\s])` rejects.
+// a `$` immediately to the opener's right, which `(?![$\s{])` rejects.
 const INLINE_MATH_REGEX =
-  /(?<![\\$])\$(?![$\s])([^$\n]*?)(?<![\s\\/:@|&;,])\$(?![$\d])/g;
+  /(?<![\\$])\$(?![$\s{])([^$\n]*?)(?<=[A-Za-z0-9)}\]|])\$(?![$\da-zA-Z])/g;
 
 const DOUBLE_DOLLAR_REGEX = /\$\$/g;
 
-function escapeCurrency(content: string): string {
-  const codeRegions = findCodeBlockRegions(content);
+function escapeCurrency(content: string, isStreaming: boolean): string {
+  const codeRegions = findCodeRegions(content, isStreaming);
   const parts: string[] = [];
   let lastIndex = 0;
 
@@ -92,8 +102,8 @@ function escapeCurrency(content: string): string {
  * Regions are recomputed here because the currency pass shifted every offset
  * after the first `\$` it inserted.
  */
-function promoteInlineMath(content: string): string {
-  const codeRegions = findCodeBlockRegions(content);
+function promoteInlineMath(content: string, isStreaming: boolean): string {
+  const codeRegions = findCodeRegions(content, isStreaming);
   const displayDelimiters = findDisplayDelimiters(content, codeRegions);
   const result: string[] = [];
   let lastIndex = 0;
@@ -168,48 +178,176 @@ function hasOpenDisplayMathBefore(
 }
 
 /**
- * Code regions that must not be rewritten, as [start, end] pairs.
+ * Code regions that must not be rewritten, as ascending disjoint [start, end]
+ * pairs.
  *
- * Deviates from upstream in one way: an unterminated fence runs to the end of
- * the string instead of being dropped. Replies are rendered while they stream,
- * so a fence is *routinely* open at render time — upstream's version leaves
- * that half-arrived block unprotected and rewrites the `$` inside it.
+ * Two implementations, because the cost profiles are opposite. A finished reply
+ * is parsed properly: CommonMark is the only thing that agrees with the renderer
+ * about what a fence, an indented block or a backtick run actually is, and a
+ * hand-rolled scanner kept getting it wrong. A streaming reply is scanned,
+ * because `children` changes on every token and re-parsing the whole string each
+ * time is quadratic — 6.6ms per update and 35s cumulative on a 21k-char reply.
+ *
+ * The invariant is asymmetric, and that is what makes it safe: everything the
+ * renderer treats as code, this must also treat as code. The reverse is allowed.
+ * Over-protecting only declines a rewrite, which leaves the literal text the
+ * model wrote. Under-protecting rewrites inside a code block, which is the one
+ * failure a developer tool cannot have.
+ *
+ * The consequence is that a code region arriving mid-stream can render as math
+ * for as long as it is still streaming, then correct itself when the reply
+ * finishes and the parse takes over.
  */
-function findCodeBlockRegions(content: string): Array<[number, number]> {
+function findCodeRegions(
+  content: string,
+  isStreaming: boolean,
+): Array<[number, number]> {
+  return normalizeRegions(
+    isStreaming ? scanCodeRegions(content) : parseCodeRegions(content),
+  );
+}
+
+/** Offsets of every `code` and `inlineCode` node, from a real CommonMark parse. */
+function parseCodeRegions(content: string): Array<[number, number]> {
   const regions: Array<[number, number]> = [];
-  let inlineStart = -1;
-  let multilineStart = -1;
 
-  for (let i = 0; i < content.length; i++) {
-    const char = content[i];
+  const visit = (node: {
+    type: string;
+    position?: unknown;
+    children?: unknown;
+  }) => {
+    if (node.type === "code" || node.type === "inlineCode") {
+      const position = node.position as
+        | { start?: { offset?: number }; end?: { offset?: number } }
+        | undefined;
+      const start = position?.start?.offset;
+      const end = position?.end?.offset;
+      if (typeof start === "number" && typeof end === "number") {
+        regions.push([start, end]);
+      }
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) visit(child);
+    }
+  };
 
-    if (
-      char === "`" &&
-      i + 2 < content.length &&
-      content[i + 1] === "`" &&
-      content[i + 2] === "`"
-    ) {
-      if (multilineStart === -1) {
-        multilineStart = i;
-        i += 2;
-      } else {
-        regions.push([multilineStart, i + 2]);
-        multilineStart = -1;
-        i += 2;
+  visit(fromMarkdown(content));
+
+  return regions;
+}
+
+/**
+ * Backtick/tilde scan for the streaming path, deliberately over-inclusive.
+ *
+ * Runs are matched by length, so a ``` ``span`` ``` is not closed by the second
+ * backtick of its own opener, and a ```` ```` ```` fence is not closed by an
+ * inner ``` ``` ```. An unterminated run extends to the end of the string:
+ * mid-stream that is the normal state of a code block, and CommonMark says an
+ * unclosed fence runs to the end of the document anyway.
+ */
+function scanCodeRegions(content: string): Array<[number, number]> {
+  const regions: Array<[number, number]> = [];
+  let index = 0;
+  let fenceStart = -1;
+  let fenceChar = "";
+  let fenceLength = 0;
+
+  while (index < content.length) {
+    const char = content[index];
+
+    if (char !== "`" && char !== "~") {
+      index++;
+      continue;
+    }
+
+    let length = 0;
+    while (content[index + length] === char) length++;
+
+    if (fenceStart !== -1) {
+      // Only the same character, at least as long, closes an open fence.
+      if (char === fenceChar && length >= fenceLength) {
+        regions.push([fenceStart, index + length]);
+        fenceStart = -1;
       }
-    } else if (char === "`" && multilineStart === -1) {
-      if (inlineStart === -1) {
-        inlineStart = i;
-      } else {
-        regions.push([inlineStart, i]);
-        inlineStart = -1;
-      }
+      index += length;
+      continue;
+    }
+
+    if (length >= 3) {
+      fenceStart = index;
+      fenceChar = char;
+      fenceLength = length;
+      index += length;
+      continue;
+    }
+
+    // A backtick run of one or two opens an inline span, closed by a run of the
+    // same length. Tildes below three are strikethrough, not code.
+    if (char === "~") {
+      index += length;
+      continue;
+    }
+
+    const close = findRunOfLength(content, index + length, length);
+    if (close === -1) {
+      regions.push([index, content.length]);
+      break;
+    }
+    regions.push([index, close + length]);
+    index = close + length;
+  }
+
+  if (fenceStart !== -1) regions.push([fenceStart, content.length]);
+
+  return regions;
+}
+
+/** First backtick run of exactly `length` at or after `from`, else -1. */
+function findRunOfLength(
+  content: string,
+  from: number,
+  length: number,
+): number {
+  for (let index = from; index < content.length; index++) {
+    if (content[index] !== "`") continue;
+
+    let run = 0;
+    while (content[index + run] === "`") run++;
+
+    if (run === length) return index;
+    index += run - 1;
+  }
+
+  return -1;
+}
+
+/**
+ * Sort and merge, because `isInCodeBlock` binary-searches.
+ *
+ * Both finders can emit out of order — the scanner when it flushes an open fence
+ * at the end, the parser because an `inlineCode` node is visited after the block
+ * that follows it in a different branch. An unsorted array silently makes the
+ * search miss regions, which reads as "protection is on" while nothing is
+ * protected.
+ */
+function normalizeRegions(
+  regions: Array<[number, number]>,
+): Array<[number, number]> {
+  if (regions.length < 2) return regions;
+
+  const sorted = [...regions].sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [sorted[0]];
+
+  for (const [start, end] of sorted.slice(1)) {
+    const last = merged[merged.length - 1];
+    if (start <= last[1]) {
+      last[1] = Math.max(last[1], end);
+    } else {
+      merged.push([start, end]);
     }
   }
 
-  if (multilineStart !== -1) regions.push([multilineStart, content.length]);
-
-  return regions;
+  return merged;
 }
 
 /** Whether a position falls inside any code region. Regions are ascending. */

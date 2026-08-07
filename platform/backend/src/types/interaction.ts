@@ -205,17 +205,6 @@ const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
   ...DELTA_ENCODING_COLUMNS,
   ...INTERNAL_ENCRYPTION_COLUMNS,
 }).extend({
-  // Read-side only: these are encrypted columns too, so a locked row carries
-  // the sentinel where an array/object would be. Writers never produce one —
-  // the insert schema deliberately still rejects it.
-  dualLlmAnalyses: z
-    .union([z.array(DualLlmAnalysisSchema), IncognitoUnavailableContentSchema])
-    .nullable()
-    .optional(),
-  unsafeContextBoundary: z
-    .union([UnsafeContextBoundarySchema, IncognitoUnavailableContentSchema])
-    .nullable()
-    .optional(),
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
   /**
    * Name of `connectorId`'s knowledge base connector, resolved within the

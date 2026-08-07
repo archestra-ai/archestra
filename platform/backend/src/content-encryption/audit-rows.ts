@@ -153,6 +153,21 @@ function lockedConversationId(row: object): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/**
+ * Columns nulled rather than sentinelled when locked. Their readers treat them
+ * as an array or a fixed shape throughout — substituting an object there makes
+ * every consumer learn a shape it otherwise never sees, and each one that
+ * doesn't is a crash. They are supporting detail anyway: a locked row already
+ * announces itself through request/response, which readers handle as opaque
+ * payloads.
+ */
+const NULLED_WHEN_LOCKED = new Set([
+  "dualLlmAnalyses",
+  "dual_llm_analyses",
+  "unsafeContextBoundary",
+  "unsafe_context_boundary",
+]);
+
 function applyLockedSentinel<T extends object>(
   row: T,
   columns: Array<[string, IncognitoContentContext]>,
@@ -164,7 +179,9 @@ function applyLockedSentinel<T extends object>(
     // null column stays null, and the fail-closed redaction marker keeps its
     // own meaning ("never stored") rather than being relabelled recoverable.
     if (key in target && isContentEnvelope(target[key])) {
-      target[key] = incognitoLockedContent(conversationId);
+      target[key] = NULLED_WHEN_LOCKED.has(key)
+        ? null
+        : incognitoLockedContent(conversationId);
     }
   }
   return row;

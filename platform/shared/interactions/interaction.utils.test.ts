@@ -141,7 +141,19 @@ describe("DynamicInteraction with a normal provider response", () => {
         request: sentinel,
         response: sentinel,
       } as unknown as typeof okInteraction;
-      expect(new DynamicInteraction(locked).mapToUiMessages()).toEqual([]);
+      const interaction = new DynamicInteraction(locked);
+      // Every payload-derived accessor must answer neutrally rather than
+      // dereference the sentinel — the session detail page calls several of
+      // them per row, so one unguarded accessor crashes the whole page.
+      expect(interaction.mapToUiMessages()).toEqual([]);
+      expect(interaction.getLastUserMessage()).toBe("");
+      expect(interaction.getLastAssistantResponse()).toBe("");
+      expect(interaction.getToolNamesRequested()).toEqual([]);
+      expect(interaction.getToolNamesUsed()).toEqual([]);
+      expect(interaction.getToolNamesRefused()).toEqual([]);
+      expect(interaction.getToolRefusedCount()).toBe(0);
+      expect(interaction.isLastMessageToolCall()).toBe(false);
+      expect(interaction.getLastToolCallId()).toBeNull();
     }
   });
 

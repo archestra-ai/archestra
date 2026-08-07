@@ -163,6 +163,15 @@ export function calculateCostSavings(
 export class DynamicInteraction implements InteractionUtils {
   private interactionClass: InteractionUtils;
   private interaction: Interaction;
+  /**
+   * An incognito interaction stores a sentinel where the provider payload
+   * would be. Every accessor below dereferences that payload unguarded
+   * (`request.messages`, `response.choices`), so the check lives here once
+   * rather than in each provider mapper, which would have to learn a shape it
+   * never produces. Callers get the neutral answer: nothing was requested,
+   * nothing refused, nothing to render.
+   */
+  private readonly contentUnavailable: boolean;
 
   id: string;
   profileId: string | null;
@@ -179,6 +188,9 @@ export class DynamicInteraction implements InteractionUtils {
     const [provider, endpoint] = interaction.type.split(":");
 
     this.interaction = interaction;
+    this.contentUnavailable =
+      isIncognitoUnavailableContent(interaction.request) ||
+      isIncognitoUnavailableContent(interaction.response);
     this.id = interaction.id;
     this.profileId = interaction.profileId;
     this.externalAgentId = interaction.externalAgentId;
@@ -227,14 +239,17 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   isLastMessageToolCall(): boolean {
+    if (this.contentUnavailable) return false;
     return this.interactionClass.isLastMessageToolCall();
   }
 
   getLastToolCallId(): string | null {
+    if (this.contentUnavailable) return null;
     return this.interactionClass.getLastToolCallId();
   }
 
   getToolNamesRefused(): string[] {
+    if (this.contentUnavailable) return [];
     if (this.getErrorResponseText() !== null) {
       return [];
     }
@@ -242,6 +257,7 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   getToolNamesRequested(): string[] {
+    if (this.contentUnavailable) return [];
     if (this.getErrorResponseText() !== null) {
       return [];
     }
@@ -249,6 +265,7 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   getToolNamesUsed(): string[] {
+    if (this.contentUnavailable) return [];
     if (this.getErrorResponseText() !== null) {
       return [];
     }
@@ -256,6 +273,7 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   getToolRefusedCount(): number {
+    if (this.contentUnavailable) return 0;
     if (this.getErrorResponseText() !== null) {
       return 0;
     }
@@ -263,10 +281,12 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   getLastUserMessage(): string {
+    if (this.contentUnavailable) return "";
     return this.interactionClass.getLastUserMessage();
   }
 
   getLastAssistantResponse(): string {
+    if (this.contentUnavailable) return "";
     const errorText = this.getErrorResponseText();
     if (errorText !== null) {
       return errorText;
@@ -283,12 +303,7 @@ export class DynamicInteraction implements InteractionUtils {
     // fields off it unguarded (`request.messages.length`), so this has to stop
     // before delegating rather than relying on a mapper tolerating it. The
     // request/response panels render their own locked affordance.
-    if (
-      isIncognitoUnavailableContent(this.interaction.request) ||
-      isIncognitoUnavailableContent(this.interaction.response)
-    ) {
-      return [];
-    }
+    if (this.contentUnavailable) return [];
     const errorText = this.getErrorResponseText();
     if (errorText === null) {
       return this.interactionClass.mapToUiMessages(dualLlmAnalyses);

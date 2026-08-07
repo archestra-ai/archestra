@@ -18,6 +18,8 @@ The Advisor is a stronger model an agent consults at the decisions that shape a 
 
 Turn it on per agent or MCP gateway with **Enable Advisor**, under **Subagents**. It works the same in Auto and Custom mode. Pick the Advisor's model in its own settings — a stronger model than the callers use is the point.
 
+Enabling the Advisor also instructs the agent to consult it before delivering a final answer, and to share the raw evidence behind the answer — samples of skipped input, for example — so the advice reviews the work, not a summary of it. MCP Gateways advertise the Advisor tool without this instruction; the calling model's own prompt decides when to consult.
+
 The Advisor cannot see the conversation, the files, or the tools. It reads only the message the calling model writes, then returns advice. It changes nothing.
 
 Each environment has its own Advisor, created and removed with the environment. An agent reaches only the Advisor in its own environment, so consultations count against that environment's [cost limits](/docs/platform-costs-and-limits). Each consultation is a separate interaction, billed at the Advisor's model rates. The agent consults at decision points rather than on every turn, so a cheap agent model paired with a strong Advisor usually costs less than running the strong model throughout.

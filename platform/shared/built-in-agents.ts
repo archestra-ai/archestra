@@ -2,7 +2,9 @@
  * Built-in agent identifiers and names.
  * Used across backend, frontend, and e2e-tests.
  */
+import { AGENT_TOOL_PREFIX } from "./agents";
 import { POLICY_CONFIG_SYSTEM_PROMPT_EXPRESSIONS } from "./system-prompt-template";
+import { slugify } from "./utils";
 
 /** Display names for built-in agents */
 export const BUILT_IN_AGENT_NAMES = {
@@ -324,11 +326,27 @@ Consult it:
 - when an approach is not converging — you have tried the same thing twice and it still fails, or you are about to change tack
 - before you declare the work done, to have the result reviewed
 
-It cannot see your conversation, your files, or your tools, and it cannot run anything or ask you a follow-up question. Put everything it needs in your message: the decision you face, the options you are weighing, what you already tried, and the constraints that matter.
+It cannot see your conversation, your files, or your tools, and it cannot run anything or ask you a follow-up question. Put everything it needs in your message: the decision you face, the options you are weighing, what you already tried, and the constraints that matter. Include the raw evidence, not just your reading of it — verbatim samples of any input you skipped, normalized, or worked around, and counts of how much input you used versus discarded — and ask what could explain what you saw rather than whether your conclusion is correct.
 
 It returns a recommendation and the reasoning behind it. It does not edit anything. If it answers that it is missing something, that is a real gap in what you sent — supply it and ask again, rather than acting on an answer built without it.
 
 Consult it a few times in a task, at the decisions that matter — not every step, and not for syntax, lookups, or things you already know.`;
+
+/** The advisor delegation tool's name as the calling model sees it. */
+export const ADVISOR_DELEGATION_TOOL_NAME = `${AGENT_TOOL_PREFIX}${slugify(ADVISOR_AGENT_NAME)}`;
+
+/**
+ * System-prompt block for agents that can reach the Advisor. The tool
+ * description above tells the model *how* to consult; this block carries the
+ * *whether*, because models act on system-prompt policy and treat tool
+ * descriptions as reference — across ~100 benchmark rollouts, no tested
+ * open model ever consulted from the description alone, while a system-prompt
+ * mandate produced consultations that turned wrong answers into right ones.
+ * The evidence-sharing rules are the load-bearing part: a consultation that
+ * shares conclusions instead of raw samples gets rubber-stamped.
+ */
+// white-label-ok: shipped default text; branded by brandBuiltInText where it is used
+export const ADVISOR_CONSULT_INSTRUCTION = `You have an Advisor — a stronger model — available through the \`${ADVISOR_DELEGATION_TOOL_NAME}\` tool. Before you deliver a final answer, verdict, or deliverable that took research, computation, or judgment to produce, consult it. State the question you are answering and your proposed answer, and include the raw evidence behind it: verbatim samples of any input you skipped, normalized, or worked around (the actual lines or bytes, not paraphrases), and counts of how much input you used versus discarded. Ask what could explain the anomalies you saw, not whether your conclusion is correct. Reconsider based on the reply, and follow up if the Advisor asks you to check something. Skip the consultation only for conversational exchanges that produce no work product.`;
 
 // Starter persona prefilled into the system-prompt editor when authoring a new
 // user-facing agent. The author sees it, can edit or clear it, and it is saved

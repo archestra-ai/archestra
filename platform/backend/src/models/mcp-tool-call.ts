@@ -439,7 +439,7 @@ class McpToolCallModel {
         WHERE method = 'tools/call' AND tool_result IS NOT NULL
           -- Incognito rows are keyed to a browser this process cannot reach,
           -- so their result is unreadable here. Excluded in SQL rather than
-          -- skipped in JS: the locked sentinel has no top-level `isError`, so
+          -- skipped in JS: the locked sentinel has no top-level isError, so
           -- an encrypted FAILURE would otherwise be counted as the first
           -- success and mis-fire onboarding.
           AND incognito_conversation_id IS NULL

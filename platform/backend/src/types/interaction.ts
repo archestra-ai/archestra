@@ -2,6 +2,7 @@ import {
   BillingModeSchema,
   InteractionSourceSchema,
   SupportedProvidersDiscriminatorSchema,
+  isIncognitoUnavailableContent,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -179,9 +180,19 @@ const DELTA_ENCODING_COLUMNS = {
   requestLastMessageHash: true,
 } as const;
 
-const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit(
-  DELTA_ENCODING_COLUMNS,
-).extend({
+/**
+ * Server-side plumbing for the same reason as the delta columns: it tells the
+ * read path which key a row's content is under. Clients never need it — a
+ * locked row already announces itself through the sentinel in the content
+ * field, which also carries the conversation id — so it stays out of the
+ * public API surface rather than widening it for nothing.
+ */
+const INTERNAL_ENCRYPTION_COLUMNS = { incognitoConversationId: true } as const;
+
+const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
+  ...DELTA_ENCODING_COLUMNS,
+  ...INTERNAL_ENCRYPTION_COLUMNS,
+}).extend({
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
   /**
    * Name of `connectorId`'s knowledge base connector, resolved within the
@@ -555,6 +566,13 @@ export function normalizeInteractionResponse(
   type: string,
   response: unknown,
 ): unknown {
+  // An incognito row's content is deliberately unavailable, not malformed.
+  // Both sentinels would fail the provider schema below, and reporting them as
+  // corrupt would be actively misleading — one means "encrypted, an escrow
+  // holder can recover it", the other "never stored".
+  if (isIncognitoUnavailableContent(response)) {
+    return response;
+  }
   const schema = responseSchemaByInteractionType.get(type);
   if (!schema) {
     return response;

@@ -10,6 +10,26 @@ archestra:
   resources:
     requests:
       cpu: "500m"
+    # The chart's default 3Gi limit is too tight for this container, which runs
+    # two Node processes under supervisord (backend + the Next.js server). A
+    # freshly-booted web pod already sits at ~2.0Gi of the 3Gi limit (backend
+    # ~1.15Gi RSS, next-server ~0.14Gi, plus slab and page cache), so ordinary
+    # traffic walked it into the limit and the kernel OOM-killed the container
+    # every few minutes. Raising the limit restores real headroom; requests are
+    # unchanged, so scheduling and the node-pool budget are unaffected.
+    #
+    # This also fixes the ordering that made the crash undiagnosable. The Node
+    # launcher derives the V8 old-space ceiling as 60% of the container limit,
+    # so this moves it from 1843 MiB to ~2457 MiB while the container gains a
+    # full extra gigabyte. Projected peak (heap + native/external + the Next.js
+    # server + slab) now lands under 4Gi, so V8 reaches its own heap ceiling
+    # before the cgroup does: the process exits with a JS heap OOM and a
+    # fatal-error report instead of being SIGKILLed with no stack. Note the
+    # ceiling is deliberately left to that formula rather than pinned via
+    # ARCHESTRA_NODE_MAX_OLD_SPACE_SIZE_MIB, because that env var would also
+    # apply to the worker, whose limit is 2Gi.
+    limits:
+      memory: "4Gi"
 
   worker:
     replicaCount: 3
@@ -129,7 +149,15 @@ archestra:
     storageClassName: "archestra-diagnostics-rwx"
     accessModes:
       - ReadWriteMany
-    heapSnapshotsNearHeapLimit: 1
+    # Deliberately off (matching the chart default). Writing a heap snapshot as
+    # V8 approaches its limit needs extra memory and stalls the event loop at
+    # exactly the moment memory is tightest, so the container hit its cgroup
+    # limit mid-write: the volume accumulated 783 snapshots and every one was
+    # 0 bytes, i.e. the process was killed before a single byte landed. It also
+    # converted a diagnosable JS heap OOM into an opaque SIGKILL and made the
+    # readiness/liveness probes fail during the stall. Turn this back on only
+    # for a targeted investigation, with headroom to actually write the file.
+    heapSnapshotsNearHeapLimit: 0
 
   # Orchestrator configuration with Workload Identity for Vertex AI
   orchestrator:

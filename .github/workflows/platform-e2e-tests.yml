@@ -383,10 +383,11 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: ubuntu-latest
     # Worst case = the 25-min image-poll ceiling (cold build, see
-    # image-pull-timeout-seconds below) plus setup and the ~4 min of tests;
-    # 40 caps a hung run instead of letting it burn a runner for the GitHub
-    # default.
-    timeout-minutes: 40
+    # image-pull-timeout-seconds below) plus setup and the ~4 min of api-k8s
+    # tests. On the nightly and on-demand runs the hibernation leg adds its own
+    # 110-min ceiling; in the merge queue that step is skipped, so a queued
+    # merge still finishes in ~40 min. Caps a hung run either way.
+    timeout-minutes: 150
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -479,11 +480,52 @@ jobs:
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
+      # The blob reporter writes a fixed filename, so the hibernation leg would
+      # overwrite the run above. Its report is already uploaded, so clear the
+      # directory and let the next leg own it.
+      - name: Clear blob report for the hibernation leg
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        run: rm -rf platform/e2e-tests/blob-report/
+
+      # The hibernation specs flip the organization-wide idle-hibernation
+      # toggle and wait out real 120 s idle windows, so they run alone
+      # (--workers=1) and their cost is wall clock rather than work: ~100 min
+      # for a clean serial run, most of it spent waiting on purpose.
+      #
+      # Deliberately NOT in the merge queue. Quadrupling the K8s leg would tax
+      # every merge for a feature that ships behind a beta flag and is off by
+      # default, and whose logic is already covered by the backend suite (the
+      # state machine, the sweep, the wake and the hard reset all have unit and
+      # seam tests). This leg exists to prove the parts only a real cluster
+      # can: what the kubelet, the scheduler and the API server actually do.
+      # It runs nightly and on demand, so a regression surfaces within a day
+      # and can be reproduced on a branch with workflow_dispatch.
+      #
+      # Tests whose runtime is dominated by an idle window carry @slow-window
+      # in their titles, so a developer can grep them out for a fast local run.
+      - name: Run hibernation E2E tests
+        id: e2e-hibernation
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-e2e-tests
+        with:
+          projects: api-k8s-hibernation
+          extra_args: --workers=1
+          timeout: "110"
+
+      - name: Upload hibernation blob report
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: blob-report-k8s-hibernation
+          path: platform/e2e-tests/blob-report/
+          retention-days: 1
+
       # always() so this still runs when a failing setup step aborts the job
       # (a plain outcome check is implicitly ANDed with success() and gets
       # skipped exactly when the diagnostics matter most).
       - name: Show logs on failure or flaky tests
-        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true')
+        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true' || steps.e2e-hibernation.outcome == 'failure' || steps.e2e-hibernation.outputs.has_flaky_tests == 'true')
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide || true
@@ -546,9 +588,15 @@ jobs:
       # the job anyway.
 
       - name: Fail if K8s-bound E2E tests failed
-        if: ${{ always() && steps.e2e.outcome == 'failure' }}
+        if: ${{ always() && (steps.e2e.outcome == 'failure' || steps.e2e-hibernation.outcome == 'failure') }}
+        # Which leg failed goes through the environment rather than straight
+        # into the shell: an expression expanded into a run block is a template
+        # injection, and the static-analysis gate rejects it.
+        env:
+          E2E_OUTCOME: ${{ steps.e2e.outcome }}
+          E2E_HIBERNATION_OUTCOME: ${{ steps.e2e-hibernation.outcome }}
         run: |
-          echo "The K8s-bound E2E run failed."
+          echo "The K8s-bound E2E run failed (api-k8s: ${E2E_OUTCOME}, hibernation: ${E2E_HIBERNATION_OUTCOME})."
           exit 1
 
   # NOTE: there is deliberately no separate fan-in job for the test legs. Their

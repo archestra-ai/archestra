@@ -52,6 +52,9 @@ archestra:
     # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
     # flipped off.
     ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
+    # BETA: MCP idle hibernation (off by default everywhere else). Explicit so
+    # staging keeps the feature even if ARCHESTRA_BETA is ever flipped off.
+    ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"

@@ -52,6 +52,13 @@ archestra:
   env:
     ENABLE_E2E_TEST_ENDPOINTS: "true"
     ARCHESTRA_ANALYTICS: disabled
+    # BETA: MCP idle hibernation — on in the e2e cluster so the K8s specs
+    # exercise the feature the way our staging deployment runs it.
+    ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED: "true"
+    # The shortest idle window the platform accepts. A spec asserting that a
+    # server was NOT hibernated is vacuous under the 1800 s default — nothing
+    # would sleep within any test's lifetime either way.
+    ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS: "120"
     # LLM Proxy base URLs (for LLM proxy routes)
     # Each provider uses a distinct path prefix to avoid WireMock stub conflicts
     ARCHESTRA_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/openai/v1"

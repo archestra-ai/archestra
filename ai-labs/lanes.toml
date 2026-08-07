@@ -103,13 +103,6 @@ base_url = "https://api.z.ai/api/anthropic"
 api_key_env = "ZAI_API_KEY"
 openrouter_model = "z-ai/glm-5.2"
 
-# Advisor A/B arm: run an advised lane together with its base lane and its
-# advisor's lane in one sweep for a paired comparison on identical tasks —
-# e.g. --lanes qwen36-35b-a3b,qwen36-35b-a3b-adv-deepseek-flash,deepseek-flash.
-#
-# Consult-behavior baseline: the pair the advisor consult-policy work is
-# measured against (qwen fails ~9/27 tasks solo; deepseek-flash is the
-# strongest OpenRouter-served lane). Runs on the OpenRouter key alone.
 [[lane]]
 name = "qwen36-35b-a3b-adv-deepseek-flash"
 provider = "openrouter"

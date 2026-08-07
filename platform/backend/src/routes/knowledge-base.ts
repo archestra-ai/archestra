@@ -28,7 +28,7 @@ const PermissionSyncIntervalSchema = z
     },
   );
 
-import { userHasPermission } from "@/auth/utils";
+import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
@@ -50,6 +50,8 @@ import { invalidateGroupTokenCache } from "@/knowledge-base/group-token-cache";
 import {
   deleteConnector,
   deleteKnowledgeBase,
+  restoreConnector,
+  restoreKnowledgeBase,
 } from "@/knowledge-base/knowledge-source-deletion";
 import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedule";
 import logger from "@/logging";
@@ -113,6 +115,23 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
 const KnowledgeBaseConnectorResponseSchema =
   SelectKnowledgeBaseConnectorSchema.omit({ permissionSyncState: true });
 
+/**
+ * The connector LIST response. Identical to the detail response except that
+ * `config` also accepts a shape the current `ConnectorConfigSchema` no longer
+ * recognizes — a config persisted by an older version and since drifted.
+ *
+ * The active list drops such rows (they still have a detail page, an edit form
+ * and a delete button to reach them by id), but the trash cannot: it is the
+ * only surface offering restore and permanent delete, so a row it refuses to
+ * render is a row nobody can ever recover or purge. Valid configs still match
+ * the discriminated union first and keep their precise shape.
+ */
+const KnowledgeBaseConnectorListItemSchema =
+  KnowledgeBaseConnectorResponseSchema.extend({
+    config: z.union([ConnectorConfigSchema, z.record(z.string(), z.unknown())]),
+    assignedAgents: z.array(AssignedAgentSummarySchema),
+  });
+
 // `containerKey` is internal permission-sync bookkeeping; API consumers see
 // the document's EFFECTIVE audience (container tokens expanded server-side).
 const KnowledgeBaseDocumentListItemSchema = SelectKbDocumentSchema.omit({
@@ -128,6 +147,30 @@ const KnowledgeBaseDocumentDetailSchema = SelectKbDocumentSchema.omit({
   connectorType: ConnectorTypeSchema,
 });
 
+/**
+ * Gate for the `status=deleted` slice of a list endpoint. Seeing the trash is
+ * the delete permission's other half — the same gate that put the rows there,
+ * matching how skills and projects gate theirs. No-op for the active slice,
+ * which the route's declared `knowledgeSource:read` already covers.
+ */
+async function requireTrashAccess(params: {
+  status: "active" | "deleted";
+  userId: string;
+  organizationId: string;
+}): Promise<void> {
+  if (params.status !== "deleted") return;
+
+  const canDelete = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "knowledgeSource",
+    "delete",
+  );
+  if (!canDelete) {
+    throw new ApiError(403, "Forbidden");
+  }
+}
+
 const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // ===== Knowledge Base CRUD =====
 
@@ -136,10 +179,23 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetKnowledgeBases,
-        description: "List all knowledge bases for the organization",
+        description:
+          "List all knowledge bases for the organization. `status=deleted` " +
+          "lists the soft-deleted ones instead — the trash view, which " +
+          "requires `knowledgeSource:delete`. Search and pagination behave " +
+          "identically on both slices, but the deleted slice carries identity " +
+          "only: `connectors` and `assignedAgents` come back empty and " +
+          "`totalDocsIndexed` zero, since those links resolve to nothing " +
+          "while the knowledge base is in the trash.",
         tags: ["Knowledge Bases"],
         querystring: PaginationQuerySchema.extend({
           search: z.string().optional(),
+          status: z
+            .enum(["active", "deleted"])
+            .default("active")
+            .describe(
+              "Filter by lifecycle status. `deleted` lists soft-deleted knowledge bases and requires `knowledgeSource:delete`.",
+            ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),
@@ -147,26 +203,52 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { query: { limit, offset, search }, organizationId, user },
+      { query: { limit, offset, search, status }, organizationId, user },
       reply,
     ) => {
+      // Viewing the trash is the delete permission's other half — the same
+      // gate that put the rows there, as for skills and projects. Checked
+      // before the access-control context is built so a rejected caller pays
+      // for neither the permission lookup nor the team-membership query.
+      await requireTrashAccess({ status, userId: user.id, organizationId });
+
       const access =
         await knowledgeSourceAccessControlService.buildAccessControlContext({
           userId: user.id,
           organizationId,
         });
+
       const [knowledgeBases, total] = await Promise.all([
         KnowledgeBaseModel.findByOrganization({
           organizationId,
           limit,
           offset,
           search,
+          status,
         }),
         KnowledgeBaseModel.countByOrganization({
           organizationId,
           search,
+          status,
         }),
       ]);
+
+      // The trash view renders identity and `deletedAt` only, so the four
+      // enrichment queries below are skipped for it: their answers would
+      // describe links no other surface resolves while the knowledge base sits
+      // in the trash. Declared in the endpoint description, not silently
+      // narrowed.
+      if (status === "deleted") {
+        return reply.send({
+          data: knowledgeBases.map((kb) => ({
+            ...kb,
+            connectors: [],
+            totalDocsIndexed: 0,
+            assignedAgents: [],
+          })),
+          pagination: calculatePaginationMeta(total, { limit, offset }),
+        });
+      }
 
       const kbIds = knowledgeBases.map((kb) => kb.id);
       const [allConnectors, docsIndexedByKbId, agentIdsByKbId] =
@@ -343,6 +425,79 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/knowledge-bases/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreKnowledgeBase,
+        description:
+          "Restore a soft-deleted knowledge base. Agent assignments and " +
+          "connector links survive deletion, so the restored knowledge base is " +
+          "immediately live for previously-assigned agents. 404 if there is no " +
+          "soft-deleted knowledge base with that id in the org.",
+        tags: ["Knowledge Bases"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const kb = await KnowledgeBaseModel.findDeletedByIdForOrganization(
+        id,
+        organizationId,
+      );
+      if (!kb) {
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      const success = await restoreKnowledgeBase(id);
+      if (!success) {
+        // Restored (or purged) between the lookup and the write.
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/knowledge-bases/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeleteKnowledgeBase,
+        description:
+          "Permanently destroy a soft-deleted knowledge base (global admins " +
+          "only — a `knowledgeSource:delete` or `knowledgeSource:admin` grant " +
+          "reaches the trash, not past it). Irreversible, with no grace " +
+          "period: the row and its agent and connector assignments are " +
+          "destroyed. Its connectors survive, detached. 404 if there is no " +
+          "soft-deleted knowledge base with that id in the org, which is also " +
+          "the answer when it is still live or the caller is not a global " +
+          "admin. Restore wins a race.",
+        tags: ["Knowledge Bases"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      // Checked before the knowledge base is looked up at all: a non-admin gets
+      // the same 404 whatever the id, so the endpoint never confirms one
+      // exists. The purge itself re-checks id, org, and soft-deleted state
+      // under a row lock, so there is no separate existence read to do here.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      // The in-transaction FOR UPDATE re-check makes a concurrent restore win
+      // over the purge.
+      const purged = await KnowledgeBaseModel.purge({ id, organizationId });
+      if (!purged) {
+        throw new ApiError(404, "Knowledge base not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.get(
     "/api/knowledge-bases/:id/health",
     {
@@ -382,39 +537,78 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetConnectors,
-        description: "List all connectors for the organization",
+        description:
+          "List all connectors for the organization. `status=deleted` lists " +
+          "the soft-deleted ones instead — the trash view, which requires " +
+          "`knowledgeSource:delete`. Search and connector-type filtering " +
+          "behave identically on both slices; `knowledgeBaseId` is an " +
+          "active-only filter and is rejected with a 400 alongside " +
+          "`status=deleted`. The deleted slice carries identity only: " +
+          "`assignedAgents` comes back empty, since those links resolve to " +
+          "nothing while the connector is in the trash. It is also the one " +
+          "slice that never hides a row whose stored `config` no longer " +
+          "matches a known connector shape — the trash is the only place " +
+          "restore and permanent delete are offered.",
         tags: ["Connectors"],
         querystring: PaginationQuerySchema.extend({
           knowledgeBaseId: z.string().optional(),
           search: z.string().optional(),
           connectorType: ConnectorTypeSchema.optional(),
+          status: z
+            .enum(["active", "deleted"])
+            .default("active")
+            .describe(
+              "Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`.",
+            ),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(
-            KnowledgeBaseConnectorResponseSchema.extend({
-              assignedAgents: z.array(AssignedAgentSummarySchema),
-            }),
-          ),
+          createPaginatedResponseSchema(KnowledgeBaseConnectorListItemSchema),
         ),
       },
     },
     async (
       {
-        query: { limit, offset, knowledgeBaseId, search, connectorType },
+        query: {
+          limit,
+          offset,
+          knowledgeBaseId,
+          search,
+          connectorType,
+          status,
+        },
         organizationId,
         user,
       },
       reply,
     ) => {
+      // Viewing the trash is the delete permission's other half — the same
+      // gate that put the rows there, as for skills and projects. Checked
+      // before the access-control context is built so a rejected caller pays
+      // for neither the permission lookup nor the team-membership query.
+      await requireTrashAccess({ status, userId: user.id, organizationId });
+
       const access =
         await knowledgeSourceAccessControlService.buildAccessControlContext({
           userId: user.id,
           organizationId,
         });
+
       let data: Awaited<
         ReturnType<typeof KnowledgeBaseConnectorModel.findByOrganization>
       >;
       let total: number;
+
+      // The per-knowledge-base path is the expandable sub-table's: unpaginated
+      // on purpose, so a knowledge base always shows all of its connectors. It
+      // is an active-knowledge-base surface and has no deleted-slice variant,
+      // so the combination is rejected rather than silently answered with the
+      // org-wide trash — a dropped filter reads as a scoped result that isn't.
+      if (knowledgeBaseId && status === "deleted") {
+        throw new ApiError(
+          400,
+          "knowledgeBaseId cannot be combined with status=deleted; the trash is listed org-wide",
+        );
+      }
 
       if (knowledgeBaseId) {
         await findKnowledgeBaseOrThrow({
@@ -440,9 +634,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             connectorType,
             canReadAll: access.canReadAll,
             viewerTeamIds: access.teamIds,
+            status,
           });
         data = result.data;
         total = result.total;
+      }
+
+      // The trash renders identity and `deletedAt` only, so the two agent
+      // queries below are skipped for it — their answers would describe
+      // assignments no surface resolves while the connector sits in the trash.
+      // The schema filter is skipped too, and deliberately: it is what keeps a
+      // drifted `config` off the active list, but on the trash it would strand
+      // the row for good (see KnowledgeBaseConnectorListItemSchema). Declared
+      // in the endpoint description, not silently narrowed.
+      if (status === "deleted") {
+        return reply.send({
+          data: data.map((connector) => ({
+            ...connector,
+            assignedAgents: [],
+          })),
+          pagination: calculatePaginationMeta(total, { limit, offset }),
+        });
       }
 
       // Enrich connectors with assigned agents (batch query to avoid N+1)
@@ -503,19 +715,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return false;
       });
 
-      const currentPage = Math.floor(offset / limit) + 1;
-      const totalPages = Math.ceil(total / limit);
-
       return reply.send({
         data: validatedData,
-        pagination: {
-          currentPage,
-          limit,
-          total,
-          totalPages,
-          hasNext: currentPage < totalPages,
-          hasPrev: currentPage > 1,
-        },
+        pagination: calculatePaginationMeta(total, { limit, offset }),
       });
     },
   );
@@ -1170,12 +1372,86 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // invalidates the knowledge-source cache. A re-delete 404s at
       // findConnectorOrThrow above.
       //
-      // The connector's SECRET is intentionally NOT revoked here — soft-delete
-      // preserves it so a future restore is credential-preserving. Secret
-      // revocation is deferred to the purge / hard-delete follow-up, which will
-      // run the real child cascade (documents, runs, ACLs, …) alongside it.
+      // The connector's stored SECRET is destroyed here too (see
+      // revokeConnectorSecret in the service): a stamped connector 404s from
+      // every route, so the secret could never be rotated or revoked afterwards.
+      // A restored connector comes back disabled and re-authenticates instead.
       const success = await deleteConnector(id);
       if (!success) {
+        throw new ApiError(404, "Connector not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/connectors/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreConnector,
+        description:
+          "Restore a soft-deleted connector. The stored credential was " +
+          "destroyed when the connector was deleted, so it is restored " +
+          "DISABLED — re-authenticate, then re-enable it to resume syncing. " +
+          "404 if there is no soft-deleted connector with that id in the org " +
+          "that the caller may manage — restoring one is gated on the same " +
+          "visibility as editing or deleting it.",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      await findDeletedConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      const success = await restoreConnector(id);
+      if (!success) {
+        // Restored (or purged) between the lookup and the write.
+        throw new ApiError(404, "Connector not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PermanentlyDeleteConnector,
+        description:
+          "Permanently destroy a soft-deleted connector (global admins only — " +
+          "a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches " +
+          "the trash, not past it). Irreversible, with no grace period: its " +
+          "synced documents and their chunks, run history, access mappings, " +
+          "and assignments are all destroyed. 404 if there is no soft-deleted " +
+          "connector with that id in the org, which is also the answer when it " +
+          "is still live or the caller is not a global admin. Restore wins a " +
+          "race.",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      // Checked before the connector is looked up at all — see the
+      // knowledge-base permanent delete for why.
+      if (!(await isGlobalAdmin(user.id, organizationId))) {
+        throw new ApiError(404, "Connector not found");
+      }
+
+      // The in-transaction FOR UPDATE re-check makes a concurrent restore win
+      // over the purge.
+      const purged = await KnowledgeBaseConnectorModel.purge({
+        id,
+        organizationId,
+      });
+      if (!purged) {
         throw new ApiError(404, "Connector not found");
       }
 
@@ -2122,6 +2398,52 @@ async function findConnectorOrThrow(params: {
 }) {
   const connector = await KnowledgeBaseConnectorModel.findById(params.id);
   if (!connector || connector.organizationId !== params.organizationId) {
+    throw new ApiError(404, "Connector not found");
+  }
+  const access =
+    await knowledgeSourceAccessControlService.buildAccessControlContext({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+  if (
+    !knowledgeSourceAccessControlService.canAccessConnector(access, connector)
+  ) {
+    throw new ApiError(404, "Connector not found");
+  }
+  return connector;
+}
+
+/**
+ * `findConnectorOrThrow` for the trash: resolves ONLY soft-deleted rows (the
+ * ordinary lookup is `notDeleted`-filtered and would 404 every restore), and
+ * applies the same management-visibility gate — team-scoped connectors need
+ * team membership, `auto-sync-permissions` ones need the auto-sync grant.
+ *
+ * Without that second half, restore would be a by-id bypass of the visibility
+ * rules every other connector mutation enforces: the trash LISTING hides those
+ * rows from non-admins (buildVisibilityFilter in the model), so a delete-holder
+ * outside the team could revive a connector they cannot see, edit, or delete.
+ * Skill restore authorizes the deleted object the same way.
+ *
+ * The one asymmetry, inherited from the active list rather than introduced
+ * here: `buildVisibilityFilter` short-circuits on `canReadAll`, while
+ * `canAccessSource` deliberately does NOT let that bypass reach
+ * `auto-sync-permissions` connectors. So a `knowledgeSource:admin` WITHOUT
+ * `knowledgeSourceAutoSync:read` sees those rows listed and 404s here — the
+ * same 404 they already get from edit and delete on the active list. No
+ * default role holds that combination.
+ */
+async function findDeletedConnectorOrThrow(params: {
+  id: string;
+  organizationId: string;
+  userId: string;
+}) {
+  const connector =
+    await KnowledgeBaseConnectorModel.findDeletedByIdForOrganization(
+      params.id,
+      params.organizationId,
+    );
+  if (!connector) {
     throw new ApiError(404, "Connector not found");
   }
   const access =

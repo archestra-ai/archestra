@@ -26,6 +26,7 @@ The following components are licensed under the Enterprise License and are not p
 - SSO & OIDC
 - Knowledge Base and RAG with access control
 - Data retention windows (automatic deletion of LLM logs, MCP logs, idle chats, and audit logs)
+- Real User Monitoring (product-usage and web-performance telemetry exported to your own OTLP collector)
 - Content encryption at rest (LLM logs and chat messages under a separate, operator-held key)
 - Two-factor authentication (TOTP enrollment, organization-wide enforcement, and session lifetime caps)
 

@@ -76,7 +76,11 @@ overrides:
   # CVE-2026-59869 (HIGH, uncontrolled resource consumption) affects >=4.0.0,
   # fixed in 4.3.0. Bounded to <5 so consumers expecting the 4.x API aren't
   # force-jumped onto the js-yaml 5 major.
-  js-yaml: '>=4.3.0 <5'
+  # Then GHSA-5p4m-2wfm-xmqj (HIGH, quadratic CPU in !!omap resolution) fixed
+  # in 4.3.1, published 2026-08-06 — inside the 7-day window, so excluded from
+  # minimumReleaseAge below and pinned exact so a floor can't pull an
+  # unvetted release.
+  js-yaml: 4.3.1
   qs: 6.15.2
   d3-path: 3.1.0
   # CVE-2026-54290 (HIGH, permissive cross-domain policy) fixed in 4.12.25.
@@ -194,6 +198,10 @@ minimumReleaseAgeExclude:
   # 2026-07-21 and clears the 7-day window on 2026-07-28. Remove on/after that
   # date — the lockfile stays pinned at 9.7.0 regardless.
   - find-my-way
+  # TEMPORARY: js-yaml 4.3.1 (fix GHSA-5p4m-2wfm-xmqj, HIGH) was published
+  # 2026-08-06 and clears the 7-day window on 2026-08-13. Remove on/after that
+  # date — the lockfile stays pinned at 4.3.1 regardless.
+  - js-yaml
   # TEMPORARY: brace-expansion 5.0.9 (fix CVE-2026-69152, HIGH) was published
   # 2026-07-30 and clears the 7-day window on 2026-08-06. Remove on/after that
   # date — the lockfile stays pinned at 5.0.9 regardless.

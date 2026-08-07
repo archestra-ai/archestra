@@ -17,12 +17,14 @@ import {
 
 // ===== Knowledge Base Schemas =====
 
-// `deletedAt` is an internal soft-delete axis (see softDeletablePgTable); keep
-// it out of API responses and reject client-supplied values. A user-facing
-// restore/trash surface can expose it in a follow-up.
+// `deletedAt` is exposed in responses for the trash views: null on active
+// rows, non-null only in the manage-deleted `status=deleted` listings, where
+// it drives the "Deleted N ago" label and the retention countdown. It stays
+// out of every write payload (see the Insert/Update schemas) — soft-delete is
+// the delete routes' business, never a client-supplied value.
 export const SelectKnowledgeBaseSchema = createSelectSchema(
   schema.knowledgeBasesTable,
-).omit({ deletedAt: true });
+);
 export const InsertKnowledgeBaseSchema = createInsertSchema(
   schema.knowledgeBasesTable,
 ).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
@@ -53,8 +55,8 @@ export const SelectKnowledgeBaseConnectorSchema = createSelectSchema(
     lastPermissionSyncStatus: NullableConnectorSyncStatusSchema,
     ftsLanguage: TextSearchLanguageSchema,
   },
-  // Internal soft-delete axis; kept out of API responses (see KB schema above).
-).omit({ deletedAt: true });
+  // `deletedAt` exposed for the trash views, write-protected — see KB schema.
+);
 export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
   schema.knowledgeBaseConnectorsTable,
   {

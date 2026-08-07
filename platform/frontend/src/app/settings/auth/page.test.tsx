@@ -23,6 +23,7 @@ let mockOrganizationPending = false;
 
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/clients/auth/auth-client");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("next/navigation");
@@ -64,6 +65,7 @@ import {
   useMissingPermissions,
   useSession,
 } from "@/lib/auth/auth.query";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import {
   useEnterpriseFeature,
   useSmallTeamTier,
@@ -73,6 +75,8 @@ import {
   useOrganization,
   useUpdateAuthSettings,
 } from "@/lib/organization.query";
+// biome-ignore lint/style/noRestrictedImports: asserts the dual-licensed RUM teardown; inert without the feature
+import { rumClient } from "@/lib/rum.ee";
 import AuthSettingsPage from "./page";
 
 function renderPage() {
@@ -269,5 +273,38 @@ describe("AuthSettingsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("signs the non-enrolled admin out after enforcing 2FA, resetting RUM first", async () => {
+    // Enforcing 2FA revokes this admin's own session because they have not
+    // enrolled — the page must tear down RUM state and sign out cleanly.
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1", twoFactorEnabled: false } },
+    } as unknown as ReturnType<typeof useSession>);
+    Object.defineProperty(window, "location", {
+      value: { assign: vi.fn() },
+      writable: true,
+    });
+    const resetSpy = vi.spyOn(rumClient, "reset").mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({ requireTwoFactor: true });
+      expect(window.location.assign).toHaveBeenCalledWith("/auth/sign-in");
+    });
+    expect(resetSpy).toHaveBeenCalledTimes(1);
+    expect(authClient.signOut).toHaveBeenCalledTimes(1);
+    // The flush inside reset() rides the still-valid session cookie, so it
+    // must land before signOut revokes the session.
+    expect(resetSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(authClient.signOut).mock.invocationCallOrder[0],
+    );
+
+    resetSpy.mockRestore();
   });
 });

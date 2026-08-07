@@ -1918,8 +1918,18 @@ class AgentModel {
   /**
    * Includes `environmentId` so callers can apply the environment fence beside
    * the permission checks, without a second round-trip per target.
+   *
+   * `organizationId` is an OPTIONAL tenant fence. The scope checks downstream
+   * cannot supply one: `requireScopedModifyPermission` returns early for an
+   * admin, and that admin flag is the caller's role in the caller's OWN org, so
+   * nothing ever compares the target's tenant. Callers that accept agent ids
+   * straight from a request body should pass it, which drops foreign-org agents
+   * from the map and makes them indistinguishable from ids that do not exist.
    */
-  static async findByIdsForPermissionCheck(ids: string[]): Promise<
+  static async findByIdsForPermissionCheck(
+    ids: string[],
+    organizationId?: string,
+  ): Promise<
     Map<
       string,
       {
@@ -1949,6 +1959,9 @@ class AgentModel {
           and(
             inArray(schema.agentsTable.id, ids),
             notDeleted(schema.agentsTable),
+            organizationId
+              ? eq(schema.agentsTable.organizationId, organizationId)
+              : undefined,
           ),
         ),
       AgentTeamModel.getTeamDetailsForAgents(ids),

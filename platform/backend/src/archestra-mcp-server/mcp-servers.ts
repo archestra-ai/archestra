@@ -1,4 +1,6 @@
 import {
+  redactCatalogToolArguments,
+  redactLocalConfigSecrets,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_SHORT_NAME,
   TOOL_DEPLOY_MCP_SERVER_SHORT_NAME,
@@ -35,12 +37,17 @@ import {
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
+import {
+  extractLocalConfigSecrets,
+  upsertCatalogClientSecretValue,
+} from "@/services/mcp-catalog-secrets";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
 import { reloadToolsForServer } from "@/services/mcp-reinstall";
 import {
   ApiError,
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
+  type LocalConfig,
   PartialUpdateInternalMcpCatalogSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
@@ -717,6 +724,9 @@ async function handleEditMcpDescription(
     });
 
     const existing = await InternalMcpCatalogModel.findById(args.id, {
+      // Only scope and teams are read here, so hydrating would buy nothing and
+      // would put expanded secrets one added field away from being persisted.
+      expandSecrets: false,
       userId: context.userId,
       isAdmin: checker.isAdmin,
       organizationId,
@@ -857,7 +867,7 @@ async function handleEditMcpConfig(
   const { agent: contextAgent, organizationId } = context;
 
   logger.info(
-    { agentId: contextAgent.id, editArgs: args },
+    { agentId: contextAgent.id, editArgs: redactCatalogToolArguments(args) },
     "edit_mcp_config tool called",
   );
 
@@ -872,6 +882,10 @@ async function handleEditMcpConfig(
     });
 
     const existing = await InternalMcpCatalogModel.findById(args.id, {
+      // Never hydrate on a write path: the merged config is persisted and
+      // echoed, so an expanded secret would land back in the jsonb column and
+      // in the tool result.
+      expandSecrets: false,
       userId: context.userId,
       isAdmin: checker.isAdmin,
       organizationId,
@@ -967,8 +981,16 @@ async function handleEditMcpConfig(
       );
     }
 
+    // Validate before touching the secret bag: rotating a live credential and
+    // then rejecting the edit would leave the bag ahead of the catalog row.
     const validatedUpdate =
       PartialUpdateInternalMcpCatalogSchema.parse(updateData);
+    await moveCatalogSecretsToBag({
+      updateData: validatedUpdate as Record<string, unknown>,
+      catalogName: existing.name,
+      existingLocalConfigSecretId: existing.localConfigSecretId,
+      existingClientSecretId: existing.clientSecretId,
+    });
     const updated = await InternalMcpCatalogModel.update(
       existing.id,
       validatedUpdate,
@@ -990,7 +1012,9 @@ async function handleEditMcpConfig(
       lines.push(`Installation Command: ${updated.installationCommand}`);
     }
     if (updated.localConfig) {
-      lines.push(`Local Config: ${JSON.stringify(updated.localConfig)}`);
+      lines.push(
+        `Local Config: ${JSON.stringify(redactLocalConfigSecrets(updated.localConfig))}`,
+      );
     }
     if (updated.deploymentSpecYaml) {
       lines.push("Deployment Spec: (custom YAML set)");
@@ -1009,7 +1033,7 @@ async function handleCreateMcpServer(
   const { agent: contextAgent, organizationId } = context;
 
   logger.info(
-    { agentId: contextAgent.id, createArgs: args },
+    { agentId: contextAgent.id, createArgs: redactCatalogToolArguments(args) },
     "create_mcp_server tool called",
   );
 
@@ -1155,6 +1179,12 @@ async function handleCreateMcpServer(
     if (teamIdsForScope.length > 0) createParams.teams = teamIdsForScope;
 
     const validatedParams = InsertInternalMcpCatalogSchema.parse(createParams);
+    await moveCatalogSecretsToBag({
+      updateData: validatedParams as Record<string, unknown>,
+      catalogName: name,
+      existingLocalConfigSecretId: null,
+      existingClientSecretId: null,
+    });
     const created = await InternalMcpCatalogModel.create(validatedParams, {
       organizationId,
       authorId: context.userId,
@@ -1171,7 +1201,9 @@ async function handleCreateMcpServer(
     if (created.description) lines.push(`Description: ${created.description}`);
     if (created.serverUrl) lines.push(`Server URL: ${created.serverUrl}`);
     if (created.localConfig) {
-      lines.push(`Local Config: ${JSON.stringify(created.localConfig)}`);
+      lines.push(
+        `Local Config: ${JSON.stringify(redactLocalConfigSecrets(created.localConfig))}`,
+      );
     }
     if (created.teams.length > 0) {
       lines.push(`Teams: ${created.teams.map((t) => t.name).join(", ")}`);
@@ -1791,4 +1823,54 @@ async function authorizeDeployScope(params: {
   }
 
   return null;
+}
+
+/**
+ * Moves credential values out of a catalog write payload into the item's secret
+ * bags, rewriting the payload to reference them instead.
+ */
+async function moveCatalogSecretsToBag(params: {
+  updateData: Record<string, unknown>;
+  catalogName: string;
+  existingLocalConfigSecretId: string | null;
+  existingClientSecretId: string | null;
+}): Promise<void> {
+  const {
+    updateData,
+    catalogName,
+    existingLocalConfigSecretId,
+    existingClientSecretId,
+  } = params;
+
+  if (updateData.localConfig !== undefined) {
+    const { localConfig, secretId } = await extractLocalConfigSecrets({
+      localConfig: updateData.localConfig as LocalConfig,
+      existingSecretId: existingLocalConfigSecretId,
+      catalogName,
+    });
+    updateData.localConfig = localConfig;
+    if (secretId) updateData.localConfigSecretId = secretId;
+  }
+
+  const oauthConfig = updateData.oauthConfig;
+  if (
+    typeof oauthConfig === "object" &&
+    oauthConfig !== null &&
+    !Array.isArray(oauthConfig)
+  ) {
+    const { client_secret: clientSecret, ...rest } = oauthConfig as Record<
+      string,
+      unknown
+    >;
+    if (typeof clientSecret === "string" && clientSecret) {
+      const { id } = await upsertCatalogClientSecretValue({
+        clientSecretId: existingClientSecretId,
+        catalogName,
+        key: "client_secret",
+        value: clientSecret,
+      });
+      updateData.oauthConfig = rest;
+      updateData.clientSecretId = id;
+    }
+  }
 }

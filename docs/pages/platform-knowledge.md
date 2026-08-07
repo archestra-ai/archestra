@@ -208,6 +208,14 @@ Create the key in [Atlassian administration](https://admin.atlassian.com) under 
 
 The API token stays required. Atlassian does not accept admin API keys on the Jira and Confluence APIs.
 
+## Deleting and Restoring Knowledge Bases and Connectors
+
+Deleting a knowledge base or connector moves it to a trash — the record is hidden but kept. Deleting a knowledge base leaves its connectors alone: they are unlinked from it, but they are not deleted and keep syncing. Deleting a connector does stop its syncs, and destroys its stored credential.
+
+Anyone with `knowledgeSource:delete` switches the status filter to **Deleted** to open the trash. **Restore** returns the entry to active. A restored knowledge base is immediately live for its previously-assigned agents. A restored connector comes back disabled — re-authenticate it, then enable it to resume syncing.
+
+Global admins can also delete an entry from the trash for good, with **Delete permanently**. For a knowledge base this destroys the record and its agent and connector assignments; its connectors survive. For a connector it destroys every document it has indexed, along with its run history and access mappings. Nothing brings either back.
+
 ## Supported Connectors
 
 Archestra ships with these built-in connector types.

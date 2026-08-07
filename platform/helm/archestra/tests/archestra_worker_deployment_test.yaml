@@ -23,6 +23,24 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: "2Gi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_REQUEST_MIB
+            valueFrom:
+              resourceFieldRef:
+                containerName: archestra-platform-worker
+                resource: requests.memory
+                divisor: 1Mi
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_LIMIT_MIB
+            valueFrom:
+              resourceFieldRef:
+                containerName: archestra-platform-worker
+                resource: limits.memory
+                divisor: 1Mi
 
   - it: worker deployment uses percentage-based rolling update defaults
     asserts:

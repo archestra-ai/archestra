@@ -110,8 +110,10 @@ const knowledgeBaseConnectorsTable = softDeletablePgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // Partial: every read of this table filters `deleted_at IS NULL`, so both
-    // indexes only ever need the active rows.
+    // Partial: every read of this table but the trash listing filters
+    // `deleted_at IS NULL`, so both indexes only ever need the active rows.
+    // The trash's `status=deleted` slice scans instead — deliberately
+    // unindexed, since soft-deleted rows are a small tail of a small table.
     index("knowledge_base_connectors_organization_id_idx")
       .on(table.organizationId)
       .where(sql`deleted_at IS NULL`),

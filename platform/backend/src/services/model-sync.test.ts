@@ -114,6 +114,53 @@ describe("ModelSyncService", () => {
     expect(linkedModels.every((m) => m.model.provider === "openai")).toBe(true);
   });
 
+  test("reclassifies a proxy-discovered model once the provider's catalog returns it", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+
+    // Both rows exist because the proxy saw the ids before any key synced them.
+    await ModelModel.ensureModelExists("gpt-4o", "openai");
+    // A client-invented id no catalog lists, so the sync below never names it.
+    await ModelModel.ensureModelExists("gpt-4o[1m]", "openai");
+
+    modelFetchers.openai = async () => [
+      {
+        id: "gpt-4o",
+        displayName: "GPT-4o",
+        provider: "openai" as SupportedProvider,
+      },
+    ];
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "openai",
+      apiKeyValue: "test-key",
+    });
+
+    // The catalog returned it, so it is an ordinary synced model now and
+    // deleting the key can clean it up.
+    const synced = await ModelModel.findByProviderAndModelId(
+      "openai",
+      "gpt-4o",
+    );
+    expect(synced?.discoveredViaLlmProxy).toBe(false);
+
+    // Nothing returned this one, so it keeps the protection that lets a custom
+    // price survive having no API key link.
+    const untouched = await ModelModel.findByProviderAndModelId(
+      "openai",
+      "gpt-4o[1m]",
+    );
+    expect(untouched?.discoveredViaLlmProxy).toBe(true);
+  });
+
   test("forceRefresh resets custom pricing, normal sync preserves it", async ({
     makeOrganization,
     makeSecret,

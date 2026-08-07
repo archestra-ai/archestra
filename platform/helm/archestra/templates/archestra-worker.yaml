@@ -1,5 +1,6 @@
 {{- if and .Values.archestra.worker.enabled (ne (include "archestra-platform.maintenanceModeEnabled" .) "true") }}
 {{- $workerPodAnnotations := mergeOverwrite (dict) (.Values.archestra.podAnnotations | default dict) (.Values.archestra.worker.podAnnotations | default dict) }}
+{{- $workerResources := .Values.archestra.worker.resources | default .Values.archestra.resources }}
 {{- if hasKey $workerPodAnnotations "prometheus.io/scrape" }}
 {{- $workerPodAnnotations = mergeOverwrite $workerPodAnnotations (dict "prometheus.io/port" "9000" "prometheus.io/path" "/metrics") }}
 {{- end }}
@@ -51,13 +52,14 @@ spec:
               protocol: TCP
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
+            {{- include "archestra-platform.nodeMemoryEnv" (dict "resources" $workerResources "containerName" (printf "%s-worker" .Chart.Name)) | nindent 12 }}
             - name: ARCHESTRA_PROCESS_TYPE
               value: "worker"
           {{- with .Values.archestra.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with (.Values.archestra.worker.resources | default .Values.archestra.resources) }}
+          {{- with $workerResources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}

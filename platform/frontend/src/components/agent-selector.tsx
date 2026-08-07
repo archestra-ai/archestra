@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,22 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+
+/**
+ * The dialog a selector is rendered in, or null outside one.
+ *
+ * A modal dialog locks scrolling and preventDefaults every wheel event whose
+ * target sits outside its own subtree. The popover defaults to a `<body>`
+ * portal, so its list renders at full height and simply refuses to scroll —
+ * portaling into the dialog puts it back inside the lock's allowed subtree.
+ */
+function dialogPortalContainer(
+  trigger: HTMLElement | null,
+): HTMLElement | null {
+  // Keyed on the data-slot rather than [role=dialog], which Radix also puts on
+  // popover and hover-card content.
+  return trigger?.closest<HTMLElement>("[data-slot=dialog-content]") ?? null;
+}
 
 export type AgentSelectorAgent = {
   id: string;
@@ -107,6 +123,8 @@ function SingleAgentSelector({
 }: Extract<AgentSelectorProps, { mode: "single" }>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogContainer = dialogPortalContainer(triggerRef.current);
   const selectedAgent = agents.find((agent) => agent.id === value);
   const isPersonalDefaultSelected = personalDefaultOption?.value === value;
   const groupedAgents = useGroupedAgents(agents, search);
@@ -130,6 +148,7 @@ function SingleAgentSelector({
     >
       <PopoverTrigger asChild>
         <Button
+          ref={triggerRef}
           variant="outline"
           role="combobox"
           aria-expanded={open}
@@ -154,8 +173,13 @@ function SingleAgentSelector({
           <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-        <Command shouldFilter={false}>
+      <PopoverContent
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col p-0"
+        portalContainer={dialogContainer}
+        collisionBoundary={dialogContainer ?? undefined}
+        collisionPadding={8}
+      >
+        <Command shouldFilter={false} className="min-h-0">
           <CommandInput
             value={search}
             onValueChange={setSearch}
@@ -166,7 +190,7 @@ function SingleAgentSelector({
               {hint}
             </div>
           )}
-          <CommandList>
+          <CommandList className="min-h-0 flex-1">
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             {personalDefaultOption &&
               matchesSearch(personalDefaultOption.label, search) && (
@@ -226,6 +250,8 @@ function MultiAgentSelector({
 }: Extract<AgentSelectorProps, { mode: "multiple" }>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const dialogContainer = dialogPortalContainer(anchorRef.current);
   const selectedAgents = agents.filter((agent) => value.includes(agent.id));
   const groupedAgents = useGroupedAgents(agents, search);
   const visibleAgents = useVisibleAgents(agents, search);
@@ -259,6 +285,7 @@ function MultiAgentSelector({
     <Popover open={disabled ? false : open} onOpenChange={setOpen}>
       <PopoverAnchor asChild>
         <div
+          ref={anchorRef}
           role="combobox"
           aria-expanded={open}
           aria-disabled={disabled}
@@ -313,20 +340,20 @@ function MultiAgentSelector({
         </div>
       </PopoverAnchor>
       <PopoverContent
-        className="w-[var(--radix-popover-trigger-width)] p-0"
+        className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col p-0"
         align="start"
         onOpenAutoFocus={(event) => event.preventDefault()}
+        portalContainer={dialogContainer}
+        collisionBoundary={dialogContainer ?? undefined}
+        collisionPadding={8}
       >
-        <Command shouldFilter={false}>
+        <Command shouldFilter={false} className="min-h-0">
           <CommandInput
             value={search}
             onValueChange={setSearch}
             placeholder={searchPlaceholder}
           />
-          <CommandList
-            className="max-h-[260px] overflow-y-auto"
-            onWheelCapture={(event) => event.stopPropagation()}
-          >
+          <CommandList className="max-h-[260px] min-h-0 flex-1 overflow-y-auto">
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             {flat ? (
               <>

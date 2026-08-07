@@ -880,13 +880,15 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
   - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
   - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
-- **`ARCHESTRA_CHAT_INCOGNITO_ENABLED`** - Offers [incognito chats](/docs/platform-content-encryption#incognito-chats): conversations encrypted under a browser-held per-conversation key the server never stores. The feature is free.
-  - Default: `true` (enabled). Set to `false` to remove the composer toggle and reject incognito conversation creation.
-- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`** - Enables incognito key escrow (enterprise; the incognito feature itself is free). The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery; the private half stays offline with the customer's security team.
-  - Default: not set — incognito chats store no recoverable copy of the key.
-  - Requires an enterprise license; startup fails when set without one, or when the key is not a valid RSA public key.
+- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`** - Enables [incognito chats](/docs/platform-content-encryption#incognito-chats): conversations, and the audit records they produce, encrypted under a browser-held per-conversation key the server never stores. The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery; the private half stays offline with your security team.
+  - Default: not set — incognito chats are unavailable.
+  - Escrow is required, not optional: an incognito chat encrypts its own audit trail, so without an escrowed key those records could be read by nobody.
+  - Startup fails when the value is not a valid RSA public key of at least 2048 bits.
+  - Set it in its own rollout, after the release is deployed, so no replica writes a record an older one cannot read.
   - See [Incognito Chats](/docs/platform-content-encryption#incognito-chats) for setup and the recovery procedure.
-- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK`** - Where the escrow copy is written (enterprise): `db` stores the wrapped key on the conversation row; `vault` writes it to the configured HashiCorp Vault backend at `incognito-escrow/<conversation id>` under the secret path prefix and stores only a path marker on the row.
+- **`ARCHESTRA_CHAT_INCOGNITO_ENABLED`** - Kill switch for incognito chats, independent of the escrow key.
+  - Default: `true`. Set to `false` to remove the composer toggle and reject incognito conversation creation while leaving the escrow key configured.
+- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK`** - Where the escrow copy is written: `db` stores the wrapped key on the conversation row; `vault` writes it to the configured HashiCorp Vault backend at `incognito-escrow/<conversation id>` under the secret path prefix and stores only a path marker on the row.
   - Default: `db`. Any other value fails startup.
   - `vault` requires an enterprise license, `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`, and `ARCHESTRA_SECRETS_MANAGER=Vault`; startup fails naming the missing piece.
   - A failed Vault write fails the conversation creation — an incognito chat is never created without its escrow copy.

@@ -11,7 +11,7 @@ lastUpdated: 2026-08-05
 This page covers two independent features:
 
 - **Content encryption at rest** (Enterprise, disabled by default) — server-side encryption of stored conversation and tool content, covered by the sections below.
-- **[Incognito chats](#incognito-chats)** (free, enabled by default) — chats encrypted under a key only the user's browser holds.
+- **[Incognito chats](#incognito-chats)** (disabled by default) — chats encrypted under a key only the user's browser holds.
 
 They work separately or together.
 
@@ -24,6 +24,7 @@ Beyond [stored secrets](./platform-secrets-management), Archestra can encrypt co
 - LLM proxy request and response payloads — the LLM Logs records.
 - Chat message bodies.
 - MCP tool call arguments and results — the MCP Logs records. A tool result carries whatever the tool returned — an email inbox, for example — so it is treated as content, not metadata.
+- Guardrail analyses and the unsafe context boundary, which quote the content they judged.
 
 Metadata stays in plaintext: timestamps, model names, token counts, tool and server names, and cost figures. Statistics, cost limits, and usage metering keep working unchanged.
 
@@ -55,36 +56,67 @@ An incognito chat is encrypted under a key that exists only in the browser that 
 
 This is not end-to-end encryption. The server sees content while serving requests: it forwards messages to the LLM provider and runs your security policies on them. The guarantee is at rest — a database dump, a backup, or an operator with the content encryption secret cannot read an incognito chat.
 
-Incognito chats are a free feature, enabled by default — no license or configuration is needed. Set `ARCHESTRA_CHAT_INCOGNITO_ENABLED=false` to disable them.
+Incognito chats are off until you configure [key escrow](#key-escrow). Escrow keeps an offline-recoverable copy of each chat's key.
+
+Escrow is required because an incognito chat encrypts its own audit trail. Without an escrowed copy, those records could be read by nobody — not even during an investigation. Set `ARCHESTRA_CHAT_INCOGNITO_ENABLED=false` to turn the feature off again without removing the escrow key.
 
 Users start an incognito chat from the composer toggle. If the browser's copy of the key is lost — cleared site data, a different browser or device — the chat opens to a notice that its contents can't be read. The conversation row and its title remain visible. Without [key escrow](#key-escrow), a lost key is unrecoverable.
 
 What incognito changes while a chat is active:
 
-- Messages are stored encrypted under the chat's own key; LLM request logs and MCP tool call logs keep usage and cost metadata but their content fields are redacted.
+- Messages are stored encrypted under the chat's own key.
+- LLM request logs, MCP tool call logs, and chat errors are encrypted under the same key. Usage, cost, and model metadata stay in plaintext, so statistics, cost limits, and metering are unaffected.
+- The Logs pages show those records with their content locked. Recovering it takes the escrow private key — see [Break-Glass Recovery](#break-glass-recovery).
 - The title is fixed to "Incognito chat" — no LLM title generation. A manual rename is stored in plaintext.
 - Attachments, sandbox commands, sharing, forking, projects, and context compaction are unavailable.
-- Reconnecting to an in-progress response after a page reload is unavailable; the response still completes and is saved.
 
 ### Key Escrow
 
-> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
-
-For governance, each new chat's key can be escrowed: wrapped to an RSA public key whose private half your security team holds offline. Recovery is a deliberate break-glass procedure, not something the platform can do alone. Set `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY` to an RSA public key (PEM, at least 2048 bits). Generate a keypair with:
+Escrow wraps each new chat's key to an RSA public key whose private half your security team holds offline. Configuring it enables incognito chats. Recovery is a deliberate break-glass procedure, not something the platform can do alone. Set `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY` to an RSA public key (PEM, at least 2048 bits). Generate a keypair with:
 
 ```bash
 openssl genrsa -out incognito-escrow.pem 4096
 openssl rsa -in incognito-escrow.pem -pubout -out incognito-escrow.pub
 ```
 
-Keep `incognito-escrow.pem` offline with your security team. Configure only the public half. Without an escrow key, incognito chats store no recoverable copy of the key at all.
+Keep `incognito-escrow.pem` offline with your security team. Configure only the public half.
+
+Enable escrow in its own rollout, after the release is fully deployed. Until the key is set, no replica writes an incognito record, so a mixed fleet never meets one it cannot read.
 
 By default the wrapped key is stored on the conversation row (`ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK=db`). The platform cannot read it — only the offline private key can open it.
+
+The Vault sink below requires an enterprise license. Contact sales@archestra.ai for licensing information.
 
 Set `ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK=vault` to write the wrapped key to your HashiCorp Vault backend instead, at `incognito-escrow/<conversation id>` under the configured secret path prefix. This requires `ARCHESTRA_SECRETS_MANAGER=Vault`. The conversation row then stores only the Vault path. The platform only ever writes these paths — grant it a create-only Vault policy so they are write-only from the app's side. If the Vault write fails, the chat is not created.
 
 Escrow key rotation affects new chats only: each conversation stores its key wrapped to the escrow key configured at creation time.
 
+With the `vault` sink, Archestra never reads the path back. It cannot tell you whether a blob is still there — a deleted or rotated one still looks present. Treat Vault retention as your responsibility.
+
 ### Break-Glass Recovery
 
-The escrow record is a JSON blob with the chat key wrapped as RSA-OAEP (SHA-256). With the `db` sink it sits in the conversation row's `incognito_escrow` column; with the `vault` sink the column holds the Vault path and the blob sits at `incognito-escrow/<conversation id>` in Vault. To recover a chat, the holder of the escrow private key decrypts `wrappedDek`, then decrypts each `messages.content` envelope with AES-256-GCM using the AAD `messages.content|incognito:<conversation id>`. Recovery happens outside the platform, with database — and, for the `vault` sink, Vault — access. Plan who holds the private key and under what procedure before enabling escrow.
+The escrow record is a JSON blob with the chat key wrapped as RSA-OAEP (SHA-256). With the `db` sink it sits in the conversation row's `incognito_escrow` column; with the `vault` sink the column holds the Vault path and the blob sits at `incognito-escrow/<conversation id>` in Vault.
+
+Recovery happens outside the platform, with database access — and Vault access for the `vault` sink. The holder of the escrow private key decrypts `wrappedDek` to get the chat key, then decrypts each envelope with AES-256-GCM.
+
+Every envelope uses an AAD of `<column>|incognito:<conversation id>`, which binds it to both the column and the chat. Use the column the value came from:
+
+| Table | Column | AAD column part |
+|---|---|---|
+| `messages` | `content` | `messages.content` |
+| `interactions` | `request` | `interactions.request` |
+| `interactions` | `processed_request` | `interactions.processed_request` |
+| `interactions` | `response` | `interactions.response` |
+| `interactions` | `dual_llm_analyses` | `interactions.dual_llm_analyses` |
+| `interactions` | `unsafe_context_boundary` | `interactions.unsafe_context_boundary` |
+| `mcp_tool_calls` | `tool_call` | `mcp_tool_calls.tool_call` |
+| `mcp_tool_calls` | `tool_result` | `mcp_tool_calls.tool_result` |
+| `conversation_chat_errors` | `error` | `conversation_chat_errors.error` |
+
+Rows in `interactions` and `mcp_tool_calls` carry the chat they belong to in `incognito_conversation_id`. Select on it to find everything one chat produced — `mcp_tool_calls` has no other reference to the conversation.
+
+Each envelope decrypts to `{"v": <original value>}`.
+
+A record whose content reads `{"__redacted": "incognito"}` was never stored and cannot be recovered. Archestra writes that only when it could not encrypt correctly — no key on the request, a key that did not match the chat, or a chat with no escrow record.
+
+Plan who holds the private key and under what procedure before enabling escrow.

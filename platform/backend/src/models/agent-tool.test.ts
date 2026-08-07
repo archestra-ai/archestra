@@ -3,8 +3,10 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import config from "@/config";
+import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
@@ -1498,9 +1500,140 @@ describe("AgentToolModel.bulkCreateOrUpdateCredentials", () => {
     expect(agent1Tools).toHaveLength(2);
     expect(agent2Tools).toHaveLength(2);
   });
+
+  // The write is one upsert whose conflict clause copies `excluded.mcp_server_id`.
+  // Omitting the column for an absent pin would make that read the row's own
+  // stale value, so an unpin would silently not happen.
+  test("clears a previously pinned mcpServerId when the assignment omits one", async ({
+    makeAgent,
+    makeTool,
+    makeMcpServer,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "tool-unpin" });
+    const server = await makeMcpServer();
+    await makeAgentTool(agent.id, tool.id, { mcpServerId: server.id });
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      {
+        agentId: agent.id,
+        toolId: tool.id,
+        credentialResolutionMode: "dynamic",
+      },
+    ]);
+
+    expect(results[0].status).toBe("updated");
+    const [row] = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(row.mcpServerId).toBeNull();
+    expect(row.credentialResolutionMode).toBe("dynamic");
+  });
+
+  // `unchanged` pairs are kept out of the upsert entirely. Including them would
+  // bump `updatedAt` for a write that changes nothing else about the row.
+  test("leaves updatedAt untouched for an unchanged assignment", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const [unchangedTool, changedTool] = await Promise.all([
+      makeTool({ name: "tool-untouched" }),
+      makeTool({ name: "tool-touched" }),
+    ]);
+    await makeAgentTool(agent.id, unchangedTool.id);
+    await makeAgentTool(agent.id, changedTool.id);
+
+    const before = new Map(
+      (
+        await db
+          .select({
+            toolId: schema.agentToolsTable.toolId,
+            updatedAt: schema.agentToolsTable.updatedAt,
+          })
+          .from(schema.agentToolsTable)
+          .where(eq(schema.agentToolsTable.agentId, agent.id))
+      ).map((r) => [r.toolId, r.updatedAt.getTime()]),
+    );
+
+    // Same batch as a row that DOES change, so this proves the row was excluded
+    // from the statement rather than the statement never running.
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      { agentId: agent.id, toolId: unchangedTool.id },
+      {
+        agentId: agent.id,
+        toolId: changedTool.id,
+        credentialResolutionMode: "dynamic",
+      },
+    ]);
+    const statusByTool = new Map(results.map((r) => [r.toolId, r.status]));
+    expect(statusByTool.get(unchangedTool.id)).toBe("unchanged");
+    expect(statusByTool.get(changedTool.id)).toBe("updated");
+
+    const after = await db
+      .select({
+        toolId: schema.agentToolsTable.toolId,
+        updatedAt: schema.agentToolsTable.updatedAt,
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, agent.id));
+    const unchangedRow = after.find((r) => r.toolId === unchangedTool.id);
+    const changedRow = after.find((r) => r.toolId === changedTool.id);
+
+    expect(unchangedRow?.updatedAt.getTime()).toBe(
+      before.get(unchangedTool.id),
+    );
+    // The statement really did run — asserted on the value it wrote rather than
+    // on a timestamp, which two writes in the same millisecond would not
+    // distinguish.
+    expect(changedRow?.credentialResolutionMode).toBe("dynamic");
+  });
+
+  // One upsert cannot name the same conflict target twice, so a body that
+  // repeats a pair has to be collapsed before the write rather than throwing.
+  test("collapses a pair repeated within one batch instead of failing", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeMcpServer,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "tool-repeated" });
+    const server = await makeMcpServer();
+    await makeAgentTool(agent.id, tool.id);
+
+    const results = await AgentToolModel.bulkCreateOrUpdateCredentials([
+      { agentId: agent.id, toolId: tool.id, mcpServerId: server.id },
+      { agentId: agent.id, toolId: tool.id, mcpServerId: server.id },
+    ]);
+
+    // Reported per input entry, written once.
+    expect(results).toHaveLength(2);
+    const rows = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].mcpServerId).toBe(server.id);
+  });
 });
 
-describe("AgentToolModel.bulkCreate", () => {
+describe("AgentToolModel.bulkUpsert", () => {
   test("inserts multiple rows in a single operation", async ({
     makeAgent,
     makeTool,
@@ -1510,7 +1643,7 @@ describe("AgentToolModel.bulkCreate", () => {
     const tool2 = await makeTool({ name: "bulk-2" });
     const tool3 = await makeTool({ name: "bulk-3" });
 
-    const rows = await AgentToolModel.bulkCreate([
+    const rows = await AgentToolModel.bulkUpsert([
       { agentId: agent.id, toolId: tool1.id },
       { agentId: agent.id, toolId: tool2.id },
       { agentId: agent.id, toolId: tool3.id },
@@ -1526,7 +1659,7 @@ describe("AgentToolModel.bulkCreate", () => {
   });
 
   test("returns empty array for empty input", async () => {
-    const rows = await AgentToolModel.bulkCreate([]);
+    const rows = await AgentToolModel.bulkUpsert([]);
     expect(rows).toEqual([]);
   });
 
@@ -1539,7 +1672,7 @@ describe("AgentToolModel.bulkCreate", () => {
     const tool = await makeTool({ name: "bulk-cred" });
     const server = await makeMcpServer();
 
-    const rows = await AgentToolModel.bulkCreate([
+    const rows = await AgentToolModel.bulkUpsert([
       {
         agentId: agent.id,
         toolId: tool.id,
@@ -1565,7 +1698,7 @@ describe("AgentToolModel.bulkCreate", () => {
       catalogId: catalog.id,
     });
 
-    const rows = await AgentToolModel.bulkCreate([
+    const rows = await AgentToolModel.bulkUpsert([
       {
         agentId: agent.id,
         toolId: tool.id,

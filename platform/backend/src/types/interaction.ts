@@ -1,8 +1,8 @@
 import {
   BillingModeSchema,
   InteractionSourceSchema,
-  SupportedProvidersDiscriminatorSchema,
   isIncognitoUnavailableContent,
+  SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -141,6 +141,18 @@ export const InteractionResponseSchema = z.union([
   InteractionErrorResponseSchema,
 ]);
 
+/**
+ * The two shapes an incognito conversation's content takes when it is not
+ * available to the reader: encrypted under the browser key (locked), or never
+ * stored (redacted). Neither resembles a provider payload, so every read arm
+ * has to accept them explicitly — otherwise one incognito row 500s the whole
+ * interactions list rather than rendering as unavailable.
+ */
+const IncognitoUnavailableContentSchema = z.union([
+  z.object({ __incognitoLocked: z.string() }),
+  z.object({ __redacted: z.literal("incognito") }),
+]);
+
 const extendedFields = {
   source: InteractionSourceSchema.nullable().optional(),
   authMethod: InteractionAuthMethodSchema.nullable().optional(),
@@ -193,6 +205,17 @@ const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
   ...DELTA_ENCODING_COLUMNS,
   ...INTERNAL_ENCRYPTION_COLUMNS,
 }).extend({
+  // Read-side only: these are encrypted columns too, so a locked row carries
+  // the sentinel where an array/object would be. Writers never produce one —
+  // the insert schema deliberately still rejects it.
+  dualLlmAnalyses: z
+    .union([z.array(DualLlmAnalysisSchema), IncognitoUnavailableContentSchema])
+    .nullable()
+    .optional(),
+  unsafeContextBoundary: z
+    .union([UnsafeContextBoundarySchema, IncognitoUnavailableContentSchema])
+    .nullable()
+    .optional(),
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
   /**
    * Name of `connectorId`'s knowledge base connector, resolved within the
@@ -225,12 +248,17 @@ const withReadFallback = <T extends z.ZodTypeAny>(schema: T) =>
   z.union([schema, LoosePersistedPayloadSchema]);
 
 /**
- * Each arm's read schema accepts either the provider response or a persisted
- * error response, so a failed interaction (stored with the provider `type`)
- * still serializes on read-back.
+ * Each arm's read schema accepts either the provider response, a persisted
+ * error response, or unavailable incognito content, so a failed interaction
+ * (stored with the provider `type`) and an incognito one both still serialize
+ * on read-back.
  */
 const withErrorResponse = <T extends z.ZodTypeAny>(schema: T) =>
-  z.union([schema, InteractionErrorResponseSchema]);
+  z.union([
+    schema,
+    InteractionErrorResponseSchema,
+    IncognitoUnavailableContentSchema,
+  ]);
 
 /**
  * Discriminated union schema for API responses

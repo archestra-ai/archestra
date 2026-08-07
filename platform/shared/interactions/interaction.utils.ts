@@ -1,3 +1,4 @@
+import { isIncognitoUnavailableContent } from "../incognito-content";
 import type { SupportedProvider } from "../index";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
 import AzureChatCompletionInteraction from "./llmProviders/azure";
@@ -277,6 +278,17 @@ export class DynamicInteraction implements InteractionUtils {
    * Map request messages, combining tool calls with their results and dual LLM analysis
    */
   mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
+    // An incognito interaction stores a sentinel where the provider payload
+    // would be, so there is no conversation to render. Provider mappers read
+    // fields off it unguarded (`request.messages.length`), so this has to stop
+    // before delegating rather than relying on a mapper tolerating it. The
+    // request/response panels render their own locked affordance.
+    if (
+      isIncognitoUnavailableContent(this.interaction.request) ||
+      isIncognitoUnavailableContent(this.interaction.response)
+    ) {
+      return [];
+    }
     const errorText = this.getErrorResponseText();
     if (errorText === null) {
       return this.interactionClass.mapToUiMessages(dualLlmAnalyses);

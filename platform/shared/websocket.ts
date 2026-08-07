@@ -336,6 +336,12 @@ export const MCP_DEPLOYMENT_STATES = [
   "running",
   "failed",
   "succeeded",
+  // Deployment deliberately scaled to 0 replicas by the idle-hibernation
+  // manager; woken (scaled back to 1) on demand.
+  "hibernated",
+  // Deployment scaling back up from idle hibernation; the hibernation
+  // annotation is still present and it is not yet available.
+  "waking",
 ] as const;
 
 export type McpDeploymentState = (typeof MCP_DEPLOYMENT_STATES)[number];

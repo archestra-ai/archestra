@@ -36,6 +36,7 @@ vi.mock("prom-client", () => {
   };
 });
 
+import { MCP_DEPLOYMENT_STATES } from "@archestra/shared";
 import {
   initializeMcpMetrics,
   reportMcpDeploymentStatuses,
@@ -345,14 +346,33 @@ describe("reportMcpDeploymentStatuses", () => {
     );
   });
 
+  test("reports a series for every deployment state, including the idle ones", () => {
+    reportMcpDeploymentStatuses({
+      "server-1": { serverName: "github-server", state: "hibernated" },
+    });
+
+    // An operator graphing fleet capacity needs the idle states as their own
+    // series — `count(...{state="hibernated"} == 1)` is how you see how much
+    // hibernation is actually saving.
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "github-server", state: "hibernated" },
+      1,
+    );
+    expect(gaugeSet).toHaveBeenCalledWith(
+      { server_name: "github-server", state: "waking" },
+      0,
+    );
+  });
+
   test("reports multiple servers with different states", () => {
     reportMcpDeploymentStatuses({
       "server-1": { serverName: "github-server", state: "running" },
       "server-2": { serverName: "slack-server", state: "failed" },
     });
 
-    // 5 states per server * 2 servers = 10 calls
-    expect(gaugeSet).toHaveBeenCalledTimes(10);
+    // One series per known state, per server. Derived rather than hard-coded
+    // so adding a state stays a docs question, not a broken test.
+    expect(gaugeSet).toHaveBeenCalledTimes(MCP_DEPLOYMENT_STATES.length * 2);
 
     expect(gaugeSet).toHaveBeenCalledWith(
       { server_name: "github-server", state: "running" },

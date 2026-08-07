@@ -72,6 +72,10 @@ class WebSocketService {
   private clientContexts: Map<WebSocket, WebSocketClientContext> = new Map();
   private browserStreamContext: BrowserStreamSocketClientContext | null = null;
   private deploymentMetricsInterval: NodeJS.Timeout | null = null;
+  // Event-driven metrics: short-lived states (a deployment waking from
+  // hibernation lives for a couple of seconds) would never survive until the
+  // next interval tick, so the gauge is also rewritten on every state refresh.
+  private deploymentMetricsRefreshUnsubscribe: (() => void) | null = null;
   // One poller shared by all deployment-status subscribers; runs while the
   // subscription map is non-empty.
   private mcpDeploymentStatusPollInterval: NodeJS.Timeout | null = null;
@@ -638,8 +642,13 @@ class WebSocketService {
       }
     };
 
-    // Report immediately, then every 30 seconds
+    // Report immediately, on every manager state refresh (so states shorter
+    // than the interval — waking, a brief pending — reach the gauge the moment
+    // they happen), and every 30 seconds as a reconciler for servers that
+    // appear or vanish without a refresh event.
     reportMetrics();
+    this.deploymentMetricsRefreshUnsubscribe =
+      McpServerRuntimeManager.onDeploymentStatesRefreshed(reportMetrics);
     this.deploymentMetricsInterval = setInterval(reportMetrics, 30_000);
   }
 
@@ -926,6 +935,8 @@ class WebSocketService {
   stop() {
     this.mcpDeploymentStatusRefreshUnsubscribe?.();
     this.mcpDeploymentStatusRefreshUnsubscribe = null;
+    this.deploymentMetricsRefreshUnsubscribe?.();
+    this.deploymentMetricsRefreshUnsubscribe = null;
 
     if (this.deploymentMetricsInterval) {
       clearInterval(this.deploymentMetricsInterval);

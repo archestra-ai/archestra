@@ -5,6 +5,7 @@ import type {
   McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import client from "prom-client";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
@@ -64,6 +65,9 @@ const service = websocketService as unknown as {
   mcpDeploymentStatusPollInterval: NodeJS.Timeout | null;
   lastMcpDeploymentRefreshAt: number;
   unsubscribeMcpDeploymentStatuses: (ws: WS) => void;
+  startDeploymentMetricsPolling: () => void;
+  deploymentMetricsInterval: NodeJS.Timeout | null;
+  deploymentMetricsRefreshUnsubscribe: (() => void) | null;
   initBrowserStreamContextForTesting: () => void;
   wss: { clients: Set<WS> } | null;
 };
@@ -2359,5 +2363,84 @@ describe("websocket MCP exec", () => {
 
     expect(mockK8sWs1.close).toHaveBeenCalled();
     expect(service.mcpExecSubscriptions.get(ws)?.serverId).toBe(mcpServer2.id);
+  });
+});
+
+describe("websocket deployment metrics", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // Only fake interval timers: real timeouts stay real so DB access keeps working
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  });
+
+  afterEach(() => {
+    if (service.deploymentMetricsInterval) {
+      clearInterval(service.deploymentMetricsInterval);
+      service.deploymentMetricsInterval = null;
+    }
+    service.deploymentMetricsRefreshUnsubscribe?.();
+    service.deploymentMetricsRefreshUnsubscribe = null;
+    vi.useRealTimers();
+  });
+
+  const gaugeValue = async (state: string) => {
+    const metric = client.register.getSingleMetric(
+      "mcp_server_deployment_status",
+    ) as client.Gauge<string> | undefined;
+    const data = await metric?.get();
+    return data?.values.find(
+      (v) =>
+        v.labels.server_name === "metrics-test-server" &&
+        v.labels.state === state,
+    )?.value;
+  };
+
+  test("a manager state refresh rewrites the deployment gauge immediately", async () => {
+    let state: "hibernated" | "waking" = "hibernated";
+    vi.spyOn(
+      McpServerRuntimeManager,
+      "statusSummary",
+      "get",
+    ).mockImplementation(() => ({
+      status: "running",
+      mcpServers: {
+        "server-1": {
+          state,
+          message: "Deployment status for the metrics test",
+          error: null,
+          serverName: "metrics-test-server",
+          deploymentName: "mcp-server-1",
+          namespace: "default",
+        },
+      },
+    }));
+    const captured: { refreshListener: (() => void) | null } = {
+      refreshListener: null,
+    };
+    vi.spyOn(
+      McpServerRuntimeManager,
+      "onDeploymentStatesRefreshed",
+    ).mockImplementation((listener: () => void) => {
+      captured.refreshListener = listener;
+      return () => {
+        captured.refreshListener = null;
+      };
+    });
+
+    service.startDeploymentMetricsPolling();
+
+    // The immediate report reflects the current state.
+    expect(await gaugeValue("hibernated")).toBe(1);
+    expect(await gaugeValue("waking")).toBe(0);
+
+    // A waking deployment lives for a couple of seconds — far less than the
+    // reconciler interval. The manager's refresh notification alone, with no
+    // timer advance, must land it in the gauge.
+    state = "waking";
+    expect(captured.refreshListener).not.toBeNull();
+    captured.refreshListener?.();
+
+    expect(await gaugeValue("waking")).toBe(1);
+    expect(await gaugeValue("hibernated")).toBe(0);
   });
 });

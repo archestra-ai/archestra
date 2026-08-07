@@ -1937,6 +1937,8 @@ Required RBAC permission: `knowledgeSource:update`
 | `todo_write` | Write todos to the current conversation. | None (no additional RBAC permission required) |
 | `create_project_from_conversation` | Turn the current chat into a project. | `project:create` |
 | `set_project_share` | Change who can see a project: the whole organization ("organization"), specific teams ("team"), or only the owner ("none"). | `project:update` † |
+| `list_projects` | List the projects the caller can reach — the ones they own plus those shared with them. | `project:read` † |
+| `get_project` | Read one project's context in a single call: its metadata, its instructions (the `instructions.md` that steers every chat in the project), and the list of files it owns. | `project:read` † |
 
 † This tool enforces an additional access requirement beyond its RBAC permission — see its details below.
 
@@ -2003,6 +2005,65 @@ Additional access requirement: Beyond `project:update`, the caller must own the 
 | `project_id` | `string` | Yes | The affected project's id. |
 | `project_name` | `string` | Yes | The affected project's name. |
 | `visibility` | `"organization" \| "team" \| "none"` | Yes | The project's sharing after the update. |
+
+#### list_projects
+
+Required RBAC permission: `project:read`
+
+Additional access requirement: Returns only projects the caller owns or that are shared with them. `project:admin` oversight of other members' projects does **not** extend to this tool.
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | `string` | No | Case-insensitive substring matched against the project name and description. Omit to list everything the caller can reach. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `projects` | `object[]` | Yes | Projects the caller can reach. |
+| `projects[].id` | `string` | Yes | The project's id — pass it to get_project. |
+| `projects[].name` | `string` | Yes | The project's name. |
+| `projects[].description` | `string \| null` | Yes | The project's description. |
+| `projects[].visibility` | `"organization" \| "team" \| "user" \| null` | Yes | Who the project is shared with; null = owner-only. |
+| `projects[].viewer_role` | `"owner" \| "shared" \| "admin"` | Yes | The caller's relationship to the project. |
+| `projects[].owner_name` | `string \| null` | Yes | Display name of the owner. |
+| `projects[].conversation_count` | `integer` | Yes | How many chats live in the project. |
+| `projects[].created_at` | `string` | Yes | ISO 8601 creation timestamp. |
+
+#### get_project
+
+Required RBAC permission: `project:read`
+
+Additional access requirement: Readable only for projects the caller owns or that are shared with them. `project:admin` oversight of other members' projects does **not** extend to this tool.
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_id` | `string` | Yes | Id of the project to read (from list_projects). |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes | The project's id — pass it to get_project. |
+| `name` | `string` | Yes | The project's name. |
+| `description` | `string \| null` | Yes | The project's description. |
+| `visibility` | `"organization" \| "team" \| "user" \| null` | Yes | Who the project is shared with; null = owner-only. |
+| `viewer_role` | `"owner" \| "shared" \| "admin"` | Yes | The caller's relationship to the project. |
+| `owner_name` | `string \| null` | Yes | Display name of the owner. |
+| `conversation_count` | `integer` | Yes | How many chats live in the project. |
+| `created_at` | `string` | Yes | ISO 8601 creation timestamp. |
+| `instructions` | `string` | Yes | The project's instructions markdown; empty when never saved. Truncated when `instructions_truncated` is true. |
+| `instructions_truncated` | `boolean` | Yes | Whether `instructions` was cut short at the inline limit. |
+| `files` | `object[]` | Yes | Files the project owns. Read one with read_file, passing the same project_id and this `ref`. |
+| `files[].id` | `string` | Yes | The file's id. |
+| `files[].ref` | `string` | Yes | Stable reference to pass to read_file. |
+| `files[].filename` | `string` | Yes | The file's name. |
+| `files[].mime_type` | `string` | Yes | The file's MIME type. |
+| `files[].size_bytes` | `integer` | Yes | Size in bytes. |
 
 ### Meta
 
@@ -2241,6 +2302,7 @@ Required RBAC permission: `file:manage`
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Case-insensitive substring matched against filenames only. Omit it (or pass empty) to list the files (the first 200). |
 | `scope` | `"chat" \| "app"` | No | "chat" (default) = this chat's files; "app" = the files of the app the user has open, which is how you find what the app has produced before copying one out with copy_file. |
+| `project_id` | `string` | No | Read this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be read. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
 
 ##### Output
 
@@ -2266,6 +2328,7 @@ Required RBAC permission: `file:manage`
 | `filename` | `string` | No | Filename to read instead of `id`; rejected as ambiguous if more than one file shares the name. |
 | `offset` | `integer` | No | 1-based line number to start reading from. Defaults to 1. |
 | `limit` | `integer` | No | Maximum number of lines to read. Defaults to 2000. |
+| `project_id` | `string` | No | Read this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be read. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
 
 ##### Output
 

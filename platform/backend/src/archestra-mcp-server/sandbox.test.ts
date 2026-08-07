@@ -2193,6 +2193,130 @@ describe("project file scope (save_file, scoped search/my_file)", () => {
     expect(denied.isError).toBe(true);
     expect(textOf(denied)).toContain("project");
   });
+
+  describe("explicit project_id (headless project reads)", () => {
+    test("reads a project's instructions with no conversation at all", async () => {
+      const project = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "headless-read",
+        description: null,
+      });
+      await fileStore.writeProjectInstructions({
+        organizationId,
+        userId,
+        projectId: project.id,
+        content: "# House rules\nAlways cite sources.",
+      });
+
+      // No conversationId: exactly what an external MCP client on a gateway has.
+      const result = await executeArchestraTool(
+        TOOL_READ_FILE_FULL_NAME,
+        { filename: PROJECT_INSTRUCTIONS_FILENAME, project_id: project.id },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(textOf(result)).toContain("Always cite sources.");
+    });
+
+    test("search_files lists the project's files with no conversation", async () => {
+      const project = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "headless-list",
+        description: null,
+      });
+      await fileStore.put({
+        organizationId,
+        userId,
+        projectId: project.id,
+        conversationId: null,
+        filename: "spec.md",
+        mimeType: "text/plain",
+        sizeBytes: 4,
+        data: Buffer.from("spec"),
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_FILES_FULL_NAME,
+        { project_id: project.id },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(
+        structuredOf<{ files: { filename: string }[] }>(result).files.map(
+          (f) => f.filename,
+        ),
+      ).toContain("spec.md");
+    });
+
+    test("denies a project the caller cannot access, without revealing it exists", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const stranger = await makeUser();
+      await makeMember(stranger.id, organizationId);
+      const theirs = await ProjectModel.create({
+        organizationId,
+        userId: stranger.id,
+        name: "not-mine",
+        description: null,
+      });
+      await fileStore.writeProjectInstructions({
+        organizationId,
+        userId: stranger.id,
+        projectId: theirs.id,
+        content: "secret rules",
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_READ_FILE_FULL_NAME,
+        { filename: PROJECT_INSTRUCTIONS_FILENAME, project_id: theirs.id },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).not.toContain("secret rules");
+      // Same wording a nonexistent id gets, so ids cannot be probed.
+      const missingId = crypto.randomUUID();
+      const missing = await executeArchestraTool(
+        TOOL_READ_FILE_FULL_NAME,
+        { filename: PROJECT_INSTRUCTIONS_FILENAME, project_id: missingId },
+        context,
+      );
+      expect(textOf(missing).replace(missingId, "<id>")).toBe(
+        textOf(result).replace(theirs.id, "<id>"),
+      );
+    });
+
+    test("refuses to escape a project chat into another project", async () => {
+      const { ctx } = await makeProjectChatCtx("confined");
+      const other = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "the-other-one",
+        description: null,
+      });
+      await fileStore.writeProjectInstructions({
+        organizationId,
+        userId,
+        projectId: other.id,
+        content: "other project rules",
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_READ_FILE_FULL_NAME,
+        { filename: PROJECT_INSTRUCTIONS_FILENAME, project_id: other.id },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("drop project_id");
+      expect(textOf(result)).not.toContain("other project rules");
+    });
+  });
 });
 
 describe("read_file", () => {

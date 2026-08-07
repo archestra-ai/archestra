@@ -62,6 +62,12 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
   // callers holding `project:share-org`.
   set_project_share:
     "Beyond `project:update`, the caller must own the project (or hold `project:admin`), and moving a project into or out of organization-wide visibility additionally requires `project:share-org`.",
+  // The read tools stay on the caller's own reach: `project:admin` oversight of
+  // a foreign project is a REST/UI capability and does not extend to them.
+  list_projects:
+    "Returns only projects the caller owns or that are shared with them. `project:admin` oversight of other members' projects does **not** extend to this tool.",
+  get_project:
+    "Readable only for projects the caller owns or that are shared with them. `project:admin` oversight of other members' projects does **not** extend to this tool.",
 };
 
 /**

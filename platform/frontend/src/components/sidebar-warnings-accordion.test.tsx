@@ -138,8 +138,6 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     expect(vi.mocked(useK8sCapabilities)).toHaveBeenCalledWith(false);
   });
 
-  // The SSRF section, not the policy model: it names what an unenforced
-  // cluster exposes and states the enforcing-dataplane prerequisite.
   it("links to the SSRF protection docs in a new tab", () => {
     setup({ enforcementStatus: "verified-not-enforced" });
 

@@ -70,11 +70,6 @@ export function SidebarWarningsAccordion() {
   const showNetworkPolicyWarning =
     capabilities?.networkPolicy?.enforcementStatus === "verified-not-enforced";
 
-  // The SSRF section rather than the policy model: someone who just learned
-  // enforcement is off needs what is now reachable — cloud metadata endpoints,
-  // private cluster ranges — not how to configure egress modes. It also states
-  // the enforcing-dataplane prerequisite, which is this reader's situation.
-  //
   // Null under full white-labeling, where the environments screen carries the
   // same explanation and stays reachable.
   const networkPolicyDocsUrl = getFrontendDocsUrl(

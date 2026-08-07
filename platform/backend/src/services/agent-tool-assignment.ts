@@ -38,6 +38,12 @@ export type PrefetchedMcpServer = {
 
 type AgentToolAssignmentPrefetchedData = {
   existingAgentIds: Set<string>;
+  /**
+   * Scope/membership of the target agents, when the caller already read it.
+   * A cache, never a fence: a missing entry falls through to a query, and
+   * tenant isolation stays with whatever loaded these agents in the first place.
+   */
+  ownerContextsByAgentId: Map<string, ToolOwnerContext>;
   toolsMap: Map<string, Tool>;
   catalogItemsMap: ReadonlyMap<string, InternalMcpCatalog>;
   mcpServersBasicMap: Map<string, PrefetchedMcpServer>;
@@ -180,8 +186,16 @@ export async function validateAssignment(
   if (mcpServerId) {
     const preFetchedServer =
       preFetchedData?.mcpServersBasicMap?.get(mcpServerId);
+    const preFetchedOwnerContext =
+      preFetchedData?.ownerContextsByAgentId?.get(agentId);
     const validationError = await validateAssignedMcpServer({
-      getOwnerContext: () => getAssignmentTargetContext(agentId),
+      // Bulk callers pass the context they already read. Without it this is a
+      // full agent read (with a team join) per statically-bound assignment, not
+      // per agent.
+      getOwnerContext: () =>
+        preFetchedOwnerContext
+          ? Promise.resolve(preFetchedOwnerContext)
+          : getAssignmentTargetContext(agentId),
       mcpServerId,
       tool,
       preFetchedServer,

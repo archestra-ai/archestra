@@ -35,6 +35,8 @@ export function invalidateToolAssignmentQueries(
   queryClient.invalidateQueries({ queryKey: ["agents"] });
   queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
   queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+  // Assignment counts hang off server and catalog cards.
+  queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
 }
 
 /**

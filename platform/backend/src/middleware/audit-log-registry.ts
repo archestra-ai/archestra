@@ -726,6 +726,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, _orgId) =>
       AgentToolModel.countAssignmentsForOrganization(id),
   },
+  // Deliberately no `fetchById`: the snapshot must be per-agent, and only the
+  // handler can derive it (the affected agents come from the request body,
+  // which fetchById never sees). Omitting it also leaves `auditBefore` unset by
+  // the preHandler, so the handler owns both sides. See
+  // buildBulkToolUpdateAuditSnapshot in routes/agent-tool.ts.
+  "/api/agents/tools/bulk-update": {
+    resourceType: "agentTool",
+    action: "agentTool.bulk_updated",
+    resourceIdSource: "organizationContext",
+  },
   "/api/agent-tools/auto-configure-policies": {
     resourceType: "toolInvocationPolicy",
     action: "toolInvocationPolicy.auto_configured",

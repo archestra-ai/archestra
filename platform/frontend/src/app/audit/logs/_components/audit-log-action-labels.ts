@@ -30,6 +30,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agentTool.deleted": "Agent tool removed",
   "agentTool.bulk_assigned": "Agent tools bulk assigned",
   "agentTool.bulk_removed": "Agent tools bulk removed",
+  "agentTool.bulk_updated": "Agent tools bulk updated",
   // API key
   "apiKey.created": "API key created",
   "apiKey.deleted": "API key deleted",

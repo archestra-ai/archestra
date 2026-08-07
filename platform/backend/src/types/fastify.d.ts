@@ -28,7 +28,14 @@ declare module "fastify" {
       serviceAccount: SelectServiceAccount;
       token: SelectServiceAccountToken;
     };
-    /** Sanitized snapshot of the resource before the mutation; set by the audit preHandler hook. */
+    /**
+     * Snapshot of the resource before the mutation. Normally set (and
+     * sanitized) by the audit preHandler hook. A route registered WITHOUT
+     * `fetchById` gets no preHandler snapshot and may set this itself before
+     * its writes — e.g. a bulk route whose affected resources are only known
+     * from the request body. A handler-supplied value is stored verbatim, so
+     * the handler owns keeping secrets out of it.
+     */
     auditBefore?: Record<string, unknown> | null;
     /**
      * Memoized effective audit route config, computed once by whichever audit

@@ -315,7 +315,9 @@ class KbChunkModel {
       sql`, `,
     );
     const documentIds = sql.join(
-      [...new Set(pairs.map((p) => p.documentId))].map((id) => sql`${id}::uuid`),
+      [...new Set(pairs.map((p) => p.documentId))].map(
+        (id) => sql`${id}::uuid`,
+      ),
       sql`, `,
     );
     const aclEntries = bypassAcl

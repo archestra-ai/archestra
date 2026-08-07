@@ -659,7 +659,9 @@ describe("KbChunkModel", () => {
       expect(results).toHaveLength(1);
       // The header is an indexing signal only; it never leaks into the text the
       // model is shown.
-      expect(results[0].content).toBe("The limit was raised to 5,000 per minute.");
+      expect(results[0].content).toBe(
+        "The limit was raised to 5,000 per minute.",
+      );
     });
   });
 

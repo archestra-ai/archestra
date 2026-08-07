@@ -32,13 +32,7 @@ export async function expandChunkContext(params: {
   bypassAcl?: boolean;
   environmentId?: string | null;
 }): Promise<VectorSearchResult[]> {
-  const {
-    results,
-    radius,
-    userAcl,
-    bypassAcl = false,
-    environmentId,
-  } = params;
+  const { results, radius, userAcl, bypassAcl = false, environmentId } = params;
 
   if (radius <= 0 || results.length === 0) return results;
 

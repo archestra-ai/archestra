@@ -137,9 +137,7 @@ function getSourceIcon({
     "knowledge:embedding": <Database className="h-3 w-3 shrink-0" />,
     "knowledge:reranker": <Database className="h-3 w-3 shrink-0" />,
     "knowledge:query-expansion": <Database className="h-3 w-3 shrink-0" />,
-    "knowledge:contextual-retrieval": (
-      <Database className="h-3 w-3 shrink-0" />
-    ),
+    "knowledge:contextual-retrieval": <Database className="h-3 w-3 shrink-0" />,
     "app:llm_complete": <LayoutGrid className="h-3 w-3 shrink-0" />,
     "app:recording_enhancement": <Sparkles className="h-3 w-3 shrink-0" />,
   };

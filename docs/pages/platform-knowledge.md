@@ -2,17 +2,102 @@
 title: Knowledge
 category: Knowledge
 order: 1
-description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
-lastUpdated: 2026-08-03
+description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
+lastUpdated: 2026-08-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions. The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra — no external vector database or separate retrieval service required.
+A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions.
 
 > **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
 
 ![Agent answering from a Jira Knowledge Base with cited sources](/docs/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
+
+## How Retrieval Works
+
+The whole pipeline runs inside Archestra on PostgreSQL with pgvector. There is no external vector database and no separate retrieval service to operate.
+
+### Indexing
+
+Connectors run on a cron schedule. Each document goes through the same four steps.
+
+1. **Extract.** Text is pulled from the source. Office documents and PDFs are read through format-specific extractors; PDF text comes from the document's text layer. With a multimodal embedding model configured, images are embedded directly rather than described.
+2. **Chunk.** The document is split into passages of roughly 512 tokens, on paragraph and sentence boundaries. Each chunk carries its document title and the document's metadata, so it can be matched on its own.
+3. **Add context.** Optionally, the document is summarized once and that summary is indexed with every one of its chunks. See [Contextual Retrieval](#contextual-retrieval).
+4. **Embed.** Each chunk is vectorized with the configured embedding model and stored alongside a keyword index of the same text.
+
+A document whose content has not changed since the last sync is skipped, so a re-sync only pays for what actually changed.
+
+```mermaid
+flowchart LR
+    C[Connectors] -->|cron schedule| D[Documents]
+    D --> CH[Chunking]
+    CH --> CTX[Document context]
+    CTX -->|Embedding provider API| E[Embedding]
+    E --> PG[(PostgreSQL + pgvector)]
+```
+
+### Querying
+
+A search runs both a semantic and a keyword pass, then narrows the results.
+
+1. **Expand the query.** The reranking model rewrites the question into a semantic phrasing and a set of keyword queries. This catches documents that use different words than the asker did. Identifiers, ticket numbers, and error codes are preserved verbatim.
+2. **Search both ways.** Every query variant runs against the vector index and the keyword index in parallel.
+3. **Fuse.** Results are merged with Reciprocal Rank Fusion, which favors chunks that rank well across several variants rather than one.
+4. **Rerank.** The reranking model scores each surviving chunk against the original question and drops the irrelevant ones.
+5. **Filter by access.** Chunks the asking user cannot read are removed. This applies to every result, at every stage.
+6. **Widen.** The chunks either side of each hit are stitched back on, so a passage that starts mid-sentence arrives with its surroundings. See [Context Expansion](#context-expansion).
+
+```mermaid
+flowchart LR
+    Q[Agent Query] --> QX[Query Expansion]
+    QX --> VS[Vector Search]
+    QX --> FTS[Keyword Search]
+    VS --> RRF[Reciprocal Rank Fusion]
+    FTS --> RRF
+    RRF --> RR[Reranking]
+    RR --> ACL[Access Filtering]
+    ACL --> CE[Context Expansion]
+    CE --> R[Results]
+```
+
+### Citations
+
+Every result carries the document title, its URL in the source system, the connector it came from, and the position of the chunk within the document. An agent answering from a Knowledge Base cites those sources in its reply, so a reader can open the original.
+
+### Contextual Retrieval
+
+Chunking separates a passage from the context it sits in. A chunk reading "the limit was raised to 5,000 per minute" is a poor match for "what is the rate limit on the billing API", because neither the product nor the subject appears in it.
+
+Turn contextual retrieval on and each document is summarized once at ingest. That summary is indexed with every chunk of the document, so the chunk above becomes findable by a question naming the billing API. The summary shapes matching only — it is never added to the text the agent reads.
+
+It costs one LLM call per document per sync, billed against the reranking model, and needs a reranking model that can generate text. Enable it with `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED`.
+
+### Context Expansion
+
+Search ranks chunks, but a chunk boundary falls wherever the chunker put it. A hit can begin mid-sentence or cut a table in half.
+
+After ranking, the neighbouring chunks are stitched back onto each hit. Ranking is unaffected — this only widens the passage the agent reads. Expansion stops at any chunk the user cannot read, so it never becomes a way around access control. Set the radius with `ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS`.
+
+### Keyword Search Language
+
+The keyword index stems words so that different forms of one word match. Stemming is language-specific: "Katzen" and "Katze" only collapse to the same term under German rules.
+
+Set the language on each connector under **Advanced > Keyword Search Language**, to match the language its documents are written in. Choose **Simple** to turn stemming off, which suits source code and mixed-language sources. One deployment can index an English wiki and a German one correctly at the same time. The setting applies on the connector's next sync.
+
+### Tuning
+
+These settings are deployment-wide. See [Deployment](/docs/platform-deployment#knowledge-base-configuration) for the full reference.
+
+| Setting | Default | Controls |
+| --- | --- | --- |
+| `ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED` | `true` | Whether keyword search runs alongside vector search |
+| `ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS` | `512` | Size of one chunk. Smaller is more precise, larger carries more context |
+| `ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS` | `1` | How many neighbouring chunks are stitched onto a hit |
+| `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED` | `false` | Whether documents are summarized into their chunks at ingest |
+
+Chunk size and contextual retrieval apply at ingest, so a change takes effect as each connector re-syncs.
 
 ## Configuration
 
@@ -38,7 +123,7 @@ Pick the model that scores and reorders search results by relevance. Reranking i
 - **Key** — any LLM provider key.
 - **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
 
-A chat model also powers query expansion (rephrasings that improve recall). A Cohere Rerank model only scores results, so expansion is skipped with one configured.
+A chat model also powers query expansion and [contextual retrieval](#contextual-retrieval). A Cohere Rerank model only scores results, so both are skipped with one configured.
 
 ## Creating a Knowledge Base
 
@@ -452,31 +537,3 @@ A connector can be assigned a deployment environment. Only agents and gateways i
 ## Adding New Connector Types
 
 See [Adding Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for a developer guide on implementing new connector types.
-
-## Architecture
-
-The RAG stack runs entirely within PostgreSQL — no external vector database. See [Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for the full configuration reference.
-
-**Ingestion.** Connectors run on a cron schedule; documents are chunked and embedded into PostgreSQL with pgvector.
-
-```mermaid
-flowchart LR
-    C[Connectors] -->|cron schedule| D[Documents]
-    D --> CH[Chunking]
-    CH -->|Embedding provider API| E[Embedding]
-    E --> PG[(PostgreSQL + pgvector)]
-```
-
-**Querying.** The agent's query is embedded, then vector and optional full-text search run in parallel. Results are fused, reranked, and ACL-filtered before being returned.
-
-```mermaid
-flowchart LR
-    Q[Agent Query] -->|Embedding provider API| QE[Query Embedding]
-    QE --> VS[Vector Search]
-    QE --> FTS["Full-Text Search (configurable)"]
-    VS --> RRF[Reciprocal Rank Fusion]
-    FTS --> RRF
-    RRF --> RR[Reranking]
-    RR --> ACL[ACL Filtering]
-    ACL --> R[Results]
-```

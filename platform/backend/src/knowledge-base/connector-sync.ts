@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
-import type {
-  ModelInputModality,
-  TextSearchLanguage,
-} from "@archestra/shared";
+import type { ModelInputModality, TextSearchLanguage } from "@archestra/shared";
 import type pino from "pino";
 import config from "@/config";
 import defaultLogger from "@/logging";

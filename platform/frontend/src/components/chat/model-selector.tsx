@@ -249,9 +249,12 @@ function ModelCapabilityBadges({
   // known to take no tools, which gets its own marker below.
   const lacksToolCalling = capabilities?.supportsToolCalling === false;
 
-  // Size is reported independently of the capability fields, so it can be the
-  // only thing worth showing on a row (a freshly pulled Ollama model has a
-  // parameter count long before it has modalities or a tool-calling verdict).
+  // Size is reported independently of the capability fields, so it is usually
+  // the only marker an Ollama row carries: those models are synced with an
+  // inferred "text" modality and no tool-calling verdict (models.dev lists no
+  // Ollama entry to supply one), which without this would render nothing. Size
+  // is not itself capability data — a row reporting only a count still falls to
+  // the unknown badge below.
   const isSmall = isSmallModel(capabilities?.parameterCount ?? null);
 
   const hasAnyCapability =

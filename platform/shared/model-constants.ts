@@ -214,6 +214,11 @@ export function isSelfHostedProvider(provider: SupportedProvider): boolean {
  * as low as a 12B model on published agentic benchmarks, so a threshold on size
  * can only ever say "small", never "weak".
  *
+ * The bound is inclusive, but it sits just under the counts real 8B builds
+ * report — Llama 3 8B reports 8_030_261_248 — so the nominal-8B tier falls
+ * outside it and only genuinely smaller models are marked. That ~30M gap is
+ * deliberate, not an off-by-one: closing it flips every 8B model to badged.
+ *
  * Keep this at or below ~20B. Above that it starts catching mixture-of-experts
  * models (gpt-oss:20b, qwen3:30b-a3b), whose total parameter count describes
  * neither their compute per token nor their capability — at which point MoE

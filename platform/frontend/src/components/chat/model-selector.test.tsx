@@ -297,4 +297,82 @@ describe("ModelSelector coverage matrix", () => {
     expect(screen.getByText("Pinned Model")).toBeInTheDocument();
     expect(onModelChange).not.toHaveBeenCalled();
   });
+
+  // Only Ollama reports a size, and its rows are synced with an inferred "text"
+  // modality and no tool-calling verdict — so the size marker is the only thing
+  // standing between such a row and an empty badge column.
+  const ollamaRow = (capabilities: Record<string, unknown>) =>
+    model({
+      dbId: "o1",
+      id: "qwen3:4b",
+      displayName: "qwen3:4b",
+      provider: "ollama",
+      isBest: false,
+      capabilities,
+    });
+
+  it("badges a small model in the picker list", () => {
+    setQuery({
+      modelsByProvider: {
+        ollama: [
+          ollamaRow({
+            inputModalities: ["text"],
+            parameterCount: 4_022_468_096,
+          }),
+        ],
+      },
+    });
+    renderSelector({ selectedModel: "o1", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(screen.getByText("small model")).toBeInTheDocument();
+  });
+
+  // The threshold sits just below the count a real 8B build reports, so the
+  // nominal-8B tier stays unmarked.
+  it("leaves an 8B model unbadged", () => {
+    setQuery({
+      modelsByProvider: {
+        ollama: [
+          ollamaRow({
+            inputModalities: ["text"],
+            parameterCount: 8_030_261_248,
+          }),
+        ],
+      },
+    });
+    renderSelector({ selectedModel: "o1", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(screen.queryByText("small model")).not.toBeInTheDocument();
+  });
+
+  // Every provider but Ollama reports no size; the row must make no claim
+  // rather than assume the model is large.
+  it("makes no size claim when the provider reports no parameter count", () => {
+    setQuery({
+      modelsByProvider: {
+        openai: [model({ capabilities: { inputModalities: ["text"] } })],
+      },
+    });
+    renderSelector({ selectedModel: "m1", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(screen.queryByText("small model")).not.toBeInTheDocument();
+  });
+
+  // A size is not capability data: a row that reports one and nothing else is
+  // still a row whose capabilities were never recorded.
+  it("still calls a size-only row's capabilities unknown", () => {
+    setQuery({
+      modelsByProvider: {
+        ollama: [ollamaRow({ parameterCount: 4_022_468_096 })],
+      },
+    });
+    renderSelector({ selectedModel: "o1", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(screen.getByText("capabilities unknown")).toBeInTheDocument();
+    expect(screen.queryByText("small model")).not.toBeInTheDocument();
+  });
 });

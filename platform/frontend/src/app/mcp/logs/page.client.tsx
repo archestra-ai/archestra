@@ -3,6 +3,7 @@
 import {
   type archestraApiTypes,
   extractMcpExecutedAs,
+  isIncognitoUnavailableContent,
   parseFullToolName,
 } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
@@ -10,6 +11,7 @@ import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
+import { IncognitoContentUnavailableLabel } from "@/components/incognito-content-unavailable";
 import { ProfileFilterOption } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
@@ -361,7 +363,13 @@ function McpToolCallsTable({
       id: "arguments",
       header: "Arguments",
       cell: ({ row }) => {
-        const args = row.original.toolCall?.arguments;
+        // Incognito rows carry a sentinel in place of the recorded call, so
+        // there are no arguments to preview — say why instead of showing "—".
+        const call = row.original.toolCall;
+        if (isIncognitoUnavailableContent(call)) {
+          return <IncognitoContentUnavailableLabel value={call} />;
+        }
+        const args = call?.arguments;
         if (!args) {
           return <div className="text-xs text-muted-foreground">—</div>;
         }
@@ -379,6 +387,13 @@ function McpToolCallsTable({
       cell: ({ row }) => {
         const result = row.original.toolResult;
         const method = row.original.method || "tools/call";
+
+        // The status lives inside the result, so an incognito row has none to
+        // report. Falling through to the "Success" badge below would assert an
+        // outcome the row does not record.
+        if (isIncognitoUnavailableContent(result)) {
+          return <IncognitoContentUnavailableLabel value={result} />;
+        }
 
         // For tools/call, resolve success / error / cancelled (a call the
         // user stopped mid-flight — neither a success nor a failure).

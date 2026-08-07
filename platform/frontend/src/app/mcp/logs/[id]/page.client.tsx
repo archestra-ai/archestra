@@ -3,12 +3,17 @@
 import {
   type archestraApiTypes,
   extractMcpExecutedAs,
+  isIncognitoUnavailableContent,
   parseFullToolName,
 } from "@archestra/shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
+import {
+  IncognitoContentUnavailable,
+  IncognitoContentUnavailableLabel,
+} from "@/components/incognito-content-unavailable";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
@@ -94,18 +99,35 @@ function McpToolCallDetail({
 
   const agent = agents?.find((a) => a.id === mcpToolCall.agentId);
   const method = mcpToolCall.method || "tools/call";
-  const toolCall = mcpToolCall.toolCall as {
-    name?: string;
-    arguments?: unknown;
-  } | null;
-  const toolResult = mcpToolCall.toolResult as {
-    isError?: boolean;
-    error?: string;
-    content?: unknown;
-  } | null;
+  // An incognito conversation's tool call and result are stored encrypted (or,
+  // in the fail-closed case, not at all), so the columns hold a sentinel rather
+  // than the recorded content. Split them out before anything reads a field off
+  // them — the tool name, the arguments and the success/error status are all
+  // equally unavailable, and painting the call "Success" would be a claim the
+  // row does not support.
+  const lockedToolCall = isIncognitoUnavailableContent(mcpToolCall.toolCall)
+    ? mcpToolCall.toolCall
+    : null;
+  const lockedToolResult = isIncognitoUnavailableContent(mcpToolCall.toolResult)
+    ? mcpToolCall.toolResult
+    : null;
+
+  const toolCall = lockedToolCall
+    ? null
+    : (mcpToolCall.toolCall as {
+        name?: string;
+        arguments?: unknown;
+      } | null);
+  const toolResult = lockedToolResult
+    ? null
+    : (mcpToolCall.toolResult as {
+        isError?: boolean;
+        error?: string;
+        content?: unknown;
+      } | null);
 
   // Whose credential served the call upstream, recorded with the result.
-  const executedAs = extractMcpExecutedAs(mcpToolCall.toolResult);
+  const executedAs = extractMcpExecutedAs(toolResult);
 
   // Success / error / cancelled — a cancelled call (the user stopped the run
   // or the background task) is neither a success nor a failure.
@@ -143,22 +165,26 @@ function McpToolCallDetail({
               >
                 {method}
               </Badge>
-              <Badge
-                variant={
-                  status === "error"
-                    ? "destructive"
+              {lockedToolResult ? (
+                <IncognitoContentUnavailableLabel value={lockedToolResult} />
+              ) : (
+                <Badge
+                  variant={
+                    status === "error"
+                      ? "destructive"
+                      : status === "cancelled"
+                        ? "secondary"
+                        : "default"
+                  }
+                  className="text-xs"
+                >
+                  {status === "error"
+                    ? "Error"
                     : status === "cancelled"
-                      ? "secondary"
-                      : "default"
-                }
-                className="text-xs"
-              >
-                {status === "error"
-                  ? "Error"
-                  : status === "cancelled"
-                    ? "Cancelled"
-                    : "Success"}
-              </Badge>
+                      ? "Cancelled"
+                      : "Success"}
+                </Badge>
+              )}
             </>
           }
         >
@@ -215,7 +241,7 @@ function McpToolCallDetail({
           )}
         </MetadataCard>
 
-        {toolCall?.arguments !== undefined && (
+        {(lockedToolCall || toolCall?.arguments !== undefined) && (
           <Accordion type="single" collapsible className="mb-4">
             <AccordionItem
               value="arguments"
@@ -225,7 +251,11 @@ function McpToolCallDetail({
                 <span className="text-base font-semibold">Arguments</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <JsonCodeBlock value={toolCall.arguments} />
+                {lockedToolCall ? (
+                  <IncognitoContentUnavailable value={lockedToolCall} />
+                ) : (
+                  <JsonCodeBlock value={toolCall?.arguments} />
+                )}
               </AccordionContent>
             </AccordionItem>
           </Accordion>
@@ -237,7 +267,11 @@ function McpToolCallDetail({
               <span className="text-base font-semibold">Result</span>
             </AccordionTrigger>
             <AccordionContent className="px-6 pb-4">
-              <JsonCodeBlock value={toolResult} />
+              {lockedToolResult ? (
+                <IncognitoContentUnavailable value={lockedToolResult} />
+              ) : (
+                <JsonCodeBlock value={toolResult} />
+              )}
             </AccordionContent>
           </AccordionItem>
         </Accordion>

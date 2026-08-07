@@ -1,7 +1,8 @@
+import { fromMarkdown } from "mdast-util-from-markdown";
 import { describe, expect, it } from "vitest";
-import { preprocessLaTeX } from "./preprocess-latex";
+import { prepareMathDelimiters } from "./preprocess-latex";
 
-describe("preprocessLaTeX", () => {
+describe("prepareMathDelimiters (dollar math)", () => {
   // The failure this exists for: models write inline math as `$x$`, which
   // remark-math ignores while singleDollarTextMath is off.
   it.each([
@@ -16,7 +17,7 @@ describe("preprocessLaTeX", () => {
     ],
     ["two spans on a line", "$a$ then $b$", "$$a$$ then $$b$$"],
   ])("promotes %s to display delimiters", (_label, input, expected) => {
-    expect(preprocessLaTeX(input)).toBe(expected);
+    expect(prepareMathDelimiters(input)).toBe(expected);
   });
 
   // Currency is the reason single-dollar math cannot simply be switched on.
@@ -26,12 +27,12 @@ describe("preprocessLaTeX", () => {
     ["a magnitude suffix", "raised $3.2M total", "raised \\$3.2M total"],
     ["an amount ending a line", "the price is $99", "the price is \\$99"],
   ])("escapes %s", (_label, input, expected) => {
-    expect(preprocessLaTeX(input)).toBe(expected);
+    expect(prepareMathDelimiters(input)).toBe(expected);
   });
 
   // Both in one line is the case a delimiter-only rule cannot get right.
   it("separates a price from real math on the same line", () => {
-    expect(preprocessLaTeX("Costs $5, and $x^2$ is the formula")).toBe(
+    expect(prepareMathDelimiters("Costs $5, and $x^2$ is the formula")).toBe(
       "Costs \\$5, and $$x^2$$ is the formula",
     );
   });
@@ -54,7 +55,7 @@ describe("preprocessLaTeX", () => {
     ["a price then a variable", "Item A ($5) and Item B ($x)."],
     ["a price then a variable in a ratio", "Rates: ($5)/($x) per unit."],
   ])("does not promote %s", (_label, input) => {
-    expect(preprocessLaTeX(input)).not.toContain("$$");
+    expect(prepareMathDelimiters(input)).not.toContain("$$");
   });
 
   // Rule 2 alone would pair these: the closing candidate is pinned against
@@ -66,13 +67,13 @@ describe("preprocessLaTeX", () => {
     ["a comma", "Compare $HOME,$PATH ordering."],
     ["a semicolon", "Try $FOO;$BAR in one line."],
   ])("does not promote across %s", (_label, input) => {
-    expect(preprocessLaTeX(input)).not.toContain("$$");
+    expect(prepareMathDelimiters(input)).not.toContain("$$");
   });
 
   // A number closed by a `$` is a formula, not a price, so the currency pass
   // has to stand down for it.
   it("promotes a numeric formula that closes on a dollar", () => {
-    expect(preprocessLaTeX("The answer is $42$ exactly.")).toBe(
+    expect(prepareMathDelimiters("The answer is $42$ exactly.")).toBe(
       "The answer is $$42$$ exactly.",
     );
   });
@@ -82,11 +83,11 @@ describe("preprocessLaTeX", () => {
   // formula. Declining to promote leaves the span as the literal text instead.
   it("declines to promote under an unclosed display delimiter", () => {
     const input = "Save $$ when $x$ is high.";
-    expect(preprocessLaTeX(input)).toBe(input);
+    expect(prepareMathDelimiters(input)).toBe(input);
   });
 
   it("resumes promoting in the next paragraph", () => {
-    expect(preprocessLaTeX("Save $$ today.\n\nThen $x$ holds.")).toBe(
+    expect(prepareMathDelimiters("Save $$ today.\n\nThen $x$ holds.")).toBe(
       "Save $$ today.\n\nThen $$x$$ holds.",
     );
   });
@@ -97,18 +98,18 @@ describe("preprocessLaTeX", () => {
     ["an inline code span", "use `$5` verbatim"],
     ["text with no dollars", "just a sentence"],
   ])("leaves %s unchanged", (_label, input) => {
-    expect(preprocessLaTeX(input)).toBe(input);
+    expect(prepareMathDelimiters(input)).toBe(input);
   });
 
   // Upstream drops an unterminated fence, which is the normal state of a reply
   // that is still streaming — its contents would be rewritten mid-render.
   it("protects a fence that has not closed yet", () => {
     const input = "```py\nprice = $5\ncmd = $HOME$PATH";
-    expect(preprocessLaTeX(input)).toBe(input);
+    expect(prepareMathDelimiters(input)).toBe(input);
   });
 
   it("rewrites math that follows a closed code block", () => {
-    expect(preprocessLaTeX("```\n$5\n```\n\n$x^2$")).toBe(
+    expect(prepareMathDelimiters("```\n$5\n```\n\n$x^2$")).toBe(
       "```\n$5\n```\n\n$$x^2$$",
     );
   });
@@ -120,6 +121,93 @@ describe("preprocessLaTeX", () => {
     ["ce", "$\\ce{H2O}$ is water", "$$\\ce{H2O}$$ is water"],
     ["pu", "mass $\\pu{123 kg}$ here", "mass $$\\pu{123 kg}$$ here"],
   ])("leaves a \\%s command's backslash alone", (_label, input, expected) => {
-    expect(preprocessLaTeX(input)).toBe(expected);
+    expect(prepareMathDelimiters(input)).toBe(expected);
+  });
+});
+
+// The case-by-case suites above pin the shapes that were reported; this pins the
+// rule they are all instances of. It generates documents from atoms that mix
+// every code form with every math form, and asserts that the text of each code
+// node survives the rewrite byte for byte.
+//
+// It earns its place twice over. It caught the reported bug at the third
+// document when run against the delimiter-regex implementation this replaced,
+// and it is the only check on the offset remapping in `shiftRegions` — a
+// region list that is subtly off shifts a rewrite into a code span, and no
+// hand-written case would happen to sit at the wrong offset.
+describe("prepareMathDelimiters code safety", () => {
+  const ATOMS = [
+    "prose about things",
+    "$x$",
+    "$x^2 + y$",
+    "\\[ a^2 \\]",
+    "\\(b_1\\)",
+    "costs $5",
+    "$1,250.50",
+    "$HOME/$USER",
+    "`inline $x$ and \\[y\\]`",
+    "``dbl $x$ \\[y\\]``",
+    "```sh\necho $HOME and \\[z\\]\n```",
+    "~~~py\ncost = $x$ and \\[w\\]\n~~~",
+    "$$\nE = mc^2\n$$",
+    "\n\n",
+    " ",
+    "\n",
+  ];
+
+  /** Text of every code and inlineCode node, in document order. */
+  function codeTexts(markdown: string): string[] {
+    const texts: string[] = [];
+    const visit = (node: {
+      type: string;
+      value?: string;
+      children?: unknown;
+    }) => {
+      if (node.type === "code" || node.type === "inlineCode") {
+        texts.push(node.value ?? "");
+      }
+      if (Array.isArray(node.children)) {
+        for (const child of node.children) visit(child);
+      }
+    };
+    visit(fromMarkdown(markdown));
+    return texts;
+  }
+
+  // Fixed seed: a failure has to reproduce on the next run to be worth anything.
+  function makeRandom(seed: number) {
+    let state = seed;
+    return () => {
+      state = (state * 1664525 + 1013904223) % 4294967296;
+      return state / 4294967296;
+    };
+  }
+
+  it("never rewrites the contents of a code node", () => {
+    const random = makeRandom(20260807);
+    let documentsWithCode = 0;
+
+    for (let iteration = 0; iteration < 2000; iteration++) {
+      const parts: string[] = [];
+      const length = 1 + Math.floor(random() * 8);
+      for (let part = 0; part < length; part++) {
+        parts.push(ATOMS[Math.floor(random() * ATOMS.length)]);
+      }
+      const input = parts.join(" ");
+      const before = codeTexts(input);
+
+      if (before.length > 0) documentsWithCode++;
+
+      // Finished path only. The streaming scanner is deliberately approximate —
+      // see the indented-code limitation pinned in response.test.ts.
+      expect({ input, code: codeTexts(prepareMathDelimiters(input)) }).toEqual({
+        input,
+        code: before,
+      });
+    }
+
+    // Guard the generator itself: a corpus that stopped producing code would
+    // make every assertion above vacuous.
+    expect(documentsWithCode).toBeGreaterThan(1000);
   });
 });

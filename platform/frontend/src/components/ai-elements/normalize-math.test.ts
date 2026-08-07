@@ -48,7 +48,22 @@ describe("normalizeMathDelimiters", () => {
     ["text with no math at all", "just a sentence"],
     ["empty brackets", "\\[\\]"],
     ["whitespace-only brackets", "\\[ \\]"],
+    // Shapes the old protected-region regex could not see. It knew only ```
+    // fences and single-backtick spans, so each of these had its delimiters
+    // rewritten inside the code block.
+    ["a tilde fence", "~~~sh\necho \\[x\\] and \\(y\\)\n~~~"],
+    ["an indented code block", "text:\n\n    echo \\[x\\]\n"],
+    ["a double-backtick span", "Run ``a ` \\[x\\]`` verbatim"],
+    ["a four-backtick fence", "````md\n```\n\\[x\\]\n```\n````"],
   ])("leaves %s unchanged", (_label, input) => {
+    expect(normalizeMathDelimiters(input)).toBe(input);
+  });
+
+  // The bracket body is lazy but unanchored, so an opener in prose can pair
+  // with a closer on the far side of a fence. Matches are declined on overlap,
+  // not just on where they start, so the fence's own content survives.
+  it("declines a bracket pair that straddles a code fence", () => {
+    const input = "Prose \\[ start\n\n```sh\necho hi\n```\n\nend \\] here";
     expect(normalizeMathDelimiters(input)).toBe(input);
   });
 

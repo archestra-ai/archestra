@@ -374,27 +374,63 @@ describe("Response dollar-sign safety", () => {
 // exercised because they find code regions differently — a finished reply is
 // parsed, a streaming one is scanned — and a shape can pass in one and fail in
 // the other.
+// Every shape runs against every delimiter form. The dollar and bracket passes
+// used to disagree about what counts as code — the bracket pass knew only ```
+// fences and single-backtick spans — so a tilde fence containing `\[x\]` had
+// its delimiters rewritten while the same fence containing `$x$` was left
+// alone. Both now ask the same module, and this matrix is what holds them to it.
+const MATH_FORMS: Array<[string, string]> = [
+  ["dollar", "$x$"],
+  ["display brackets", "\\[x\\]"],
+  ["inline brackets", "\\(x\\)"],
+];
+
+const CODE_SHAPES: Array<[string, (math: string) => string]> = [
+  ["a fenced block", (m) => `\`\`\`sh\ncost = ${m} and $5\n\`\`\``],
+  [
+    "a fence with a blank line",
+    (m) => `\`\`\`py\na = 1\n\ncost = ${m}\n\`\`\``,
+  ],
+  ["a tilde fence", (m) => `~~~sh\ncost = ${m} and $5\n~~~`],
+  ["an inline span", (m) => `Run \`cost = ${m}\` verbatim.`],
+  ["a double-backtick span", (m) => `Run \`\`cost = ${m}\`\` verbatim.`],
+  [
+    "a longer fence around a shorter one",
+    (m) => `\`\`\`\`md\n\`\`\`\ncost = ${m}\n\`\`\`\n\`\`\`\``,
+  ],
+  ["a fence that has not closed yet", (m) => `\`\`\`py\ncost = ${m} and $5`],
+];
+
 describe.each([
   ["finished", false],
   ["streaming", true],
 ])("Response code-region safety (%s)", (_label, isStreaming) => {
-  it.each([
-    ["a fenced block", "```sh\ncost = $x$ and $5\n```"],
-    ["a fence with a blank line", "```py\na = 1\n\ncost = $x$\n```"],
-    ["a tilde fence", "~~~sh\ncost = $x$ and $5\n~~~"],
-    ["an inline span", "Run `cost = $x$` verbatim."],
-    ["a double-backtick span", "Run ``cost = $x$`` verbatim."],
-    [
-      "a longer fence around a shorter one",
-      "````md\n```\ncost = $x$\n```\n````",
-    ],
-    ["a fence that has not closed yet", "```py\ncost = $x$ and $5"],
-  ])("leaves %s untouched", (_shape, markdown) => {
-    const { container } = renderResponse(markdown, isStreaming);
+  describe.each(MATH_FORMS)("%s math", (_form, math) => {
+    it.each(CODE_SHAPES)("leaves %s untouched", (_shape, build) => {
+      const { container } = renderResponse(build(math), isStreaming);
+      const code = container.querySelector("code");
+
+      expect(code).not.toBeNull();
+      expect(code?.textContent).toContain(math);
+      expect(code?.textContent).not.toContain("$$");
+      expect(code?.textContent).not.toContain("\\$");
+      expect(container.querySelector(".katex")).toBeNull();
+    });
+  });
+});
+
+// Indented code is finished-path only: the streaming scanner works on backtick
+// and tilde runs, and mid-stream a four-space indent is not distinguishable
+// from a deep list continuation without block context. See the known-limitation
+// pin below for what that costs while a reply is still arriving.
+describe.each(
+  MATH_FORMS,
+)("Response code-region safety (indented block, %s)", (_form, math) => {
+  it("leaves an indented code block untouched once the reply is finished", () => {
+    const { container } = renderResponse(`text:\n\n    cost = ${math} and $5`);
     const code = container.querySelector("code");
 
-    expect(code).not.toBeNull();
-    expect(code?.textContent).toContain("$x$");
+    expect(code?.textContent).toContain(math);
     expect(code?.textContent).not.toContain("$$");
     expect(code?.textContent).not.toContain("\\$");
     expect(container.querySelector(".katex")).toBeNull();
@@ -425,6 +461,16 @@ describe("Response known limitations", () => {
   ])("still reads %s as math", (markdown) => {
     const { container } = renderResponse(markdown);
     expect(container.querySelector(".katex")).not.toBeNull();
+  });
+
+  // The streaming scanner has no notion of indented code, so a four-space block
+  // is rewritten for as long as the reply is still arriving and corrects itself
+  // when the parse takes over. Teaching the scanner the rule would need block
+  // context it does not have mid-stream, and a crude four-space test would
+  // suppress math inside nested list items — a live case in this suite.
+  it("still rewrites an indented code block while streaming", () => {
+    const { container } = renderResponse("text:\n\n    cost = $x$\n", true);
+    expect(container.querySelector("code")?.textContent).toContain("$$x$$");
   });
 
   // The closer may not be followed by a letter, which is what stops `$FOO$BAR`

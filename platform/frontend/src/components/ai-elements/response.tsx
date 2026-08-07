@@ -8,8 +8,7 @@ import {
   Streamdown,
 } from "streamdown";
 import { cn } from "@/lib/utils";
-import { normalizeMathDelimiters } from "./normalize-math";
-import { preprocessLaTeX } from "./preprocess-latex";
+import { prepareMathDelimiters } from "./preprocess-latex";
 
 type ResponseProps = ComponentProps<typeof Streamdown> & {
   isStreaming?: boolean;
@@ -132,20 +131,20 @@ export const Response = memo(
     ...props
   }: ResponseProps) => {
     // Streamdown has no preprocess hook, so math delimiters are rewritten on
-    // the way in — `$$` is the only form remark-math parses here. Two passes,
-    // because models emit both and each needs a different trick: dollar math
-    // has to be told apart from prices (preprocess-latex.ts), bracket math has
-    // to be caught before CommonMark eats its backslashes (normalize-math.ts).
-    // Currency first, so it works on the original text.
+    // the way in — `$$` is the only form remark-math parses here. See
+    // preprocess-latex.ts for the passes and the order they run in.
     //
     // `isStreaming` is a dependency, not just an argument: at the end of a
     // stream the last token has already arrived, so `children` is final and
     // unchanged. Without it here the memo never recomputes and the finished
     // reply keeps the streaming pass's cheaper, more approximate code regions.
+    // Any surface that streams must pass it for the same reason it exists: the
+    // finished path parses the whole string, which over 200 incremental updates
+    // of a 13k-char reply measured 2.4s against 33ms for the streaming scan.
     const normalizedChildren = useMemo(
       () =>
         typeof children === "string"
-          ? normalizeMathDelimiters(preprocessLaTeX(children, isStreaming))
+          ? prepareMathDelimiters(children, isStreaming)
           : children,
       [children, isStreaming],
     );

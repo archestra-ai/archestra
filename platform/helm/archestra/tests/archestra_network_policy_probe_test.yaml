@@ -258,7 +258,7 @@ tests:
         documentIndex: 2
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'https://archestra\.ai/docs/platform-environments#network-egress-policies'
+          pattern: 'https://archestra\.ai/docs/platform-deployment#ssrf-protection-for-mcp-server-pods'
         documentIndex: 2
 
   # Helm 4 routes hook output through its structured logger, so a stacked banner
@@ -307,6 +307,12 @@ tests:
       - matchRegex:
           path: spec.containers[0].args[0]
           pattern: 'NETWORK POLICY CHECK INCONCLUSIVE'
+        documentIndex: 1
+      # Unmeasured leaves the same exposure open as unenforced, so this arm
+      # carries the same reference rather than only naming the failed check.
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'https://archestra\.ai/docs/platform-deployment#ssrf-protection-for-mcp-server-pods'
         documentIndex: 1
       # Never tells the operator to discount a result. With no all-clear from the
       # treatment arm, the only line that can accompany this one is the warning,

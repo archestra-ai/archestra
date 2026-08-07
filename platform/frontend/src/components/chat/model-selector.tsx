@@ -625,32 +625,17 @@ export const ModelSelector = memo(function ModelSelector({
     ? providerToLogoProvider[selectedModelProvider]
     : null;
 
-  // Display name for the selected model, plus whether it is small enough to
-  // badge. Resolved together because both come from the same lookup, and the
-  // trigger shows the badge beside the name so the warning survives the picker
-  // being closed.
-  const {
-    displayName: selectedModelDisplayName,
-    isSmall: selectedModelIsSmall,
-  } = useMemo(() => {
+  // Get display name for selected model
+  const selectedModelDisplayName = useMemo(() => {
     for (const provider of availableProviders) {
       const model = modelsByProvider[provider]?.find(
         (m) => m.dbId === selectedModel,
       );
-      if (model) {
-        return {
-          displayName: model.displayName,
-          isSmall: isSmallModel(model.capabilities?.parameterCount ?? null),
-        };
-      }
+      if (model) return model.displayName;
     }
     // Not in the viewer's available models (e.g. a per-user model they can't
-    // access): prefer the server-resolved name over the raw model UUID. No
-    // capabilities to read, so make no size claim.
-    return {
-      displayName: fallbackModelName ?? selectedModel,
-      isSmall: false,
-    };
+    // access): prefer the server-resolved name over the raw model UUID.
+    return fallbackModelName ?? selectedModel;
   }, [selectedModel, availableProviders, modelsByProvider, fallbackModelName]);
 
   const handleSelectModel = (modelValue: string) => {
@@ -768,11 +753,6 @@ export const ModelSelector = memo(function ModelSelector({
                   Best available model
                 </span>
               )}
-              {selectedModelIsSmall && (
-                <span className="shrink-0">
-                  <SmallModelBadge />
-                </span>
-              )}
               {onClear && selectedModel && (
                 <button
                   type="button"
@@ -802,11 +782,6 @@ export const ModelSelector = memo(function ModelSelector({
               <ModelSelectorName className="truncate flex-1 text-left">
                 {selectedModelDisplayName || "Select model"}
               </ModelSelectorName>
-              {selectedModelIsSmall && (
-                <span className="shrink-0">
-                  <SmallModelBadge />
-                </span>
-              )}
               {onClear && selectedModel && (
                 <button
                   type="button"

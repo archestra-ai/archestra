@@ -1,6 +1,7 @@
 import {
   type archestraApiTypes,
   deriveModelSource as deriveModelSourceShared,
+  isSmallModel,
   type ModelSelection,
   type ModelSource,
   pickBestModel,
@@ -306,6 +307,38 @@ export function agentToolsUnavailableForModel(params: {
   if (!selectedModelId) return false;
   const model = models.find((m) => m.dbId === selectedModelId);
   return model?.capabilities?.supportsToolCalling === false;
+}
+
+/**
+ * True when the selected model is small enough that multi-step tool use is
+ * likely to be unreliable, while the selected agent brings tools. Gated on the
+ * agent having tools for the same reason as
+ * {@link agentToolsUnavailableForModel}: size only matters here because the
+ * turn is agentic, and a small model doing plain chat needs no warning.
+ *
+ * Suppressed when the model already reports no tool calling at all — that is
+ * the stronger, more actionable statement, and two chips side by side in the
+ * composer is noise.
+ */
+export function agentToolsUnreliableOnSmallModel(params: {
+  /** Structural subset of the agents-API row (AgentLlmConfig). */
+  agent: { accessAllTools: boolean; tools: readonly unknown[] } | undefined;
+  selectedModelId: string | null | undefined;
+  models: Array<{
+    dbId: string;
+    capabilities?: {
+      parameterCount?: number | null;
+      supportsToolCalling?: boolean | null;
+    } | null;
+  }>;
+}): boolean {
+  const { agent, selectedModelId, models } = params;
+  if (!agent) return false;
+  if (!agent.accessAllTools && agent.tools.length === 0) return false;
+  if (!selectedModelId) return false;
+  const model = models.find((m) => m.dbId === selectedModelId);
+  if (model?.capabilities?.supportsToolCalling === false) return false;
+  return isSmallModel(model?.capabilities?.parameterCount ?? null);
 }
 
 // ===== Model source =====

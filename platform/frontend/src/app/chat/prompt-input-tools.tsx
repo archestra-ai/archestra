@@ -22,6 +22,7 @@ import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
+import { SmallModelNoticeBadge } from "@/components/chat/small-model-notice";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -89,6 +90,12 @@ export interface ChatPromptInputToolsProps {
    * shifts when it toggles.
    */
   toolsUnavailable?: boolean;
+  /**
+   * The selected model is small enough that the agent's tools may be called
+   * unreliably over a multi-step task. Same compact-chip treatment as
+   * {@link toolsUnavailable}, and mutually exclusive with it.
+   */
+  smallModel?: boolean;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
   /**
@@ -148,6 +155,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
+  smallModel = false,
   onResetModelOverride,
   agentRequiresPerUserConnect = false,
   subscriptionConnectRequired = false,
@@ -308,6 +316,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     {toolsUnavailable && (
                       <div className="flex items-center gap-1.5">
                         <NoToolsModelBadge />
+                      </div>
+                    )}
+                    {smallModel && (
+                      <div className="flex items-center gap-1.5">
+                        <SmallModelNoticeBadge />
                       </div>
                     )}
                     {(conversationId || onApiKeyChange) && (
@@ -570,6 +583,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </div>
           )}
           {toolsUnavailable && <NoToolsModelBadge />}
+          {smallModel && <SmallModelNoticeBadge />}
           {tokensUsed > 0 && maxContextLength && (
             <ContextWindowDialog
               breakdown={contextWindow ?? null}

@@ -4,6 +4,14 @@ name: Platform E2E Tests
 # For PRs, add the "run-e2e" label to trigger the full E2E suite on demand.
 # Remove and re-add the label to re-trigger after new commits.
 #
+# The MCP idle-hibernation specs are the one leg that is NOT in either of those
+# runs: a clean serial pass is ~100 minutes, most of it real idle windows, which
+# is not a fair toll on every merge for a feature that ships behind a flag that
+# is off by default. It runs on the nightly schedule, on workflow_dispatch, and
+# on the separate "run-e2e-hibernation" label — which is the one to add on a PR
+# that touches hibernation, since the nightly only ever runs on the default
+# branch and would otherwise first exercise those specs AFTER the merge.
+#
 # Three test environments:
 #   - Lite: the platform as one quickstart-mode container plus WireMock and
 #     Keycloak sidecars (scripts/e2e-lite.sh — the same harness devs run
@@ -79,7 +87,7 @@ jobs:
   platform-e2e-build:
     name: Build ${{ matrix.name }} Image
     runs-on: ${{ matrix.runner }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
     permissions:
       contents: read # Required to checkout the repository and build images for E2E jobs.
       id-token: write # Required for Workload Identity Federation when pushing trusted images.
@@ -343,7 +351,7 @@ jobs:
   platform-e2e-cancel-on-build-failure:
     name: Cancel E2E on build failure
     needs: [platform-e2e-build]
-    if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -380,7 +388,7 @@ jobs:
     # path. Trade-off: if the build fails, this job burns the poll deadline
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
     runs-on: ubuntu-latest
     # Worst case = the 25-min image-poll ceiling (cold build, see
     # image-pull-timeout-seconds below) plus setup and the ~4 min of api-k8s
@@ -484,7 +492,7 @@ jobs:
       # overwrite the run above. Its report is already uploaded, so clear the
       # directory and let the next leg own it.
       - name: Clear blob report for the hibernation leg
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') }}
         run: rm -rf platform/e2e-tests/blob-report/
 
       # The hibernation specs flip the organization-wide idle-hibernation
@@ -505,7 +513,7 @@ jobs:
       # in their titles, so a developer can grep them out for a fast local run.
       - name: Run hibernation E2E tests
         id: e2e-hibernation
-        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation' }}
         continue-on-error: true
         uses: ./.github/actions/run-e2e-tests
         with:
@@ -514,7 +522,7 @@ jobs:
           timeout: "110"
 
       - name: Upload hibernation blob report
-        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e-hibernation') }}
         uses: ./.github/actions/github-upload-artifact
         with:
           name: blob-report-k8s-hibernation
@@ -615,7 +623,7 @@ jobs:
   platform-e2e-lite-tests:
     name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -755,7 +763,7 @@ jobs:
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -1119,7 +1127,7 @@ jobs:
     # `!cancelled()` (not `always()`) so a cancelled upstream still cancels the
     # gate; the event guard keeps it running on merge_group / on-demand runs but
     # reporting skipped (and thus satisfying the ruleset) on ordinary PR pushes.
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # No permissions needed: this job only inspects `needs.*.result`.
@@ -1162,7 +1170,7 @@ jobs:
         platform-e2e-lite-tests,
         platform-quickstart-e2e-tests,
       ]
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' || github.event.label.name == 'run-e2e-hibernation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

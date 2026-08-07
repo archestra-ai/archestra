@@ -22,7 +22,7 @@ export function RumTracker() {
   const { data: session } = useSession();
   const pathname = usePathname();
 
-  const enabled = Boolean(publicConfig?.rum.enabled);
+  const enabled = Boolean(publicConfig?.rum?.enabled);
   const userId = session?.user?.id;
   const isSignedIn = Boolean(userId);
 
@@ -43,9 +43,9 @@ export function RumTracker() {
       rumClient.stop();
       return;
     }
-    rumClient.start({ sampleRate: publicConfig?.rum.sampleRate });
+    rumClient.start({ sampleRate: publicConfig?.rum?.sampleRate });
     return () => rumClient.stop();
-  }, [enabled, isSignedIn, publicConfig?.rum.sampleRate]);
+  }, [enabled, isSignedIn, publicConfig?.rum?.sampleRate]);
 
   // Sign-in detection lives on the RUM client (not the analytics taxonomy)
   // because the analytics call site requires PostHog to be initialized —

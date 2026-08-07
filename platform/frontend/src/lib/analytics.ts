@@ -1,5 +1,6 @@
 import type { RUM_EVENT_ALLOWED_ATTRIBUTES } from "@archestra/shared";
 import posthog from "posthog-js";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; the client no-ops unless RUM is enabled
 import { rumClient } from "@/lib/rum.ee";
 
 /**

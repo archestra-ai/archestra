@@ -75,6 +75,7 @@ import {
   useOrganization,
   useUpdateAuthSettings,
 } from "@/lib/organization.query";
+// biome-ignore lint/style/noRestrictedImports: asserts the dual-licensed RUM teardown; inert without the feature
 import { rumClient } from "@/lib/rum.ee";
 import AuthSettingsPage from "./page";
 

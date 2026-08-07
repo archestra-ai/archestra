@@ -23,6 +23,7 @@ import {
   useOrganization,
   useUpdateAuthSettings,
 } from "@/lib/organization.query";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; reset is a no-op when RUM never started
 import { rumClient } from "@/lib/rum.ee";
 import {
   type AuthSettingsFormValues,

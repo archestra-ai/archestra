@@ -1,5 +1,6 @@
 import posthog from "posthog-js";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+// biome-ignore lint/style/noRestrictedImports: asserts the dual-licensed RUM dual-emit; inert without the feature
 import { rumClient } from "@/lib/rum.ee";
 import { clipErrorMessage, trackEvent } from "./analytics";
 

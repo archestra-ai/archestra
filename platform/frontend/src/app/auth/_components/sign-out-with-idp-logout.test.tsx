@@ -5,6 +5,7 @@ import {
   hasSsoSignInAttempt,
   recordSsoSignInAttempt,
 } from "@/lib/auth/sso-sign-in-attempt";
+// biome-ignore lint/style/noRestrictedImports: asserts the dual-licensed RUM teardown; inert without the feature
 import { rumClient } from "@/lib/rum.ee";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 

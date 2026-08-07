@@ -4,6 +4,7 @@ import { archestraApiSdk } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { clearSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; reset is a no-op when RUM never started
 import { rumClient } from "@/lib/rum.ee";
 
 export function SignOutWithIdpLogout() {

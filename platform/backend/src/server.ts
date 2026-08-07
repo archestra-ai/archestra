@@ -84,6 +84,7 @@ import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";

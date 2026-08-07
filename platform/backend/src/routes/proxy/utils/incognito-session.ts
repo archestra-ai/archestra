@@ -1,4 +1,8 @@
-import { type InteractionSource, TimeInMs } from "@archestra/shared";
+import {
+  INCOGNITO_REDACTED_MARKER,
+  type InteractionSource,
+  TimeInMs,
+} from "@archestra/shared";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   type IncognitoAuditContext,
@@ -27,10 +31,11 @@ import { isLoopbackAddress } from "@/utils/network";
 
 /**
  * Marker persisted in place of conversation content when incognito content
- * cannot be encrypted. The shape is deliberately stable so log surfaces can
- * detect it.
+ * cannot be encrypted. Re-exported from the shared module so the UI matches on
+ * the same shape, and so it stays distinguishable from the LOCKED sentinel —
+ * this one means "never stored", not "stored and recoverable".
  */
-export const INCOGNITO_REDACTED_MARKER = { __redacted: "incognito" } as const;
+export { INCOGNITO_REDACTED_MARKER };
 
 /**
  * How this request's audit content must be stored.

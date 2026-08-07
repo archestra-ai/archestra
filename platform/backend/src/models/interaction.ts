@@ -28,12 +28,9 @@ import {
 import {
   decryptInteractionContent,
   encryptInteractionContent,
+  readInteractionRow,
 } from "@/content-encryption/audit-rows";
 import type { IncognitoAuditContext } from "@/content-encryption/incognito";
-import {
-  decryptInteractionRow,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
-} from "@/content-encryption/rows.ee";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -619,7 +616,7 @@ class InteractionModel {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    decryptInteractionRow(interaction);
+    readInteractionRow(interaction);
     // SPDX-SnippetEnd
 
     // Check access control for non-agent admins
@@ -1454,15 +1451,21 @@ class InteractionModel {
       response: unknown;
       type: string;
       created_at: Date;
+      // Selected so readInteractionRow can tell an incognito row from an
+      // ordinary one; without it the guard cannot fire and a DEK envelope
+      // would be handed to the server-key decryptor.
+      incognito_conversation_id: string | null;
     }>(sql`
       WITH ranked AS (
         SELECT
           id, session_id, thread_id, request, response, type, created_at,
+          incognito_conversation_id,
           ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC) as rn
         FROM interactions
         WHERE ${whereClause}
       )
-      SELECT id, session_id, thread_id, request, response, type, created_at
+      SELECT id, session_id, thread_id, request, response, type, created_at,
+             incognito_conversation_id
       FROM ranked
       WHERE rn <= ${INTERACTIONS_PER_SESSION}
       ORDER BY session_id, created_at DESC
@@ -1474,7 +1477,7 @@ class InteractionModel {
     // Raw-SQL rows bypass the model select paths — decrypt before the JS
     // content scanning below.
     for (const row of interactionsResult.rows) {
-      decryptInteractionRow(row);
+      readInteractionRow(row);
     }
     // SPDX-SnippetEnd
 
@@ -1644,7 +1647,7 @@ function reconstructInteractionRequests(
   // Decrypt in place BEFORE delta folding — every list read path funnels
   // through here, and callers keep using the same row objects afterwards.
   for (const row of rows) {
-    decryptInteractionRow(row);
+    readInteractionRow(row);
   }
   // SPDX-SnippetEnd
   return InteractionDeltaManager.reconstructMany(rows);

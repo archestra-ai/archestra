@@ -1,3 +1,5 @@
+import { incognitoLockedContent } from "@archestra/shared";
+import { isContentEnvelope } from "@/utils/crypto";
 import {
   type IncognitoAuditContext,
   type IncognitoContentContext,
@@ -43,6 +45,31 @@ export function encryptMcpToolCallContent<T extends object>(
 ): T {
   if (!audit) return encryptMcpToolCallInsert(values);
   return encryptUnderDek(values, MCP_TOOL_CALL_COLUMN_CONTEXTS, audit);
+}
+
+/**
+ * Read-path counterpart for interaction rows: locked-safe.
+ *
+ * A row belonging to an incognito conversation is keyed to a browser the
+ * server does not have, so its content columns are replaced with the locked
+ * sentinel rather than decrypted — attempting a server-key decrypt on them
+ * throws, and one such row would otherwise 500 an entire logs page. Ordinary
+ * rows decrypt as before.
+ *
+ * Use this at EVERY read site. `decryptInteractionContent` is only for callers
+ * that hold the conversation key.
+ */
+export function readInteractionRow<T extends object>(row: T): T {
+  const lockedTo = lockedConversationId(row);
+  if (lockedTo === null) return decryptInteractionRow(row);
+  return applyLockedSentinel(row, INTERACTION_COLUMN_CONTEXTS, lockedTo);
+}
+
+/** Read-path counterpart for MCP tool-call rows: locked-safe. */
+export function readMcpToolCallRow<T extends object>(row: T): T {
+  const lockedTo = lockedConversationId(row);
+  if (lockedTo === null) return decryptMcpToolCallRow(row);
+  return applyLockedSentinel(row, MCP_TOOL_CALL_COLUMN_CONTEXTS, lockedTo);
 }
 
 /**
@@ -110,6 +137,37 @@ function encryptUnderDek<T extends object>(
   // set together in one place — and in one INSERT, never insert-then-update.
   target.incognitoConversationId = audit.conversationId;
   return values;
+}
+
+/**
+ * The conversation this row's content is keyed to, or null when it is not an
+ * incognito row. Accepts both spellings because raw-SQL reads return
+ * snake_case while Drizzle selects return camelCase — a read site that fed the
+ * wrong one in would silently fall through to a server-key decrypt and throw,
+ * so both are checked here rather than at each call site.
+ */
+function lockedConversationId(row: object): string | null {
+  const target = row as Record<string, unknown>;
+  const value =
+    target.incognitoConversationId ?? target.incognito_conversation_id;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function applyLockedSentinel<T extends object>(
+  row: T,
+  columns: Array<[string, IncognitoContentContext]>,
+  conversationId: string,
+): T {
+  const target = row as Record<string, unknown>;
+  for (const [key] of columns) {
+    // Only columns actually selected, and only ones holding an envelope: a
+    // null column stays null, and the fail-closed redaction marker keeps its
+    // own meaning ("never stored") rather than being relabelled recoverable.
+    if (key in target && isContentEnvelope(target[key])) {
+      target[key] = incognitoLockedContent(conversationId);
+    }
+  }
+  return row;
 }
 
 function decryptUnderDek<T extends object>(

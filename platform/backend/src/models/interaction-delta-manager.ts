@@ -441,17 +441,20 @@ class InteractionDeltaManager {
     }>(sql`
       WITH RECURSIVE chain AS (
         SELECT id, parent_id, thread_id, request_shared_prefix,
-               processed_request_shared_prefix, request, processed_request
+               processed_request_shared_prefix, request, processed_request,
+               incognito_conversation_id
         FROM interactions
         WHERE id IN (${seedList})
         UNION
         SELECT i.id, i.parent_id, i.thread_id, i.request_shared_prefix,
-               i.processed_request_shared_prefix, i.request, i.processed_request
+               i.processed_request_shared_prefix, i.request, i.processed_request,
+               i.incognito_conversation_id
         FROM interactions i
         JOIN chain c ON i.id = c.parent_id
       )
       SELECT id, parent_id, thread_id, request_shared_prefix,
-             processed_request_shared_prefix, request, processed_request
+             processed_request_shared_prefix, request, processed_request,
+             incognito_conversation_id
       FROM chain
     `);
 

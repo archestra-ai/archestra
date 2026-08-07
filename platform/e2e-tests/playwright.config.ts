@@ -20,6 +20,7 @@ const projectNames = {
   identityProviders: "identity-providers",
   api: "api",
   apiK8s: "api-k8s",
+  apiK8sHibernation: "api-k8s-hibernation",
   vaultK8s: "vault-k8s",
 };
 
@@ -83,12 +84,26 @@ const apiTestMatch = [
 // kubectl access (image-pull-secrets), NetworkPolicy enforcement (ssrf,
 // jwt-propagation), or helm-deployed fixture servers (oauth-self-hosted,
 // enterprise-managed). Everything else belongs in apiTestMatch above.
+// Idle hibernation also needs a host cluster but has its own project below:
+// it flips the organization-wide toggle and waits out real idle windows, so
+// it can neither share workers with specs that own MCP servers of their own
+// nor fit the budget this leg is sized for.
 const apiK8sTestMatch = [
   "**/image-pull-secrets.spec.ts",
   "**/mcp-enterprise-managed.ee.spec.ts",
   "**/mcp-gateway-jwt-propagation.ee.spec.ts",
   "**/oauth-self-hosted.spec.ts",
   "**/ssrf-protection.spec.ts",
+];
+
+// Every idle-hibernation spec. Run serially in their own CI leg: one of them
+// turns the organization-wide toggle on to exercise the real sweeper, which
+// would otherwise be free to hibernate a sibling spec's server mid-test.
+const hibernationTestMatch = [
+  "**/mcp-hibernation.spec.ts",
+  "**/mcp-hibernation-capacity.spec.ts",
+  "**/mcp-hibernation-recovery.spec.ts",
+  "**/mcp-hibernation-topology.spec.ts",
 ];
 
 const quickstartTestMatch = [
@@ -267,6 +282,18 @@ export default defineConfig({
       name: projectNames.apiK8s,
       testDir: "./tests",
       testMatch: apiK8sTestMatch,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: dependencies.testProjects,
+    },
+    // Idle hibernation against a real cluster: sweeper, wake, capacity,
+    // topology and administrator recovery.
+    {
+      name: projectNames.apiK8sHibernation,
+      testDir: "./tests",
+      testMatch: hibernationTestMatch,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,

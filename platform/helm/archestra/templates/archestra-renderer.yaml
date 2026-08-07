@@ -14,6 +14,7 @@ neither this Deployment nor the URL.
 */}}
 {{- if and .Values.archestra.renderer.enabled (ne (include "archestra-platform.maintenanceModeEnabled" .) "true") }}
 {{- $rendererPodAnnotations := mergeOverwrite (dict) (.Values.archestra.podAnnotations | default dict) (.Values.archestra.renderer.podAnnotations | default dict) }}
+{{- $rendererResources := .Values.archestra.renderer.resources | default .Values.archestra.resources }}
 {{- if hasKey $rendererPodAnnotations "prometheus.io/scrape" }}
 {{- $rendererPodAnnotations = mergeOverwrite $rendererPodAnnotations (dict "prometheus.io/port" "9000" "prometheus.io/path" "/metrics") }}
 {{- end }}
@@ -82,13 +83,14 @@ spec:
               protocol: TCP
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
+            {{- include "archestra-platform.nodeMemoryEnv" (dict "resources" $rendererResources "containerName" (printf "%s-renderer" .Chart.Name)) | nindent 12 }}
             - name: ARCHESTRA_PROCESS_TYPE
               value: "renderer"
           {{- with .Values.archestra.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with (.Values.archestra.renderer.resources | default .Values.archestra.resources) }}
+          {{- with $rendererResources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}

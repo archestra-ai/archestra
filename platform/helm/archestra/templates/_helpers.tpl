@@ -278,6 +278,33 @@ genuinely missing key loudly at startup.
 {{- end }}
 
 {{/*
+Expose declared memory resources in MiB so the production Node launcher can
+derive a V8 old-space ceiling. Only emit fields that are explicitly configured:
+resourceFieldRef otherwise falls back to node allocatable memory.
+*/}}
+{{- define "archestra-platform.nodeMemoryEnv" -}}
+{{- $resources := .resources | default dict -}}
+{{- $requests := get $resources "requests" | default dict -}}
+{{- $limits := get $resources "limits" | default dict -}}
+{{- if get $requests "memory" }}
+- name: ARCHESTRA_NODE_MEMORY_REQUEST_MIB
+  valueFrom:
+    resourceFieldRef:
+      containerName: {{ .containerName }}
+      resource: requests.memory
+      divisor: 1Mi
+{{- end }}
+{{- if get $limits "memory" }}
+- name: ARCHESTRA_NODE_MEMORY_LIMIT_MIB
+  valueFrom:
+    resourceFieldRef:
+      containerName: {{ .containerName }}
+      resource: limits.memory
+      divisor: 1Mi
+{{- end }}
+{{- end }}
+
+{{/*
 Auth secret name for the Archestra Platform
 */}}
 {{- define "archestra-platform.authSecretName" -}}

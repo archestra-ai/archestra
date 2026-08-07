@@ -25,11 +25,21 @@ export ARCHESTRA_NODE_DIAGNOSTIC_DIR="${ARCHESTRA_NODE_DIAGNOSTIC_DIR:-/app/data
 
 mkdir -p "$ARCHESTRA_NODE_DIAGNOSTIC_DIR"
 
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+node_max_old_space_size_mib=$(
+  "$script_dir/calculate-node-max-old-space-size.sh"
+)
+
 set -- \
   --enable-source-maps \
   --report-on-fatalerror \
   --report-uncaught-exception \
   --diagnostic-dir="$ARCHESTRA_NODE_DIAGNOSTIC_DIR"
+
+if [ -n "$node_max_old_space_size_mib" ]; then
+  echo "Configuring Node old-space limit: ${node_max_old_space_size_mib} MiB"
+  set -- "$@" "--max-old-space-size=${node_max_old_space_size_mib}"
+fi
 
 if [ -n "${ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT:-}" ]; then
   set -- "$@" "--heapsnapshot-near-heap-limit=${ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT}"

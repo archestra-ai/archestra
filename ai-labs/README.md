@@ -351,9 +351,7 @@ averaging it out over more rollouts):
   the `/api/chat` body and the backend forwards it to `streamText` (a provider that can't honor it, e.g. a
   reasoning model, drops it with a warning rather than erroring). The value is recorded in `config.json`.
   This is variance *reduction*, not bitwise determinism — MoE routing and parallel tool-call ordering keep
-  agent runs non-bitwise-stable. For sampling experiments, `ARCHESTRA_BENCH_TEMPERATURE` overrides the
-  pin — a float in `[0, 2]`, or `provider-default` to omit the field so the provider's default applies;
-  `config.json` records the effective value (null = omitted) either way.
+  agent runs non-bitwise-stable.
 - **The remote-MCP tool surface can be pinned** per env. Remote servers add/rename/remove tools over time,
   silently changing the agent's action space; a committed `envs/<id>.mcp.lock` (MCP name → sorted tool
   short-names) snapshots it. On a run, a drift from the lock aborts that env's setup with a per-MCP diff;

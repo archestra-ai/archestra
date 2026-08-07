@@ -55,6 +55,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
 import { cacheManager } from "@/cache-manager";
+import { registerMcpClientHibernationInvalidation } from "@/clients/mcp-client";
 import config, {
   shouldRunRenderer,
   shouldRunWebServer,
@@ -1373,6 +1374,10 @@ const startWebServer = async () => {
     });
 
     startMcpServerRuntime(fastify);
+    // Wire pooled-connection invalidation to hibernation events. Done here —
+    // not at mcp-client module scope — because the manager module sits in an
+    // import cycle with mcp-client.
+    registerMcpClientHibernationInvalidation();
 
     // Start the sandboxed code runtime in the background (non-blocking pre-warm).
     skillSandboxRuntimeService.init().catch((error) => {
@@ -1787,6 +1792,9 @@ const startWorker = async () => {
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
+    // Worker task handlers call MCP servers through mcp-client too — wire its
+    // pooled-connection invalidation to hibernation events (see `start`).
+    registerMcpClientHibernationInvalidation();
     // See the shouldRunWorker branch in `start` — same legacy-index cleanup,
     // for the dedicated worker Deployment.
     void dropLegacyPayloadTrgmIndexes();

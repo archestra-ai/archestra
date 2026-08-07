@@ -3,8 +3,14 @@ import { PassThrough } from "node:stream";
 import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
 // Resolve to this file's model mocks — the adopt tests assert on their calls.
+import { enterpriseTier } from "@/enterprise-tier";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
-import McpServerModel from "@/models/mcp-server";
+import McpServerModel, {
+  MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
+} from "@/models/mcp-server";
+import OrganizationModel from "@/models/organization";
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { McpServer, NetworkPolicy } from "@/types";
 
@@ -100,10 +106,49 @@ vi.mock("@/models/internal-mcp-catalog", () => ({
 }));
 
 vi.mock("@/models/mcp-server", () => ({
+  // Mirrors the real constant — the idle-hibernation sweeper adds it to the
+  // idle window as grace for the throttled last-used stamp. NOT passed
+  // through via importOriginal: the real module's import graph reaches
+  // mcp-client and this runtime, so evaluating it at mock-registration time
+  // caches the REAL McpServerModel into the `@/models` barrel before the
+  // mock exists, un-mocking the model for the module under test. A
+  // drift-guard test below asserts this value against the real constant.
+  MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS: 30_000,
   default: {
     findById: vi.fn().mockResolvedValue(null),
     findByCatalogId: vi.fn().mockResolvedValue([]),
     setDeploymentName: vi.fn().mockResolvedValue(undefined),
+    getLatestUsageAt: vi.fn().mockResolvedValue(null),
+    // Per-install hibernation overrides; "no overrides" by default.
+    getHibernationModes: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+// In-process demand signals consumed by the idle-hibernation sweeper. Defaults
+// mean "no demand"; individual tests override per call.
+vi.mock("@/services/mcp-active-use.ee", () => ({
+  mcpActiveUseTracker: {
+    trackActiveUse: vi.fn(),
+    stamp: vi.fn(),
+    getActiveUseCount: vi.fn(() => 0),
+    getInMemoryLastUsedAt: vi.fn(() => null),
+    remove: vi.fn(),
+  },
+}));
+
+// Several tests below call vi.resetModules(), which rebuilds the graph the
+// dynamically-imported manager pulls in — a real singleton imported statically
+// by this file would then be a different object from the one the code under
+// test uses, and stubbing it would silently do nothing. Mock factories survive
+// the reset, so the enterprise gate is mocked like every other dependency.
+vi.mock("@/enterprise-tier", () => ({
+  enterpriseTier: {
+    isCoreActive: vi.fn(() => true),
+    isKnowledgeBaseActive: vi.fn(() => true),
+    setUserCountForTesting: vi.fn(),
+    refresh: vi.fn().mockResolvedValue(undefined),
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn(),
   },
 }));
 
@@ -123,6 +168,10 @@ vi.mock("@/models/organization", () => ({
       id: "test-org",
       defaultNetworkPolicy: null,
     }),
+    // The organization's idle-hibernation opt-in. Defaulted ON here so the
+    // sweeper tests are about the sweep; the gate has its own tests.
+    getMcpIdleHibernationEnabled: vi.fn().mockResolvedValue(true),
+    getMcpIdleHibernationEnabledSync: vi.fn().mockReturnValue(true),
   },
 }));
 
@@ -170,6 +219,16 @@ vi.mock("./k8s-deployment", () => {
       static collectImagePullSecretNames(): string[] {
         return [];
       }
+      // Mirrors the real annotation check so the manager's direct-read guards
+      // (cache-cold wake, external-scale seizure guard) behave.
+      static hasHibernationAnnotation(deployment: {
+        metadata?: { annotations?: Record<string, string> };
+      }): boolean {
+        return (
+          deployment?.metadata?.annotations?.["archestra.io/hibernated"] ===
+          "true"
+        );
+      }
       // Mirrors the real frozen-first logic: the stored deploymentName wins;
       // the name-derived recompute is only the NULL fallback.
       static constructDeploymentName(
@@ -198,6 +257,27 @@ vi.mock("./k8s-deployment", () => {
     },
     fetchPlatformPodNodeSelector: vi.fn().mockResolvedValue(undefined),
     fetchPlatformPodTolerations: vi.fn().mockResolvedValue(undefined),
+    // The real class, not a stub: the manager distinguishes it from a slow
+    // wake with `instanceof`, so the identity has to match.
+    McpServerDeploymentFailedError: class McpServerDeploymentFailedError extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = "McpServerDeploymentFailedError";
+      }
+    },
+    // Likewise: the wake path tells a full cluster apart from a broken pod by
+    // identity, and re-reports the scheduler's own words to the caller.
+    McpServerUnschedulableError: class McpServerUnschedulableError extends Error {
+      constructor(
+        deploymentName: string,
+        readonly schedulerMessage: string,
+      ) {
+        super(
+          `Deployment ${deploymentName} has a pod the cluster cannot schedule: ${schedulerMessage}`,
+        );
+        this.name = "McpServerUnschedulableError";
+      }
+    },
   };
 });
 
@@ -1469,6 +1549,24 @@ describe("McpServerRuntimeManager", () => {
       expect(mockCreateK8sSecret).toHaveBeenCalledWith({
         SHARED_KEY: "updated-catalog-value",
       });
+
+      cleanup();
+    });
+
+    test("a successful start stamps demand so a just-(re)created deployment gets a full idle window", async () => {
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {},
+        catalogEnvironment: [],
+      });
+
+      await manager.startServer(mcpServer);
+
+      // Without the stamp, a reinstall inherits the row's stale last_used_at
+      // and the sweeper hibernates the fresh pod within seconds
+      // (live-reproduced).
+      expect(vi.mocked(mcpActiveUseTracker.stamp)).toHaveBeenCalledWith(
+        mcpServer.id,
+      );
 
       cleanup();
     });
@@ -2907,5 +3005,1107 @@ describe("McpServerRuntimeManager deployment-state watch layer", () => {
       internals.stopDeploymentStateWatchers();
     }
     expect(manager.deploymentStateWatchersActive).toBe(false);
+  });
+});
+
+describe("McpServerRuntimeManager idle hibernation", () => {
+  type MockHibernationDeployment = {
+    state: string;
+    mcpServer: { id: string; name: string };
+    catalogItem: {
+      id: string;
+      serverType: string;
+      deploymentSpecYaml: string | null;
+      multitenant: boolean;
+    };
+    k8sNamespace: string;
+    k8sDeploymentName: string;
+    readonly statusSummary: { state: string; serverName: string };
+    getCatalogItem: () => Promise<MockHibernationDeployment["catalogItem"]>;
+    syncStateFromSibling: (state: string) => void;
+    hibernate: ReturnType<typeof vi.fn>;
+    beginWake: ReturnType<typeof vi.fn>;
+    completeWake: ReturnType<typeof vi.fn>;
+    refreshState: ReturnType<typeof vi.fn>;
+    readLiveDeployment: ReturnType<typeof vi.fn>;
+    waitForDeploymentReady: ReturnType<typeof vi.fn>;
+    assessWakeImageCache: ReturnType<typeof vi.fn>;
+  };
+
+  type HibernationInternals = {
+    mcpServerIdToDeploymentMap: Map<string, MockHibernationDeployment>;
+    startIdleHibernationSweeper: () => void;
+    sweepIdleDeployments: () => Promise<void>;
+    idleHibernationSweepTimer?: NodeJS.Timeout;
+    idleHibernationSweepInFlight?: Promise<void>;
+    wakeInFlightByPhysicalKey: Map<string, Promise<void>>;
+  };
+
+  /** One sweeper tick: min(window/2, 60)s. */
+  const SWEEP_TICK_MS = 60_000;
+
+  const IDLE_WINDOW_SECONDS = 300;
+  // Idle window + MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS stamp grace.
+  const IDLE_CUTOFF_MS =
+    IDLE_WINDOW_SECONDS * 1000 + MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS;
+
+  /** A live-deployment read the seizure guard accepts: awake, unannotated. */
+  function awakeLiveDeployment() {
+    return {
+      metadata: { annotations: {} },
+      spec: { replicas: 1 },
+      status: { availableReplicas: 1 },
+    };
+  }
+
+  function makeDeployment(
+    overrides: Partial<MockHibernationDeployment> = {},
+  ): MockHibernationDeployment {
+    return {
+      state: "running",
+      mcpServer: { id: "server-1", name: "sleepy-server" },
+      catalogItem: {
+        id: "catalog-1",
+        serverType: "local",
+        deploymentSpecYaml: null,
+        multitenant: false,
+      },
+      k8sNamespace: "test-namespace",
+      k8sDeploymentName: "mcp-sleepy",
+      get statusSummary() {
+        return { state: this.state, serverName: this.mcpServer.name };
+      },
+      async getCatalogItem() {
+        return this.catalogItem;
+      },
+      syncStateFromSibling(state: string) {
+        this.state = state;
+      },
+      hibernate: vi.fn().mockResolvedValue({ hibernated: true }),
+      beginWake: vi.fn().mockResolvedValue(undefined),
+      completeWake: vi.fn().mockResolvedValue(undefined),
+      refreshState: vi.fn().mockResolvedValue(undefined),
+      readLiveDeployment: vi.fn().mockResolvedValue(awakeLiveDeployment()),
+      waitForDeploymentReady: vi.fn().mockResolvedValue(undefined),
+      // Post-hibernate image-cache observability. The real method reports
+      // "could not assess" as null rather than throwing, so the hibernation
+      // outcome never depends on it.
+      assessWakeImageCache: vi.fn().mockResolvedValue(null),
+      ...overrides,
+    };
+  }
+
+  /**
+   * A manager with idle hibernation ON (beta flag on, organization opted in,
+   * licence active, operator kill switch off) and the given idle window. Pass
+   * `{ hardDisabled: true }` for the operator's kill switch or
+   * `{ betaEnabled: false }` for a deployment that does not offer the feature.
+   */
+  async function makeManager(
+    options: {
+      windowSeconds?: number;
+      hardDisabled?: boolean;
+      betaEnabled?: boolean;
+    } = {},
+  ) {
+    const config = (await import("@/config")).default;
+    config.orchestrator.mcpIdleHibernation.windowSeconds =
+      options.windowSeconds ?? IDLE_WINDOW_SECONDS;
+    config.orchestrator.mcpIdleHibernation.hardDisabled =
+      options.hardDisabled ?? false;
+    config.orchestrator.mcpIdleHibernation.betaEnabled =
+      options.betaEnabled ?? true;
+    const managerModule = await import("./manager");
+    const manager = new managerModule.McpServerRuntimeManager();
+    return {
+      manager,
+      internals: manager as unknown as HibernationInternals,
+      McpServerWakeError: managerModule.McpServerWakeError,
+      config,
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    // The feature flags live on the (mocked, file-shared) config object and
+    // several model mocks get sticky implementations here — restore the
+    // factory defaults so a shuffled test order can't leak them.
+    const config = (await import("@/config")).default;
+    config.orchestrator.mcpIdleHibernation.hardDisabled = true;
+    config.orchestrator.mcpIdleHibernation.betaEnabled = false;
+    vi.mocked(OrganizationModel.getMcpIdleHibernationEnabled).mockReset();
+    vi.mocked(OrganizationModel.getMcpIdleHibernationEnabled).mockResolvedValue(
+      true,
+    );
+    vi.mocked(OrganizationModel.getMcpIdleHibernationEnabledSync).mockReset();
+    vi.mocked(
+      OrganizationModel.getMcpIdleHibernationEnabledSync,
+    ).mockReturnValue(true);
+    vi.mocked(McpServerModel.getHibernationModes).mockReset();
+    vi.mocked(McpServerModel.getHibernationModes).mockResolvedValue([]);
+    // clearAllMocks keeps implementations, so an unlicensed instance would
+    // otherwise leak into every later test.
+    vi.mocked(enterpriseTier.isCoreActive).mockReturnValue(true);
+    vi.mocked(McpServerModel.findById).mockReset();
+    vi.mocked(McpServerModel.findById).mockResolvedValue(null);
+    vi.mocked(McpServerModel.findByCatalogId).mockReset();
+    vi.mocked(McpServerModel.findByCatalogId).mockResolvedValue([]);
+    vi.mocked(McpServerModel.getLatestUsageAt).mockReset();
+    vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(null);
+    vi.mocked(mcpActiveUseTracker.getActiveUseCount).mockReset();
+    vi.mocked(mcpActiveUseTracker.getActiveUseCount).mockReturnValue(0);
+    vi.mocked(mcpActiveUseTracker.getInMemoryLastUsedAt).mockReset();
+    vi.mocked(mcpActiveUseTracker.getInMemoryLastUsedAt).mockReturnValue(null);
+  });
+
+  test("the mocked last-used grace constant matches the real one (drift guard)", async () => {
+    // importActual is safe HERE (after the module graph settled with mocks in
+    // place) but not inside the mock factory — see the factory comment.
+    const actual = await vi.importActual<typeof import("@/models/mcp-server")>(
+      "@/models/mcp-server",
+    );
+    expect(actual.MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS).toBe(
+      MCP_SERVER_LAST_USED_REFRESH_INTERVAL_MS,
+    );
+  });
+
+  describe("sweeper", () => {
+    /** One idle-past-cutoff candidate loaded in the map, ready to sweep. */
+    async function makeDeploymentInSweep() {
+      const { manager, internals } = await makeManager();
+      internals.mcpServerIdToDeploymentMap.set("server-1", makeDeployment());
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+      return { manager, internals };
+    }
+
+    test("hibernates a shared deployment idle past window+grace once, syncing every sibling alias, listeners, and durable sessions", async () => {
+      const { manager, internals } = await makeManager();
+      const McpHttpSessionModel = (await import("@/models/mcp-http-session"))
+        .default;
+
+      // Two sibling installs alias ONE physical deployment.
+      const depA = makeDeployment({
+        mcpServer: { id: "sib-a", name: "shared-server" },
+        k8sDeploymentName: "mcp-mt-shared",
+      });
+      const depB = makeDeployment({
+        mcpServer: { id: "sib-b", name: "shared-server" },
+        k8sDeploymentName: "mcp-mt-shared",
+      });
+      internals.mcpServerIdToDeploymentMap.set("sib-a", depA);
+      internals.mcpServerIdToDeploymentMap.set("sib-b", depB);
+
+      vi.mocked(McpServerModel.findById).mockImplementation(
+        async (id) =>
+          ({ id, catalogId: "cat-mt" }) as unknown as Awaited<
+            ReturnType<typeof McpServerModel.findById>
+          >,
+      );
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: "cat-mt",
+        multitenant: true,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValue([
+        { id: "sib-a" },
+        { id: "sib-b" },
+      ] as unknown as Awaited<
+        ReturnType<typeof McpServerModel.findByCatalogId>
+      >);
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+
+      const listener = vi.fn().mockResolvedValue(undefined);
+      manager.registerHibernationListener(listener);
+
+      await internals.sweepIdleDeployments();
+
+      // Physical dedupe: exactly ONE hibernate patch for the shared deployment.
+      expect(depA.hibernate).toHaveBeenCalledTimes(1);
+      expect(depB.hibernate).not.toHaveBeenCalled();
+      // Every loaded sibling alias transitions, not only the patched object.
+      expect(depA.state).toBe("hibernated");
+      expect(depB.state).toBe("hibernated");
+      // Connection-pool invalidation gets the whole sibling group.
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith(["sib-a", "sib-b"]);
+      // Durable HTTP sessions dropped for every sibling.
+      expect(
+        vi
+          .mocked(McpHttpSessionModel.deleteByMcpServerId)
+          .mock.calls.map((c) => c[0]),
+      ).toEqual(expect.arrayContaining(["sib-a", "sib-b"]));
+      expect(manager.isDeploymentDormant("sib-a")).toBe(true);
+      expect(manager.isDeploymentDormant("sib-b")).toBe(true);
+    });
+
+    test("an actively-used deployment is skipped before any query runs", async () => {
+      const { internals } = await makeDeploymentInSweep();
+      const deployment = internals.mcpServerIdToDeploymentMap.get("server-1");
+      vi.mocked(mcpActiveUseTracker.getActiveUseCount).mockReturnValue(1);
+
+      await internals.sweepIdleDeployments();
+
+      expect(deployment?.hibernate).not.toHaveBeenCalled();
+      // The sweep ticks over every loaded deployment forever. A server with
+      // work in progress is provably not idle from memory alone, so it must
+      // not cost a sibling-resolution and usage query every time.
+      expect(McpServerModel.findById).not.toHaveBeenCalled();
+      expect(McpServerModel.getLatestUsageAt).not.toHaveBeenCalled();
+    });
+
+    test("a stale sibling alias cannot veto a group the cluster says is running", async () => {
+      const { internals } = await makeManager();
+      // Same physical deployment, two aliases, and only one of them has ever
+      // been refreshed. Map order decided which one the sweep evaluated, so a
+      // never-refreshed alias could keep a genuinely idle group awake forever.
+      const coldAlias = makeDeployment({
+        state: "not_created",
+        mcpServer: { id: "sib-a", name: "shared-server" },
+        k8sDeploymentName: "mcp-mt-shared",
+      });
+      const runningAlias = makeDeployment({
+        mcpServer: { id: "sib-b", name: "shared-server" },
+        k8sDeploymentName: "mcp-mt-shared",
+      });
+      internals.mcpServerIdToDeploymentMap.set("sib-a", coldAlias);
+      internals.mcpServerIdToDeploymentMap.set("sib-b", runningAlias);
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+
+      await internals.sweepIdleDeployments();
+
+      expect(runningAlias.hibernate).toHaveBeenCalledTimes(1);
+      expect(coldAlias.hibernate).not.toHaveBeenCalled();
+    });
+
+    test("keeps a deployment whose last use is within window+grace (persisted stamp)", async () => {
+      const { internals } = await makeManager();
+      const deployment = makeDeployment();
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      // Past the raw window but inside the stamp-throttle grace.
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS + 10_000),
+      );
+
+      await internals.sweepIdleDeployments();
+
+      expect(deployment.hibernate).not.toHaveBeenCalled();
+      expect(deployment.state).toBe("running");
+    });
+
+    test("keeps a deployment whose in-memory watermark is fresh even when the persisted stamp is stale", async () => {
+      const { internals } = await makeManager();
+      const deployment = makeDeployment();
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+      // A failed stamp write can leave the DB stale while the process knows
+      // better — effective last-use is the max of both signals.
+      vi.mocked(mcpActiveUseTracker.getInMemoryLastUsedAt).mockReturnValue(
+        new Date(),
+      );
+
+      await internals.sweepIdleDeployments();
+
+      expect(deployment.hibernate).not.toHaveBeenCalled();
+    });
+
+    test("an active call on ANY sibling blocks hibernation", async () => {
+      const { internals } = await makeManager();
+      const depA = makeDeployment({
+        mcpServer: { id: "sib-a", name: "shared-server" },
+        k8sDeploymentName: "mcp-mt-shared",
+      });
+      internals.mcpServerIdToDeploymentMap.set("sib-a", depA);
+
+      vi.mocked(McpServerModel.findById).mockResolvedValue({
+        id: "sib-a",
+        catalogId: "cat-mt",
+      } as unknown as Awaited<ReturnType<typeof McpServerModel.findById>>);
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: "cat-mt",
+        multitenant: true,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValue([
+        { id: "sib-a" },
+        { id: "sib-b" },
+      ] as unknown as Awaited<
+        ReturnType<typeof McpServerModel.findByCatalogId>
+      >);
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+      // The in-flight call runs on the OTHER sibling.
+      vi.mocked(mcpActiveUseTracker.getActiveUseCount).mockImplementation(
+        (id: string) => (id === "sib-b" ? 1 : 0),
+      );
+
+      await internals.sweepIdleDeployments();
+
+      expect(depA.hibernate).not.toHaveBeenCalled();
+      // The guarded usage read is never reached — the active counter already
+      // decided.
+      expect(McpServerModel.getLatestUsageAt).not.toHaveBeenCalled();
+    });
+
+    test("a usage-lookup DB error skips the deployment this cycle (never hibernate on doubt)", async () => {
+      const { internals } = await makeManager();
+      const deployment = makeDeployment();
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      vi.mocked(McpServerModel.getLatestUsageAt).mockRejectedValue(
+        new Error("connection refused"),
+      );
+
+      await expect(internals.sweepIdleDeployments()).resolves.toBeUndefined();
+
+      expect(deployment.hibernate).not.toHaveBeenCalled();
+      expect(deployment.state).toBe("running");
+    });
+
+    test("a custom-YAML deployment hibernates like any other", async () => {
+      // Previously excluded on the theory that an operator-authored spec owns
+      // its replica count. It doesn't: deploymentSpecYaml is only consumed
+      // when the Deployment is generated, never re-applied on a schedule, and
+      // hibernate records the LIVE replica count — so a spec asking for 3
+      // comes back as 3. Excluding it only denied idle savings to exactly the
+      // heavyweight servers most worth hibernating.
+      const { internals } = await makeManager();
+      const customYaml = makeDeployment({
+        mcpServer: { id: "custom-yaml", name: "custom-yaml-server" },
+        k8sDeploymentName: "mcp-custom-yaml",
+        catalogItem: {
+          id: "catalog-yaml",
+          serverType: "local",
+          deploymentSpecYaml: "kind: Deployment",
+          multitenant: false,
+        },
+      });
+      internals.mcpServerIdToDeploymentMap.set("custom-yaml", customYaml);
+
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+
+      await internals.sweepIdleDeployments();
+
+      expect(customYaml.hibernate).toHaveBeenCalledTimes(1);
+      expect(customYaml.state).toBe("hibernated");
+    });
+
+    test("non-running deployments are never candidates", async () => {
+      const { internals } = await makeManager();
+      const pending = makeDeployment({
+        mcpServer: { id: "pending-server", name: "pending-server" },
+        k8sDeploymentName: "mcp-pending",
+        state: "pending",
+      });
+      const hibernated = makeDeployment({
+        mcpServer: { id: "hibernated-server", name: "hibernated-server" },
+        k8sDeploymentName: "mcp-hibernated",
+        state: "hibernated",
+      });
+      internals.mcpServerIdToDeploymentMap.set("pending-server", pending);
+      internals.mcpServerIdToDeploymentMap.set("hibernated-server", hibernated);
+
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+
+      await internals.sweepIdleDeployments();
+
+      expect(pending.hibernate).not.toHaveBeenCalled();
+      expect(hibernated.hibernate).not.toHaveBeenCalled();
+    });
+
+    test("one sibling pinned to hibernationMode 'disabled' keeps the whole group awake", async () => {
+      const { internals } = await makeManager();
+      const deployment = makeDeployment();
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+      // Siblings share ONE pod, so there is no way to honour a single
+      // install's "keep me awake" without keeping all of them awake.
+      vi.mocked(McpServerModel.getHibernationModes).mockResolvedValue([
+        "inherit",
+        "disabled",
+      ]);
+
+      await internals.sweepIdleDeployments();
+
+      expect(deployment.hibernate).not.toHaveBeenCalled();
+      expect(deployment.state).toBe("running");
+      // Vetoed before the usage query: the answer is already decided.
+      expect(McpServerModel.getLatestUsageAt).not.toHaveBeenCalled();
+    });
+
+    test("'enabled' and 'inherit' modes both sleep while the org toggle is on", async () => {
+      const { internals } = await makeManager();
+      const deployment = makeDeployment();
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+      vi.mocked(McpServerModel.getHibernationModes).mockResolvedValue([
+        "enabled",
+        "inherit",
+      ]);
+
+      await internals.sweepIdleDeployments();
+
+      expect(deployment.hibernate).toHaveBeenCalledTimes(1);
+    });
+
+    test("an inactive enterprise licence stops the sweep dead", async () => {
+      // Idle hibernation is enterprise-licensed. A team that grew past the
+      // small-team allowance without a licence keeps every server awake —
+      // it must never silently keep scaling workloads away.
+      // Unlicensed by either route the gate knows about (no env licence and
+      // a head count past the small-team allowance).
+      vi.mocked(enterpriseTier.isCoreActive).mockReturnValue(false);
+      const { internals } = await makeManager();
+      const deployment = makeDeployment();
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+
+      await internals.sweepIdleDeployments();
+
+      expect(deployment.hibernate).not.toHaveBeenCalled();
+      expect(deployment.state).toBe("running");
+    });
+
+    test("compensation: demand arriving during the hibernate patch wakes the deployment immediately", async () => {
+      const { manager, internals } = await makeManager();
+      const deployment = makeDeployment();
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+      // Three reads in order: the cheap own-server pre-filter, the sibling
+      // group check, then the post-patch re-check. Only the last sees demand.
+      vi.mocked(mcpActiveUseTracker.getInMemoryLastUsedAt)
+        .mockReturnValueOnce(null)
+        .mockReturnValueOnce(null)
+        .mockReturnValueOnce(new Date());
+
+      const ensureAwakeSpy = vi
+        .spyOn(manager, "ensureAwake")
+        .mockResolvedValue(undefined);
+
+      await internals.sweepIdleDeployments();
+
+      expect(deployment.hibernate).toHaveBeenCalledTimes(1);
+      expect(ensureAwakeSpy).toHaveBeenCalledWith("server-1");
+    });
+
+    test("seizure guard: an externally-scaled-to-0 deployment (no annotation) is never annotated", async () => {
+      const { internals } = await makeDeploymentInSweep();
+      const deployment = internals.mcpServerIdToDeploymentMap.get("server-1");
+      // The debounce leaves the cached state "running" for up to 3 refreshes
+      // after an operator scaled to 0 — only the fresh direct read knows.
+      deployment?.readLiveDeployment.mockResolvedValue({
+        metadata: { annotations: {} },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+
+      await internals.sweepIdleDeployments();
+
+      expect(deployment?.hibernate).not.toHaveBeenCalled();
+      expect(deployment?.state).toBe("running");
+    });
+
+    test("seizure guard: an already-annotated or missing live deployment is skipped", async () => {
+      const { internals } = await makeDeploymentInSweep();
+      const deployment = internals.mcpServerIdToDeploymentMap.get("server-1");
+
+      // Another replica hibernated it between our idle check and the patch.
+      deployment?.readLiveDeployment.mockResolvedValue({
+        metadata: { annotations: { "archestra.io/hibernated": "true" } },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      await internals.sweepIdleDeployments();
+      expect(deployment?.hibernate).not.toHaveBeenCalled();
+
+      // Deployment deleted out from under the sweep.
+      deployment?.readLiveDeployment.mockResolvedValue(null);
+      await internals.sweepIdleDeployments();
+      expect(deployment?.hibernate).not.toHaveBeenCalled();
+    });
+
+    test("the operator kill switch installs no sweeper timer at all", async () => {
+      const { internals } = await makeManager({ hardDisabled: true });
+      internals.startIdleHibernationSweeper();
+      expect(internals.idleHibernationSweepTimer).toBeUndefined();
+    });
+
+    test("the beta flag off installs no sweeper timer at all", async () => {
+      const { internals } = await makeManager({ betaEnabled: false });
+      internals.startIdleHibernationSweeper();
+      expect(internals.idleHibernationSweepTimer).toBeUndefined();
+    });
+
+    test("the timer runs while only the org toggle is off, so flipping it on needs no restart", async () => {
+      // The organization toggle is re-read on every tick; latching the timer
+      // on it would mean an administrator turning hibernation on had to wait
+      // for a redeploy before anything ever slept.
+      vi.mocked(
+        OrganizationModel.getMcpIdleHibernationEnabled,
+      ).mockResolvedValue(false);
+      const { manager, internals } = await makeManager();
+      const deployment = makeDeployment();
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+      vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+        new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+      );
+
+      internals.startIdleHibernationSweeper();
+      expect(internals.idleHibernationSweepTimer).toBeDefined();
+
+      await internals.sweepIdleDeployments();
+      expect(deployment.hibernate).not.toHaveBeenCalled();
+      expect(deployment.state).toBe("running");
+
+      // Don't leave a live interval behind for later tests to trip over.
+      await manager.shutdown();
+    });
+
+    test("sweeper ticks at min(window/2, 60)s and shutdown clears the timer and wake map", async () => {
+      vi.useFakeTimers();
+      try {
+        const { manager, internals } = await makeManager();
+        const deployment = makeDeployment();
+        internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+        vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+          new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+        );
+
+        internals.startIdleHibernationSweeper();
+        expect(internals.idleHibernationSweepTimer).toBeDefined();
+
+        // window/2 = 150s caps at 60s.
+        await vi.advanceTimersByTimeAsync(59_000);
+        expect(deployment.hibernate).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(deployment.hibernate).toHaveBeenCalledTimes(1);
+
+        internals.mcpServerIdToDeploymentMap.clear();
+        internals.wakeInFlightByPhysicalKey.set(
+          "test-namespace/mcp-sleepy",
+          Promise.resolve(),
+        );
+        await manager.shutdown();
+        expect(internals.idleHibernationSweepTimer).toBeUndefined();
+        expect(internals.wakeInFlightByPhysicalKey.size).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test("a sweep that never settles releases the in-flight guard so a later tick sweeps again", async () => {
+      vi.useFakeTimers();
+      try {
+        const { manager, internals } = await makeManager();
+        // biome-ignore lint/style/noRestrictedImports: the sweep deadline under test is enterprise-licensed
+        const { SWEEP_DEADLINE_MS } = await import("./hibernation.ee");
+        // The first sweep hangs on its very first await; later ones are normal.
+        vi.mocked(OrganizationModel.getMcpIdleHibernationEnabled)
+          .mockReturnValueOnce(new Promise<boolean>(() => {}))
+          .mockResolvedValue(true);
+        const deployment = makeDeployment();
+        internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+        vi.mocked(McpServerModel.getLatestUsageAt).mockResolvedValue(
+          new Date(Date.now() - IDLE_CUTOFF_MS - 60_000),
+        );
+
+        internals.startIdleHibernationSweeper();
+
+        // The first tick starts the sweep that never settles, and every tick
+        // after it is skipped while the guard is held: without a deadline this
+        // is where hibernation stops platform-wide until a restart.
+        await vi.advanceTimersByTimeAsync(SWEEP_TICK_MS * 2);
+        expect(
+          OrganizationModel.getMcpIdleHibernationEnabled,
+        ).toHaveBeenCalledTimes(1);
+        expect(internals.idleHibernationSweepInFlight).toBeDefined();
+        expect(deployment.hibernate).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(SWEEP_DEADLINE_MS + SWEEP_TICK_MS);
+
+        expect(internals.idleHibernationSweepInFlight).toBeUndefined();
+        // A later tick sweeps for real: the abandoned sweep cost this install
+        // some idle savings, not the feature.
+        expect(deployment.hibernate).toHaveBeenCalledTimes(1);
+        expect(deployment.state).toBe("hibernated");
+
+        internals.mcpServerIdToDeploymentMap.clear();
+        await manager.shutdown();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("ensureAwake", () => {
+    test("fast no-op on a cached running state — no K8s call of any kind", async () => {
+      const { manager, internals } = await makeManager();
+      const deployment = makeDeployment({ state: "running" });
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      await manager.ensureAwake("server-1");
+
+      expect(deployment.refreshState).not.toHaveBeenCalled();
+      expect(deployment.beginWake).not.toHaveBeenCalled();
+      expect(deployment.waitForDeploymentReady).not.toHaveBeenCalled();
+      expect(deployment.completeWake).not.toHaveBeenCalled();
+      expect(manager.isDeploymentDormant("server-1")).toBe(false);
+    });
+
+    test("isDeploymentDormant covers waking as well as hibernated", async () => {
+      const { manager, internals } = await makeManager();
+      internals.mcpServerIdToDeploymentMap.set(
+        "asleep",
+        makeDeployment({ state: "hibernated" }),
+      );
+      internals.mcpServerIdToDeploymentMap.set(
+        "waking",
+        makeDeployment({ state: "waking" }),
+      );
+      internals.mcpServerIdToDeploymentMap.set(
+        "up",
+        makeDeployment({ state: "running" }),
+      );
+
+      // Background paths skip anything not yet serving, so a deployment
+      // mid-wake counts as dormant just like a hibernated one.
+      expect(manager.isDeploymentDormant("asleep")).toBe(true);
+      expect(manager.isDeploymentDormant("waking")).toBe(true);
+      expect(manager.isDeploymentDormant("up")).toBe(false);
+      expect(manager.isDeploymentDormant("never-loaded")).toBe(false);
+    });
+
+    // A cache-cold alias is covered in manager.dormancy.test.ts, which drives
+    // real K8sDeployment objects through the lifecycle instead of hand-building
+    // a state a K8sDeployment cannot actually reach.
+    test("nothing is dormant while idle hibernation is off", async () => {
+      vi.mocked(
+        OrganizationModel.getMcpIdleHibernationEnabledSync,
+      ).mockReturnValue(false);
+      const { manager, internals } = await makeManager();
+      internals.mcpServerIdToDeploymentMap.set(
+        "cold",
+        makeDeployment({ state: "not_created" }),
+      );
+
+      // Without a sweeper nothing can be asleep, so a cold cache must never
+      // cost a background path the servers it would otherwise refresh.
+      expect(manager.isDeploymentDormant("cold")).toBe(false);
+    });
+
+    test("concurrent callers single-flight onto one wake", async () => {
+      const { manager, internals } = await makeManager();
+      const deployment = makeDeployment({ state: "hibernated" });
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      const first = manager.ensureAwake("server-1");
+      const second = manager.ensureAwake("server-1");
+      await Promise.all([first, second]);
+
+      expect(deployment.refreshState).toHaveBeenCalledTimes(1);
+      expect(deployment.beginWake).toHaveBeenCalledTimes(1);
+      expect(deployment.completeWake).toHaveBeenCalledTimes(1);
+      expect(deployment.state).toBe("running");
+      // The single-flight entry is cleared once the wake settles.
+      expect(internals.wakeInFlightByPhysicalKey.size).toBe(0);
+    });
+
+    test("ready-wait failure throws McpServerWakeError and a later call resumes the wake without a second beginWake", async () => {
+      const { manager, internals, McpServerWakeError } = await makeManager();
+      const deployment = makeDeployment({ state: "hibernated" });
+      deployment.waitForDeploymentReady.mockRejectedValueOnce(
+        new Error("deployment did not become ready"),
+      );
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      const wakeError = await manager.ensureAwake("server-1").then(
+        () => null,
+        (error) => error,
+      );
+      expect(wakeError).toBeInstanceOf(McpServerWakeError);
+      expect(wakeError).toMatchObject({
+        name: "McpServerWakeError",
+        message: expect.stringContaining("sleepy-server"),
+      });
+
+      // completeWake never ran, so the hibernation annotation stays on the
+      // deployment (deliberate: refreshState reports it "waking", keeping the
+      // sweeper away from a half-woken pod), and the cached state returns to
+      // "hibernated" so the next call re-enters the wake path.
+      expect(deployment.completeWake).not.toHaveBeenCalled();
+      expect(deployment.state).toBe("hibernated");
+      expect(internals.wakeInFlightByPhysicalKey.size).toBe(0);
+
+      // Cluster truth on retry: replicas ≥ 1 with the annotation → "waking".
+      deployment.refreshState.mockImplementation(async () => {
+        deployment.state = "waking";
+      });
+
+      await manager.ensureAwake("server-1");
+
+      // Resume path: no second scale-up patch, just wait + completeWake.
+      expect(deployment.beginWake).toHaveBeenCalledTimes(1);
+      expect(deployment.completeWake).toHaveBeenCalledTimes(1);
+      expect(deployment.state).toBe("running");
+    });
+
+    test("a full cluster is retryable, not a failed deployment: the wake rides out Unschedulable and resumes later", async () => {
+      const { manager, internals, McpServerWakeError } = await makeManager();
+      const { McpServerDeploymentFailedError, McpServerUnschedulableError } =
+        await import("./k8s-deployment");
+      const deployment = makeDeployment({ state: "hibernated" });
+      // The mass-wake case: a fleet that went to sleep together asks the
+      // scheduler for every pod back at once and the cluster runs out of room.
+      const schedulerMessage =
+        "0/3 nodes are available: 3 Insufficient memory.";
+      deployment.waitForDeploymentReady.mockRejectedValueOnce(
+        new McpServerUnschedulableError("mcp-sleepy", schedulerMessage),
+      );
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      const wakeError = await manager.ensureAwake("server-1").then(
+        () => null,
+        (error) => error,
+      );
+
+      // Riding out Unschedulable is what makes the capacity case survivable:
+      // a first install fails fast on it after ~20s, which on a wake would
+      // brand a full-but-healthy cluster a deployment defect.
+      expect(deployment.waitForDeploymentReady).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.any(Number),
+        { waitOutUnschedulablePods: true },
+      );
+      expect(wakeError).toBeInstanceOf(McpServerWakeError);
+      expect(wakeError).not.toBeInstanceOf(McpServerDeploymentFailedError);
+      // Retryable AND diagnosable: "retry shortly" with no reason is
+      // indistinguishable from a wake hung on something nobody is fixing.
+      expect(wakeError.message).toContain("no free capacity");
+      expect(wakeError.message).toContain(schedulerMessage);
+
+      // Nothing is marked broken: completeWake never ran, so the hibernation
+      // annotation stays put, and the cache goes back to "hibernated" so the
+      // next demand re-enters the wake instead of trusting a half-woken pod.
+      expect(deployment.completeWake).not.toHaveBeenCalled();
+      expect(deployment.state).toBe("hibernated");
+      expect(internals.wakeInFlightByPhysicalKey.size).toBe(0);
+
+      // Capacity freed: the resumed wake finishes without a second scale-up.
+      deployment.refreshState.mockImplementation(async () => {
+        deployment.state = "waking";
+      });
+      await manager.ensureAwake("server-1");
+
+      expect(deployment.beginWake).toHaveBeenCalledTimes(1);
+      expect(deployment.completeWake).toHaveBeenCalledTimes(1);
+      expect(deployment.state).toBe("running");
+    });
+
+    test("a genuinely broken pod stays terminal — a failed wake is never dressed up as retryable", async () => {
+      const { manager, internals, McpServerWakeError } = await makeManager();
+      const { McpServerDeploymentFailedError } = await import(
+        "./k8s-deployment"
+      );
+      const deployment = makeDeployment({ state: "hibernated" });
+      deployment.waitForDeploymentReady.mockRejectedValueOnce(
+        new McpServerDeploymentFailedError(
+          "Deployment mcp-sleepy failed: CrashLoopBackOff - server exited on boot",
+        ),
+      );
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      const error = await manager.ensureAwake("server-1").then(
+        () => null,
+        (thrown) => thrown,
+      );
+
+      // Telling a caller to "retry shortly" for a pod only an operator can
+      // clear loops forever, so the real failure has to survive the wake path.
+      expect(error).toBeInstanceOf(McpServerDeploymentFailedError);
+      expect(error).not.toBeInstanceOf(McpServerWakeError);
+      expect(deployment.state).toBe("failed");
+      expect(deployment.completeWake).not.toHaveBeenCalled();
+      expect(internals.wakeInFlightByPhysicalKey.size).toBe(0);
+    });
+
+    test("a wake attempt that never settles releases its waiters and frees the slot for a fresh attempt", async () => {
+      vi.useFakeTimers();
+      try {
+        const { manager, internals, McpServerWakeError } = await makeManager();
+        // biome-ignore lint/style/noRestrictedImports: the wake deadline under test is enterprise-licensed
+        const { WAKE_ATTEMPT_DEADLINE_MS } = await import("./hibernation.ee");
+        const deployment = makeDeployment({ state: "hibernated" });
+        // A Kubernetes call that never comes back. The ready-wait's own budget
+        // cannot end this, because the wait itself is what hangs.
+        deployment.waitForDeploymentReady.mockImplementation(
+          () => new Promise<void>(() => {}),
+        );
+        internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+        const firstOutcome = manager.ensureAwake("server-1").then(
+          () => null,
+          (error) => error,
+        );
+        const joined = manager.ensureAwake("server-1").then(
+          () => null,
+          (error) => error,
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(deployment.waitForDeploymentReady).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(WAKE_ATTEMPT_DEADLINE_MS);
+
+        // Every caller parked on the wedged attempt is released, not left
+        // waiting for a promise that will never settle.
+        expect(await firstOutcome).toBeInstanceOf(McpServerWakeError);
+        expect(await joined).toBeInstanceOf(McpServerWakeError);
+        expect(internals.wakeInFlightByPhysicalKey.size).toBe(0);
+
+        // The next demand starts a NEW attempt instead of queueing behind the
+        // wedge — which is the difference between a slow call and a server
+        // that can never be woken again this process.
+        deployment.waitForDeploymentReady.mockResolvedValue(undefined);
+        await manager.ensureAwake("server-1");
+
+        expect(deployment.waitForDeploymentReady).toHaveBeenCalledTimes(2);
+        expect(deployment.completeWake).toHaveBeenCalledTimes(1);
+        expect(deployment.state).toBe("running");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test("a cached 'waking' state takes the slow path and resumes the wake", async () => {
+      const { manager, internals } = await makeManager();
+      // A wake started by another replica (or by a process that died): there
+      // is no in-flight promise to join, so a fast return would leave the
+      // caller talking to a pod that is not up yet.
+      const deployment = makeDeployment({ state: "waking" });
+      internals.mcpServerIdToDeploymentMap.set("server-1", deployment);
+
+      await manager.ensureAwake("server-1");
+
+      expect(deployment.refreshState).toHaveBeenCalledTimes(1);
+      // Resume, not restart: the deployment is already scaled up.
+      expect(deployment.beginWake).not.toHaveBeenCalled();
+      expect(deployment.waitForDeploymentReady).toHaveBeenCalledTimes(1);
+      expect(deployment.completeWake).toHaveBeenCalledTimes(1);
+      expect(deployment.state).toBe("running");
+    });
+
+    test("every sibling alias flips to 'waking' as soon as beginWake lands, not only when the wake finishes", async () => {
+      const { manager, internals } = await makeManager();
+      const depA = makeDeployment({
+        mcpServer: { id: "sib-a", name: "shared-server" },
+        k8sDeploymentName: "mcp-mt-shared",
+        state: "hibernated",
+      });
+      const depB = makeDeployment({
+        mcpServer: { id: "sib-b", name: "shared-server" },
+        k8sDeploymentName: "mcp-mt-shared",
+        state: "hibernated",
+      });
+      internals.mcpServerIdToDeploymentMap.set("sib-a", depA);
+      internals.mcpServerIdToDeploymentMap.set("sib-b", depB);
+
+      vi.mocked(McpServerModel.findById).mockImplementation(
+        async (id) =>
+          ({ id, catalogId: "cat-mt" }) as unknown as Awaited<
+            ReturnType<typeof McpServerModel.findById>
+          >,
+      );
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: "cat-mt",
+        multitenant: true,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValue([
+        { id: "sib-a" },
+        { id: "sib-b" },
+      ] as unknown as Awaited<
+        ReturnType<typeof McpServerModel.findByCatalogId>
+      >);
+
+      // Hold the wake open at the readiness wait so the in-between state is
+      // observable — that window is exactly what the UI renders.
+      let finishReadyWait: () => void = () => {};
+      depA.waitForDeploymentReady.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            finishReadyWait = resolve;
+          }),
+      );
+
+      const wake = manager.ensureAwake("sib-a");
+
+      await vi.waitFor(() => expect(depA.beginWake).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(depB.state).toBe("waking"));
+      expect(depA.state).toBe("waking");
+
+      finishReadyWait();
+      await wake;
+
+      expect(depA.state).toBe("running");
+      expect(depB.state).toBe("running");
+    });
+
+    test("a successful wake stamps the group so the next sweep sees a full idle window", async () => {
+      const { manager, internals } = await makeManager();
+      const deployment = makeDeployment({
+        mcpServer: { id: "sib-a", name: "shared-server" },
+        state: "hibernated",
+      });
+      internals.mcpServerIdToDeploymentMap.set("sib-a", deployment);
+
+      vi.mocked(McpServerModel.findById).mockResolvedValue({
+        id: "sib-a",
+        catalogId: "cat-mt",
+      } as unknown as Awaited<ReturnType<typeof McpServerModel.findById>>);
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue({
+        id: "cat-mt",
+        multitenant: true,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+      vi.mocked(McpServerModel.findByCatalogId).mockResolvedValue([
+        { id: "sib-a" },
+        { id: "sib-b" },
+      ] as unknown as Awaited<
+        ReturnType<typeof McpServerModel.findByCatalogId>
+      >);
+
+      await manager.ensureAwake("sib-a");
+
+      expect(deployment.completeWake).toHaveBeenCalledTimes(1);
+      // The woken deployment gets a full idle window: without the stamp, the
+      // stale pre-hibernation last_used_at would re-hibernate it on the very
+      // next sweep. One stamp is enough for the whole multitenant group —
+      // every idle check takes the MAXIMUM last-used across siblings — and
+      // stamping each one meant a write per install.
+      expect(
+        vi.mocked(mcpActiveUseTracker.stamp).mock.calls.map((c) => c[0]),
+      ).toEqual(["sib-a"]);
+    });
+
+    test("cache-cold wake: a hibernated deployment loaded fresh (state not_created) is still woken from the direct read", async () => {
+      const { manager } = await makeManager();
+      // Fresh lazy K8sDeployment: cached state "not_created", so refreshState
+      // early-returns and says nothing about the cluster.
+      const deployment = makeDeployment({ state: "not_created" });
+      deployment.readLiveDeployment.mockResolvedValue({
+        metadata: { annotations: { "archestra.io/hibernated": "true" } },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      const loadSpy = vi
+        .spyOn(manager, "getOrLoadDeployment")
+        .mockResolvedValue(
+          deployment as unknown as Awaited<
+            ReturnType<typeof manager.getOrLoadDeployment>
+          >,
+        );
+
+      await manager.ensureAwake("cold-1");
+
+      expect(loadSpy).toHaveBeenCalledWith("cold-1");
+      expect(deployment.readLiveDeployment).toHaveBeenCalledTimes(1);
+      expect(deployment.beginWake).toHaveBeenCalledTimes(1);
+      expect(deployment.waitForDeploymentReady).toHaveBeenCalledTimes(1);
+      expect(deployment.completeWake).toHaveBeenCalledTimes(1);
+    });
+
+    test("an ALREADY-LOADED not_created alias is woken too, not trusted as awake", async () => {
+      const { manager, internals } = await makeManager();
+      // The difference from the test above is the map: a multitenant sibling
+      // holds its own K8sDeployment for the shared pod, and that object sits
+      // at "not_created" until something refreshes it. Treating the cached
+      // state as proof the deployment was awake made every wake through this
+      // alias a permanent no-op — the tool call then hit a pod that was gone.
+      const deployment = makeDeployment({ state: "not_created" });
+      deployment.readLiveDeployment.mockResolvedValue({
+        metadata: { annotations: { "archestra.io/hibernated": "true" } },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      internals.mcpServerIdToDeploymentMap.set("alias-1", deployment);
+      const loadSpy = vi.spyOn(manager, "getOrLoadDeployment");
+
+      await manager.ensureAwake("alias-1");
+
+      expect(loadSpy).not.toHaveBeenCalled();
+      expect(deployment.beginWake).toHaveBeenCalledTimes(1);
+      expect(deployment.completeWake).toHaveBeenCalledTimes(1);
+    });
+
+    test("cache-cold read without our annotation is not ours — no wake", async () => {
+      const { manager } = await makeManager();
+      const deployment = makeDeployment({ state: "not_created" });
+      deployment.readLiveDeployment.mockResolvedValue({
+        metadata: { annotations: {} },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      vi.spyOn(manager, "getOrLoadDeployment").mockResolvedValue(
+        deployment as unknown as Awaited<
+          ReturnType<typeof manager.getOrLoadDeployment>
+        >,
+      );
+
+      await manager.ensureAwake("cold-2");
+
+      expect(deployment.beginWake).not.toHaveBeenCalled();
+      expect(deployment.completeWake).not.toHaveBeenCalled();
+    });
+
+    test("cache-cold read with the annotation at replicas >= 1 resumes the half-woken wake", async () => {
+      const { manager } = await makeManager();
+      const deployment = makeDeployment({ state: "not_created" });
+      deployment.readLiveDeployment.mockResolvedValue({
+        metadata: { annotations: { "archestra.io/hibernated": "true" } },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 0 },
+      });
+      vi.spyOn(manager, "getOrLoadDeployment").mockResolvedValue(
+        deployment as unknown as Awaited<
+          ReturnType<typeof manager.getOrLoadDeployment>
+        >,
+      );
+
+      await manager.ensureAwake("cold-3");
+
+      // Resume: no second scale-up patch, straight to wait + completeWake.
+      expect(deployment.beginWake).not.toHaveBeenCalled();
+      expect(deployment.waitForDeploymentReady).toHaveBeenCalledTimes(1);
+      expect(deployment.completeWake).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-27
+lastUpdated: 2026-08-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -426,6 +426,14 @@ Open **LLM → Models**, edit a native-transport model, and set any generation p
 Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the [chat context ring](/docs/platform-chat#context-window-visualizer).
 
 A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama's model API and cannot be detected. If you run a capped server, set `num_ctx` on the model — a request-level value takes precedence.
+
+### Model Size
+
+Ollama reports each model's parameter count. Archestra marks any model under 8B as a **small model**. An 8B build stays unmarked.
+
+The marker shows on the model in the picker. It also shows next to the composer when the agent in that chat brings tools. A 4B model, for example, often calls those tools unreliably over a multi-step task — switch to a larger model for tool-heavy work.
+
+The marker describes size, not quality. No other provider reports a parameter count, so no model outside Ollama carries it.
 
 ### Environment Variables
 

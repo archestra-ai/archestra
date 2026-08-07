@@ -258,7 +258,7 @@ tests:
         documentIndex: 2
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'https://archestra\.ai/docs/platform-environments#network-egress-policies'
+          pattern: 'https://archestra\.ai/docs/platform-deployment#ssrf-protection-for-mcp-server-pods'
         documentIndex: 2
 
   # Helm 4 routes hook output through its structured logger, so a stacked banner

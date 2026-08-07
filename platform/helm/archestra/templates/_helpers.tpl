@@ -613,7 +613,7 @@ args:
       renders on 3 and reaches 4 as a row of escapes. Emoji survive both.
     */}}
     if [ "$result" = reachable ]; then
-      echo "[archestra] 🚨 🚨 🚨  NETWORK POLICY NOT ENFORCED  🚨 🚨 🚨  Environment egress rules (MCP servers, code sandboxes) are accepted and then silently ignored — see https://archestra.ai/docs/platform-environments#network-egress-policies"
+      echo "[archestra] 🚨 🚨 🚨  NETWORK POLICY NOT ENFORCED  🚨 🚨 🚨  Environment egress rules (MCP servers, code sandboxes) are accepted and then silently ignored, so pods reach cloud metadata endpoints and private cluster ranges — see https://archestra.ai/docs/platform-deployment#ssrf-protection-for-mcp-server-pods"
     fi
     exit 0
 {{- end }}

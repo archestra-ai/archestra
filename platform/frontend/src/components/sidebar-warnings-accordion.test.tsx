@@ -138,7 +138,9 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     expect(vi.mocked(useK8sCapabilities)).toHaveBeenCalledWith(false);
   });
 
-  it("links to the network egress policies docs in a new tab", () => {
+  // The SSRF section, not the policy model: it names what an unenforced
+  // cluster exposes and states the enforcing-dataplane prerequisite.
+  it("links to the SSRF protection docs in a new tab", () => {
     setup({ enforcementStatus: "verified-not-enforced" });
 
     const link = screen.getByRole("link", {
@@ -146,7 +148,9 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     });
     expect(link).toHaveAttribute(
       "href",
-      expect.stringContaining("platform-environments#network-egress-policies"),
+      expect.stringContaining(
+        "platform-deployment#ssrf-protection-for-mcp-server-pods",
+      ),
     );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));

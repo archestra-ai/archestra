@@ -137217,6 +137217,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -138216,6 +138247,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -138925,6 +138987,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -139623,6 +139716,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -140321,6 +140445,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -140888,6 +141043,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -141466,6 +141652,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -144004,6 +144221,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -147276,6 +147524,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -147854,6 +148133,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -148432,6 +148742,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -149010,6 +149351,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -149588,6 +149960,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -150166,6 +150569,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -150744,6 +151178,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -151322,6 +151787,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -151889,6 +152385,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -152456,6 +152983,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -153023,6 +153581,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -153601,6 +154190,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -154179,6 +154799,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -156979,6 +157630,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -159774,6 +160456,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -162574,6 +163287,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -163152,6 +163896,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -163966,6 +164741,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -164965,6 +165771,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -165964,6 +166801,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -168077,6 +168945,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -169076,6 +169975,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -169785,6 +170715,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -170483,6 +171444,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -171181,6 +172173,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -171748,6 +172771,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -172326,6 +173380,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -174864,6 +175949,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -178136,6 +179252,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -178714,6 +179861,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -179292,6 +180470,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -179870,6 +181079,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -180448,6 +181688,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -181026,6 +182297,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -181604,6 +182906,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -182182,6 +183515,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -182749,6 +184113,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -183316,6 +184711,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -183883,6 +185309,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -184461,6 +185918,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -185039,6 +186527,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -187839,6 +189358,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -190634,6 +192184,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -193434,6 +195015,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -194012,6 +195624,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -194826,6 +196469,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -195825,6 +197499,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -196824,6 +198529,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -243182,6 +244918,12 @@
                           "toolResult": {
                             "nullable": true
                           },
+                          "incognitoConversationId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "userId": {
                             "nullable": true,
                             "type": "string"
@@ -243220,6 +244962,7 @@
                           "method",
                           "toolCall",
                           "toolResult",
+                          "incognitoConversationId",
                           "userId",
                           "authMethod",
                           "createdAt",
@@ -243598,6 +245341,12 @@
                     "toolResult": {
                       "nullable": true
                     },
+                    "incognitoConversationId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
                     "userId": {
                       "nullable": true,
                       "type": "string"
@@ -243636,6 +245385,7 @@
                     "method",
                     "toolCall",
                     "toolResult",
+                    "incognitoConversationId",
                     "userId",
                     "authMethod",
                     "createdAt",

@@ -227303,11 +227303,9 @@
                             "nullable": true,
                             "type": "boolean"
                           },
-                          "parameterCount": {
+                          "recommendedForAgents": {
                             "nullable": true,
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
+                            "type": "boolean"
                           },
                           "pricePerMillionInput": {
                             "nullable": true,
@@ -227355,7 +227353,7 @@
                           "inputModalities",
                           "outputModalities",
                           "supportsToolCalling",
-                          "parameterCount",
+                          "recommendedForAgents",
                           "pricePerMillionInput",
                           "pricePerMillionOutput",
                           "isCustomPrice",
@@ -228045,11 +228043,9 @@
                           }
                         ]
                       },
-                      "parameterCount": {
+                      "recommendedForAgents": {
                         "nullable": true,
-                        "type": "integer",
-                        "minimum": -9007199254740991,
-                        "maximum": 9007199254740991
+                        "type": "boolean"
                       },
                       "defaultParameters": {
                         "nullable": true,
@@ -228290,7 +228286,7 @@
                       "customPricePerMillionCacheWrite",
                       "ignored",
                       "embeddingDimensions",
-                      "parameterCount",
+                      "recommendedForAgents",
                       "defaultParameters",
                       "configuredParameters",
                       "discoveredViaLlmProxy",
@@ -228842,11 +228838,9 @@
                         }
                       ]
                     },
-                    "parameterCount": {
+                    "recommendedForAgents": {
                       "nullable": true,
-                      "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991
+                      "type": "boolean"
                     },
                     "defaultParameters": {
                       "nullable": true,
@@ -228962,7 +228956,7 @@
                     "customPricePerMillionCacheWrite",
                     "ignored",
                     "embeddingDimensions",
-                    "parameterCount",
+                    "recommendedForAgents",
                     "defaultParameters",
                     "configuredParameters",
                     "discoveredViaLlmProxy",

@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-08-04
+lastUpdated: 2026-08-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -67,6 +67,25 @@ Expand any category to see the largest individual contributors (top tools by sch
 Use **Compact now** in the panel to summarize earlier turns before auto-compaction does it for you. When a compaction frees tokens, a note appears showing how many were recovered. See [Context Compaction](#context-compaction) for how compaction works.
 
 Ollama models often run with a smaller context window than the model architecturally supports. Archestra detects the effective window and sizes the ring to it — see [Ollama Context Window](/docs/platform-supported-llm-providers#context-window).
+
+### Math Rendering
+
+Chat renders LaTeX math in replies. Four delimiter forms work:
+
+| Form | Example | Renders as |
+| --- | --- | --- |
+| `\[ … \]` | `\[ E = mc^2 \]` | A centered formula on its own line |
+| `$$ … $$` | `$$` and `$$` each on their own line | A centered formula on its own line |
+| `\( … \)` | `\(x^2\)` | Inline, inside the sentence |
+| `$ … $` | `$x^2$` | Inline, inside the sentence |
+
+A `$$` pair written inside a line renders inline rather than centered.
+
+Dollar amounts stay text. "The plan costs $5 and the addon $10" renders as written. Chat reads a `$` as a delimiter only when the characters around it look like notation. Shell variables are safe for the same reason — `$HOME` and `$PATH` render as themselves.
+
+Code is never treated as math. A snippet that echoes `$HOME` is shown exactly as the model wrote it.
+
+One idiom loses to the currency rule: `$n$th` stays literal. Write `$n$-th` to render it.
 
 ### File Attachments
 

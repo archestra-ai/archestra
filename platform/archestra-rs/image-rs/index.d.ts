@@ -7,11 +7,7 @@
  * a decompression bomb) or cannot be made to fit. Prefers lossless PNG, falling
  * back to JPEG and progressive downscaling.
  */
-export declare function shrinkImageToFit(
-  input: Buffer,
-  maxBytes: number,
-  maxDimension: number,
-): Promise<ShrunkImage | null>;
+export declare function shrinkImageToFit(input: Buffer, maxBytes: number, maxDimension: number): Promise<ShrunkImage | null>
 
 /**
  * A shrunk image produced by `shrinkImageToFit`. `bytes` is guaranteed to be at
@@ -19,6 +15,6 @@ export declare function shrinkImageToFit(
  * `"image/jpeg"`.
  */
 export interface ShrunkImage {
-  bytes: Buffer;
-  contentType: string;
+  bytes: Buffer
+  contentType: string
 }

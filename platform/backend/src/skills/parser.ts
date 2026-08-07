@@ -81,6 +81,15 @@ export function parseSkillManifest(raw: string): ParsedSkill {
   if (!name) {
     throw new SkillParseError("SKILL.md frontmatter is missing `name`");
   }
+  // the name becomes the sandbox mount root `/skills/<name>`; a name that is
+  // `.` or carries `/` or `..` collapses or escapes that root and makes every
+  // later mount replay-fail, permanently wedging the sandbox. mirror the Rust
+  // `skill_root_path` boundary (archestra-rs/sandbox-core/src/validation.rs).
+  if (name === "." || name.includes("/") || name.includes("..")) {
+    throw new SkillParseError(
+      "SKILL.md `name` must not be `.` or contain `/` or `..`",
+    );
+  }
   if (!description) {
     throw new SkillParseError("SKILL.md frontmatter is missing `description`");
   }
@@ -122,6 +131,24 @@ export function deriveSkillFileKind(path: string): SkillFileKind {
   if (normalized.startsWith("assets/")) return "asset";
   if (normalized.startsWith("references/")) return "reference";
   return /\.(md|mdx|txt|markdown)$/.test(normalized) ? "reference" : "asset";
+}
+
+/**
+ * A skill resource path is safe to persist when it is relative (no leading
+ * `/`), carries no `..` traversal segment, and does not resolve to a directory
+ * — its final segment is neither empty (a trailing slash) nor `.`. A path that
+ * resolves to a directory makes the Rust replay writer's `base64 -d > <path>`
+ * redirect fail on every run, permanently wedging the sandbox. Non-terminal
+ * `.`/empty segments (`a/./b`, `a//b`) normalize to a regular file and are
+ * allowed. Shared by the input schema and the GitHub importer so every
+ * persistence path applies the same boundary.
+ */
+export function isSafeSkillResourcePath(path: string): boolean {
+  if (path.startsWith("/")) return false;
+  const segments = path.split("/");
+  if (segments.some((s) => s === "..")) return false;
+  const last = segments[segments.length - 1];
+  return last !== "" && last !== ".";
 }
 
 // ===== Internal helpers =====

@@ -231,6 +231,36 @@ describe("POST /api/skills", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  test("rejects a resource path that would break the sandbox mount with a 400", async () => {
+    // only paths that traverse or resolve to a directory are rejected.
+    for (const path of ["scripts/", "run.py/.", "../escape", "a/b/"]) {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: MANIFEST,
+          files: [{ path, content: "print(1)" }],
+        },
+      });
+      expect(response.statusCode, `path: ${JSON.stringify(path)}`).toBe(400);
+    }
+  });
+
+  test("accepts a resource path with a non-terminal `.` or `//` alias", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: MANIFEST,
+        files: [
+          { path: "./scripts/run.py", content: "print(1)" },
+          { path: "references//API.md", content: "# API" },
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+  });
+
   test("rejects a manifest larger than the size cap", async () => {
     const response = await ctx.app.inject({
       method: "POST",

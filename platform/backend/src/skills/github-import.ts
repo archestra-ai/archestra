@@ -6,6 +6,7 @@ import logger from "@/logging";
 import type { SkillFileEncoding, SkillFileKind } from "@/types";
 import {
   deriveSkillFileKind,
+  isSafeSkillResourcePath,
   type ParsedSkill,
   parseSkillManifest,
   SKILL_MANIFEST_FILENAME,
@@ -86,8 +87,9 @@ interface ImportedSkill {
   }[];
   /**
    * Resource paths (relative to the skill dir) that were not imported:
-   * oversized files, files beyond the per-skill cap, and files whose fetch
-   * failed. Surfaced to the caller so drops are never silent.
+   * oversized files, files beyond the per-skill cap, files whose fetch failed,
+   * and paths that would not be safe to persist (see `isSafeSkillResourcePath`).
+   * Surfaced to the caller so drops are never silent.
    */
   skippedFiles: string[];
   /** Provenance string, e.g. `owner/repo@main:skills/pdf`. */
@@ -320,7 +322,10 @@ export async function importSkills(params: {
       const fetched = fetchedFiles[cursor];
       cursor += 1;
       const relativePath = plan.toRelative(absolutePath);
-      if (fetched === null) {
+      // git blob paths are structurally clean, but this keeps the importer
+      // behind the same resource-path boundary as create/update so a path that
+      // would wedge the sandbox on replay is never persisted from any source.
+      if (fetched === null || !isSafeSkillResourcePath(relativePath)) {
         plan.skippedFiles.push(relativePath);
         continue;
       }

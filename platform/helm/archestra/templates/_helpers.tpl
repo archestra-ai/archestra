@@ -520,15 +520,16 @@ args:
     done
     printf '%s' "$result" > /dev/termination-log
     {{- /*
-      Silent when the target answers: a working check should cost the operator
-      one line, and that line is the treatment arm's.
+      Silent when the target answers: a healthy release should cost the operator
+      no output at all.
 
-      When the target never answers, the treatment arm is blocked for the same
-      reason and reports enforcement it did not observe — so this says so, and
+      When the target never answers, the treatment arm is blocked for that same
+      reason rather than by any policy, and cannot tell the two apart. This arm
+      is the only one that can, so it reports the run measured nothing — and
       says it without depending on which line Helm printed first.
     */}}
     if [ "$result" = blocked ]; then
-      echo "[archestra] network policy check: INCONCLUSIVE, could not reach {{ .host }}:9000 — disregard any enforcement result reported for this release"
+      echo "[archestra] ⚠️ ⚠️ ⚠️  NETWORK POLICY CHECK INCONCLUSIVE  ⚠️ ⚠️ ⚠️  Could not reach {{ .host }}:9000, so enforcement was never measured — environment egress rules (MCP servers, code sandboxes) may be accepted and then silently ignored. Re-run once the platform is up to get a verdict"
     fi
     exit 0
 {{- end }}
@@ -572,14 +573,20 @@ args:
     fi
     printf '%s' "$result" > /dev/termination-log
     {{- /*
-      One line per outcome: Helm wraps each log record in its own `level=... msg=`
-      envelope, so a multi-line banner would arrive as a column of quoted
-      fragments.
+      Speaks only to warn. Being blocked is also what a target that never came up
+      looks like from inside this pod, so an all-clear here would sometimes
+      announce enforcement nobody measured. The verdict still leaves in the
+      termination message, where the platform resolves it against the control arm
+      and can claim enforcement holding both halves of the evidence.
+
+      One line, because the two supported Helm majors disagree about hook output:
+      Helm 4 routes it through its structured logger, where the whole pod log
+      becomes one `level=... msg="..."` record and every newline arrives as a
+      literal \n, while Helm 3 copies the stream verbatim. A stacked banner
+      renders on 3 and reaches 4 as a row of escapes. Emoji survive both.
     */}}
     if [ "$result" = reachable ]; then
-      echo "[archestra] network policy check: WARNING, network policy not enforced. See https://archestra.ai/docs/platform-environments#network-egress-policies"
-    else
-      echo "[archestra] network policy check: OK, enforcement enabled"
+      echo "[archestra] 🚨 🚨 🚨  NETWORK POLICY NOT ENFORCED  🚨 🚨 🚨  Environment egress rules (MCP servers, code sandboxes) are accepted and then silently ignored — see https://archestra.ai/docs/platform-environments#network-egress-policies"
     fi
     exit 0
 {{- end }}

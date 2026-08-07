@@ -207,11 +207,8 @@ export async function buildAgentSystemPrompt(params: {
     ? buildProjectFilesInstruction(projectFileNames, mcpTools)
     : null;
 
-  // The consult policy lives here rather than only in the delegation tool's
-  // description because models act on system-prompt policy and read tool
-  // descriptions as reference material — with the description alone, tested
-  // models never consult. Keyed off the tool's presence, so any agent that can
-  // reach the Advisor (chat or A2A) gets the policy and no one else does.
+  // Keyed off the tool's presence, so any agent that can reach the Advisor
+  // (chat or A2A) gets the policy and no one else does.
   const advisorConsultInstruction =
     ADVISOR_DELEGATION_TOOL_NAME in mcpTools
       ? archestraMcpBranding.brandBuiltInText(ADVISOR_CONSULT_INSTRUCTION)

@@ -30,7 +30,6 @@ import {
   USER_ID_HEADER,
 } from "@archestra/shared";
 import { context, propagation } from "@opentelemetry/api";
-import { INCOGNITO_KEY_HEADER } from "@/content-encryption/incognito";
 import {
   extractReasoningMiddleware,
   type streamText,
@@ -56,6 +55,7 @@ import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
+import { INCOGNITO_KEY_HEADER } from "@/content-encryption/incognito";
 import logger from "@/logging";
 import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ApiError } from "@/types";

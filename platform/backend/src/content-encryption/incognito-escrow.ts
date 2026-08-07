@@ -84,22 +84,35 @@ export function wrapIncognitoDek(dek: Buffer): IncognitoEscrowBlob {
 
 const MIN_ESCROW_MODULUS_BITS = 2048;
 
-let cachedEscrowKey: KeyObject | null = null;
-let cachedEscrowKeyPem: string | null = null;
+/**
+ * Parses the configured PEM once and re-parses only when it changes. Keyed on
+ * the PEM itself rather than a boolean, so a config change (or a test mutating
+ * the value between cases) is picked up instead of serving a stale key.
+ */
+class EscrowKeyCache {
+  private key: KeyObject | null = null;
+  private pem: string | null = null;
+
+  resolve(): KeyObject | null {
+    const pem = config.chatIncognito.escrowPublicKey;
+    if (!pem) return null;
+    if (this.key && this.pem === pem) return this.key;
+    try {
+      this.key = loadEscrowKey(pem);
+      this.pem = pem;
+      return this.key;
+    } catch {
+      // Invalid key: the boot guard rejects this at startup; treat escrow
+      // as unconfigured rather than half-working if it is somehow reached.
+      return null;
+    }
+  }
+}
+
+const escrowKeyCache = new EscrowKeyCache();
 
 function escrowKeyOrNull(): KeyObject | null {
-  const pem = config.chatIncognito.escrowPublicKey;
-  if (!pem) return null;
-  if (cachedEscrowKey && cachedEscrowKeyPem === pem) return cachedEscrowKey;
-  try {
-    cachedEscrowKey = loadEscrowKey(pem);
-    cachedEscrowKeyPem = pem;
-    return cachedEscrowKey;
-  } catch {
-    // Invalid key: the boot guard rejects this at startup; treat escrow
-    // as unconfigured rather than half-working if it is somehow reached.
-    return null;
-  }
+  return escrowKeyCache.resolve();
 }
 
 function loadEscrowKey(pem: string): KeyObject {

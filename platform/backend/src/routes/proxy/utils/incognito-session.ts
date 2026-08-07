@@ -48,8 +48,15 @@ export type IncognitoAuditDisposition =
   | { kind: "encrypt"; audit: IncognitoAuditContext }
   | { kind: "redact" };
 
-/** TTL for positive incognito lookups; the flag is immutable per conversation. */
-const INCOGNITO_SESSION_CACHE_TTL_MS = TimeInMs.Minute;
+/**
+ * TTL for positive incognito lookups. Everything cached here — the flag, the
+ * key fingerprint, and whether an escrow record exists — is written once at
+ * conversation creation and never mutated, so a longer window cannot go stale.
+ * It matters on the proxy hot path: an agentic turn issues many calls, and
+ * each cache miss is a database round-trip on a request that is already
+ * waiting on a provider.
+ */
+const INCOGNITO_SESSION_CACHE_TTL_MS = 5 * TimeInMs.Minute;
 
 /**
  * Resolve how this proxy request's audit content must be stored.

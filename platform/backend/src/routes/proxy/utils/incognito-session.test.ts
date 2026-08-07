@@ -233,12 +233,12 @@ describe("resolveIncognitoAuditContext", () => {
     const lookup = vi.spyOn(ConversationModel, "getIncognitoAuditInfoOwnedBy");
     const setSpy = vi.spyOn(cacheManager, "set");
 
-    await expect(resolveIncognitoAuditContext(chatParams())).resolves.toMatchObject(
-      { kind: "encrypt" },
-    );
-    await expect(resolveIncognitoAuditContext(chatParams())).resolves.toMatchObject(
-      { kind: "encrypt" },
-    );
+    await expect(
+      resolveIncognitoAuditContext(chatParams()),
+    ).resolves.toMatchObject({ kind: "encrypt" });
+    await expect(
+      resolveIncognitoAuditContext(chatParams()),
+    ).resolves.toMatchObject({ kind: "encrypt" });
 
     expect(lookup).toHaveBeenCalledTimes(1);
     expect(setSpy).toHaveBeenCalledTimes(1);

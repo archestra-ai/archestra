@@ -27,15 +27,15 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import {
-  INCOGNITO_KEY_HEADER,
-  parseIncognitoDekHeader,
-} from "@/content-encryption/incognito";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
+import {
+  INCOGNITO_KEY_HEADER,
+  parseIncognitoDekHeader,
+} from "@/content-encryption/incognito";
 import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,

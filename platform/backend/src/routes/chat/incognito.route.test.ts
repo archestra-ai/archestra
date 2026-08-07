@@ -243,6 +243,52 @@ describe("incognito conversation routes", () => {
   });
 
   describe("GET /api/chat/conversations/:id (incognito)", () => {
+    test.for([
+      [
+        "the feature is turned off",
+        () => {
+          config.chatIncognito.enabled = false;
+        },
+      ],
+      [
+        "the escrow key is removed",
+        () => {
+          config.chatIncognito.escrowPublicKey = undefined;
+        },
+      ],
+    ] as const)("an existing chat is still readable after %s", async ([
+      ,
+      disable,
+    ]) => {
+      // Both settings gate CREATION. Neither may orphan a chat already made:
+      // the browser key is what opens the content, and the row keeps its own
+      // escrow copy no matter what the current configuration says.
+      const id = await createIncognitoConversation();
+      await MessageModel.create(
+        {
+          conversationId: id,
+          role: "user",
+          content: {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "still readable" }],
+          },
+        },
+        { dek, conversationId: id },
+      );
+
+      disable();
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations/${id}`,
+        headers: dekHeader(),
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().contentLocked).toBeUndefined();
+      expect(response.json().messages[0].parts[0].text).toBe("still readable");
+    });
+
     test("decrypts with the key; locked without it; 409 on a wrong key", async () => {
       // Orthogonality pin: this full roundtrip runs on a FREE instance — no
       // enterprise license (beforeEach) and no at-rest content-encryption

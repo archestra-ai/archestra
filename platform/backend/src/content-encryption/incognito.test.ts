@@ -258,6 +258,45 @@ kt2mqWURg9/ZzdQ7GwIDAQAB
     expect(() => verifyIncognitoChatConfig()).not.toThrow();
   });
 
+  test("rotating the escrow key changes the recorded fingerprint, so recovery knows which private key to use", () => {
+    // Rotation is forward-only: rows already written stay wrapped to the key
+    // configured when they were created. The fingerprint on the blob is the
+    // only thing telling a break-glass operator which private key opens which
+    // row, so it has to track the key actually used.
+    const first = wrapIncognitoDek(randomBytes(32));
+
+    const rotated = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    config.chatIncognito.escrowPublicKey = rotated.publicKey.export({
+      type: "spki",
+      format: "pem",
+    }) as string;
+    const second = wrapIncognitoDek(randomBytes(32));
+
+    expect(second.escrowKeyFingerprint).not.toBe(first.escrowKeyFingerprint);
+    // The pre-rotation blob still opens with the pre-rotation private key.
+    expect(() =>
+      privateDecrypt(
+        {
+          key: privateKey,
+          padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING,
+          oaepHash: "sha256",
+        },
+        Buffer.from(first.wrappedDek, "base64"),
+      ),
+    ).not.toThrow();
+    // ...and the rotated key cannot open it.
+    expect(() =>
+      privateDecrypt(
+        {
+          key: rotated.privateKey,
+          padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING,
+          oaepHash: "sha256",
+        },
+        Buffer.from(first.wrappedDek, "base64"),
+      ),
+    ).toThrow();
+  });
+
   test("escrow wrap is independently recoverable with the private key", () => {
     const dek = randomBytes(32);
     const blob = wrapIncognitoDek(dek);

@@ -20,16 +20,16 @@ import {
   sql,
 } from "drizzle-orm";
 import {
-  isContentDecryptionAvailable,
-  isContentEncryptionEnabled,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
-} from "@/content-encryption/index.ee";
-import {
   decryptMcpToolCallContent,
   encryptMcpToolCallContent,
   readMcpToolCallRow,
 } from "@/content-encryption/audit-rows";
 import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import {
+  isContentDecryptionAvailable,
+  isContentEncryptionEnabled,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
+} from "@/content-encryption/index.ee";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -79,10 +79,7 @@ class McpToolCallModel {
       // Spread first: the encrypt helper mutates in place, and callers must
       // keep their plaintext copy (e.g. to build the JSON-RPC response).
       .values(
-        encryptMcpToolCallContent(
-          redactToolCallArguments({ ...data }),
-          audit,
-        ),
+        encryptMcpToolCallContent(redactToolCallArguments({ ...data }), audit),
       )
       .returning();
 

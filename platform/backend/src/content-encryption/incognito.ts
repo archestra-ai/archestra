@@ -1,11 +1,11 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import config from "@/config";
+import type { ConversationContentKey } from "@/types/conversation";
 import {
   decryptStringWithKey,
   encryptStringWithKey,
   isContentEnvelope,
 } from "@/utils/crypto";
-import type { ConversationContentKey } from "@/types/conversation";
 import { isIncognitoEscrowConfigured } from "./incognito-escrow";
 
 /**

@@ -1,17 +1,17 @@
 import { incognitoLockedContent } from "@archestra/shared";
 import { isContentEnvelope } from "@/utils/crypto";
 import {
-  type IncognitoAuditContext,
-  type IncognitoContentContext,
   decryptIncognitoValue,
   encryptIncognitoValue,
+  type IncognitoAuditContext,
+  type IncognitoContentContext,
 } from "./incognito";
-// biome-ignore lint/style/noRestrictedImports: dual-licensed; server-key at-rest encryption is enterprise and is a no-op without it
 import {
   decryptInteractionRow,
   decryptMcpToolCallRow,
   encryptInteractionInsert,
   encryptMcpToolCallInsert,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; server-key at-rest encryption is enterprise and is a no-op without it
 } from "./rows.ee";
 
 /**
@@ -114,12 +114,13 @@ const INTERACTION_COLUMN_CONTEXTS: Array<[string, IncognitoContentContext]> = [
   ["unsafe_context_boundary", "interactions.unsafe_context_boundary"],
 ];
 
-const MCP_TOOL_CALL_COLUMN_CONTEXTS: Array<[string, IncognitoContentContext]> = [
-  ["toolCall", "mcp_tool_calls.tool_call"],
-  ["tool_call", "mcp_tool_calls.tool_call"],
-  ["toolResult", "mcp_tool_calls.tool_result"],
-  ["tool_result", "mcp_tool_calls.tool_result"],
-];
+const MCP_TOOL_CALL_COLUMN_CONTEXTS: Array<[string, IncognitoContentContext]> =
+  [
+    ["toolCall", "mcp_tool_calls.tool_call"],
+    ["tool_call", "mcp_tool_calls.tool_call"],
+    ["toolResult", "mcp_tool_calls.tool_result"],
+    ["tool_result", "mcp_tool_calls.tool_result"],
+  ];
 
 function encryptUnderDek<T extends object>(
   values: T,

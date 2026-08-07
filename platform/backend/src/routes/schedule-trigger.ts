@@ -240,9 +240,19 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
+      // projectId is required by the schema; verify the caller can access it.
+      // Resolved first because the project's pinned agent outranks the org
+      // default for a caller who did not (or could not) pick one.
+      const projectId = body.projectId;
+      const project = await projectService.get({
+        id: projectId,
+        organizationId,
+        userId: user.id,
+      });
+
       // A caller who can pick an agent (`agent:read`) passes one and we verify
       // access; a caller who can't (e.g. a basic-user role) omits it and we fall
-      // back to the org's default agent.
+      // back to the project's default agent, then the org's.
       let agentId: string;
       if (body.agentId) {
         const agent = await AgentModel.findById(
@@ -266,6 +276,9 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
         agentId = agent.id;
+      } else if (project.defaultAgent) {
+        // Already re-validated as a live, org-scoped chat agent by the read.
+        agentId = project.defaultAgent.id;
       } else {
         const defaultAgent = await AgentModel.findDefaultByType({
           organizationId,
@@ -279,14 +292,6 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         agentId = defaultAgent.id;
       }
-
-      // projectId is required by the schema; verify the caller can access it.
-      const projectId = body.projectId;
-      await projectService.get({
-        id: projectId,
-        organizationId,
-        userId: user.id,
-      });
 
       const trigger = await ScheduleTriggerModel.create({
         organizationId,

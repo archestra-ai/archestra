@@ -48,6 +48,10 @@ vi.mock("@/lib/teams/team.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useK8sImagePullSecrets: useK8sImagePullSecretsMock,
+  // Consumed by the create-mode RegistryDuplicateNotice (rendered only when
+  // a page docks it via the footer render prop); an empty catalog keeps it
+  // inert in these enterprise-gating scenarios.
+  useInternalMcpCatalog: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/secrets.query", () => ({
@@ -73,6 +77,8 @@ vi.mock("@/components/environment-variables-form-field", () => ({
   EnvironmentVariablesFormField: () => (
     <div data-testid="environment-variables-form-field" />
   ),
+  EnvFromSection: () => <div data-testid="env-from-section" />,
+  SecretFilesSection: () => <div data-testid="secret-files-section" />,
 }));
 
 vi.mock("@/components/visibility-selector", () => ({
@@ -278,12 +284,17 @@ describe("McpCatalogForm enterprise gating", () => {
     expect(fireEvent.cut(clientSecret)).toBe(false);
   });
 
-  it("shows a disabled default environment selector when no custom environments are available", () => {
+  it("shows a disabled default environment selector when no custom environments are available", async () => {
     vi.mocked(useEnvironments).mockReturnValue({
       data: { environments: [], defaultAssignedCatalogCount: 0 },
     } as never);
 
     render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+
+    // Environment lives in the collapsed "Sharing & placement" section.
+    await userEvent.click(
+      screen.getByRole("button", { name: /Sharing & placement/ }),
+    );
 
     expect(screen.getByText("Environment")).toBeInTheDocument();
     expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
@@ -339,6 +350,9 @@ describe("McpCatalogForm enterprise gating", () => {
         }
       />,
     );
+
+    // Image pull secrets live in the collapsed "Advanced" section.
+    await userEvent.click(screen.getByRole("button", { name: /Advanced/ }));
 
     const imagePullSecretSelect = container.querySelector(
       '[data-slot="popover-trigger"][role="combobox"]',

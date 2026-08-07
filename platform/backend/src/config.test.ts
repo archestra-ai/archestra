@@ -23,6 +23,7 @@ import config, {
   getOtelExporterOtlpEndpoint,
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
+  getRumOtlpAuthHeaders,
   getTrustedOrigins,
   isCodeRuntimeEnabled,
   k8sMemoryQuantityToBytes,
@@ -350,6 +351,48 @@ describe("getOtlpAuthHeaders", () => {
       expect(result).toBeUndefined();
       expect(logger.warn).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("getRumOtlpAuthHeaders", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("reads the RUM-prefixed variables, not the OTEL ones", () => {
+    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER = "otel-token";
+    delete process.env.ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_BEARER;
+
+    expect(getRumOtlpAuthHeaders()).toBeUndefined();
+
+    process.env.ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_BEARER = "rum-token";
+
+    expect(getRumOtlpAuthHeaders()).toEqual({
+      Authorization: "Bearer rum-token",
+    });
+  });
+
+  test("supports basic auth and warns on a partial pair", () => {
+    process.env.ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME = "testuser";
+    process.env.ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD = "testpass";
+
+    expect(getRumOtlpAuthHeaders()).toEqual({
+      Authorization: "Basic dGVzdHVzZXI6dGVzdHBhc3M=",
+    });
+
+    delete process.env.ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD;
+
+    expect(getRumOtlpAuthHeaders()).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "OTEL authentication misconfigured: both ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+    );
   });
 });
 
@@ -1380,6 +1423,58 @@ describe("mcp gateway config", () => {
     const { default: cfg } = await import("./config");
 
     expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(60000);
+  });
+});
+
+describe("rum export config", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    process.env.ARCHESTRA_DATABASE_URL =
+      "postgresql://archestra:pass@localhost:5432/archestra";
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("stays disabled with an empty exporter url when no RUM endpoint is set", async () => {
+    delete process.env.ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.observability.rum).toMatchObject({
+      enabled: false,
+      logExporter: { url: "" },
+    });
+  });
+
+  test("enables the pipeline and normalizes the endpoint to /v1/logs", async () => {
+    process.env.ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT =
+      "https://collector.example";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.observability.rum).toMatchObject({
+      enabled: true,
+      logExporter: { url: "https://collector.example/v1/logs" },
+    });
+  });
+
+  test("never falls back to the backend OTEL exporter endpoint", async () => {
+    // RUM export targets a customer-controlled collector; the backend's own
+    // OTEL endpoint must never become an accidental default for it.
+    delete process.env.ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT;
+    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.example";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.observability.rum).toMatchObject({
+      enabled: false,
+      logExporter: { url: "" },
+    });
   });
 });
 

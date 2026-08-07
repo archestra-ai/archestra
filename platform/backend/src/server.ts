@@ -66,8 +66,8 @@ import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import {
+  dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
-  dropMessagesContentTrgmIndexUnderEncryption,
 } from "@/database/index-maintenance";
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -84,6 +84,8 @@ import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { rumExporter } from "@/observability/rum/exporter.ee";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -1306,6 +1308,8 @@ const startWebServer = async () => {
       logger.warn({ err: error }, "Failed to track instance analytics");
     });
 
+    rumExporter.initialize();
+
     posthogErrorTrackingService.init().catch((error) => {
       logger.warn(
         { err: error },
@@ -1362,7 +1366,7 @@ const startWebServer = async () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      void dropMessagesContentTrgmIndexUnderEncryption();
+      void dropContentTrgmIndexesUnderEncryption();
       // SPDX-SnippetEnd
     }
 
@@ -1621,6 +1625,9 @@ function registerWebServerShutdown(
 
       instanceAnalyticsService.stop();
 
+      // Flush any buffered RUM events before the process exits.
+      await rumExporter.shutdown();
+
       metrics.activeUsers.activeUsersMetricCollector.stop();
 
       const completedCleanups = new Set<
@@ -1727,7 +1734,7 @@ const startWorker = async () => {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    void dropMessagesContentTrgmIndexUnderEncryption();
+    void dropContentTrgmIndexesUnderEncryption();
     // SPDX-SnippetEnd
 
     posthogErrorTrackingService.init().catch((error) => {

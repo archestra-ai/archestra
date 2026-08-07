@@ -58,6 +58,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .nullable()
             .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
+          defaultAgentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(ProjectListItemSchema),
       },
@@ -69,6 +70,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name,
         description: body.description ?? null,
         icon: body.icon ?? null,
+        defaultAgentId: body.defaultAgentId ?? null,
       });
       return {
         id: project.id,
@@ -223,8 +225,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateProject,
         description:
-          "Update a project's name, description, and/or icon (owner or a " +
-          "project admin). Only the provided fields change.",
+          "Update a project's name, description, icon, and/or default agent " +
+          "(owner or a project admin). Only the provided fields change. The " +
+          "default agent must be an organization-wide chat agent; null clears " +
+          "it.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
@@ -235,6 +239,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .nullable()
             .optional(),
           icon: z.string().max(1_000_000).nullable().optional(),
+          defaultAgentId: z.string().uuid().nullable().optional(),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
@@ -247,6 +252,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         name: body.name,
         description: body.description,
         icon: body.icon,
+        defaultAgentId: body.defaultAgentId,
       });
       return { ok: true as const };
     },

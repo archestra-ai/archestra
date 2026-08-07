@@ -1428,6 +1428,11 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicConfig]: {},
+  /**
+   * Ingest product-usage (RUM) events from the web client.
+   * Any authenticated user — every signed-in browser session reports usage.
+   */
+  [RouteId.IngestRumEvents]: {},
   // Public: reports only whether a two-factor sign-in challenge is pending,
   // so the auth pages can redirect when they don't apply. Auth is skipped in
   // middleware for this path.

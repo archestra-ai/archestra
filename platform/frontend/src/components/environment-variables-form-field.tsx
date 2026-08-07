@@ -76,6 +76,12 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
    * and block confirm. Returns an error message, or null when allowed.
    */
   validateValue?: (value: string) => string | null;
+  /**
+   * Render the Secret Files section (the mounted-secret rows of this same
+   * field array). Callers that present secret files elsewhere pass false;
+   * mounted rows stay filtered out of the variables list either way.
+   */
+  showSecretFiles?: boolean;
   /** Optional envFrom field array for injecting env from K8s Secrets/ConfigMaps */
   envFrom?: {
     // biome-ignore lint/suspicious/noExplicitAny: Generic field array types require any for flexibility
@@ -118,17 +124,12 @@ export function EnvironmentVariablesFormField<
   disablePromptOnInstallationReason,
   validateValue,
   envFrom,
+  showSecretFiles = true,
 }: EnvironmentVariablesFormFieldProps<TFieldValues>) {
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
     number | null
   >(null);
   const [envVarDialog, setEnvVarDialog] = useState<
-    { mode: "add" } | { mode: "edit"; index: number } | null
-  >(null);
-  const [envFromDialog, setEnvFromDialog] = useState<
-    { mode: "add" } | { mode: "edit"; index: number } | null
-  >(null);
-  const [secretFileDialog, setSecretFileDialog] = useState<
     { mode: "add" } | { mode: "edit"; index: number } | null
   >(null);
 
@@ -248,212 +249,21 @@ export function EnvironmentVariablesFormField<
         }}
       />
 
-      {/* Environment From k8s Secrets / ConfigMaps Section */}
-      {envFrom && (
-        <div className="space-y-1 mt-6">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-base">
-              Environment From k8s Secrets / ConfigMaps
-            </h3>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEnvFromDialog({ mode: "add" })}
-            >
-              <Plus className="h-4 w-4" />
-              Add Source
-            </Button>
-          </div>
+      {envFrom && <EnvFromSection envFrom={envFrom} />}
 
-          {envFrom.fields.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              No sources configured.
-            </div>
-          ) : (
-            <>
-              <FormDescription className="mb-4 text-xs">
-                Inject all keys from existing k8s Secrets or ConfigMaps as
-                environment variables.
-              </FormDescription>
-              <div>
-                <div className="grid grid-cols-[160px_1fr_1fr_auto] gap-3 border-b py-2.5 px-4 text-xs font-medium text-foreground">
-                  <div>Type</div>
-                  <div>Name</div>
-                  <div>Prefix</div>
-                  <div className="w-9" />
-                </div>
-                {envFrom.fields.map((field, index) => {
-                  const type = envFrom.watch(
-                    `${envFrom.fieldNamePrefix}.${index}.type`,
-                  ) as EnvFromType | undefined;
-                  const name = envFrom.watch(
-                    `${envFrom.fieldNamePrefix}.${index}.name`,
-                  ) as string | undefined;
-                  const prefix = envFrom.watch(
-                    `${envFrom.fieldNamePrefix}.${index}.prefix`,
-                  ) as string | undefined;
-                  return (
-                    // biome-ignore lint/a11y/useSemanticElements: row contains a nested delete <button>
-                    <div
-                      key={field.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setEnvFromDialog({ mode: "edit", index })}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setEnvFromDialog({ mode: "edit", index });
-                        }
-                      }}
-                      className="group grid grid-cols-[160px_1fr_1fr_auto] gap-3 items-center border-b py-3 px-4 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <div className="text-muted-foreground">
-                        {type === "configMap" ? "ConfigMap" : "Secret"}
-                      </div>
-                      <div className="min-w-0 truncate font-mono">
-                        {name || (
-                          <span className="text-muted-foreground italic">
-                            unnamed
-                          </span>
-                        )}
-                      </div>
-                      <div className="min-w-0 truncate font-mono text-muted-foreground">
-                        {prefix || <span className="italic">—</span>}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="opacity-60 group-hover:opacity-100"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          envFrom.remove(index);
-                        }}
-                        aria-label="Remove source"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-
-          <EnvFromDialog
-            open={envFromDialog !== null}
-            mode={envFromDialog?.mode === "edit" ? "edit" : "add"}
-            initial={
-              envFromDialog?.mode === "edit"
-                ? readEnvFromRowAsDraft(envFrom, envFromDialog.index)
-                : null
-            }
-            onClose={() => setEnvFromDialog(null)}
-            onConfirm={(draft) => {
-              if (envFromDialog?.mode === "add") {
-                envFrom.append(draft);
-              } else if (envFromDialog?.mode === "edit") {
-                applyEnvFromDraftToRow(envFrom, envFromDialog.index, draft);
-              }
-              setEnvFromDialog(null);
-            }}
-          />
-        </div>
-      )}
-
-      {/* Secret Files Section */}
-      <div className="space-y-1 mt-6">
-        <div className="flex items-center justify-between">
-          <FormLabel>Secret Files</FormLabel>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setSecretFileDialog({ mode: "add" })}
-          >
-            <Plus className="h-4 w-4" />
-            Add Secret File
-          </Button>
-        </div>
-        {(() => {
-          const secretFileIndices = fields
-            .map((_, index) => index)
-            .filter((index) => {
-              const mounted = form.watch(
-                `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
-              );
-              return mounted === true;
-            });
-
-          if (secretFileIndices.length === 0) {
-            return (
-              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                No secret files configured.
-              </div>
-            );
-          }
-
-          return (
-            <>
-              <FormDescription className="mb-4 text-xs">
-                Secrets mounted as files at /secrets/&lt;key&gt;.
-              </FormDescription>
-              <EnvironmentVariablesReadOnlyTable
-                form={form}
-                fields={fields}
-                rowIndexes={secretFileIndices}
-                fieldNamePrefix={fieldNamePrefix}
-                useExternalSecretsManager={useExternalSecretsManager}
-                secretKeysWithStoredValue={secretKeysWithStoredValue}
-                showType={false}
-                keyLabel="File"
-                removeAriaLabel="Remove secret file"
-                onEdit={(index) => setSecretFileDialog({ mode: "edit", index })}
-                onDelete={(index) => remove(index)}
-              />
-            </>
-          );
-        })()}
-
-        <SecretFileDialog
-          open={secretFileDialog !== null}
-          mode={secretFileDialog?.mode === "edit" ? "edit" : "add"}
-          initial={
-            secretFileDialog?.mode === "edit"
-              ? readSecretFileRowAsDraft(
-                  form,
-                  fieldNamePrefix,
-                  secretFileDialog.index,
-                )
-              : null
-          }
-          existingKeys={readOtherSecretFileKeys(
-            form,
-            fieldNamePrefix,
-            fields,
-            secretFileDialog?.mode === "edit" ? secretFileDialog.index : null,
-          )}
-          secretKeysWithStoredValue={secretKeysWithStoredValue}
+      {showSecretFiles && (
+        <SecretFilesSection
+          form={form}
+          fields={fields}
+          append={append}
+          remove={remove}
+          fieldNamePrefix={fieldNamePrefix}
           useExternalSecretsManager={useExternalSecretsManager}
-          disableInstallation={disablePromptOnInstallation}
-          disableInstallationReason={disablePromptOnInstallationReason}
-          onClose={() => setSecretFileDialog(null)}
-          onConfirm={(draft) => {
-            if (secretFileDialog?.mode === "add") {
-              (append as (value: unknown) => void)(secretFileDraftToRow(draft));
-            } else if (secretFileDialog?.mode === "edit") {
-              applySecretFileDraftToRow(
-                form,
-                fieldNamePrefix,
-                secretFileDialog.index,
-                draft,
-              );
-            }
-            setSecretFileDialog(null);
-          }}
+          secretKeysWithStoredValue={secretKeysWithStoredValue}
+          disablePromptOnInstallation={disablePromptOnInstallation}
+          disablePromptOnInstallationReason={disablePromptOnInstallationReason}
         />
-      </div>
+      )}
 
       {/* External Secret Selection Dialog */}
       <ExternalSecretDialog
@@ -556,6 +366,254 @@ function applyDraftToRow<TFieldValues extends FieldValues>(
   set("promptOnInstallation", draft.scope === "installation");
   set("required", draft.scope === "installation" ? draft.required : false);
   set("description", draft.description);
+}
+
+/**
+ * Standalone "Environment From k8s Secrets / ConfigMaps" section — the
+ * same field-array UI whether rendered inline by
+ * EnvironmentVariablesFormField or placed elsewhere (e.g. an Advanced
+ * panel) by the caller.
+ */
+export function EnvFromSection({ envFrom }: { envFrom: EnvFromApi }) {
+  const [envFromDialog, setEnvFromDialog] = useState<
+    { mode: "add" } | { mode: "edit"; index: number } | null
+  >(null);
+  return (
+    <div className="space-y-1 mt-6">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-base">
+          Environment From k8s Secrets / ConfigMaps
+        </h3>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setEnvFromDialog({ mode: "add" })}
+        >
+          <Plus className="h-4 w-4" />
+          Add Source
+        </Button>
+      </div>
+
+      {envFrom.fields.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          No sources configured.
+        </div>
+      ) : (
+        <>
+          <FormDescription className="mb-4 text-xs">
+            Inject all keys from existing k8s Secrets or ConfigMaps as
+            environment variables.
+          </FormDescription>
+          <div>
+            <div className="grid grid-cols-[160px_1fr_1fr_auto] gap-3 border-b py-2.5 px-4 text-xs font-medium text-foreground">
+              <div>Type</div>
+              <div>Name</div>
+              <div>Prefix</div>
+              <div className="w-9" />
+            </div>
+            {envFrom.fields.map((field, index) => {
+              const type = envFrom.watch(
+                `${envFrom.fieldNamePrefix}.${index}.type`,
+              ) as EnvFromType | undefined;
+              const name = envFrom.watch(
+                `${envFrom.fieldNamePrefix}.${index}.name`,
+              ) as string | undefined;
+              const prefix = envFrom.watch(
+                `${envFrom.fieldNamePrefix}.${index}.prefix`,
+              ) as string | undefined;
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: row contains a nested delete <button>
+                <div
+                  key={field.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setEnvFromDialog({ mode: "edit", index })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setEnvFromDialog({ mode: "edit", index });
+                    }
+                  }}
+                  className="group grid grid-cols-[160px_1fr_1fr_auto] gap-3 items-center border-b py-3 px-4 text-xs last:border-b-0 cursor-pointer hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div className="text-muted-foreground">
+                    {type === "configMap" ? "ConfigMap" : "Secret"}
+                  </div>
+                  <div className="min-w-0 truncate font-mono">
+                    {name || (
+                      <span className="text-muted-foreground italic">
+                        unnamed
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 truncate font-mono text-muted-foreground">
+                    {prefix || <span className="italic">—</span>}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="opacity-60 group-hover:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      envFrom.remove(index);
+                    }}
+                    aria-label="Remove source"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <EnvFromDialog
+        open={envFromDialog !== null}
+        mode={envFromDialog?.mode === "edit" ? "edit" : "add"}
+        initial={
+          envFromDialog?.mode === "edit"
+            ? readEnvFromRowAsDraft(envFrom, envFromDialog.index)
+            : null
+        }
+        onClose={() => setEnvFromDialog(null)}
+        onConfirm={(draft) => {
+          if (envFromDialog?.mode === "add") {
+            envFrom.append(draft);
+          } else if (envFromDialog?.mode === "edit") {
+            applyEnvFromDraftToRow(envFrom, envFromDialog.index, draft);
+          }
+          setEnvFromDialog(null);
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * Standalone "Secret Files" section: the mounted-secret rows of the same
+ * environment field array, mounted as files at /secrets/<key>.
+ */
+export function SecretFilesSection<TFieldValues extends FieldValues>({
+  form,
+  fields,
+  append,
+  remove,
+  fieldNamePrefix,
+  useExternalSecretsManager = false,
+  secretKeysWithStoredValue,
+  disablePromptOnInstallation = false,
+  disablePromptOnInstallationReason,
+}: Pick<
+  EnvironmentVariablesFormFieldProps<TFieldValues>,
+  | "form"
+  | "fields"
+  | "append"
+  | "remove"
+  | "fieldNamePrefix"
+  | "useExternalSecretsManager"
+  | "secretKeysWithStoredValue"
+  | "disablePromptOnInstallation"
+  | "disablePromptOnInstallationReason"
+>) {
+  const [secretFileDialog, setSecretFileDialog] = useState<
+    { mode: "add" } | { mode: "edit"; index: number } | null
+  >(null);
+  return (
+    <div className="space-y-1 mt-6">
+      <div className="flex items-center justify-between">
+        <FormLabel>Secret Files</FormLabel>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setSecretFileDialog({ mode: "add" })}
+        >
+          <Plus className="h-4 w-4" />
+          Add Secret File
+        </Button>
+      </div>
+      {(() => {
+        const secretFileIndices = fields
+          .map((_, index) => index)
+          .filter((index) => {
+            const mounted = form.watch(
+              `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
+            );
+            return mounted === true;
+          });
+
+        if (secretFileIndices.length === 0) {
+          return (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              No secret files configured.
+            </div>
+          );
+        }
+
+        return (
+          <>
+            <FormDescription className="mb-4 text-xs">
+              Secrets mounted as files at /secrets/&lt;key&gt;.
+            </FormDescription>
+            <EnvironmentVariablesReadOnlyTable
+              form={form}
+              fields={fields}
+              rowIndexes={secretFileIndices}
+              fieldNamePrefix={fieldNamePrefix}
+              useExternalSecretsManager={useExternalSecretsManager}
+              secretKeysWithStoredValue={secretKeysWithStoredValue}
+              showType={false}
+              keyLabel="File"
+              removeAriaLabel="Remove secret file"
+              onEdit={(index) => setSecretFileDialog({ mode: "edit", index })}
+              onDelete={(index) => remove(index)}
+            />
+          </>
+        );
+      })()}
+
+      <SecretFileDialog
+        open={secretFileDialog !== null}
+        mode={secretFileDialog?.mode === "edit" ? "edit" : "add"}
+        initial={
+          secretFileDialog?.mode === "edit"
+            ? readSecretFileRowAsDraft(
+                form,
+                fieldNamePrefix,
+                secretFileDialog.index,
+              )
+            : null
+        }
+        existingKeys={readOtherSecretFileKeys(
+          form,
+          fieldNamePrefix,
+          fields,
+          secretFileDialog?.mode === "edit" ? secretFileDialog.index : null,
+        )}
+        secretKeysWithStoredValue={secretKeysWithStoredValue}
+        useExternalSecretsManager={useExternalSecretsManager}
+        disableInstallation={disablePromptOnInstallation}
+        disableInstallationReason={disablePromptOnInstallationReason}
+        onClose={() => setSecretFileDialog(null)}
+        onConfirm={(draft) => {
+          if (secretFileDialog?.mode === "add") {
+            (append as (value: unknown) => void)(secretFileDraftToRow(draft));
+          } else if (secretFileDialog?.mode === "edit") {
+            applySecretFileDraftToRow(
+              form,
+              fieldNamePrefix,
+              secretFileDialog.index,
+              draft,
+            );
+          }
+          setSecretFileDialog(null);
+        }}
+      />
+    </div>
+  );
 }
 
 type EnvFromApi = NonNullable<

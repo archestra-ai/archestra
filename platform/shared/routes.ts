@@ -57,6 +57,9 @@ export const RouteId = {
   GetConfig: "getConfig",
   GetPublicConfig: "getPublicConfig",
 
+  // RUM Routes
+  IngestRumEvents: "ingestRumEvents",
+
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
   GetAuthState: "getAuthState",

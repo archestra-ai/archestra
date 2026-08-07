@@ -61,6 +61,13 @@ describe("config routes", () => {
           host: expect.any(String),
         },
       },
+      // The test env sets no ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT, so the
+      // opt-in RUM pipeline must report itself concretely off here — an
+      // always-true regression would silently turn client telemetry on.
+      rum: {
+        enabled: false,
+        sampleRate: 1,
+      },
     });
 
     const cachedResponse = await app.inject({

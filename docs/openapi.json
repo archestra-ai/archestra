@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.28"
+    "version": "1.3.29"
   },
   "components": {
     "schemas": {
@@ -118823,6 +118823,22 @@
                         "posthog"
                       ],
                       "additionalProperties": false
+                    },
+                    "rum": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "sampleRate": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "sampleRate"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -118834,7 +118850,8 @@
                     "siteNotificationMessage",
                     "enterpriseCoreActive",
                     "mcpSandboxDomain",
-                    "analytics"
+                    "analytics",
+                    "rum"
                   ],
                   "additionalProperties": false
                 }
@@ -280223,6 +280240,12 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 1000000
+                  },
+                  "defaultAgentId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
@@ -281472,6 +281495,25 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "defaultAgent": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -281489,7 +281531,8 @@
                     "createdAt",
                     "deletedAt",
                     "shareTeamIds",
-                    "shareUserIds"
+                    "shareUserIds",
+                    "defaultAgent"
                   ],
                   "additionalProperties": false
                 }
@@ -281737,7 +281780,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Update a project's name, description, and/or icon (owner or a project admin). Only the provided fields change.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
+        "description": "Update a project's name, description, icon, and/or default agent (owner or a project admin). Only the provided fields change. The default agent must be an organization-wide chat agent; null clears it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
         "requestBody": {
           "required": true,
           "content": {
@@ -281759,6 +281802,12 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 1000000
+                  },
+                  "defaultAgentId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 }
               }
@@ -282767,6 +282816,25 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "defaultAgent": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -282784,7 +282852,8 @@
                     "createdAt",
                     "deletedAt",
                     "shareTeamIds",
-                    "shareUserIds"
+                    "shareUserIds",
+                    "defaultAgent"
                   ],
                   "additionalProperties": false
                 }
@@ -328110,6 +328179,357 @@
           "permissions": [
             "identityProvider:delete"
           ]
+        }
+      }
+    },
+    "/api/rum/events": {
+      "post": {
+        "operationId": "ingestRumEvents",
+        "tags": [
+          "RUM"
+        ],
+        "description": "Ingest a batch of product-usage (RUM) events from the web client. Events are forwarded as OTLP log records to the deployment-configured collector; when no RUM export endpoint is configured the batch is acknowledged and dropped.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "events": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "enum": [
+                            "session.start",
+                            "archestra.session.heartbeat",
+                            "archestra.page_view",
+                            "browser.web_vital",
+                            "archestra.page_load",
+                            "archestra.long_task",
+                            "archestra.client_error",
+                            "archestra.api_request",
+                            "archestra.interaction",
+                            "archestra.user_authenticated",
+                            "archestra.onboarding_completed",
+                            "archestra.mcp_server_installed",
+                            "archestra.mcp_server_uninstalled",
+                            "archestra.mcp_server_installation_cancelled",
+                            "archestra.mcp_server_installation_failed",
+                            "archestra.knowledge_base_connector_installation_failed",
+                            "archestra.message_sent",
+                            "archestra.message_queued",
+                            "archestra.prompt_selected",
+                            "archestra.skill_created",
+                            "archestra.file_uploaded"
+                          ]
+                        },
+                        "timestampMs": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "sessionId": {
+                          "type": "string",
+                          "minLength": 8,
+                          "maxLength": 64
+                        },
+                        "previousSessionId": {
+                          "type": "string",
+                          "minLength": 8,
+                          "maxLength": 64
+                        },
+                        "attributes": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 500
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "timestampMs",
+                        "sessionId"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "events"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "accepted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },

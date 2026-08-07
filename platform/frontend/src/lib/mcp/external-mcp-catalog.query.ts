@@ -58,6 +58,31 @@ export function useMcpRegistryServersInfinite(
   });
 }
 
+// Quiet enrichment search behind the create form's catalog auto-fill. Errors
+// stay silent by design (no toast, error state ignored by the caller): a
+// broken catalog must never disrupt manual server creation.
+export function useCatalogTemplateCandidates(term: string | null) {
+  return useQuery({
+    queryKey: ["archestra-catalog", "template-candidates", term],
+    enabled: term !== null,
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<
+      archestraCatalogTypes.ArchestraMcpServerManifest[]
+    > => {
+      const { data, error } = await archestraCatalogSdk.searchMcpServerCatalog({
+        query: {
+          q: term ?? undefined,
+          limit: 10,
+          sortBy: "stars",
+          worksInArchestra: true,
+        },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.servers ?? [];
+    },
+  });
+}
+
 export function useMcpRegistryServer(serverName: string | null) {
   return useQuery({
     queryKey: ["archestra-catalog", "server-details", serverName],

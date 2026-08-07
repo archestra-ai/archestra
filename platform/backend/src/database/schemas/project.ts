@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import agentsTable from "./agent";
 import { softDeletablePgTable } from "./soft-deletable-table";
 import { team } from "./team";
 import usersTable from "./user";
@@ -49,6 +50,17 @@ const projectsTable = softDeletablePgTable(
     description: text("description"),
     /** Emoji character or base64-encoded image data URL, like agents/catalog. */
     icon: text("icon"),
+    /**
+     * Org-scoped chat agent preselected for new chats and scheduled tasks
+     * started in this project; null falls through to the organization default.
+     * Restricted to `scope: "org"` agents so every member of a shared project
+     * can use it, and re-validated on read: agents soft-delete, so SET NULL
+     * never fires, and an agent rescoped away from `org` leaves a pin that
+     * still points at a live row the members can no longer see.
+     */
+    defaultAgentId: uuid("default_agent_id").references(() => agentsTable.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   },

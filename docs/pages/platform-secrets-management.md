@@ -39,22 +39,7 @@ See [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](./platform-deployment#authentication
 
 ## Content Encryption at Rest (Enterprise)
 
-> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
-
-Beyond stored secrets, Archestra can encrypt conversation content at rest: LLM proxy request/response payloads (the LLM Logs records) and chat message bodies. Set `ARCHESTRA_CONTENT_ENCRYPTION_SECRET` — a key separate from the stored-secrets key, so a security team can hold it in their own vault and map it to the environment variable at deploy time. Encryption and decryption are transparent; rows written before enablement are encrypted by a background sweep.
-
-Two behaviors change while encryption is on:
-
-- Conversation search matches titles only — message bodies are ciphertext.
-- OTel spans stop carrying message/tool content by default — the [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](./platform-deployment#observability--metrics) default flips to `false` so plaintext content does not reach the telemetry backend while the database copies are encrypted. An explicit `true` re-enables capture (see the [observability docs](./platform-observability)) and logs a startup warning.
-
-**Enabling on a running deployment** takes two rollouts, so replicas never mix encrypted writes with readers that lack the key: first deploy with the key in `ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS` (decrypt-capable everywhere, writes unchanged), then move it to `ARCHESTRA_CONTENT_ENCRYPTION_SECRET`. After the second rollout finishes, run `pnpm --filter backend db:reencrypt-content` once: replicas that had not yet restarted during the rollout may have written a few plaintext rows behind the background sweep, and an explicit run always re-verifies the full table.
-
-**Rotating the key** is the same shape: add the new key as `..._PREVIOUS` and roll out, swap the two variables and roll out again, let the background sweep re-encrypt (or run `pnpm --filter backend db:reencrypt-content`), then drop `..._PREVIOUS`.
-
-**Plan disk headroom before enabling.** Plaintext JSONB payloads compress inside PostgreSQL (typically ~1.5–2×); ciphertext does not, and carries a further ~33% base64 overhead. Expect the `interactions` and `messages` tables to roughly **double** on disk once encrypted, with additional transient bloat while autovacuum reclaims the pre-encryption row versions, and a WAL/backup burst on the order of the final encrypted size while the sweep runs. Size the database volume for at least 2.5× the current combined size of those tables before enabling.
-
-On every startup Archestra verifies the configured key against previously encrypted content and aborts on a mismatch or a missing key. Unlike stored secrets, there is deliberately no accept-new-key override: chat history cannot be re-entered. Disabling encryption after enabling it is not currently supported.
+Beyond stored secrets, Archestra can encrypt conversation and tool content at rest: LLM Logs records, chat message bodies, and MCP tool call arguments and results. See [Content Encryption at Rest](./platform-content-encryption) for coverage, enablement, and key rotation.
 
 ## HashiCorp Vault
 

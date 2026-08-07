@@ -588,6 +588,7 @@ describe("KbChunkModel", () => {
       const results = await KbChunkModel.fullTextSearch({
         connectorIds: [connector.id],
         queryText: "Katze",
+        languages: await KbChunkModel.getTextSearchLanguages([connector.id]),
         userAcl: ["org:*"],
       });
 
@@ -619,10 +620,94 @@ describe("KbChunkModel", () => {
       const results = await KbChunkModel.fullTextSearch({
         connectorIds: [connector.id],
         queryText: "Katze",
+        languages: await KbChunkModel.getTextSearchLanguages([connector.id]),
         userAcl: ["org:*"],
       });
 
       expect(results).toHaveLength(0);
+    });
+
+    test("a mixed-language corpus matches under every configuration present", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const german = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        ftsLanguage: "german",
+      });
+      const english = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const germanDoc = await KbDocumentModel.create(
+        createDocumentData(german.id, org.id),
+      );
+      const englishDoc = await KbDocumentModel.create(
+        createDocumentData(english.id, org.id),
+      );
+
+      await KbChunkModel.insertMany([
+        {
+          documentId: germanDoc.id,
+          content: "Die laufenden Katzen springen",
+          chunkIndex: 0,
+          ftsLanguage: "german",
+          acl: ["org:*"],
+        },
+        {
+          documentId: englishDoc.id,
+          content: "The running cats jumped",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      const connectorIds = [german.id, english.id];
+      const languages = await KbChunkModel.getTextSearchLanguages(connectorIds);
+      expect([...languages].sort()).toEqual(["english", "german"]);
+
+      // The German query form only matches under German stemming, and the
+      // search still reaches it while spanning an English connector too.
+      const results = await KbChunkModel.fullTextSearch({
+        connectorIds,
+        queryText: "Katze",
+        languages,
+        userAcl: ["org:*"],
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toBe("Die laufenden Katzen springen");
+      expect(results[0].score).toBeGreaterThan(0);
+    });
+
+    test("falls back to the default configuration when no languages are given", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "The running cats jumped",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      const results = await KbChunkModel.fullTextSearch({
+        connectorIds: [connector.id],
+        queryText: "running",
+        userAcl: ["org:*"],
+      });
+
+      expect(results).toHaveLength(1);
     });
 
     test("the contextual header is searchable alongside the chunk", async ({

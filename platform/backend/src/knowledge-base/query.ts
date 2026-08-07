@@ -1,4 +1,4 @@
-import { addNomicTaskPrefix } from "@archestra/shared";
+import { addNomicTaskPrefix, type TextSearchLanguage } from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
@@ -80,11 +80,14 @@ class QueryService {
     // across several has no single connector to name.
     const connectorId = connectorIds.length === 1 ? connectorIds[0] : null;
 
-    const expandedQueries = await expandQuery({
-      queryText,
-      organizationId,
-      connectorId,
-    });
+    // Resolved once and passed down: the keyword search needs the languages as
+    // bound parameters to keep its tsquery index-eligible (see fullTextSearch).
+    const [expandedQueries, searchLanguages] = await Promise.all([
+      expandQuery({ queryText, organizationId, connectorId }),
+      hybridEnabled
+        ? KbChunkModel.getTextSearchLanguages(connectorIds)
+        : Promise.resolve([]),
+    ]);
 
     const perQueryResults = await Promise.all(
       expandedQueries.map((eq) =>
@@ -99,6 +102,7 @@ class QueryService {
           environmentId,
           type: eq.type,
           hybridEnabled,
+          searchLanguages,
         }),
       ),
     );
@@ -212,6 +216,7 @@ class QueryService {
     environmentId?: string | null;
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
+    searchLanguages: TextSearchLanguage[];
   }): Promise<VectorSearchResult[]> {
     const {
       queryText,
@@ -224,6 +229,7 @@ class QueryService {
       environmentId,
       type,
       hybridEnabled,
+      searchLanguages,
     } = params;
 
     // queryText is user content — payloads only at debug.
@@ -288,6 +294,7 @@ class QueryService {
       ? KbChunkModel.fullTextSearch({
           connectorIds,
           queryText,
+          languages: searchLanguages,
           limit,
           userAcl,
           bypassAcl,

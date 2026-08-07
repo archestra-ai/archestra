@@ -6,7 +6,11 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
     restartServer: vi.fn(),
     getOrLoadDeployment: vi.fn(),
     reinstallSharedDeployment: vi.fn(),
+    ensureAwake: vi.fn(),
+    isDeploymentDormant: vi.fn(() => false),
+    registerHibernationListener: vi.fn(),
   },
+  McpServerWakeError: class McpServerWakeError extends Error {},
 }));
 
 vi.mock("@/websocket", () => ({
@@ -1127,6 +1131,9 @@ describe("mcp-reinstall", () => {
 
       expect(McpServerRuntimeManager.restartServer).toHaveBeenCalledWith(
         server.id,
+        // An ordinary reinstall keeps the node-cached image; only the
+        // registry's refresh-image action asks for a fresh pull.
+        { freshImagePull: false },
       );
       // Threw before clearing the flag → still required.
       expect((await getServer(server.id)).reinstallRequired).toBe(true);
@@ -1426,6 +1433,42 @@ describe("mcp-reinstall", () => {
       });
     });
 
+    test("uses the caller's tool fetcher instead of the default live connection", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const { catalog, server } = await seed(
+        { makeInternalMcpCatalog, makeMcpServer },
+        {
+          catalogName: "Test Catalog",
+          catalogServerType: "remote",
+          serverName: "Test Catalog",
+          serverType: "remote",
+        },
+      );
+
+      const getToolsFromServer = vi.spyOn(McpServerModel, "getToolsFromServer");
+      const getTools = vi.fn().mockResolvedValue([
+        {
+          name: "supplied-tool",
+          description: "From the caller",
+          inputSchema: {},
+        },
+      ]);
+
+      await autoReinstallServer(server, catalog, { getTools });
+
+      // The remote install path authenticates the tool fetch itself and hands
+      // the result down; falling back to the default fetcher would discard
+      // that auth and rediscover nothing.
+      expect(getTools).toHaveBeenCalledWith({ server, catalogItem: catalog });
+      expect(getToolsFromServer).not.toHaveBeenCalled();
+      const [tool] = await getCatalogTools(catalog.id);
+      expect(tool.name).toBe(
+        ToolModel.slugifyName("Test Catalog", "supplied-tool"),
+      );
+    });
+
     test("succeeds for local server with full flow", async ({
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -1459,6 +1502,9 @@ describe("mcp-reinstall", () => {
 
       expect(McpServerRuntimeManager.restartServer).toHaveBeenCalledWith(
         server.id,
+        // An ordinary reinstall keeps the node-cached image; only the
+        // registry's refresh-image action asks for a fresh pull.
+        { freshImagePull: false },
       );
 
       // Both tools were reconciled into the tools table under the catalog.
@@ -1475,6 +1521,48 @@ describe("mcp-reinstall", () => {
       const updated = await getServer(server.id);
       expect(updated.name).toBe(`Test Catalog-${user.id}`);
       expect(updated.reinstallRequired).toBe(false);
+    });
+
+    test("wakes a hibernated deployment before waiting for it to be ready", async ({
+      makeUser,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const user = await makeUser();
+      const { catalog, server } = await seed(
+        { makeInternalMcpCatalog, makeMcpServer },
+        {
+          catalogName: "Sleepy Catalog",
+          catalogServerType: "local",
+          serverName: `Sleepy Catalog-${user.id}`,
+          serverType: "local",
+          scope: "personal",
+          ownerId: user.id,
+        },
+      );
+
+      const waitForDeploymentReady = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(McpServerRuntimeManager.restartServer).mockResolvedValue(
+        undefined,
+      );
+      vi.mocked(McpServerRuntimeManager.getOrLoadDeployment).mockResolvedValue({
+        waitForDeploymentReady,
+      } as never);
+      vi.spyOn(McpServerModel, "getToolsFromServer").mockResolvedValue([]);
+
+      await autoReinstallServer(server, catalog);
+
+      // restartServer deliberately skips the K8s restart for a shared
+      // multitenant deployment, so a hibernated one is still at zero replicas
+      // here — without the wake the wait below is a guaranteed timeout.
+      expect(McpServerRuntimeManager.ensureAwake).toHaveBeenCalledWith(
+        server.id,
+      );
+      const wakeOrder = vi.mocked(McpServerRuntimeManager.ensureAwake).mock
+        .invocationCallOrder[0];
+      expect(wakeOrder).toBeLessThan(
+        waitForDeploymentReady.mock.invocationCallOrder[0],
+      );
     });
   });
 
@@ -1550,6 +1638,67 @@ describe("mcp-reinstall", () => {
         type: "object",
         properties: { b: { type: "number" } },
       });
+    });
+
+    test("wakes a hibernated local deployment on the default (user-triggered) path", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "Reload Local Wake",
+        serverType: "local",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        name: "Reload Local Wake",
+      });
+      vi.spyOn(McpServerModel, "getToolsFromServer").mockResolvedValue([]);
+
+      await reloadToolsForServer(server);
+
+      expect(McpServerRuntimeManager.ensureAwake).toHaveBeenCalledWith(
+        server.id,
+      );
+    });
+
+    test("wake: false never calls ensureAwake and skips a hibernated deployment entirely", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "Reload Local Background",
+        serverType: "local",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        name: "Reload Local Background",
+      });
+      const getTools = vi
+        .spyOn(McpServerModel, "getToolsFromServer")
+        .mockResolvedValue([]);
+
+      // Awake deployment: the background reload syncs, but never wakes.
+      vi.mocked(McpServerRuntimeManager.isDeploymentDormant).mockReturnValue(
+        false,
+      );
+      await reloadToolsForServer(server, { wake: false });
+      expect(McpServerRuntimeManager.ensureAwake).not.toHaveBeenCalled();
+      expect(getTools).toHaveBeenCalledTimes(1);
+
+      // Hibernated deployment: skipped outright (belt for background callers
+      // whose own hibernation fast path missed — the check is memory-only).
+      vi.mocked(McpServerRuntimeManager.isDeploymentDormant).mockReturnValue(
+        true,
+      );
+      const result = await reloadToolsForServer(server, { wake: false });
+      expect(result).toEqual({
+        created: 0,
+        updated: 0,
+        unchanged: 0,
+        deleted: 0,
+      });
+      expect(McpServerRuntimeManager.ensureAwake).not.toHaveBeenCalled();
+      expect(getTools).toHaveBeenCalledTimes(1);
     });
   });
 

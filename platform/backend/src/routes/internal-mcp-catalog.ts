@@ -21,6 +21,10 @@ import {
 } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import {
+  enterpriseTier,
+  MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE,
+} from "@/enterprise-tier";
+import {
   generateDeploymentYamlTemplate,
   mergeLocalConfigIntoYaml,
   validateDeploymentYaml,
@@ -613,11 +617,22 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
+        // Operational field on the INSTALL rows, not a catalog column: pulled
+        // out here and cascaded onto every live install after the permission
+        // gate, so it never reaches the catalog update.
+        hibernationMode,
         ...restBodyInput
       } = body;
       // Downstream secret extraction removes plaintext values from the payload
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
+
+      // Idle hibernation is enterprise-licensed at both ends: the org toggle
+      // and this per-server override. Refuse rather than ignore, so an
+      // unlicensed caller never believes it pinned a server awake.
+      if (hibernationMode !== undefined && !enterpriseTier.isCoreActive()) {
+        throw new ApiError(403, MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE);
+      }
 
       // Secret FK columns are server-managed (see POST): a client-supplied id
       // would otherwise be persisted onto the row, repointing it at another
@@ -766,6 +781,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Only rewrite team assignments when scope/teams/levels actually change;
       // undefined leaves the existing rows untouched.
       restBody.teams = scopeChanged || teamsChanged ? newTeams : undefined;
+
+      // Cascade the per-server idle-hibernation override onto every live
+      // install of this catalog. The registry dialog is catalog-scoped, so
+      // this PUT is its write path; the reinstall route remains the
+      // per-install path when a single installation must diverge. Runs after
+      // the permission gate above — whoever may edit the catalog may pin it
+      // awake — and before the catalog update, so a later failure leaves the
+      // mode applied (operational, idempotent, safe to re-send).
+      if (hibernationMode !== undefined) {
+        await McpServerModel.setHibernationModeForCatalog(id, hibernationMode);
+      }
 
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
@@ -2152,7 +2178,7 @@ async function reinstallApprovedImage(
 
 async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
   if (catalogItem.multitenant === true) {
-    await reinstallMultitenantCatalog(catalogItem);
+    await reinstallMultitenantCatalog(catalogItem, { freshImagePull: true });
     return;
   }
 
@@ -2166,7 +2192,9 @@ async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
       broadcastMcpInstallationStatus(server.id, "pending", null);
 
       try {
-        await autoReinstallServer(server, catalogItem);
+        await autoReinstallServer(server, catalogItem, {
+          freshImagePull: true,
+        });
         await McpServerModel.update(server.id, {
           localInstallationStatus: "success",
           localInstallationError: null,

@@ -14,7 +14,10 @@ import { getPermissionsForUserContext } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
-import { enterpriseTier } from "@/enterprise-tier";
+import {
+  enterpriseTier,
+  MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE,
+} from "@/enterprise-tier";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
@@ -199,13 +202,24 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdateMcpSettings,
-        description: "Update MCP settings (online catalog availability)",
+        description:
+          "Update MCP settings (online catalog availability, idle hibernation)",
         tags: ["Organization"],
         body: UpdateMcpSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
+      // Scaling idle MCP servers to zero is enterprise-licensed. Refuse the
+      // field outright rather than silently dropping it, so an unlicensed
+      // deployment can't believe it turned the feature off either.
+      if (
+        "mcpIdleHibernationEnabled" in body &&
+        !enterpriseTier.isCoreActive()
+      ) {
+        throw new ApiError(403, MCP_IDLE_HIBERNATION_ENTERPRISE_MESSAGE);
+      }
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

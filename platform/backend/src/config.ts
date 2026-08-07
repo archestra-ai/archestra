@@ -910,6 +910,45 @@ export const parseNonNegativeInt = (
   return !Number.isNaN(parsed) && parsed >= 0 ? parsed : defaultValue;
 };
 
+/**
+ * Parses `ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`.
+ *
+ * The env var is no longer the on/off switch — idle hibernation is an
+ * enterprise feature an organization opts into. What is left here is the
+ * operator's two decisions:
+ *
+ *  - an explicit "0" is a HARD kill switch: hibernation is off platform-wide
+ *    no matter what the organization has enabled, for deployments that must
+ *    never see a scaled-to-zero MCP pod;
+ *  - anything else configures the idle WINDOW. Unset or unparseable falls
+ *    back to 30 minutes; a parsed value is floored at 120 seconds, because a
+ *    lower threshold could hibernate a server in the gap between normal
+ *    consecutive tool calls of one conversation and thrash pods.
+ *
+ * @public — exported for testability
+ */
+export const parseMcpIdleHibernationSeconds = (
+  envValue: string | undefined,
+): { windowSeconds: number; hardDisabled: boolean } => {
+  if (envValue?.trim() === "0") {
+    return {
+      windowSeconds: DEFAULT_MCP_IDLE_HIBERNATION_SECONDS,
+      hardDisabled: true,
+    };
+  }
+  const parsed = parsePositiveInt(envValue, 0);
+  return {
+    windowSeconds:
+      parsed === 0
+        ? DEFAULT_MCP_IDLE_HIBERNATION_SECONDS
+        : Math.max(120, parsed),
+    hardDisabled: false,
+  };
+};
+
+/** 30 minutes — the idle window when the operator configures none. */
+const DEFAULT_MCP_IDLE_HIBERNATION_SECONDS = 1800;
+
 /** @public — exported for testability */
 export const parseSampleRate = (
   envValue: string | undefined,
@@ -2411,6 +2450,25 @@ const config = {
             process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
             600,
           ),
+    /**
+     * The OPERATOR half of idle hibernation: `windowSeconds` is how long an
+     * MCP server must sit unused before it is scaled to zero (default 30 min,
+     * floored at 120 s), `hardDisabled` is the kill switch set by an explicit
+     * `…MCP_IDLE_HIBERNATION_SECONDS=0`, and `betaEnabled` is the BETA gate
+     * the whole feature ships behind — off by default, a blank value falling
+     * back to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+     * Whether hibernation runs at all is decided together with the enterprise
+     * licence and the organization's own toggle — see
+     * `k8s/mcp-server-runtime/hibernation.ee`.
+     */
+    mcpIdleHibernation: {
+      ...parseMcpIdleHibernationSeconds(
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS,
+      ),
+      betaEnabled: betaFeatureEnabled(
+        process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED,
+      ),
+    },
     kubernetes: {
       namespace: process.env.ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE || "default",
       kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,

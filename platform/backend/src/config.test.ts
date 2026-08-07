@@ -48,6 +48,7 @@ import config, {
   parseHackathonRecorderMaxFinalCutMs,
   parseK8sResourceQuantity,
   parseLogFormat,
+  parseMcpIdleHibernationSeconds,
   parseMetricsPort,
   parseNonNegativeInt,
   parseOptionalPort,
@@ -2356,6 +2357,70 @@ describe("parseK8sResourceQuantity", () => {
     expect(parseK8sResourceQuantity({ ...cpuParams, value: "fast" })).toBe(
       "50m",
     );
+  });
+});
+
+describe("parseMcpIdleHibernationSeconds", () => {
+  test("unset means the default window, NOT disabled", () => {
+    // The env var stopped being the on/off switch when hibernation became an
+    // organization setting: leaving it unset must not silently veto a toggle
+    // an administrator turned on.
+    expect(parseMcpIdleHibernationSeconds(undefined)).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: false,
+    });
+    expect(parseMcpIdleHibernationSeconds("")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: false,
+    });
+  });
+
+  test('an explicit "0" is the operator kill switch', () => {
+    // The one value that overrides the organization: a deployment that must
+    // never see a scaled-to-zero MCP pod.
+    expect(parseMcpIdleHibernationSeconds("0")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: true,
+    });
+    expect(parseMcpIdleHibernationSeconds(" 0 ")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: true,
+    });
+  });
+
+  test("values below the floor are clamped to 120", () => {
+    expect(parseMcpIdleHibernationSeconds("60")).toEqual({
+      windowSeconds: 120,
+      hardDisabled: false,
+    });
+    expect(parseMcpIdleHibernationSeconds("1")).toEqual({
+      windowSeconds: 120,
+      hardDisabled: false,
+    });
+  });
+
+  test("values at or above the floor pass through", () => {
+    expect(parseMcpIdleHibernationSeconds("120")).toEqual({
+      windowSeconds: 120,
+      hardDisabled: false,
+    });
+    expect(parseMcpIdleHibernationSeconds("600")).toEqual({
+      windowSeconds: 600,
+      hardDisabled: false,
+    });
+  });
+
+  test("garbage and negative values fall back to the default window", () => {
+    // Unparseable configuration is an operator mistake, not a kill switch —
+    // only the literal "0" turns the feature off.
+    expect(parseMcpIdleHibernationSeconds("soon")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: false,
+    });
+    expect(parseMcpIdleHibernationSeconds("-300")).toEqual({
+      windowSeconds: 1800,
+      hardDisabled: false,
+    });
   });
 });
 

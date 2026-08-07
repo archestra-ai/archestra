@@ -63,6 +63,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             features: z.strictObject({
               betaEnabled: z.boolean(),
               orchestratorK8sRuntime: z.boolean(),
+              // BETA gate for MCP idle hibernation; the licence and the
+              // organization toggle sit behind it.
+              mcpIdleHibernationBetaEnabled: z.boolean(),
               sandbox: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
@@ -151,6 +154,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         features: {
           betaEnabled: config.beta,
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
+          mcpIdleHibernationBetaEnabled:
+            config.orchestrator.mcpIdleHibernation.betaEnabled,
           sandbox: skillSandboxRuntimeService.isEnabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:

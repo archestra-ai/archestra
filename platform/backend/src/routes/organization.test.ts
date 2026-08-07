@@ -249,6 +249,96 @@ describe("organization routes", () => {
       );
       expect(snapshot?.onlineMcpCatalogEnabled).toBe(false);
     });
+
+    describe("idle hibernation", () => {
+      test("defaults to off for a new organization", async () => {
+        // Hibernation trades first-call latency for idle compute. That is a
+        // decision to make deliberately, so it is never on by default.
+        const response = await app.inject({
+          method: "GET",
+          url: "/api/organization",
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json().mcpIdleHibernationEnabled).toBe(false);
+      });
+
+      test("enables idle hibernation and persists it", async () => {
+        enterpriseTier.setUserCountForTesting(0); // small-team tier = licensed
+
+        const enable = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { mcpIdleHibernationEnabled: true },
+        });
+
+        expect(enable.statusCode).toBe(200);
+        expect(enable.json().mcpIdleHibernationEnabled).toBe(true);
+
+        const afterEnable = await app.inject({
+          method: "GET",
+          url: "/api/organization",
+        });
+        expect(afterEnable.json().mcpIdleHibernationEnabled).toBe(true);
+      });
+
+      test("403s without an enterprise licence", async () => {
+        enterpriseTier.setUserCountForTesting(9999); // over the free threshold
+
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { mcpIdleHibernationEnabled: true },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain("sales@archestra.ai");
+        // Refused, not silently dropped: the stored value is untouched.
+        const organization = await OrganizationModel.getById(organizationId);
+        expect(organization?.mcpIdleHibernationEnabled).toBe(false);
+      });
+
+      test("403s on an unlicensed attempt to turn it OFF too", async () => {
+        // Refusing only the "on" direction would let an unlicensed deployment
+        // believe it had disabled a feature it never had.
+        enterpriseTier.setUserCountForTesting(9999);
+
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { mcpIdleHibernationEnabled: false },
+        });
+
+        expect(response.statusCode).toBe(403);
+      });
+
+      test("leaves the licensed catalog toggle alone when hibernation is absent", async () => {
+        enterpriseTier.setUserCountForTesting(9999);
+
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { onlineMcpCatalogEnabled: false },
+        });
+
+        expect(response.statusCode).toBe(200);
+      });
+
+      test("captures the hibernation toggle in the audit snapshot", async () => {
+        enterpriseTier.setUserCountForTesting(0);
+        await app.inject({
+          method: "PATCH",
+          url: "/api/organization/mcp-settings",
+          payload: { mcpIdleHibernationEnabled: true },
+        });
+
+        const snapshot = await OrganizationModel.findByIdForAudit(
+          organizationId,
+          organizationId,
+        );
+        expect(snapshot?.mcpIdleHibernationEnabled).toBe(true);
+      });
+    });
   });
 
   describe("PATCH /api/organization/skills-settings - online catalog", () => {

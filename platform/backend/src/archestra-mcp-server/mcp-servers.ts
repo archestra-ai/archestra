@@ -1613,6 +1613,11 @@ async function discoverLocalMcpServerTools(params: {
       throw new Error("Deployment manager not found");
     }
 
+    // An install can adopt an existing shared (multitenant) deployment that
+    // idle hibernation scaled to zero; wake it so the readiness wait below
+    // isn't a guaranteed timeout.
+    await McpServerRuntimeManager.ensureAwake(mcpServer.id);
+
     await k8sDeployment.waitForDeploymentReady(60, 2000);
     await McpServerModel.update(mcpServer.id, {
       localInstallationStatus: "discovering-tools",

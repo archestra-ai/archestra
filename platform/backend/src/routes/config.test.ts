@@ -110,6 +110,8 @@ describe("config routes", () => {
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
       chatSecretScanEnabled: true,
       kbAutoSyncPermissionsEnabled: expect.any(Boolean),
+      // Beta flag, off in the test environment (no env var, no master switch).
+      mcpIdleHibernationBetaEnabled: false,
     });
     expect([null, "1", "2"]).toContain(payload.features.byosVaultKvVersion);
     expect(typeof payload.features.incomingEmail.enabled).toBe("boolean");

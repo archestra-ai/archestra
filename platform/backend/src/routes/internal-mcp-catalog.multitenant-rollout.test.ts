@@ -154,7 +154,11 @@ describe("PUT /api/internal_mcp_catalog/:id — multi-tenant shared-pod rollout"
 
     // One recreate for the one shared pod — not one per install.
     expect(reinstallSharedSpy).toHaveBeenCalledTimes(1);
-    expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id);
+    expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id, {
+      // A configuration rollout redeploys the current image reference, so the
+      // node's cached copy is correct; only refresh-image forces a pull.
+      freshImagePull: false,
+    });
 
     // Nothing is left pending: no card banner, no per-tenant Reinstall button.
     expect((await getCatalogRow(catalog.id)).catalogReinstallRequired).toBe(
@@ -187,7 +191,11 @@ describe("PUT /api/internal_mcp_catalog/:id — multi-tenant shared-pod rollout"
     expect(response.statusCode).toBe(200);
     await drainCascade();
 
-    expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id);
+    expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id, {
+      // A configuration rollout redeploys the current image reference, so the
+      // node's cached copy is correct; only refresh-image forces a pull.
+      freshImagePull: false,
+    });
     expect((await getCatalogRow(catalog.id)).catalogReinstallRequired).toBe(
       false,
     );
@@ -227,7 +235,11 @@ describe("PUT /api/internal_mcp_catalog/:id — multi-tenant shared-pod rollout"
 
     // Non-prompted entries are baked into the shared pod's spec, so this takes
     // the one-shot recreate rather than the per-install auto path.
-    expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id);
+    expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id, {
+      // A configuration rollout redeploys the current image reference, so the
+      // node's cached copy is correct; only refresh-image forces a pull.
+      freshImagePull: false,
+    });
     expect((await getCatalogRow(catalog.id)).catalogReinstallRequired).toBe(
       false,
     );
@@ -340,7 +352,11 @@ describe("PUT /api/internal_mcp_catalog/:id — multi-tenant shared-pod rollout"
 
     // Attempted-then-failed, not skipped — the flag has to come from the
     // catch, otherwise this passes for a deferral that never tried.
-    expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id);
+    expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id, {
+      // A configuration rollout redeploys the current image reference, so the
+      // node's cached copy is correct; only refresh-image forces a pull.
+      freshImagePull: false,
+    });
     // Pod is still on the old spec — the admin needs a retry affordance.
     expect((await getCatalogRow(catalog.id)).catalogReinstallRequired).toBe(
       true,

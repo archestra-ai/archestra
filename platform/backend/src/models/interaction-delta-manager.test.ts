@@ -4,6 +4,7 @@ import {
   LEGACY_CLAUDE_DESKTOP_SESSION_SOURCE,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import { vi } from "vitest";
 import config from "@/config";
 import {
   _resetContentKeys,
@@ -535,6 +536,43 @@ describe("InteractionDeltaManager", () => {
 
     expect(reconstructedMessages(map.get(aTip.id)?.request)).toEqual(aMsgs);
     expect(reconstructedMessages(map.get(bTip.id)?.request)).toEqual(bMsgs);
+  });
+
+  test("reconstructs correctly when the cache retains nothing", async () => {
+    const sessionId = "sess-evicting";
+    const msgs1 = [userMsg("e0")];
+    const msgs2 = [...msgs1, assistantMsg("ea0"), userMsg("e1")];
+    const msgs3 = [...msgs2, assistantMsg("ea1"), userMsg("e2")];
+    await createClaude(msgs1, { sessionId });
+    await createClaude(msgs2, { sessionId });
+    const tip = await createClaude(msgs3, { sessionId });
+
+    InteractionDeltaManager.reset();
+
+    // The reconstruct cache is byte-bounded, so a conversation larger than the
+    // whole budget is evicted the moment it is written. Folding must not depend
+    // on reading its own writes back: if it does, reconstruction silently
+    // returns null here and callers fall back to the stored delta — a partial
+    // request presented as if it were the full one.
+    const cache = (
+      InteractionDeltaManager as unknown as {
+        reconstructCache: { set: (key: string, value: unknown) => void };
+      }
+    ).reconstructCache;
+    const setSpy = vi.spyOn(cache, "set").mockImplementation(() => {});
+
+    try {
+      const full = await InteractionDeltaManager.reconstructRow({
+        id: tip.id,
+        threadId: tip.threadId,
+        request: tip.request,
+        processedRequest: tip.processedRequest,
+      });
+
+      expect(reconstructedMessages(full.request)).toEqual(msgs3);
+    } finally {
+      setSpy.mockRestore();
+    }
   });
 
   test("claude_desktop interactions are delta-encoded too", async () => {

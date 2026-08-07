@@ -432,4 +432,93 @@ describe("LRUCacheManager", () => {
     expect(cache.has("C")).toBe(true);
     expect(cache.has("D")).toBe(true);
   });
+
+  test("evicts oldest entries until the retained total fits maxBytes", () => {
+    // Entry count is deliberately generous — bytes are what should bind here.
+    const cache = new LRUCacheManager<string>({
+      maxSize: 100,
+      maxBytes: 30,
+      sizeOf: (value) => value.length,
+    });
+
+    cache.set("A", "a".repeat(10));
+    cache.set("B", "b".repeat(10));
+    cache.set("C", "c".repeat(10));
+    expect(cache.retainedBytes).toBe(30);
+    expect(cache.size).toBe(3);
+
+    // Pushes the total to 40 against a 30 budget, so the oldest entry goes even
+    // though the cache is nowhere near its 100-entry ceiling.
+    cache.set("D", "d".repeat(10));
+
+    expect(cache.retainedBytes).toBe(30);
+    expect(cache.has("A")).toBe(false);
+    expect(cache.has("B")).toBe(true);
+    expect(cache.has("C")).toBe(true);
+    expect(cache.has("D")).toBe(true);
+  });
+
+  test("byte eviction is oldest-written-first and ignores read recency", () => {
+    const cache = new LRUCacheManager<string>({
+      maxSize: 100,
+      maxBytes: 30,
+      sizeOf: (value) => value.length,
+    });
+
+    cache.set("A", "a".repeat(10));
+    cache.set("B", "b".repeat(10));
+    cache.set("C", "c".repeat(10));
+    // Reading A does NOT protect it. QuickLRU only reorders when an entry is
+    // promoted out of its older generation, which cannot happen while the cache
+    // is far below maxSize — so within a generation, reads are invisible to
+    // eviction order. This mirrors QuickLRU's own count-based eviction rather
+    // than adding a second, stricter policy on top of it.
+    expect(cache.get("A")).toBe("a".repeat(10));
+
+    cache.set("D", "d".repeat(10));
+
+    expect(cache.has("A")).toBe(false);
+    expect(cache.has("D")).toBe(true);
+  });
+
+  test("drops a value that is larger than the whole budget", () => {
+    const onEviction = vi.fn();
+    const cache = new LRUCacheManager<string>({
+      maxSize: 100,
+      maxBytes: 30,
+      sizeOf: (value) => value.length,
+      onEviction,
+    });
+
+    cache.set("huge", "x".repeat(100));
+
+    // A cache that cannot retain a value must not pretend it did, so callers
+    // cannot treat set() as making the value readable afterwards.
+    expect(cache.get("huge")).toBeUndefined();
+    expect(cache.retainedBytes).toBe(0);
+    expect(onEviction).toHaveBeenCalledWith("huge", "x".repeat(100));
+  });
+
+  test("leaves entry-count eviction alone when maxBytes is not configured", () => {
+    const cache = new LRUCacheManager<string>({ maxSize: 3 });
+
+    cache.set("A", "a".repeat(10_000));
+    cache.set("B", "b".repeat(10_000));
+
+    // No budget configured: sizes are not measured and nothing is byte-evicted.
+    expect(cache.retainedBytes).toBe(0);
+    expect(cache.size).toBe(2);
+    expect(cache.get("A")).toBe("a".repeat(10_000));
+  });
+
+  test("ignores maxBytes when no sizeOf is supplied", () => {
+    // Without a way to measure values a byte budget cannot be enforced, so the
+    // cache must fall back to entry-count behavior rather than evict blindly.
+    const cache = new LRUCacheManager<string>({ maxSize: 10, maxBytes: 1 });
+
+    cache.set("A", "a".repeat(10_000));
+
+    expect(cache.get("A")).toBe("a".repeat(10_000));
+    expect(cache.size).toBe(1);
+  });
 });

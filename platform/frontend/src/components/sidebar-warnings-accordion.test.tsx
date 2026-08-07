@@ -102,6 +102,34 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     expect(screen.queryByText("Network policy not enforced")).toBeNull();
   });
 
+  // This renders in the layout, so throwing on an unexpected payload blanks
+  // every page rather than one component.
+  it("survives a response without the network policy section", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { email: "someone@example.org" } },
+    } as ReturnType<typeof useSession>);
+    vi.mocked(useDefaultCredentialsEnabled).mockReturnValue({
+      data: false,
+      isLoading: false,
+    } as ReturnType<typeof useDefaultCredentialsEnabled>);
+    vi.mocked(useDisableBasicAuth).mockReturnValue(true);
+    vi.mocked(useK8sCapabilities).mockReturnValue({
+      data: { error: { message: "Unauthenticated" } },
+    } as unknown as ReturnType<typeof useK8sCapabilities>);
+
+    expect(() =>
+      render(
+        <SidebarProvider>
+          <SidebarWarningsAccordion />
+        </SidebarProvider>,
+      ),
+    ).not.toThrow();
+    expect(screen.queryByText("Network policy not enforced")).toBeNull();
+  });
+
   // Reading capabilities needs environment:update; without it the query is
   // disabled and returns nothing rather than 403-ing on every page.
   it("does not query capabilities without environment update permission", () => {

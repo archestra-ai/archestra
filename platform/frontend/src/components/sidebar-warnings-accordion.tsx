@@ -62,8 +62,13 @@ export function SidebarWarningsAccordion() {
 
   // Only a measured verdict warns. "unknown" means nothing tested the cluster,
   // which is not evidence that egress rules are inert.
+  //
+  // networkPolicy is optional-chained despite being required in the response
+  // type: a payload that does not match — an error envelope, an older backend —
+  // would otherwise throw here and blank every page, since this renders in the
+  // layout rather than on one screen.
   const showNetworkPolicyWarning =
-    capabilities?.networkPolicy.enforcementStatus === "verified-not-enforced";
+    capabilities?.networkPolicy?.enforcementStatus === "verified-not-enforced";
 
   // Null under full white-labeling, where the environments screen carries the
   // same explanation and stays reachable.

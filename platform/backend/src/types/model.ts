@@ -171,6 +171,7 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   inputModalities: true,
   outputModalities: true,
   supportsToolCalling: true,
+  parameterCount: true,
 }).extend({
   /** Price per million tokens for input (computed from per-token price) */
   pricePerMillionInput: z.string().nullable(),

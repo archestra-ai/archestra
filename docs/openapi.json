@@ -227303,6 +227303,12 @@
                             "nullable": true,
                             "type": "boolean"
                           },
+                          "parameterCount": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
                           "pricePerMillionInput": {
                             "nullable": true,
                             "type": "string"
@@ -227349,6 +227355,7 @@
                           "inputModalities",
                           "outputModalities",
                           "supportsToolCalling",
+                          "parameterCount",
                           "pricePerMillionInput",
                           "pricePerMillionOutput",
                           "isCustomPrice",
@@ -228038,6 +228045,12 @@
                           }
                         ]
                       },
+                      "parameterCount": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
                       "defaultParameters": {
                         "nullable": true,
                         "type": "object",
@@ -228277,6 +228290,7 @@
                       "customPricePerMillionCacheWrite",
                       "ignored",
                       "embeddingDimensions",
+                      "parameterCount",
                       "defaultParameters",
                       "configuredParameters",
                       "discoveredViaLlmProxy",
@@ -228828,6 +228842,12 @@
                         }
                       ]
                     },
+                    "parameterCount": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
                     "defaultParameters": {
                       "nullable": true,
                       "type": "object",
@@ -228942,6 +228962,7 @@
                     "customPricePerMillionCacheWrite",
                     "ignored",
                     "embeddingDimensions",
+                    "parameterCount",
                     "defaultParameters",
                     "configuredParameters",
                     "discoveredViaLlmProxy",

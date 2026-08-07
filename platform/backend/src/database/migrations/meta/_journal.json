@@ -2801,6 +2801,13 @@
       "when": 1785954195482,
       "tag": "0399_broken_lady_ursula",
       "breakpoints": true
+    },
+    {
+      "idx": 400,
+      "version": "7",
+      "when": 1786108103995,
+      "tag": "0400_swift_naoko",
+      "breakpoints": true
     }
   ]
 }

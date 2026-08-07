@@ -46,6 +46,12 @@ export interface FetchedModelCapabilities {
   embeddingDimensions?: number | null;
   /** Provider-reported default generation parameters (Ollama `/api/show`). */
   defaultParameters?: ModelDefaultParameters | null;
+  /**
+   * Total parameter count reported by the serving backend (Ollama `/api/show`).
+   * Null/undefined for every provider that does not report one — which is all of
+   * them except Ollama, vLLM included (its `ModelCard` carries no size field).
+   */
+  parameterCount?: number | null;
 }
 
 export interface ModelInfo {

@@ -3,6 +3,7 @@ import type {
   SupportedProvider,
 } from "@archestra/shared";
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -132,6 +133,18 @@ const modelsTable = pgTable(
     embeddingDimensions: integer(
       "embedding_dimensions",
     ).$type<SupportedEmbeddingDimension>(),
+
+    /**
+     * Total parameter count reported by the serving backend (Ollama
+     * `/api/show`, GGUF `general.parameter_count`). Null for every provider
+     * that does not report one — which is all of them except Ollama, vLLM
+     * included: its OpenAI-compatible `ModelCard` carries no size field and
+     * there is no second endpoint to ask.
+     *
+     * `bigint` rather than `integer`: `integer` caps at 2,147,483,647, which is
+     * smaller than an 8B model.
+     */
+    parameterCount: bigint("parameter_count", { mode: "number" }),
 
     /**
      * Provider-reported default generation parameters (Ollama `/api/show`).

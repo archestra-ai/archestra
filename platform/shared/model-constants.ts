@@ -204,6 +204,35 @@ export function isSelfHostedProvider(provider: SupportedProvider): boolean {
 }
 
 /**
+ * Total parameter count at or below which a model is surfaced as "small". 8B is
+ * where the open-weight families that ship a tool-calling chat template start
+ * (Llama 3.1 8B, Qwen3 8B), so it is the boundary below which a model is likely
+ * to have been trained for chat rather than for tool use.
+ *
+ * A statement about SIZE, not quality, and the copy must stay that way:
+ * parameter count is a poor predictor of agentic skill — Llama 3.3 70B scores
+ * as low as a 12B model on published agentic benchmarks, so a threshold on size
+ * can only ever say "small", never "weak".
+ *
+ * Keep this at or below ~20B. Above that it starts catching mixture-of-experts
+ * models (gpt-oss:20b, qwen3:30b-a3b), whose total parameter count describes
+ * neither their compute per token nor their capability — at which point MoE
+ * handling becomes load-bearing and this constant is no longer sufficient.
+ */
+export const SMALL_MODEL_MAX_PARAMETERS = 8_000_000_000;
+
+/**
+ * True when a model's reported size is small enough to warn about. Requires a
+ * known count: null means the serving backend reported no size, and no claim is
+ * made. Only Ollama reports one today, so this is null everywhere else.
+ */
+export function isSmallModel(parameterCount: number | null): boolean {
+  return (
+    parameterCount !== null && parameterCount <= SMALL_MODEL_MAX_PARAMETERS
+  );
+}
+
+/**
  * Providers reachable through the OpenAI-compatible Model Router — either
  * because they already speak the OpenAI wire, or because the router translates
  * for them. Single source of truth: the router builds its own lookup from this

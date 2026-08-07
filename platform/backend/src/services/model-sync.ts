@@ -363,6 +363,7 @@ export function buildModelsToUpsert(params: {
         fetched: model.capabilities,
       }),
       defaultParameters: model.capabilities?.defaultParameters ?? null,
+      parameterCount: model.capabilities?.parameterCount ?? null,
       lastSyncedAt: new Date(),
     };
   });

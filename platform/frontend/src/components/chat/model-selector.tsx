@@ -5,6 +5,7 @@ import {
   E2eTestId,
   isLegacyGeminiModel,
   isOpenRouterLatestAlias,
+  isSmallModel,
   type ModelInputModality,
   providerDisplayNames,
   requiresPerplexityAgentApi,
@@ -43,6 +44,7 @@ import {
   LatestModelBadge,
   NoToolsBadge,
   OldModelBadge,
+  SmallModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
 import { Button } from "@/components/ui/button";
@@ -247,6 +249,11 @@ function ModelCapabilityBadges({
   // known to take no tools, which gets its own marker below.
   const lacksToolCalling = capabilities?.supportsToolCalling === false;
 
+  // Size is reported independently of the capability fields, so it can be the
+  // only thing worth showing on a row (a freshly pulled Ollama model has a
+  // parameter count long before it has modalities or a tool-calling verdict).
+  const isSmall = isSmallModel(capabilities?.parameterCount ?? null);
+
   const hasAnyCapability =
     hasVision || hasAudio || hasVideo || hasPdf || hasToolCalling;
 
@@ -261,7 +268,7 @@ function ModelCapabilityBadges({
   if (!hasCapabilityData) {
     return <UnknownCapabilitiesBadge />;
   }
-  if (!hasAnyCapability && !lacksToolCalling) {
+  if (!hasAnyCapability && !lacksToolCalling && !isSmall) {
     return null;
   }
 
@@ -278,6 +285,7 @@ function ModelCapabilityBadges({
         {hasPdf && (
           <CapabilityIcon icon={FileText} label="Supports PDF input" />
         )}
+        {isSmall && <SmallModelBadge />}
         {lacksToolCalling && <NoToolsBadge />}
         {hasToolCalling && (
           <CapabilityIcon icon={Settings2} label="Supports tool calling" />

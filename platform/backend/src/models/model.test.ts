@@ -576,6 +576,20 @@ describe("ModelModel", () => {
       expect(updated?.defaultParameters).toEqual({ num_ctx: 4096 });
     });
 
+    test("keeps the last known parameter count when a non-full sync omits it", async () => {
+      await ModelModel.bulkUpsert([
+        { ...ollamaBase, parameterCount: 8_030_261_248 },
+      ]);
+      // A time-boxed /api/show miss reports no size; the known one must survive.
+      await ModelModel.bulkUpsert([{ ...ollamaBase, parameterCount: null }]);
+
+      const updated = await ModelModel.findByProviderAndModelId(
+        "ollama",
+        "llama3",
+      );
+      expect(updated?.parameterCount).toBe(8_030_261_248);
+    });
+
     test("refreshes default parameters on non-full sync when the provider reports new values", async () => {
       await ModelModel.bulkUpsert([
         { ...ollamaBase, defaultParameters: { num_ctx: 4096 } },
@@ -645,6 +659,32 @@ describe("ModelModel", () => {
         "llama3-full",
       );
       expect(refreshed?.defaultParameters).toEqual({ num_ctx: 8192 });
+    });
+
+    test("clears a stale parameter count on full refresh", async () => {
+      const base = {
+        externalId: "ollama/llama3-resize",
+        provider: "ollama" as const,
+        modelId: "llama3-resize",
+        description: "Llama 3",
+        contextLength: 8192,
+        inputModalities: ["text" as const],
+        outputModalities: ["text" as const],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+      };
+      await ModelModel.bulkUpsert([{ ...base, parameterCount: 8_030_261_248 }]);
+      // A full refresh is the way to correct a size that went stale because the
+      // tag was repointed at a different model.
+      await ModelModel.bulkUpsertFull([{ ...base, parameterCount: null }]);
+
+      const refreshed = await ModelModel.findByProviderAndModelId(
+        "ollama",
+        "llama3-resize",
+      );
+      expect(refreshed?.parameterCount).toBeNull();
     });
   });
 

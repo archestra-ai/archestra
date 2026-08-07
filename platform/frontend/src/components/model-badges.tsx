@@ -81,6 +81,21 @@ export function NoToolsBadge() {
   );
 }
 
+/**
+ * Marks a model small enough that multi-step tool use is likely to be
+ * unreliable. Deliberately states size, not quality: parameter count is a weak
+ * predictor of agentic skill, so the copy stops short of calling the model bad.
+ * Only self-hosted backends report a size today, so in practice this is an
+ * Ollama-only marker.
+ */
+export function SmallModelBadge() {
+  return (
+    <InlineTag className="text-muted-foreground bg-muted">
+      small model
+    </InlineTag>
+  );
+}
+
 export function BestModelBadge() {
   return (
     <InlineTag

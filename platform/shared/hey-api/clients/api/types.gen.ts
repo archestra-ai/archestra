@@ -57786,6 +57786,7 @@ export type GetLlmModelsResponses = {
             inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
             outputModalities: Array<'text' | 'image' | 'audio'> | null;
             supportsToolCalling: boolean | null;
+            parameterCount: number | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
             isCustomPrice: boolean;
@@ -57984,6 +57985,7 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
+        parameterCount: number | null;
         defaultParameters: {
             [key: string]: string | number | Array<string>;
         } | null;
@@ -58154,6 +58156,7 @@ export type UpdateModelResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
+        parameterCount: number | null;
         defaultParameters: {
             [key: string]: string | number | Array<string>;
         } | null;

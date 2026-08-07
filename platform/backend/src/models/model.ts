@@ -360,6 +360,10 @@ class ModelModel {
           // synced value so changed Ollama defaults show up, keeping the last
           // known value only when a sync omits it (e.g. a transient /api/show miss).
           defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
+          // Same treatment as defaultParameters: `/api/show` is best-effort
+          // (time-boxed, degrades to null per model), so a transient miss must
+          // not wipe a known size.
+          parameterCount: sql`COALESCE(excluded.parameter_count, ${schema.modelsTable.parameterCount})`,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
           // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
@@ -431,6 +435,8 @@ class ModelModel {
               // fresh synced value so changed Ollama defaults show up, keeping
               // the last known value only when a sync omits it.
               defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
+              // See upsert(): a time-boxed /api/show miss must not wipe a known size.
+              parameterCount: sql`COALESCE(excluded.parameter_count, ${schema.modelsTable.parameterCount})`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
               // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
@@ -502,6 +508,10 @@ class ModelModel {
               cacheWritePricePerToken: sql`excluded.cache_write_price_per_token`,
               embeddingDimensions: sql`excluded.embedding_dimensions`,
               defaultParameters: sql`excluded.default_parameters`,
+              // Plain `excluded`, unlike the COALESCE in bulkUpsert: an Ollama
+              // tag is mutable (`ollama create` can repoint it), so a full
+              // refresh has to stay the way to correct a stale size.
+              parameterCount: sql`excluded.parameter_count`,
               customPricePerMillionInput: sql`NULL`,
               customPricePerMillionOutput: sql`NULL`,
               customPricePerMillionCacheRead: sql`NULL`,
@@ -986,6 +996,7 @@ class ModelModel {
         inputModalities: null,
         outputModalities: null,
         supportsToolCalling: null,
+        parameterCount: null,
         pricePerMillionInput: null,
         pricePerMillionOutput: null,
         isCustomPrice: false,
@@ -1003,6 +1014,7 @@ class ModelModel {
       inputModalities: model.inputModalities,
       outputModalities: model.outputModalities,
       supportsToolCalling: model.supportsToolCalling,
+      parameterCount: model.parameterCount,
       pricePerMillionInput: pricing.pricePerMillionInput,
       pricePerMillionOutput: pricing.pricePerMillionOutput,
       isCustomPrice: pricing.source === "custom",

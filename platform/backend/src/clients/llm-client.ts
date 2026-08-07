@@ -30,6 +30,7 @@ import {
   USER_ID_HEADER,
 } from "@archestra/shared";
 import { context, propagation } from "@opentelemetry/api";
+import { INCOGNITO_KEY_HEADER } from "@/content-encryption/incognito";
 import {
   extractReasoningMiddleware,
   type streamText,
@@ -173,6 +174,13 @@ export function createLLMModel(params: {
   contextIsTrusted?: boolean;
   chatApiKeyId?: string;
   dualLlmProgressChannel?: string;
+  /**
+   * Incognito conversation key. Forwarded so the proxy can store this
+   * interaction's content encrypted under it instead of redacting it. The
+   * proxy re-validates it against the conversation's stored fingerprint and
+   * only honours it on its loopback chat path.
+   */
+  incognitoKey?: Buffer | null;
 }): LLMModel {
   const {
     provider,
@@ -187,6 +195,7 @@ export function createLLMModel(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
+    incognitoKey,
   } = params;
 
   // Build headers for LLM Proxy
@@ -230,6 +239,12 @@ export function createLLMModel(params: {
     clientHeaders[DUAL_LLM_PROGRESS_CHANNEL_HEADER] = dualLlmProgressChannel;
   }
 
+  // Never logged: the header name is on the logging redaction denylist and
+  // OTel captures no request headers.
+  if (incognitoKey) {
+    clientHeaders[INCOGNITO_KEY_HEADER] = incognitoKey.toString("base64url");
+  }
+
   const headers =
     Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined;
 
@@ -267,6 +282,11 @@ export async function createLLMModelForAgent(params: {
   contextIsTrusted?: boolean;
   /** Per-turn dual LLM progress channel id; only the chat main turn sets it. */
   dualLlmProgressChannel?: string;
+  /**
+   * Incognito conversation key, forwarded to the proxy so this turn's
+   * interaction content is stored encrypted rather than redacted.
+   */
+  incognitoKey?: Buffer | null;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -383,6 +403,7 @@ export async function createLLMModelForAgent(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
+    incognitoKey: params.incognitoKey,
   });
 
   const anthropicNativeEndpoint = isAnthropicNativeEndpoint({

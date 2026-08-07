@@ -99,7 +99,7 @@ const conversationsTable = softDeletablePgTable(
      * browser-held per-conversation key the server never persists.
      * `incognitoDekFingerprint` rejects wrong keys up front;
      * `incognitoEscrow` is the enterprise escrow record (RSA-wrapped key or
-     * Vault reference — see content-encryption/incognito-escrow.ee.ts), null
+     * Vault reference — see content-encryption/incognito-escrow.ts), null
      * when escrow is not configured.
      */
     incognito: boolean("incognito").notNull().default(false),

@@ -9,8 +9,7 @@ import {
 import {
   isIncognitoEscrowConfigured,
   produceIncognitoEscrow,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; escrow is enterprise-only and skipped when unconfigured
-} from "@/content-encryption/incognito-escrow.ee";
+} from "@/content-encryption/incognito-escrow";
 import {
   ApiError,
   type ConversationContentKey,
@@ -29,12 +28,16 @@ export const INCOGNITO_KEY_MISMATCH_TYPE = "incognito_key_mismatch";
 
 /**
  * Validate an incognito creation request and produce the row fields: the
- * caller must present the freshly generated DEK so it can be fingerprinted
- * (and, when enterprise escrow is configured, escrow-wrapped — including the
- * Vault-sink write, which is why this is async and needs the pre-generated
- * conversation id). Never returns the DEK for storage. `incognitoEscrow` is
- * null when no escrow key is configured: the free feature stores no
- * recoverable copy of the key.
+ * caller must present the freshly generated DEK so it can be fingerprinted and
+ * escrow-wrapped (including the Vault-sink write, which is why this is async
+ * and needs the pre-generated conversation id). Never returns the DEK for
+ * storage.
+ *
+ * The escrow record is mandatory, not optional: the conversation's audit trail
+ * is encrypted under this DEK, so without an escrow copy it would be
+ * recoverable by nobody. `isIncognitoChatEnabled()` already requires a
+ * configured escrow key, so reaching the wrap below means one exists — a
+ * failure there is fail-closed and no conversation is created.
  */
 export async function resolveIncognitoCreation(params: {
   request: FastifyRequest;
@@ -42,13 +45,18 @@ export async function resolveIncognitoCreation(params: {
 }): Promise<{
   incognito: true;
   incognitoDekFingerprint: string;
-  incognitoEscrow: IncognitoEscrowBlob | null;
+  incognitoEscrow: IncognitoEscrowBlob;
 }> {
   if (!isIncognitoChatEnabled()) {
     throw new ApiError(
       403,
-      "Incognito chats are disabled on this instance " +
-        "(ARCHESTRA_CHAT_INCOGNITO_ENABLED=false).",
+      isIncognitoEscrowConfigured()
+        ? "Incognito chats are disabled on this instance " +
+            "(ARCHESTRA_CHAT_INCOGNITO_ENABLED=false)."
+        : "Incognito chats are not enabled on this instance. An operator " +
+            "enables them by configuring " +
+            "ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY, which keeps an " +
+            "offline-recoverable copy of each conversation key.",
     );
   }
   const dek = readDekHeader(params.request);
@@ -64,12 +72,10 @@ export async function resolveIncognitoCreation(params: {
       params.conversationId,
       dek,
     ),
-    incognitoEscrow: isIncognitoEscrowConfigured()
-      ? await produceIncognitoEscrow({
-          dek,
-          conversationId: params.conversationId,
-        })
-      : null,
+    incognitoEscrow: await produceIncognitoEscrow({
+      dek,
+      conversationId: params.conversationId,
+    }),
   };
 }
 

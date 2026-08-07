@@ -27,6 +27,10 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import {
+  INCOGNITO_KEY_HEADER,
+  parseIncognitoDekHeader,
+} from "@/content-encryption/incognito";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -107,8 +111,9 @@ import {
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
 import {
-  isIncognitoChatSession,
+  type IncognitoAuditDisposition,
   redactIncognitoInteraction,
+  resolveIncognitoAuditContext,
 } from "./utils/incognito-session";
 
 const {
@@ -136,10 +141,17 @@ export interface LLMProxyContext<TRequest> {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   /**
-   * Incognito chat session: persisted interaction content is redacted and span
-   * content capture is suppressed (usage/cost metadata untouched).
+   * Incognito chat session: span content capture is suppressed and persisted
+   * content is either encrypted or redacted (usage/cost metadata untouched).
+   * True whenever `incognito.kind !== "none"`.
    */
   suppressContent: boolean;
+  /**
+   * How this request's persisted audit content must be keyed. `encrypt`
+   * carries the validated conversation key; `redact` is the fail-closed
+   * fallback. Resolved once per request so every write site agrees.
+   */
+  incognito: IncognitoAuditDisposition;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
@@ -653,10 +665,12 @@ export async function handleLLMProxy<
   }
 
   // Incognito chat sessions: interaction rows keep all usage/cost/session
-  // metadata but their content-bearing fields are redacted, and span content
-  // capture is suppressed. Resolved once up front (server-derived, fail
-  // closed) so the catch below and both stream handlers agree on it.
-  const suppressContent = await isIncognitoChatSession({
+  // metadata, but their content-bearing fields are encrypted under the
+  // conversation's browser-held key (or redacted if that cannot be done
+  // safely), and span content capture is suppressed either way. Resolved once
+  // up front (server-derived, fail closed) so the catch below and both stream
+  // handlers agree on it.
+  const incognito = await resolveIncognitoAuditContext({
     source,
     // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
     // from forwarded headers, and this seam must only ever match the
@@ -664,7 +678,11 @@ export async function handleLLMProxy<
     requestIp: request.socket.remoteAddress,
     sessionId,
     userId,
+    dek: readIncognitoDek(request),
   });
+  // Content never reaches spans or logs for an incognito session, whether it
+  // ends up encrypted or redacted.
+  const suppressContent = incognito.kind !== "none";
 
   // Check usage limits
   try {
@@ -1194,6 +1212,7 @@ export async function handleLLMProxy<
       dualLlmAnalyses,
       unsafeContextBoundary,
       suppressContent,
+      incognito,
       externalAgentId,
       authMethod,
       billingMode,
@@ -1266,9 +1285,7 @@ export async function handleLLMProxy<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await InteractionModel.create(
-        suppressContent ? redactIncognitoInteraction(record) : record,
-      );
+      await persistProxyInteraction(record, incognito);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1319,6 +1336,7 @@ async function handleStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
+    incognito,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1380,9 +1398,7 @@ async function handleStreaming<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await InteractionModel.create(
-        suppressContent ? redactIncognitoInteraction(record) : record,
-      );
+      await persistProxyInteraction(record, incognito);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -1794,9 +1810,7 @@ async function handleStreaming<
           dualLlmAnalyses,
           unsafeContextBoundary,
         });
-        await InteractionModel.create(
-          suppressContent ? redactIncognitoInteraction(record) : record,
-        );
+        await persistProxyInteraction(record, incognito);
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -1843,6 +1857,7 @@ async function handleNonStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
+    incognito,
     externalAgentId,
     authMethod,
     billingMode,
@@ -2114,11 +2129,7 @@ async function handleNonStreaming<
         dualLlmAnalyses,
         unsafeContextBoundary,
       });
-      await InteractionModel.create(
-        suppressContent
-          ? redactIncognitoInteraction(refusalRecord)
-          : refusalRecord,
-      );
+      await persistProxyInteraction(refusalRecord, incognito);
 
       return reply.send(refusalResponse);
     }
@@ -2195,9 +2206,7 @@ async function handleNonStreaming<
       dualLlmAnalyses,
       unsafeContextBoundary,
     });
-    await InteractionModel.create(
-      suppressContent ? redactIncognitoInteraction(record) : record,
-    );
+    await persistProxyInteraction(record, incognito);
   } catch (interactionError) {
     logger.error(
       { err: interactionError, profileId: agent.id },
@@ -2325,4 +2334,40 @@ function headerNamePeek(
 function extractDurationStatusCode(error: unknown): string {
   const statusCode = (error as { statusCode?: number } | null)?.statusCode;
   return typeof statusCode === "number" ? String(statusCode) : "0";
+}
+
+/**
+ * The single funnel every proxy interaction write goes through, so all five
+ * sites treat incognito identically.
+ *
+ * - `encrypt`: store the full record, keyed to the conversation's browser-held
+ *   DEK (recoverable offline via that conversation's escrow record).
+ * - `redact`: fail-closed — content is replaced with the redaction marker
+ *   rather than risking a plaintext write or an unrecoverable one.
+ * - `none`: ordinary write; at-rest rules apply.
+ */
+async function persistProxyInteraction(
+  record: InsertInteraction,
+  incognito: IncognitoAuditDisposition,
+): Promise<void> {
+  await InteractionModel.create(
+    incognito.kind === "redact" ? redactIncognitoInteraction(record) : record,
+    incognito.kind === "encrypt" ? incognito.audit : null,
+  );
+}
+
+/**
+ * Read the incognito conversation key off the request. A malformed header is
+ * treated as absent (the resolver then fails closed to redaction) rather than
+ * failing the LLM call — the proxy's job is to serve the request; losing the
+ * key costs audit fidelity, not the user's turn.
+ */
+function readIncognitoDek(request: FastifyRequest): Buffer | null {
+  const raw = request.headers[INCOGNITO_KEY_HEADER];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  try {
+    return parseIncognitoDekHeader(value);
+  } catch {
+    return null;
+  }
 }

@@ -24,8 +24,12 @@ import {
   // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
 } from "@/content-encryption/index.ee";
 import {
+  decryptMcpToolCallContent,
+  encryptMcpToolCallContent,
+} from "@/content-encryption/audit-rows";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import {
   decryptMcpToolCallRow,
-  encryptMcpToolCallInsert,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
 } from "@/content-encryption/rows.ee";
 import db, { schema } from "@/database";
@@ -61,15 +65,33 @@ function buildMcpToolCallSearchCondition(search: string) {
 }
 
 class McpToolCallModel {
-  static async create(data: InsertMcpToolCall) {
+  /**
+   * @param auditContext when present, this tool call belongs to an incognito
+   * conversation: `toolCall`/`toolResult` are encrypted under that
+   * conversation's browser-held key and the row is stamped with the
+   * discriminator, instead of the server key (or plaintext).
+   */
+  static async create(
+    data: InsertMcpToolCall,
+    auditContext?: IncognitoAuditContext | null,
+  ) {
+    const audit = auditContext ?? null;
     const [mcpToolCall] = await db
       .insert(schema.mcpToolCallsTable)
       // Spread first: the encrypt helper mutates in place, and callers must
       // keep their plaintext copy (e.g. to build the JSON-RPC response).
-      .values(encryptMcpToolCallInsert(redactToolCallArguments({ ...data })))
+      .values(
+        encryptMcpToolCallContent(
+          redactToolCallArguments({ ...data }),
+          audit,
+        ),
+      )
       .returning();
 
-    return decryptMcpToolCallRow(mcpToolCall);
+    // Decrypting on a write path is only safe because the key came from this
+    // caller. A read path that might meet a row keyed to a conversation it
+    // cannot open must go through the locked-row guards instead.
+    return decryptMcpToolCallContent(mcpToolCall, audit);
   }
 
   /**

@@ -63,7 +63,7 @@ import config, {
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-op when escrow is unconfigured
-import { verifyIncognitoChatConfig } from "@/content-encryption/incognito-escrow.ee";
+import { verifyIncognitoChatConfig } from "@/content-encryption/incognito-escrow";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";

@@ -476,17 +476,31 @@ class ConversationModel {
   }
 
   /**
-   * True only when `id` names a non-deleted incognito conversation owned by
-   * `userId`. Used by the LLM proxy to decide whether a chat-loopback session
-   * must have its interaction/telemetry content redacted; the owner check keeps
-   * a spoofed session id from suppressing someone else's audit trail.
+   * Incognito bookkeeping for a conversation, scoped to its owner. Used by the
+   * LLM proxy to decide how a chat-loopback session's audit content must be
+   * stored; the owner check keeps a spoofed session id from suppressing (or
+   * re-keying) someone else's audit trail.
+   *
+   * Returns null when `id` is not a non-deleted conversation owned by
+   * `userId`. `hasEscrow` reports only that an escrow record was CREATED —
+   * with the Vault sink the blob itself is deliberately unreadable by the app,
+   * so a deleted or rotated one still reads as present.
    */
-  static async isIncognitoOwnedBy(params: {
+  static async getIncognitoAuditInfoOwnedBy(params: {
     id: string;
     userId: string;
-  }): Promise<boolean> {
+  }): Promise<{
+    incognito: boolean;
+    incognitoDekFingerprint: string | null;
+    hasEscrow: boolean;
+  } | null> {
     const [row] = await db
-      .select({ incognito: schema.conversationsTable.incognito })
+      .select({
+        incognito: schema.conversationsTable.incognito,
+        incognitoDekFingerprint:
+          schema.conversationsTable.incognitoDekFingerprint,
+        incognitoEscrow: schema.conversationsTable.incognitoEscrow,
+      })
       .from(schema.conversationsTable)
       .where(
         and(
@@ -496,7 +510,12 @@ class ConversationModel {
         ),
       )
       .limit(1);
-    return row?.incognito ?? false;
+    if (!row) return null;
+    return {
+      incognito: row.incognito,
+      incognitoDekFingerprint: row.incognitoDekFingerprint,
+      hasEscrow: row.incognitoEscrow !== null,
+    };
   }
 
   /**

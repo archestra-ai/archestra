@@ -2812,26 +2812,25 @@ const config = {
   },
   /**
    * Incognito chats: per-conversation encryption under a browser-held key.
-   * Free feature, enabled by default; ARCHESTRA_CHAT_INCOGNITO_ENABLED=false
-   * disables it. The escrow fields below are the enterprise add-on.
+   * Configuring `escrowPublicKey` is what enables the feature — it is off
+   * until then. `ARCHESTRA_CHAT_INCOGNITO_ENABLED=false` is a kill switch that
+   * turns it off again without discarding the escrow configuration.
    */
   chatIncognito: {
     enabled: process.env.ARCHESTRA_CHAT_INCOGNITO_ENABLED !== "false",
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     /**
-     * Enterprise escrow: the PEM (or base64-of-PEM) RSA public key
-     * conversation keys are escrowed to for break-glass recovery; the private
-     * half stays offline with the customer's security team. Setting it without
-     * an enterprise license fails startup (see verifyIncognitoChatConfig).
+     * The PEM (or base64-of-PEM) RSA public key conversation keys are escrowed
+     * to for break-glass recovery; the private half stays offline with the
+     * customer's security team. Setting it enables incognito chats; an
+     * unparseable or undersized key fails startup (see
+     * verifyIncognitoChatConfig).
      */
     escrowPublicKey:
       process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
       undefined,
     /**
-     * Escrow sink: `db` stores the wrapped blob on the conversation row;
-     * `vault` writes it to the configured HashiCorp Vault backend at
+     * Escrow sink: `db` (default) stores the wrapped blob on the conversation
+     * row; `vault` writes it to the configured HashiCorp Vault backend at
      * `incognito-escrow/<conversationId>` and stores only a path marker.
      * `vault` requires an enterprise license, the escrow key, and
      * ARCHESTRA_SECRETS_MANAGER=Vault (see verifyIncognitoChatConfig).
@@ -2839,7 +2838,6 @@ const config = {
     escrowSink: parseIncognitoEscrowSink(
       process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK,
     ),
-    // SPDX-SnippetEnd
   },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",

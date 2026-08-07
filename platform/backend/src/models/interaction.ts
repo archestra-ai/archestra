@@ -26,8 +26,12 @@ import {
   sum,
 } from "drizzle-orm";
 import {
+  decryptInteractionContent,
+  encryptInteractionContent,
+} from "@/content-encryption/audit-rows";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import {
   decryptInteractionRow,
-  encryptInteractionInsert,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
 } from "@/content-encryption/rows.ee";
 import db, { schema } from "@/database";
@@ -332,7 +336,17 @@ class InteractionModel {
     return result !== undefined;
   }
 
-  static async create(data: InsertInteraction) {
+  /**
+   * @param auditContext when present, this interaction belongs to an incognito
+   * conversation: its content columns are encrypted under that conversation's
+   * browser-held key and the row is stamped with the discriminator, instead of
+   * being encrypted under the server key (or left plaintext).
+   */
+  static async create(
+    data: InsertInteraction,
+    auditContext?: IncognitoAuditContext | null,
+  ) {
+    const audit = auditContext ?? null;
     // Snapshot the environment from the agent at creation time (single funnel
     // for all interaction writes) so per-environment cost-limit usage stays
     // stable under later agent reassignment. The agent is authoritative: when a
@@ -354,26 +368,26 @@ class InteractionModel {
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
     // whole conversation on every row (no-op for all other interactions, and
     // disabled entirely under content encryption — see isEligible).
-    const { values, tip } =
-      await InteractionDeltaManager.encodeOnWrite(sanitized);
+    //
+    // Incognito rows are excluded outright. Today they could not qualify anyway
+    // (isEligible demands a Claude session source, and these are chat sources),
+    // but relying on that coincidence would be fragile: a delta chain mixes rows
+    // across requests and only the request that created a row carries its key,
+    // so a chain spanning keys could not be reconstructed by any reader.
+    const { values, tip } = audit
+      ? { values: sanitized, tip: null }
+      : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
     const [interaction] = await db
       .insert(schema.interactionsTable)
       // Monotonic v7 id: created_at ties happen under load, and the delta
       // manager's "most recent interaction" lookup breaks ties with the id.
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      .values({ id: uuidv7(), ...encryptInteractionInsert(values) })
-      // SPDX-SnippetEnd
+      .values({ id: uuidv7(), ...encryptInteractionContent(values, audit) })
       .returning();
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes.
-    decryptInteractionRow(interaction);
-    // SPDX-SnippetEnd
+    // callers never see envelopes. Safe for incognito rows too: this caller
+    // supplied the very key that just encrypted them.
+    decryptInteractionContent(interaction, audit);
 
     if (tip) {
       InteractionDeltaManager.commitTip(interaction.id, tip);

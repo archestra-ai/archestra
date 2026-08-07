@@ -33,7 +33,7 @@ export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 
 /**
  * Versioned escrow record stored on incognito conversations (enterprise
- * break-glass recovery — see content-encryption/incognito-escrow.ee.ts).
+ * break-glass recovery — see content-encryption/incognito-escrow.ts).
  * Union of the two escrow sinks:
  * - `db` sink: the conversation key wrapped to the operator's RSA escrow
  *   public key, stored inline on the row.

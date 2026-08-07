@@ -21,7 +21,7 @@ import {
   verifyIncognitoChatConfig,
   wrapIncognitoDek,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
-} from "./incognito-escrow.ee";
+} from "./incognito-escrow";
 
 const { publicKey, privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,

@@ -2651,7 +2651,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // and store a derived plaintext title.
       const incognitoConversationId = incognito ? randomUUID() : null;
       const incognitoFields = incognitoConversationId
-        ? await resolveIncognitoCreation({
+        ? resolveIncognitoCreation({
             request,
             conversationId: incognitoConversationId,
           })

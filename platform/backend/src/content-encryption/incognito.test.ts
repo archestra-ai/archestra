@@ -19,7 +19,6 @@ import {
 } from "./incognito";
 import {
   isIncognitoEscrowConfigured,
-  produceIncognitoEscrow,
   verifyIncognitoChatConfig,
   wrapIncognitoDek,
 } from "./incognito-escrow";
@@ -259,32 +258,6 @@ kt2mqWURg9/ZzdQ7GwIDAQAB
     expect(() => verifyIncognitoChatConfig()).not.toThrow();
   });
 
-  test("boot guard names each missing piece for the vault sink", () => {
-    config.chatIncognito.escrowSink = "vault";
-
-    // Missing license — the Vault sink stays enterprise.
-    config.enterpriseFeatures.core = false;
-    expect(() => verifyIncognitoChatConfig()).toThrow(/enterprise license/);
-
-    // Missing Vault secrets backend.
-    config.enterpriseFeatures.core = true;
-    config.secretsManager.type = "DB";
-    expect(() => verifyIncognitoChatConfig()).toThrow(
-      /ARCHESTRA_SECRETS_MANAGER=Vault/,
-    );
-
-    // Missing escrow key: there is no blob to write to Vault without one.
-    config.secretsManager.type = "VAULT";
-    config.chatIncognito.escrowPublicKey = undefined;
-    expect(() => verifyIncognitoChatConfig()).toThrow(
-      /ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY/,
-    );
-
-    // All three present: fine.
-    config.chatIncognito.escrowPublicKey = ESCROW_PEM;
-    expect(() => verifyIncognitoChatConfig()).not.toThrow();
-  });
-
   test("escrow wrap is independently recoverable with the private key", () => {
     const dek = randomBytes(32);
     const blob = wrapIncognitoDek(dek);
@@ -302,14 +275,5 @@ kt2mqWURg9/ZzdQ7GwIDAQAB
       Buffer.from(blob.wrappedDek, "base64"),
     );
     expect(recovered.equals(dek)).toBe(true);
-  });
-
-  test("produceIncognitoEscrow returns the inline blob for the db sink", async () => {
-    const dek = randomBytes(32);
-    const record = await produceIncognitoEscrow({
-      dek,
-      conversationId: CONVERSATION_A,
-    });
-    expect(record).toMatchObject({ v: 1, alg: "RSA-OAEP-256" });
   });
 });

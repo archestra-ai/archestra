@@ -16,10 +16,8 @@ type UnavailableContent = IncognitoLockedContent | IncognitoRedactedContent;
  * still exists (encrypted, with an escrow copy of the key), redacted content
  * never made it to disk.
  *
- * Nothing here promises the content "is recoverable" — with the Vault escrow
- * sink the platform deliberately never reads the blob back, so a deleted or
- * rotated escrow record still reads as present. Only the fact that a copy was
- * made is stated.
+ * Locked content really is recoverable: the wrapped key sits on the
+ * conversation row, so its presence is verifiable rather than assumed.
  */
 export function IncognitoContentUnavailable({
   value,
@@ -44,7 +42,7 @@ export function IncognitoContentUnavailable({
         </p>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {locked
-            ? "This content is encrypted with a key held only in the browser that started the chat. An escrow copy of the key was created, so reading it requires that escrow key, held offline."
+            ? "This content is encrypted with a key held only in the browser that started the chat. It can be recovered with the escrow key, which is held offline."
             : "This incognito content could not be encrypted when it was written, so it was never stored. It cannot be recovered."}
         </p>
       </div>

@@ -8,7 +8,7 @@ import {
 } from "@/content-encryption/incognito";
 import {
   isIncognitoEscrowConfigured,
-  produceIncognitoEscrow,
+  wrapIncognitoDek,
 } from "@/content-encryption/incognito-escrow";
 import {
   ApiError,
@@ -29,9 +29,7 @@ export const INCOGNITO_KEY_MISMATCH_TYPE = "incognito_key_mismatch";
 /**
  * Validate an incognito creation request and produce the row fields: the
  * caller must present the freshly generated DEK so it can be fingerprinted and
- * escrow-wrapped (including the Vault-sink write, which is why this is async
- * and needs the pre-generated conversation id). Never returns the DEK for
- * storage.
+ * escrow-wrapped. Never returns the DEK for storage.
  *
  * The escrow record is mandatory, not optional: the conversation's audit trail
  * is encrypted under this DEK, so without an escrow copy it would be
@@ -39,14 +37,14 @@ export const INCOGNITO_KEY_MISMATCH_TYPE = "incognito_key_mismatch";
  * configured escrow key, so reaching the wrap below means one exists — a
  * failure there is fail-closed and no conversation is created.
  */
-export async function resolveIncognitoCreation(params: {
+export function resolveIncognitoCreation(params: {
   request: FastifyRequest;
   conversationId: string;
-}): Promise<{
+}): {
   incognito: true;
   incognitoDekFingerprint: string;
   incognitoEscrow: IncognitoEscrowBlob;
-}> {
+} {
   if (!isIncognitoChatEnabled()) {
     throw new ApiError(
       403,
@@ -72,10 +70,7 @@ export async function resolveIncognitoCreation(params: {
       params.conversationId,
       dek,
     ),
-    incognitoEscrow: await produceIncognitoEscrow({
-      dek,
-      conversationId: params.conversationId,
-    }),
+    incognitoEscrow: wrapIncognitoDek(dek),
   };
 }
 

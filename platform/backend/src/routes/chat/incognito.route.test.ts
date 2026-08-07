@@ -7,10 +7,6 @@
  *   incognito_escrow stays NULL (no recoverable key copy anywhere)
  * - with enterprise escrow configured, the RSA-wrapped blob is stored and
  *   independently recoverable with the offline private key
- * - with the enterprise Vault escrow sink, the blob is written to
- *   `incognito-escrow/<conversationId>` under the configured secret path and
- *   the row stores only a reference marker; a failed Vault write fails the
- *   creation (500) with no conversation row (fail closed)
  * - message content at rest is an envelope only the browser-held key opens;
  *   GET decrypts with the key, returns the locked shape without it, and 409s
  *   on a wrong key
@@ -42,23 +38,6 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import { isContentEnvelope } from "@/utils/crypto";
 
-// Vault HTTP boundary for the escrow vault-sink tests — the same seam
-// secrets-manager.test.ts mocks. Everything else runs real against PGlite.
-const mockVaultClient = vi.hoisted(() => ({
-  write: vi.fn(),
-  read: vi.fn(),
-  delete: vi.fn(),
-  list: vi.fn(),
-  kubernetesLogin: vi.fn(),
-}));
-
-vi.mock("node-vault", () => {
-  return {
-    __esModule: true,
-    default: () => mockVaultClient,
-  };
-});
-
 const { publicKey, privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
 });
@@ -85,7 +64,6 @@ describe("incognito conversation routes", () => {
     // Escrow is what enables incognito, and the db sink needs no license — so
     // this IS the unlicensed default posture, not an enterprise one.
     config.chatIncognito.escrowPublicKey = ESCROW_PEM;
-    config.chatIncognito.escrowSink = "db";
     // Force at-rest content encryption OFF (a local .env may set
     // ARCHESTRA_CONTENT_ENCRYPTION_SECRET): incognito must be exercised on a
     // free-instance posture, and the envelopes asserted on must be the
@@ -261,86 +239,6 @@ describe("incognito conversation routes", () => {
         ),
       );
       expect(recovered.equals(dek)).toBe(true);
-    });
-  });
-
-  describe("escrow vault sink (enterprise)", () => {
-    beforeEach(async () => {
-      config.enterpriseFeatures.core = true;
-      config.chatIncognito.escrowPublicKey = ESCROW_PEM;
-      config.chatIncognito.escrowSink = "vault";
-      config.secretsManager.type = "VAULT";
-      process.env.ARCHESTRA_HASHICORP_VAULT_ADDR = "http://vault.test:8200";
-      process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN = "test-token";
-      mockVaultClient.write.mockReset();
-      mockVaultClient.write.mockResolvedValue({});
-      await secretManagerCoordinator.initialize();
-    });
-
-    afterEach(async () => {
-      delete process.env.ARCHESTRA_HASHICORP_VAULT_ADDR;
-      delete process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN;
-      config.secretsManager.type = "DB";
-      await secretManagerCoordinator.initialize();
-    });
-
-    test("writes the blob to incognito-escrow/<id> and stores the reference marker", async () => {
-      const id = await createIncognitoConversation();
-
-      // KV v2 default path prefix + the escrow folder + the conversation id.
-      const expectedPath = `secret/data/archestra/incognito-escrow/${id}`;
-      expect(mockVaultClient.write).toHaveBeenCalledTimes(1);
-      const [writtenPath, payload] = mockVaultClient.write.mock.calls[0] as [
-        string,
-        { data: { value: string } },
-      ];
-      expect(writtenPath).toBe(expectedPath);
-
-      // The value written to Vault is the wrapped blob, recoverable offline.
-      const writtenBlob = JSON.parse(payload.data.value) as {
-        alg: string;
-        wrappedDek: string;
-      };
-      expect(writtenBlob.alg).toBe("RSA-OAEP-256");
-      const recovered = privateDecrypt(
-        {
-          key: privateKey,
-          padding: cryptoConstants.RSA_PKCS1_OAEP_PADDING,
-          oaepHash: "sha256",
-        },
-        Buffer.from(writtenBlob.wrappedDek, "base64"),
-      );
-      expect(recovered.equals(dek)).toBe(true);
-
-      // The row stores only the reference marker — never the blob.
-      const row = await readIncognitoRow(id);
-      expect(row.incognito_escrow).toEqual({
-        v: 1,
-        sink: "vault",
-        path: expectedPath,
-      });
-      expect(row.incognito_dek_fingerprint).toBeTruthy();
-    });
-
-    test("a failed Vault write fails the creation (500) with NO conversation row", async () => {
-      mockVaultClient.write.mockRejectedValue(new Error("vault sealed"));
-
-      const before = await db.execute<{ count: string }>(
-        sql`SELECT count(*) FROM conversations WHERE incognito`,
-      );
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/chat/conversations",
-        headers: dekHeader(),
-        payload: { agentId, incognito: true },
-      });
-      expect(response.statusCode).toBe(500);
-      expect(response.json().error.message).toContain("Vault");
-
-      const after = await db.execute<{ count: string }>(
-        sql`SELECT count(*) FROM conversations WHERE incognito`,
-      );
-      expect(after.rows[0].count).toBe(before.rows[0].count);
     });
   });
 

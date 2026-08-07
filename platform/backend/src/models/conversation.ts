@@ -458,10 +458,8 @@ class ConversationModel {
    * authorized: the flag plus the stored key fingerprint (the fingerprint is
    * deliberately absent from API response shapes).
    *
-   * `hasEscrow` reports only that an escrow record was CREATED — with the
-   * Vault sink the blob itself is deliberately unreadable by the app, so a
-   * deleted or rotated one still reads as present. It gates whether this
-   * conversation's audit trail may be encrypted rather than redacted.
+   * `hasEscrow` gates whether this conversation's audit trail may be encrypted
+   * rather than redacted. It is exact: the wrapped key lives on the row.
    */
   static async getIncognitoKeyInfo(id: string): Promise<{
     id: string;
@@ -495,9 +493,8 @@ class ConversationModel {
    * re-keying) someone else's audit trail.
    *
    * Returns null when `id` is not a non-deleted conversation owned by
-   * `userId`. `hasEscrow` reports only that an escrow record was CREATED —
-   * with the Vault sink the blob itself is deliberately unreadable by the app,
-   * so a deleted or rotated one still reads as present.
+   * `userId`. `hasEscrow` is exact: the wrapped key lives on the row, so its
+   * presence is read directly rather than inferred.
    */
   static async getIncognitoAuditInfoOwnedBy(params: {
     id: string;

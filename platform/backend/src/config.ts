@@ -1269,24 +1269,6 @@ export const parseOtelCaptureContent = (params: {
   if (value === "false") return false;
   return !params.contentEncryptionConfigured;
 };
-
-/**
- * Where the incognito escrow blob is persisted: on the conversation row
- * (`db`, default) or in the configured HashiCorp Vault backend (`vault`).
- * Rejected at parse time on any other value — escrow drives break-glass
- * recovery, so a typo must fail the boot, never silently fall back to `db`.
- * @public — exported for testability
- */
-export const parseIncognitoEscrowSink = (
-  envValue: string | undefined,
-): "db" | "vault" => {
-  const value = envValue?.trim().toLowerCase();
-  if (!value || value === "db") return "db";
-  if (value === "vault") return "vault";
-  throw new Error(
-    `Invalid ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK="${envValue}". Expected "db" or "vault".`,
-  );
-};
 // SPDX-SnippetEnd
 
 /**
@@ -2887,16 +2869,6 @@ const config = {
     escrowPublicKey:
       process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
       undefined,
-    /**
-     * Escrow sink: `db` (default) stores the wrapped blob on the conversation
-     * row; `vault` writes it to the configured HashiCorp Vault backend at
-     * `incognito-escrow/<conversationId>` and stores only a path marker.
-     * `vault` requires an enterprise license, the escrow key, and
-     * ARCHESTRA_SECRETS_MANAGER=Vault (see verifyIncognitoChatConfig).
-     */
-    escrowSink: parseIncognitoEscrowSink(
-      process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK,
-    ),
   },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",

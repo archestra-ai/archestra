@@ -83,21 +83,15 @@ Keep `incognito-escrow.pem` offline with your security team. Configure only the 
 
 Enable escrow in its own rollout, after the release is fully deployed. Until the key is set, no replica writes an incognito record, so a mixed fleet never meets one it cannot read.
 
-By default the wrapped key is stored on the conversation row (`ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK=db`). The platform cannot read it — only the offline private key can open it.
-
-The Vault sink below requires an enterprise license. Contact sales@archestra.ai for licensing information.
-
-Set `ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK=vault` to write the wrapped key to your HashiCorp Vault backend instead, at `incognito-escrow/<conversation id>` under the configured secret path prefix. This requires `ARCHESTRA_SECRETS_MANAGER=Vault`. The conversation row then stores only the Vault path. The platform only ever writes these paths — grant it a create-only Vault policy so they are write-only from the app's side. If the Vault write fails, the chat is not created.
+The wrapped key is stored on the conversation row. Archestra cannot read it — only the offline private key opens it, so a database dump holds content encrypted under one key and the key itself encrypted under another, and yields neither.
 
 Escrow key rotation affects new chats only: each conversation stores its key wrapped to the escrow key configured at creation time.
 
-With the `vault` sink, Archestra never reads the path back. It cannot tell you whether a blob is still there — a deleted or rotated one still looks present. Treat Vault retention as your responsibility.
-
 ### Break-Glass Recovery
 
-The escrow record is a JSON blob with the chat key wrapped as RSA-OAEP (SHA-256). With the `db` sink it sits in the conversation row's `incognito_escrow` column; with the `vault` sink the column holds the Vault path and the blob sits at `incognito-escrow/<conversation id>` in Vault.
+The escrow record is a JSON blob in the conversation row's `incognito_escrow` column, holding the chat key wrapped as RSA-OAEP (SHA-256).
 
-Recovery happens outside the platform, with database access — and Vault access for the `vault` sink. The holder of the escrow private key decrypts `wrappedDek` to get the chat key, then decrypts each envelope with AES-256-GCM.
+Recovery happens outside the platform, with database access. The holder of the escrow private key decrypts `wrappedDek` to get the chat key, then decrypts each envelope with AES-256-GCM.
 
 Every envelope uses an AAD of `<column>|incognito:<conversation id>`, which binds it to both the column and the chat. Use the column the value came from:
 

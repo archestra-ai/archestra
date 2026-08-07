@@ -6,7 +6,7 @@ import {
   publicEncrypt,
 } from "node:crypto";
 import config from "@/config";
-import type { IncognitoEscrowBlob, IncognitoEscrowWrappedDek } from "@/types";
+import type { IncognitoEscrowBlob } from "@/types";
 
 /**
  * Key escrow for incognito chats: at conversation creation the browser-held
@@ -22,10 +22,12 @@ import type { IncognitoEscrowBlob, IncognitoEscrowWrappedDek } from "@/types";
  * what an auditable deployment needs. So incognito is unavailable until an
  * escrow key is configured.
  *
- * Two sinks (ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK):
- * - `db` (default): the wrapped blob is stored inline on the conversation row.
- * - `vault`: Enterprise. The wrapped blob is written to HashiCorp Vault and
- *   the row stores only a reference marker (see incognito-escrow.ee.ts).
+ * The wrapped key is stored inline on the conversation row. That is safe by
+ * construction rather than by access control: unwrapping needs the offline
+ * private half, so a database dump yields ciphertext under two separate keys
+ * and opens neither. There is deliberately no choice of where it goes — a
+ * second location would guard only against compromise of the offline private
+ * key, at the cost of a store the platform cannot read back to verify.
  */
 
 /**
@@ -38,72 +40,14 @@ export function isIncognitoEscrowConfigured(): boolean {
 
 /**
  * Boot-time validation, mirroring the content-encryption guard's posture: an
- * operator who configured escrow must never silently run with it ignored (bad
- * PEM, too-small key, or a Vault sink without the pieces it needs).
+ * operator who configured escrow must never silently run with it ignored
+ * because of a bad PEM or an undersized key.
  */
 export function verifyIncognitoChatConfig(): void {
   const pem = config.chatIncognito.escrowPublicKey;
-
-  if (config.chatIncognito.escrowSink === "vault") {
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    if (!config.enterpriseFeatures.core) {
-      throw new Error(
-        "ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK=vault requires an enterprise " +
-          "license. Unset the variable to use the default `db` sink, or " +
-          "contact sales@archestra.ai.",
-      );
-    }
-    if (config.secretsManager.type !== "VAULT") {
-      throw new Error(
-        "ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK=vault requires " +
-          "ARCHESTRA_SECRETS_MANAGER=Vault (the escrow blob is written to " +
-          "the configured HashiCorp Vault secrets backend).",
-      );
-    }
-    // SPDX-SnippetEnd
-    if (!pem) {
-      throw new Error(
-        "ARCHESTRA_CHAT_INCOGNITO_ESCROW_SINK=vault requires " +
-          "ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY to be configured — " +
-          "there is no escrow blob to write without an escrow key.",
-      );
-    }
-  }
-
   if (!pem) return;
-
   // Throws with the parse/size problem named.
   loadEscrowKey(pem);
-}
-
-/**
- * Produce the escrow record for a new incognito conversation: wrap the DEK to
- * the escrow key and either return the blob for inline (db-sink) storage or
- * write it to Vault and return the reference marker. Callers must have checked
- * {@link isIncognitoEscrowConfigured} first. Fail closed: a Vault write
- * failure throws (500) so the conversation is never created without its
- * escrow copy.
- */
-export async function produceIncognitoEscrow(params: {
-  dek: Buffer;
-  conversationId: string;
-}): Promise<IncognitoEscrowBlob> {
-  const wrapped = wrapIncognitoDek(params.dek);
-  if (config.chatIncognito.escrowSink !== "vault") {
-    return wrapped;
-  }
-  // SPDX-SnippetBegin
-  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  const { writeEscrowBlobToVault } = await import("./incognito-escrow.ee");
-  const path = await writeEscrowBlobToVault({
-    conversationId: params.conversationId,
-    blob: wrapped,
-  });
-  return { v: 1, sink: "vault", path };
-  // SPDX-SnippetEnd
 }
 
 /**
@@ -112,7 +56,7 @@ export async function produceIncognitoEscrow(params: {
  * recovery procedure is unambiguous.
  * @public — exported so tests can pin the exact offline recovery contract
  */
-export function wrapIncognitoDek(dek: Buffer): IncognitoEscrowWrappedDek {
+export function wrapIncognitoDek(dek: Buffer): IncognitoEscrowBlob {
   const key = escrowKeyOrNull();
   if (!key) {
     throw new Error(

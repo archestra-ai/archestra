@@ -24,6 +24,7 @@ import {
   useTestConnectionTarget,
 } from "../../_parts/catalog-setup-wizard";
 import { EditCatalogContent } from "../../_parts/edit-catalog-dialog";
+import { IdleHibernationSection } from "../../_parts/idle-hibernation-section";
 import type { CatalogItem } from "../../_parts/mcp-server-card";
 
 export function McpCatalogItemEditPage({ id }: { id: string }) {
@@ -117,6 +118,7 @@ function SetupWizard({ item }: { item: CatalogItem }) {
 
       {step === "configuration" && (
         <div className="flex flex-col rounded-lg border">
+          <IdleHibernationSection item={item} />
           <EditCatalogContent
             item={item}
             onClose={() => {}}

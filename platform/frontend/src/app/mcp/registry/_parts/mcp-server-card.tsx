@@ -74,6 +74,10 @@ import { shouldShowMcpCardChatButton } from "./chat-button-visibility";
 import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
+  getDeploymentStatusAriaLabel,
+  getDeploymentStatusChipLabel,
+  getDeploymentStatusTooltipCopy,
+  STATE_PRIORITY,
 } from "./deployment-status";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
@@ -448,13 +452,6 @@ export function McpServerCard({
   // (one stays "pending" while another flips to "failed"), so before any
   // summary or per-row dot is computed, canonicalize the state per podName
   // by picking the highest-priority observation. All rows then agree.
-  const STATE_PRIORITY: Record<string, number> = {
-    failed: 4,
-    running: 3,
-    succeeded: 3,
-    pending: 2,
-    not_created: 1,
-  };
   const effectiveDeploymentStatuses = (() => {
     if (!item.multitenant) return deploymentStatuses;
     const canonicalByPod = new Map<string, string>();
@@ -486,6 +483,10 @@ export function McpServerCard({
     deploymentServerIds,
     effectiveDeploymentStatuses,
   );
+  // Non-null only for the idle states, which is also what gates the tooltip.
+  const deploymentIdleCopy = deploymentSummary
+    ? getDeploymentStatusTooltipCopy(deploymentSummary.overallState)
+    : null;
   const toolsCount = item.toolCount ?? 0;
 
   const chatButton = shouldShowMcpCardChatButton({
@@ -667,17 +668,36 @@ export function McpServerCard({
       {variant === "local" && deploymentServerIds.length > 0 && (
         <>
           {deploymentSummary ? (
-            <button
-              type="button"
-              onClick={() => goToItemPage("logs")}
-              aria-label={`${deploymentSummary.running} of ${deploymentSummary.total} deployments running for ${item.name}, view logs`}
-              className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
-            >
-              <DeploymentStatusDot state={deploymentSummary.overallState} />
-              <span aria-hidden>
-                {deploymentSummary.running}/{deploymentSummary.total}
-              </span>
-            </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => goToItemPage("logs")}
+                    aria-label={getDeploymentStatusAriaLabel({
+                      summary: deploymentSummary,
+                      serverName: item.name,
+                    })}
+                    className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
+                  >
+                    <DeploymentStatusDot
+                      state={deploymentSummary.overallState}
+                    />
+                    <span aria-hidden>
+                      {getDeploymentStatusChipLabel({
+                        summary: deploymentSummary,
+                        format: "ratio",
+                      })}
+                    </span>
+                  </button>
+                </TooltipTrigger>
+                {deploymentIdleCopy && (
+                  <TooltipContent className="max-w-md break-words">
+                    {deploymentIdleCopy}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           ) : (
             <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-muted-foreground/50 opacity-75" />
@@ -724,6 +744,8 @@ export function McpServerCard({
                       pending: "border-yellow-500 dark:border-yellow-600",
                       failed: "border-red-500 dark:border-red-700",
                       degraded: "border-orange-500 dark:border-orange-600",
+                      hibernated: "border-muted-foreground",
+                      waking: "border-muted-foreground",
                     }[connDeployment.overallState]
                   : "border-background";
                 return (

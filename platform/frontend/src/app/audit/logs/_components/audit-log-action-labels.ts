@@ -113,6 +113,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "mcpServer.deleted": "MCP server deleted",
   "mcpServer.restored": "MCP server restored",
   "mcpServer.reinstalled": "MCP server reinstalled",
+  "mcpServer.hardReset": "MCP server hard reset",
   // MCP install request
   // Retired with the installation-request feature; retained so audit rows
   // written before its removal still render with a readable label.

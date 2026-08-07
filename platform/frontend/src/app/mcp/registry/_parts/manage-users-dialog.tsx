@@ -75,7 +75,11 @@ import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { AddServiceAccountDialog } from "./add-service-account-dialog";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
-import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
+import {
+  type DeploymentState,
+  DeploymentStatusDot,
+  STATE_PRIORITY,
+} from "./deployment-status";
 import { formatOAuthFailureDetail } from "./oauth-reauth-detail";
 import { useCanReauthenticate } from "./use-can-reauthenticate";
 
@@ -830,14 +834,6 @@ function resolveServerScope(server: ServerEntry): "personal" | "team" | "org" {
 // didn't observe the pod first stays "pending" while the other goes "failed".
 // Pick a canonical state per podName (across every connection for the catalog,
 // so the personal and service-account tables agree) so all rows match.
-const DEPLOYMENT_STATE_PRIORITY: Record<string, number> = {
-  failed: 4,
-  running: 3,
-  succeeded: 3,
-  pending: 2,
-  not_created: 1,
-};
-
 function computeCanonicalStateByPod(
   servers: ServerEntry[],
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>,
@@ -849,8 +845,7 @@ function computeCanonicalStateByPod(
     const current = canonicalStateByPod.get(entry.podName);
     if (
       !current ||
-      (DEPLOYMENT_STATE_PRIORITY[entry.state] ?? 0) >
-        (DEPLOYMENT_STATE_PRIORITY[current] ?? 0)
+      (STATE_PRIORITY[entry.state] ?? 0) > (STATE_PRIORITY[current] ?? 0)
     ) {
       canonicalStateByPod.set(entry.podName, entry.state);
     }

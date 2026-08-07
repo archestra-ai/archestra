@@ -70,7 +70,7 @@ import { DeleteCatalogDialog } from "../_parts/delete-catalog-dialog";
 import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
-  getDeploymentLabel,
+  getDeploymentStatusChipLabel,
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
@@ -381,7 +381,10 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   const statusText =
     variant === "local"
       ? deploymentSummary
-        ? `${deploymentSummary.running}/${deploymentSummary.total} ${getDeploymentLabel(deploymentSummary.overallState).toLowerCase()}`
+        ? getDeploymentStatusChipLabel({
+            summary: deploymentSummary,
+            format: "ratio-with-state",
+          })
         : "Not connected"
       : connectionsCount > 0
         ? "Connected"
@@ -463,7 +466,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
                         refreshImageMutation.isPending && "animate-spin",
                       )}
                     />
-                    Restart pods
+                    Restart pods with a fresh image
                   </DropdownMenuItem>
                 )}
                 {userCanCreateCatalogItem && !isPlaywright && (

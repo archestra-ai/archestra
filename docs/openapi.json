@@ -6,6 +6,40 @@
   },
   "components": {
     "schemas": {
+      "TextSearchLanguageInput": {
+        "type": "string",
+        "enum": [
+          "simple",
+          "arabic",
+          "armenian",
+          "basque",
+          "catalan",
+          "danish",
+          "dutch",
+          "english",
+          "finnish",
+          "french",
+          "german",
+          "greek",
+          "hindi",
+          "hungarian",
+          "indonesian",
+          "irish",
+          "italian",
+          "lithuanian",
+          "nepali",
+          "norwegian",
+          "portuguese",
+          "romanian",
+          "russian",
+          "serbian",
+          "spanish",
+          "swedish",
+          "tamil",
+          "turkish",
+          "yiddish"
+        ]
+      },
       "EmbeddingDimensionsInput": {
         "type": "integer",
         "minimum": -9007199254740991,
@@ -19262,6 +19296,40 @@
           "type",
           "title",
           "description"
+        ]
+      },
+      "TextSearchLanguage": {
+        "type": "string",
+        "enum": [
+          "simple",
+          "arabic",
+          "armenian",
+          "basque",
+          "catalan",
+          "danish",
+          "dutch",
+          "english",
+          "finnish",
+          "french",
+          "german",
+          "greek",
+          "hindi",
+          "hungarian",
+          "indonesian",
+          "irish",
+          "italian",
+          "lithuanian",
+          "nepali",
+          "norwegian",
+          "portuguese",
+          "romanian",
+          "russian",
+          "serbian",
+          "spanish",
+          "swedish",
+          "tamil",
+          "turkish",
+          "yiddish"
         ]
       },
       "EmbeddingDimensions": {
@@ -136985,6 +137053,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -137562,6 +137631,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -138560,6 +138630,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -139257,6 +139328,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -139954,6 +140026,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -140651,6 +140724,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -141228,6 +141302,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -141805,6 +141880,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -144342,6 +144418,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -147613,6 +147690,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -148190,6 +148268,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -148767,6 +148846,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -149344,6 +149424,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -149921,6 +150002,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -150498,6 +150580,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -151075,6 +151158,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -151641,6 +151725,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -152207,6 +152292,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -152773,6 +152859,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -153350,6 +153437,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -153927,6 +154015,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -154504,6 +154593,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -157303,6 +157393,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -160097,6 +160188,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -162896,6 +162988,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -163473,6 +163566,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -164286,6 +164380,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -165284,6 +165379,7 @@
                                   "knowledge:embedding",
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
+                                  "knowledge:contextual-retrieval",
                                   "app:llm_complete",
                                   "app:recording_enhancement"
                                 ]
@@ -166542,6 +166638,7 @@
                 "knowledge:embedding",
                 "knowledge:reranker",
                 "knowledge:query-expansion",
+                "knowledge:contextual-retrieval",
                 "app:llm_complete",
                 "app:recording_enhancement"
               ]
@@ -166662,6 +166759,7 @@
                               "knowledge:embedding",
                               "knowledge:reranker",
                               "knowledge:query-expansion",
+                              "knowledge:contextual-retrieval",
                               "app:llm_complete",
                               "app:recording_enhancement"
                             ]
@@ -166689,6 +166787,7 @@
                                 "knowledge:embedding",
                                 "knowledge:reranker",
                                 "knowledge:query-expansion",
+                                "knowledge:contextual-retrieval",
                                 "app:llm_complete",
                                 "app:recording_enhancement"
                               ]
@@ -167814,6 +167913,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -168391,6 +168491,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -169389,6 +169490,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -170086,6 +170188,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -170783,6 +170886,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -171480,6 +171584,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -172057,6 +172162,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -172634,6 +172740,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -175171,6 +175278,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -178442,6 +178550,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -179019,6 +179128,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -179596,6 +179706,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -180173,6 +180284,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -180750,6 +180862,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -181327,6 +181440,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -181904,6 +182018,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -182470,6 +182585,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -183036,6 +183152,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -183602,6 +183719,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -184179,6 +184297,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -184756,6 +184875,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -185333,6 +185453,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -188132,6 +188253,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -190926,6 +191048,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -193725,6 +193848,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -194302,6 +194426,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -195115,6 +195240,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -196113,6 +196239,7 @@
                             "knowledge:embedding",
                             "knowledge:reranker",
                             "knowledge:query-expansion",
+                            "knowledge:contextual-retrieval",
                             "app:llm_complete",
                             "app:recording_enhancement"
                           ]
@@ -214582,6 +214709,9 @@
                           "schedule": {
                             "type": "string"
                           },
+                          "ftsLanguage": {
+                            "$ref": "#/components/schemas/TextSearchLanguage"
+                          },
                           "permissionSyncIntervalSeconds": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -214717,6 +214847,7 @@
                           "secretId",
                           "environmentId",
                           "schedule",
+                          "ftsLanguage",
                           "permissionSyncIntervalSeconds",
                           "enabled",
                           "lastSyncAt",
@@ -215900,6 +216031,13 @@
                   "schedule": {
                     "type": "string"
                   },
+                  "ftsLanguage": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/TextSearchLanguageInput"
+                      }
+                    ]
+                  },
                   "permissionSyncIntervalSeconds": {
                     "type": "integer",
                     "minimum": 0,
@@ -216786,6 +216924,9 @@
                     "schedule": {
                       "type": "string"
                     },
+                    "ftsLanguage": {
+                      "$ref": "#/components/schemas/TextSearchLanguage"
+                    },
                     "permissionSyncIntervalSeconds": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -216898,6 +217039,7 @@
                     "secretId",
                     "environmentId",
                     "schedule",
+                    "ftsLanguage",
                     "permissionSyncIntervalSeconds",
                     "enabled",
                     "lastSyncAt",
@@ -218028,6 +218170,9 @@
                     "schedule": {
                       "type": "string"
                     },
+                    "ftsLanguage": {
+                      "$ref": "#/components/schemas/TextSearchLanguage"
+                    },
                     "permissionSyncIntervalSeconds": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -218143,6 +218288,7 @@
                     "secretId",
                     "environmentId",
                     "schedule",
+                    "ftsLanguage",
                     "permissionSyncIntervalSeconds",
                     "enabled",
                     "lastSyncAt",
@@ -219175,6 +219321,13 @@
                   "schedule": {
                     "type": "string"
                   },
+                  "ftsLanguage": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/TextSearchLanguageInput"
+                      }
+                    ]
+                  },
                   "permissionSyncIntervalSeconds": {
                     "type": "integer",
                     "minimum": 0,
@@ -220062,6 +220215,9 @@
                     "schedule": {
                       "type": "string"
                     },
+                    "ftsLanguage": {
+                      "$ref": "#/components/schemas/TextSearchLanguage"
+                    },
                     "permissionSyncIntervalSeconds": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -220174,6 +220330,7 @@
                     "secretId",
                     "environmentId",
                     "schedule",
+                    "ftsLanguage",
                     "permissionSyncIntervalSeconds",
                     "enabled",
                     "lastSyncAt",

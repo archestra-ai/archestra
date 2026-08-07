@@ -2961,6 +2961,8 @@ export type {
   TestRerankerConnectionErrors,
   TestRerankerConnectionResponse,
   TestRerankerConnectionResponses,
+  TextSearchLanguage,
+  TextSearchLanguageInput,
   TriggerPermissionSyncData,
   TriggerPermissionSyncError,
   TriggerPermissionSyncErrors,

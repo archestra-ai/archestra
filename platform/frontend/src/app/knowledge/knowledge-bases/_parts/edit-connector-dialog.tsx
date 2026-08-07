@@ -3,6 +3,7 @@
 import {
   type archestraApiTypes,
   getConnectorNamePlaceholder,
+  type TextSearchLanguage,
 } from "@archestra/shared";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -45,6 +46,7 @@ import {
 import { ConnectorTypeIcon } from "./connector-icons";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
+import { TextSearchLanguagePicker } from "./text-search-language-picker";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorItem = Pick<
@@ -57,6 +59,7 @@ type ConnectorItem = Pick<
   | "connectorType"
   | "config"
   | "schedule"
+  | "ftsLanguage"
   | "permissionSyncIntervalSeconds"
   | "enabled"
   | "environmentId"
@@ -71,6 +74,7 @@ type EditConnectorFormValues = {
   apiToken: string;
   adminApiKey: string;
   schedule: string;
+  ftsLanguage: TextSearchLanguage;
   permissionSyncIntervalSeconds: number;
   environmentId: string | null;
 };
@@ -98,6 +102,7 @@ export function EditConnectorDialog({
       apiToken: "",
       adminApiKey: "",
       schedule: connector.schedule,
+      ftsLanguage: connector.ftsLanguage,
       permissionSyncIntervalSeconds: connector.permissionSyncIntervalSeconds,
       environmentId: connector.environmentId ?? null,
     },
@@ -116,6 +121,7 @@ export function EditConnectorDialog({
         apiToken: "",
         adminApiKey: "",
         schedule: connector.schedule,
+        ftsLanguage: connector.ftsLanguage,
         permissionSyncIntervalSeconds: connector.permissionSyncIntervalSeconds,
         environmentId: connector.environmentId ?? null,
       });
@@ -169,6 +175,7 @@ export function EditConnectorDialog({
         ) as archestraApiTypes.CreateConnectorData["body"]["config"],
         environmentId: values.environmentId,
         schedule: values.schedule,
+        ftsLanguage: values.ftsLanguage,
         ...(visibility === "auto-sync-permissions" && {
           permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
         }),
@@ -419,6 +426,7 @@ export function EditConnectorDialog({
                   connectorTypeLabel={typeLabel}
                 />
               )}
+              <TextSearchLanguagePicker form={form} name="ftsLanguage" />
               <ConnectorAdvancedConfigFields
                 connectorType={connectorType}
                 form={form}

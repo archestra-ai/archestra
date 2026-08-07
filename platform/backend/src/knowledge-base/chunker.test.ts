@@ -272,4 +272,31 @@ describe("chunkDocument", () => {
       expect(tokens).toBeLessThanOrEqual(512);
     }
   });
+
+  test("chunk size is configurable and bounds the emitted chunks", async () => {
+    // Same document, two budgets: the smaller budget must split it further.
+    const content = Array.from(
+      { length: 60 },
+      (_, i) => `Sentence number ${i} describing part of a long document.`,
+    ).join(" ");
+
+    const wide = await chunkDocument({
+      title: "Long Doc",
+      content,
+      maxTokens: 512,
+    });
+    const narrow = await chunkDocument({
+      title: "Long Doc",
+      content,
+      maxTokens: 128,
+    });
+
+    expect(narrow.length).toBeGreaterThan(wide.length);
+    for (const chunk of narrow) {
+      expect(countTokensHelper(chunk.content)).toBeLessThanOrEqual(128);
+    }
+    for (const chunk of wide) {
+      expect(countTokensHelper(chunk.content)).toBeLessThanOrEqual(512);
+    }
+  });
 });

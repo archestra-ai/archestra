@@ -1,0 +1,117 @@
+{
+  "name": "moorcheh-ai__memanto__integrations__mcp",
+  "display_name": "Memanto",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii02IDAgMTA4IDEwOCIgd2lkdGg9IjEwOCIgaGVpZ2h0PSIxMDgiPjxnIGZpbGw9IiM1NTM0YTUiPjxwYXRoIGQ9Ik0gMTgsMCBIIDc4IFYgMjQgSCA2NiBWIDEyIEggNjAgViAyNCBIIDM2IFYgMTIgSCAzMCBWIDI0IEggMTggWiBNIDEyLDI0IEggMTggViA0OCBIIDEyIFogTSA3OCwyNCBIIDg0IFYgNDggSCA3OCBaIE0gMTgsNDggSCA3OCBWIDYwIEggNjYgViA3MiBIIDMwIFYgNjAgSCAxOCBaIi8+PHBvbHlnb24gcG9pbnRzPSI0MiwyOCA0NiwzNiA0Miw0NCAzOCwzNiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNTUzNGE1IiBzdHJva2Utd2lkdGg9IjEuNSIvPjxwb2x5Z29uIHBvaW50cz0iNDIsMzIgNDQsMzYgNDIsNDAgNDAsMzYiLz48cG9seWdvbiBwb2ludHM9IjU0LDI4IDU4LDM2IDU0LDQ0IDUwLDM2IiBmaWxsPSJub25lIiBzdHJva2U9IiM1NTM0YTUiIHN0cm9rZS13aWR0aD0iMS41Ii8+PHBvbHlnb24gcG9pbnRzPSI1NCwzMiA1NiwzNiA1NCw0MCA1MiwzNiIvPjxwYXRoIGQ9Ik0gMTIsNzIgSCAxOCBWIDEwOCBIIDEyIFogTSAyNCw3MiBIIDMwIFYgOTYgSCAyNCBaIE0gMzYsNzIgSCA0MiBWIDg0IEggMzYgWiBNIDU0LDcyIEggNjAgViA4NCBIIDU0IFogTSA2Niw3MiBIIDcyIFYgOTYgSCA2NiBaIE0gNzgsNzIgSCA4NCBWIDEwOCBIIDc4IFoiLz48L2c+PC9zdmc+",
+  "description": "Memanto is a memory agent — an agent whose whole job is managing your other agents' memories. It curates what's worth keeping, consolidates it across sessions, and briefs your agents the moment they start, while you keep ownership of everything they learn. This server gives any MCP client its three core operations — remember, recall and answer — plus point-in-time and differential recall, over memory shared by every client using the same agent id.",
+  "author": {
+    "name": "Moorcheh AI",
+    "url": "https://github.com/moorcheh-ai"
+  },
+  "homepage": "https://memanto.ai",
+  "documentation": "https://docs.memanto.ai",
+  "license": "MIT",
+  "server": {
+    "command": "uvx",
+    "args": [
+      "memanto-mcp"
+    ],
+    "env": {
+      "MOORCHEH_API_KEY": "${user_config.moorcheh_api_key}",
+      "MEMANTO_DEFAULT_AGENT_ID": "${user_config.memanto_default_agent_id}"
+    },
+    "type": "local"
+  },
+  "tools": [
+    {
+      "name": "remember",
+      "description": "Store a single fact, preference, decision, goal or instruction in long-term memory, typed and tagged with confidence and provenance"
+    },
+    {
+      "name": "batch_remember",
+      "description": "Store up to 100 memories in one call, e.g. facts extracted from a document"
+    },
+    {
+      "name": "recall",
+      "description": "Search stored memories by semantic similarity and return the top-N most relevant items"
+    },
+    {
+      "name": "recall_recent",
+      "description": "Return the most recently stored memories, newest first, without a search query"
+    },
+    {
+      "name": "recall_as_of",
+      "description": "Point-in-time recall: return only memories that were known before a given timestamp"
+    },
+    {
+      "name": "recall_changed_since",
+      "description": "Differential recall: return memories created or updated after a given timestamp"
+    },
+    {
+      "name": "answer",
+      "description": "Answer a natural-language question with an LLM response grounded only in the agent's stored memories, plus the supporting sources"
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "memory",
+    "long-term memory",
+    "semantic memory",
+    "recall",
+    "rag",
+    "memanto",
+    "moorcheh"
+  ],
+  "user_config": {
+    "moorcheh_api_key": {
+      "type": "string",
+      "title": "Moorcheh API Key",
+      "description": "Moorcheh API key used to read and write memories. Create one at https://console.moorcheh.ai/api-keys",
+      "required": true,
+      "sensitive": true
+    },
+    "memanto_default_agent_id": {
+      "type": "string",
+      "title": "Default Agent ID",
+      "description": "Memory namespace used when a tool call omits agent_id. Created automatically on first use.",
+      "required": false,
+      "default": "archestra"
+    }
+  },
+  "readme": "# Memanto MCP Server\n\n**Persistent semantic memory for any MCP-compatible agent.**\n\nThis package exposes [Memanto's](https://memanto.ai) memory primitives —\n`remember`, `recall`, `answer`, and friends — as\n[Model Context Protocol (MCP)](https://modelcontextprotocol.io) tools so any\nMCP client (Claude Desktop, Cursor, Windsurf, Cline, Continue, Goose,\ncustom agents, …) can plug into long-term memory in a single config line.\n\n> One Moorcheh API key → typed semantic memory across every agent that\n> shares the namespace, with sub-90 ms retrieval, conflict detection, and\n> zero ingestion latency.\n\n---\n\n## Install\n\n```bash\npip install memanto-mcp\n```\n\nRequires Python 3.10+, `memanto>=0.2.13`, `mcp>=1.2,<2`, and a\n[Moorcheh API key](https://console.moorcheh.ai/api-keys)\n(free tier: 100K ops/month).\n\n## Quick start (Claude Desktop)\n\n1. Get a Moorcheh API key from the [console](https://console.moorcheh.ai/api-keys).\n2. Edit `claude_desktop_config.json` (Settings → Developer → Edit Config):\n\n```json\n{\n  \"mcpServers\": {\n    \"memanto\": {\n      \"command\": \"memanto-mcp\",\n      \"env\": {\n        \"MOORCHEH_API_KEY\": \"mch_xxxxxxxxxxxxxxxxxx\",\n        \"MEMANTO_DEFAULT_AGENT_ID\": \"my-assistant\"\n      }\n    }\n  }\n}\n```\n\n3. Restart Claude Desktop. Ask it to *\"remember that I prefer concise\n   answers\"* — then in a brand-new chat tomorrow ask *\"what do I prefer?\"*.\n\nThe first call auto-creates the `my-assistant` agent and namespace; every\nsubsequent call reuses the same persistent memory.\n\n## Quick start (Cursor / Windsurf / Cline / Continue / Goose)\n\nMost clients consume a config file in the\n[standard MCP shape](https://modelcontextprotocol.io/docs/clients).\nThe same JSON snippet works almost verbatim:\n\n```json\n{\n  \"mcpServers\": {\n    \"memanto\": {\n      \"command\": \"memanto-mcp\",\n      \"env\": {\n        \"MOORCHEH_API_KEY\": \"mch_xxxxxxxxxxxxxxxxxx\",\n        \"MEMANTO_DEFAULT_AGENT_ID\": \"cursor-workspace\"\n      }\n    }\n  }\n}\n```\n\n| Client | Config path |\n|---|---|\n| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) / `%APPDATA%\\Claude\\claude_desktop_config.json` (Windows) |\n| Cursor | `~/.cursor/mcp.json` (or per-project `.cursor/mcp.json`) |\n| Windsurf | `~/.codeium/windsurf/mcp_config.json` |\n| Cline (VS Code) | `~/.config/Code/User/globalStorage/cline.cline/settings/cline_mcp_settings.json` |\n| Continue | `~/.continue/config.json` → `experimental.modelContextProtocolServers` |\n| Goose | `~/.config/goose/config.yaml` |\n\n## Available tools\n\nThe server registers **7 memory tools by default**. Set\n`MEMANTO_EXPOSE_ADMIN=true` to also expose **4 agent-management tools**.\n\n### Memory tools (always on)\n\n| Tool | When the agent should call it |\n|---|---|\n| `remember` | Persist a single new fact/preference/decision/goal/instruction. |\n| `batch_remember` | Persist up to 100 memories in one call (e.g. extracted from a document). |\n| `recall` | Semantic search — *always* check here before asking the user to repeat stable info. |\n| `recall_recent` | \"What did we just decide?\" — newest-first, no query needed. |\n| `recall_as_of` | Point-in-time recall — \"what did we know on 2025-11-01?\" |\n| `recall_changed_since` | Differential — \"what's new since I last checked?\" |\n| `answer` | RAG: grounded LLM answer synthesized over the agent's memories. |\n\n### Agent admin tools (opt-in)\n\nEnabled when `MEMANTO_EXPOSE_ADMIN=true`:\n\n| Tool | Purpose |\n|---|---|\n| `create_agent` | Create a new memory namespace. |\n| `list_agents` | List every agent the API key can see. |\n| `get_agent` | Look up an agent's metadata. |\n| `delete_agent` | Remove an agent's local metadata. |\n\nMemory types accepted by `remember` / `batch_remember`:\n`fact`, `preference`, `goal`, `decision`, `artifact`, `learning`, `event`,\n`instruction`, `relationship`, `context`, `observation`, `commitment`,\n`error`.\n\nProvenance values: `explicit_statement`, `inferred`, `corrected`,\n`validated`, `observed`, `imported`.\n\n### Source attribution\n\n`source` names *who wrote* a memory, so recall can be attributed and filtered\nper writer. It is open: `user`, `agent`, `tool`, `system`, or a specific\nwriter such as `cursor`, `codex`, `claude_code`, `mem0`. Labels are limited to\n64 letters, digits, `.`, `_`, or `-` so that `#source:<value>` stays a usable\nfilter.\n\nWhen a tool call omits `source`, the server attributes the write to the\n**connected MCP client** from the initialize handshake (`cursor`, `codex`,\n`claude-ai`, …), falling back to `mcp-agent` when the client sends no name.\nTwo editors sharing one agent therefore stay distinguishable in recall without\nany extra configuration.\n\n## Configuration\n\nAll config is via environment variables (load order: process env →\n`.env` file in the working directory).\n\n| Variable | Required | Default | Description |\n|---|---|---|---|\n| `MOORCHEH_API_KEY` | **yes** | — | Moorcheh API key. |\n| `MEMANTO_DEFAULT_AGENT_ID` | recommended | _none_ | Default agent. When set, tool calls may omit `agent_id`. |\n| `MEMANTO_AGENT_PATTERN` | no | `tool` | Pattern (`support`/`project`/`tool`) used when auto-creating the default agent. |\n| `MEMANTO_AGENT_AUTO_CREATE` | no | `true` | Create the default agent on first use if missing. Explicit non-default agents must already exist. |\n| `MEMANTO_SESSION_DURATION_HOURS` | no | server default (6) | Session lifetime in hours. |\n| `MEMANTO_EXPOSE_ADMIN` | no | `false` | Register the 4 agent-management tools. |\n| `MEMANTO_MCP_TRANSPORT` | no | `stdio` | `stdio`, `sse`, or `streamable-http`. |\n| `MEMANTO_MCP_HOST` | no | `127.0.0.1` | Bind host for sse/http transports. |\n| `MEMANTO_MCP_PORT` | no | `8765` | Bind port for sse/http transports. |\n| `MEMANTO_MCP_LOG_LEVEL` | no | `INFO` | Log level (logs are always sent to stderr). |\n\nCLI flags (`memanto-mcp --transport sse --port 9000`) override env vars.\n\n## Running over HTTP / SSE\n\nFor remote clients or multi-process setups, run the server over a network\ntransport:\n\n```bash\n# Streamable HTTP (recommended modern transport)\nmemanto-mcp --transport streamable-http --host 0.0.0.0 --port 8765\n\n# Server-Sent Events (older, still widely supported)\nmemanto-mcp --transport sse --host 0.0.0.0 --port 8765\n```\n\nThen point your client at `http://your-host:8765/mcp` (or whatever path the\nchosen transport advertises). Pair with a reverse proxy + auth for\nproduction deployments — the server itself authenticates upstream to\nMoorcheh using your API key but does **not** authenticate inbound MCP\nclients.\n\n## How it works\n\n```\n┌──────────────┐    MCP/stdio    ┌──────────────────┐    Moorcheh API    ┌─────────────┐\n│ Claude / IDE │ ──────────────► │  memanto-mcp     │ ────────────────► │   Moorcheh  │\n│   (client)   │ ◄────────────── │  (this package)  │ ◄──────────────── │   Service   │\n└──────────────┘    tool calls   └──────────────────┘    HTTPS+API key   └─────────────┘\n                                          │\n                                          └─ uses memanto.cli.client.SdkClient\n                                             (same client the Memanto CLI uses)\n```\n\n- On startup, settings are validated; the API key is verified lazily on\n  first tool call.\n- On the first memory tool invocation for a given agent, the server\n  ensures the agent exists (auto-creates if needed) and activates a JWT\n  session. Sessions auto-renew before expiry, so long-running MCP\n  connections never hit a session-expired error mid-conversation.\n- The server intentionally keeps the session alive on shutdown: JWT\n  sessions are TTL-bound and other Memanto clients (CLI, REST) may want\n  to share them.\n\n## Programmatic embedding\n\nIf you're building a custom MCP host or wiring this server into a larger\nprocess, you can construct the FastMCP instance yourself:\n\n```python\nfrom memanto_mcp import MCPServerSettings, build_server\n\nsettings = MCPServerSettings()  # reads env / .env\nmcp = build_server(settings)\n\n# Add your own tools alongside Memanto's, then run.\nmcp.run(transport=\"stdio\")\n```\n\n## Troubleshooting\n\n| Symptom | Fix |\n|---|---|\n| `configuration error: MOORCHEH_API_KEY is required` | Set the env var in your MCP client config's `env` block. |\n| `Agent '…' does not exist and MEMANTO_AGENT_AUTO_CREATE is disabled` | Either re-enable auto-create or call `create_agent` (admin tools) / `memanto agent create <id>` once. |\n| Tools never appear in the client | Confirm the client supports MCP and the config path matches. Look at the client's MCP log: the server's stderr lines (prefixed `memanto_mcp`) will appear there on startup. |\n| Garbled output in stdio mode | Something on your side is writing to **stdout** — that channel is reserved for JSON-RPC. Move logs to stderr. The server itself only writes to stderr. |\n| Slow first call | Cold-start cost: SDK import + first session activation. Subsequent calls reuse the live session. |\n\n## License\n\nMIT — same as the [Memanto](https://github.com/moorcheh-ai/memanto)\nproject. See [LICENSE](../../LICENSE).\n\n## Links\n\n- [Memanto](https://memanto.ai) — the memory agent itself\n- [Moorcheh](https://moorcheh.ai) — the no-indexing semantic DB underneath\n- [Model Context Protocol spec](https://modelcontextprotocol.io)\n- [Anthropic MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)\n",
+  "category": "Knowledge",
+  "archestra_config": {
+    "client_config_permutations": {
+      "memanto": {
+        "command": "uvx",
+        "args": [
+          "memanto-mcp"
+        ],
+        "env": {}
+      },
+      "memanto-console-script": {
+        "command": "memanto-mcp",
+        "args": [],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": true
+  },
+  "github_info": {
+    "owner": "moorcheh-ai",
+    "repo": "memanto",
+    "url": "https://github.com/moorcheh-ai/memanto/tree/main/integrations/mcp",
+    "name": "memanto",
+    "path": "integrations/mcp",
+    "stars": 1772,
+    "contributors": 54,
+    "issues": 6,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "b52561d6711c59fdef6dfe74ccdd00c172cbce51"
+  },
+  "programming_language": "Python"
+}

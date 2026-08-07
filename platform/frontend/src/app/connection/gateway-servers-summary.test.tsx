@@ -85,8 +85,7 @@ describe("GatewayServersSummary", () => {
     render(<GatewayServersSummary gatewayId="g1" />);
 
     // header count: 2 servers, 3 tools total
-    expect(screen.getByRole("button")).toHaveTextContent(/2 MCP servers/);
-    expect(screen.getByRole("button")).toHaveTextContent(/3 tools/);
+    expect(screen.getByText("2 MCP servers · 3 tools")).toBeInTheDocument();
 
     await expandList();
 

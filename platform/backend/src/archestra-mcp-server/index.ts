@@ -140,52 +140,56 @@ const toolEntries: Partial<
   ...appLlmToolEntries,
 };
 
+/**
+ * Every built-in, in registration order, with no deployment-config filtering.
+ * Groups whose runtime is unconfigured are dropped downstream by
+ * `getArchestraMcpTools`; keeping one array means a tool can never be reachable
+ * for dispatch while missing from the list a caller enumerates.
+ */
+const ALL_ARCHESTRA_MCP_TOOLS = [
+  ...identityTools,
+  ...agentTools,
+  ...llmProxyTools,
+  ...mcpGatewayTools,
+  ...mcpServerTools,
+  ...teamTools,
+  ...limitTools,
+  ...policyTools,
+  ...toolAssignmentTools,
+  ...knowledgeManagementTools,
+  ...chatTools,
+  ...projectTools,
+  ...searchToolTools,
+  ...runToolTools,
+  ...skillTools,
+  ...sandboxTools,
+  ...hookTools,
+  ...appTools,
+  ...appDataTools,
+  ...appLlmTools,
+];
+
+const sandboxToolNames: ReadonlySet<string> = new Set(
+  sandboxTools.map((tool) => tool.name),
+);
+const hookToolNames: ReadonlySet<string> = new Set(
+  hookTools.map((tool) => tool.name),
+);
+
 export function getArchestraMcpTools() {
-  const tools = [
-    ...identityTools,
-    ...agentTools,
-    ...llmProxyTools,
-    ...mcpGatewayTools,
-    ...mcpServerTools,
-    ...teamTools,
-    ...limitTools,
-    ...policyTools,
-    ...toolAssignmentTools,
-    ...knowledgeManagementTools,
-    ...chatTools,
-    ...projectTools,
-    ...searchToolTools,
-    ...runToolTools,
-    ...skillTools,
-    ...(config.skillsSandbox.enabled ? sandboxTools : []),
-    // Lifecycle hooks execute in the conversation sandbox; hide their
-    // management tools when the runtime (and thus hooks) is unavailable.
-    ...(config.hooks.enabled ? hookTools : []),
-    ...appTools,
-    ...appDataTools,
-    ...appLlmTools,
-  ];
+  return brandTools(
+    ALL_ARCHESTRA_MCP_TOOLS.filter((tool) => isToolRuntimeEnabled(tool.name)),
+  );
+}
 
-  // Descriptions are shipped strings frozen at module load, so they cannot read
-  // the branding singleton inline — it is only synced once an organization has
-  // been loaded. Rebranding them here, where the tool list is built per
-  // reconcile, is what lets a white-labeled deployment advertise built-ins under
-  // its own name. `brandBuiltInText` is a no-op for non-branded orgs.
-  return tools.map((tool) => {
-    const shortName = getArchestraToolShortName(tool.name);
-    const description =
-      typeof tool.description === "string"
-        ? archestraMcpBranding.brandBuiltInText(tool.description)
-        : tool.description;
-
-    return {
-      ...tool,
-      description,
-      ...(shortName
-        ? { name: archestraMcpBranding.getToolName(shortName) }
-        : {}),
-    };
-  });
+/**
+ * The complete built-in surface, including groups this deployment has not
+ * configured a runtime for. Only the generated tools-reference docs want this —
+ * they describe the product, not one process's live capabilities. Everything
+ * that serves or dispatches tools wants `getArchestraMcpTools`.
+ */
+export function getAllArchestraMcpTools() {
+  return brandTools(ALL_ARCHESTRA_MCP_TOOLS);
 }
 
 /**
@@ -326,6 +330,41 @@ export async function executeArchestraTool(
     }
     throw error;
   }
+}
+
+/**
+ * Whether a built-in's runtime is configured on this deployment. Sandbox tools
+ * materialize a Dagger container and lifecycle hooks execute inside that same
+ * sandbox, so both are unusable without the code runtime and advertising them
+ * would promise the model a capability the call cannot deliver.
+ */
+function isToolRuntimeEnabled(canonicalName: string): boolean {
+  if (sandboxToolNames.has(canonicalName)) return config.skillsSandbox.enabled;
+  if (hookToolNames.has(canonicalName)) return config.hooks.enabled;
+  return true;
+}
+
+// Descriptions are shipped strings frozen at module load, so they cannot read
+// the branding singleton inline — it is only synced once an organization has
+// been loaded. Rebranding here, where the tool list is built per reconcile, is
+// what lets a white-labeled deployment advertise built-ins under its own name.
+// `brandBuiltInText` is a no-op for non-branded orgs.
+function brandTools(tools: typeof ALL_ARCHESTRA_MCP_TOOLS) {
+  return tools.map((tool) => {
+    const shortName = getArchestraToolShortName(tool.name);
+    const description =
+      typeof tool.description === "string"
+        ? archestraMcpBranding.brandBuiltInText(tool.description)
+        : tool.description;
+
+    return {
+      ...tool,
+      description,
+      ...(shortName
+        ? { name: archestraMcpBranding.getToolName(shortName) }
+        : {}),
+    };
+  });
 }
 
 // run_tool / search_tools are the dispatch surface (advertised implicitly in

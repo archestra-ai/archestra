@@ -14,6 +14,7 @@ import { DEFAULT_APP_DESCRIPTION } from "@archestra/shared";
 import { DynamicHead } from "@/components/dynamic-head";
 import { OrgThemeLoader } from "@/components/org-theme-loader";
 import { ChatProvider } from "@/lib/chat/global-chat.context";
+import { getDeploymentFavicon } from "@/lib/favicon.server";
 import { WebsocketInitializer } from "./_parts/websocket-initializer";
 import { WithAuthCheck } from "./_parts/with-auth-check";
 import { WithPagePermissions } from "./_parts/with-page-permissions";
@@ -173,6 +174,34 @@ const secretMaskFont = localFont({
   preload: false,
 });
 
+// A user agent can replay the favicon saved with an exact history URL while a
+// new document is loading. Using only widely supported DOM, image, and canvas
+// APIs, activate the current content-version during head parsing. Unsupported
+// features simply leave the standards-based versioned link in place.
+const ACTIVATE_FAVICON_SCRIPT = `(() => {
+  const link = document.getElementById("app-favicon");
+  if (!link || link.tagName !== "LINK" || typeof Image === "undefined") return;
+  const image = new Image();
+  image.addEventListener("load", () => {
+    const canvas = document.createElement("canvas");
+    const size = 64;
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext("2d");
+    if (!context || !image.naturalWidth || !image.naturalHeight) return;
+    const scale = Math.min(size / image.naturalWidth, size / image.naturalHeight);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+    try {
+      link.href = canvas.toDataURL("image/png");
+    } catch {
+      // Keep the versioned link if this user agent cannot serialize the canvas.
+    }
+  }, { once: true });
+  image.src = link.href;
+})();`;
+
 export const metadata: Metadata = {
   description: DEFAULT_APP_DESCRIPTION,
 };
@@ -186,11 +215,13 @@ export const viewport: Viewport = {
   interactiveWidget: "resizes-content",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const favicon = await getDeploymentFavicon();
+
   return (
     <html
       lang="en"
@@ -199,7 +230,21 @@ export default function RootLayout({
     >
       <head>
         <PublicEnvScript />
-        <link rel="icon" href="/favicon.ico" />
+        {favicon.version && (
+          <link
+            rel="preload"
+            as="image"
+            href={favicon.href}
+            fetchPriority="high"
+          />
+        )}
+        <link
+          id="app-favicon"
+          rel="icon"
+          href={favicon.href}
+          data-favicon-version={favicon.version ?? "default"}
+        />
+        {favicon.version && <script>{ACTIVATE_FAVICON_SCRIPT}</script>}
       </head>
       <body className="font-sans antialiased">
         <VisualViewportHeight />

@@ -1,5 +1,5 @@
 {
-  "id": "d1d89d9e-30e9-4df6-a1bc-d59ad3aeb3ab",
+  "id": "67837444-25a0-44e9-b36f-3fc21131fe6d",
   "prevId": "c36ec1dd-dbe3-40d5-a2e7-37b4080c710a",
   "version": "7",
   "dialect": "postgresql",
@@ -6116,25 +6116,6 @@
           "notNull": true,
           "default": false
         },
-        "incognito": {
-          "name": "incognito",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "incognito_dek_fingerprint": {
-          "name": "incognito_dek_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "incognito_escrow": {
-          "name": "incognito_escrow",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "pinned_at": {
           "name": "pinned_at",
           "type": "timestamp",
@@ -8816,6 +8797,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "contextual_header": {
+          "name": "contextual_header",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fts_language": {
+          "name": "fts_language",
+          "type": "regconfig",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'english'"
+        },
         "acl": {
           "name": "acl",
           "type": "jsonb",
@@ -9620,6 +9614,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'0 */6 * * *'"
+        },
+        "fts_language": {
+          "name": "fts_language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'english'"
         },
         "permission_sync_interval_seconds": {
           "name": "permission_sync_interval_seconds",

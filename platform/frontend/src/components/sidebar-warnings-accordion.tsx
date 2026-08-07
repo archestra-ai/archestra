@@ -73,8 +73,8 @@ export function SidebarWarningsAccordion() {
   // Null under full white-labeling, where the environments screen carries the
   // same explanation and stays reachable.
   const networkPolicyDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformEnvironments,
-    "network-egress-policies",
+    DocsPage.PlatformDeployment,
+    "ssrf-protection-for-mcp-server-pods",
   );
 
   const warnings = [

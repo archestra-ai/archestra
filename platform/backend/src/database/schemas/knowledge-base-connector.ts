@@ -1,4 +1,8 @@
-import { DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS } from "@archestra/shared";
+import {
+  DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS,
+  DEFAULT_TEXT_SEARCH_LANGUAGE,
+  type TextSearchLanguage,
+} from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -51,6 +55,17 @@ const knowledgeBaseConnectorsTable = softDeletablePgTable(
       { onDelete: "set null" },
     ),
     schedule: text("schedule").notNull().default("0 */6 * * *"),
+    /**
+     * PostgreSQL text-search configuration used to build the keyword index for
+     * this connector's documents. Set it to the language the corpus is written
+     * in so stemming matches ("laufende"/"läuft" only collapse under `german`),
+     * or to `simple` to disable stemming for code and mixed-language corpora.
+     * Applied at ingest: changing it takes effect on the next sync.
+     */
+    ftsLanguage: text("fts_language")
+      .$type<TextSearchLanguage>()
+      .notNull()
+      .default(DEFAULT_TEXT_SEARCH_LANGUAGE),
     /**
      * Cadence of the scheduled permission-sync pass for `auto-sync-permissions`
      * connectors: the next pass is due this many seconds after the last one

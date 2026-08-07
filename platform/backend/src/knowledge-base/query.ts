@@ -1,10 +1,11 @@
-import { addNomicTaskPrefix } from "@archestra/shared";
+import { addNomicTaskPrefix, type TextSearchLanguage } from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
+import { expandChunkContext } from "./context-expansion";
 import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
 import {
   EmbeddingDimensionMismatchError,
@@ -79,11 +80,14 @@ class QueryService {
     // across several has no single connector to name.
     const connectorId = connectorIds.length === 1 ? connectorIds[0] : null;
 
-    const expandedQueries = await expandQuery({
-      queryText,
-      organizationId,
-      connectorId,
-    });
+    // Resolved once and passed down: the keyword search needs the languages as
+    // bound parameters to keep its tsquery index-eligible (see fullTextSearch).
+    const [expandedQueries, searchLanguages] = await Promise.all([
+      expandQuery({ queryText, organizationId, connectorId }),
+      hybridEnabled
+        ? KbChunkModel.getTextSearchLanguages(connectorIds)
+        : Promise.resolve([]),
+    ]);
 
     const perQueryResults = await Promise.all(
       expandedQueries.map((eq) =>
@@ -98,6 +102,7 @@ class QueryService {
           environmentId,
           type: eq.type,
           hybridEnabled,
+          searchLanguages,
         }),
       ),
     );
@@ -143,11 +148,35 @@ class QueryService {
     });
     topResults = topResults.slice(0, limit);
 
+    // Widen each surviving hit with its neighbouring chunks. Deliberately after
+    // the rerank and the slice: expansion must not change what ranks or how
+    // many results come back, and expanding chunks the rerank was about to drop
+    // would be wasted queries.
+    //
+    // Strictly an enhancement, so it degrades rather than fails: a user asking a
+    // question is far better served by the ranked chunks than by an error
+    // because the widening query failed.
+    try {
+      topResults = await expandChunkContext({
+        results: topResults,
+        radius: config.kb.contextExpansionRadius,
+        userAcl: params.userAcl,
+        bypassAcl,
+        environmentId,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        "[QueryService] Context expansion failed, returning unexpanded results",
+      );
+    }
+
     logger.info(
       {
         preRerankCount,
         postRerankCount: topResults.length,
         expandedQueryCount: expandedQueries.length,
+        contextExpansionRadius: config.kb.contextExpansionRadius,
         resultIds: topResults.map((r) => r.id),
       },
       "[QueryService] Final results (after rerank)",
@@ -187,6 +216,7 @@ class QueryService {
     environmentId?: string | null;
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
+    searchLanguages: TextSearchLanguage[];
   }): Promise<VectorSearchResult[]> {
     const {
       queryText,
@@ -199,6 +229,7 @@ class QueryService {
       environmentId,
       type,
       hybridEnabled,
+      searchLanguages,
     } = params;
 
     // queryText is user content — payloads only at debug.
@@ -263,6 +294,7 @@ class QueryService {
       ? KbChunkModel.fullTextSearch({
           connectorIds,
           queryText,
+          languages: searchLanguages,
           limit,
           userAcl,
           bypassAcl,

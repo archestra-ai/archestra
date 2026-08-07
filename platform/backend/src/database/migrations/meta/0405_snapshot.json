@@ -1,6 +1,6 @@
 {
-  "id": "f5782e36-1e4f-4ebd-88d5-bb17926fd0d2",
-  "prevId": "d1d89d9e-30e9-4df6-a1bc-d59ad3aeb3ab",
+  "id": "ebe3e882-af98-4a49-b5ef-3d7fcee93ace",
+  "prevId": "67837444-25a0-44e9-b36f-3fc21131fe6d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -8822,6 +8822,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "contextual_header": {
+          "name": "contextual_header",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fts_language": {
+          "name": "fts_language",
+          "type": "regconfig",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'english'"
+        },
         "acl": {
           "name": "acl",
           "type": "jsonb",
@@ -9626,6 +9639,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'0 */6 * * *'"
+        },
+        "fts_language": {
+          "name": "fts_language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'english'"
         },
         "permission_sync_interval_seconds": {
           "name": "permission_sync_interval_seconds",

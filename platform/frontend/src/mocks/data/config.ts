@@ -85,6 +85,7 @@ export function makePublicConfig(
       instanceId: null,
       posthog: { key: "", host: "" },
     },
+    rum: { enabled: false, sampleRate: 1 },
     ...overrides,
     maintenanceMode: overrides.maintenanceMode ?? null,
     siteNotificationMessage: overrides.siteNotificationMessage ?? null,

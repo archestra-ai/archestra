@@ -286,9 +286,11 @@ tests:
           path: spec.containers[0].args[0]
           pattern: 'echo "[^"]*"[\s\S]*echo "'
         documentIndex: 2
+      # Each arm leads with the warning sign, which is the only emphasis Helm 4
+      # leaves once it collapses a pod's log into one escaped record.
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: '🚨'
+          pattern: '⚠️'
         documentIndex: 2
       - matchRegex:
           path: spec.containers[0].args[0]

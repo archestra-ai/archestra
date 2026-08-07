@@ -48,6 +48,7 @@ import config, {
   parseK8sResourceQuantity,
   parseLogFormat,
   parseMetricsPort,
+  parseClampedInt,
   parseNonNegativeInt,
   parseOptionalPort,
   parseOtelCaptureContent,
@@ -2867,6 +2868,30 @@ describe("parseNonNegativeInt", () => {
   test("accepts positive values and rejects negative ones", () => {
     expect(parseNonNegativeInt("30", 90)).toBe(30);
     expect(parseNonNegativeInt("-5", 90)).toBe(90);
+  });
+});
+
+describe("parseClampedInt", () => {
+  test("falls back when unset or unparseable", () => {
+    expect(parseClampedInt(undefined, 512, 128, 2048)).toBe(512);
+    expect(parseClampedInt("", 512, 128, 2048)).toBe(512);
+    expect(parseClampedInt("not-a-number", 512, 128, 2048)).toBe(512);
+  });
+
+  test("passes through a value inside the range", () => {
+    expect(parseClampedInt("256", 512, 128, 2048)).toBe(256);
+  });
+
+  test("clamps out-of-range values to the nearest bound", () => {
+    // Deliberately NOT the default: an operator who wrote 8 wanted "smaller",
+    // and silently restoring 512 would look like the setting was ignored.
+    expect(parseClampedInt("8", 512, 128, 2048)).toBe(128);
+    expect(parseClampedInt("999999", 512, 128, 2048)).toBe(2048);
+    expect(parseClampedInt("-5", 512, 128, 2048)).toBe(128);
+  });
+
+  test("allows zero when the range permits it", () => {
+    expect(parseClampedInt("0", 1, 0, 4)).toBe(0);
   });
 });
 

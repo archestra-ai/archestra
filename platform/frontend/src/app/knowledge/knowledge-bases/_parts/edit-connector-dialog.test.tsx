@@ -79,6 +79,7 @@ function makeAsanaConnector(
       ...overrides,
     },
     schedule: "0 */6 * * *",
+    ftsLanguage: "english",
     permissionSyncIntervalSeconds: 1800,
     enabled: true,
   } as ConnectorFixture;
@@ -223,6 +224,7 @@ describe("EditConnectorDialog - Jira admin API key", () => {
         projectKey: "TEST",
       },
       schedule: "0 */6 * * *",
+      ftsLanguage: "english",
       permissionSyncIntervalSeconds: 1800,
       enabled: true,
     } as ConnectorFixture;
@@ -295,6 +297,7 @@ describe("EditConnectorDialog - permission sync interval (auto-sync)", () => {
         authMethod: "pat",
       },
       schedule: "0 */6 * * *",
+      ftsLanguage: "english",
       permissionSyncIntervalSeconds: 1800,
       enabled: true,
     } as ConnectorFixture;

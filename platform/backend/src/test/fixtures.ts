@@ -1217,6 +1217,7 @@ async function makeKnowledgeBaseConnector(
       | "config"
       | "schedule"
       | "enabled"
+      | "ftsLanguage"
     >
   > = {},
 ): Promise<KnowledgeBaseConnector> {

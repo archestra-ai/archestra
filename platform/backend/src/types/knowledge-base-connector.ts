@@ -1,3 +1,4 @@
+import { TextSearchLanguageSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -50,6 +51,7 @@ export const SelectKnowledgeBaseConnectorSchema = createSelectSchema(
     config: ConnectorConfigSchema,
     lastSyncStatus: NullableConnectorSyncStatusSchema,
     lastPermissionSyncStatus: NullableConnectorSyncStatusSchema,
+    ftsLanguage: TextSearchLanguageSchema,
   },
   // Internal soft-delete axis; kept out of API responses (see KB schema above).
 ).omit({ deletedAt: true });
@@ -63,6 +65,7 @@ export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
     checkpoint: ConnectorCheckpointSchema.optional(),
     lastSyncStatus: NullableConnectorSyncStatusSchema.optional(),
     lastPermissionSyncStatus: NullableConnectorSyncStatusSchema.optional(),
+    ftsLanguage: TextSearchLanguageSchema.optional(),
   },
 ).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
@@ -75,10 +78,12 @@ export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
     checkpoint: ConnectorCheckpointSchema.nullable().optional(),
     lastSyncStatus: NullableConnectorSyncStatusSchema.optional(),
     lastPermissionSyncStatus: NullableConnectorSyncStatusSchema.optional(),
+    ftsLanguage: TextSearchLanguageSchema.optional(),
   },
 ).pick({
   name: true,
   description: true,
+  ftsLanguage: true,
   visibility: true,
   teamIds: true,
   config: true,

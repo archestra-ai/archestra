@@ -554,6 +554,115 @@ describe("KbChunkModel", () => {
     });
   });
 
+  describe("fullTextSearch", () => {
+    /**
+     * The keyword index stems with the chunk's own text-search configuration.
+     * "Katzen" in a German document only collapses to the same token as a
+     * "Katze" query under the `german` configuration; indexed as English it
+     * stays a distinct token and the document is silently unfindable.
+     */
+    test("a German corpus is found by a German query when indexed as german", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        ftsLanguage: "german",
+      });
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "Die laufenden Katzen springen",
+          chunkIndex: 0,
+          ftsLanguage: "german",
+          acl: ["org:*"],
+        },
+      ]);
+
+      const results = await KbChunkModel.fullTextSearch({
+        connectorIds: [connector.id],
+        queryText: "Katze",
+        userAcl: ["org:*"],
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].content).toBe("Die laufenden Katzen springen");
+    });
+
+    test("the same German corpus indexed as english does not match", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "Die laufenden Katzen springen",
+          chunkIndex: 0,
+          acl: ["org:*"],
+        },
+      ]);
+
+      const results = await KbChunkModel.fullTextSearch({
+        connectorIds: [connector.id],
+        queryText: "Katze",
+        userAcl: ["org:*"],
+      });
+
+      expect(results).toHaveLength(0);
+    });
+
+    test("the contextual header is searchable alongside the chunk", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const doc = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id),
+      );
+
+      // The chunk never names the subject; only the document-level context does.
+      // This is the case contextual retrieval exists to fix.
+      await KbChunkModel.insertMany([
+        {
+          documentId: doc.id,
+          content: "The limit was raised to 5,000 per minute.",
+          chunkIndex: 0,
+          contextualHeader:
+            "CONTEXT: Runbook for the billing API rate limiter.\n\n",
+          acl: ["org:*"],
+        },
+      ]);
+
+      const results = await KbChunkModel.fullTextSearch({
+        connectorIds: [connector.id],
+        queryText: "billing rate limiter",
+        userAcl: ["org:*"],
+      });
+
+      expect(results).toHaveLength(1);
+      // The header is an indexing signal only; it never leaks into the text the
+      // model is shown.
+      expect(results[0].content).toBe("The limit was raised to 5,000 per minute.");
+    });
+  });
+
   describe("updateEmbeddings", () => {
     test("returns without error when updates is empty", async () => {
       await expect(

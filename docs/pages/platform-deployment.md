@@ -1574,6 +1574,18 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title prefix and metadata suffix.
+  - Default: `512`. Clamped to `128`–`2048`.
+  - Smaller chunks make a hit more precise but carry less surrounding context; larger chunks do the reverse. Applies at ingest only — existing chunks keep the size they were written at until their connector re-syncs, so changing this mid-corpus leaves a mix until everything has been re-indexed.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS`** - How many neighbouring chunks either side of a search hit are stitched back onto it before the result is returned.
+  - Default: `1`. Clamped to `0`–`4`; `0` disables it.
+  - Ranking is unaffected — this only widens the passage the model reads around a hit it already earned, so a hit landing mid-sentence or mid-table still arrives with its surroundings. Each step of radius adds up to two more chunks per result, so raising it increases the tokens sent to the model roughly proportionally.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED`** - Summarize each document once at ingest and index that summary alongside every one of its chunks.
+  - Default: `false`
+  - Improves recall for chunks that never name their own subject: a chunk reading "the limit was raised to 5,000" becomes findable by "billing API rate limit". Costs one LLM call per document per sync, billed against the configured reranking model; unchanged documents are skipped, so a steady-state re-sync costs nothing. Requires a reranking model that can generate text — with a dedicated Cohere Rerank model configured it is skipped.
+
 Permission sync for connectors using [auto-sync permissions](/docs/platform-knowledge#auto-sync-permissions) runs in its own worker lane, independent of content sync. Its cadence is not an environment variable: each connector's permission sync interval is set in the connector form, and a pass also runs automatically after a content sync ingests new documents or when triggered manually.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`** - Beta gate for the whole auto-sync-permissions feature: the connector visibility option, its permission passes, and the Users and Groups tabs.

@@ -7,6 +7,7 @@ import {
   PaginationQuerySchema,
   PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
   RouteId,
+  TextSearchLanguageSchema,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -537,6 +538,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // github_app_configs row instead of an inline secret
           credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
+          ftsLanguage: TextSearchLanguageSchema.optional(),
           permissionSyncIntervalSeconds:
             PermissionSyncIntervalSchema.optional(),
           enabled: z.boolean().optional(),
@@ -661,6 +663,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         secretId,
         environmentId: body.environmentId ?? null,
         schedule: body.schedule,
+        ftsLanguage: body.ftsLanguage,
         permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
         enabled: body.enabled,
       });
@@ -877,6 +880,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             apiToken: true,
           }).optional(),
           schedule: z.string().optional(),
+          ftsLanguage: TextSearchLanguageSchema.optional(),
           permissionSyncIntervalSeconds:
             PermissionSyncIntervalSchema.optional(),
           enabled: z.boolean().optional(),

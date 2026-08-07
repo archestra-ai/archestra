@@ -148,13 +148,24 @@ class QueryService {
     // the rerank and the slice: expansion must not change what ranks or how
     // many results come back, and expanding chunks the rerank was about to drop
     // would be wasted queries.
-    topResults = await expandChunkContext({
-      results: topResults,
-      radius: config.kb.contextExpansionRadius,
-      userAcl: params.userAcl,
-      bypassAcl,
-      environmentId,
-    });
+    //
+    // Strictly an enhancement, so it degrades rather than fails: a user asking a
+    // question is far better served by the ranked chunks than by an error
+    // because the widening query failed.
+    try {
+      topResults = await expandChunkContext({
+        results: topResults,
+        radius: config.kb.contextExpansionRadius,
+        userAcl: params.userAcl,
+        bypassAcl,
+        environmentId,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        "[QueryService] Context expansion failed, returning unexpanded results",
+      );
+    }
 
     logger.info(
       {

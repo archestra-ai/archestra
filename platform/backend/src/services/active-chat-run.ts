@@ -1,5 +1,6 @@
 import type { UIMessageChunk } from "ai";
 import config from "@/config";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import logger from "@/logging";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import {
@@ -178,10 +179,15 @@ export class ActiveChatRunService {
     }>;
     abortController?: AbortController;
     /**
-     * Incognito conversations (enterprise): replay event payloads are raw
-     * stream chunks — plaintext content — so their persistence is suppressed.
-     * The run row still tracks liveness (flushes touch it), but reconnect
-     * replay is unavailable.
+     * Incognito conversations: replay event payloads are raw stream chunks, so
+     * they are stored encrypted under the conversation key.
+     */
+    incognitoAudit?: IncognitoAuditContext | null;
+    /**
+     * Incognito with no key to encrypt under (no escrow record): payload
+     * persistence is suppressed rather than written in plaintext. The run row
+     * still tracks liveness (flushes touch it), but reconnect replay is
+     * unavailable for that run.
      */
     suppressEventPayloads?: boolean;
   }): { terminalReady: Promise<void> } {
@@ -202,6 +208,7 @@ export class ActiveChatRunService {
       const writer = new ActiveChatRunEventBatcher({
         runId: params.runId,
         suppressPayloads: params.suppressEventPayloads ?? false,
+        incognitoAudit: params.incognitoAudit ?? null,
         onFlush: () => this.notifyEvent(params.runId),
         onAsyncFailure: () => {
           if (!params.abortController?.signal.aborted) {
@@ -306,10 +313,14 @@ export class ActiveChatRunService {
     return { terminalReady };
   }
 
-  createReplayStream(runId: string): ReadableStream<UIMessageChunk> {
+  createReplayStream(
+    runId: string,
+    incognitoAudit?: IncognitoAuditContext | null,
+  ): ReadableStream<UIMessageChunk> {
     let isCancelled = false;
     const notifier = this.notifier;
     const replayPollIntervalMs = this.replayPollIntervalMs;
+    const audit = incognitoAudit ?? null;
 
     return new ReadableStream<UIMessageChunk>({
       async start(controller) {
@@ -324,6 +335,7 @@ export class ActiveChatRunService {
             const snapshot = await ActiveChatRunModel.readStatusAndEventsAfter({
               runId,
               seq: lastSeq,
+              incognitoAudit: audit,
             });
 
             // Run row gone: its conversation was hard-deleted and cascaded,
@@ -493,17 +505,20 @@ class ActiveChatRunEventBatcher {
   private asyncFailure: unknown = null;
   private readonly runId: string;
   private readonly suppressPayloads: boolean;
+  private readonly incognitoAudit: IncognitoAuditContext | null;
   private readonly onFlush: () => Promise<void>;
   private readonly onAsyncFailure: (error: unknown) => void;
 
   constructor(params: {
     runId: string;
     suppressPayloads: boolean;
+    incognitoAudit: IncognitoAuditContext | null;
     onFlush: () => Promise<void>;
     onAsyncFailure: (error: unknown) => void;
   }) {
     this.runId = params.runId;
     this.suppressPayloads = params.suppressPayloads;
+    this.incognitoAudit = params.incognitoAudit;
     this.onFlush = params.onFlush;
     this.onAsyncFailure = params.onAsyncFailure;
   }
@@ -550,9 +565,9 @@ class ActiveChatRunEventBatcher {
       return;
     }
 
-    // Suppressed (incognito) runs persist no payloads; the appendEvents call
-    // below still runs when a liveness touch is due, so a long silent stream
-    // is not reaped as stale.
+    // Suppression is now only for an incognito run with no key to encrypt
+    // under; the appendEvents call below still runs when a liveness touch is
+    // due, so a long silent stream is not reaped as stale.
     const payloads = this.suppressPayloads
       ? []
       : compactReplayPayloads(this.pending);
@@ -564,6 +579,7 @@ class ActiveChatRunEventBatcher {
     this.flushPromise = this.flushPromise.then(async () => {
       const result = await ActiveChatRunModel.appendEvents({
         runId: this.runId,
+        incognitoAudit: this.incognitoAudit,
         seq,
         payloads,
         touchRun,

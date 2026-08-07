@@ -1882,7 +1882,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // plaintext, so payload persistence is suppressed (reconnect
               // replay is lost; the run still completes server-side with the
               // key held in this request's closure).
-              suppressEventPayloads: conversation.incognito,
+              incognitoAudit,
+              // Suppress only when there is nothing to encrypt under: an
+              // incognito run WITH a key now persists its replay payloads
+              // encrypted, so reconnect-after-reload works for it.
+              suppressEventPayloads: conversation.incognito && !incognitoAudit,
               reply,
               stream: uiMessageStream as ReadableStream<UIMessageChunk>,
               runId: activeRun.id,
@@ -2052,7 +2056,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async (request, reply) => {
+      const { id } = request.params;
+      const { user, organizationId } = request;
       const conversation = await ConversationModel.findAccessibleById({
         id,
         userId: user.id,
@@ -2064,6 +2070,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!conversation) {
         throw new ApiError(404, "Conversation not found");
       }
+
+      // Replay payloads of an incognito run are encrypted under the browser
+      // key, so reconnecting needs it presented again. Without it the reader
+      // yields nothing rather than failing the reconnect.
+      const replayKeyInfo = conversation.incognito
+        ? await ConversationModel.getIncognitoKeyInfo(id)
+        : null;
+      const replayIncognitoAudit =
+        replayKeyInfo?.hasEscrow === true
+          ? requireIncognitoKey({
+              request,
+              conversation: replayKeyInfo,
+            })
+          : null;
 
       const activeRun = await ActiveChatRunModel.findReplayableByConversation({
         conversationId: id,
@@ -2079,7 +2099,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: {
           "Content-Encoding": "none",
         },
-        stream: activeChatRunService.createReplayStream(activeRun.id),
+        stream: activeChatRunService.createReplayStream(
+          activeRun.id,
+          replayIncognitoAudit,
+        ),
       });
 
       for (const [key, value] of response.headers.entries()) {

@@ -19,6 +19,8 @@ import {
   isK8sConflictError,
   isK8sNotFoundError,
   isTransientK8sApiError,
+  MCP_HIBERNATED_ANNOTATION,
+  MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION,
   sanitizeLabelValue,
   sanitizeMetadataLabels,
   withK8sApiRetry,
@@ -31,6 +33,13 @@ import type {
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+import {
+  assertTransition,
+  type DeploymentFacts,
+  deriveDeploymentState,
+  type TransitionKind,
+  // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
+} from "./hibernation-state-machine.ee";
 import { getMcpImagePullPolicy } from "./image-pull-policy";
 import {
   customYamlToDeployment,
@@ -97,12 +106,86 @@ const POD_READY_WAIT_MS = 5 * TimeInMs.Minute;
  * container, unschedulable pod, bad image/config). A condition of the user's
  * server or environment, not a bug of ours: error tracking drops it by name,
  * and routes surface it as an upstream failure.
+ *
+ * @public — the runtime manager distinguishes it from a slow wake
  */
-class McpServerDeploymentFailedError extends Error {
+export class McpServerDeploymentFailedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "McpServerDeploymentFailedError";
   }
+}
+
+/**
+ * The ready-wait ran out under capacity pressure — a full cluster or an
+ * exhausted namespace quota, as told apart by {@link classifySchedulingFailure}.
+ * Not a pod defect: an autoscaler adds nodes, a neighbour releases its quota,
+ * so callers treat it as retryable rather than branding the deployment failed.
+ *
+ * A wait can hold both a capacity reason and an image-pull reason at once (a
+ * rollout whose old pod is stuck pulling while its replacement finds no room),
+ * so a known pull error rides along in the message. It stays out of
+ * `schedulerMessage`, which callers quote as the scheduler's own wording.
+ *
+ * @public — the wake path maps it onto a capacity-flavored retryable error
+ */
+export class McpServerUnschedulableError extends Error {
+  constructor(
+    deploymentName: string,
+    readonly schedulerMessage: string,
+    lastImagePullError?: string | null,
+  ) {
+    super(
+      `Deployment ${deploymentName} has a pod the cluster cannot schedule: ${schedulerMessage}${
+        lastImagePullError
+          ? ` (last image pull error: ${lastImagePullError})`
+          : ""
+      }`,
+    );
+    this.name = "McpServerUnschedulableError";
+  }
+}
+
+/**
+ * Outcome of a {@link K8sDeployment.hibernate} call. `hibernated: false`
+ * carries why the scale-to-zero did not happen: already asleep (here or on
+ * another replica), somebody else's zero-replica deployment, or a lost
+ * compare-and-swap. A discriminated object rather than a boolean so future
+ * outcomes extend it without touching every caller.
+ *
+ * @public — consumed by the idle-hibernation sweeper (hibernation.ee.ts)
+ */
+export type HibernateResult =
+  | { hibernated: true }
+  | {
+      hibernated: false;
+      reason: "already-hibernated" | "not-ours" | "conflict";
+    };
+
+/**
+ * Classify why the scheduler could not place a pod.
+ *
+ * `capacity` means the cluster is merely full: a node-scale-up or a freed /
+ * raised ResourceQuota clears it without anyone touching the server, so a
+ * wake may keep waiting. Everything else — an unmatchable nodeSelector or
+ * affinity, an untolerated taint, an unbindable volume — describes a pod this
+ * cluster can never place, and waiting on it would retry until the end of
+ * time.
+ *
+ * Unrecognized wording is `terminal` deliberately: calling real capacity
+ * pressure a defect only restores the pre-existing fail-fast behavior, while
+ * calling a permanent condition capacity produces a wait that never ends.
+ * A composite message counts as capacity if any clause is resource pressure —
+ * those nodes are full, so more nodes would place the pod.
+ *
+ * @public — exported for direct testing
+ */
+export function classifySchedulingFailure(
+  message: string,
+): "capacity" | "terminal" {
+  return CAPACITY_PRESSURE_PATTERNS.some((pattern) => pattern.test(message))
+    ? "capacity"
+    : "terminal";
 }
 
 // Container waiting reasons that won't resolve without user action (bad
@@ -326,11 +409,21 @@ export default class K8sDeployment {
   private deploymentName: string; // Used for deployment name
   private state: McpDeploymentState = "not_created";
   private errorMessage: string | null = null;
+  // One-shot: the next generated spec pulls fresh (`Always`) even though the
+  // steady-state policy is `IfNotPresent` — the refresh-image flow's
+  // freshness contract. See image-pull-policy.ts.
+  private freshImagePullRequested = false;
   /** Count of consecutive polls where a running deployment appeared unavailable.
    *  We only downgrade to "pending" after multiple misses to avoid flickering
    *  caused by transient K8s API lag. */
   private runningMissCount = 0;
   private static readonly RUNNING_MISS_THRESHOLD = 3;
+  /** Bumped when a hibernation lifecycle transition starts. refreshState reads
+   *  the cluster across several awaits, so without this a refresh that began
+   *  before a hibernate/wake could land its now-stale reading on top of the
+   *  transition's state — advertising "running" for a deployment that is in
+   *  fact scaled to zero. */
+  private stateGeneration = 0;
   private cachedRestartCount = 0;
   private cachedPodCreationTime: Date | null = null;
   private cachedPodName: string | null = null;
@@ -1226,7 +1319,7 @@ export default class K8sDeployment {
    * Get catalog item for this MCP server.
    * Caches the result in this.catalogItem for subsequent calls.
    */
-  private async getCatalogItem(): Promise<InternalMcpCatalog | null> {
+  async getCatalogItem(): Promise<InternalMcpCatalog | null> {
     if (this.catalogItem) {
       return this.catalogItem;
     }
@@ -1684,6 +1777,48 @@ export default class K8sDeployment {
    * @param tolerations - Optional tolerations to apply to the pod spec (e.g., inherited from platform pod)
    * @returns The Kubernetes deployment specification
    */
+  /**
+   * Make the next {@link generateDeploymentSpec} emit `imagePullPolicy:
+   * Always` so its rollout pulls the current image — the refresh-image flow's
+   * freshness contract under the `IfNotPresent` steady state. One-shot.
+   */
+  requestFreshImagePull(): void {
+    this.freshImagePullRequested = true;
+  }
+
+  /**
+   * Best-effort read of what a wake would ask of the container registry: the
+   * image the sleeping deployment will run and the pull policy that decides
+   * whether a node-cached copy is allowed to satisfy it.
+   *
+   * Deliberately says nothing about which nodes hold that image — that lives
+   * in `node.status.images`, a cluster-scoped read the platform's namespaced
+   * Role does not grant, so it would be a 403 on every real install. Never
+   * throws — callers log, they don't gate.
+   */
+  async assessWakeImageCache(): Promise<{
+    image: string;
+    pullPolicy: string;
+  } | null> {
+    try {
+      const live = await this.readLiveDeployment();
+      const container = live?.spec?.template?.spec?.containers?.[0];
+      if (!container?.image) return null;
+      return {
+        image: container.image,
+        pullPolicy: container.imagePullPolicy ?? "IfNotPresent",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private consumeFreshImagePullRequest(): boolean {
+    const requested = this.freshImagePullRequested;
+    this.freshImagePullRequested = false;
+    return requested;
+  }
+
   generateDeploymentSpec(
     dockerImage: string,
     localConfig: z.infer<typeof LocalConfigSchema>,
@@ -1774,7 +1909,9 @@ export default class K8sDeployment {
         {
           name: "mcp-server",
           image: dockerImage,
-          imagePullPolicy: getMcpImagePullPolicy(dockerImage),
+          imagePullPolicy: getMcpImagePullPolicy(dockerImage, {
+            forceFreshPull: this.consumeFreshImagePullRequest(),
+          }),
           env: envVars,
           // Inject all keys from existing K8s Secrets/ConfigMaps as env vars
           ...(localConfig.envFrom?.length
@@ -2182,6 +2319,29 @@ export default class K8sDeployment {
       }
     }
 
+    // 9. imagePullPolicy: an explicit YAML value wins, like every other field
+    // in this merge — advanced YAML exists so an operator can pin a pod spec we
+    // would not generate, and which registry round-trips a pod makes is theirs
+    // to decide. The system only fills the field in when the YAML leaves it
+    // unset, which is also what keeps the `Never` guard on bare local images.
+    // The one exception is a refresh-image request: that is an explicit admin
+    // action asking for the current image right now, and on a YAML frozen at
+    // `IfNotPresent` it is the only route to one. It applies to that single
+    // rollout, then the author's value governs again. On a bare local image
+    // that rollout writes `Never` rather than `Always`, because there is no
+    // registry to fetch a fresher image from; the request is still consumed so
+    // it cannot leak into a later rollout.
+    if (deployment.spec?.template?.spec?.containers?.[0]) {
+      const container = deployment.spec.template.spec.containers[0];
+      const forceFreshPull = this.consumeFreshImagePullRequest();
+      if (forceFreshPull || !container.imagePullPolicy) {
+        container.imagePullPolicy = getMcpImagePullPolicy(
+          container.image || dockerImage,
+          { forceFreshPull },
+        );
+      }
+    }
+
     logger.info(
       { mcpServerId: this.mcpServer.id },
       "Generated deployment spec from YAML override",
@@ -2537,8 +2697,62 @@ export default class K8sDeployment {
           return this.startOrCreateDeployment(resolvedImagePullSecretNames);
         }
 
+        // ADOPTION: a deployment we hibernated (scaled to 0 with our
+        // annotation) is intact and intentionally idle. Adopt it as
+        // "hibernated" — don't treat it as a pending start, don't recreate
+        // it, and don't scale it up; the idle-hibernation manager wakes it on
+        // demand. The egress policy and HTTP Service are still reconciled so
+        // a later wake only needs to scale up (the pod starts confined).
+        if (
+          existingDeployment.spec?.replicas === 0 &&
+          K8sDeployment.hasHibernationAnnotation(existingDeployment)
+        ) {
+          await this.applyK8sNetworkPolicy();
+          await this.ensureHttpServerConfigured();
+          // Cluster fact, recorded before either branch below: this is a
+          // deployment we are holding asleep. Recording it first is also what
+          // makes the beginWake below a legal `hibernated → waking` move
+          // rather than an action out of a never-confirmed state.
+          if (
+            this.transitionTo(
+              "hibernated",
+              "observation",
+              "adopted an existing hibernated deployment",
+            )
+          ) {
+            this.errorMessage = null;
+          }
+          if (
+            config.orchestrator.mcpIdleHibernation.betaEnabled &&
+            !config.orchestrator.mcpIdleHibernation.hardDisabled
+          ) {
+            logger.info(
+              `Deployment ${this.deploymentName} is hibernated — adopted without scaling up`,
+            );
+            return;
+          }
+          // The operator's kill switch (…MCP_IDLE_HIBERNATION_SECONDS=0) is
+          // set, or the beta flag that offers the feature is off. Leaving the
+          // deployment asleep would strand it: no sweeper runs, so only a
+          // tool call would ever wake it. Deployment-level off means "always
+          // on", so scale it back up here and let the periodic refresh
+          // complete the wake once it reports available replicas.
+          // (An org toggle that is merely OFF is deliberately NOT enough to
+          // force a wake: nothing new gets hibernated, and ensureAwake still
+          // wakes what is asleep on the next call that needs it.)
+          await this.beginWake();
+          logger.info(
+            `Deployment ${this.deploymentName} was hibernated but idle hibernation is disabled — scaling it back up`,
+          );
+          return;
+        }
+
         if (existingDeployment.status?.availableReplicas) {
-          this.state = "running";
+          this.transitionTo(
+            "running",
+            "observation",
+            "adopted a deployment with available replicas",
+          );
 
           // For running deployments, we need to find the pod to assign HTTP port
           const pod = await this.findPodForDeployment();
@@ -2563,18 +2777,40 @@ export default class K8sDeployment {
         // Check pod container statuses for failure states (e.g. CrashLoopBackOff)
         const failureCheck = await this.checkPodContainerStatusesForFailure();
         if (failureCheck.hasFailed && !failureCheck.isTransientImagePull) {
-          this.state = "failed";
-          this.errorMessage = failureCheck.message;
+          if (
+            this.transitionTo(
+              "failed",
+              "observation",
+              "adopted a deployment whose pod is in a terminal failure state",
+            )
+          ) {
+            this.errorMessage = failureCheck.message;
+          }
           logger.warn(
             `Deployment ${this.deploymentName} is in a failure state: ${failureCheck.message}`,
           );
         } else {
-          // Image pull errors stay "pending": the kubelet retries the pull
-          // on its own and the deployment recovers once it succeeds.
-          this.state = "pending";
-          this.errorMessage = failureCheck.isTransientImagePull
-            ? failureCheck.message
-            : null;
+          // A deployment scaled back up but still carrying the hibernation
+          // annotation is mid-wake (the annotation only drops once it is
+          // verifiably up), so adopt it as "waking" rather than as a cold
+          // start. Otherwise "pending" — including image pull errors, which
+          // the kubelet retries on its own until the pull succeeds.
+          const adopted = K8sDeployment.hasHibernationAnnotation(
+            existingDeployment,
+          )
+            ? "waking"
+            : "pending";
+          if (
+            this.transitionTo(
+              adopted,
+              "observation",
+              "adopted an existing deployment that is not ready yet",
+            )
+          ) {
+            this.errorMessage = failureCheck.isTransientImagePull
+              ? failureCheck.message
+              : null;
+          }
           if (failureCheck.isTransientImagePull) {
             logger.info(
               `Deployment ${this.deploymentName} is waiting on an image pull (kubelet will retry): ${failureCheck.message}`,
@@ -2611,7 +2847,7 @@ export default class K8sDeployment {
         `Creating deployment ${this.deploymentName} for MCP server ${this.mcpServer.name}`,
       );
 
-      this.state = "pending";
+      this.transitionTo("pending", "observation", "creating a new deployment");
 
       // Use custom Docker image if provided
       const dockerImage =
@@ -2681,7 +2917,7 @@ export default class K8sDeployment {
 
       // Note: assignedHttpPort is set asynchronously in findPodForDeployment during status checks
       // State is "pending" until waitForDeploymentReady confirms the deployment has available replicas
-      this.state = "pending";
+      this.transitionTo("pending", "observation", "new deployment created");
       logger.info(`Deployment ${this.deploymentName} initiated`);
     } catch (error: unknown) {
       // A throttled/unavailable API server (429/5xx) says nothing about the
@@ -2689,7 +2925,11 @@ export default class K8sDeployment {
       // "pending" so the periodic status refresh re-reads the real state,
       // instead of latching a terminal "failed" that sticks until a manual
       // restart.
-      this.state = isTransientK8sApiError(error) ? "pending" : "failed";
+      this.transitionTo(
+        isTransientK8sApiError(error) ? "pending" : "failed",
+        "observation",
+        "the deployment reconcile threw",
+      );
       this.errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       logger.error(
@@ -2698,6 +2938,348 @@ export default class K8sDeployment {
       );
       throw error;
     }
+  }
+
+  /**
+   * Hibernate this deployment: scale it to 0 replicas and mark it with the
+   * hibernation annotation in a single merge patch, so the two can never be
+   * observed out of sync. Uses a plain deployment patch, NOT the
+   * `deployments/scale` subresource — RBAC only grants patch on deployments.
+   * K8s errors propagate to the caller (the idle-hibernation manager).
+   *
+   * The result says whether THIS call put the deployment to sleep, and if
+   * not, why. `hibernated: false` means the scale-to-zero never happened —
+   * and the caller must not run the teardown that follows a real hibernate
+   * (dropping pooled connections for a pod that is still serving would fail
+   * live calls).
+   */
+  async hibernate(): Promise<HibernateResult> {
+    this.stateGeneration++;
+    // Record the current replica count in the same patch, so the wake can
+    // restore an operator's scale-up instead of resetting to 1 replica.
+    const liveDeployment = await this.readLiveDeployment();
+    const liveReplicas = liveDeployment?.spec?.replicas ?? 0;
+
+    // Already at zero: there is nothing to scale away, and patching anyway
+    // would record a pre-hibernation count of 1 that a later wake would
+    // "restore" — silently resizing somebody else's Deployment. With our
+    // annotation this call is a legal no-op (the hibernate already
+    // happened, here or on another replica); without it the zero is an
+    // operator's or a controller's decision and not ours to claim.
+    if (liveDeployment && liveReplicas === 0) {
+      if (K8sDeployment.hasHibernationAnnotation(liveDeployment)) {
+        if (
+          this.transitionTo(
+            "hibernated",
+            "observation",
+            "deployment is already scaled to zero with our annotation",
+          )
+        ) {
+          this.errorMessage = null;
+          this.runningMissCount = 0;
+          this.clearCachedPodTelemetry();
+        }
+        return { hibernated: false, reason: "already-hibernated" };
+      }
+      logger.debug(
+        { deploymentName: this.deploymentName },
+        "Skipping MCP hibernate: the deployment is already at 0 replicas without our annotation",
+      );
+      return { hibernated: false, reason: "not-ours" };
+    }
+
+    const priorReplicas = Math.max(liveReplicas, 1);
+    try {
+      await this.k8sAppsApi.patchNamespacedDeployment(
+        {
+          name: this.deploymentName,
+          namespace: this.namespace,
+          body: {
+            metadata: {
+              // Compare-and-swap on the cluster object: the API server
+              // rejects this patch with 409 if ANYTHING changed the
+              // Deployment since the read above (another replica's
+              // hibernate or wake, an operator scale, a controller update).
+              // The cluster is the source of truth, so this is the lock.
+              ...K8sDeployment.resourceVersionPrecondition(liveDeployment),
+              annotations: {
+                [MCP_HIBERNATED_ANNOTATION]: "true",
+                [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]:
+                  String(priorReplicas),
+              },
+            },
+            spec: { replicas: 0 },
+          },
+        },
+        setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+      );
+    } catch (error) {
+      if (isK8sConflictError(error)) {
+        // Somebody else wrote to this Deployment between our read and our
+        // patch, so the replica count we were about to record is already
+        // stale. Never hibernate on doubt: abandon this attempt entirely and
+        // let the next sweep re-evaluate from a fresh read.
+        logger.debug(
+          { deploymentName: this.deploymentName },
+          "Aborting MCP hibernate: the deployment changed between the read and the patch",
+        );
+        return { hibernated: false, reason: "conflict" };
+      }
+      // The patch may or may not have committed (e.g. a timeout after the
+      // apply landed) — best-effort converge the cached state with whatever
+      // the cluster actually holds instead of guessing.
+      await this.refreshState().catch((refreshError) => {
+        logger.warn(
+          { err: refreshError },
+          `Failed to refresh state for ${this.deploymentName} after a hibernate patch error`,
+        );
+      });
+      throw error;
+    }
+    if (
+      this.transitionTo(
+        "hibernated",
+        "action",
+        "scaled to 0 replicas for idleness",
+      )
+    ) {
+      this.errorMessage = null;
+      this.runningMissCount = 0;
+    }
+    // The pod is gone — statusSummary must not keep reporting its name, age,
+    // or restart count as if it still existed. Unconditional: the scale-to-0
+    // patch committed whatever the cached state was allowed to become.
+    this.clearCachedPodTelemetry();
+    logger.info(`Deployment ${this.deploymentName} hibernated (scaled to 0)`);
+    return { hibernated: true };
+  }
+
+  /**
+   * Begin waking a hibernated deployment: scale it back to its recorded
+   * pre-hibernation replica count (default 1). The hibernation annotations
+   * deliberately stay until readiness — replicas >= 1 with the annotation
+   * still present means "waking". The manager waits via
+   * waitForDeploymentReady, then calls {@link completeWake}.
+   */
+  async beginWake(): Promise<void> {
+    this.stateGeneration++;
+    const liveDeployment = await this.readLiveDeployment();
+    let replicas = K8sDeployment.recordedPreHibernationReplicas(liveDeployment);
+    try {
+      await this.patchWakeReplicas(replicas, liveDeployment);
+    } catch (error) {
+      if (!isK8sConflictError(error)) throw error;
+      // Lost the compare-and-swap: something wrote to the Deployment between
+      // our read and this patch. Re-read once — if it is still hibernated
+      // (annotation, 0 replicas) the write was unrelated and the wake is
+      // still ours to perform, so retry it against the fresh object.
+      logger.debug(
+        { deploymentName: this.deploymentName },
+        "MCP wake lost a resourceVersion race; re-reading the deployment",
+      );
+      const rereadDeployment = await this.readLiveDeployment();
+      if (
+        !rereadDeployment ||
+        !K8sDeployment.hasHibernationAnnotation(rereadDeployment) ||
+        (rereadDeployment.spec?.replicas ?? 0) !== 0
+      ) {
+        // No longer hibernated-shaped: another replica is already waking it
+        // (or an operator took it over). Scaling it a second time would fight
+        // them — converge on cluster truth instead and let the caller's
+        // readiness wait ride along with the wake already in progress.
+        await this.refreshStateAfterLostWakeRace();
+        return;
+      }
+      replicas = K8sDeployment.recordedPreHibernationReplicas(rereadDeployment);
+      try {
+        await this.patchWakeReplicas(replicas, rereadDeployment);
+      } catch (retryError) {
+        if (!isK8sConflictError(retryError)) throw retryError;
+        await this.refreshStateAfterLostWakeRace();
+        return;
+      }
+    }
+    this.transitionTo("waking", "action", `scaled to ${replicas} to wake`);
+    logger.info(
+      `Deployment ${this.deploymentName} waking (scaled to ${replicas})`,
+    );
+  }
+
+  /**
+   * Finish waking: remove both hibernation annotations (a merge-patch null
+   * deletes the key) once the manager has confirmed the deployment is ready.
+   */
+  async completeWake(): Promise<void> {
+    this.stateGeneration++;
+    await this.k8sAppsApi.patchNamespacedDeployment(
+      {
+        name: this.deploymentName,
+        namespace: this.namespace,
+        body: {
+          metadata: {
+            annotations: {
+              [MCP_HIBERNATED_ANNOTATION]: null,
+              [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: null,
+            },
+          },
+        },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
+    // Deliberately sends no resourceVersion precondition: deleting two
+    // annotation keys is idempotent and commutes with every other write, so a
+    // compare-and-swap here could only turn a harmless concurrent update into
+    // a deployment left stuck reading "waking".
+    this.transitionTo(
+      "running",
+      "action",
+      "wake confirmed and annotations dropped",
+    );
+    logger.info(`Deployment ${this.deploymentName} woke up`);
+  }
+
+  /**
+   * Read this deployment's live K8s object, or null when it doesn't exist.
+   * Demand-lane guards in the runtime manager use it to decide from cluster
+   * truth where the cached state can't be trusted (cache-cold wakes, the
+   * pre-hibernation external-scale check).
+   */
+  async readLiveDeployment(): Promise<k8s.V1Deployment | null> {
+    try {
+      return await this.k8sAppsApi.readNamespacedDeployment({
+        name: this.deploymentName,
+        namespace: this.namespace,
+      });
+    } catch (error: unknown) {
+      if (isK8sNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Mirror a hibernation state transition performed on a sibling alias onto
+   * this object's cached state. Exists solely for the runtime manager to keep
+   * the multitenant sibling aliases of one physical deployment consistent
+   * (K8sDeployment only transitions the object a lifecycle method was called
+   * on) — no other callers.
+   */
+  syncStateFromSibling(state: McpDeploymentState): void {
+    this.transitionTo(state, "observation", "mirrored from a sibling alias");
+  }
+
+  /**
+   * Whether a Deployment carries the idle-hibernation annotation we set in
+   * {@link hibernate} (removed again by {@link completeWake}). Public so the
+   * runtime manager can classify deployments it read directly.
+   */
+  static hasHibernationAnnotation(deployment: k8s.V1Deployment): boolean {
+    return (
+      deployment.metadata?.annotations?.[MCP_HIBERNATED_ANNOTATION] === "true"
+    );
+  }
+
+  /**
+   * The ONLY place `this.state` is written. Every assignment goes through the
+   * hibernation state machine's transition table first, so an illegal move —
+   * a stale status refresh trying to overwrite a hibernate, a caller acting
+   * from a state it never confirmed — is refused and logged instead of
+   * silently scaling a workload the wrong way.
+   *
+   * Returns whether the transition was applied, so callers can keep their
+   * bookkeeping (error message, debounce counter) in step with the state.
+   */
+  private transitionTo(
+    next: McpDeploymentState,
+    kind: TransitionKind,
+    reason: string,
+  ): boolean {
+    if (
+      !assertTransition({
+        from: this.state,
+        to: next,
+        kind,
+        reason,
+        deploymentName: this.deploymentName,
+      })
+    ) {
+      return false;
+    }
+    this.state = next;
+    return true;
+  }
+
+  /**
+   * The `metadata` fragment that turns a merge patch into a compare-and-swap.
+   * Omitted entirely when the object carries no resourceVersion (a fake or a
+   * read that failed), so the patch degrades to an unconditional write rather
+   * than failing on a `null` precondition.
+   */
+  private static resourceVersionPrecondition(
+    deployment: k8s.V1Deployment | null,
+  ): { resourceVersion?: string } {
+    const resourceVersion = deployment?.metadata?.resourceVersion;
+    return resourceVersion ? { resourceVersion } : {};
+  }
+
+  /** The replica count {@link hibernate} recorded, clamped to a usable ≥ 1. */
+  private static recordedPreHibernationReplicas(
+    deployment: k8s.V1Deployment | null,
+  ): number {
+    const recorded = Number.parseInt(
+      deployment?.metadata?.annotations?.[
+        MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION
+      ] ?? "",
+      10,
+    );
+    return Number.isFinite(recorded) ? Math.max(recorded, 1) : 1;
+  }
+
+  /**
+   * The scale-up half of a wake. Patches replicas only — the hibernation
+   * annotations deliberately stay until readiness — under the read object's
+   * resourceVersion, so a concurrent write is surfaced as a 409 rather than
+   * silently overwriting it.
+   */
+  private async patchWakeReplicas(
+    replicas: number,
+    liveDeployment: k8s.V1Deployment | null,
+  ): Promise<void> {
+    const precondition =
+      K8sDeployment.resourceVersionPrecondition(liveDeployment);
+    await this.k8sAppsApi.patchNamespacedDeployment(
+      {
+        name: this.deploymentName,
+        namespace: this.namespace,
+        body: {
+          ...(precondition.resourceVersion ? { metadata: precondition } : {}),
+          spec: { replicas },
+        },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
+  }
+
+  /** Converge on cluster truth after a wake lost its compare-and-swap race. */
+  private async refreshStateAfterLostWakeRace(): Promise<void> {
+    await this.refreshState().catch((error) => {
+      logger.warn(
+        { err: error },
+        `Failed to refresh state for ${this.deploymentName} after losing a wake race`,
+      );
+    });
+  }
+
+  /**
+   * Forget the pod this deployment used to run. Called wherever the pod is
+   * known to be gone, so statusSummary stops reporting a dead pod's name, age
+   * and restart count as if it still existed.
+   */
+  private clearCachedPodTelemetry(): void {
+    this.cachedPodName = null;
+    this.cachedPodCreationTime = null;
+    this.cachedRestartCount = 0;
   }
 
   /**
@@ -2747,39 +3329,35 @@ export default class K8sDeployment {
   }
 
   /**
-   * Helper to find any pod for this deployment (not just running)
+   * Helper to find any pod for this deployment (not just running).
+   *
+   * Throws on a failed lookup rather than reporting "no pod": callers draw
+   * conclusions from an absent pod (clearing telemetry, declaring a deployment
+   * pod-less), and a 429 from the API server is not evidence of either.
    */
   private async findAnyPodForDeployment(): Promise<k8s.V1Pod | undefined> {
-    try {
-      const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
-      const pods = await this.k8sApi.listNamespacedPod({
-        namespace: this.namespace,
-        labelSelector: `mcp-server-id=${sanitizedId}`,
-      });
-      if (pods.items.length > 0) {
-        return pods.items[0];
-      }
-
-      // Multi-tenant catalogs share one deployment across many mcp_server
-      // rows; the deployment's pod label was baked in at create time using
-      // the first caller's mcp_server.id, so subsequent callers won't match
-      // by label. Fall back to matching pods by deployment name prefix,
-      // scoped to pods this runtime created (every one carries
-      // app=mcp-server) so we never list the whole namespace.
-      const allPods = await this.k8sApi.listNamespacedPod({
-        namespace: this.namespace,
-        labelSelector: "app=mcp-server",
-      });
-      return allPods.items.find((pod) =>
-        (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
-      );
-    } catch (error) {
-      logger.error(
-        { err: error },
-        `Failed to list pods for ${this.deploymentName}`,
-      );
-      return undefined;
+    const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
+    const pods = await this.k8sApi.listNamespacedPod({
+      namespace: this.namespace,
+      labelSelector: `mcp-server-id=${sanitizedId}`,
+    });
+    if (pods.items.length > 0) {
+      return pods.items[0];
     }
+
+    // Multi-tenant catalogs share one deployment across many mcp_server
+    // rows; the deployment's pod label was baked in at create time using
+    // the first caller's mcp_server.id, so subsequent callers won't match
+    // by label. Fall back to matching pods by deployment name prefix,
+    // scoped to pods this runtime created (every one carries
+    // app=mcp-server) so we never list the whole namespace.
+    const allPods = await this.k8sApi.listNamespacedPod({
+      namespace: this.namespace,
+      labelSelector: "app=mcp-server",
+    });
+    return allPods.items.find((pod) =>
+      (pod.metadata?.name ?? "").startsWith(`${this.deploymentName}-`),
+    );
   }
 
   /**
@@ -3197,8 +3775,14 @@ export default class K8sDeployment {
   async waitForDeploymentReady(
     maxAttempts = 60,
     intervalMs = 2000,
+    options?: { waitOutUnschedulablePods?: boolean },
   ): Promise<void> {
+    const waitOutCapacityPressure = options?.waitOutUnschedulablePods === true;
     let lastImagePullError: string | null = null;
+    // Holds the capacity wording only while it is still the live reason this
+    // wait has not finished: an attempt that sees the pod on a node clears it,
+    // so the error thrown at the end names whatever actually ended the wait.
+    let lastCapacityPressureMessage: string | null = null;
 
     for (let i = 0; i < maxAttempts; i++) {
       try {
@@ -3216,8 +3800,15 @@ export default class K8sDeployment {
           if (pod && pod.status?.phase === "Running") {
             await this.assignHttpPortIfNeeded(pod);
             // Update state to running now that deployment is confirmed ready
-            this.state = "running";
-            this.errorMessage = null;
+            if (
+              this.transitionTo(
+                "running",
+                "observation",
+                "readiness wait observed an available replica with a Running pod",
+              )
+            ) {
+              this.errorMessage = null;
+            }
             return;
           }
         }
@@ -3234,15 +3825,38 @@ export default class K8sDeployment {
         if (i >= 5 && i % 5 === 0) {
           const eventCheck = await this.checkEventsForFailure();
           if (eventCheck.hasFailure) {
-            this.state = "failed";
-            this.errorMessage = eventCheck.message || "Deployment failed";
-            throw new McpServerDeploymentFailedError(
-              `Deployment ${this.deploymentName} failed: ${eventCheck.message}`,
-            );
+            const eventMessage = eventCheck.message || "Deployment failed";
+            if (
+              waitOutCapacityPressure &&
+              classifySchedulingFailure(eventMessage) === "capacity"
+            ) {
+              // Capacity pressure reaches a wake as a Warning event too — an
+              // exhausted namespace ResourceQuota is reported against the
+              // ReplicaSet, before any pod exists to carry a condition.
+              lastCapacityPressureMessage = eventMessage;
+              this.errorMessage = eventMessage;
+            } else {
+              this.transitionTo(
+                "failed",
+                "observation",
+                "readiness wait found a failure event",
+              );
+              this.errorMessage = eventMessage;
+              throw new McpServerDeploymentFailedError(
+                `Deployment ${this.deploymentName} failed: ${eventCheck.message}`,
+              );
+            }
           }
         }
 
+        let unschedulableThisAttempt: string | null = null;
+        let sawScheduledPod = false;
+
         for (const pod of pods.items) {
+          if (isPodScheduled(pod)) {
+            sawScheduledPod = true;
+          }
+
           // Check pending pods without containerStatuses for condition failures
           if (
             pod.status?.phase === "Pending" &&
@@ -3251,20 +3865,42 @@ export default class K8sDeployment {
           ) {
             const conditionCheck = this.checkPodConditionsForFailure(pod);
             if (conditionCheck.hasFailure) {
-              // Check how long pod has been pending
-              const creationTime = pod.metadata?.creationTimestamp;
-              const pendingDuration = creationTime
-                ? Date.now() - new Date(creationTime).getTime()
-                : 0;
+              const conditionMessage =
+                conditionCheck.message || "Pod scheduling failed";
+              if (
+                waitOutCapacityPressure &&
+                classifySchedulingFailure(conditionMessage) === "capacity"
+              ) {
+                // A wake rides out scheduling pressure: a full cluster is the
+                // condition a cluster autoscaler exists to clear (nodes take
+                // 1–4 minutes to provision), so failing fast would brand a
+                // full-but-healthy cluster as a deployment defect. Keep
+                // waiting within the budget; the final error carries what the
+                // scheduler said. Anything the classifier does not recognize
+                // as capacity falls through and still fails fast — nothing
+                // outside capacity pressure resolves itself.
+                unschedulableThisAttempt = conditionMessage;
+                this.errorMessage = conditionMessage;
+              } else {
+                // Check how long pod has been pending
+                const creationTime = pod.metadata?.creationTimestamp;
+                const pendingDuration = creationTime
+                  ? Date.now() - new Date(creationTime).getTime()
+                  : 0;
 
-              // If pending for > 20 seconds with a condition failure, fail fast
-              if (pendingDuration > TimeInMs.Second * 20) {
-                this.state = "failed";
-                this.errorMessage =
-                  conditionCheck.message || "Pod scheduling failed";
-                throw new McpServerDeploymentFailedError(
-                  `Deployment ${this.deploymentName} failed: ${conditionCheck.message}`,
-                );
+                // If pending for > 20 seconds with a condition failure, fail fast
+                if (pendingDuration > TimeInMs.Second * 20) {
+                  this.transitionTo(
+                    "failed",
+                    "observation",
+                    "readiness wait found an unschedulable pod",
+                  );
+                  this.errorMessage =
+                    conditionCheck.message || "Pod scheduling failed";
+                  throw new McpServerDeploymentFailedError(
+                    `Deployment ${this.deploymentName} failed: ${conditionCheck.message}`,
+                  );
+                }
               }
             }
           }
@@ -3281,7 +3917,11 @@ export default class K8sDeployment {
                 if (
                   TERMINAL_CONTAINER_WAITING_REASONS.includes(waitingReason)
                 ) {
-                  this.state = "failed";
+                  this.transitionTo(
+                    "failed",
+                    "observation",
+                    `readiness wait found a terminal container state (${waitingReason})`,
+                  );
                   this.errorMessage = message;
                   throw new McpServerDeploymentFailedError(
                     `Deployment ${this.deploymentName} failed: ${waitingReason} - ${message}`,
@@ -3301,6 +3941,14 @@ export default class K8sDeployment {
             }
           }
         }
+
+        if (unschedulableThisAttempt) {
+          lastCapacityPressureMessage = unschedulableThisAttempt;
+        } else if (sawScheduledPod) {
+          // The pod got a node, so whatever is holding the wait up now is not
+          // capacity — drop the wording so it cannot shadow the real cause.
+          lastCapacityPressureMessage = null;
+        }
       } catch (error: unknown) {
         if (
           error instanceof Error &&
@@ -3315,6 +3963,13 @@ export default class K8sDeployment {
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
 
+    if (lastCapacityPressureMessage) {
+      throw new McpServerUnschedulableError(
+        this.deploymentName,
+        lastCapacityPressureMessage,
+        lastImagePullError,
+      );
+    }
     throw new Error(
       `Deployment ${this.deploymentName} did not become ready after ${maxAttempts} attempts${
         lastImagePullError
@@ -3364,12 +4019,16 @@ export default class K8sDeployment {
         namespace: this.namespace,
       });
       logger.info(`Deployment ${this.deploymentName} deletion initiated`);
-      this.state = "not_created";
+      this.transitionTo("not_created", "observation", "deployment deleted");
     } catch (error: unknown) {
       // If deployment doesn't exist (404), that's okay - it may have been deleted already
       if (isK8sNotFoundError(error)) {
         logger.info(`Deployment ${this.deploymentName} already deleted`);
-        this.state = "not_created";
+        this.transitionTo(
+          "not_created",
+          "observation",
+          "deployment was already gone",
+        );
         return;
       }
       logger.error(
@@ -3822,18 +4481,42 @@ export default class K8sDeployment {
       return;
     }
 
+    // Everything below is derived from cluster reads taken across several
+    // awaits. A hibernate or wake starting in the meantime makes all of it
+    // stale, so each read is followed by a generation check that abandons this
+    // refresh rather than overwriting the transition's state.
+    const generation = this.stateGeneration;
+
     try {
-      // Update pod metadata (restarts, age) from the latest pod
-      const anyPod = await this.findAnyPodForDeployment();
-      if (anyPod) {
-        const cs = anyPod.status?.containerStatuses?.find(
-          (c) => c.name === "mcp-server",
+      // Update pod metadata (restarts, age) from the latest pod. Best-effort:
+      // a failed lookup is not evidence the pod is gone, so it leaves the
+      // cached values alone and the state evaluation below still runs.
+      try {
+        const anyPod = await this.findAnyPodForDeployment();
+        if (this.stateGeneration !== generation) return;
+        if (anyPod) {
+          const cs = anyPod.status?.containerStatuses?.find(
+            (c) => c.name === "mcp-server",
+          );
+          this.cachedRestartCount = cs?.restartCount ?? 0;
+          this.cachedPodCreationTime = anyPod.metadata?.creationTimestamp
+            ? new Date(anyPod.metadata.creationTimestamp)
+            : null;
+          this.cachedPodName = anyPod.metadata?.name ?? null;
+        } else {
+          // No pod at all — statusSummary must not keep reporting the last
+          // pod's name/age/restarts as if it still existed. Without this a
+          // hibernated deployment shows its dead pod forever: hibernate()
+          // clears these caches, but the next refresh repopulates them from
+          // the still-Terminating pod, and once that pod object is gone this
+          // branch is the only place the caches can be cleared again.
+          this.clearCachedPodTelemetry();
+        }
+      } catch (error) {
+        logger.warn(
+          { err: error },
+          `Failed to refresh pod telemetry for ${this.deploymentName}`,
         );
-        this.cachedRestartCount = cs?.restartCount ?? 0;
-        this.cachedPodCreationTime = anyPod.metadata?.creationTimestamp
-          ? new Date(anyPod.metadata.creationTimestamp)
-          : null;
-        this.cachedPodName = anyPod.metadata?.name ?? null;
       }
 
       // "failed" is re-evaluated too: it can be a false positive — e.g. a
@@ -3841,58 +4524,176 @@ export default class K8sDeployment {
       // the pod kept running fine, or a crashloop that has since recovered.
       // A deployment that is verifiably available flips (back) to "running";
       // one that is genuinely broken re-derives the same failed state below.
+      // "hibernated" is refreshed too, so an externally-completed wake (or an
+      // externally-removed annotation) is picked up by the next poll — as is
+      // "waking", whose whole point is to converge to "running" once the
+      // scaled-up deployment reports available replicas.
       if (
         this.state !== "pending" &&
         this.state !== "running" &&
-        this.state !== "failed"
+        this.state !== "failed" &&
+        this.state !== "hibernated" &&
+        this.state !== "waking"
       ) {
         return;
       }
 
       // Check if deployment has available replicas
-      const deployment = await this.k8sAppsApi.readNamespacedDeployment({
-        name: this.deploymentName,
-        namespace: this.namespace,
-      });
-
-      if (
-        deployment.status?.availableReplicas &&
-        deployment.status.availableReplicas > 0
-      ) {
-        const pod = await this.findPodForDeployment();
-        if (pod) {
-          this.state = "running";
+      let deployment: k8s.V1Deployment;
+      try {
+        deployment = await this.k8sAppsApi.readNamespacedDeployment({
+          name: this.deploymentName,
+          namespace: this.namespace,
+        });
+      } catch (error) {
+        if (!isK8sNotFoundError(error)) throw error;
+        if (this.stateGeneration !== generation) return;
+        // The Deployment itself is gone — deleted out-of-band (kubectl, a
+        // namespace cleanup, another controller). That is a definitive read,
+        // not a flake: converge to not_created instead of advertising a
+        // running/hibernated deployment that no longer exists, which nothing
+        // else would ever correct.
+        const decision = deriveDeploymentState(
+          {
+            exists: false,
+            hasHibernationAnnotation: false,
+            replicas: 0,
+            availableReplicas: 0,
+            podFailure: null,
+          },
+          this.state,
+        );
+        if (
+          decision.kind === "state" &&
+          this.transitionTo(
+            decision.state,
+            "observation",
+            "deployment no longer exists in the cluster",
+          )
+        ) {
           this.errorMessage = null;
           this.runningMissCount = 0;
-          return;
+          this.clearCachedPodTelemetry();
+        }
+        return;
+      }
+      if (this.stateGeneration !== generation) return;
+
+      // Assemble exactly the facts the state machine is allowed to look at.
+      // Everything below this point is bookkeeping around ITS verdict — the
+      // classification itself lives in one pure, exhaustively tested function
+      // rather than in an if-chain nobody can hold in their head.
+      const hasHibernationAnnotation =
+        K8sDeployment.hasHibernationAnnotation(deployment);
+      let availableReplicas = deployment.status?.availableReplicas ?? 0;
+
+      // "Available" alone isn't enough to call an unannotated deployment
+      // running — the pod has to be findable. (An annotated one is a wake to
+      // finish regardless of which pod object backs it, and looking one up
+      // there would only cost an API call.)
+      if (!hasHibernationAnnotation && availableReplicas > 0) {
+        const pod = await this.findPodForDeployment();
+        if (this.stateGeneration !== generation) return;
+        if (!pod) availableReplicas = 0;
+      }
+
+      // Only consulted for un-annotated, unavailable deployments: the
+      // annotation branches never reach the failure rules, so paying for the
+      // pod-status read there would be pure waste.
+      let podFailure: DeploymentFacts["podFailure"] = null;
+      let failureMessage: string | null = null;
+      if (!hasHibernationAnnotation && availableReplicas === 0) {
+        const failureCheck = await this.checkPodContainerStatusesForFailure();
+        if (this.stateGeneration !== generation) return;
+        if (failureCheck.hasFailed) {
+          podFailure = {
+            failed: true,
+            transient: failureCheck.isTransientImagePull,
+          };
+          failureMessage = failureCheck.message;
         }
       }
 
-      // No available replicas — check for container failure states
-      const failureCheck = await this.checkPodContainerStatusesForFailure();
-      if (failureCheck.hasFailed) {
-        if (failureCheck.isTransientImagePull) {
-          // Image pull errors self-heal: the kubelet retries the pull with
-          // exponential backoff. Stay "pending" (with the error visible) so
-          // the next refresh flips to "running" once the pull succeeds —
-          // marking it "failed" here would latch the state forever and
-          // require a manual restart.
-          this.state = "pending";
-          this.errorMessage = failureCheck.message;
-        } else {
-          this.state = "failed";
-          this.errorMessage = failureCheck.message;
+      const decision = deriveDeploymentState(
+        {
+          exists: true,
+          hasHibernationAnnotation,
+          replicas: deployment.spec?.replicas ?? 0,
+          availableReplicas,
+          podFailure,
+        },
+        this.state,
+      );
+
+      if (decision.kind === "finish-wake") {
+        // A wake whose completeWake patch failed (or whose process died) left
+        // annotation + available replicas, which reads as neither asleep nor
+        // running. Record the mid-wake fact first — that is what the cluster
+        // says — then finish the job (idempotent annotation removal). If the
+        // patch fails, fall back to "pending" and retry on the next refresh.
+        this.transitionTo(
+          "waking",
+          "observation",
+          "annotated deployment is already available",
+        );
+        try {
+          await this.completeWake();
+        } catch (error) {
+          logger.warn(
+            { err: error },
+            `Failed to self-heal wake completion for ${this.deploymentName}; retrying on the next refresh`,
+          );
+          this.transitionTo(
+            "pending",
+            "observation",
+            "wake self-heal patch failed",
+          );
         }
         this.runningMissCount = 0;
-      } else if (this.state === "running") {
-        // Debounce: only downgrade to "pending" after several consecutive
-        // misses to avoid flickering from transient K8s API inconsistencies.
+        return;
+      }
+
+      if (decision.kind === "debounce-running") {
+        // Only downgrade a running deployment after several consecutive
+        // misses, so a transient K8s API inconsistency can't flicker the UI.
         this.runningMissCount++;
         if (this.runningMissCount >= K8sDeployment.RUNNING_MISS_THRESHOLD) {
-          this.state = "pending";
-          this.errorMessage = null;
+          if (
+            this.transitionTo(
+              "pending",
+              "observation",
+              "no available replicas across the debounce window",
+            )
+          ) {
+            this.errorMessage = null;
+          }
           this.runningMissCount = 0;
         }
+        return;
+      }
+
+      const stateChanged = decision.state !== this.state;
+      if (
+        !this.transitionTo(decision.state, "observation", "cluster refresh")
+      ) {
+        return;
+      }
+      if (podFailure?.failed) {
+        // "failed" (terminal) or "pending" (an image pull the kubelet retries
+        // on its own) — either way, surface WHY.
+        this.errorMessage = failureMessage;
+        this.runningMissCount = 0;
+      } else if (
+        stateChanged ||
+        decision.state === "running" ||
+        decision.state === "hibernated" ||
+        decision.state === "waking"
+      ) {
+        // A state backed by a positive cluster fact clears any stale error.
+        // A "pending"/"failed" the deployment merely stayed in carries no new
+        // evidence, so it keeps the message an earlier refresh recorded.
+        this.errorMessage = null;
+        this.runningMissCount = 0;
       }
     } catch (error) {
       if (!isK8sNotFoundError(error)) {
@@ -3915,9 +4716,13 @@ export default class K8sDeployment {
           ? "Deployment is running"
           : this.state === "pending"
             ? "Deployment is starting"
-            : this.state === "failed"
-              ? "Deployment failed"
-              : "Deployment not created",
+            : this.state === "waking"
+              ? "Waking (from idle)"
+              : this.state === "failed"
+                ? "Deployment failed"
+                : this.state === "hibernated"
+                  ? "Hibernated (idle)"
+                  : "Deployment not created",
       error: this.errorMessage,
       serverName: this.mcpServer.name,
       deploymentName: this.deploymentName,
@@ -4059,6 +4864,30 @@ export default class K8sDeployment {
 
     return { k8sWs, podName };
   }
+}
+
+// The only scheduling wordings an autoscaler, a rescheduled neighbour or a
+// quota change can clear on their own. kube-scheduler's NodeResourcesFit
+// plugin says "Insufficient <resource>" for every resource kind (cpu, memory,
+// ephemeral-storage, extended resources) and "Too many pods" when a node is at
+// its pod cap; admission says "exceeded quota" when the namespace
+// ResourceQuota is full.
+const CAPACITY_PRESSURE_PATTERNS = [
+  /\binsufficient\b/i,
+  /\btoo many pods\b/i,
+  /\bexceeded quota\b/i,
+];
+
+/**
+ * Whether the scheduler has already bound the pod to a node. Distinguishes a
+ * pod still waiting for capacity from one that got a node and is failing for
+ * some later reason (image pull, mount, crash).
+ */
+function isPodScheduled(pod: k8s.V1Pod): boolean {
+  return (pod.status?.conditions ?? []).some(
+    (condition) =>
+      condition.type === "PodScheduled" && condition.status === "True",
+  );
 }
 
 function listCustomObjectItems(response: unknown): Array<{

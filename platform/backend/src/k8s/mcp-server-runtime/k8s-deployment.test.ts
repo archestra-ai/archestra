@@ -6,16 +6,22 @@ import type { Attach, Exec, Log } from "@kubernetes/client-node";
 import { vi } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
-import { describe, expect, test } from "@/test";
+import {
+  MCP_HIBERNATED_ANNOTATION,
+  MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION,
+} from "@/k8s/shared";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
   EffectiveNetworkPolicy,
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
 import K8sDeployment, {
+  classifySchedulingFailure,
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
   getCachedPlatformNodeSelector,
+  McpServerUnschedulableError,
   resetPlatformNodeSelectorCache,
   resetPlatformTolerationsCache,
 } from "./k8s-deployment";
@@ -71,6 +77,51 @@ function createK8sDeploymentInstance(
     environmentValues: stringEnvironmentValues,
   });
 }
+
+describe("classifySchedulingFailure", () => {
+  // Verbatim kube-scheduler / quota-admission wordings: the classifier is only
+  // as good as the strings it is fed, so paraphrasing them would prove nothing.
+  const capacityMessages = [
+    "Pod scheduling failed: 0/3 nodes are available: 3 Insufficient cpu. preemption: 0/3 nodes are available: 3 No preemption victims found for incoming pod.",
+    "0/5 nodes are available: 5 Insufficient memory.",
+    "0/2 nodes are available: 2 Insufficient ephemeral-storage.",
+    "0/1 nodes are available: 1 Insufficient nvidia.com/gpu.",
+    "0/4 nodes are available: 4 Too many pods.",
+    'Resource quota exceeded: pods "mcp-test-server-7d9f" is forbidden: exceeded quota: compute-resources, requested: requests.cpu=1, used: requests.cpu=10, limited: requests.cpu=10',
+    // Some nodes are merely full, so a scale-up still places this pod.
+    "0/6 nodes are available: 2 Insufficient cpu, 4 node(s) had untolerated taint {dedicated: gpu}.",
+  ];
+
+  test.each(capacityMessages)("waits out %s", (message) => {
+    expect(classifySchedulingFailure(message)).toBe("capacity");
+  });
+
+  // Nothing here is cleared by adding a node, so a wake that waited on it
+  // would retry until its deadline and then retry again forever.
+  const terminalMessages = [
+    "0/3 nodes are available: 3 node(s) didn't match Pod's node affinity/selector.",
+    "0/3 nodes are available: 3 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }.",
+    "0/2 nodes are available: 2 pod has unbound immediate PersistentVolumeClaims.",
+    "0/1 nodes are available: 1 node(s) didn't find available persistent volumes to bind.",
+    "0/3 nodes are available: 3 node(s) had volume node affinity conflict.",
+    "0/4 nodes are available: 4 node(s) didn't satisfy existing pods anti-affinity rules.",
+    "0/3 nodes are available: 3 node(s) were unschedulable.",
+    "Invalid ServiceAccount: error looking up service account default/missing-sa",
+  ];
+
+  test.each(terminalMessages)("fails fast on %s", (message) => {
+    expect(classifySchedulingFailure(message)).toBe("terminal");
+  });
+
+  // Guessing "capacity" for an unknown string buys an unbounded retry loop;
+  // guessing "terminal" only reproduces the behavior that shipped before.
+  test.each([
+    "",
+    "Pod scheduling failed: something nobody has seen before",
+  ])("treats unrecognized wording as terminal: %s", (message) => {
+    expect(classifySchedulingFailure(message)).toBe("terminal");
+  });
+});
 
 describe("K8sDeployment.createContainerEnvFromConfig", () => {
   test.each([
@@ -820,7 +871,52 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
 
     const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.image).toBe("ghcr.io/my-org/custom-mcp-server:v2.1.0");
-    expect(container?.imagePullPolicy).toBe("Always");
+    expect(container?.imagePullPolicy).toBe("IfNotPresent");
+  });
+
+  describe("container image availability", () => {
+    const registryImage = "ghcr.io/my-org/custom-mcp-server:v2.1.0";
+
+    function pullPolicyOf(deployment: K8sDeployment, image: string) {
+      return deployment.generateDeploymentSpec(
+        image,
+        { command: "node" },
+        false,
+        8080,
+      ).spec?.template.spec?.containers[0]?.imagePullPolicy;
+    }
+
+    function makeDeployment(): K8sDeployment {
+      return createMockK8sDeployment({
+        id: "image-availability-id",
+        name: "image-availability-server",
+        catalogId: null,
+        // biome-ignore lint/suspicious/noExplicitAny: Mock data for testing
+      } as any);
+    }
+
+    test("a fresh-pull request applies to exactly one generated spec", () => {
+      const k8sDeployment = makeDeployment();
+
+      expect(pullPolicyOf(k8sDeployment, registryImage)).toBe("IfNotPresent");
+
+      k8sDeployment.requestFreshImagePull();
+      expect(pullPolicyOf(k8sDeployment, registryImage)).toBe("Always");
+
+      // A refresh must not permanently re-arm the registry dependency: the
+      // next ordinary regeneration is back to the cache-tolerant policy, so a
+      // later wake can still start from the image already on the node.
+      expect(pullPolicyOf(k8sDeployment, registryImage)).toBe("IfNotPresent");
+    });
+
+    test("a fresh-pull request never makes a bare local image pullable", () => {
+      const k8sDeployment = makeDeployment();
+
+      k8sDeployment.requestFreshImagePull();
+      expect(pullPolicyOf(k8sDeployment, "locally-built-image:latest")).toBe(
+        "Never",
+      );
+    });
   });
 
   test("generates deploymentSpec with resource governance (memory limit + ephemeral-storage request/limit)", () => {
@@ -2918,6 +3014,64 @@ spec:
       { secretRef: { name: "existing-yaml-secret" } },
       { secretRef: { name: "from-local-config" } },
     ]);
+  });
+
+  describe("imagePullPolicy", () => {
+    const registryImage = "ghcr.io/my-org/custom-mcp-server:v2.1.0";
+
+    function yamlWith(imagePullPolicy?: string) {
+      return `
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: ${registryImage}
+${imagePullPolicy ? `          imagePullPolicy: ${imagePullPolicy}\n` : ""}          command: ["node"]
+          args: ["server.js"]
+`;
+    }
+
+    function pullPolicyOf(deployment: K8sDeployment) {
+      return deployment.generateDeploymentSpec(
+        registryImage,
+        { command: "node", arguments: ["server.js"] },
+        false,
+        8080,
+      ).spec?.template.spec?.containers[0]?.imagePullPolicy;
+    }
+
+    // Advanced YAML is the escape hatch for a pod spec the platform would not
+    // generate, so silently rewriting a field the operator wrote would make
+    // the escape hatch untrustworthy.
+    test.each([
+      "Always",
+      "IfNotPresent",
+      "Never",
+    ])("keeps the value the YAML author wrote (%s)", (yamlPolicy) => {
+      const deployment = createK8sDeploymentWithYaml(yamlWith(yamlPolicy));
+
+      expect(pullPolicyOf(deployment)).toBe(yamlPolicy);
+    });
+
+    test("fills in the steady-state policy when the YAML omits it", () => {
+      const deployment = createK8sDeploymentWithYaml(yamlWith(undefined));
+
+      expect(pullPolicyOf(deployment)).toBe("IfNotPresent");
+    });
+
+    // Advanced YAML is copied once from the generated template and then
+    // frozen, so without this an admin whose copy says `IfNotPresent` has no
+    // way back to a fresh image.
+    test("honours a refresh-image request for exactly one generated spec, then defers again", () => {
+      const deployment = createK8sDeploymentWithYaml(yamlWith("IfNotPresent"));
+
+      deployment.requestFreshImagePull();
+      expect(pullPolicyOf(deployment)).toBe("Always");
+      expect(pullPolicyOf(deployment)).toBe("IfNotPresent");
+    });
   });
 });
 
@@ -7489,5 +7643,1312 @@ describe("K8sDeployment.refreshState failed-state recovery", () => {
     await deployment.refreshState();
     expect(deployment.statusSummary.state).toBe("failed");
     expect(deployment.statusSummary.error).toContain("back-off");
+  });
+});
+
+describe("K8sDeployment idle hibernation", () => {
+  const notFound = { statusCode: 404, message: "not found" };
+
+  // Adoption behaves differently when the deployment does not offer the
+  // feature, so pin the ordinary case — beta flag on, operator kill switch
+  // off — and let the tests that need it flip either gate.
+  beforeEach(() => {
+    config.orchestrator.mcpIdleHibernation.betaEnabled = true;
+  });
+  afterEach(() => {
+    config.orchestrator.mcpIdleHibernation.betaEnabled = false;
+    config.orchestrator.mcpIdleHibernation.hardDisabled = false;
+  });
+
+  function makeDeployment(overrides?: {
+    readNamespacedPod?: ReturnType<typeof vi.fn>;
+    listNamespacedPod?: ReturnType<typeof vi.fn>;
+    listNamespacedEvent?: ReturnType<typeof vi.fn>;
+    readNamespacedDeployment?: ReturnType<typeof vi.fn>;
+    patchNamespacedDeployment?: ReturnType<typeof vi.fn>;
+    createNamespacedDeployment?: ReturnType<typeof vi.fn>;
+    deleteNamespacedDeployment?: ReturnType<typeof vi.fn>;
+  }): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      // null catalogId so getCatalogItem() short-circuits without a DB lookup
+      catalogId: null,
+    } as unknown as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {
+        readNamespacedPod:
+          overrides?.readNamespacedPod ?? vi.fn().mockRejectedValue(notFound),
+        listNamespacedPod:
+          overrides?.listNamespacedPod ??
+          vi.fn().mockResolvedValue({ items: [] }),
+        listNamespacedEvent:
+          overrides?.listNamespacedEvent ??
+          vi.fn().mockResolvedValue({ items: [] }),
+      } as unknown as k8s.CoreV1Api,
+      k8sAppsApi: {
+        readNamespacedDeployment:
+          overrides?.readNamespacedDeployment ?? vi.fn(),
+        patchNamespacedDeployment:
+          overrides?.patchNamespacedDeployment ?? vi.fn().mockResolvedValue({}),
+        createNamespacedDeployment:
+          overrides?.createNamespacedDeployment ??
+          vi.fn().mockResolvedValue({}),
+        deleteNamespacedDeployment:
+          overrides?.deleteNamespacedDeployment ??
+          vi.fn().mockResolvedValue({}),
+      } as unknown as k8s.AppsV1Api,
+      k8sNetworkingApi: {} as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  function seedState(
+    deployment: K8sDeployment,
+    state: "pending" | "running" | "failed" | "hibernated" | "waking",
+  ): void {
+    // @ts-expect-error - seeding a private property for testing
+    deployment.state = state;
+  }
+
+  /** A read of a deployment carrying the hibernation annotation. */
+  function annotatedDeploymentRead(replicas: number) {
+    return {
+      metadata: { annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" } },
+      spec: { replicas },
+      status: { availableReplicas: 0 },
+    };
+  }
+
+  /**
+   * Recover the Content-Type header a patch call's options set: the client's
+   * `setHeaderOptions` packs it into a middleware whose `pre` stamps the
+   * header onto the outgoing request, so replay that against a recorder.
+   */
+  function getPatchContentType(options: unknown): string | undefined {
+    let contentType: string | undefined;
+    const fakeRequest = {
+      setHeaderParam: (key: string, value: string) => {
+        if (key === "Content-Type") contentType = value;
+      },
+    };
+    const middleware =
+      (options as { middleware?: Array<{ pre: (req: unknown) => unknown }> })
+        ?.middleware ?? [];
+    for (const m of middleware) m.pre(fakeRequest);
+    return contentType;
+  }
+
+  const runningPod = {
+    metadata: { name: "test-server-abc123", creationTimestamp: new Date() },
+    status: {
+      phase: "Running",
+      containerStatuses: [
+        {
+          name: "mcp-server",
+          ready: true,
+          restartCount: 0,
+          state: { running: {} },
+        },
+      ],
+    },
+  } as k8s.V1Pod;
+
+  describe("hibernate", () => {
+    test("sends a single merge patch scaling to 0 with both annotations, and flips state to hibernated", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ spec: { replicas: 1 } });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "running");
+
+      await deployment.hibernate();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      const [request, options] = patchNamespacedDeployment.mock.calls[0];
+      expect(request).toEqual({
+        name: deployment.k8sDeploymentName,
+        namespace: "default",
+        body: {
+          metadata: {
+            annotations: {
+              [MCP_HIBERNATED_ANNOTATION]: "true",
+              [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: "1",
+            },
+          },
+          spec: { replicas: 0 },
+        },
+      });
+      expect(getPatchContentType(options)).toBe("application/merge-patch+json");
+      expect(deployment.statusSummary.state).toBe("hibernated");
+      expect(deployment.statusSummary.message).toBe("Hibernated (idle)");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("records the CURRENT replica count in the pre-hibernation annotation", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ spec: { replicas: 3 } });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "running");
+
+      await deployment.hibernate();
+
+      const [request] = patchNamespacedDeployment.mock.calls[0];
+      expect(
+        request.body.metadata.annotations[
+          MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION
+        ],
+      ).toBe("3");
+    });
+
+    test("clears cached pod telemetry so statusSummary stops reporting a dead pod", async () => {
+      const runningRead = {
+        metadata: { annotations: {} },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 1 },
+      };
+      const readNamespacedDeployment = vi.fn().mockResolvedValue(runningRead);
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [runningPod] });
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        listNamespacedPod,
+      });
+      seedState(deployment, "running");
+      // Populate the pod telemetry cache through the public refresh path.
+      await deployment.refreshState();
+      expect(deployment.statusSummary.podName).toBe("test-server-abc123");
+
+      await deployment.hibernate();
+
+      expect(deployment.statusSummary.podName).toBeUndefined();
+      expect(deployment.statusSummary.podAge).toBeUndefined();
+      expect(deployment.statusSummary.restartCount).toBe(0);
+    });
+
+    test("propagates k8s errors and refreshes the cached state from cluster truth", async () => {
+      const patchError = { code: 403, message: "forbidden" };
+      const patchNamespacedDeployment = vi.fn().mockRejectedValue(patchError);
+      // The error-path refresh reads the cluster: this deployment is still
+      // untouched (no annotation, replicas 1, available) — so the cached
+      // state converges back to what actually holds: "running".
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: {} },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 1 },
+      });
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [runningPod] });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+        listNamespacedPod,
+      });
+      seedState(deployment, "running");
+
+      await expect(deployment.hibernate()).rejects.toEqual(patchError);
+      expect(deployment.statusSummary.state).toBe("running");
+    });
+
+    test("a patch failure that actually committed converges the cached state to hibernated", async () => {
+      const patchError = { code: 504, message: "gateway timeout" };
+      const patchNamespacedDeployment = vi.fn().mockRejectedValue(patchError);
+      // First read (record replicas): still up. Refresh read (error path):
+      // the patch actually landed — annotation present, replicas 0.
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({ spec: { replicas: 1 } })
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "running");
+
+      await expect(deployment.hibernate()).rejects.toEqual(patchError);
+      expect(deployment.statusSummary.state).toBe("hibernated");
+    });
+
+    test("an already-hibernated deployment is a legal no-op, not a second patch", async () => {
+      // Another replica (or an earlier sweep) got there first. Patching again
+      // would record a pre-hibernation count of 0 — and a later wake would
+      // "restore" a deployment that used to run three replicas to one.
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "running");
+
+      await expect(deployment.hibernate()).resolves.toEqual({
+        hibernated: false,
+        reason: "already-hibernated",
+      });
+
+      expect(patchNamespacedDeployment).not.toHaveBeenCalled();
+      // Still reported as asleep: that is what the cluster says.
+      expect(deployment.statusSummary.state).toBe("hibernated");
+    });
+
+    test("a zero-replica deployment WITHOUT our annotation is left alone entirely", async () => {
+      // An operator scaled it down. Claiming it would let a later wake undo a
+      // deliberate human decision.
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: {} },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "running");
+
+      await expect(deployment.hibernate()).resolves.toEqual({
+        hibernated: false,
+        reason: "not-ours",
+      });
+
+      expect(patchNamespacedDeployment).not.toHaveBeenCalled();
+      expect(deployment.statusSummary.state).toBe("running");
+    });
+
+    test("the scale-to-zero carries the read's resourceVersion as a compare-and-swap", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: {}, resourceVersion: "4711" },
+        spec: { replicas: 2 },
+        status: { availableReplicas: 2 },
+      });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "running");
+
+      await expect(deployment.hibernate()).resolves.toEqual({
+        hibernated: true,
+      });
+
+      // The precondition is what makes this safe across replicas: the API
+      // server rejects the patch outright if anything wrote in between.
+      const [request] = patchNamespacedDeployment.mock.calls[0];
+      expect(request.body.metadata.resourceVersion).toBe("4711");
+    });
+
+    test("a lost compare-and-swap (409) abandons the hibernate silently", async () => {
+      // Never hibernate on doubt: the replica count we read is now stale, so
+      // there is nothing safe to record. The next sweep re-evaluates.
+      const patchNamespacedDeployment = vi
+        .fn()
+        .mockRejectedValue({ statusCode: 409, message: "conflict" });
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: {}, resourceVersion: "9" },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 1 },
+      });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "running");
+
+      await expect(deployment.hibernate()).resolves.toEqual({
+        hibernated: false,
+        reason: "conflict",
+      });
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      expect(deployment.statusSummary.state).toBe("running");
+    });
+  });
+
+  describe("beginWake / completeWake", () => {
+    test("beginWake merge-patches replicas only (default 1), leaving the annotations in place", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      // No pre-hibernation-replicas annotation recorded (e.g. hibernated by
+      // an older build) — restore the default of 1.
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "hibernated");
+
+      await deployment.beginWake();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      const [request, options] = patchNamespacedDeployment.mock.calls[0];
+      // Exact body match: replicas only — no metadata/annotations key at all,
+      // so the merge patch cannot touch the hibernation annotations.
+      expect(request).toEqual({
+        name: deployment.k8sDeploymentName,
+        namespace: "default",
+        body: { spec: { replicas: 1 } },
+      });
+      expect(getPatchContentType(options)).toBe("application/merge-patch+json");
+      // Not "pending": a scale-up from idle is its own calm state, so the UI
+      // never shows a bare "0/1" that reads as an outage.
+      expect(deployment.statusSummary.state).toBe("waking");
+      expect(deployment.statusSummary.message).toBe("Waking (from idle)");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("beginWake restores the recorded pre-hibernation replica count", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: {
+          annotations: {
+            [MCP_HIBERNATED_ANNOTATION]: "true",
+            [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: "3",
+          },
+        },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "hibernated");
+
+      await deployment.beginWake();
+
+      const [request] = patchNamespacedDeployment.mock.calls[0];
+      expect(request.body).toEqual({ spec: { replicas: 3 } });
+    });
+
+    test("beginWake clamps a garbage or sub-1 recorded count to 1", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: {
+          annotations: {
+            [MCP_HIBERNATED_ANNOTATION]: "true",
+            [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: "0",
+          },
+        },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "hibernated");
+
+      await deployment.beginWake();
+
+      const [request] = patchNamespacedDeployment.mock.calls[0];
+      expect(request.body).toEqual({ spec: { replicas: 1 } });
+    });
+
+    test("completeWake deletes BOTH annotations via merge-patch nulls and flips state to running", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({ patchNamespacedDeployment });
+      // The state a wake is actually in when completeWake lands: beginWake
+      // scaled it up, the readiness wait confirmed it.
+      seedState(deployment, "waking");
+
+      await deployment.completeWake();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      const [request, options] = patchNamespacedDeployment.mock.calls[0];
+      expect(request).toEqual({
+        name: deployment.k8sDeploymentName,
+        namespace: "default",
+        body: {
+          metadata: {
+            annotations: {
+              [MCP_HIBERNATED_ANNOTATION]: null,
+              [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: null,
+            },
+          },
+        },
+      });
+      expect(getPatchContentType(options)).toBe("application/merge-patch+json");
+      expect(deployment.statusSummary.state).toBe("running");
+    });
+
+    test("beginWake carries the read's resourceVersion as a compare-and-swap", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: {
+          annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" },
+          resourceVersion: "1234",
+        },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "hibernated");
+
+      await deployment.beginWake();
+
+      const [request] = patchNamespacedDeployment.mock.calls[0];
+      expect(request.body).toEqual({
+        metadata: { resourceVersion: "1234" },
+        spec: { replicas: 1 },
+      });
+    });
+
+    test("a lost wake race retries once when the deployment is still hibernated", async () => {
+      // Unlike a hibernate, a wake is safe to insist on: the deployment is
+      // still asleep and somebody has to bring it back. Only the stale
+      // precondition needs refreshing.
+      const patchNamespacedDeployment = vi
+        .fn()
+        .mockRejectedValueOnce({ statusCode: 409, message: "conflict" })
+        .mockResolvedValue({});
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({
+          metadata: {
+            annotations: {
+              [MCP_HIBERNATED_ANNOTATION]: "true",
+              [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: "2",
+            },
+            resourceVersion: "1",
+          },
+          spec: { replicas: 0 },
+          status: { availableReplicas: 0 },
+        })
+        .mockResolvedValue({
+          metadata: {
+            annotations: {
+              [MCP_HIBERNATED_ANNOTATION]: "true",
+              [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: "2",
+            },
+            resourceVersion: "2",
+          },
+          spec: { replicas: 0 },
+          status: { availableReplicas: 0 },
+        });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+      });
+      seedState(deployment, "hibernated");
+
+      await deployment.beginWake();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(2);
+      expect(patchNamespacedDeployment.mock.calls[1][0].body).toEqual({
+        metadata: { resourceVersion: "2" },
+        spec: { replicas: 2 },
+      });
+      expect(deployment.statusSummary.state).toBe("waking");
+    });
+
+    test("a lost wake race whose re-read is no longer hibernated converges instead of scaling twice", async () => {
+      // Another replica already woke it. Scaling it a second time would fight
+      // them; the readiness wait the caller runs next rides along with the
+      // wake that is already in progress.
+      const patchNamespacedDeployment = vi
+        .fn()
+        .mockRejectedValueOnce({ statusCode: 409, message: "conflict" })
+        .mockResolvedValue({});
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({
+          metadata: {
+            annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" },
+            resourceVersion: "1",
+          },
+          spec: { replicas: 0 },
+          status: { availableReplicas: 0 },
+        })
+        .mockResolvedValue({
+          metadata: { annotations: {}, resourceVersion: "3" },
+          spec: { replicas: 1 },
+          status: { availableReplicas: 1 },
+        });
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [runningPod] });
+      const deployment = makeDeployment({
+        patchNamespacedDeployment,
+        readNamespacedDeployment,
+        listNamespacedPod,
+      });
+      seedState(deployment, "hibernated");
+
+      await deployment.beginWake();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      // Converged on cluster truth rather than guessing.
+      expect(deployment.statusSummary.state).toBe("running");
+    });
+
+    test("beginWake and completeWake propagate k8s errors", async () => {
+      const patchError = { code: 500, message: "boom" };
+      const patchNamespacedDeployment = vi.fn().mockRejectedValue(patchError);
+      const deployment = makeDeployment({ patchNamespacedDeployment });
+      seedState(deployment, "hibernated");
+
+      await expect(deployment.beginWake()).rejects.toEqual(patchError);
+      await expect(deployment.completeWake()).rejects.toEqual(patchError);
+    });
+  });
+
+  describe("refreshState", () => {
+    test("replicas 0 with the annotation refreshes to hibernated, not pending", async () => {
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      const deployment = makeDeployment({ readNamespacedDeployment });
+      seedState(deployment, "running");
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("hibernated");
+      expect(deployment.statusSummary.message).toBe("Hibernated (idle)");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("a hibernated deployment is still refreshed (not skipped by the state guard)", async () => {
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      const deployment = makeDeployment({ readNamespacedDeployment });
+      seedState(deployment, "hibernated");
+
+      await deployment.refreshState();
+
+      expect(readNamespacedDeployment).toHaveBeenCalled();
+      expect(deployment.statusSummary.state).toBe("hibernated");
+    });
+
+    test("pod telemetry is cleared once the hibernated deployment's pod is gone", async () => {
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      // First refresh still finds the Terminating pod (repopulating the
+      // caches hibernate() cleared); the second finds nothing.
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValueOnce({
+          items: [
+            {
+              metadata: {
+                name: "test-server-pod-abc",
+                creationTimestamp: "2026-08-06T10:00:00Z",
+              },
+              status: {
+                phase: "Running",
+                containerStatuses: [{ name: "mcp-server", restartCount: 2 }],
+              },
+            },
+          ],
+        })
+        .mockResolvedValue({ items: [] });
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        listNamespacedPod,
+      });
+      seedState(deployment, "hibernated");
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.podName).toBe("test-server-pod-abc");
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("hibernated");
+      expect(deployment.statusSummary.podName).toBeUndefined();
+      expect(deployment.statusSummary.podAge).toBeUndefined();
+      expect(deployment.statusSummary.restartCount).toBe(0);
+    });
+
+    test("a FAILED pod lookup leaves the telemetry alone instead of reporting no pod", async () => {
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValueOnce({
+          items: [
+            {
+              metadata: {
+                name: "test-server-pod-abc",
+                creationTimestamp: "2026-08-06T10:00:00Z",
+              },
+              status: {
+                phase: "Running",
+                containerStatuses: [{ name: "mcp-server", restartCount: 2 }],
+              },
+            },
+          ],
+        })
+        .mockRejectedValue({ statusCode: 429, message: "too many requests" });
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        listNamespacedPod,
+      });
+      seedState(deployment, "hibernated");
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.podName).toBe("test-server-pod-abc");
+
+      // A throttled API server says nothing about the pod. Clearing here would
+      // erase a live pod's identity, age and restart count on every 429.
+      await deployment.refreshState();
+      expect(deployment.statusSummary.podName).toBe("test-server-pod-abc");
+      expect(deployment.statusSummary.restartCount).toBe(2);
+      // ...and the state evaluation still runs on the deployment read.
+      expect(deployment.statusSummary.state).toBe("hibernated");
+    });
+
+    test("removing the annotation externally releases the deployment instead of pinning it hibernated", async () => {
+      // An operator cleared our annotation but the deployment is still at 0.
+      // Nothing here is ours anymore, and no branch could ever clear the
+      // cached state again — it read "Hibernated" in the UI forever.
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: {} },
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      const deployment = makeDeployment({ readNamespacedDeployment });
+      seedState(deployment, "hibernated");
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("pending");
+    });
+
+    test("a refresh in flight when a hibernate lands does not overwrite it", async () => {
+      // The refresh's pod lookup resolves only once the test says so, so the
+      // hibernate lands in the middle of it — the ordering that had a stale
+      // "running" reading overwrite "hibernated", leaving the manager routing
+      // tool calls to a pod that had already been scaled away.
+      let releasePodList!: () => void;
+      const podListInFlight = new Promise<void>((resolve) => {
+        releasePodList = resolve;
+      });
+      const listNamespacedPod = vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          await podListInFlight;
+          return { items: [runningPod] };
+        })
+        .mockResolvedValue({ items: [] });
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: {} },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 1 },
+      });
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        listNamespacedPod,
+      });
+      seedState(deployment, "running");
+
+      const refresh = deployment.refreshState();
+      await deployment.hibernate();
+      releasePodList();
+      await refresh;
+
+      expect(deployment.statusSummary.state).toBe("hibernated");
+      // The same stale reading must not resurrect the dead pod's telemetry.
+      expect(deployment.statusSummary.podName).toBeUndefined();
+    });
+
+    test("replicas >= 1 with the annotation but NOT yet available refreshes to waking", async () => {
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" } },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 0 },
+      });
+      const deployment = makeDeployment({ readNamespacedDeployment });
+      seedState(deployment, "hibernated");
+
+      await deployment.refreshState();
+
+      // The annotation is only removed once the deployment is verifiably up,
+      // so until then the deployment is "waking" — an expected, calm state,
+      // not a half-broken "pending".
+      expect(deployment.statusSummary.state).toBe("waking");
+      expect(deployment.statusSummary.message).toBe("Waking (from idle)");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("a waking deployment is still refreshed (not skipped by the state guard) and converges to running", async () => {
+      // The wake finished: replicas up, available, annotation already removed
+      // by completeWake.
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: {} },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 1 },
+      });
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [runningPod] });
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        listNamespacedPod,
+      });
+      seedState(deployment, "waking");
+
+      await deployment.refreshState();
+
+      expect(readNamespacedDeployment).toHaveBeenCalled();
+      expect(deployment.statusSummary.state).toBe("running");
+    });
+
+    test("SELF-HEAL: an available deployment still carrying the annotation completes the wake on refresh", async () => {
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" } },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 1 },
+      });
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [runningPod] });
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        listNamespacedPod,
+        patchNamespacedDeployment,
+      });
+      // A wake whose completeWake patch failed (or whose process crashed)
+      // left annotation + replicas >= 1; the watcher-triggered refresh must
+      // finish the job instead of wedging the state at "pending" forever.
+      seedState(deployment, "pending");
+
+      await deployment.refreshState();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      const [request] = patchNamespacedDeployment.mock.calls[0];
+      expect(request.body).toEqual({
+        metadata: {
+          annotations: {
+            [MCP_HIBERNATED_ANNOTATION]: null,
+            [MCP_PRE_HIBERNATION_REPLICAS_ANNOTATION]: null,
+          },
+        },
+      });
+      expect(deployment.statusSummary.state).toBe("running");
+    });
+
+    test("SELF-HEAL patch failure stays pending so the next refresh retries", async () => {
+      const patchNamespacedDeployment = vi
+        .fn()
+        .mockRejectedValue({ code: 500, message: "boom" });
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" } },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 1 },
+      });
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        patchNamespacedDeployment,
+      });
+      seedState(deployment, "pending");
+
+      await expect(deployment.refreshState()).resolves.toBeUndefined();
+
+      expect(deployment.statusSummary.state).toBe("pending");
+    });
+
+    test("replicas 0 WITHOUT the annotation keeps the existing debounced downgrade behavior", async () => {
+      // Externally scaled to zero — not ours. The pre-hibernation behavior
+      // applies: a running deployment only downgrades to pending after
+      // several consecutive misses (RUNNING_MISS_THRESHOLD = 3).
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        spec: { replicas: 0 },
+        status: { availableReplicas: 0 },
+      });
+      const deployment = makeDeployment({ readNamespacedDeployment });
+      seedState(deployment, "running");
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("running");
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("running");
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("pending");
+    });
+  });
+
+  describe("startOrCreateDeployment adoption", () => {
+    test("adopts an existing zero-replica annotated deployment as hibernated without recreating or scaling it", async () => {
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const createNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deleteNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        patchNamespacedDeployment,
+        createNamespacedDeployment,
+        deleteNamespacedDeployment,
+      });
+      const applySpy = vi
+        .spyOn(deployment, "applyK8sNetworkPolicy")
+        .mockResolvedValue(undefined);
+      const httpSpy = vi
+        .spyOn(
+          deployment as unknown as {
+            ensureHttpServerConfigured: () => unknown;
+          },
+          "ensureHttpServerConfigured",
+        )
+        .mockResolvedValue(undefined);
+
+      await expect(
+        deployment.startOrCreateDeployment(),
+      ).resolves.toBeUndefined();
+
+      expect(deployment.statusSummary.state).toBe("hibernated");
+      // Adopted as-is: not recreated, not deleted, and never scaled up.
+      expect(createNamespacedDeployment).not.toHaveBeenCalled();
+      expect(deleteNamespacedDeployment).not.toHaveBeenCalled();
+      expect(patchNamespacedDeployment).not.toHaveBeenCalled();
+      // The egress policy and HTTP Service stay reconciled while asleep, so a
+      // wake only needs to scale up.
+      expect(applySpy).toHaveBeenCalled();
+      expect(httpSpy).toHaveBeenCalled();
+    });
+
+    test("scales a hibernated deployment back up when idle hibernation has been turned off", async () => {
+      config.orchestrator.mcpIdleHibernation.hardDisabled = true;
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        patchNamespacedDeployment,
+      });
+      vi.spyOn(deployment, "applyK8sNetworkPolicy").mockResolvedValue(
+        undefined,
+      );
+      vi.spyOn(
+        deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+        "ensureHttpServerConfigured",
+      ).mockResolvedValue(undefined);
+
+      await deployment.startOrCreateDeployment();
+
+      // Setting the window back to 0 means "always on". Adopting the sleeping
+      // deployment as-is would strand it: no sweeper runs, so only a tool call
+      // would ever bring it back.
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      expect(patchNamespacedDeployment.mock.calls[0][0].body).toEqual({
+        spec: { replicas: 1 },
+      });
+      expect(deployment.statusSummary.state).toBe("waking");
+    });
+
+    test("scales a hibernated deployment back up on adoption when the beta flag is off", async () => {
+      // Same stranding logic as the kill switch: with the feature not offered,
+      // no sweeper runs, so a sleeping deployment must not stay asleep.
+      config.orchestrator.mcpIdleHibernation.betaEnabled = false;
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(0));
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        patchNamespacedDeployment,
+      });
+      vi.spyOn(deployment, "applyK8sNetworkPolicy").mockResolvedValue(
+        undefined,
+      );
+      vi.spyOn(
+        deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+        "ensureHttpServerConfigured",
+      ).mockResolvedValue(undefined);
+
+      await deployment.startOrCreateDeployment();
+
+      expect(patchNamespacedDeployment).toHaveBeenCalledTimes(1);
+      expect(patchNamespacedDeployment.mock.calls[0][0].body).toEqual({
+        spec: { replicas: 1 },
+      });
+      expect(deployment.statusSummary.state).toBe("waking");
+    });
+
+    test("adopts an annotated deployment already scaled back up as waking, not as a cold pending start", async () => {
+      // A restart mid-wake: replicas are back but the annotation is only
+      // dropped once the deployment is verifiably up.
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(annotatedDeploymentRead(1));
+      const patchNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const createNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        patchNamespacedDeployment,
+        createNamespacedDeployment,
+      });
+      vi.spyOn(deployment, "applyK8sNetworkPolicy").mockResolvedValue(
+        undefined,
+      );
+      vi.spyOn(
+        deployment as unknown as {
+          ensureHttpServerConfigured: () => unknown;
+        },
+        "ensureHttpServerConfigured",
+      ).mockResolvedValue(undefined);
+
+      await expect(
+        deployment.startOrCreateDeployment(),
+      ).resolves.toBeUndefined();
+
+      expect(deployment.statusSummary.state).toBe("waking");
+      expect(createNamespacedDeployment).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("waitForDeploymentReady during a wake", () => {
+    test("a waking deployment (annotation still present) passes readiness once available with a Running pod", async () => {
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({
+        metadata: { annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" } },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 1 },
+      });
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [runningPod] });
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        listNamespacedPod,
+      });
+      seedState(deployment, "waking");
+
+      await expect(
+        deployment.waitForDeploymentReady(5, 1),
+      ).resolves.toBeUndefined();
+      // Readiness itself ignores the annotation; the manager removes it via
+      // completeWake after this returns.
+      expect(deployment.statusSummary.state).toBe("running");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    const notReadyDeploymentRead = () =>
+      vi.fn().mockResolvedValue({
+        metadata: { annotations: { [MCP_HIBERNATED_ANNOTATION]: "true" } },
+        spec: { replicas: 1 },
+        status: { availableReplicas: 0 },
+      });
+
+    /** A pod the scheduler has refused, with the wording it gave. */
+    function unschedulablePod(message: string, ageMs = 60 * 1000): k8s.V1Pod {
+      return {
+        metadata: {
+          name: "test-server-abc123",
+          creationTimestamp: new Date(Date.now() - ageMs),
+        },
+        status: {
+          phase: "Pending",
+          conditions: [
+            { type: "PodScheduled", status: "False", message },
+          ] as k8s.V1PodCondition[],
+        },
+      } as k8s.V1Pod;
+    }
+
+    /** A pod that got a node and is now stuck pulling its image. */
+    const pullingPod = {
+      metadata: { name: "test-server-abc123", creationTimestamp: new Date() },
+      status: {
+        phase: "Pending",
+        conditions: [
+          { type: "PodScheduled", status: "True" },
+        ] as k8s.V1PodCondition[],
+        containerStatuses: [
+          {
+            name: "mcp-server",
+            ready: false,
+            restartCount: 0,
+            state: {
+              waiting: {
+                reason: "ImagePullBackOff",
+                message: 'Back-off pulling image "ghcr.io/example/mcp:latest"',
+              },
+            },
+          },
+        ],
+      },
+    } as k8s.V1Pod;
+
+    function warningEvent(message: string) {
+      return {
+        type: "Warning",
+        message,
+        lastTimestamp: new Date(),
+        involvedObject: { name: "mcp-test-server-7d9f" },
+      };
+    }
+
+    test("rides out resource pressure and ends on a retryable capacity error", async () => {
+      const deployment = makeDeployment({
+        readNamespacedDeployment: notReadyDeploymentRead(),
+        listNamespacedPod: vi.fn().mockResolvedValue({
+          items: [
+            unschedulablePod("0/3 nodes are available: 3 Insufficient cpu."),
+          ],
+        }),
+      });
+      seedState(deployment, "waking");
+
+      await expect(
+        deployment.waitForDeploymentReady(3, 1, {
+          waitOutUnschedulablePods: true,
+        }),
+      ).rejects.toThrow(/cannot schedule.*Insufficient cpu/);
+      // Branding a full-but-healthy cluster "failed" would stop the agent
+      // from retrying at the one moment retrying is exactly right.
+      expect(deployment.statusSummary.state).not.toBe("failed");
+    });
+
+    // Nothing about these clears itself, so waiting them out is an infinite
+    // retry loop rather than patience.
+    test.each([
+      "0/3 nodes are available: 3 node(s) didn't match Pod's node affinity/selector.",
+      "0/3 nodes are available: 3 node(s) had untolerated taint {dedicated: gpu}.",
+      "0/2 nodes are available: 2 pod has unbound immediate PersistentVolumeClaims.",
+    ])("still fails a wake fast on: %s", async (message) => {
+      const deployment = makeDeployment({
+        readNamespacedDeployment: notReadyDeploymentRead(),
+        listNamespacedPod: vi
+          .fn()
+          .mockResolvedValue({ items: [unschedulablePod(message)] }),
+      });
+      seedState(deployment, "waking");
+
+      await expect(
+        deployment.waitForDeploymentReady(3, 1, {
+          waitOutUnschedulablePods: true,
+        }),
+      ).rejects.toThrow(/failed: Pod scheduling failed/);
+      expect(deployment.statusSummary.state).toBe("failed");
+    });
+
+    test("an exhausted namespace quota surfaces as capacity, not as a failed deployment", async () => {
+      const deployment = makeDeployment({
+        readNamespacedDeployment: notReadyDeploymentRead(),
+        listNamespacedEvent: vi.fn().mockResolvedValue({
+          items: [
+            warningEvent(
+              'pods "mcp-test-server-7d9f" is forbidden: exceeded quota: mcp-quota, requested: pods=1, used: pods=10, limited: pods=10',
+            ),
+          ],
+        }),
+      });
+      seedState(deployment, "waking");
+
+      await expect(
+        deployment.waitForDeploymentReady(6, 1, {
+          waitOutUnschedulablePods: true,
+        }),
+      ).rejects.toThrow(/cannot schedule.*exceeded quota/);
+      expect(deployment.statusSummary.state).not.toBe("failed");
+    });
+
+    test("a non-capacity warning event still ends the wake as failed", async () => {
+      const deployment = makeDeployment({
+        readNamespacedDeployment: notReadyDeploymentRead(),
+        listNamespacedEvent: vi.fn().mockResolvedValue({
+          items: [
+            warningEvent(
+              'error looking up service account default/missing-sa: serviceaccount "missing-sa" not found',
+            ),
+          ],
+        }),
+      });
+      seedState(deployment, "waking");
+
+      await expect(
+        deployment.waitForDeploymentReady(6, 1, {
+          waitOutUnschedulablePods: true,
+        }),
+      ).rejects.toThrow(/failed: Invalid ServiceAccount/);
+      expect(deployment.statusSummary.state).toBe("failed");
+    });
+
+    test("a wake that waits for a node and then fails to pull reports the pull error", async () => {
+      const deployment = makeDeployment({
+        readNamespacedDeployment: notReadyDeploymentRead(),
+        listNamespacedPod: vi
+          .fn()
+          .mockResolvedValueOnce({
+            items: [
+              unschedulablePod("0/3 nodes are available: 3 Insufficient cpu."),
+            ],
+          })
+          .mockResolvedValue({ items: [pullingPod] }),
+      });
+      seedState(deployment, "waking");
+
+      // Capacity pressure is over the moment the pod lands on a node; keeping
+      // it latched would hide the pull failure that actually ended the wait.
+      await expect(
+        deployment.waitForDeploymentReady(3, 1, {
+          waitOutUnschedulablePods: true,
+        }),
+      ).rejects.toThrow(/did not become ready.*ImagePullBackOff/);
+    });
+
+    test("a capacity timeout still reports a pull error seen in the same wait", async () => {
+      // A rollout can hold both at once: the outgoing pod is stuck pulling
+      // while its replacement finds no room. Reporting only the capacity half
+      // sends the operator looking for nodes when the image is also broken.
+      const deployment = makeDeployment({
+        readNamespacedDeployment: notReadyDeploymentRead(),
+        listNamespacedPod: vi.fn().mockResolvedValue({
+          items: [
+            pullingPod,
+            unschedulablePod("0/3 nodes are available: 3 Insufficient cpu."),
+          ],
+        }),
+      });
+      seedState(deployment, "waking");
+
+      const error: unknown = await deployment
+        .waitForDeploymentReady(3, 1, { waitOutUnschedulablePods: true })
+        .then(() => null)
+        .catch((thrown: unknown) => thrown);
+
+      expect(error).toBeInstanceOf(McpServerUnschedulableError);
+      const unschedulable = error as McpServerUnschedulableError;
+      expect(unschedulable.message).toMatch(/Insufficient cpu/);
+      expect(unschedulable.message).toMatch(/ImagePullBackOff/);
+      // Callers quote this verbatim as the scheduler's own words, so the pull
+      // error must not leak into it.
+      expect(unschedulable.schedulerMessage).not.toMatch(/ImagePullBackOff/);
+    });
+
+    test("without the wake option, resource pressure keeps failing fast", async () => {
+      const deployment = makeDeployment({
+        readNamespacedDeployment: notReadyDeploymentRead(),
+        listNamespacedPod: vi.fn().mockResolvedValue({
+          items: [
+            unschedulablePod("0/3 nodes are available: 3 Insufficient cpu."),
+          ],
+        }),
+      });
+
+      await expect(
+        deployment.waitForDeploymentReady(3, 1, {
+          waitOutUnschedulablePods: false,
+        }),
+      ).rejects.toThrow(/failed: Pod scheduling failed/);
+      expect(deployment.statusSummary.state).toBe("failed");
+    });
+  });
+
+  describe("assessWakeImageCache", () => {
+    const image = "ghcr.io/my-org/custom-mcp-server:v2.1.0";
+
+    function deploymentRead(container: Partial<k8s.V1Container>) {
+      return {
+        spec: { template: { spec: { containers: [container] } } },
+      };
+    }
+
+    test("reports the image the wake will run and the policy that decides whether the registry is needed", async () => {
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue(
+          deploymentRead({ image, imagePullPolicy: "Always" }),
+        );
+      const listNamespacedPod = vi.fn().mockResolvedValue({ items: [] });
+      const deployment = makeDeployment({
+        readNamespacedDeployment,
+        listNamespacedPod,
+      });
+
+      await expect(deployment.assessWakeImageCache()).resolves.toEqual({
+        image,
+        pullPolicy: "Always",
+      });
+    });
+
+    // The platform's Role is namespace-scoped, so a cluster-scoped node read
+    // is a 403 on every real install — the assessment must not depend on one.
+    test("reads nothing outside its own namespace", async () => {
+      const listNode = vi.fn();
+      const deployment = makeDeployment({
+        readNamespacedDeployment: vi
+          .fn()
+          .mockResolvedValue(
+            deploymentRead({ image, imagePullPolicy: "IfNotPresent" }),
+          ),
+      });
+      // @ts-expect-error - a node read would have to come through this client
+      deployment.k8sApi.listNode = listNode;
+
+      await expect(deployment.assessWakeImageCache()).resolves.not.toBeNull();
+      expect(listNode).not.toHaveBeenCalled();
+    });
+
+    test("falls back to the cache-tolerant policy when the container omits one", async () => {
+      const deployment = makeDeployment({
+        readNamespacedDeployment: vi
+          .fn()
+          .mockResolvedValue(deploymentRead({ image })),
+      });
+
+      await expect(deployment.assessWakeImageCache()).resolves.toMatchObject({
+        pullPolicy: "IfNotPresent",
+      });
+    });
+
+    test.each([
+      {
+        name: "the deployment does not exist",
+        makeOverrides: () => ({
+          readNamespacedDeployment: vi.fn().mockRejectedValue(notFound),
+        }),
+      },
+      {
+        name: "the deployment read fails",
+        makeOverrides: () => ({
+          readNamespacedDeployment: vi
+            .fn()
+            .mockRejectedValue(new Error("apiserver unavailable")),
+        }),
+      },
+      {
+        name: "the deployment has no container image",
+        makeOverrides: () => ({
+          readNamespacedDeployment: vi
+            .fn()
+            .mockResolvedValue(deploymentRead({ name: "mcp-server" })),
+        }),
+      },
+    ])("returns null instead of throwing when $name", async ({
+      makeOverrides,
+    }) => {
+      const deployment = makeDeployment(makeOverrides());
+
+      await expect(deployment.assessWakeImageCache()).resolves.toBeNull();
+    });
   });
 });

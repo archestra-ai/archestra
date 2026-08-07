@@ -95,20 +95,17 @@ const {
   mockRegisterHibernationListener: vi.fn(),
 }));
 
-vi.mock("@/k8s/mcp-server-runtime", () => ({
-  McpServerRuntimeManager: {
-    usesStreamableHttp: mockUsesStreamableHttp,
-    getHttpEndpointUrl: mockGetHttpEndpointUrl,
-    getRunningPodHttpEndpoint: mockGetRunningPodHttpEndpoint,
-    getOrLoadDeployment: mockGetOrLoadDeployment,
-    ensureAwake: mockEnsureAwake,
-    isDeploymentDormant: mockIsDeploymentDormant,
-    registerHibernationListener: mockRegisterHibernationListener,
-  },
-  // Mirrors the real class shapes: mcp-client funnels wake failures to a tool
-  // error result by instanceof, so the mock must provide the same classes it
-  // rejects ensureAwake with.
-  McpServerWakeError: class McpServerWakeError extends Error {
+/** The wake response budget the mocked runtime reports, in ms. */
+const { WAKE_RESPONSE_BUDGET_TEST_MS } = vi.hoisted(() => ({
+  WAKE_RESPONSE_BUDGET_TEST_MS: 50,
+}));
+
+vi.mock("@/k8s/mcp-server-runtime", () => {
+  // Declared here, not in the returned literal, so McpServerWakePendingError
+  // can extend it. The funnel classifies by `instanceof McpServerWakeError`,
+  // so a pending error that did not inherit from it would be reported to the
+  // agent as "unexpected" — the opposite of what it means.
+  class McpServerWakeError extends Error {
     constructor(serverName: string, options?: { detail?: string }) {
       super(
         `MCP server ${serverName} is waking from idle hibernation but ${
@@ -117,14 +114,61 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
       );
       this.name = "McpServerWakeError";
     }
-  },
-  McpServerDeploymentFailedError: class McpServerDeploymentFailedError extends Error {
-    constructor(message: string) {
-      super(message);
-      this.name = "McpServerDeploymentFailedError";
+  }
+  class McpServerWakePendingError extends McpServerWakeError {
+    constructor(serverName: string, waitedMs: number) {
+      super(serverName, {
+        detail:
+          `it is still starting up and did not become ready within ${Math.round(waitedMs / 1000)}s. ` +
+          "It is still starting in the background: retry this same tool call with the same arguments " +
+          "in about 30 seconds and it should run normally. Nothing needs to be fixed or changed",
+      });
+      this.name = "McpServerWakePendingError";
     }
-  },
-}));
+  }
+  return {
+    McpServerWakeError,
+    McpServerWakePendingError,
+    McpServerRuntimeManager: {
+      usesStreamableHttp: mockUsesStreamableHttp,
+      getHttpEndpointUrl: mockGetHttpEndpointUrl,
+      getRunningPodHttpEndpoint: mockGetRunningPodHttpEndpoint,
+      getOrLoadDeployment: mockGetOrLoadDeployment,
+      ensureAwake: mockEnsureAwake,
+      isDeploymentDormant: mockIsDeploymentDormant,
+      registerHibernationListener: mockRegisterHibernationListener,
+    },
+    McpServerDeploymentFailedError: class McpServerDeploymentFailedError extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = "McpServerDeploymentFailedError";
+      }
+    },
+    // Real logic, not a stub: the point of the budget path is the timing, so a
+    // stub that resolved immediately would test nothing. Kept faithful to
+    // hibernation.ee.ts — it must not cancel the work, and it must attach a
+    // rejection handler so a wake that fails after the budget cannot surface as
+    // an unhandled rejection.
+    withDeadline: <T>(work: Promise<T>, ms: number, makeError: () => Error) =>
+      new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(makeError()), ms);
+        timer.unref?.();
+        work.then(
+          (value) => {
+            clearTimeout(timer);
+            resolve(value);
+          },
+          (error) => {
+            clearTimeout(timer);
+            reject(error);
+          },
+        );
+      }),
+    // Short enough to keep the test fast; the production value is derived from
+    // the tool-call timeout and is exercised in hibernation.ee.test.ts.
+    wakeResponseBudgetMs: () => WAKE_RESPONSE_BUDGET_TEST_MS,
+  };
+});
 
 // The shared fixture connection below is personal-scope with no owner (as a
 // connection looks once its owning user is deleted), so calls through it run

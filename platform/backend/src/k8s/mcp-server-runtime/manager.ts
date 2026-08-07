@@ -35,10 +35,12 @@ import {
   isIdleHibernationEnabledCached,
   isIdleHibernationOffered,
   McpServerWakeError,
+  McpServerWakePendingError,
   SWEEP_DEADLINE_MS,
   sweepIdleDeployments,
   WAKE_ATTEMPT_DEADLINE_MS,
   wakeDeployment,
+  wakeResponseBudgetMs,
   withDeadline,
   // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 } from "./hibernation.ee";
@@ -119,11 +121,16 @@ type McpServerHardReset = {
 
 /**
  * Re-exported so demand-lane callers (mcp-client) keep importing the whole
- * runtime surface from one place — the error itself belongs with the
- * hibernation lifecycle that raises it.
- * @public — thrown to demand-lane callers (mcp-client) that wake servers on use
+ * runtime surface from one place — these belong with the hibernation lifecycle
+ * that raises and bounds them.
+ * @public — used by demand-lane callers (mcp-client) that wake servers on use
  */
-export { McpServerWakeError };
+export {
+  McpServerWakeError,
+  McpServerWakePendingError,
+  wakeResponseBudgetMs,
+  withDeadline,
+};
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.

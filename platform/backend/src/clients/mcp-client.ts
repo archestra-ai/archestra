@@ -41,6 +41,9 @@ import {
   McpServerDeploymentFailedError,
   McpServerRuntimeManager,
   McpServerWakeError,
+  McpServerWakePendingError,
+  wakeResponseBudgetMs,
+  withDeadline,
 } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import {
@@ -565,7 +568,20 @@ class McpClient {
     // the audit row and error funnel every other tool failure goes through.
     if (catalogItem.serverType === "local") {
       try {
-        await McpServerRuntimeManager.ensureAwake(targetMcpServerId);
+        // Bounded by what the CALLER can wait for, not by what the wake is
+        // allowed to take. A cold pod can legitimately need minutes, and this
+        // request is a synchronous tool call whose client has its own timeout —
+        // holding it open until the wake settles means the client gives up
+        // first and the agent gets a dropped connection instead of an answer.
+        // Past the budget we reply with something an agent can act on; the wake
+        // itself keeps running under the manager's single-flight entry, so the
+        // retry we ask for joins it rather than starting a second one.
+        const budgetMs = wakeResponseBudgetMs();
+        await withDeadline(
+          McpServerRuntimeManager.ensureAwake(targetMcpServerId),
+          budgetMs,
+          () => new McpServerWakePendingError(mcpServerName, budgetMs),
+        );
       } catch (error) {
         const { agentMessage, unexpected } = describeWakeFailure(
           error,

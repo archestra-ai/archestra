@@ -65,6 +65,50 @@ export class McpServerWakeError extends Error {
 export const WAKE_ATTEMPT_DEADLINE_MS = 120_000;
 
 /**
+ * How long a caller waits on a wake before being answered instead of held.
+ *
+ * {@link WAKE_ATTEMPT_DEADLINE_MS} bounds the *work*; this bounds the *reply*,
+ * and the two are not the same number. A wake may legitimately outlive the
+ * caller that triggered it — a cold pod that pulls an image and installs
+ * dependencies is minutes, not seconds — and holding an MCP tool call open
+ * that long means the client's own timeout fires first. The caller then gets a
+ * transport error (a dropped connection, a gateway timeout) that says nothing
+ * about what happened and nothing about what to do, which is exactly the
+ * failure an agent cannot act on.
+ *
+ * Derived from the existing tool-call knob rather than adding a second one,
+ * the same way `taskSyncThresholdMs` is: the wake is only the prologue to the
+ * call, so it may claim at most half of what the whole call is allowed, and
+ * never more than 30 s. Whatever is left belongs to the tool itself.
+ *
+ * Answering early does not abandon the wake. It keeps running under the
+ * manager's single-flight entry, so the retry this reply asks for joins the
+ * attempt already in progress rather than starting a second one — and by then
+ * the server is usually up.
+ */
+export function wakeResponseBudgetMs(): number {
+  return Math.min(30_000, Math.floor(config.mcpGateway.toolCallTimeoutMs / 2));
+}
+
+/**
+ * Raised when a wake is still running at {@link wakeResponseBudgetMs}. It is
+ * not a failure — the wake has not failed, it simply has not finished — so it
+ * is deliberately a `McpServerWakeError` subclass and stays classified
+ * retryable and not-the-caller's-fault by the tool-call funnel.
+ */
+export class McpServerWakePendingError extends McpServerWakeError {
+  constructor(serverName: string, waitedMs: number) {
+    super(serverName, {
+      detail:
+        `it is still starting up and did not become ready within ${Math.round(waitedMs / 1000)}s. ` +
+        "It is still starting in the background: retry this same tool call with the same arguments " +
+        "in about 30 seconds and it should run normally. Nothing needs to be fixed or changed",
+    });
+    this.name = "McpServerWakePendingError";
+  }
+}
+
+/**
  * Hard ceiling on one hibernation sweep. A sweep that hangs would otherwise
  * hold the in-flight guard and silently stop hibernation platform-wide until
  * a restart; releasing the guard lets the next tick try again.

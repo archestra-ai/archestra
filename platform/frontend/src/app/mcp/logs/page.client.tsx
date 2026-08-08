@@ -351,7 +351,13 @@ function McpToolCallsTable({
       id: "toolName",
       header: "Tool Name",
       cell: ({ row }) => {
-        const fullName = row.original.toolCall?.name;
+        // A locked row carries the sentinel in place of the call, so there is
+        // no name to parse — the em dash the column already uses for a missing
+        // name says the same thing without a second marker per row.
+        const call = row.original.toolCall;
+        const fullName = isIncognitoUnavailableContent(call)
+          ? undefined
+          : call?.name;
         if (!fullName) {
           return <div className="text-xs text-muted-foreground">—</div>;
         }

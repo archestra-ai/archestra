@@ -323,6 +323,12 @@ export const RouteId = {
     "githubCopilotListModelsWithDefaultAgent",
   GithubCopilotListModelsWithAgent: "githubCopilotListModelsWithAgent",
 
+  // Proxy Routes - GitHub Copilot Responses API (the surface Copilot's
+  // Codex/GPT-5.x models are served on; they reject /chat/completions)
+  GithubCopilotResponsesWithDefaultAgent:
+    "githubCopilotResponsesWithDefaultAgent",
+  GithubCopilotResponsesWithAgent: "githubCopilotResponsesWithAgent",
+
   // GitHub Copilot device-flow sign-in (creates personal provider keys)
   GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
   GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",

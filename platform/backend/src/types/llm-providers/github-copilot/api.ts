@@ -15,6 +15,9 @@ import {
   FinishReasonSchema,
   ChatCompletionRequestSchema as OpenAIChatCompletionRequestSchema,
   ChatCompletionResponseSchema as OpenAIChatCompletionResponseSchema,
+  ResponsesRequestSchema as OpenAIResponsesRequestSchema,
+  ResponsesResponseSchema as OpenAIResponsesResponseSchema,
+  ResponsesUsageSchema,
 } from "../openai/api";
 
 // Re-export headers and other schemas from OpenAI
@@ -22,7 +25,17 @@ export {
   ChatCompletionsHeadersSchema,
   ChatCompletionUsageSchema,
   FinishReasonSchema,
+  ResponsesUsageSchema,
 };
+
+/**
+ * The Responses surface authenticates identically to chat completions — the
+ * incoming credential is the same long-lived GitHub OAuth token, which the
+ * adapter's fetch wrapper exchanges for a short-lived Copilot bearer. So the
+ * chat header schema (which strips the `Bearer ` prefix) serves both surfaces,
+ * matching how Azure shares one header schema across its two surfaces.
+ */
+export { ChatCompletionsHeadersSchema as ResponsesHeadersSchema };
 
 /**
  * Copilot's rejection of a model its `/chat/completions` endpoint does not
@@ -50,3 +63,27 @@ export const ChatCompletionResponseSchema =
     created: z.number().optional(),
     object: z.string().optional(),
   }).passthrough();
+
+/**
+ * Copilot's second surface: `POST /responses`. Its Codex and GPT-5.x models
+ * declare `supported_endpoints: ["/responses"]` and reject `/chat/completions`
+ * outright, so this is the only way to reach them.
+ *
+ * Request passes through unchanged — the wire format is OpenAI's Responses API.
+ */
+export const ResponsesRequestSchema = OpenAIResponsesRequestSchema.passthrough();
+
+/**
+ * Response schema relaxed the same way (and for the same reason) as
+ * `ChatCompletionResponseSchema` above: Copilot's payloads are OpenAI-shaped
+ * but it does not guarantee every envelope field OpenAI does. Requiring the
+ * literal `object: "response"` plus `created_at`/`status` would turn any such
+ * omission into a 500 during response serialization, hiding an otherwise
+ * perfectly usable completion. Clients still receive Copilot's real fields via
+ * passthrough.
+ */
+export const ResponsesResponseSchema = OpenAIResponsesResponseSchema.extend({
+  object: z.string().optional(),
+  created_at: z.number().optional(),
+  status: z.string().optional(),
+}).passthrough();

@@ -7,7 +7,11 @@ import { tryParseJson } from "./json";
 type OpenAiResponsesArm = Extract<
   Interaction,
   {
-    type: "azure:responses" | "openai:responses" | "perplexity:responses";
+    type:
+      | "azure:responses"
+      | "github-copilot:responses"
+      | "openai:responses"
+      | "perplexity:responses";
   }
 >;
 

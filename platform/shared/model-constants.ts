@@ -62,6 +62,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:chatCompletions",
   "azure:responses",
   "github-copilot:chatCompletions",
+  "github-copilot:responses",
   "microsoft-365-copilot:chatCompletions",
   "archestra:chatCompletions",
 ]);

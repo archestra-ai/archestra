@@ -44519,6 +44519,10 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
+            } | {
+                __incognitoLocked: string;
+            } | {
+                __redacted: 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51058,6 +51062,10 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
+        } | {
+            __incognitoLocked: string;
+        } | {
+            __redacted: 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -59440,6 +59448,9 @@ export type GetModelsWithApiKeysResponses = {
         inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities: Array<'text' | 'image' | 'audio'> | null;
         supportsToolCalling: boolean | null;
+        supportedEndpoints: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
         cacheReadPricePerToken: string | null;
@@ -59610,6 +59621,9 @@ export type UpdateModelResponses = {
         inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
         outputModalities: Array<'text' | 'image' | 'audio'> | null;
         supportsToolCalling: boolean | null;
+        supportedEndpoints: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
         promptPricePerToken: string | null;
         completionPricePerToken: string | null;
         cacheReadPricePerToken: string | null;

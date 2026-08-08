@@ -168978,6 +168978,37 @@
                                       "error"
                                     ],
                                     "additionalProperties": false
+                                  },
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__incognitoLocked": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "__incognitoLocked"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "__redacted": {
+                                            "type": "string",
+                                            "enum": [
+                                              "incognito"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "__redacted"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
                                   }
                                 ]
                               },
@@ -201696,6 +201727,37 @@
                                 "error"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__incognitoLocked": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "__incognitoLocked"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "__redacted": {
+                                      "type": "string",
+                                      "enum": [
+                                        "incognito"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "__redacted"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             }
                           ]
                         },
@@ -234782,6 +234844,39 @@
                         "nullable": true,
                         "type": "boolean"
                       },
+                      "supportedEndpoints": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
                       "promptPricePerToken": {
                         "nullable": true,
                         "type": "string"
@@ -235054,6 +235149,7 @@
                       "inputModalities",
                       "outputModalities",
                       "supportsToolCalling",
+                      "supportedEndpoints",
                       "promptPricePerToken",
                       "completionPricePerToken",
                       "cacheReadPricePerToken",
@@ -235572,6 +235668,39 @@
                       "nullable": true,
                       "type": "boolean"
                     },
+                    "supportedEndpoints": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
                     "promptPricePerToken": {
                       "nullable": true,
                       "type": "string"
@@ -235719,6 +235848,7 @@
                     "inputModalities",
                     "outputModalities",
                     "supportsToolCalling",
+                    "supportedEndpoints",
                     "promptPricePerToken",
                     "completionPricePerToken",
                     "cacheReadPricePerToken",

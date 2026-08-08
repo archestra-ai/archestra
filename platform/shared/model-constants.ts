@@ -71,6 +71,42 @@ export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
 
 /**
+ * The wire formats a single provider can serve one model catalog over, spelled
+ * as the provider spells them. Only GitHub Copilot publishes this per model
+ * today (`supported_endpoints` on its `/models` entries), and it is the only
+ * discriminator available there: its Codex and GPT-5.x models accept only
+ * `/responses` while the rest accept only `/chat/completions`, and both
+ * families use bare ids like `gpt-5.5` and `gpt-4o`, so — unlike Perplexity,
+ * where a vendor prefix marks the Agent API — nothing about the id says which
+ * surface a model belongs to. Persisted per model so the surface survives to
+ * request time.
+ */
+export const ProviderEndpointSchema = z.enum([
+  "/chat/completions",
+  "/responses",
+]);
+export type SupportedProviderEndpoint = z.infer<typeof ProviderEndpointSchema>;
+
+/**
+ * True when a model must be invoked through the Responses API — i.e. the
+ * provider published its supported endpoints and `/chat/completions` was not
+ * among them. Absent or empty data answers `false` so a model whose surface is
+ * unknown keeps the chat-completions default rather than being routed to a
+ * surface it may not serve.
+ */
+export function requiresResponsesApi(
+  supportedEndpoints: readonly string[] | null | undefined,
+): boolean {
+  if (!supportedEndpoints || supportedEndpoints.length === 0) {
+    return false;
+  }
+  return (
+    supportedEndpoints.includes("/responses") &&
+    !supportedEndpoints.includes("/chat/completions")
+  );
+}
+
+/**
  * Type guard to check if a value is a valid SupportedProvider
  */
 export function isSupportedProvider(

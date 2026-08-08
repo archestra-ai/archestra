@@ -124,6 +124,13 @@ overrides:
   # carried two postcss copies (8.5.11 and 8.5.17) under the old >=8.5.10
   # floor, so the floor has to clear the higher of the two fixes.
   postcss: '>=8.5.18'
+  # CVE-2026-67213 (GHSA-2v37-7h3g-55p8, HIGH, custom generators loop forever
+  # when size is 0) fixed in 3.3.17 on the v3 line. Transitive via postcss and
+  # points-on-path; scoped to <4 so the frontend's direct nanoid ^5.1.6 (already
+  # past the v5 fix) keeps its own resolution. Pinned exact (not a `>=` floor)
+  # because nanoid is temporarily excluded from minimumReleaseAge below, so a
+  # floor could otherwise pull an unvetted release.
+  nanoid@<4: 3.3.17
   uuid@^11: '>=11.1.1'
   # CVE-2026-69192 (HIGH) affects <=10.3.0, fixed in 10.3.1 — the previous
   # >=10.1.1 floor resolved 10.2.0, inside the vulnerable range.
@@ -210,6 +217,10 @@ minimumReleaseAgeExclude:
   # 2026-07-31 and clears the 7-day window on 2026-08-07. Remove on/after that
   # date — the lockfile stays pinned at 3.1.5 regardless.
   - fast-uri
+  # TEMPORARY: nanoid 3.3.17 (fix CVE-2026-67213, HIGH) was published
+  # 2026-08-03 and clears the 7-day window on 2026-08-10. Remove on/after that
+  # date — the lockfile stays pinned at 3.3.17 regardless.
+  - nanoid
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare

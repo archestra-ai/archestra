@@ -1,6 +1,13 @@
 import { and, eq } from "drizzle-orm";
+import {
+  decryptIncognitoValue,
+  encryptIncognitoValue,
+  type IncognitoAuditContext,
+} from "@/content-encryption/incognito";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import type { ChatToolExecutionClaim } from "@/types";
+import { isContentEnvelope } from "@/utils/crypto";
 
 /** Upper bound on the replayable content stored on a claim row. */
 const MAX_STORED_RESULT_CHARS = 100_000;
@@ -9,11 +16,20 @@ type ClaimOutcome =
   | { claimed: true }
   | { claimed: false; existing: ChatToolExecutionClaim.Select | null };
 
+/**
+ * A claim is inserted `executing` and its result written later, and replays
+ * read it back before any policy runs — so the conversation key has to reach
+ * both ends of that lifecycle. Every entry point that touches `result` takes
+ * the audit context explicitly; none of them derives it from the row.
+ */
 class ChatToolExecutionClaimModel {
-  static async findByKey(params: {
-    conversationId: string;
-    toolCallId: string;
-  }): Promise<ChatToolExecutionClaim.Select | null> {
+  static async findByKey(
+    params: {
+      conversationId: string;
+      toolCallId: string;
+    },
+    auditContext?: IncognitoAuditContext | null,
+  ): Promise<ChatToolExecutionClaim.Select | null> {
     const [row] = await db
       .select()
       .from(schema.chatToolExecutionClaimsTable)
@@ -27,7 +43,11 @@ class ChatToolExecutionClaimModel {
         ),
       )
       .limit(1);
-    return (row as ChatToolExecutionClaim.Select) ?? null;
+    if (!row) return null;
+    return withDecryptedResult(
+      row as ChatToolExecutionClaim.Select,
+      auditContext ?? null,
+    );
   }
 
   /**
@@ -36,11 +56,14 @@ class ChatToolExecutionClaimModel {
    * `existing: null` is a should-not-happen race (row deleted between insert
    * and select) — callers must fail closed on it, never dispatch.
    */
-  static async claim(params: {
-    conversationId: string;
-    toolCallId: string;
-    toolName: string;
-  }): Promise<ClaimOutcome> {
+  static async claim(
+    params: {
+      conversationId: string;
+      toolCallId: string;
+      toolName: string;
+    },
+    auditContext?: IncognitoAuditContext | null,
+  ): Promise<ClaimOutcome> {
     const [row] = await db
       .insert(schema.chatToolExecutionClaimsTable)
       .values({ ...params, state: "executing" })
@@ -67,7 +90,14 @@ class ChatToolExecutionClaimModel {
 
     return {
       claimed: false,
-      existing: (existing as ChatToolExecutionClaim.Select) ?? null,
+      // The loser answers from the winner's row, so it needs the same key the
+      // winner wrote under.
+      existing: existing
+        ? withDecryptedResult(
+            existing as ChatToolExecutionClaim.Select,
+            auditContext ?? null,
+          )
+        : null,
     };
   }
 
@@ -77,15 +107,21 @@ class ChatToolExecutionClaimModel {
    * closed, which is the safe direction for a possibly-committed external
    * write.
    */
-  static async recordOutcome(params: {
-    conversationId: string;
-    toolCallId: string;
-    state: Exclude<ChatToolExecutionClaim.State, "executing">;
-    result: ChatToolExecutionClaim.StoredResult | null;
-  }): Promise<void> {
+  static async recordOutcome(
+    params: {
+      conversationId: string;
+      toolCallId: string;
+      state: Exclude<ChatToolExecutionClaim.State, "executing">;
+      result: ChatToolExecutionClaim.StoredResult | null;
+    },
+    auditContext?: IncognitoAuditContext | null,
+  ): Promise<void> {
     await db
       .update(schema.chatToolExecutionClaimsTable)
-      .set({ state: params.state, result: params.result })
+      .set({
+        state: params.state,
+        result: encryptClaimResult(params.result, auditContext ?? null),
+      })
       .where(
         and(
           eq(
@@ -120,3 +156,52 @@ class ChatToolExecutionClaimModel {
 }
 
 export default ChatToolExecutionClaimModel;
+
+// === Internal ===
+
+const CLAIM_RESULT_CONTEXT = "chat_tool_execution_claims.result" as const;
+
+function encryptClaimResult(
+  result: ChatToolExecutionClaim.StoredResult | null,
+  auditContext: IncognitoAuditContext | null,
+): ChatToolExecutionClaim.StoredResult | null {
+  if (!result || !auditContext) return result;
+  // The whole payload is wrapped, not just `content`: `truncated` and
+  // `resultKind` are derived from the result and the column is typed to the
+  // object, so splitting them would leak shape and still need a cast.
+  return encryptIncognitoValue(result, {
+    ...auditContext,
+    context: CLAIM_RESULT_CONTEXT,
+  }) as ChatToolExecutionClaim.StoredResult;
+}
+
+/**
+ * Fail closed on a result this caller cannot open. A null result makes the
+ * replay builder answer "already dispatched, do not re-run" — the safe
+ * direction for a possibly-committed external write. Only reachable if a
+ * conversation's key situation changed under us; normal reads carry the
+ * writer's key.
+ */
+function withDecryptedResult(
+  row: ChatToolExecutionClaim.Select,
+  auditContext: IncognitoAuditContext | null,
+): ChatToolExecutionClaim.Select {
+  if (!isContentEnvelope(row.result)) return row;
+  if (auditContext) {
+    try {
+      return {
+        ...row,
+        result: decryptIncognitoValue(row.result, {
+          ...auditContext,
+          context: CLAIM_RESULT_CONTEXT,
+        }) as ChatToolExecutionClaim.StoredResult,
+      };
+    } catch (error) {
+      logger.warn(
+        { error, toolCallId: row.toolCallId },
+        "Tool execution claim result could not be decrypted; replay will fail closed",
+      );
+    }
+  }
+  return { ...row, result: null };
+}

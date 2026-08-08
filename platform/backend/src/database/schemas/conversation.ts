@@ -8,7 +8,10 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ConversationOrigin } from "@/types/conversation";
+import type {
+  ConversationOrigin,
+  IncognitoEscrowBlob,
+} from "@/types/conversation";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
@@ -91,6 +94,17 @@ const conversationsTable = softDeletablePgTable(
     titleIsPlaceholder: boolean("title_is_placeholder")
       .notNull()
       .default(false),
+    /**
+     * Incognito conversations: message content is encrypted under a
+     * browser-held per-conversation key the server never persists.
+     * `incognitoDekFingerprint` rejects wrong keys up front;
+     * `incognitoEscrow` is the enterprise escrow record (RSA-wrapped key or
+     * Vault reference — see content-encryption/incognito-escrow.ts), null
+     * when escrow is not configured.
+     */
+    incognito: boolean("incognito").notNull().default(false),
+    incognitoDekFingerprint: text("incognito_dek_fingerprint"),
+    incognitoEscrow: jsonb("incognito_escrow").$type<IncognitoEscrowBlob>(),
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
     lastMessageAt: timestamp("last_message_at", { mode: "date" })
       .notNull()

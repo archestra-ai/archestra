@@ -2851,6 +2851,23 @@ const config = {
       process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
       undefined,
   },
+  /**
+   * Incognito chats: per-conversation encryption under a browser-held key.
+   * Configuring `escrowPublicKey` is the whole switch — the feature is off
+   * until one is set, and unsetting it turns the feature off again.
+   */
+  chatIncognito: {
+    /**
+     * The PEM (or base64-of-PEM) RSA public key conversation keys are escrowed
+     * to for break-glass recovery; the private half stays offline with the
+     * customer's security team. Setting it enables incognito chats; an
+     * unparseable or undersized key fails startup (see
+     * verifyIncognitoChatConfig).
+     */
+    escrowPublicKey:
+      process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
+      undefined,
+  },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
     enableTestMcpServer: process.env.ENABLE_TEST_MCP_SERVER === "true",

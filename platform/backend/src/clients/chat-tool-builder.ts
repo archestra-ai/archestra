@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import {
   extractMcpExecutedAs,
   extractMcpToolError,
+  INCOGNITO_REDACTED_MARKER,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   MCP_EXECUTED_AS_META_KEY,
@@ -45,6 +46,7 @@ import type {
   RepeatSeverity,
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import { sensitiveContextOriginFromBoundary } from "@/guardrails/trusted-data";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
@@ -127,6 +129,18 @@ export interface ChatToolContext {
   taskBridge?: ChatTaskBridge;
   mcpGwToken: McpGatewayToken;
   considerContextUntrusted: boolean;
+  /**
+   * Incognito conversation: span content capture is suppressed and long calls
+   * are forced inline (never detached into durable MCP task rows).
+   */
+  suppressContentLogging?: boolean;
+  /**
+   * Present only when the incognito conversation has an escrow record: the
+   * MCP tool-call rows and execution-claim results it produces are encrypted
+   * under the conversation key instead of redacted, so break-glass recovery
+   * can still read them.
+   */
+  incognitoAudit?: IncognitoAuditContext | null;
   /**
    * Per-run guard against the model re-issuing the identical tool call forever.
    * One instance per getChatMcpTools call (shared by every tool wrapper), so it
@@ -245,7 +259,12 @@ export function buildMcpGatewayTool(params: {
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
-                taskBridge: ctx.taskBridge,
+                // Incognito: never detach into a durable task — task rows
+                // persist tool results in plaintext. Forcing inline execution
+                // keeps the result inside the encrypted conversation only.
+                taskBridge: ctx.suppressContentLogging
+                  ? undefined
+                  : ctx.taskBridge,
                 // Lets a task minted inside run_tool attach its card to the
                 // run_tool call the user sees, not the synthetic inner id.
                 currentToolCallId: options.toolCallId,
@@ -257,6 +276,11 @@ export function buildMcpGatewayTool(params: {
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
                 approvalRequiredPoliciesHandled: true,
+                // Incognito: a run_tool dispatch persists via mcpClient, so
+                // its stored row needs the same treatment as a direct call —
+                // encrypted under the conversation key, not redacted.
+                suppressContentLogging: ctx.suppressContentLogging,
+                incognitoAudit: ctx.incognitoAudit,
                 tokenAuth: buildTokenAuthContext({
                   mcpGwToken: ctx.mcpGwToken,
                   organizationId: ctx.organizationId,
@@ -344,6 +368,8 @@ export function buildMcpGatewayTool(params: {
               taskBridge: ctx.taskBridge,
               toolCallId: options.toolCallId,
               isUiProvidingTool,
+              suppressContentLogging: ctx.suppressContentLogging,
+              incognitoAudit: ctx.incognitoAudit,
             });
           }
 
@@ -833,7 +859,10 @@ async function claimApprovalGatedDispatch(params: {
   // approval-gated when it first dispatched, and relaxing or deleting the
   // policy afterwards must not reopen duplicate dispatch for its replays.
   const claimKey = { conversationId: ctx.conversationId, toolCallId };
-  const priorClaim = await ChatToolExecutionClaimModel.findByKey(claimKey);
+  const priorClaim = await ChatToolExecutionClaimModel.findByKey(
+    claimKey,
+    ctx.incognitoAudit,
+  );
   if (priorClaim) {
     return { kind: "dedup", result: buildReplayResult(priorClaim) };
   }
@@ -849,10 +878,10 @@ async function claimApprovalGatedDispatch(params: {
     return { kind: "proceed" };
   }
 
-  const outcome = await ChatToolExecutionClaimModel.claim({
-    ...claimKey,
-    toolName,
-  });
+  const outcome = await ChatToolExecutionClaimModel.claim(
+    { ...claimKey, toolName },
+    ctx.incognitoAudit,
+  );
   if (outcome.claimed) {
     return { kind: "claimed", claimKey };
   }
@@ -882,9 +911,10 @@ function buildReplayResult(
 /** Best-effort outcome write: a failure here must never fail the tool call. */
 async function recordClaimOutcome(
   params: Parameters<typeof ChatToolExecutionClaimModel.recordOutcome>[0],
+  incognitoAudit: IncognitoAuditContext | null | undefined,
 ): Promise<void> {
   try {
-    await ChatToolExecutionClaimModel.recordOutcome(params);
+    await ChatToolExecutionClaimModel.recordOutcome(params, incognitoAudit);
   } catch (error) {
     logger.warn(
       { error, toolCallId: params.toolCallId },
@@ -964,6 +994,18 @@ async function executeWithToolSpan<R>(params: {
   const { serverName } = parseFullToolName(toolName);
   const startTime = Date.now();
 
+  // Incognito: the recorded outcome (used to answer replays) goes in encrypted
+  // under the conversation key, so a replay still reproduces the real result.
+  // Without an escrow record there is no key that could ever open it, so the
+  // marker is stored instead and replays answer with it — the accepted cost of
+  // never persisting unrecoverable content.
+  const claimResultForStorage = (result: string | { content: string }) =>
+    ctx.suppressContentLogging && !ctx.incognitoAudit
+      ? ChatToolExecutionClaimModel.toStoredResult(
+          JSON.stringify(INCOGNITO_REDACTED_MARKER),
+        )
+      : ChatToolExecutionClaimModel.toStoredResult(result);
+
   return startActiveMcpSpan({
     toolName,
     mcpServerName: serverName ?? "unknown",
@@ -972,19 +1014,23 @@ async function executeWithToolSpan<R>(params: {
     userTeams: ctx.userTeams,
     sessionId: ctx.sessionId,
     toolArgs: spanToolArgs,
+    suppressContent: ctx.suppressContentLogging,
     user: ctx.user,
     callback: async (span) => {
       try {
         throwIfAborted(ctx.abortSignal);
         const result = await run({ span, startTime });
         if (claimGate.kind === "claimed") {
-          await recordClaimOutcome({
-            ...claimGate.claimKey,
-            state: "completed",
-            result: ChatToolExecutionClaimModel.toStoredResult(
-              result as string | { content: string },
-            ),
-          });
+          await recordClaimOutcome(
+            {
+              ...claimGate.claimKey,
+              state: "completed",
+              result: claimResultForStorage(
+                result as string | { content: string },
+              ),
+            },
+            ctx.incognitoAudit,
+          );
         }
         return result;
       } catch (error) {
@@ -993,13 +1039,16 @@ async function executeWithToolSpan<R>(params: {
         // stays `executing` so replays keep failing closed. Only a definite
         // failure is recorded (replays then report it without re-running).
         if (claimGate.kind === "claimed" && !aborted) {
-          await recordClaimOutcome({
-            ...claimGate.claimKey,
-            state: "failed",
-            result: ChatToolExecutionClaimModel.toStoredResult(
-              error instanceof Error ? error.message : String(error),
-            ),
-          });
+          await recordClaimOutcome(
+            {
+              ...claimGate.claimKey,
+              state: "failed",
+              result: claimResultForStorage(
+                error instanceof Error ? error.message : String(error),
+              ),
+            },
+            ctx.incognitoAudit,
+          );
         }
         // A stopped run is a cancellation, not a tool failure — don't count it.
         if (!aborted) {
@@ -1011,13 +1060,23 @@ async function executeWithToolSpan<R>(params: {
             isError: true,
           });
         }
-        const logPayload = {
-          agentId: ctx.agentId,
-          userId: ctx.userId,
-          toolName,
-          err: error,
-          errorMessage: error instanceof Error ? error.message : String(error),
-        };
+        // Incognito: upstream/tool errors routinely echo arguments or result
+        // content — keep only non-content metadata in the app log.
+        const logPayload = ctx.suppressContentLogging
+          ? {
+              agentId: ctx.agentId,
+              userId: ctx.userId,
+              toolName,
+              errorMessage: "[redacted: incognito conversation]",
+            }
+          : {
+              agentId: ctx.agentId,
+              userId: ctx.userId,
+              toolName,
+              err: error,
+              errorMessage:
+                error instanceof Error ? error.message : String(error),
+            };
         if (aborted) {
           logger.info(logPayload, abortLogMessage);
         } else {
@@ -1061,6 +1120,14 @@ interface ToolExecutionContext {
    * availableTool resolution so ordinary assigned tools skip its DB lookups.
    */
   isUiProvidingTool?: boolean;
+  /**
+   * Incognito conversation: the persisted MCP tool-call row never holds
+   * plaintext content and the call is forced inline (no durable task
+   * detachment).
+   */
+  suppressContentLogging?: boolean;
+  /** Encrypts the persisted row instead of redacting it; see ChatToolContext. */
+  incognitoAudit?: IncognitoAuditContext | null;
 }
 
 /**
@@ -1095,6 +1162,8 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     taskBridge,
     toolCallId,
     isUiProvidingTool,
+    suppressContentLogging,
+    incognitoAudit,
   } = ctx;
   throwIfAborted(abortSignal);
   const startTime = Date.now();
@@ -1195,13 +1264,20 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         ...(elicitation
           ? { elicitationHandler: elicitation.createHandler({ toolName }) }
           : {}),
+        // Incognito: the persisted mcp_tool_calls row is encrypted under the
+        // conversation key, or redacted when there is no escrow record.
+        ...(suppressContentLogging
+          ? { suppressContentLogging: true, incognitoAudit }
+          : {}),
       },
     );
 
   let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
   try {
+    // Incognito forces inline execution: a detached task persists the tool
+    // result on a durable task row in plaintext, so it is never minted.
     result =
-      taskBridge && toolCallId
+      taskBridge && toolCallId && !suppressContentLogging
         ? await taskBridge.runMaybeTask({
             agentId,
             userId,
@@ -1736,6 +1812,8 @@ interface ToolHookContext {
   /** Conversation user id — the default sandbox is keyed per org/user/conversation. */
   userId: string;
   conversationId?: string;
+  /** Incognito conversations: hook dispatch is skipped (payloads persist). */
+  suppressContentLogging?: boolean;
   /**
    * Per-turn sink the chat route drains into inline `data-hook-run` entries.
    * Pre/PostToolUse runs are appended here, tagged with the tool call's id so
@@ -1757,7 +1835,9 @@ async function firePreToolUseHook(params: {
   toolCallId?: string;
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolCallId } = params;
-  if (!ctx.conversationId) {
+  if (!ctx.conversationId || ctx.suppressContentLogging) {
+    // Incognito: hook dispatch would hand tool args to the hook sandbox,
+    // which persists its payloads into the durable replay log in plaintext.
     return null;
   }
   try {
@@ -1876,7 +1956,8 @@ async function firePostToolUseHook(params: {
   toolCallId?: string;
 }): Promise<string | null> {
   const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
-  if (!ctx.conversationId) {
+  if (!ctx.conversationId || ctx.suppressContentLogging) {
+    // Incognito: see firePreToolUseHook — hook payloads persist in plaintext.
     return null;
   }
   try {

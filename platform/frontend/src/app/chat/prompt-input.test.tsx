@@ -307,7 +307,10 @@ vi.mock("@/lib/config/config.query");
 // Import the component after mocks are set up
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useOrganization } from "@/lib/organization.query";
+import {
+  useAppearanceSettings,
+  useOrganization,
+} from "@/lib/organization.query";
 import ArchestraPromptInput from "./prompt-input";
 
 describe("ArchestraPromptInput", () => {
@@ -326,6 +329,10 @@ describe("ArchestraPromptInput", () => {
       data: null,
       isLoading: false,
     } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useAppearanceSettings).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAppearanceSettings>);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
       isPending: false,

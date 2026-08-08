@@ -1,6 +1,7 @@
 import {
   BillingModeSchema,
   InteractionSourceSchema,
+  isIncognitoUnavailableContent,
   SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -140,6 +141,18 @@ export const InteractionResponseSchema = z.union([
   InteractionErrorResponseSchema,
 ]);
 
+/**
+ * The two shapes an incognito conversation's content takes when it is not
+ * available to the reader: encrypted under the browser key (locked), or never
+ * stored (redacted). Neither resembles a provider payload, so every read arm
+ * has to accept them explicitly — otherwise one incognito row 500s the whole
+ * interactions list rather than rendering as unavailable.
+ */
+const IncognitoUnavailableContentSchema = z.union([
+  z.object({ __incognitoLocked: z.string() }),
+  z.object({ __redacted: z.literal("incognito") }),
+]);
+
 const extendedFields = {
   source: InteractionSourceSchema.nullable().optional(),
   authMethod: InteractionAuthMethodSchema.nullable().optional(),
@@ -179,9 +192,19 @@ const DELTA_ENCODING_COLUMNS = {
   requestLastMessageHash: true,
 } as const;
 
-const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit(
-  DELTA_ENCODING_COLUMNS,
-).extend({
+/**
+ * Server-side plumbing for the same reason as the delta columns: it tells the
+ * read path which key a row's content is under. Clients never need it — a
+ * locked row already announces itself through the sentinel in the content
+ * field, which also carries the conversation id — so it stays out of the
+ * public API surface rather than widening it for nothing.
+ */
+const INTERNAL_ENCRYPTION_COLUMNS = { incognitoConversationId: true } as const;
+
+const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
+  ...DELTA_ENCODING_COLUMNS,
+  ...INTERNAL_ENCRYPTION_COLUMNS,
+}).extend({
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
   /**
    * Name of `connectorId`'s knowledge base connector, resolved within the
@@ -214,12 +237,17 @@ const withReadFallback = <T extends z.ZodTypeAny>(schema: T) =>
   z.union([schema, LoosePersistedPayloadSchema]);
 
 /**
- * Each arm's read schema accepts either the provider response or a persisted
- * error response, so a failed interaction (stored with the provider `type`)
- * still serializes on read-back.
+ * Each arm's read schema accepts either the provider response, a persisted
+ * error response, or unavailable incognito content, so a failed interaction
+ * (stored with the provider `type`) and an incognito one both still serialize
+ * on read-back.
  */
 const withErrorResponse = <T extends z.ZodTypeAny>(schema: T) =>
-  z.union([schema, InteractionErrorResponseSchema]);
+  z.union([
+    schema,
+    InteractionErrorResponseSchema,
+    IncognitoUnavailableContentSchema,
+  ]);
 
 /**
  * Discriminated union schema for API responses
@@ -555,6 +583,13 @@ export function normalizeInteractionResponse(
   type: string,
   response: unknown,
 ): unknown {
+  // An incognito row's content is deliberately unavailable, not malformed.
+  // Both sentinels would fail the provider schema below, and reporting them as
+  // corrupt would be actively misleading — one means "encrypted, an escrow
+  // holder can recover it", the other "never stored".
+  if (isIncognitoUnavailableContent(response)) {
+    return response;
+  }
   const schema = responseSchemaByInteractionType.get(type);
   if (!schema) {
     return response;

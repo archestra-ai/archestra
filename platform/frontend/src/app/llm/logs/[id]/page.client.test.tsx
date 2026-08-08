@@ -22,6 +22,53 @@ const KB_EMBEDDING = {
   response: { object: "list", data: [], model: "text-embedding-3-small" },
 };
 
+describe("LogDetail incognito content", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function renderInteraction(interaction: Record<string, unknown>) {
+    vi.mocked(useInteraction).mockReturnValue({
+      data: interaction,
+      isPending: false,
+      isLoadingError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useInteraction>);
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <ChatPage id="test-interaction-id" />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("explains encrypted content instead of rendering the marker", async () => {
+    renderInteraction({
+      ...KB_EMBEDDING,
+      request: { __incognitoLocked: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60" },
+      response: { __incognitoLocked: "9f1c0e2a-3d4b-4c5e-8a7f-1b2c3d4e5f60" },
+    });
+
+    // Only the response accordion is open by default; the raw marker must
+    // never reach the JSON block.
+    expect(
+      await screen.findByText("Encrypted incognito content"),
+    ).toBeVisible();
+    expect(screen.queryByText(/__incognitoLocked/)).not.toBeInTheDocument();
+  });
+
+  it("says content was never stored when it was redacted", async () => {
+    renderInteraction({
+      ...KB_EMBEDDING,
+      request: { __redacted: "incognito" },
+      response: { __redacted: "incognito" },
+    });
+
+    expect(await screen.findByText("Content not stored")).toBeVisible();
+    expect(screen.queryByText(/__redacted/)).not.toBeInTheDocument();
+  });
+});
+
 describe("LogDetail knowledge base connector", () => {
   beforeEach(() => {
     vi.clearAllMocks();

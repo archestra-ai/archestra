@@ -25,6 +25,15 @@ export type MCPGatewayAuthMethod = z.infer<typeof MCPGatewayAuthMethodSchema>;
  * - tools/list: { tools: [...] }
  * - initialize: { capabilities, serverInfo }
  */
+/**
+ * The two shapes an incognito row's content takes when it is not available to
+ * the reader: encrypted under the browser key, or never stored.
+ */
+const IncognitoUnavailableContentSchema = z.union([
+  z.object({ __incognitoLocked: z.string() }),
+  z.object({ __redacted: z.literal("incognito") }),
+]);
+
 export const SelectMcpToolCallSchema = createSelectSchema(
   schema.mcpToolCallsTable,
   {
@@ -33,12 +42,17 @@ export const SelectMcpToolCallSchema = createSelectSchema(
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable(),
   },
-).extend({
-  userName: z.string().nullable(),
-  // Name of the owning app for app-owned calls; null for agent-owned calls
-  // or when the app was deleted.
-  appName: z.string().nullable(),
-});
+)
+  // Server-side plumbing telling the read path which key the row is under.
+  // Clients never need it: a locked row announces itself through the sentinel,
+  // which carries the conversation id.
+  .omit({ incognitoConversationId: true })
+  .extend({
+    userName: z.string().nullable(),
+    // Name of the owning app for app-owned calls; null for agent-owned calls
+    // or when the app was deleted.
+    appName: z.string().nullable(),
+  });
 
 /**
  * Insert schema for MCP tool calls. `ownerType` is optional and the DB column
@@ -92,6 +106,20 @@ export const InsertMcpToolCallSchema = createInsertSchema(
       }
     }
   });
+
+/**
+ * What routes serialize. An incognito row carries a sentinel where the
+ * recorded call would be — unavailable, not malformed — so the response schema
+ * has to admit it or one such row fails serialization for the whole list.
+ * Deliberately separate from the select schema above: widening that would push
+ * the union onto every consumer of `McpToolCall`, which only ever handles real
+ * calls. `toolResult` needs no equivalent; it is already unknown.
+ */
+export const McpToolCallResponseSchema = SelectMcpToolCallSchema.extend({
+  toolCall: z
+    .union([CommonToolCallSchema, IncognitoUnavailableContentSchema])
+    .nullable(),
+});
 
 export type McpToolCall = z.infer<typeof SelectMcpToolCallSchema>;
 export type InsertMcpToolCall = z.infer<typeof InsertMcpToolCallSchema>;

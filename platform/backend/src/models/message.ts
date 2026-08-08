@@ -1,4 +1,8 @@
 import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import {
+  decryptIncognitoMessageRow,
+  encryptIncognitoMessageContent,
+} from "@/content-encryption/incognito";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
 import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
 import {
@@ -8,12 +12,38 @@ import {
 } from "@/content-encryption/rows.ee";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
-import { ApiError, type InsertMessage, type Message } from "@/types";
+import {
+  ApiError,
+  type ConversationContentKey,
+  type InsertMessage,
+  type Message,
+} from "@/types";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 
 type DbExecutor =
   | typeof db
   | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Encrypt content under the incognito conversation key when one is in play,
+ * otherwise under the at-rest layer (which passes through when disabled).
+ */
+function encryptContent(
+  content: unknown,
+  key: ConversationContentKey | null | undefined,
+): unknown {
+  return key
+    ? encryptIncognitoMessageContent(content, key)
+    : encryptMessageContent(content);
+}
+
+/** Decrypt counterpart of {@link encryptContent}, mutating the row in place. */
+function decryptRow<T extends object>(
+  row: T,
+  key: ConversationContentKey | null | undefined,
+): T {
+  return key ? decryptIncognitoMessageRow(row, key) : decryptMessageRow(row);
+}
 
 class MessageModel {
   /**
@@ -49,7 +79,10 @@ class MessageModel {
       );
   }
 
-  static async create(data: InsertMessage): Promise<Message> {
+  static async create(
+    data: InsertMessage,
+    conversationKey?: ConversationContentKey | null,
+  ): Promise<Message> {
     // Insert and recency-touch are one transaction: retention eligibility is
     // judged on `lastMessageAt`, so content must never exist with a stale
     // recency stamp (a crash between the two statements would otherwise leave
@@ -63,10 +96,10 @@ class MessageModel {
         .values({
           id: uuidv7(),
           ...data,
-          content: encryptMessageContent(data.content),
+          content: encryptContent(data.content, conversationKey),
         })
         .returning();
-      decryptMessageRow(message);
+      decryptRow(message, conversationKey);
 
       // Update conversation's updatedAt so it sorts to the top
       await MessageModel.touchConversation(data.conversationId, tx);
@@ -78,6 +111,7 @@ class MessageModel {
   static async bulkCreate(
     messages: InsertMessage[],
     executor: DbExecutor = db,
+    conversationKey?: ConversationContentKey | null,
   ): Promise<void> {
     if (messages.length === 0) {
       return;
@@ -87,7 +121,7 @@ class MessageModel {
       messages.map((m) => ({
         id: uuidv7(),
         ...m,
-        content: encryptMessageContent(m.content),
+        content: encryptContent(m.content, conversationKey),
       })),
     );
 
@@ -104,7 +138,10 @@ class MessageModel {
     );
   }
 
-  static async findByConversation(conversationId: string): Promise<Message[]> {
+  static async findByConversation(
+    conversationId: string,
+    conversationKey?: ConversationContentKey | null,
+  ): Promise<Message[]> {
     const messages = await db
       .select()
       .from(schema.messagesTable)
@@ -112,7 +149,7 @@ class MessageModel {
       .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     for (const message of messages) {
-      decryptMessageRow(message);
+      decryptRow(message, conversationKey);
     }
     return messages;
   }
@@ -140,13 +177,16 @@ class MessageModel {
       .where(eq(schema.messagesTable.conversationId, conversationId));
   }
 
-  static async findById(messageId: string): Promise<Message | null> {
+  static async findById(
+    messageId: string,
+    conversationKey?: ConversationContentKey | null,
+  ): Promise<Message | null> {
     const [message] = await db
       .select()
       .from(schema.messagesTable)
       .where(eq(schema.messagesTable.id, messageId));
 
-    return message ? decryptMessageRow(message) : null;
+    return message ? decryptRow(message, conversationKey) : null;
   }
 
   /**
@@ -160,6 +200,7 @@ class MessageModel {
   static async findByAnyIdInConversation(
     id: string,
     conversationId: string,
+    conversationKey?: ConversationContentKey | null,
   ): Promise<Message | null> {
     if (isUuid(id)) {
       const [byDbId] = await db
@@ -171,24 +212,24 @@ class MessageModel {
             eq(schema.messagesTable.conversationId, conversationId),
           ),
         );
-      if (byDbId) return decryptMessageRow(byDbId);
+      if (byDbId) return decryptRow(byDbId, conversationKey);
     }
 
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Under content encryption, content->>'id' cannot see into envelopes;
-    // scan the conversation's (bounded) messages in JS instead — decryption
-    // also passes plaintext rows through, so mixed states resolve correctly.
-    if (isContentEncryptionEnabled()) {
-      const rows = await MessageModel.findByConversation(conversationId);
+    // Under content encryption (at-rest or per-conversation), content->>'id'
+    // cannot see into envelopes; scan the conversation's (bounded) messages
+    // in JS instead — decryption also passes plaintext rows through, so
+    // mixed states resolve correctly.
+    if (conversationKey || isContentEncryptionEnabled()) {
+      const rows = await MessageModel.findByConversation(
+        conversationId,
+        conversationKey,
+      );
       for (let i = rows.length - 1; i >= 0; i--) {
         const content = rows[i].content as { id?: unknown } | null;
         if (content && content.id === id) return rows[i];
       }
       return null;
     }
-    // SPDX-SnippetEnd
 
     // Content IDs carry no uniqueness guarantee even within one conversation
     // (client-supplied), so pick the newest match deterministically instead of
@@ -220,6 +261,7 @@ class MessageModel {
   static async updateFeedback(
     messageId: string,
     feedback: Message["feedback"],
+    conversationKey?: ConversationContentKey | null,
   ): Promise<Message | null> {
     const [updatedMessage] = await db
       .update(schema.messagesTable)
@@ -230,16 +272,17 @@ class MessageModel {
       .where(eq(schema.messagesTable.id, messageId))
       .returning();
 
-    return updatedMessage || null;
+    return updatedMessage ? decryptRow(updatedMessage, conversationKey) : null;
   }
 
   static async updateTextPart(
     messageId: string,
     partIndex: number,
     newText: string,
+    conversationKey?: ConversationContentKey | null,
   ): Promise<Message> {
     // Fetch the current message
-    const message = await MessageModel.findById(messageId);
+    const message = await MessageModel.findById(messageId, conversationKey);
 
     if (!message) {
       throw new ApiError(404, "Message not found");
@@ -271,12 +314,12 @@ class MessageModel {
       const [updatedMessage] = await tx
         .update(schema.messagesTable)
         .set({
-          content: encryptMessageContent(content),
+          content: encryptContent(content, conversationKey),
           updatedAt: new Date(),
         })
         .where(eq(schema.messagesTable.id, messageId))
         .returning();
-      decryptMessageRow(updatedMessage);
+      decryptRow(updatedMessage, conversationKey);
 
       await MessageModel.touchConversation(updatedMessage.conversationId, tx);
 
@@ -291,10 +334,11 @@ class MessageModel {
   static async updateContent(
     messageId: string,
     content: Message["content"],
+    conversationKey?: ConversationContentKey | null,
   ): Promise<Message> {
     // Validate the row exists so the return type holds — `.returning()`
     // would otherwise yield `undefined` for an unknown id.
-    const message = await MessageModel.findById(messageId);
+    const message = await MessageModel.findById(messageId, conversationKey);
     if (!message) {
       throw new Error("Message not found");
     }
@@ -307,12 +351,12 @@ class MessageModel {
       const [updatedMessage] = await tx
         .update(schema.messagesTable)
         .set({
-          content: encryptMessageContent(content),
+          content: encryptContent(content, conversationKey),
           updatedAt: new Date(),
         })
         .where(eq(schema.messagesTable.id, messageId))
         .returning();
-      decryptMessageRow(updatedMessage);
+      decryptRow(updatedMessage, conversationKey);
 
       await MessageModel.touchConversation(updatedMessage.conversationId, tx);
 
@@ -381,6 +425,7 @@ class MessageModel {
     newText: string,
     deleteSubsequent: boolean,
     executor: DbExecutor = db,
+    conversationKey?: ConversationContentKey | null,
   ): Promise<Message> {
     const run = async (tx: DbExecutor): Promise<Message> => {
       const [message] = await tx
@@ -391,7 +436,7 @@ class MessageModel {
       if (!message) {
         throw new ApiError(404, "Message not found");
       }
-      decryptMessageRow(message);
+      decryptRow(message, conversationKey);
 
       // biome-ignore lint/suspicious/noExplicitAny: UIMessage content is dynamic
       const content = message.content as any;
@@ -416,12 +461,12 @@ class MessageModel {
       const [updatedMessage] = await tx
         .update(schema.messagesTable)
         .set({
-          content: encryptMessageContent(content),
+          content: encryptContent(content, conversationKey),
           updatedAt: new Date(),
         })
         .where(eq(schema.messagesTable.id, messageId))
         .returning();
-      decryptMessageRow(updatedMessage);
+      decryptRow(updatedMessage, conversationKey);
 
       // Delete subsequent messages if requested
       if (deleteSubsequent) {

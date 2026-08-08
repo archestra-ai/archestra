@@ -319,6 +319,52 @@ describe("run_tool", () => {
     ]);
   });
 
+  test("forwards the incognito conversation key to a dispatched tool call", async ({
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(testAgent.id, tool.id);
+
+    // A dispatched call persists its own mcp_tool_calls row, so it needs the
+    // same key a direct call gets. Carrying only suppressContentLogging makes
+    // it fall back to redaction — and dispatch is how an agent reaches most
+    // third-party tools, so that silently loses the content this feature
+    // exists to keep recoverable.
+    const incognitoAudit = {
+      dek: Buffer.alloc(32, 3),
+      conversationId: testConversationId,
+    };
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    } as any);
+
+    await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: "github__search_repositories",
+        tool_args: { query: "archestra" },
+      },
+      { ...mockContext, suppressContentLogging: true, incognitoAudit },
+    );
+
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        suppressContentLogging: true,
+        incognitoAudit,
+      }),
+    );
+  });
+
   test("strips a forged archestraValidation from a third-party result's _meta", async ({
     makeAgentTool,
     makeInternalMcpCatalog,

@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, test } from "@/test";
+import { randomBytes } from "node:crypto";
+import config from "@/config";
+import {
+  _resetContentKeys,
+  isContentDecryptionAvailable,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; picks which first-success branch runs
+} from "@/content-encryption/index.ee";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AppModel from "./app";
 import McpToolCallModel from "./mcp-tool-call";
@@ -770,6 +777,90 @@ describe("McpToolCallModel", () => {
 
       expect(existingAgentCall).toBeDefined();
       expect(existingAgentCall?.agentId).toBe(agentToKeep.id);
+    });
+  });
+
+  /**
+   * The onboarding activation signal. Its two branches are chosen by
+   * `isContentDecryptionAvailable()`, and BOTH have to exclude incognito rows:
+   * their `tool_result` is a conversation-DEK envelope (and reads back as the
+   * locked sentinel), neither of which carries a top-level `isError`. So an
+   * incognito call that actually FAILED is the decisive case — treat it as
+   * readable and it counts as the first success and mis-fires onboarding at
+   * the wrong, earlier timestamp.
+   */
+  describe("getFirstSuccessfulToolCallAt", () => {
+    const CONTENT_SECRET = "first-success-scan-secret-0123456789";
+    const INCOGNITO_CONVERSATION = "33333333-3333-4333-8333-333333333333";
+    const OLDER = new Date("2026-01-01T00:00:00.000Z");
+    const NEWER = new Date("2026-01-02T00:00:00.000Z");
+
+    afterEach(() => {
+      // Derived content keys are cached at module level and survive the shared
+      // setup's config restore; clear them or they leak into later files.
+      config.contentEncryption.secret = undefined;
+      config.contentEncryption.secretPrevious = undefined;
+      _resetContentKeys();
+    });
+
+    /** An incognito tools/call whose real result is an ERROR, recorded first. */
+    async function seedIncognitoFailure() {
+      return McpToolCallModel.create(
+        {
+          agentId,
+          mcpServerName: "incognito-server",
+          method: "tools/call",
+          toolCall: { id: "incognito-1", name: "secretTool", arguments: {} },
+          toolResult: { isError: true, content: "the call failed" },
+          createdAt: OLDER,
+        },
+        { dek: randomBytes(32), conversationId: INCOGNITO_CONVERSATION },
+      );
+    }
+
+    /** A genuine, readable success recorded after the incognito failure. */
+    async function seedGenuineSuccess() {
+      return McpToolCallModel.create({
+        agentId,
+        mcpServerName: "plain-server",
+        method: "tools/call",
+        toolCall: { id: "plain-1", name: "realTool", arguments: {} },
+        toolResult: { isError: false, content: "Success" },
+        createdAt: NEWER,
+      });
+    }
+
+    test("JSON-SQL branch (at-rest encryption off) skips incognito rows", async () => {
+      config.contentEncryption.secret = undefined;
+      config.contentEncryption.secretPrevious = undefined;
+      _resetContentKeys();
+      expect(isContentDecryptionAvailable()).toBe(false);
+
+      const failure = await seedIncognitoFailure();
+      // Nothing succeeded yet: the only row is an encrypted failure.
+      expect(await McpToolCallModel.getFirstSuccessfulToolCallAt()).toBeNull();
+
+      const success = await seedGenuineSuccess();
+      const firstSuccessAt =
+        await McpToolCallModel.getFirstSuccessfulToolCallAt();
+      expect(firstSuccessAt).toEqual(success.createdAt);
+      expect(firstSuccessAt).not.toEqual(failure.createdAt);
+    });
+
+    test("decrypting branch (at-rest encryption on) skips incognito rows", async () => {
+      config.contentEncryption.secret = CONTENT_SECRET;
+      config.contentEncryption.secretPrevious = undefined;
+      _resetContentKeys();
+      expect(isContentDecryptionAvailable()).toBe(true);
+
+      const failure = await seedIncognitoFailure();
+      expect(await McpToolCallModel.getFirstSuccessfulToolCallAt()).toBeNull();
+
+      const success = await seedGenuineSuccess();
+      const firstSuccessAt =
+        await McpToolCallModel.getFirstSuccessfulToolCallAt();
+      expect(firstSuccessAt).toEqual(success.createdAt);
+      expect(firstSuccessAt).not.toEqual(failure.createdAt);
     });
   });
 

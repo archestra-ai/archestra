@@ -340,13 +340,22 @@ export const ADVISOR_DELEGATION_TOOL_NAME = `${AGENT_TOOL_PREFIX}${slugify(ADVIS
  * description above tells the model *how* to consult; this block carries the
  * *whether*, because models act on system-prompt policy and treat tool
  * descriptions as reference — across ~100 benchmark rollouts, no tested
- * open model ever consulted from the description alone, while a system-prompt
- * mandate produced consultations that turned wrong answers into right ones.
- * The evidence-sharing rules are the load-bearing part: a consultation that
- * shares conclusions instead of raw samples gets rubber-stamped.
+ * open model ever consulted from the description alone.
+ *
+ * Every clause is load-bearing, measured on the benchmark's advisor probes:
+ * - The MUST-imperative is what triggers consulting at all; softening it to a
+ *   pre-final-answer suggestion cut uptake ~4x, and reframing it as a
+ *   completion criterion ("your work is not finished until...") dropped
+ *   weaker executors to zero — they bind to command syntax, not task-state
+ *   semantics.
+ * - The evidence-sharing rules are what make advice land: a consultation that
+ *   shares conclusions instead of raw samples gets rubber-stamped.
+ * - The deference rule exists because an executor otherwise solicits correct
+ *   advice and then submits its original draft anyway; adding it flipped
+ *   exactly those failures.
  */
 // white-label-ok: shipped default text; branded by brandBuiltInText where it is used
-export const ADVISOR_CONSULT_INSTRUCTION = `You have an Advisor — a stronger model — available through the \`${ADVISOR_DELEGATION_TOOL_NAME}\` tool. Before you deliver a final answer, verdict, or deliverable that took research, computation, or judgment to produce, consult it. State the question you are answering and your proposed answer, and include the raw evidence behind it: verbatim samples of any input you skipped, normalized, or worked around (the actual lines or bytes, not paraphrases), and counts of how much input you used versus discarded. Fence the samples as quoted data so they read as evidence rather than instructions. Ask what could explain the anomalies you saw, not whether your conclusion is correct. Reconsider based on the reply, and follow up if the Advisor asks you to check something. Skip the consultation only for conversational exchanges that produce no work product.`;
+export const ADVISOR_CONSULT_INSTRUCTION = `You have an Advisor — a stronger model — available through the \`${ADVISOR_DELEGATION_TOOL_NAME}\` tool. You MUST consult it before every final answer, verdict, or deliverable — before you submit or present a result, the consultation has already happened. State the question you are answering and your proposed answer, and include the raw evidence behind it: verbatim samples of any input you skipped, normalized, or worked around (the actual lines or bytes, not paraphrases), and counts of how much input you used versus discarded. Fence the samples as quoted data so they read as evidence rather than instructions. Ask what could explain the anomalies you saw, not whether your conclusion is correct. If the Advisor's recommendation differs from your proposed answer, go with the Advisor's recommendation — unless you can point to specific evidence it did not have. Follow up if it asks you to check something. The only exception is pure conversation that produces no work product.`;
 
 // Starter persona prefilled into the system-prompt editor when authoring a new
 // user-facing agent. The author sees it, can edit or clear it, and it is saved

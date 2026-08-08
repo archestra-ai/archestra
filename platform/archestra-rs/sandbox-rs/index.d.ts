@@ -23,6 +23,23 @@ export interface CommandExecution {
   truncated: boolean
 }
 
+export interface DaggerMcpServiceEndpoint {
+  /** Host-reachable URL produced by a Dagger host tunnel. */
+  url: string
+}
+
+/**
+ * One environment variable supplied to the experimental Dagger MCP service
+ * runtime. Secret values are registered with Dagger as `Secret`s instead of
+ * becoming plain graph arguments (and therefore appearing in traces/cache
+ * metadata).
+ */
+export interface DaggerMcpServiceEnvVar {
+  name: string
+  value: string
+  secret?: boolean
+}
+
 /**
  * JS input identifying a per-environment isolation target. Omitting it (null)
  * runs on the process-default engine. The Dagger transport address (`kube-pod://…`)
@@ -140,6 +157,37 @@ export interface SnapshotFile {
   encoding: string
   content: string
 }
+
+/**
+ * Start (or join) a streamable-HTTP MCP server backed by a Dagger service.
+ *
+ * This is deliberately an experimental primitive, not a replacement for the
+ * Kubernetes MCP runtime. It proves the lifecycle seam for catalog entries
+ * that are already container-native and need no Kubernetes-only features.
+ */
+export interface StartDaggerMcpServiceInput {
+  serviceKey: string
+  image: string
+  /** Full argv override. Omit to use the image's entrypoint/CMD. */
+  command?: Array<string>
+  env: Array<DaggerMcpServiceEnvVar>
+  port: number
+  environment?: EnvironmentTarget
+}
+
+export interface StopDaggerMcpServiceInput {
+  serviceKey: string
+  kill?: boolean
+  environment?: EnvironmentTarget
+}
+
+export interface StopDaggerMcpServiceResult {
+  /**
+   * False means this process/session did not own the service; stop is
+   * intentionally idempotent so a repeated hibernation is harmless.
+   */
+  stopped: boolean
+}
 export declare function checkSession(input?: CheckSessionInput | undefined | null): Promise<void>
 
 /**
@@ -153,3 +201,12 @@ export declare function flushTelemetry(): void
 export declare function readArtifact(input: ReadArtifactInput): Promise<ArtifactBytes>
 
 export declare function runSandbox(input: RunSandboxInput): Promise<CommandExecution>
+
+/**
+ * Experimental lifecycle primitive used by the MCP/Dagger hibernation spike.
+ * It is intentionally not wired into the production MCP runtime yet.
+ */
+export declare function startDaggerMcpServicePrototype(input: StartDaggerMcpServiceInput): Promise<DaggerMcpServiceEndpoint>
+
+/** Idempotent counterpart to [`start_dagger_mcp_service_prototype`]. */
+export declare function stopDaggerMcpServicePrototype(input: StopDaggerMcpServiceInput): Promise<StopDaggerMcpServiceResult>

@@ -13,8 +13,13 @@ use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared};
 use tokio::sync::{Mutex, OnceCell, Semaphore, mpsc, oneshot};
 
-use crate::backend::{ArtifactRequest, Backend, RunRequest};
-use crate::{ArtifactBytes, CommandExecution, EngineFault, Result, RuntimeTarget, SandboxError};
+use crate::backend::{
+    ArtifactRequest, Backend, RunRequest, StartMcpServiceRequest, StopMcpServiceRequest,
+};
+use crate::{
+    ArtifactBytes, CommandExecution, DaggerMcpServiceEndpoint, EngineFault, Result, RuntimeTarget,
+    SandboxError, StopDaggerMcpServiceResult,
+};
 
 pub(crate) const CHANNEL_CAPACITY: usize = 64;
 // Rust-side cap on concurrent backend handlers. Defense in depth — the TS
@@ -36,6 +41,14 @@ pub(crate) enum SessionMsg {
         traceparent: Option<String>,
         reply: oneshot::Sender<Result<()>>,
     },
+    StartMcpService {
+        req: StartMcpServiceRequest,
+        reply: oneshot::Sender<Result<DaggerMcpServiceEndpoint>>,
+    },
+    StopMcpService {
+        req: StopMcpServiceRequest,
+        reply: oneshot::Sender<Result<StopDaggerMcpServiceResult>>,
+    },
 }
 
 impl SessionMsg {
@@ -44,6 +57,8 @@ impl SessionMsg {
             SessionMsg::Run { .. } => SessionOperation::Run,
             SessionMsg::ReadArtifact { .. } => SessionOperation::ReadArtifact,
             SessionMsg::CheckSession { .. } => SessionOperation::CheckSession,
+            SessionMsg::StartMcpService { .. } => SessionOperation::StartMcpService,
+            SessionMsg::StopMcpService { .. } => SessionOperation::StopMcpService,
         }
     }
 }
@@ -53,6 +68,8 @@ enum SessionOperation {
     Run,
     ReadArtifact,
     CheckSession,
+    StartMcpService,
+    StopMcpService,
 }
 
 impl SessionOperation {
@@ -61,6 +78,8 @@ impl SessionOperation {
             SessionOperation::Run => "run",
             SessionOperation::ReadArtifact => "read_artifact",
             SessionOperation::CheckSession => "check_session",
+            SessionOperation::StartMcpService => "start_mcp_service",
+            SessionOperation::StopMcpService => "stop_mcp_service",
         }
     }
 }
@@ -458,6 +477,14 @@ async fn handle(backend: Arc<Backend>, msg: SessionMsg) {
             let result = catch_panic(&backend, backend.check_session(traceparent)).await;
             let _ = reply.send(result);
         }
+        SessionMsg::StartMcpService { req, reply } => {
+            let result = catch_panic(&backend, backend.start_mcp_service(req)).await;
+            let _ = reply.send(result);
+        }
+        SessionMsg::StopMcpService { req, reply } => {
+            let result = catch_panic(&backend, backend.stop_mcp_service(req)).await;
+            let _ = reply.send(result);
+        }
     }
 }
 
@@ -624,6 +651,8 @@ mod tests {
         // engine error (which may have run some of that history) is not retried.
         assert_eq!(retry_reason(SessionOperation::ReadArtifact, &err), None);
         assert_eq!(retry_reason(SessionOperation::Run, &err), None);
+        assert_eq!(retry_reason(SessionOperation::StartMcpService, &err), None);
+        assert_eq!(retry_reason(SessionOperation::StopMcpService, &err), None);
     }
 
     #[test]
@@ -636,6 +665,8 @@ mod tests {
         assert_eq!(retry_reason(SessionOperation::Run, &err), None);
         assert_eq!(retry_reason(SessionOperation::ReadArtifact, &err), None);
         assert_eq!(retry_reason(SessionOperation::CheckSession, &err), None);
+        assert_eq!(retry_reason(SessionOperation::StartMcpService, &err), None);
+        assert_eq!(retry_reason(SessionOperation::StopMcpService, &err), None);
     }
 
     #[test]
@@ -676,6 +707,14 @@ mod tests {
         );
         assert_eq!(
             retry_reason(SessionOperation::CheckSession, &err),
+            Some(RetryReason::StaleAttachables),
+        );
+        assert_eq!(
+            retry_reason(SessionOperation::StartMcpService, &err),
+            Some(RetryReason::StaleAttachables),
+        );
+        assert_eq!(
+            retry_reason(SessionOperation::StopMcpService, &err),
             Some(RetryReason::StaleAttachables),
         );
     }

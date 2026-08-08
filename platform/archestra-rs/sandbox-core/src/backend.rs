@@ -5,7 +5,10 @@
 //! every match site to handle it.
 
 use crate::backends::dagger::DaggerBackend;
-use crate::{ArtifactBytes, CommandExecution, EngineFault, Limits, ReplayStep, Result};
+use crate::{
+    ArtifactBytes, CommandExecution, DaggerMcpServiceEndpoint, DaggerMcpServiceEnvVar, EngineFault,
+    Limits, ReplayStep, Result, StopDaggerMcpServiceResult,
+};
 
 /// a materialise-and-run request handed to a backend. validated at the public
 /// core entry points before it reaches here. skill files and PYTHONPATH are no
@@ -29,6 +32,21 @@ pub(crate) struct ArtifactRequest {
     pub path: String,
     pub default_cwd: String,
     pub traceparent: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StartMcpServiceRequest {
+    pub service_key: String,
+    pub image: String,
+    pub command: Option<Vec<String>>,
+    pub env: Vec<DaggerMcpServiceEnvVar>,
+    pub port: u16,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StopMcpServiceRequest {
+    pub service_key: String,
+    pub kill: bool,
 }
 
 /// the behaviour every sandbox backend provides. used only via the concrete
@@ -69,6 +87,24 @@ impl Backend {
     pub(crate) async fn check_session(&self, traceparent: Option<String>) -> Result<()> {
         match self {
             Backend::Dagger(b) => b.check_session(traceparent).await,
+        }
+    }
+
+    pub(crate) async fn start_mcp_service(
+        &self,
+        req: StartMcpServiceRequest,
+    ) -> Result<DaggerMcpServiceEndpoint> {
+        match self {
+            Backend::Dagger(b) => b.start_mcp_service(req).await,
+        }
+    }
+
+    pub(crate) async fn stop_mcp_service(
+        &self,
+        req: StopMcpServiceRequest,
+    ) -> Result<StopDaggerMcpServiceResult> {
+        match self {
+            Backend::Dagger(b) => b.stop_mcp_service(req).await,
         }
     }
 

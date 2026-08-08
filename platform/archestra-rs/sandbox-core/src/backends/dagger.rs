@@ -2,6 +2,7 @@
 //! session, and materialises each request into a content-addressed container
 //! chain. all `dagger_sdk` usage is contained in this module.
 
+use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -16,15 +17,19 @@ use dagger_sdk::core::gql_client::GraphQlExtension;
 use dagger_sdk::core::graphql_client::{DefaultGraphQLClient, GraphQLError};
 use dagger_sdk::errors::{ConnectError, DaggerError};
 use dagger_sdk::{
-    Config, Container, ContainerWithExecOpts, ContainerWithFileOpts, ContainerWithNewFileOpts,
-    DaggerConn, Query, ReturnType,
+    Config, Container, ContainerAsServiceOpts, ContainerWithExecOpts, ContainerWithFileOpts,
+    ContainerWithNewFileOpts, DaggerConn, HostTunnelOpts, NetworkProtocol, PortForward, Query,
+    ReturnType, Service, ServiceEndpointOpts, ServiceStopOpts,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::{OnceCell, broadcast, mpsc, oneshot};
+use tokio::sync::{Mutex, OnceCell, broadcast, mpsc, oneshot};
 use tracing::Span;
 
-use crate::backend::{ArtifactRequest, Backend, RunRequest, SandboxBackend};
+use crate::backend::{
+    ArtifactRequest, Backend, RunRequest, SandboxBackend, StartMcpServiceRequest,
+    StopMcpServiceRequest,
+};
 use crate::session::{self, CHANNEL_CAPACITY, SessionHandle, SessionMsg};
 use crate::supervisor::{
     ARCHESTRA_RUN_PY, SUPERVISOR_PATH, parse_supervisor_output, supervised_argv,
@@ -34,8 +39,9 @@ use crate::validation::{
     skill_root_path, validate_artifact_path, validate_cwd, validate_snapshot_file_path,
 };
 use crate::{
-    ArtifactBytes, CommandExecution, EngineFault, ReplayInputFile, ReplayStep, Result,
-    RuntimeTarget, SandboxError, SnapshotFile,
+    ArtifactBytes, CommandExecution, DAGGER_MCP_SERVICE_KEY_ENV, DaggerMcpServiceEndpoint,
+    EngineFault, ReplayInputFile, ReplayStep, Result, RuntimeTarget, SandboxError, SnapshotFile,
+    StopDaggerMcpServiceResult,
 };
 
 /// debian + python + uv + node + npm + common cli, warmed once per process.
@@ -86,7 +92,6 @@ const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
 /// the dagger SDK message emitted when the engine accepted `/query` but timed
 /// out waiting for this client's session attachables. see [`classify_engine_fault`].
 const SESSION_ATTACHABLES_WAIT_ERROR: &str = "waiting for client session attachables";
-
 const ARTIFACT_TOO_LARGE_EXIT_CODE: isize = 65;
 const ARTIFACT_NOT_FOUND_EXIT_CODE: isize = 66;
 
@@ -111,6 +116,14 @@ const PYPROJECT_SETUP: &str = "printf '[project]\\nname = \"sandbox\"\\nversion 
 pub(crate) struct DaggerBackend {
     client: DaggerConn,
     warm: OnceCell<Container>,
+    mcp_service_slots: Mutex<HashMap<String, Arc<Mutex<Option<RunningMcpService>>>>>,
+}
+
+struct RunningMcpService {
+    spec: StartMcpServiceRequest,
+    source: Service,
+    tunnel: Service,
+    endpoint: DaggerMcpServiceEndpoint,
 }
 
 impl DaggerBackend {
@@ -121,6 +134,157 @@ impl DaggerBackend {
             .await?;
         Ok(container.clone())
     }
+
+    /// Start a container-native MCP server and expose it to the backend through
+    /// a Dagger host tunnel. Holding the per-service slot across the start makes
+    /// concurrent demand a natural single-flight: the second caller observes
+    /// the already-running identical spec and reuses its endpoint, while other
+    /// service keys can wake in parallel.
+    pub(crate) async fn start_mcp_service(
+        &self,
+        req: StartMcpServiceRequest,
+    ) -> Result<DaggerMcpServiceEndpoint> {
+        let slot = {
+            let mut slots = self.mcp_service_slots.lock().await;
+            slots
+                .entry(req.service_key.clone())
+                .or_insert_with(|| Arc::new(Mutex::new(None)))
+                .clone()
+        };
+        // Serialize only this physical service. Different MCP servers can cold
+        // start concurrently and use the actor's normal engine back-pressure.
+        let mut running = slot.lock().await;
+        if let Some(running) = running.as_ref()
+            && running.spec == req
+        {
+            return Ok(running.endpoint.clone());
+        }
+
+        // A catalog edit may reuse the physical key with a different image,
+        // command, env or port. Stop the old graph before replacing it so one
+        // logical MCP server never has two live processes in this session.
+        if let Some(previous) = running.as_ref() {
+            stop_running_mcp_service(previous, true).await?;
+            *running = None;
+        }
+
+        let mut container = self.client.container().from(req.image.clone());
+        for (index, env) in req.env.iter().enumerate() {
+            container = if env.secret.unwrap_or(false) {
+                let secret = self.client.set_secret(
+                    format!("mcp-service-{}-{index}", req.service_key.replace('/', "-")),
+                    env.value.clone(),
+                );
+                container.with_secret_variable(env.name.clone(), secret)
+            } else {
+                container.with_env_variable(env.name.clone(), env.value.clone())
+            };
+        }
+        // Apply after user env so the isolation key cannot be overridden even
+        // if an older caller bypassed the current boundary validation.
+        container =
+            container.with_env_variable(DAGGER_MCP_SERVICE_KEY_ENV, req.service_key.clone());
+        container = container.with_exposed_port(req.port as isize);
+
+        let source = match req.command.as_ref() {
+            Some(command) => {
+                let args = command.iter().map(String::as_str).collect();
+                container.as_service_opts(ContainerAsServiceOpts {
+                    args: Some(args),
+                    // `command` is a full argv override, matching a Kubernetes
+                    // container `command` + `args` pair after TS normalisation.
+                    use_entrypoint: Some(false),
+                    experimental_privileged_nesting: None,
+                    insecure_root_capabilities: None,
+                    expand: None,
+                    no_init: None,
+                })
+            }
+            None => container.as_service(),
+        };
+        let tunnel = self.client.host().tunnel_opts(
+            source.clone(),
+            HostTunnelOpts {
+                native: Some(false),
+                ports: Some(vec![PortForward {
+                    backend: req.port as isize,
+                    // 0 asks Dagger for a collision-free host port.
+                    frontend: 0,
+                    protocol: NetworkProtocol::Tcp,
+                }]),
+            },
+        );
+        // Starting the tunnel starts its source dependency and waits for the
+        // source port health check. That collapses image pull + process start +
+        // readiness + port-forward creation into one engine operation.
+        let started_tunnel = tunnel.start().await.map_err(from_sdk)?;
+        let url = match started_tunnel
+            .endpoint_opts(ServiceEndpointOpts {
+                port: None,
+                scheme: Some("http"),
+            })
+            .await
+        {
+            Ok(url) => url,
+            Err(error) => {
+                // A tunnel that started but could not report its endpoint is
+                // unusable and would otherwise be left running but untracked.
+                let _ = stop_dagger_services(&started_tunnel, &source, true).await;
+                return Err(from_sdk(error));
+            }
+        };
+        let endpoint = DaggerMcpServiceEndpoint { url };
+        *running = Some(RunningMcpService {
+            spec: req,
+            source,
+            tunnel: started_tunnel,
+            endpoint: endpoint.clone(),
+        });
+        Ok(endpoint)
+    }
+
+    /// Stop the host tunnel and its source container. Missing ownership is a
+    /// successful no-op; a Dagger service belongs to its client session, so a
+    /// new backend process must not pretend it can stop a predecessor's graph.
+    pub(crate) async fn stop_mcp_service(
+        &self,
+        req: StopMcpServiceRequest,
+    ) -> Result<StopDaggerMcpServiceResult> {
+        let slot = self
+            .mcp_service_slots
+            .lock()
+            .await
+            .get(&req.service_key)
+            .cloned();
+        let Some(slot) = slot else {
+            return Ok(StopDaggerMcpServiceResult { stopped: false });
+        };
+        let mut running = slot.lock().await;
+        let Some(owned) = running.as_ref() else {
+            return Ok(StopDaggerMcpServiceResult { stopped: false });
+        };
+        stop_running_mcp_service(owned, req.kill).await?;
+        *running = None;
+        Ok(StopDaggerMcpServiceResult { stopped: true })
+    }
+}
+
+async fn stop_running_mcp_service(running: &RunningMcpService, kill: bool) -> Result<()> {
+    stop_dagger_services(&running.tunnel, &running.source, kill).await
+}
+
+async fn stop_dagger_services(tunnel: &Service, source: &Service, kill: bool) -> Result<()> {
+    let opts = ServiceStopOpts { kill: Some(kill) };
+    let tunnel_result = tunnel.stop_opts(opts).await.map_err(from_sdk);
+    // The tunnel owns a dependency on `source`, but stopping it explicitly is
+    // cheap and makes the desired zero-running-container state unambiguous.
+    let source_result = source
+        .stop_opts(ServiceStopOpts { kill: Some(kill) })
+        .await
+        .map_err(from_sdk);
+    tunnel_result?;
+    source_result?;
+    Ok(())
 }
 
 impl SandboxBackend for DaggerBackend {
@@ -546,6 +710,7 @@ pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
             let backend = Arc::new(Backend::Dagger(DaggerBackend {
                 client,
                 warm: OnceCell::new(),
+                mcp_service_slots: Mutex::new(HashMap::new()),
             }));
             session::run_loop(backend, msg_rx).await;
             Ok(())

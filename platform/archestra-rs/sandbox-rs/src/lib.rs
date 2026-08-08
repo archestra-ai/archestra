@@ -26,6 +26,25 @@ pub async fn read_artifact(input: core::ReadArtifactInput) -> napi::Result<core:
     catch_core(core::read_artifact(input)).await
 }
 
+/// Experimental lifecycle primitive used by the MCP/Dagger hibernation spike.
+/// It is intentionally not wired into the production MCP runtime yet.
+#[napi(js_name = "startDaggerMcpServicePrototype")]
+pub async fn start_dagger_mcp_service_prototype(
+    input: core::StartDaggerMcpServiceInput,
+) -> napi::Result<core::DaggerMcpServiceEndpoint> {
+    core::telemetry::init();
+    catch_core(core::start_dagger_mcp_service(input)).await
+}
+
+/// Idempotent counterpart to [`start_dagger_mcp_service_prototype`].
+#[napi(js_name = "stopDaggerMcpServicePrototype")]
+pub async fn stop_dagger_mcp_service_prototype(
+    input: core::StopDaggerMcpServiceInput,
+) -> napi::Result<core::StopDaggerMcpServiceResult> {
+    core::telemetry::init();
+    catch_core(core::stop_dagger_mcp_service(input)).await
+}
+
 /// force-flush pending OTLP traces/logs. the backend calls this on graceful
 /// shutdown so the final batch isn't lost. intentionally sync: the blocking
 /// flush runs on the JS thread while the batch-export tasks drain on the tokio

@@ -354,6 +354,71 @@ pub struct CheckSessionInput {
     pub environment: Option<EnvironmentTarget>,
 }
 
+/// Reserved graph input that keeps otherwise-identical logical MCP workloads
+/// distinct in Dagger's content-addressed service cache.
+pub(crate) const DAGGER_MCP_SERVICE_KEY_ENV: &str = "ARCHESTRA_MCP_SERVICE_KEY";
+
+/// One environment variable supplied to the experimental Dagger MCP service
+/// runtime. Secret values are registered with Dagger as `Secret`s instead of
+/// becoming plain graph arguments (and therefore appearing in traces/cache
+/// metadata).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct DaggerMcpServiceEnvVar {
+    pub name: String,
+    pub value: String,
+    #[serde(default)]
+    pub secret: Option<bool>,
+}
+
+/// Start (or join) a streamable-HTTP MCP server backed by a Dagger service.
+///
+/// This is deliberately an experimental primitive, not a replacement for the
+/// Kubernetes MCP runtime. It proves the lifecycle seam for catalog entries
+/// that are already container-native and need no Kubernetes-only features.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct StartDaggerMcpServiceInput {
+    #[cfg_attr(feature = "napi", napi(js_name = "serviceKey"))]
+    pub service_key: String,
+    pub image: String,
+    /// Full argv override. Omit to use the image's entrypoint/CMD.
+    pub command: Option<Vec<String>>,
+    pub env: Vec<DaggerMcpServiceEnvVar>,
+    pub port: u32,
+    pub environment: Option<EnvironmentTarget>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct DaggerMcpServiceEndpoint {
+    /// Host-reachable URL produced by a Dagger host tunnel.
+    pub url: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct StopDaggerMcpServiceInput {
+    #[cfg_attr(feature = "napi", napi(js_name = "serviceKey"))]
+    pub service_key: String,
+    #[serde(default)]
+    pub kill: Option<bool>,
+    pub environment: Option<EnvironmentTarget>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct StopDaggerMcpServiceResult {
+    /// False means this process/session did not own the service; stop is
+    /// intentionally idempotent so a repeated hibernation is harmless.
+    pub stopped: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "napi", napi_derive::napi(object))]
 #[serde(rename_all = "camelCase")]
@@ -425,6 +490,43 @@ pub struct ArtifactBytes {
     pub size_bytes: u32,
 }
 
+#[tracing::instrument(name = "dagger_mcp_service.start.request", skip_all, fields(service_key = %input.service_key, image = %input.image, port = input.port))]
+pub async fn start_dagger_mcp_service(
+    input: StartDaggerMcpServiceInput,
+) -> Result<DaggerMcpServiceEndpoint> {
+    validate_dagger_mcp_service_input(&input)?;
+    let target = runtime_target_from(input.environment.clone())?;
+    let req = backend::StartMcpServiceRequest {
+        service_key: input.service_key,
+        image: input.image,
+        command: input.command,
+        env: input.env,
+        port: input.port as u16,
+    };
+    session::submit(target, move |reply| session::SessionMsg::StartMcpService {
+        req: req.clone(),
+        reply,
+    })
+    .await
+}
+
+#[tracing::instrument(name = "dagger_mcp_service.stop.request", skip_all, fields(service_key = %input.service_key))]
+pub async fn stop_dagger_mcp_service(
+    input: StopDaggerMcpServiceInput,
+) -> Result<StopDaggerMcpServiceResult> {
+    validate_service_key(&input.service_key)?;
+    let target = runtime_target_from(input.environment.clone())?;
+    let req = backend::StopMcpServiceRequest {
+        service_key: input.service_key,
+        kill: input.kill.unwrap_or(false),
+    };
+    session::submit(target, move |reply| session::SessionMsg::StopMcpService {
+        req: req.clone(),
+        reply,
+    })
+    .await
+}
+
 #[tracing::instrument(name = "sandbox.check_session.request", skip_all)]
 pub async fn check_session(input: CheckSessionInput) -> Result<()> {
     let span = tracing::Span::current();
@@ -437,6 +539,79 @@ pub async fn check_session(input: CheckSessionInput) -> Result<()> {
         }
     })
     .await
+}
+
+fn validate_dagger_mcp_service_input(input: &StartDaggerMcpServiceInput) -> Result<()> {
+    validate_service_key(&input.service_key)?;
+    if input.image.trim().is_empty() || input.image.len() > 2048 {
+        return Err(SandboxError::InvalidInput(
+            "Dagger MCP service image must be 1..=2048 characters".to_string(),
+        ));
+    }
+    if !(1..=u16::MAX as u32).contains(&input.port) {
+        return Err(SandboxError::InvalidInput(format!(
+            "Dagger MCP service port must be between 1 and 65535, got {}",
+            input.port
+        )));
+    }
+    if input.command.as_ref().is_some_and(Vec::is_empty) {
+        return Err(SandboxError::InvalidInput(
+            "Dagger MCP service command must be omitted or non-empty".to_string(),
+        ));
+    }
+    if input
+        .command
+        .iter()
+        .flatten()
+        .any(|part| part.is_empty() || part.contains('\0'))
+    {
+        return Err(SandboxError::InvalidInput(
+            "Dagger MCP service command entries must be non-empty and NUL-free".to_string(),
+        ));
+    }
+    for env in &input.env {
+        if !is_env_name(&env.name) {
+            return Err(SandboxError::InvalidInput(format!(
+                "invalid Dagger MCP service environment variable name: {:?}",
+                env.name
+            )));
+        }
+        if env.value.contains('\0') {
+            return Err(SandboxError::InvalidInput(format!(
+                "Dagger MCP service environment variable {:?} contains NUL",
+                env.name
+            )));
+        }
+        if env.name == DAGGER_MCP_SERVICE_KEY_ENV {
+            return Err(SandboxError::InvalidInput(format!(
+                "{DAGGER_MCP_SERVICE_KEY_ENV} is reserved by the Dagger MCP runtime"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_service_key(service_key: &str) -> Result<()> {
+    if service_key.is_empty()
+        || service_key.len() > 200
+        || !service_key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'/'))
+        || service_key
+            .split('/')
+            .any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
+    {
+        return Err(SandboxError::InvalidInput(format!(
+            "invalid Dagger MCP service key: {service_key:?}"
+        )));
+    }
+    Ok(())
+}
+
+fn is_env_name(name: &str) -> bool {
+    let mut bytes = name.bytes();
+    matches!(bytes.next(), Some(first) if first.is_ascii_alphabetic() || first == b'_')
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
 #[tracing::instrument(
@@ -502,6 +677,77 @@ mod tests {
             environment_id: id.into(),
             namespace: ns.into(),
         }
+    }
+
+    fn valid_mcp_service_input() -> StartDaggerMcpServiceInput {
+        StartDaggerMcpServiceInput {
+            service_key: "namespace/mcp-example".to_string(),
+            image: "ghcr.io/example/mcp:sha-abc".to_string(),
+            command: Some(vec!["node".to_string(), "server.js".to_string()]),
+            env: vec![
+                DaggerMcpServiceEnvVar {
+                    name: "LOG_LEVEL".to_string(),
+                    value: "info".to_string(),
+                    secret: None,
+                },
+                DaggerMcpServiceEnvVar {
+                    name: "API_TOKEN".to_string(),
+                    value: "secret".to_string(),
+                    secret: Some(true),
+                },
+            ],
+            port: 8080,
+            environment: None,
+        }
+    }
+
+    #[test]
+    fn dagger_mcp_service_input_accepts_the_supported_http_shape() {
+        assert!(validate_dagger_mcp_service_input(&valid_mcp_service_input()).is_ok());
+    }
+
+    #[test]
+    fn dagger_mcp_service_input_rejects_unsafe_identity_port_and_env() {
+        let mut input = valid_mcp_service_input();
+        input.service_key = "../../tenant".to_string();
+        assert!(matches!(
+            validate_dagger_mcp_service_input(&input),
+            Err(SandboxError::InvalidInput(_))
+        ));
+
+        let mut input = valid_mcp_service_input();
+        input.port = 0;
+        assert!(matches!(
+            validate_dagger_mcp_service_input(&input),
+            Err(SandboxError::InvalidInput(_))
+        ));
+
+        let mut input = valid_mcp_service_input();
+        input.env[0].name = "BAD-NAME".to_string();
+        assert!(matches!(
+            validate_dagger_mcp_service_input(&input),
+            Err(SandboxError::InvalidInput(_))
+        ));
+
+        let mut input = valid_mcp_service_input();
+        input.env[0].name = "ARCHESTRA_MCP_SERVICE_KEY".to_string();
+        assert!(matches!(
+            validate_dagger_mcp_service_input(&input),
+            Err(SandboxError::InvalidInput(_))
+        ));
+    }
+
+    #[test]
+    fn dagger_mcp_service_input_distinguishes_default_command_from_empty_override() {
+        let mut input = valid_mcp_service_input();
+        input.command = None;
+        assert!(validate_dagger_mcp_service_input(&input).is_ok());
+
+        input.command = Some(Vec::new());
+        assert!(matches!(
+            validate_dagger_mcp_service_input(&input),
+            Err(SandboxError::InvalidInput(_))
+        ));
     }
 
     #[test]

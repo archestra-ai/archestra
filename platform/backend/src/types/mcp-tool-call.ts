@@ -37,13 +37,7 @@ const IncognitoUnavailableContentSchema = z.union([
 export const SelectMcpToolCallSchema = createSelectSchema(
   schema.mcpToolCallsTable,
   {
-    // An incognito row carries a sentinel here instead of the recorded call —
-    // it is unavailable, not malformed, so the read schema has to admit it or
-    // one such row fails serialization for the whole list. `toolResult` needs
-    // no equivalent: it is already unknown.
-    toolCall: z
-      .union([CommonToolCallSchema, IncognitoUnavailableContentSchema])
-      .nullable(),
+    toolCall: CommonToolCallSchema.nullable(),
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable(),
@@ -112,6 +106,20 @@ export const InsertMcpToolCallSchema = createInsertSchema(
       }
     }
   });
+
+/**
+ * What routes serialize. An incognito row carries a sentinel where the
+ * recorded call would be — unavailable, not malformed — so the response schema
+ * has to admit it or one such row fails serialization for the whole list.
+ * Deliberately separate from the select schema above: widening that would push
+ * the union onto every consumer of `McpToolCall`, which only ever handles real
+ * calls. `toolResult` needs no equivalent; it is already unknown.
+ */
+export const McpToolCallResponseSchema = SelectMcpToolCallSchema.extend({
+  toolCall: z
+    .union([CommonToolCallSchema, IncognitoUnavailableContentSchema])
+    .nullable(),
+});
 
 export type McpToolCall = z.infer<typeof SelectMcpToolCallSchema>;
 export type InsertMcpToolCall = z.infer<typeof InsertMcpToolCallSchema>;

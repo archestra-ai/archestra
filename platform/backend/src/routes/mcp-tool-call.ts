@@ -12,7 +12,7 @@ import {
   ApiError,
   constructResponseSchema,
   createSortingQuerySchema,
-  SelectMcpToolCallSchema,
+  McpToolCallResponseSchema,
   UuidIdSchema,
 } from "@/types";
 
@@ -54,7 +54,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ] as const),
           ),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectMcpToolCallSchema),
+          createPaginatedResponseSchema(McpToolCallResponseSchema),
         ),
       },
     },
@@ -145,7 +145,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           mcpToolCallId: UuidIdSchema,
         }),
-        response: constructResponseSchema(SelectMcpToolCallSchema),
+        response: constructResponseSchema(McpToolCallResponseSchema),
       },
     },
     async (

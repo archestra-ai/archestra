@@ -105,9 +105,16 @@ function McpToolCallDetail({
   // them — the tool name, the arguments and the success/error status are all
   // equally unavailable, and painting the call "Success" would be a claim the
   // row does not support.
+  // The redaction fallback nests the marker in `arguments` instead of
+  // replacing the whole call, so both shapes have to resolve to "unavailable".
+  const nestedRedactedArgs = (
+    mcpToolCall.toolCall as { arguments?: unknown } | null
+  )?.arguments;
   const lockedToolCall = isIncognitoUnavailableContent(mcpToolCall.toolCall)
     ? mcpToolCall.toolCall
-    : null;
+    : isIncognitoUnavailableContent(nestedRedactedArgs)
+      ? nestedRedactedArgs
+      : null;
   const lockedToolResult = isIncognitoUnavailableContent(mcpToolCall.toolResult)
     ? mcpToolCall.toolResult
     : null;

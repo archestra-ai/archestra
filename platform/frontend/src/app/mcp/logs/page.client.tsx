@@ -369,7 +369,12 @@ function McpToolCallsTable({
         if (isIncognitoUnavailableContent(call)) {
           return <IncognitoContentUnavailableLabel value={call} />;
         }
+        // Redaction replaces only the arguments, keeping the call's id and
+        // name, so the marker arrives nested rather than in the call's place.
         const args = call?.arguments;
+        if (isIncognitoUnavailableContent(args)) {
+          return <IncognitoContentUnavailableLabel value={args} />;
+        }
         if (!args) {
           return <div className="text-xs text-muted-foreground">—</div>;
         }

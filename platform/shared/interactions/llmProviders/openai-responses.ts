@@ -1,3 +1,4 @@
+import type { WithoutIncognitoUnavailable } from "../../incognito-content";
 import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
@@ -21,7 +22,9 @@ type OpenAiResponsesInteractionRecord = Omit<
   "request" | "response"
 > & {
   request: Extract<OpenAiResponsesArm["request"], { model: string }>;
-  response: Exclude<OpenAiResponsesArm["response"], { error: string }>;
+  response: WithoutIncognitoUnavailable<
+    Exclude<OpenAiResponsesArm["response"], { error: string }>
+  >;
 };
 
 type OpenAiResponsesOutputItem =

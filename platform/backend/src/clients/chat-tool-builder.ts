@@ -277,8 +277,10 @@ export function buildMcpGatewayTool(params: {
                 delegationChain: ctx.delegationChain,
                 approvalRequiredPoliciesHandled: true,
                 // Incognito: a run_tool dispatch persists via mcpClient, so
-                // its stored row must be content-redacted too.
+                // its stored row needs the same treatment as a direct call —
+                // encrypted under the conversation key, not redacted.
                 suppressContentLogging: ctx.suppressContentLogging,
+                incognitoAudit: ctx.incognitoAudit,
                 tokenAuth: buildTokenAuthContext({
                   mcpGwToken: ctx.mcpGwToken,
                   organizationId: ctx.organizationId,

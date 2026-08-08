@@ -63,3 +63,16 @@ export function isIncognitoUnavailableContent(
 ): value is IncognitoLockedContent | IncognitoRedactedContent {
   return isIncognitoLockedContent(value) || isIncognitoRedactedContent(value);
 }
+
+/**
+ * Drops the unavailable-content shapes from a persisted content union.
+ *
+ * Read schemas admit them so a locked or redacted row still serializes, which
+ * widens every provider payload type. Mappers only ever run on real content —
+ * `DynamicInteraction` short-circuits before delegating — so they narrow with
+ * this rather than each re-deriving the exclusion.
+ */
+export type WithoutIncognitoUnavailable<T> = Exclude<
+  T,
+  IncognitoLockedContent | IncognitoRedactedContent
+>;

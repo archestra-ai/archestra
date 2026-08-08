@@ -25,20 +25,40 @@ export type MCPGatewayAuthMethod = z.infer<typeof MCPGatewayAuthMethodSchema>;
  * - tools/list: { tools: [...] }
  * - initialize: { capabilities, serverInfo }
  */
+/**
+ * The two shapes an incognito row's content takes when it is not available to
+ * the reader: encrypted under the browser key, or never stored.
+ */
+const IncognitoUnavailableContentSchema = z.union([
+  z.object({ __incognitoLocked: z.string() }),
+  z.object({ __redacted: z.literal("incognito") }),
+]);
+
 export const SelectMcpToolCallSchema = createSelectSchema(
   schema.mcpToolCallsTable,
   {
-    toolCall: CommonToolCallSchema.nullable(),
+    // An incognito row carries a sentinel here instead of the recorded call —
+    // it is unavailable, not malformed, so the read schema has to admit it or
+    // one such row fails serialization for the whole list. `toolResult` needs
+    // no equivalent: it is already unknown.
+    toolCall: z
+      .union([CommonToolCallSchema, IncognitoUnavailableContentSchema])
+      .nullable(),
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable(),
   },
-).extend({
-  userName: z.string().nullable(),
-  // Name of the owning app for app-owned calls; null for agent-owned calls
-  // or when the app was deleted.
-  appName: z.string().nullable(),
-});
+)
+  // Server-side plumbing telling the read path which key the row is under.
+  // Clients never need it: a locked row announces itself through the sentinel,
+  // which carries the conversation id.
+  .omit({ incognitoConversationId: true })
+  .extend({
+    userName: z.string().nullable(),
+    // Name of the owning app for app-owned calls; null for agent-owned calls
+    // or when the app was deleted.
+    appName: z.string().nullable(),
+  });
 
 /**
  * Insert schema for MCP tool calls. `ownerType` is optional and the DB column

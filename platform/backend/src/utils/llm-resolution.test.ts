@@ -42,6 +42,7 @@ const MOCK_MODEL = {
   inputModalities: null,
   outputModalities: null,
   supportsToolCalling: null,
+  supportedEndpoints: null,
   promptPricePerToken: null,
   completionPricePerToken: null,
   cacheReadPricePerToken: null,

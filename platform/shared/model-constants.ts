@@ -88,6 +88,22 @@ export const ProviderEndpointSchema = z.enum([
 export type SupportedProviderEndpoint = z.infer<typeof ProviderEndpointSchema>;
 
 /**
+ * True for providers that serve one model catalog over more than one wire
+ * format, where the model id alone does not say which. Gates the per-model
+ * surface lookup on the chat hot path so single-surface providers — every
+ * other one — pay nothing for it.
+ *
+ * Perplexity is deliberately absent: it also serves two surfaces, but its
+ * catalogs are disjoint by construction and `requiresPerplexityAgentApi`
+ * reads the answer straight off the id, with no row to fetch.
+ */
+export function providerHasMultipleSurfaces(
+  provider: SupportedProvider,
+): boolean {
+  return provider === "github-copilot";
+}
+
+/**
  * True when a model must be invoked through the Responses API — i.e. the
  * provider published its supported endpoints and `/chat/completions` was not
  * among them. Absent or empty data answers `false` so a model whose surface is

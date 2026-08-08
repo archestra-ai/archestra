@@ -2843,6 +2843,13 @@
       "when": 1786122777580,
       "tag": "0405_incognito_chats",
       "breakpoints": true
+    },
+    {
+      "idx": 406,
+      "version": "7",
+      "when": 1786212322560,
+      "tag": "0406_model_supported_endpoints",
+      "breakpoints": true
     }
   ]
 }

@@ -71,7 +71,8 @@ export const ChatCompletionResponseSchema =
  *
  * Request passes through unchanged — the wire format is OpenAI's Responses API.
  */
-export const ResponsesRequestSchema = OpenAIResponsesRequestSchema.passthrough();
+export const ResponsesRequestSchema =
+  OpenAIResponsesRequestSchema.passthrough();
 
 /**
  * Response schema relaxed the same way (and for the same reason) as

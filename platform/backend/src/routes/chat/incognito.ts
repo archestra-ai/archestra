@@ -6,10 +6,7 @@ import {
   isIncognitoChatEnabled,
   parseIncognitoDekHeader,
 } from "@/content-encryption/incognito";
-import {
-  isIncognitoEscrowConfigured,
-  wrapIncognitoDek,
-} from "@/content-encryption/incognito-escrow";
+import { wrapIncognitoDek } from "@/content-encryption/incognito-escrow";
 import {
   ApiError,
   type ConversationContentKey,
@@ -48,13 +45,9 @@ export function resolveIncognitoCreation(params: {
   if (!isIncognitoChatEnabled()) {
     throw new ApiError(
       403,
-      isIncognitoEscrowConfigured()
-        ? "Incognito chats are disabled on this instance " +
-            "(ARCHESTRA_CHAT_INCOGNITO_ENABLED=false)."
-        : "Incognito chats are not enabled on this instance. An operator " +
-            "enables them by configuring " +
-            "ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY, which keeps an " +
-            "offline-recoverable copy of each conversation key.",
+      "Incognito chats are not enabled on this instance. An operator enables " +
+        "them by configuring ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY, " +
+        "which keeps an offline-recoverable copy of each conversation key.",
     );
   }
   const dek = readDekHeader(params.request);

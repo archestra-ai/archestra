@@ -32,20 +32,20 @@ const CONVERSATION_A = "11111111-1111-4111-8111-111111111111";
 const CONVERSATION_B = "22222222-2222-4222-8222-222222222222";
 
 describe("incognito chat crypto", () => {
-  test("escrow is the enablement switch; the env flag still force-disables", () => {
+  test("the escrow key is the only enablement switch", () => {
     // No escrow key: the audit trail these conversations produce would be
     // encrypted under a key only one browser holds, so the feature is OFF.
     config.enterpriseFeatures.core = false;
     config.chatIncognito.escrowPublicKey = undefined;
     expect(isIncognitoChatEnabled()).toBe(false);
 
-    // An escrow key alone turns it on — the default `db` sink is free, so no
-    // enterprise license is involved.
+    // An escrow key alone turns it on — the db sink needs no enterprise
+    // license, so this is the unlicensed posture.
     config.chatIncognito.escrowPublicKey = ESCROW_PEM;
     expect(isIncognitoChatEnabled()).toBe(true);
 
-    // An operator can still opt out explicitly even with escrow configured.
-    config.chatIncognito.enabled = false;
+    // Removing it turns the feature off again; there is no second flag.
+    config.chatIncognito.escrowPublicKey = undefined;
     expect(isIncognitoChatEnabled()).toBe(false);
   });
 

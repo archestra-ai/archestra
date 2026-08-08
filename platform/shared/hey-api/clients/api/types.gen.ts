@@ -62121,18 +62121,18 @@ export type GetMcpToolCallsResponses = {
             appId: string | null;
             mcpServerName: string;
             method: string;
-            /**
-             * Represents a tool call in a provider-agnostic way
-             */
             toolCall: {
                 id: string;
                 name: string;
                 arguments: {
                     [key: string]: unknown;
                 };
+            } | {
+                __incognitoLocked: string;
+            } | {
+                __redacted: 'incognito';
             } | null;
             toolResult: unknown;
-            incognitoConversationId: string | null;
             userId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
             createdAt: string;
@@ -62237,18 +62237,18 @@ export type GetMcpToolCallResponses = {
         appId: string | null;
         mcpServerName: string;
         method: string;
-        /**
-         * Represents a tool call in a provider-agnostic way
-         */
         toolCall: {
             id: string;
             name: string;
             arguments: {
                 [key: string]: unknown;
             };
+        } | {
+            __incognitoLocked: string;
+        } | {
+            __redacted: 'incognito';
         } | null;
         toolResult: unknown;
-        incognitoConversationId: string | null;
         userId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
         createdAt: string;

@@ -2853,12 +2853,10 @@ const config = {
   },
   /**
    * Incognito chats: per-conversation encryption under a browser-held key.
-   * Configuring `escrowPublicKey` is what enables the feature — it is off
-   * until then. `ARCHESTRA_CHAT_INCOGNITO_ENABLED=false` is a kill switch that
-   * turns it off again without discarding the escrow configuration.
+   * Configuring `escrowPublicKey` is the whole switch — the feature is off
+   * until one is set, and unsetting it turns the feature off again.
    */
   chatIncognito: {
-    enabled: process.env.ARCHESTRA_CHAT_INCOGNITO_ENABLED !== "false",
     /**
      * The PEM (or base64-of-PEM) RSA public key conversation keys are escrowed
      * to for break-glass recovery; the private half stays offline with the

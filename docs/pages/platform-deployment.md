@@ -881,13 +881,11 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
   - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
 - **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`** - Enables [incognito chats](/docs/platform-content-encryption#incognito-chats): conversations, and the audit records they produce, encrypted under a browser-held per-conversation key the server never stores. The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery. The wrapped key is stored on the conversation row; the private half stays offline with your security team, and without it the stored copy is useless.
-  - Default: not set — incognito chats are unavailable.
+  - Default: not set — incognito chats are unavailable. Unsetting it later turns the feature off again.
   - Escrow is required, not optional: an incognito chat encrypts its own audit trail, so without an escrowed key those records could be read by nobody.
   - Startup fails when the value is not a valid RSA public key of at least 2048 bits.
   - Set it in its own rollout, after the release is deployed, so no replica writes a record an older one cannot read.
   - See [Incognito Chats](/docs/platform-content-encryption#incognito-chats) for setup and the recovery procedure.
-- **`ARCHESTRA_CHAT_INCOGNITO_ENABLED`** - Kill switch for incognito chats, independent of the escrow key.
-  - Default: `true`. Set to `false` to remove the composer toggle and reject incognito conversation creation while leaving the escrow key configured.
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.

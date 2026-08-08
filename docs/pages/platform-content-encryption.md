@@ -58,7 +58,7 @@ This is not end-to-end encryption. The server sees content while serving request
 
 Incognito chats are off until you configure [key escrow](#key-escrow). Escrow keeps an offline-recoverable copy of each chat's key.
 
-Escrow is required because an incognito chat encrypts its own audit trail. Without an escrowed copy, those records could be read by nobody — not even during an investigation. Set `ARCHESTRA_CHAT_INCOGNITO_ENABLED=false` to turn the feature off again without removing the escrow key.
+Escrow is required because an incognito chat encrypts its own audit trail. Without an escrowed copy, those records could be read by nobody — not even during an investigation. Remove the escrow key to turn the feature off again.
 
 Users start an incognito chat from the composer toggle. If the browser's copy of the key is lost — cleared site data, a different browser or device — the chat opens to a notice that its contents can't be read. The conversation row and its title remain visible. Without [key escrow](#key-escrow), a lost key is unrecoverable.
 

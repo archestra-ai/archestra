@@ -1,5 +1,4 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import config from "@/config";
 import type { ConversationContentKey } from "@/types/conversation";
 import {
   decryptStringWithKey,
@@ -41,12 +40,12 @@ import { isIncognitoEscrowConfigured } from "./incognito-escrow";
 export const INCOGNITO_KEY_HEADER = "x-archestra-incognito-key";
 
 /**
- * True when incognito chats are offered: an escrow key is configured (the
- * enablement switch) and the operator has not explicitly turned the feature
- * off. Off by default, because escrow is unset by default.
+ * True when incognito chats are offered. Configuring an escrow key is the only
+ * switch: without one the feature cannot work correctly (see below), so a
+ * second flag would only add a way to express the same intent twice.
  */
 export function isIncognitoChatEnabled(): boolean {
-  return config.chatIncognito.enabled && isIncognitoEscrowConfigured();
+  return isIncognitoEscrowConfigured();
 }
 
 /**

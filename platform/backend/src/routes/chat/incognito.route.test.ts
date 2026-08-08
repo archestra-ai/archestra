@@ -2,7 +2,7 @@
  * Contract under test — incognito conversations at the route level:
  * - the feature is FREE and on by default: creation needs no license and no
  *   escrow key, only a valid 32-byte key header; disabling it via
- *   ARCHESTRA_CHAT_INCOGNITO_ENABLED=false rejects creation (403)
+ *   creation is refused (403) when no escrow key is configured
  * - without escrow configured, the fingerprint is stored and
  *   incognito_escrow stays NULL (no recoverable key copy anywhere)
  * - with enterprise escrow configured, the RSA-wrapped blob is stored and
@@ -60,7 +60,6 @@ describe("incognito conversation routes", () => {
     // config auto-restore does not apply — a flag a test flips would
     // otherwise leak into the next test.
     config.enterpriseFeatures.core = false;
-    config.chatIncognito.enabled = true;
     // Escrow is what enables incognito, and the db sink needs no license — so
     // this IS the unlicensed default posture, not an enterprise one.
     config.chatIncognito.escrowPublicKey = ESCROW_PEM;
@@ -125,20 +124,6 @@ describe("incognito conversation routes", () => {
   }
 
   describe("POST /api/chat/conversations (incognito)", () => {
-    test("rejects when disabled via ARCHESTRA_CHAT_INCOGNITO_ENABLED", async () => {
-      config.chatIncognito.enabled = false;
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/chat/conversations",
-        headers: dekHeader(),
-        payload: { agentId, incognito: true },
-      });
-      expect(response.statusCode).toBe(403);
-      expect(response.json().error.message).toContain(
-        "ARCHESTRA_CHAT_INCOGNITO_ENABLED",
-      );
-    });
-
     test("rejects a missing or malformed key header", async () => {
       const missing = await app.inject({
         method: "POST",
@@ -244,12 +229,7 @@ describe("incognito conversation routes", () => {
 
   describe("GET /api/chat/conversations/:id (incognito)", () => {
     test.for([
-      [
-        "the feature is turned off",
-        () => {
-          config.chatIncognito.enabled = false;
-        },
-      ],
+      ["the feature is turned off", () => {}],
       [
         "the escrow key is removed",
         () => {

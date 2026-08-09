@@ -21,7 +21,6 @@ import {
   randomBytes,
 } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { vi } from "vitest";
 import config from "@/config";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 import { runContentEncryptionBackfill } from "@/content-encryption/backfill.ee";
@@ -31,7 +30,6 @@ import {
 } from "@/content-encryption/index.ee";
 import db from "@/database";
 import MessageModel from "@/models/message";
-import { secretManagerCoordinator } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";

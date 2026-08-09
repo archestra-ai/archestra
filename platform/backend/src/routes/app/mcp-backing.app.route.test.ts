@@ -146,11 +146,13 @@ describe("MCP backing for apps", () => {
     // The source app owns the launch tool being consumed elsewhere.
     const sourceAppId = await createApp("org");
     await AppModel.setEnabled(sourceAppId, false);
-    const sourceServer = await McpServerModel.findById(
-      (await AppModel.findById(sourceAppId))!.mcpServerId!,
+    const sourceServer = mustExist(
+      await McpServerModel.findById(
+        mustExist(mustExist(await AppModel.findById(sourceAppId)).mcpServerId),
+      ),
     );
     const launchTool = (
-      await ToolModel.findByCatalogIdWithMeta(sourceServer!.catalogId)
+      await ToolModel.findByCatalogIdWithMeta(sourceServer.catalogId)
     )[0];
 
     // A second, unrelated app has the source app's launch tool assigned to it

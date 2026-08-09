@@ -6,7 +6,7 @@ import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
-import { OrganizationModel, SessionModel } from "@/models";
+import { OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { Authnz } from "./middleware";

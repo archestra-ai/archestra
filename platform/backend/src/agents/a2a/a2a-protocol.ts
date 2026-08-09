@@ -155,8 +155,6 @@ const A2AProtocolTaskStatusSchema = z.object({
   /** RFC 3339 datetime (protobuf JSON `google.protobuf.Timestamp`). */
   timestamp: z.iso.datetime().optional(),
 });
-type A2AProtocolTaskStatus = z.infer<typeof A2AProtocolTaskStatusSchema>;
-
 export const A2AProtocolTaskSchema = z.object({
   id: z.string(),
   contextId: z.string().optional(),
@@ -342,10 +340,6 @@ const A2AProtocolTaskStatusUpdateEventSchema = z.object({
   final: z.boolean().optional(),
   metadata: z.any().optional(),
 });
-type A2AProtocolTaskStatusUpdateEvent = z.infer<
-  typeof A2AProtocolTaskStatusUpdateEventSchema
->;
-
 /**
  * A2A v1.0 TaskArtifactUpdateEvent: one chunk of a task artifact. Chunked
  * delivery repeats the same `artifact.artifactId` with `append: true`;
@@ -359,10 +353,6 @@ const A2AProtocolTaskArtifactUpdateEventSchema = z.object({
   lastChunk: z.boolean().optional(),
   metadata: z.any().optional(),
 });
-type A2AProtocolTaskArtifactUpdateEvent = z.infer<
-  typeof A2AProtocolTaskArtifactUpdateEventSchema
->;
-
 /**
  * A single event in a SendStreamingMessage / SubscribeToTask stream. Exactly
  * one field is set per event: `statusUpdate` for incremental working/terminal

@@ -41,9 +41,10 @@ export function GoogleDriveAuthFields({
   prefix = "config",
 }: GoogleDriveConfigFieldsProps) {
   const oauth = useFeature("kbGoogleDriveOAuth");
-  const authMode =
-    (form.watch(`${prefix}.authMode`) as string | undefined) ??
-    DEFAULT_GDRIVE_AUTH_MODE;
+  // Left undefined for a connector predating auth modes. Those still infer the
+  // identity from their credential's shape, and naming a mode they are not in
+  // would be a lie the first save turned true.
+  const authMode = form.watch(`${prefix}.authMode`) as string | undefined;
   const folderId = form.watch(`${prefix}.folderId`) as string | undefined;
   const driveIds = form.watch(`${prefix}.driveIds`) as
     | string
@@ -60,12 +61,12 @@ export function GoogleDriveAuthFields({
           <FormItem>
             <FormLabel>How should Archestra reach Drive?</FormLabel>
             <Select
-              value={(field.value as string) ?? DEFAULT_GDRIVE_AUTH_MODE}
+              value={(field.value as string) ?? ""}
               onValueChange={field.onChange}
             >
               <FormControl>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Set by the credential (choose to change)" />
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
@@ -92,6 +93,8 @@ export function GoogleDriveAuthFields({
                   : "This deployment has no Google OAuth client. Set ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID and ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET to offer this mode.")}
               {authMode === "service_account" &&
                 "The service account sees only what has been shared with its own email address — every folder, by hand, forever."}
+              {!authMode &&
+                "This connector predates auth modes and still works out its identity from the credential it holds. Pick a mode to state it explicitly."}
             </FormDescription>
             <FormMessage />
           </FormItem>

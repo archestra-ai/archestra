@@ -1959,6 +1959,32 @@ describe("GoogleDriveConnector", () => {
       expect(mockFilesGet).toHaveBeenCalledTimes(1);
     });
 
+    it("retries a file through another viewer when the first download failed", async () => {
+      // Claiming the id at listing time would write the file off for everyone
+      // else the moment one identity's download failed.
+      resetMocks();
+      mockDrivesList.mockResolvedValue({ data: { drives: [] } });
+      mockDirectoryUsersList.mockResolvedValue({
+        data: {
+          users: [
+            { primaryEmail: "ada@example.com" },
+            { primaryEmail: "grace@example.com" },
+          ],
+        },
+      });
+
+      const shared = makeDriveFile("f-shared", "handbook.md");
+      mockFilesList.mockResolvedValue({ data: { files: [shared] } });
+      mockFilesGet
+        .mockRejectedValueOnce(new Error("403 cannotDownloadFile"))
+        .mockResolvedValueOnce({ data: Buffer.from("the handbook").buffer });
+
+      const batches = await drainDomainSync();
+
+      expect(batches.flatMap((b) => b.documents)).toHaveLength(1);
+      expect(mockFilesGet).toHaveBeenCalledTimes(2);
+    });
+
     it("impersonates a member when the admin cannot open a shared drive", async () => {
       resetMocks();
       mockDrivesList.mockResolvedValueOnce({
@@ -2010,12 +2036,15 @@ describe("GoogleDriveConnector", () => {
       const skipped = batches.flatMap((b) => b.skipped ?? []);
 
       expect(skipped.map((s) => s.itemId)).toContain("orphan-drive");
+      // Not silently written off: the next pass crawls it in full.
+      const final = batches.at(-1)?.checkpoint as Record<string, unknown>;
+      expect(final.domainFullCrawlTargets).toEqual(["drive:orphan-drive"]);
     });
 
-    it("resumes at the target it stopped on rather than the first one", async () => {
+    it("resumes where an interrupted pass stopped", async () => {
       resetMocks();
-      mockDrivesList.mockResolvedValueOnce({ data: { drives: [] } });
-      mockDirectoryUsersList.mockResolvedValueOnce({
+      mockDrivesList.mockResolvedValue({ data: { drives: [] } });
+      mockDirectoryUsersList.mockResolvedValue({
         data: {
           users: [
             { primaryEmail: "ada@example.com" },
@@ -2023,16 +2052,110 @@ describe("GoogleDriveConnector", () => {
           ],
         },
       });
-      mockFilesList.mockResolvedValueOnce({ data: { files: [] } });
+      mockFilesList.mockResolvedValue({ data: { files: [] } });
 
-      await drainDomainSync({
-        type: "gdrive",
-        domainTargetsDone: ["user:ada@example.com"],
-        domainSyncStartedAt: "2026-01-01T00:00:00.000Z",
-      });
+      // Stop after the first batch, the way a run out of its time budget does.
+      let interrupted: ConnectorSyncBatch | undefined;
+      for await (const batch of new GoogleDriveConnector().sync({
+        config: domainConfig,
+        credentials: serviceAccountCredentials,
+        checkpoint: null,
+      })) {
+        interrupted = batch;
+        break;
+      }
+
+      const resumeFrom = interrupted?.checkpoint as Record<string, unknown>;
+      expect(resumeFrom.domainTargetsCompleted).toBe(1);
+      expect(resumeFrom.domainTargetsFingerprint).toEqual(expect.any(String));
+
+      impersonatedSubjects.length = 0;
+      for await (const _batch of new GoogleDriveConnector().sync({
+        config: domainConfig,
+        credentials: serviceAccountCredentials,
+        checkpoint: resumeFrom,
+      })) {
+        // drain
+      }
 
       expect(impersonatedSubjects).not.toContain("ada@example.com");
       expect(impersonatedSubjects).toContain("grace@example.com");
+    });
+
+    it("starts over when the domain's membership changed under a resume", async () => {
+      // The checkpoint counts targets, so a count taken against a different
+      // roster would skip identities this pass never actually visited.
+      resetMocks();
+      mockDrivesList.mockResolvedValue({ data: { drives: [] } });
+      mockDirectoryUsersList.mockResolvedValue({
+        data: { users: [{ primaryEmail: "ada@example.com" }] },
+      });
+      mockFilesList.mockResolvedValue({ data: { files: [] } });
+
+      await drainDomainSync({
+        type: "gdrive",
+        domainTargetsCompleted: 1,
+        domainTargetsFingerprint: "a-roster-that-no-longer-matches",
+        domainSyncStartedAt: "2026-01-01T00:00:00.000Z",
+      });
+
+      expect(impersonatedSubjects).toContain("ada@example.com");
+    });
+
+    it("keeps going when one identity cannot be read, and carries it forward", async () => {
+      // An account with no Drive licence is ordinary in a real domain. Failing
+      // the run on it would strand every user sorted after it, forever.
+      resetMocks();
+      mockDrivesList.mockResolvedValue({ data: { drives: [] } });
+      mockDirectoryUsersList.mockResolvedValue({
+        data: {
+          users: [
+            { primaryEmail: "ada@example.com" },
+            { primaryEmail: "grace@example.com" },
+          ],
+        },
+      });
+      mockFilesList
+        .mockRejectedValueOnce(new Error("User does not have Drive enabled"))
+        .mockResolvedValue({
+          data: { files: [makeDriveFile("f-grace", "notes.txt")] },
+        });
+      mockFilesGet.mockResolvedValue({ data: Buffer.from("grace").buffer });
+
+      const batches = await drainDomainSync();
+
+      // grace still synced despite ada failing first.
+      expect(batches.flatMap((b) => b.documents).map((d) => d.title)).toEqual([
+        "notes.txt",
+      ]);
+      expect(
+        batches.flatMap((b) => b.skipped ?? []).map((s) => s.itemId),
+      ).toContain("ada@example.com");
+
+      // The cursor still advances, but ada is queued for a full crawl next
+      // pass — an incremental query would never revisit what it missed.
+      const final = batches.at(-1)?.checkpoint as Record<string, unknown>;
+      expect(final.lastSyncedAt).toEqual(expect.any(String));
+      expect(final.domainFullCrawlTargets).toEqual(["user:ada@example.com"]);
+    });
+
+    it("crawls a carried-over target in full rather than incrementally", async () => {
+      resetMocks();
+      mockDrivesList.mockResolvedValue({ data: { drives: [] } });
+      mockDirectoryUsersList.mockResolvedValue({
+        data: { users: [{ primaryEmail: "ada@example.com" }] },
+      });
+      mockFilesList.mockResolvedValue({ data: { files: [] } });
+
+      await drainDomainSync({
+        type: "gdrive",
+        lastSyncedAt: "2026-06-01T00:00:00.000Z",
+        domainFullCrawlTargets: ["user:ada@example.com"],
+      });
+
+      // No modifiedTime floor on the query for the carried-over identity.
+      const query = mockFilesList.mock.calls[0]?.[0]?.q as string;
+      expect(query).not.toContain("modifiedTime");
     });
 
     it("only advances the cursor once the whole pass is done", async () => {
@@ -2060,7 +2183,7 @@ describe("GoogleDriveConnector", () => {
       // The closing batch advances it and clears the per-target progress.
       const final = batches.at(-1)?.checkpoint as Record<string, unknown>;
       expect(final.lastSyncedAt).not.toBe("2026-01-01T00:00:00.000Z");
-      expect(final.domainTargetsDone).toBeUndefined();
+      expect(final.domainTargetsCompleted).toBeUndefined();
       expect(batches.at(-1)?.hasMore).toBe(false);
     });
 

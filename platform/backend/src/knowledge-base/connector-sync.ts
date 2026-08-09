@@ -157,7 +157,35 @@ class ConnectorSyncService {
     // and no ACL writer may trust a start-of-run snapshot. The current ownership
     // rule is re-read from the connector row at each batch boundary (ACL-write
     // time) — see the batch loop below.
-    const credentials = await resolveConnectorCredentials(connector);
+    // Resolving credentials can fail on its own (a missing secret, a Google
+    // OAuth client that was rotated out from under the connector). That has to
+    // land on the run row: it already exists, so an escaping throw would leave
+    // it "running" until the lease reaper collects it, with nothing saying why.
+    let credentials: Awaited<ReturnType<typeof resolveConnectorCredentials>>;
+    try {
+      credentials = await resolveConnectorCredentials(connector);
+    } catch (error) {
+      const message = extractErrorMessage(error);
+      runLog.error(
+        { error: message },
+        "Could not resolve connector credentials",
+      );
+      await ConnectorRunModel.updateIfOwned({
+        runId: run.id,
+        epoch,
+        data: {
+          status: "failed",
+          completedAt: new Date(),
+          error: message,
+          logs: options?.getLogOutput?.() ?? null,
+        },
+      });
+      await KnowledgeBaseConnectorModel.update(connectorId, {
+        lastSyncStatus: "failed",
+        lastSyncError: message,
+      });
+      return { runId: run.id, status: "failed" };
+    }
 
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
@@ -179,6 +207,10 @@ class ConnectorSyncService {
     let documentsIngested = 0;
     let itemErrors = 0;
     let itemsSkipped = 0;
+    // Per-item fetch fallbacks. These stay warnings (the run is not "completed
+    // with errors" for them), but a run that ingested nothing needs to know
+    // they happened before blaming the sharing configuration.
+    let itemFetchFailures = 0;
     let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
@@ -335,6 +367,7 @@ class ConnectorSyncService {
         // run to completed_with_errors. Only documents that actually failed
         // to ingest leave data missing and deserve that status.
         if (batch.failures?.length) {
+          itemFetchFailures += batch.failures.length;
           runLog.warn(
             { failures: batch.failures.length },
             "Batch completed with sub-resource fallbacks (see item warnings above)",
@@ -476,7 +509,11 @@ class ConnectorSyncService {
               ? "no_documents"
               : "success";
         const diagnosis = emptyConnector
-          ? describeEmptySync({ itemsSkipped, documentsProcessed })
+          ? describeEmptySync({
+              itemsSkipped,
+              documentsProcessed,
+              itemFetchFailures,
+            })
           : null;
 
         const updated = await ConnectorRunModel.updateIfOwned({
@@ -496,7 +533,10 @@ class ConnectorSyncService {
 
         if (updated) {
           if (diagnosis) {
-            runLog.warn({ itemsSkipped, documentsProcessed }, diagnosis);
+            runLog.warn(
+              { itemsSkipped, documentsProcessed, itemFetchFailures },
+              diagnosis,
+            );
           }
           await KnowledgeBaseConnectorModel.update(connectorId, {
             lastSyncStatus: finalStatus,
@@ -910,9 +950,15 @@ export const connectorSyncService = new ConnectorSyncService();
 function describeEmptySync(params: {
   itemsSkipped: number;
   documentsProcessed: number;
+  itemFetchFailures: number;
 }): string {
-  const { itemsSkipped, documentsProcessed } = params;
+  const { itemsSkipped, documentsProcessed, itemFetchFailures } = params;
 
+  // Items were found and every one of them failed to come back. Pointing at
+  // the sharing configuration here would send someone to the wrong console.
+  if (itemFetchFailures > 0) {
+    return `Indexed nothing: ${itemFetchFailures} item${itemFetchFailures === 1 ? "" : "s"} were found but could not be fetched. See the run logs for the individual failures — the credential can list this source but not read its contents.`;
+  }
   if (itemsSkipped > 0 && itemsSkipped === documentsProcessed) {
     return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped as unsupported types. Widen or remove the file-type filter, or point the connector at content it can read.`;
   }

@@ -49,6 +49,8 @@ describe("Google Drive individual (OAuth) connection", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
+  /** Whose session the next request carries; swapped to test the binding. */
+  let requestUser: User;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
     mockEnqueue.mockClear();
@@ -56,12 +58,13 @@ describe("Google Drive individual (OAuth) connection", () => {
     mockAboutGet.mockReset();
 
     user = await makeUser();
+    requestUser = user;
     const organization = await makeOrganization();
     organizationId = organization.id;
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { user: unknown }).user = requestUser;
       (request as typeof request & { organizationId: string }).organizationId =
         organizationId;
     });
@@ -180,6 +183,41 @@ describe("Google Drive individual (OAuth) connection", () => {
       taskType: "connector_sync",
       payload: { connectorId: created.id },
     });
+  });
+
+  test("refuses an authorization redeemed by a different account", async ({
+    makeUser,
+  }) => {
+    // Anyone who can start a flow can pass its link to someone else. Without
+    // binding the callback to the session that started it, the victim's
+    // consent would land a token for THEIR Drive on the starter's connector.
+    const created = (await createOAuthConnector()).json();
+
+    const start = await app.inject({
+      method: "POST",
+      url: `/api/connectors/${created.id}/gdrive/oauth/start`,
+      payload: {},
+    });
+    const state = new URL(start.json().authorizationUrl).searchParams.get(
+      "state",
+    );
+
+    requestUser = await makeUser();
+
+    const callback = await app.inject({
+      method: "GET",
+      url: `/api/connectors/gdrive/oauth/callback?code=victim-code&state=${encodeURIComponent(state ?? "")}`,
+    });
+
+    expect(callback.statusCode).toBe(302);
+    expect(callback.headers.location).toContain("gdriveOauthError=");
+    expect(mockGetToken).not.toHaveBeenCalled();
+
+    const stored = await secretManager().getSecret(created.secretId);
+    expect(
+      (stored?.secret as { googleOAuth: { refreshToken?: string } }).googleOAuth
+        .refreshToken,
+    ).toBeUndefined();
   });
 
   test("a callback with a forged state writes nothing", async () => {

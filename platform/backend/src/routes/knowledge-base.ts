@@ -2111,9 +2111,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CompleteGoogleDriveConnectorOAuth,
         description:
           "Where Google returns the browser after an individual Google Drive " +
-          "authorization. Trusts the signed state parameter rather than the " +
-          "session: a cross-site redirect is not guaranteed to carry cookies, " +
-          "and state is what binds the response to the request we issued.",
+          "authorization. Requires the session of the person who started the " +
+          "flow: the signed state proves only that this deployment issued a " +
+          "flow, so on its own it would let one person's authorization be " +
+          "redeemed onto another person's connector.",
         tags: ["Connectors"],
         querystring: z.object({
           code: z.string().optional(),
@@ -2124,7 +2125,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // so the person authorizing sees the connector rather than raw JSON.
       },
     },
-    async ({ query }, reply) => {
+    async ({ query, organizationId, user }, reply) => {
       const state = query.state
         ? verifyGoogleDriveOAuthState(query.state)
         : null;
@@ -2149,6 +2150,24 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!state || !query.code) {
         return failed(
           "That Google authorization link is no longer valid. Start the connection again.",
+        );
+      }
+
+      // The state travels through Google and back, so anyone who can start a
+      // flow can hand its link to somebody else. Redeeming it against the
+      // session that started it is what stops one person's Drive from being
+      // attached to another person's connector.
+      if (state.userId !== user.id || state.organizationId !== organizationId) {
+        logger.warn(
+          {
+            connectorId: state.connectorId,
+            stateUserId: state.userId,
+            sessionUserId: user.id,
+          },
+          "Google Drive OAuth callback presented to a different session than started it",
+        );
+        return failed(
+          "That Google authorization was started by a different account. Start the connection again from this connector.",
         );
       }
 

@@ -22,7 +22,6 @@ import {
   AUTH_STATE_PATH,
   CONNECTION_HEALTH_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
-  GOOGLE_DRIVE_OAUTH_CALLBACK_PATH,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   METRICS_PATH,
@@ -209,14 +208,6 @@ export class Authnz {
           url.startsWith(`${CONNECTION_HEALTH_PATH}?`))) ||
       // Allow fetching public appearance settings for login page (theme, logo, font)
       (method === "GET" && url === ORGANIZATION_APPEARANCE_SETTINGS_PATH) ||
-      // Google Drive OAuth return leg. Google redirects the browser here from
-      // its own origin, and a cross-site navigation is not guaranteed to carry
-      // the session cookie, so the signed `state` parameter authorizes the
-      // call instead — the handler re-checks the connector against the user
-      // named in that state before writing anything.
-      (method === "GET" &&
-        (url === GOOGLE_DRIVE_OAUTH_CALLBACK_PATH ||
-          url.startsWith(`${GOOGLE_DRIVE_OAUTH_CALLBACK_PATH}?`))) ||
       // Incoming email webhooks - Microsoft Graph calls these directly
       // Only allow the exact webhook path (with optional query params), not sub-paths like /setup
       url === INCOMING_EMAIL_WEBHOOK_PREFIX ||

@@ -332,17 +332,32 @@ export const GoogleDriveCheckpointSchema = z.object({
   type: GDRIVE,
   lastSyncedAt: z.string().optional(),
   /**
-   * Domain-wide sync progress: the shared drives and impersonated users this
-   * pass has finished, as `drive:<id>` / `user:<email>` entries. The pass
-   * walks the domain one target at a time, so an interrupted run has to know
-   * which are already done — without this it would restart at the first target
-   * every time and a domain bigger than one run could never finish.
+   * Domain-wide sync progress. The pass walks the domain's shared drives and
+   * users one at a time, so an interrupted run has to know where it got to —
+   * without this it would restart at the first target every time and a domain
+   * bigger than one run could never finish.
    *
-   * `domainSyncStartedAt` stamps the pass that `domainTargetsDone` belongs to;
-   * when a pass completes, both are cleared and `lastSyncedAt` advances to it.
+   * Progress is a count into the ordered target list, not the list of finished
+   * targets: a domain of twenty thousand identities would otherwise write a
+   * list that size into this checkpoint on every batch. `domainTargetsFingerprint`
+   * is what makes the count meaningful — when the domain's membership changes
+   * the count refers to different targets, so the pass starts over rather than
+   * skipping ones it never visited.
+   *
+   * `domainSyncStartedAt` stamps the pass the count belongs to; when a pass
+   * completes, both are cleared and `lastSyncedAt` advances to it.
    */
-  domainTargetsDone: z.array(z.string()).optional(),
+  domainTargetsCompleted: z.number().int().nonnegative().optional(),
+  domainTargetsFingerprint: z.string().optional(),
   domainSyncStartedAt: z.string().optional(),
+  /**
+   * Targets a pass could not read — an account with no Drive licence, a shared
+   * drive with no reachable member, a request that hit a rate limit. The next
+   * pass crawls these in full: everything that existed while they were
+   * unreachable is older than the cursor, so an incremental query would never
+   * look at it again.
+   */
+  domainFullCrawlTargets: z.array(z.string()).optional(),
 });
 export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
 

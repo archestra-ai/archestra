@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ModelInputModality } from "@archestra/shared";
 import type { admin_directory_v1, drive_v3 } from "googleapis";
 import type {
@@ -54,6 +55,22 @@ const DOMAIN_PROGRESS_CHECKPOINT_TARGETS = 50;
  * document is wasteful but harmless, since ingestion upserts by file id.
  */
 const MAX_TRACKED_FILE_IDS = 2_000_000;
+
+/**
+ * How many members of an unreachable shared drive to try impersonating, and
+ * how many pages of its membership to read looking for them. A drive with one
+ * departed organizer should still open; reading an entire membership list to
+ * find the tenth candidate should not.
+ */
+const MAX_SHARED_DRIVE_MEMBER_ATTEMPTS = 5;
+const MAX_SHARED_DRIVE_MEMBER_PAGES = 500;
+
+/** One thing a domain-wide pass walks: a shared drive, or a user's My Drive. */
+interface DomainTarget {
+  key: string;
+  driveId?: string;
+  user?: string;
+}
 
 // File extensions whose text content we can extract via direct download
 const SUPPORTED_TEXT_EXTENSIONS = new Set([
@@ -462,12 +479,20 @@ export class GoogleDriveConnector extends BaseConnector {
    *
    * The two halves do not overlap: a per-user listing uses the default `user`
    * corpus, which excludes shared drives. Files shared between users' own
-   * Drives do overlap, so a file id seen once is not fetched again.
+   * Drives do overlap, so a file already ingested this pass is not fetched
+   * again through a second viewer.
    *
    * `lastSyncedAt` only advances when a pass finishes, and it advances to when
    * that pass *started* rather than to the newest file it saw. A pass spans
    * many identities over a long time; anything modified while it was running
    * has to stay in scope for the next one.
+   *
+   * A domain always contains identities that cannot be read — an account with
+   * no Drive licence, a shared drive with no reachable member, a request that
+   * hits a rate limit. None of those may fail the run: the pass records the
+   * target, carries it forward for a full crawl on the next pass, and keeps
+   * going. Failing instead would strand every target after it, permanently,
+   * because the cursor could never advance past the one that broke.
    */
   private async *syncDomain(params: {
     config: GoogleDriveConfig;
@@ -488,16 +513,23 @@ export class GoogleDriveConnector extends BaseConnector {
     // move past work that actually finished.
     const passStartedAt =
       checkpoint.domainSyncStartedAt ?? new Date().toISOString();
-    const done = new Set(checkpoint.domainTargetsDone ?? []);
-    const syncFrom = checkpoint.lastSyncedAt
+    const incrementalFrom = checkpoint.lastSyncedAt
       ? subtractSafetyBuffer(checkpoint.lastSyncedAt)
       : undefined;
     const seenFileIds = new Set<string>();
 
-    const sharedDriveIds = await this.listDomainSharedDrives(adminAuth);
+    // Targets a previous pass could not read. They are crawled in full rather
+    // than incrementally, because everything that existed while they were
+    // unreachable is older than the cursor and an incremental query would
+    // never look at it.
+    const needsFullCrawl = new Set(checkpoint.domainFullCrawlTargets ?? []);
+
+    const sharedDriveIds = (
+      await this.listDomainSharedDrives(adminAuth)
+    ).sort();
     const userEmails = await this.listDomainUsers(directory);
 
-    const targets: Array<{ key: string; driveId?: string; user?: string }> = [
+    const targets: DomainTarget[] = [
       ...sharedDriveIds.map((driveId) => ({
         key: `drive:${driveId}`,
         driveId,
@@ -505,13 +537,29 @@ export class GoogleDriveConnector extends BaseConnector {
       ...userEmails.map((user) => ({ key: `user:${user}`, user })),
     ];
 
+    // Progress is a count into this ordered list rather than the list of
+    // finished keys: a domain of twenty thousand identities would otherwise
+    // rewrite a list that size into the checkpoint on every batch. The
+    // fingerprint is what makes the count meaningful — if the domain's
+    // membership changed, the count points at different targets, so the pass
+    // starts over instead of skipping ones it never visited.
+    const fingerprint = fingerprintDomainTargets(targets);
+    const resumeAfter =
+      checkpoint.domainTargetsFingerprint === fingerprint
+        ? (checkpoint.domainTargetsCompleted ?? 0)
+        : 0;
+
+    let completed = resumeAfter;
+    const unreadable: string[] = [];
+
     this.log.info(
       {
         sharedDrives: sharedDriveIds.length,
         users: userEmails.length,
-        alreadyDone: done.size,
+        resumeAfter,
+        fullCrawlCarriedOver: needsFullCrawl.size,
         passStartedAt,
-        syncFrom,
+        incrementalFrom,
       },
       "Starting domain-wide Google Drive sync",
     );
@@ -519,26 +567,33 @@ export class GoogleDriveConnector extends BaseConnector {
     const domainCheckpoint = (): GoogleDriveCheckpoint => ({
       type: "gdrive",
       lastSyncedAt: checkpoint.lastSyncedAt,
-      domainTargetsDone: [...done],
+      domainTargetsCompleted: completed,
+      domainTargetsFingerprint: fingerprint,
       domainSyncStartedAt: passStartedAt,
+      ...(needsFullCrawl.size > 0
+        ? { domainFullCrawlTargets: [...needsFullCrawl] }
+        : {}),
     });
+
+    const markUnreadable = (target: DomainTarget, reason: string) => {
+      unreadable.push(target.key);
+      needsFullCrawl.add(target.key);
+      this.trackSkipped({
+        itemId: target.driveId ?? target.user ?? target.key,
+        name: target.user ?? `Shared drive ${target.driveId}`,
+        reason,
+      });
+    };
 
     let targetsSinceYield = 0;
 
-    for (const target of targets) {
-      if (done.has(target.key)) continue;
+    for (const [index, target] of targets.entries()) {
+      if (index < resumeAfter) continue;
 
-      const identityDrive = await this.openDomainTarget({
-        adminAuth,
-        target,
-      });
-
+      const identityDrive = await this.openDomainTarget({ adminAuth, target });
       if (!identityDrive) {
-        // Recorded rather than dropped: a shared drive the delegated admin
-        // cannot open is exactly the gap this connector exists to close, and
-        // it has to be visible in the run rather than inferred from a
-        // suspiciously low document count.
-        done.add(target.key);
+        markUnreadable(target, "unreachable_target");
+        completed = index + 1;
         targetsSinceYield++;
         continue;
       }
@@ -551,21 +606,41 @@ export class GoogleDriveConnector extends BaseConnector {
         drive: identityDrive,
         config: identityConfig,
         progress: { maxLastModified: undefined },
-        syncFrom,
+        // A target carried over as unreadable gets everything, not just what
+        // changed since a cursor it was never covered by.
+        syncFrom: needsFullCrawl.has(target.key) ? undefined : incrementalFrom,
         batchSize,
         supportsImages,
         dedupe: seenFileIds,
       });
 
+      // Pulling from the generator is wrapped, but yielding is not: a throw
+      // raised by whoever consumes these batches must propagate, not be
+      // mistaken for this identity being unreadable.
+      const advance = async (): Promise<{
+        batch?: ConnectorSyncBatch;
+        error?: unknown;
+      }> => {
+        try {
+          const next = await inner.next();
+          return next.done ? {} : { batch: next.value };
+        } catch (error) {
+          return { error };
+        }
+      };
+
+      let current = await advance();
+      let failure = current.error;
+
       // Peek one batch ahead so the LAST batch of a target is the one that
-      // records the target as finished. Marking it earlier would let an
-      // interruption skip work that never happened.
-      let next = await inner.next();
-      while (!next.done) {
-        const batch = next.value;
-        next = await inner.next();
-        if (next.done) {
-          done.add(target.key);
+      // records it as finished. Marking it earlier would let an interruption
+      // skip work that never happened.
+      while (current.batch) {
+        const batch = current.batch;
+        const next = await advance();
+        failure ??= next.error;
+        if (!next.batch) {
+          completed = index + 1;
           targetsSinceYield = 0;
         }
         yield {
@@ -576,11 +651,22 @@ export class GoogleDriveConnector extends BaseConnector {
           // finish the pass early — recording targets it never walked as done.
           hasMore: true,
         };
+        current = next;
       }
 
-      if (!done.has(target.key)) {
-        done.add(target.key);
+      if (completed <= index) {
+        completed = index + 1;
         targetsSinceYield++;
+      }
+
+      if (failure) {
+        markUnreadable(target, "identity_read_failed");
+        this.log.warn(
+          { target: target.key, error: extractErrorMessage(failure) },
+          "Skipping a domain target that could not be read",
+        );
+      } else {
+        needsFullCrawl.delete(target.key);
       }
 
       // Long stretches of empty accounts yield nothing, so progress would
@@ -598,17 +684,31 @@ export class GoogleDriveConnector extends BaseConnector {
     }
 
     this.log.info(
-      { targets: targets.length, uniqueFiles: seenFileIds.size },
-      "Domain-wide Google Drive sync complete",
+      {
+        targets: targets.length,
+        uniqueFiles: seenFileIds.size,
+        unreadable: unreadable.length,
+      },
+      unreadable.length > 0
+        ? "Domain-wide Google Drive sync complete, with targets it could not read"
+        : "Domain-wide Google Drive sync complete",
     );
 
-    // Close the pass: clear the per-target progress and move the cursor to
-    // when this pass began.
+    // Close the pass: clear its per-target progress and move the cursor to
+    // when the pass began. Targets that could not be read stay listed, so the
+    // next pass crawls them in full instead of asking only for changes since a
+    // cursor that skipped over them.
     yield {
       documents: [],
       failures: this.flushFailures(),
       skipped: this.flushSkipped(),
-      checkpoint: { type: "gdrive", lastSyncedAt: passStartedAt },
+      checkpoint: {
+        type: "gdrive",
+        lastSyncedAt: passStartedAt,
+        ...(unreadable.length > 0
+          ? { domainFullCrawlTargets: unreadable }
+          : {}),
+      },
       hasMore: false,
     };
   }
@@ -624,7 +724,7 @@ export class GoogleDriveConnector extends BaseConnector {
    */
   private async openDomainTarget(params: {
     adminAuth: DelegatedServiceAccountAuth;
-    target: { key: string; driveId?: string; user?: string };
+    target: DomainTarget;
   }): Promise<drive_v3.Drive | null> {
     const { adminAuth, target } = params;
 
@@ -644,75 +744,80 @@ export class GoogleDriveConnector extends BaseConnector {
       // Falls through to impersonating a member.
     }
 
-    const member = await this.findSharedDriveMember(adminDrive, driveId);
-    if (!member) {
-      this.trackSkipped({
-        itemId: driveId,
-        name: `Shared drive ${driveId}`,
-        reason: "no_reachable_member",
-      });
-      this.log.warn(
-        { driveId },
-        "Shared drive has no impersonable member; skipping",
-      );
-      return null;
+    // Several candidates, because the first one is often not the one that
+    // works: an organizer may have left, and only a domain member can be
+    // impersonated at all.
+    const members = await this.findSharedDriveMembers(adminDrive, driveId);
+    const domain = adminAuth.subject.split("@")[1]?.toLowerCase();
+
+    for (const member of members) {
+      if (domain && !member.toLowerCase().endsWith(`@${domain}`)) continue;
+      const memberDrive = buildDriveClient({ ...adminAuth, subject: member });
+      try {
+        await this.rateLimit();
+        await memberDrive.drives.get({ driveId, fields: "id" });
+        this.log.debug(
+          { driveId, member },
+          "Opened shared drive by impersonating a member",
+        );
+        return memberDrive;
+      } catch (error) {
+        this.log.debug(
+          { driveId, member, error: extractErrorMessage(error) },
+          "Shared drive member could not open it either",
+        );
+      }
     }
 
-    const memberDrive = buildDriveClient({ ...adminAuth, subject: member });
-    try {
-      await this.rateLimit();
-      await memberDrive.drives.get({ driveId, fields: "id" });
-      this.log.debug(
-        { driveId, member },
-        "Opened shared drive by impersonating a member",
-      );
-      return memberDrive;
-    } catch (error) {
-      this.trackSkipped({
-        itemId: driveId,
-        name: `Shared drive ${driveId}`,
-        reason: "unreachable",
-      });
-      this.log.warn(
-        { driveId, member, error: extractErrorMessage(error) },
-        "Shared drive unreachable even as a member; skipping",
-      );
-      return null;
-    }
+    this.log.warn(
+      { driveId, candidates: members.length },
+      "Shared drive has no reachable member",
+    );
+    return null;
   }
 
-  private async findSharedDriveMember(
+  /**
+   * Members of a shared drive who might be able to open it, organizers first
+   * and groups left out — only an individual account can be impersonated.
+   */
+  private async findSharedDriveMembers(
     adminDrive: drive_v3.Drive,
     driveId: string,
-  ): Promise<string | null> {
+  ): Promise<string[]> {
+    const candidates: Array<{ email: string; organizer: boolean }> = [];
+    let pageToken: string | undefined;
+
     try {
-      await this.rateLimit();
-      const res = await adminDrive.permissions.list({
-        fileId: driveId,
-        supportsAllDrives: true,
-        useDomainAdminAccess: true,
-        fields: "permissions(type,role,emailAddress)",
-        pageSize: 100,
-      });
-      const members = res.data.permissions ?? [];
-      // Organizers first: the role most likely to see everything in the drive.
-      const ranked = [...members].sort(
-        (a, b) =>
-          (a.role === "organizer" ? 0 : 1) - (b.role === "organizer" ? 0 : 1),
-      );
-      for (const permission of ranked) {
-        if (permission.type === "user" && permission.emailAddress) {
-          return permission.emailAddress;
+      do {
+        await this.rateLimit();
+        const res = await adminDrive.permissions.list({
+          fileId: driveId,
+          supportsAllDrives: true,
+          useDomainAdminAccess: true,
+          fields: "nextPageToken,permissions(type,role,emailAddress)",
+          pageSize: 100,
+          pageToken,
+        });
+        for (const permission of res.data.permissions ?? []) {
+          if (permission.type !== "user" || !permission.emailAddress) continue;
+          candidates.push({
+            email: permission.emailAddress,
+            organizer: permission.role === "organizer",
+          });
         }
-      }
-      return null;
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken && candidates.length < MAX_SHARED_DRIVE_MEMBER_PAGES);
     } catch (error) {
       this.log.debug(
         { driveId, error: extractErrorMessage(error) },
         "Could not read shared drive membership",
       );
-      return null;
     }
+
+    return candidates
+      .sort((a, b) => Number(b.organizer) - Number(a.organizer))
+      .slice(0, MAX_SHARED_DRIVE_MEMBER_ATTEMPTS)
+      .map((candidate) => candidate.email);
   }
 
   /** Every shared drive in the domain, seen through domain-admin access. */
@@ -868,6 +973,10 @@ export class GoogleDriveConnector extends BaseConnector {
               file,
               supportsImages,
             );
+            // Claimed only once the download has actually succeeded. Claiming
+            // at listing time would let a file that failed here be written off
+            // for every other identity that can see it too.
+            claimFile(dedupe, file.id);
             // Skip files with no extractable content or media to avoid indexing
             // title-only documents that provide no search value.
             if (!result.text.trim() && !result.mediaContent) return null;
@@ -1068,6 +1177,8 @@ export class GoogleDriveConnector extends BaseConnector {
               file,
               supportsImages,
             );
+            // See syncDriveFiles: claimed on success, never on failure.
+            claimFile(dedupe, file.id);
             if (!result.text.trim() && !result.mediaContent) return null;
             return fileToDocument(file, result.text, result.mediaContent);
           },
@@ -1157,9 +1268,9 @@ export class GoogleDriveConnector extends BaseConnector {
    * Files whose type cannot be read are recorded as skipped rather than
    * silently dropped, so a run reports "N found, M imported, K unsupported"
    * instead of a total that counts every file against an import count that
-   * only covers some. Files another identity already contributed during this
-   * run are dropped outright — the same document reached through a second
-   * viewer is not a new document, and not a skip worth reporting either.
+   * only covers some. Files another identity already ingested during this run
+   * are dropped outright — the same document reached through a second viewer
+   * is not a new document, and not a skip worth reporting either.
    */
   private selectIngestableFiles(params: {
     files: DriveFile[];
@@ -1170,10 +1281,7 @@ export class GoogleDriveConnector extends BaseConnector {
     const selected: DriveFile[] = [];
 
     for (const file of files) {
-      if (dedupe && file.id) {
-        if (dedupe.has(file.id)) continue;
-        if (dedupe.size < MAX_TRACKED_FILE_IDS) dedupe.add(file.id);
-      }
+      if (dedupe && file.id && dedupe.has(file.id)) continue;
 
       if (isSupportedFile(file, supportsImages)) {
         selected.push(file);
@@ -1435,6 +1543,32 @@ function getFileExtension(name: string): string {
   const lastDot = name.lastIndexOf(".");
   if (lastDot < 0) return "";
   return name.slice(lastDot).toLowerCase();
+}
+
+/**
+ * Identifies the exact target list a progress count was recorded against, so
+ * a count is never applied to a list whose membership has since changed.
+ */
+/**
+ * Record a file as ingested by this run, so no other identity that can see it
+ * fetches it again. Stops recording past the cap rather than growing without
+ * bound — re-ingesting is wasteful but harmless, since ingestion upserts by
+ * file id.
+ */
+function claimFile(
+  dedupe: Set<string> | undefined,
+  fileId: string | null | undefined,
+): void {
+  if (!dedupe || !fileId) return;
+  if (dedupe.size >= MAX_TRACKED_FILE_IDS) return;
+  dedupe.add(fileId);
+}
+
+function fingerprintDomainTargets(targets: DomainTarget[]): string {
+  return createHash("sha256")
+    .update(targets.map((target) => target.key).join("\n"))
+    .digest("base64url")
+    .slice(0, 22);
 }
 
 function hasSharedDriveTarget(config: GoogleDriveConfig): boolean {

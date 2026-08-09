@@ -4348,7 +4348,7 @@ export const startGoogleDriveConnectorOAuth = <ThrowOnError extends boolean = fa
 });
 
 /**
- * Where Google returns the browser after an individual Google Drive authorization. Trusts the signed state parameter rather than the session: a cross-site redirect is not guaranteed to carry cookies, and state is what binds the response to the request we issued.
+ * Where Google returns the browser after an individual Google Drive authorization. Requires the session of the person who started the flow: the signed state proves only that this deployment issued a flow, so on its own it would let one person's authorization be redeemed onto another person's connector.
  *
  * Authentication:
  *
@@ -4356,7 +4356,7 @@ export const startGoogleDriveConnectorOAuth = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * None (no additional RBAC permission required)
+ * `knowledgeSource:update`: Modify Knowledge Bases and Connectors
  */
 export const completeGoogleDriveConnectorOAuth = <ThrowOnError extends boolean = false>(options?: Options<CompleteGoogleDriveConnectorOAuthData, ThrowOnError>) => (options?.client ?? client).get<CompleteGoogleDriveConnectorOAuthResponses, unknown, ThrowOnError>({ url: '/api/connectors/gdrive/oauth/callback', ...options });
 

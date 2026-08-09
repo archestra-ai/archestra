@@ -5,6 +5,7 @@ import {
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
+  type SupportedProviderEndpoint,
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
@@ -1393,7 +1394,12 @@ describe("GitHub Copilot surface selection", () => {
   // knowledge base) passes nothing here, and must keep the behaviour it has
   // today rather than being guessed onto a surface the model may not serve.
   test("falls back to chat completions when the surface is unknown", () => {
-    for (const supportedEndpoints of [undefined, null, []] as const) {
+    const unknownSurfaces: (SupportedProviderEndpoint[] | null | undefined)[] = [
+      undefined,
+      null,
+      [],
+    ];
+    for (const supportedEndpoints of unknownSurfaces) {
       const model = createLLMModel({ ...baseParams, supportedEndpoints });
       expect(model).toMatchObject({ provider: "openai.chat" });
     }

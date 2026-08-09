@@ -49,7 +49,7 @@ describe("createProxyPreHandler", () => {
 
   async function setupProxy(params: {
     apiPrefix: string;
-    endpointSuffix: string;
+    endpointSuffix: string | string[];
     rewritePrefix?: string;
     providerName: string;
     skipErrorResponse?: Record<string, unknown>;

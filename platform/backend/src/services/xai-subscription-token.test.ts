@@ -125,6 +125,26 @@ describe("xaiOauthEndpoints", () => {
     );
   });
 
+  test("refuses to widen a two-label issuer host to its entire TLD", async () => {
+    // For an issuer host like `x.ai` the "parent domain" would be the bare TLD
+    // `ai`; widening to it would admit any *.ai endpoint. Such issuers must
+    // match exactly.
+    const issuer = "https://two-label.test";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          device_authorization_endpoint: `${issuer}/oauth2/device/code`,
+          token_endpoint: "https://evil.test/oauth2/token",
+        }),
+      ),
+    );
+
+    await expect(withIssuer(issuer, xaiOauthEndpoints)).rejects.toThrow(
+      /out-of-domain/,
+    );
+  });
+
   test("refuses an endpoint that downgrades the issuer's scheme", async () => {
     const issuer = uniqueIssuer();
     const host = new URL(issuer).hostname;
@@ -285,6 +305,39 @@ describe("xaiSubscriptionTokenManager", () => {
     expect(first).toBe("at_0");
     expect(second).toBe("at_1");
     expect(redeemedRefreshTokens).toEqual(["rt_stored", "rt_rotated"]);
+  });
+
+  test("keeps the rotated refresh token through the retention window after invalidation", async () => {
+    const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+      ...(index === 0 ? { refresh_token: "rt_rotated_late" } : {}),
+      expires_in: 3600,
+    }));
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const first = await xaiSubscriptionTokenManager.getAccessToken({
+        refreshToken: "rt_stored_late",
+        providerApiKeyId: "key-late-retry",
+      });
+      xaiSubscriptionTokenManager.invalidate("key-late-retry", first);
+      // Well past the cache's default TTL (1h) but inside the 24h rotated-token
+      // retention: the rotated token must still be the one spent, not the
+      // stored (superseded) one.
+      vi.setSystemTime(Date.now() + 2 * 60 * 60 * 1000);
+      const second = await xaiSubscriptionTokenManager.getAccessToken({
+        refreshToken: "rt_stored_late",
+        providerApiKeyId: "key-late-retry",
+      });
+
+      expect(second).toBe("at_1");
+      expect(redeemedRefreshTokens).toEqual([
+        "rt_stored_late",
+        "rt_rotated_late",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("keeps a token another request already refreshed when invalidating a stale one", async () => {

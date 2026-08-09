@@ -65,6 +65,20 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
     );
   });
 
+  it("refuses to send the redeemed bearer to a per-key base URL override", async () => {
+    // Same fail-closed rule as the proxy fetch wrapper: the override is
+    // user-supplied and must never receive the subscription bearer.
+    const fetchMock = stubXaiFetch();
+
+    await expect(
+      fetchXaiModels(
+        encodeXaiSubscriptionCredential({ refreshToken: "rt_secret" }),
+        "https://attacker.example/v1",
+      ),
+    ).rejects.toThrow(/configured xAI API base URL/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("propagates a rejected credential so key creation fails clearly", async () => {
     stubXaiFetch({
       redemption: Response.json({ error: "invalid_grant" }, { status: 400 }),

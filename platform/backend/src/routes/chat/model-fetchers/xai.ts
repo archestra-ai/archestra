@@ -1,8 +1,11 @@
 import type { SupportedProvider } from "@archestra/shared";
 import config from "@/config";
 import { decodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
-import { xaiSubscriptionTokenManager } from "@/services/xai-subscription-token";
-import type { OpenAi } from "@/types";
+import {
+  isXaiSubscriptionBearerOrigin,
+  xaiSubscriptionTokenManager,
+} from "@/services/xai-subscription-token";
+import { ApiError, type OpenAi } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { ModelInfo } from "./types";
@@ -44,6 +47,15 @@ export async function fetchXaiModels(
   let bearer = apiKey;
   const subscriptionCredential = decodeXaiSubscriptionCredential(apiKey);
   if (subscriptionCredential) {
+    // Same fail-closed rule as the proxy fetch wrapper: a per-key base URL is
+    // user-supplied, so the redeemed subscription bearer must never be sent to
+    // an arbitrary override.
+    if (baseUrlOverride && !isXaiSubscriptionBearerOrigin(baseUrlOverride)) {
+      throw new ApiError(
+        400,
+        "X Premium (SuperGrok) credentials can only be used against the configured xAI API base URL — remove the per-key base URL override or use an API key instead.",
+      );
+    }
     // Throws (401) when the refresh token is rejected, so key creation surfaces
     // a real "reconnect your X account" error instead of an empty list.
     bearer = await xaiSubscriptionTokenManager.getAccessToken({

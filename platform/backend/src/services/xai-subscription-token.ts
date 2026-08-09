@@ -117,8 +117,14 @@ class XaiSubscriptionTokenManager {
     ) {
       return;
     }
-    // Keep the rotated refresh token + lineage alive across eviction.
-    this.tokenCache.set(providerApiKeyId, { ...cached, expiresAtMs: 0 });
+    // Keep the rotated refresh token + lineage alive across eviction, with an
+    // explicit TTL — the cache's default (1h) would silently cut the retention
+    // window redeemAndCache granted.
+    this.tokenCache.set(
+      providerApiKeyId,
+      { ...cached, expiresAtMs: 0 },
+      ROTATED_TOKEN_RETENTION_MS,
+    );
   }
 
   private async redeemAndCache(params: {
@@ -361,6 +367,20 @@ export function xaiOauthErrorLogFields(body: string): {
   }
 }
 
+/**
+ * True when a URL is on the configured xAI API origin — the only origin an
+ * X Premium subscription bearer may be sent to. Shared by the proxy fetch
+ * wrapper and the xai model fetcher so the fail-closed rule cannot drift
+ * between the two.
+ */
+export function isXaiSubscriptionBearerOrigin(url: string): boolean {
+  try {
+    return new URL(url).origin === new URL(config.llm.xai.baseUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
 // ===== Internal helpers =====
 
 type FetchLike = (
@@ -460,8 +480,9 @@ async function discoverXaiOauthEndpoints(
  * Accepts a discovered endpoint only when it stays within the configured
  * issuer's own domain: identical scheme, and a host that is the issuer's host or
  * a sibling under its parent domain (so `auth.x.ai` may point at `api.x.ai`, but
- * never at another origin). A single-label issuer host — a local test server —
- * must match exactly, since it has no parent to widen to.
+ * never at another origin). An issuer host with fewer than three labels — a
+ * local test server, or a bare two-label domain whose "parent" would be an
+ * entire TLD — must match exactly, since it has no parent safe to widen to.
  */
 function validateDiscoveredEndpoint(
   value: unknown,
@@ -487,7 +508,7 @@ function validateDiscoveredEndpoint(
   }
 
   const labels = issuerUrl.hostname.split(".");
-  const parentDomain = labels.length > 1 ? labels.slice(1).join(".") : null;
+  const parentDomain = labels.length > 2 ? labels.slice(1).join(".") : null;
   const hostAllowed =
     endpointUrl.hostname === issuerUrl.hostname ||
     (parentDomain !== null &&
@@ -519,13 +540,7 @@ function isBearerTargetAllowed(input: string | URL | Request): boolean {
       : input instanceof URL
         ? input.toString()
         : input.url;
-  try {
-    return (
-      new URL(requestUrl).origin === new URL(config.llm.xai.baseUrl).origin
-    );
-  } catch {
-    return false;
-  }
+  return isXaiSubscriptionBearerOrigin(requestUrl);
 }
 
 function appendKnownDigests(

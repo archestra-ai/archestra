@@ -14,32 +14,40 @@ vi.mock("@/config", async () =>
 );
 
 import {
-  type GoogleDriveOAuthState,
+  buildGoogleDriveAuthorizationUrl,
   getGoogleDriveOAuthRedirectUri,
   isGoogleDriveOAuthConfigured,
   resolveGoogleDriveOAuthReturnTo,
-  signGoogleDriveOAuthState,
   verifyGoogleDriveOAuthState,
 } from "./gdrive-oauth";
 
-const state: GoogleDriveOAuthState = {
+const state = {
   connectorId: "11111111-1111-4111-8111-111111111111",
   userId: "22222222-2222-4222-8222-222222222222",
   organizationId: "33333333-3333-4333-8333-333333333333",
   returnTo: "https://archestra.example.com/knowledge/connectors/abc",
 };
 
+/**
+ * The state Google would carry back, taken from the authorization URL the
+ * connector actually sends — the same path the callback is fed from.
+ */
+function issueState(): string {
+  const url = new URL(buildGoogleDriveAuthorizationUrl(state));
+  const issued = url.searchParams.get("state");
+  if (!issued) throw new Error("no state on the authorization URL");
+  return issued;
+}
+
 describe("google drive oauth state", () => {
   test("round-trips the connector, user, and organization it was issued for", () => {
-    expect(
-      verifyGoogleDriveOAuthState(signGoogleDriveOAuthState(state)),
-    ).toEqual(state);
+    expect(verifyGoogleDriveOAuthState(issueState())).toEqual(state);
   });
 
   test("rejects a tampered payload", () => {
     // The callback trusts state for the connector it writes a credential to,
     // so an attacker-chosen connector id must not survive re-signing checks.
-    const signed = signGoogleDriveOAuthState(state);
+    const signed = issueState();
     const [encoded, signature] = signed.split(".");
     const forged = JSON.parse(
       Buffer.from(encoded, "base64url").toString("utf-8"),
@@ -56,7 +64,7 @@ describe("google drive oauth state", () => {
   });
 
   test("rejects an expired state", () => {
-    const signed = signGoogleDriveOAuthState(state);
+    const signed = issueState();
     // 15 minutes is the whole window; a link left open overnight is not one
     // the callback should still act on.
     vi.setSystemTime(new Date(Date.now() + 16 * 60 * 1000));
@@ -78,9 +86,7 @@ describe("google drive oauth state", () => {
   test("two states for the same connector differ", () => {
     // A nonce per authorization, so a state cannot be recognized or replayed
     // by matching it against one seen earlier.
-    expect(signGoogleDriveOAuthState(state)).not.toBe(
-      signGoogleDriveOAuthState(state),
-    );
+    expect(issueState()).not.toBe(issueState());
   });
 });
 

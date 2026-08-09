@@ -525,10 +525,9 @@ export class GoogleDriveConnector extends BaseConnector {
 
     let targetsSinceYield = 0;
 
-    for (const [index, target] of targets.entries()) {
+    for (const target of targets) {
       if (done.has(target.key)) continue;
 
-      const remaining = targets.length - index - 1;
       const identityDrive = await this.openDomainTarget({
         adminAuth,
         target,
@@ -572,7 +571,10 @@ export class GoogleDriveConnector extends BaseConnector {
         yield {
           ...batch,
           checkpoint: domainCheckpoint(),
-          hasMore: !next.done || remaining > 0,
+          // Always true: a closing batch follows even after the last target,
+          // and a batch claiming to be the end would let the run's time budget
+          // finish the pass early — recording targets it never walked as done.
+          hasMore: true,
         };
       }
 
@@ -590,7 +592,7 @@ export class GoogleDriveConnector extends BaseConnector {
           failures: this.flushFailures(),
           skipped: this.flushSkipped(),
           checkpoint: domainCheckpoint(),
-          hasMore: remaining > 0,
+          hasMore: true,
         };
       }
     }

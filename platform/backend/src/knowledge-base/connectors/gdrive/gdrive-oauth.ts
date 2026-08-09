@@ -9,7 +9,7 @@ const STATE_TTL_MS = 15 * 60 * 1000;
 
 const HMAC_DOMAIN = "archestra:gdrive-oauth-state:v1";
 
-export interface GoogleDriveOAuthState {
+interface GoogleDriveOAuthState {
   connectorId: string;
   userId: string;
   organizationId: string;
@@ -123,9 +123,7 @@ export async function exchangeGoogleDriveAuthorizationCode(
   };
 }
 
-export function signGoogleDriveOAuthState(
-  state: GoogleDriveOAuthState,
-): string {
+function signGoogleDriveOAuthState(state: GoogleDriveOAuthState): string {
   const payload = {
     ...state,
     nonce: randomBytes(16).toString("base64url"),

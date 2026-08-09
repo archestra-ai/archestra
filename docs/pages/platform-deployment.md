@@ -1624,6 +1624,14 @@ Permission sync for connectors using [auto-sync permissions](/docs/platform-know
   - Default: `1`
   - This lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so permission sync never competes with content sync for slots.
 
+The Google Drive connector's [individual auth mode](/docs/platform-knowledge#one-google-account) authorizes through a Google OAuth client that belongs to the deployment. Create a **Web application** client in the Google Cloud Console, enable the Google Drive API, and register `<your Archestra URL>/api/connectors/gdrive/oauth/callback` as an authorized redirect URI — the connector form shows the exact string this deployment sends. The service-account modes, domain-wide delegation included, need neither variable.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID`** - Client ID of that OAuth client.
+  - Default: Not set (the mode appears in the connector form but is disabled, naming these variables).
+- **`ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET`** - Client secret of that OAuth client.
+  - Default: Not set.
+  - The secret is read on every token refresh, so rotating it alone needs no reconnect. Changing the client **ID** invalidates existing authorizations — each affected connector reports that and needs reconnecting.
+
 ### Data Retention
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.

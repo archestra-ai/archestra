@@ -17,7 +17,7 @@ export const DRIVE_READONLY_SCOPE =
  * individual connecting their own Drive is never asked to consent to reading
  * the company directory.
  */
-export const ADMIN_DIRECTORY_USER_READONLY_SCOPE =
+const ADMIN_DIRECTORY_USER_READONLY_SCOPE =
   "https://www.googleapis.com/auth/admin.directory.user.readonly";
 
 /**

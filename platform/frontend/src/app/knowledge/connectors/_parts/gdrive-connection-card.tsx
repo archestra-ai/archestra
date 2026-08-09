@@ -26,13 +26,15 @@ export function GoogleDriveConnectionCard({
   useGoogleDriveOAuthResultToast();
 
   const startOAuth = useStartGoogleDriveOAuth();
-  const config = connector.config as {
-    type?: string;
-    authMode?: string;
-    connectedAccountEmail?: string;
-  };
+  const config = connector.config as
+    | {
+        type?: string;
+        authMode?: string;
+        connectedAccountEmail?: string;
+      }
+    | undefined;
 
-  if (config.type !== "gdrive" || config.authMode !== "oauth") return null;
+  if (config?.type !== "gdrive" || config.authMode !== "oauth") return null;
 
   const connectedEmail = config.connectedAccountEmail;
 

@@ -1,8 +1,19 @@
+import { isSpecCompliantSkillName } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { SkillModel, SkillUsageEventModel, SkillVersionModel } from "@/models";
+import {
+  SkillFileModel,
+  SkillModel,
+  SkillUsageEventModel,
+  SkillVersionModel,
+} from "@/models";
+import { computeFileDigest } from "@/skills/skill-manifest-serializer";
+import {
+  hasPublishableFilePathSet,
+  isPublishableSkillFilePath,
+} from "@/skills/validation";
 import { describe, expect, test } from "@/test";
-import type { InsertSkill } from "@/types";
+import type { InsertSkill, Skill } from "@/types";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { drainBackgroundWork } from "@/utils/background-work";
 
@@ -287,15 +298,26 @@ describe("SkillModel immutable versioning", () => {
     });
     if (!skill) throw new Error("seed failed");
 
-    // metadata-only edit with the identical body + files: no new version.
+    // an identical re-save — same frontmatter, body, and files: no new version.
     const unchanged = await SkillModel.updateWithFiles({
       id: skill.id,
-      skill: { description: "new description", content: "# original" },
+      skill: { description: skill.description, content: "# original" },
       files: [{ path: "references/a.md", content: "# A", kind: "reference" }],
     });
     expect(unchanged?.latestVersion).toBe(1);
 
-    // a body change forks version 2.
+    // a frontmatter-only edit forks nothing: versions snapshot the body and
+    // files, and neither moved. It does refresh what the gateway publishes,
+    // which lives on the skill row itself.
+    const redescribed = await SkillModel.updateWithFiles({
+      id: skill.id,
+      skill: { description: "new description" },
+    });
+    expect(redescribed?.latestVersion).toBe(1);
+    expect(redescribed?.frontmatterBlob).toContain("new description");
+    expect(redescribed?.digest).not.toBe(skill.digest);
+
+    // a body change forks.
     const edited = await SkillModel.updateWithFiles({
       id: skill.id,
       skill: { content: "# edited" },
@@ -852,5 +874,602 @@ describe("SkillModel restore + status filter", () => {
     expect(
       await SkillModel.findDistinctSourceRepos({ organizationId: org.id }),
     ).toEqual(["acme/kept"]);
+  });
+});
+
+describe("publication artifact fills", () => {
+  test("fills a whole batch of legacy rows without touching updatedAt", async ({
+    makeOrganization,
+  }) => {
+    // Filling a derived column is not an edit, so `updatedAt` must survive it —
+    // otherwise the first gateway listing would reorder every skill in the UI's
+    // recently-changed views.
+    const org = await makeOrganization();
+    const skills: Skill[] = [];
+    for (const name of ["alpha", "bravo", "charlie"]) {
+      const skill = await SkillModel.createWithFiles({
+        skill: skillInput({ organizationId: org.id, name }),
+        files: [],
+      });
+      if (!skill) throw new Error("seed failed");
+      skills.push(skill);
+    }
+    await db
+      .update(schema.skillsTable)
+      .set({ frontmatterBlob: null, digest: null })
+      .where(eq(schema.skillsTable.organizationId, org.id));
+    // Baseline read after that update, which stamps `updatedAt` itself — the
+    // fill is what must not.
+    const updatedAtBefore = new Map(
+      (
+        await db
+          .select()
+          .from(schema.skillsTable)
+          .where(eq(schema.skillsTable.organizationId, org.id))
+      ).map((row) => [row.id, row.updatedAt]),
+    );
+
+    await SkillModel.fillPublicationArtifacts(
+      skills.map((skill) => ({
+        id: skill.id,
+        frontmatterBlob: `name: "${skill.name}"\n`,
+        digest: `sha256:${"0".repeat(63)}${skills.indexOf(skill)}`,
+      })),
+    );
+
+    const rows = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(eq(schema.skillsTable.organizationId, org.id));
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      const seeded = skills.find((skill) => skill.id === row.id);
+      if (!seeded) throw new Error("row vanished");
+      expect(row.frontmatterBlob).toBe(`name: "${seeded.name}"\n`);
+      expect(row.digest).toMatch(/^sha256:0{63}\d$/);
+      expect(row.updatedAt).toEqual(updatedAtBefore.get(row.id));
+    }
+  });
+
+  test("leaves a digest an edit wrote in between alone", async ({
+    makeOrganization,
+  }) => {
+    // The fill races an ordinary edit: whoever wrote a digest already covered
+    // bytes this caller may no longer be holding, so the IS NULL guard has to
+    // make the fill a no-op rather than publish a stale hash.
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "raced" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    await SkillModel.fillPublicationArtifacts([
+      {
+        id: skill.id,
+        frontmatterBlob: "name: stale\n",
+        digest: `sha256:${"f".repeat(64)}`,
+      },
+    ]);
+
+    const [row] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(eq(schema.skillsTable.id, skill.id));
+    expect(row?.digest).toBe(skill.digest);
+    expect(row?.frontmatterBlob).toBe(skill.frontmatterBlob);
+  });
+
+  test("fills a legacy row whose blob is missing but whose digest is not", async ({
+    makeOrganization,
+  }) => {
+    // The read path recomputes when EITHER half is missing, so the persisting
+    // UPDATE has to accept the same rows. Guarding on `digest IS NULL` alone
+    // would leave this row recomputing on every read and never saving.
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "half-filled" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    // Only the blob is cleared. This touches no column the publication digest
+    // covers, so the invalidation trigger leaves `digest` standing.
+    await db
+      .update(schema.skillsTable)
+      .set({ frontmatterBlob: null })
+      .where(eq(schema.skillsTable.id, skill.id));
+
+    await SkillModel.fillPublicationArtifacts([
+      {
+        id: skill.id,
+        frontmatterBlob: "name: refilled\n",
+        digest: `sha256:${"a".repeat(64)}`,
+      },
+    ]);
+
+    const [row] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(eq(schema.skillsTable.id, skill.id));
+    expect(row?.frontmatterBlob).toBe("name: refilled\n");
+  });
+});
+
+describe("skill_files digest invalidation trigger", () => {
+  async function fileRows(skillId: string) {
+    const rows = await db
+      .select()
+      .from(schema.skillFilesTable)
+      .where(eq(schema.skillFilesTable.skillId, skillId));
+    return new Map(rows.map((row) => [row.path, row]));
+  }
+
+  test("derives every file digest from the bytes written", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "with-files" }),
+      files: [
+        { path: "a.md", content: "# A", kind: "reference", encoding: "utf8" },
+        {
+          path: "logo.png",
+          content: "iVBORw0KGgo=",
+          kind: "asset",
+          encoding: "base64",
+        },
+      ],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    const rows = await fileRows(skill.id);
+    expect(rows.get("a.md")?.digest).toBe(
+      computeFileDigest({ content: "# A", encoding: "utf8" }),
+    );
+    // Base64 assets are digested over the DECODED bytes, so the value a client
+    // verifies covers what it actually receives.
+    expect(rows.get("logo.png")?.digest).toBe(
+      computeFileDigest({ content: "iVBORw0KGgo=", encoding: "base64" }),
+    );
+  });
+
+  test("invalidates the digest when content moves without a fresh one", async ({
+    makeOrganization,
+  }) => {
+    // The database never computes a digest (the application is the single
+    // producer — Postgres and Node disagree on non-canonical base64); it only
+    // proves staleness. A write that moves the bytes without refreshing the
+    // digest resets it, so a file can never advertise a digest over bytes it
+    // does not have.
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "stale-guard" }),
+      files: [
+        { path: "a.md", content: "# A", kind: "reference", encoding: "utf8" },
+      ],
+    });
+    if (!skill) throw new Error("seed failed");
+    const truth = computeFileDigest({ content: "# A", encoding: "utf8" });
+    expect((await fileRows(skill.id)).get("a.md")?.digest).toBe(truth);
+
+    // Content moved, digest not refreshed → invalidated, not recomputed. The
+    // row is withheld from publication until a model write or the backfill
+    // restores the pair.
+    await db
+      .update(schema.skillFilesTable)
+      .set({ content: "# B" })
+      .where(eq(schema.skillFilesTable.skillId, skill.id));
+    expect((await fileRows(skill.id)).get("a.md")?.digest).toBeNull();
+
+    // Content and digest moved together (what every model write does) → the
+    // supplied pair stands.
+    const refreshed = computeFileDigest({ content: "# C", encoding: "utf8" });
+    await db
+      .update(schema.skillFilesTable)
+      .set({ content: "# C", digest: refreshed })
+      .where(eq(schema.skillFilesTable.skillId, skill.id));
+    expect((await fileRows(skill.id)).get("a.md")?.digest).toBe(refreshed);
+  });
+
+  test("fillDigests restores an invalidated row without clobbering a fresh write", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "backfillable" }),
+      files: [
+        { path: "a.md", content: "# A", kind: "reference", encoding: "utf8" },
+      ],
+    });
+    if (!skill) throw new Error("seed failed");
+    const row = (await fileRows(skill.id)).get("a.md");
+    const truth = computeFileDigest({ content: "# A", encoding: "utf8" });
+
+    // Simulate a pre-0407 row: digest cleared directly (content unchanged).
+    await db
+      .update(schema.skillFilesTable)
+      .set({ digest: null })
+      .where(eq(schema.skillFilesTable.skillId, skill.id));
+
+    // The backfill's write path restores it — and the UPDATE it issues must
+    // not re-trip the invalidation trigger (content is unchanged).
+    await SkillFileModel.fillDigests([{ id: row?.id ?? "", digest: truth }]);
+    expect((await fileRows(skill.id)).get("a.md")?.digest).toBe(truth);
+
+    // IS NULL-guarded: a second fill with a stale value cannot overwrite it.
+    await SkillFileModel.fillDigests([
+      { id: row?.id ?? "", digest: `sha256:${"1".repeat(64)}` },
+    ]);
+    expect((await fileRows(skill.id)).get("a.md")?.digest).toBe(truth);
+  });
+});
+
+/**
+ * The publication surface decides "can a `skill://` URI name this file path?"
+ * twice — in SQL so `skills/list` can page under a LIMIT, and in TypeScript for
+ * every path that addresses one skill. Two expressions of one rule drift unless
+ * something holds them together, and drift here is not cosmetic: a path the two
+ * disagree about is a skill listed but unreadable, or readable but unlisted.
+ *
+ * So both verdicts are taken over one table of paths, and compared.
+ */
+describe("publishable file paths: SQL and TypeScript agree", () => {
+  const PATHS = [
+    // Nameable.
+    "a.md",
+    "references/FORMS.md",
+    "scripts/nested/deep/run.py",
+    "...md",
+    "..hidden.md",
+    "a/...",
+    "file with spaces.md",
+    "100%.md",
+    "a#b?c.md",
+    // Not nameable: an empty segment, or a `.`/`..` segment.
+    "",
+    "/leading.md",
+    "trailing.md/",
+    "docs//doubled.md",
+    "./here.md",
+    "../up.md",
+    "a/./b.md",
+    "a/../b.md",
+    ".",
+    "..",
+    "a/.",
+    "a/..",
+    "/",
+  ];
+
+  test("over every path shape either expression can meet", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const byPath = new Map<string, string>();
+
+    for (const [index, path] of PATHS.entries()) {
+      const skill = await SkillModel.createWithFiles({
+        skill: skillInput({
+          organizationId: org.id,
+          name: `path-case-${String(index).padStart(2, "0")}`,
+          scope: "org",
+        }),
+        files: [
+          { path, content: "x", kind: "reference", encoding: "utf8" as const },
+        ],
+      });
+      if (!skill) throw new Error(`seed failed for ${JSON.stringify(path)}`);
+      byPath.set(path, skill.id);
+    }
+
+    // The SQL verdict, read through the query that actually carries it.
+    const listed = await SkillModel.findOrgScopedInEnvironment({
+      organizationId: org.id,
+      environmentId: null,
+      excludedForAgentId: crypto.randomUUID(),
+      limit: PATHS.length + 1,
+    });
+    const listedIds = new Set(listed.map((skill) => skill.id));
+
+    for (const path of PATHS) {
+      expect(
+        listedIds.has(byPath.get(path) ?? ""),
+        `SQL and isPublishableSkillFilePath disagreed about ${JSON.stringify(path)}`,
+      ).toBe(isPublishableSkillFilePath(path));
+    }
+  });
+});
+
+/**
+ * The name gate, the third expression of the same idea — SEP-2640 hosts refuse
+ * an entry whose URI segment breaks the Agent Skills naming rules, so a name
+ * the SQL admits and the TypeScript rejects is a row fetched, withheld, and
+ * logged as drift, on a page that quietly comes back short.
+ *
+ * One caveat this test cannot cover: `[a-z]` is a collation-dependent range in
+ * Postgres, and PGlite is not running the glibc locale a deployment runs. It
+ * pins that the two expressions agree, not that they agree under production
+ * collation — which is why the predicate forces `COLLATE "C"` rather than
+ * trusting the database's default.
+ */
+describe("spec-compliant skill names: SQL and TypeScript agree", () => {
+  const NAMES = [
+    // Compliant: lowercase alphanumeric runs joined by single hyphens.
+    "quarterly-close",
+    "a",
+    "a1",
+    "1",
+    "pdf-processing-v2",
+    "a".repeat(64),
+    // Not compliant.
+    "Quarterly-Close",
+    "café",
+    "naïve-plan",
+    "a--b",
+    "-leading",
+    "trailing-",
+    "under_score",
+    "with space",
+    "dot.name",
+    "a".repeat(65),
+  ];
+
+  test("over every name shape either expression can meet", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const byName = new Map<string, string>();
+
+    for (const name of NAMES) {
+      const skill = await SkillModel.createWithFiles({
+        skill: skillInput({ organizationId: org.id, name, scope: "org" }),
+        files: [],
+      });
+      if (!skill) throw new Error(`seed failed for ${JSON.stringify(name)}`);
+      byName.set(name, skill.id);
+    }
+
+    const listed = await SkillModel.findOrgScopedInEnvironment({
+      organizationId: org.id,
+      environmentId: null,
+      excludedForAgentId: crypto.randomUUID(),
+      limit: NAMES.length + 1,
+    });
+    const listedIds = new Set(listed.map((skill) => skill.id));
+
+    for (const name of NAMES) {
+      expect(
+        listedIds.has(byName.get(name) ?? ""),
+        `SQL and isSpecCompliantSkillName disagreed about ${JSON.stringify(name)}`,
+      ).toBe(isSpecCompliantSkillName(name));
+    }
+  });
+});
+
+/**
+ * The set-level half of the same rule: no stored path may be a directory
+ * another path sits in. Every path in such a skill is individually nameable,
+ * so the per-path gate above cannot see it — and published, the collision
+ * names one URI as both a file and the directory above it, which no host can
+ * materialize.
+ *
+ * Same shape as the per-path table, for the same reason: the SQL and the
+ * TypeScript are two expressions of one rule.
+ */
+describe("colliding file paths: SQL and TypeScript agree", () => {
+  const PATH_SETS: string[][] = [
+    // Fine: siblings, nesting, and names that merely share a prefix.
+    [],
+    ["a.md"],
+    ["templates/eu.md", "templates/us.md"],
+    ["docs/guide.md", "docs/deep/guide.md"],
+    ["template.md", "templates/eu.md"],
+    // Colliding: one path is a directory the other sits in.
+    ["templates", "templates/eu.md"],
+    ["templates/eu.md", "templates"],
+    ["a/b", "a/b/c.md"],
+    ["a", "a/b/c.md"],
+    // `_` and `%` are LIKE wildcards; a prefix compare must not treat them as
+    // matching anything, or these would be withheld for resembling a pair.
+    ["a_b", "axb/c.md"],
+    ["a%b", "axxb/c.md"],
+  ];
+
+  test("over every path set either expression can meet", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const bySet = new Map<number, string>();
+
+    for (const [index, paths] of PATH_SETS.entries()) {
+      const skill = await SkillModel.createWithFiles({
+        skill: skillInput({
+          organizationId: org.id,
+          name: `collide-case-${String(index).padStart(2, "0")}`,
+          scope: "org",
+        }),
+        files: paths.map((path) => ({
+          path,
+          content: "x",
+          kind: "reference" as const,
+          encoding: "utf8" as const,
+        })),
+      });
+      if (!skill) throw new Error(`seed failed for set ${index}`);
+      bySet.set(index, skill.id);
+    }
+
+    const listed = await SkillModel.findOrgScopedInEnvironment({
+      organizationId: org.id,
+      environmentId: null,
+      excludedForAgentId: crypto.randomUUID(),
+      limit: PATH_SETS.length + 1,
+    });
+    const listedIds = new Set(listed.map((skill) => skill.id));
+
+    for (const [index, paths] of PATH_SETS.entries()) {
+      expect(
+        listedIds.has(bySet.get(index) ?? ""),
+        `SQL and hasPublishableFilePathSet disagreed about ${JSON.stringify(paths)}`,
+      ).toBe(hasPublishableFilePathSet(paths));
+    }
+  });
+});
+
+describe("SkillModel.findManifestSourceById", () => {
+  test("takes the published blob and the body it wraps in one read", async ({
+    makeOrganization,
+  }) => {
+    // The pairing is the point: a manifest composed from a blob read at one
+    // moment and a body read at another is bytes that were never committed, and
+    // so matches no digest this platform has advertised. Both halves come from
+    // here or the tear is back.
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "one-read" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    const source = await SkillModel.findManifestSourceById(skill.id);
+    expect(source?.content).toBe(skill.content);
+    expect(source?.frontmatterBlob).toBe(skill.frontmatterBlob);
+    expect(source?.digest).toBe(skill.digest);
+  });
+
+  test("carries the fields a nulled blob has to be rebuilt from", async ({
+    makeOrganization,
+  }) => {
+    // A row predating the columns — or one the invalidation trigger reset — is
+    // recomposed from its frontmatter fields. Those must ride along on the same
+    // read, or the rebuild reintroduces the very tear the single read removes.
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "rebuildable",
+        license: "MIT",
+      }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+    await db
+      .update(schema.skillsTable)
+      .set({ frontmatterBlob: null, digest: null })
+      .where(eq(schema.skillsTable.id, skill.id));
+
+    const source = await SkillModel.findManifestSourceById(skill.id);
+    expect(source?.frontmatterBlob).toBeNull();
+    expect(source?.name).toBe("rebuildable");
+    expect(source?.description).toBe("desc");
+    expect(source?.license).toBe("MIT");
+    expect(source?.content).toBe("# body");
+  });
+
+  test("answers null for a row that no longer exists", async () => {
+    expect(await SkillModel.findManifestSourceById(crypto.randomUUID())).toBe(
+      null,
+    );
+  });
+});
+
+describe("skills publication invalidation trigger", () => {
+  async function readSkill(id: string) {
+    const [row] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(eq(schema.skillsTable.id, id));
+    return row;
+  }
+
+  async function seed(organizationId: string, name: string) {
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId, name }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+    return skill;
+  }
+
+  test("a write that moves published bytes without a fresh digest clears both", async ({
+    makeOrganization,
+  }) => {
+    // Stands in for any future write path that changes covered content and
+    // forgets to recompute. The database refuses to keep serving the old
+    // digest; the read path recomputes on next publish.
+    const org = await makeOrganization();
+    const skill = await seed(org.id, "invalidated");
+    expect(skill.digest).not.toBeNull();
+
+    await db
+      .update(schema.skillsTable)
+      .set({ content: "# rewritten behind the model's back" })
+      .where(eq(schema.skillsTable.id, skill.id));
+
+    const row = await readSkill(skill.id);
+    expect(row?.digest).toBeNull();
+    expect(row?.frontmatterBlob).toBeNull();
+  });
+
+  test("a write that supplies a fresh digest is left alone", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await seed(org.id, "kept");
+
+    const updated = await SkillModel.updateWithFiles({
+      id: skill.id,
+      skill: { content: "# edited through the model" },
+    });
+
+    expect(updated?.digest).not.toBeNull();
+    expect(updated?.frontmatterBlob).not.toBeNull();
+    expect(updated?.digest).not.toBe(skill.digest);
+    expect((await readSkill(skill.id))?.digest).toBe(updated?.digest);
+  });
+
+  test("bookkeeping writes do not invalidate the published artifacts", async ({
+    makeOrganization,
+  }) => {
+    // Usage ticks and sync stamps touch no covered column. If they invalidated,
+    // every activation would churn the digest a host already approved.
+    const org = await makeOrganization();
+    const skill = await seed(org.id, "bookkept");
+
+    SkillModel.recordUsage({ skillId: skill.id, userId: null });
+    await drainBackgroundWork();
+    await SkillModel.markGithubSyncResult(skill.id, null);
+
+    const row = await readSkill(skill.id);
+    expect(row?.digest).toBe(skill.digest);
+    expect(row?.frontmatterBlob).toBe(skill.frontmatterBlob);
+  });
+
+  test("the read path's own fill does not trigger invalidation", async ({
+    makeOrganization,
+  }) => {
+    // The fill writes the very columns the trigger guards. It must read as a
+    // repair, not an edit, or a legacy row could never be filled at all.
+    const org = await makeOrganization();
+    const skill = await seed(org.id, "self-filling");
+
+    await db
+      .update(schema.skillsTable)
+      .set({ content: "# moved on" })
+      .where(eq(schema.skillsTable.id, skill.id));
+    expect((await readSkill(skill.id))?.digest).toBeNull();
+
+    await SkillModel.fillPublicationArtifacts([
+      {
+        id: skill.id,
+        frontmatterBlob: "name: self-filling\n",
+        digest: `sha256:${"b".repeat(64)}`,
+      },
+    ]);
+
+    const row = await readSkill(skill.id);
+    expect(row?.digest).toBe(`sha256:${"b".repeat(64)}`);
+    expect(row?.frontmatterBlob).toBe("name: self-filling\n");
   });
 });

@@ -2864,6 +2864,13 @@
       "when": 1786373912419,
       "tag": "0408_collapse_advisor_to_org_wide",
       "breakpoints": true
+    },
+    {
+      "idx": 409,
+      "version": "7",
+      "when": 1786385016979,
+      "tag": "0409_skill_publication_integrity",
+      "breakpoints": true
     }
   ]
 }

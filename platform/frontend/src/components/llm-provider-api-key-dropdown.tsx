@@ -38,7 +38,10 @@ type DropdownLlmProviderApiKey = Pick<
   "id" | "name" | "provider"
 > &
   Partial<
-    Pick<LlmProviderApiKey, "scope" | "teamName" | "isChatgptSubscription">
+    Pick<
+      LlmProviderApiKey,
+      "scope" | "teamName" | "subscriptionKind" | "isChatgptSubscription"
+    >
   > & {
     connectRequired?: boolean;
   };
@@ -344,10 +347,14 @@ function groupKeysByProvider(availableKeys: DropdownLlmProviderApiKey[]) {
 
 function isPersonalSubscription(key: DropdownLlmProviderApiKey) {
   return (
+    key.subscriptionKind != null ||
+    providerRequiresPerUserCredential(key.provider) ||
+    // Legacy fallback: ChatGPT keys whose secret is unreadable to the metadata
+    // endpoint carry no kind but are still recognized by the boolean flag or
+    // their default name.
     (key.provider === "openai" &&
       (key.isChatgptSubscription === true ||
-        key.name.trim().toLowerCase() === "chatgpt subscription")) ||
-    providerRequiresPerUserCredential(key.provider)
+        key.name.trim().toLowerCase() === "chatgpt subscription"))
   );
 }
 

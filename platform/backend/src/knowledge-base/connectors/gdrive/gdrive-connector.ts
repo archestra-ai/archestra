@@ -1,6 +1,5 @@
 import type { ModelInputModality } from "@archestra/shared";
-import type { drive_v3 } from "googleapis";
-import { google } from "googleapis";
+import type { admin_directory_v1, drive_v3 } from "googleapis";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -14,6 +13,16 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import {
+  asDelegatedAuth,
+  buildAdminDirectoryClient,
+  buildDriveClient,
+  type DelegatedServiceAccountAuth,
+  describeGoogleAuthFailure,
+  type GoogleDriveAuth,
+  GoogleDriveAuthConfigError,
+  resolveGoogleDriveAuth,
+} from "./gdrive-auth";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
@@ -28,6 +37,23 @@ const MAX_CONTENT_LENGTH = 500_000; // 500 KB text limit per document
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024; // 4 MB image size limit
 const INCREMENTAL_SAFETY_BUFFER_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_DEPTH = 50; // Safety limit for recursive folder traversal
+
+/**
+ * A domain pass can cross thousands of identities that hold nothing new, and
+ * progress is only durable when a batch is yielded. Emitting a document-free
+ * checkpoint every this many finished targets keeps an interrupted run from
+ * re-walking a stretch of empty accounts, without yielding once per user.
+ */
+const DOMAIN_PROGRESS_CHECKPOINT_TARGETS = 50;
+
+/**
+ * Ceiling on the cross-identity dedupe set. One shared file is visible to
+ * everyone it was shared with, so without this the same document would be
+ * downloaded and embedded once per viewer. Past the cap the run stops
+ * deduplicating rather than growing the set without bound — re-ingesting a
+ * document is wasteful but harmless, since ingestion upserts by file id.
+ */
+const MAX_TRACKED_FILE_IDS = 2_000_000;
 
 // File extensions whose text content we can extract via direct download
 const SUPPORTED_TEXT_EXTENSIONS = new Set([
@@ -132,30 +158,104 @@ export class GoogleDriveConnector extends BaseConnector {
     return { valid: true };
   }
 
+  /**
+   * Check that the connector can actually do what it is configured to do, not
+   * merely that its credential authenticates.
+   *
+   * Authenticating proves nothing useful on its own here: a service account
+   * with a valid key that nobody shared anything with passes an `about.get`
+   * and then syncs zero files forever. So each stage of the configured setup
+   * is probed separately — sign in (impersonating, when that is the mode),
+   * read the directory when the pass will enumerate one, and open the folder
+   * or shared drives that were named — and a failure says which stage it was.
+   */
   async testConnection(params: {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
   }): Promise<{ success: boolean; error?: string }> {
     this.log.debug("Testing Google Drive connection");
 
-    try {
-      const config = parseGDriveConfig(params.config);
-      if (!config) {
-        return { success: false, error: "Invalid configuration" };
-      }
-
-      const drive = this.getDriveClient(params.credentials);
-
-      // Attempt a lightweight API call to verify credentials
-      await drive.about.get({ fields: "user" });
-
-      this.log.debug("Google Drive connection test successful");
-      return { success: true };
-    } catch (error) {
-      const message = extractErrorMessage(error);
-      this.log.error({ error: message }, "Google Drive connection test failed");
-      return { success: false, error: `Connection failed: ${message}` };
+    const config = parseGDriveConfig(params.config);
+    if (!config) {
+      return { success: false, error: "Invalid configuration" };
     }
+
+    let auth: GoogleDriveAuth;
+    try {
+      auth = resolveGoogleDriveAuth({ config, credentials: params.credentials });
+    } catch (error) {
+      if (error instanceof GoogleDriveAuthConfigError) {
+        return { success: false, error: error.message };
+      }
+      throw error;
+    }
+
+    const subject = auth.kind === "service_account" ? auth.subject : undefined;
+    const drive = buildDriveClient(auth);
+
+    // Stage 1 — can we act as the identity at all?
+    let identity: string | undefined;
+    try {
+      const about = await drive.about.get({ fields: "user(emailAddress)" });
+      identity = about.data.user?.emailAddress ?? subject;
+    } catch (error) {
+      return this.failedTest({
+        error,
+        subject,
+        fallback: subject
+          ? `Could not sign in as ${subject}`
+          : "Could not sign in to Google Drive",
+      });
+    }
+
+    const asWho = identity ? ` as ${identity}` : "";
+
+    // Stage 2 — a domain-wide pass is only possible if the directory reads.
+    if (willEnumerateDomain(config)) {
+      try {
+        const directory = buildAdminDirectoryClient(auth);
+        await directory.users.list({ customer: "my_customer", maxResults: 1 });
+      } catch (error) {
+        return this.failedTest({
+          error,
+          subject,
+          fallback: `Signed in${asWho}, but the Workspace directory could not be read, so users cannot be enumerated for a domain-wide sync. Confirm the Admin SDK API is enabled and that the service account is authorized for the directory scope.`,
+        });
+      }
+    }
+
+    // Stage 3 — is the scope that was actually configured reachable? This is
+    // the check that catches the folder nobody shared with the identity.
+    if (config.folderId) {
+      try {
+        await drive.files.get({
+          fileId: config.folderId,
+          fields: "id,name",
+          supportsAllDrives: true,
+        });
+      } catch (error) {
+        return this.failedTest({
+          error,
+          subject,
+          fallback: `Signed in${asWho}, but folder ${config.folderId} is not visible to that identity. Share the folder with it, or choose a folder it can already see.`,
+        });
+      }
+    }
+
+    for (const driveId of configuredSharedDriveIds(config)) {
+      try {
+        await drive.drives.get({ driveId, fields: "id,name" });
+      } catch (error) {
+        return this.failedTest({
+          error,
+          subject,
+          fallback: `Signed in${asWho}, but shared drive ${driveId} is not visible to that identity. Add it as a member of the shared drive, or remove that drive ID.`,
+        });
+      }
+    }
+
+    this.log.debug({ identity }, "Google Drive connection test successful");
+    return { success: true };
   }
 
   async estimateTotalItems(params: {
@@ -165,6 +265,11 @@ export class GoogleDriveConnector extends BaseConnector {
   }): Promise<number | null> {
     const parsed = parseGDriveConfig(params.config);
     if (!parsed) return null;
+
+    // A domain-wide pass would have to enumerate every user and page their
+    // whole Drive just to produce a number — the same work as the sync itself.
+    // Progress is reported from what the run actually finds instead.
+    if (willEnumerateDomain(parsed)) return null;
 
     try {
       const checkpoint =
@@ -176,7 +281,10 @@ export class GoogleDriveConnector extends BaseConnector {
         ? subtractSafetyBuffer(syncFrom)
         : undefined;
 
-      const drive = this.getDriveClient(params.credentials);
+      const drive = this.getDriveClient({
+        config: parsed,
+        credentials: params.credentials,
+      });
       let total = 0;
 
       const targetDriveIds =
@@ -241,14 +349,32 @@ export class GoogleDriveConnector extends BaseConnector {
     };
 
     const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
+    const supportsImages =
+      params.embeddingInputModalities?.includes("image") ?? false;
+
+    // Domain-wide delegation with nothing narrowing it down: coverage follows
+    // the organization, so the pass walks every shared drive and impersonates
+    // every user rather than acting as one identity.
+    if (willEnumerateDomain(parsed)) {
+      yield* this.syncDomain({
+        config: parsed,
+        credentials: params.credentials,
+        checkpoint,
+        batchSize,
+        supportsImages,
+      });
+      return;
+    }
+
     const syncFrom = checkpoint.lastSyncedAt ?? params.startTime?.toISOString();
     const safetyBufferedSyncFrom = syncFrom
       ? subtractSafetyBuffer(syncFrom)
       : undefined;
-    const supportsImages =
-      params.embeddingInputModalities?.includes("image") ?? false;
 
-    const drive = this.getDriveClient(params.credentials);
+    const drive = this.getDriveClient({
+      config: parsed,
+      credentials: params.credentials,
+    });
 
     // Track the highest modifiedTime seen across all yielded batches
     // so the checkpoint only advances monotonically.
@@ -258,9 +384,11 @@ export class GoogleDriveConnector extends BaseConnector {
 
     this.log.debug(
       {
+        authMode: parsed.authMode ?? "legacy",
         driveId: parsed.driveId,
         driveIds: parsed.driveIds,
         folderId: parsed.folderId,
+        impersonating: parsed.delegatedAdminEmail,
         useSharedDriveApi: hasSharedDriveTarget(parsed),
         recursive: parsed.recursive,
         syncFrom,
@@ -269,64 +397,404 @@ export class GoogleDriveConnector extends BaseConnector {
       "Starting Google Drive sync",
     );
 
-    if (parsed.folderId) {
-      // Folder-scoped mode — recursive defaults to true
-      yield* this.syncFolder({
-        drive,
-        folderId: parsed.folderId,
-        config: parsed,
-        progress,
-        syncFrom: safetyBufferedSyncFrom,
-        batchSize,
-        supportsImages,
-        recursive: parsed.recursive ?? true,
-        maxDepth: parsed.maxDepth ?? DEFAULT_MAX_DEPTH,
-      });
-    } else {
-      // Drive listing mode
-      const targetDriveIds =
-        parsed.driveIds && parsed.driveIds.length > 0
-          ? parsed.driveIds
-          : parsed.driveId
-            ? [parsed.driveId]
-            : [undefined];
-
-      for (const currentDriveId of targetDriveIds) {
-        yield* this.syncDriveFiles({
-          drive,
-          config: { ...parsed, driveId: currentDriveId },
-          progress,
-          syncFrom: safetyBufferedSyncFrom,
-          batchSize,
-          supportsImages,
-        });
-      }
-    }
+    yield* this.syncAsIdentity({
+      drive,
+      config: parsed,
+      progress,
+      syncFrom: safetyBufferedSyncFrom,
+      batchSize,
+      supportsImages,
+    });
   }
 
   // ===== Private methods =====
 
-  private getDriveClient(credentials: ConnectorCredentials): drive_v3.Drive {
-    // Google Drive uses the apiToken as the OAuth2 access token or service
-    // account key. For service account JSON keys, parse and use JWT auth.
-    // For simple API tokens / OAuth tokens, use as bearer.
-    try {
-      // Attempt to parse as a service account JSON key
-      const keyData = JSON.parse(credentials.apiToken) as Record<
-        string,
-        unknown
-      >;
-      const auth = new google.auth.GoogleAuth({
-        credentials: keyData,
-        scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+  /**
+   * Everything one identity contributes: a folder walk when the connector is
+   * folder-scoped, otherwise a listing per configured drive.
+   */
+  private async *syncAsIdentity(params: {
+    drive: drive_v3.Drive;
+    config: GoogleDriveConfig;
+    progress: { maxLastModified: string | undefined };
+    syncFrom: string | undefined;
+    batchSize: number;
+    supportsImages: boolean;
+    dedupe?: Set<string>;
+  }): AsyncGenerator<ConnectorSyncBatch> {
+    const { config } = params;
+
+    if (config.folderId) {
+      // Folder-scoped mode — recursive defaults to true
+      yield* this.syncFolder({
+        ...params,
+        folderId: config.folderId,
+        recursive: config.recursive ?? true,
+        maxDepth: config.maxDepth ?? DEFAULT_MAX_DEPTH,
       });
-      return google.drive({ version: "v3", auth });
-    } catch {
-      // Not JSON — treat as an OAuth2 access token
-      const auth = new google.auth.OAuth2();
-      auth.setCredentials({ access_token: credentials.apiToken });
-      return google.drive({ version: "v3", auth });
+      return;
     }
+
+    // Drive listing mode
+    const targetDriveIds =
+      config.driveIds && config.driveIds.length > 0
+        ? config.driveIds
+        : config.driveId
+          ? [config.driveId]
+          : [undefined];
+
+    for (const currentDriveId of targetDriveIds) {
+      yield* this.syncDriveFiles({
+        ...params,
+        config: { ...config, driveId: currentDriveId },
+      });
+    }
+  }
+
+  /**
+   * Walk the whole Workspace domain: every shared drive, then every user's My
+   * Drive under impersonation. This is what makes coverage follow the
+   * organization instead of a manual share list — a drive created tomorrow is
+   * picked up by the next pass with nobody having to remember anything.
+   *
+   * The two halves do not overlap: a per-user listing uses the default `user`
+   * corpus, which excludes shared drives. Files shared between users' own
+   * Drives do overlap, so a file id seen once is not fetched again.
+   *
+   * `lastSyncedAt` only advances when a pass finishes, and it advances to when
+   * that pass *started* rather than to the newest file it saw. A pass spans
+   * many identities over a long time; anything modified while it was running
+   * has to stay in scope for the next one.
+   */
+  private async *syncDomain(params: {
+    config: GoogleDriveConfig;
+    credentials: ConnectorCredentials;
+    checkpoint: GoogleDriveCheckpoint;
+    batchSize: number;
+    supportsImages: boolean;
+  }): AsyncGenerator<ConnectorSyncBatch> {
+    const { config, credentials, checkpoint, batchSize, supportsImages } =
+      params;
+
+    const adminAuth = asDelegatedAuth(
+      resolveGoogleDriveAuth({ config, credentials }),
+    );
+    const directory = buildAdminDirectoryClient(adminAuth);
+
+    // A resumed pass keeps the timestamp it began with: the cursor may only
+    // move past work that actually finished.
+    const passStartedAt =
+      checkpoint.domainSyncStartedAt ?? new Date().toISOString();
+    const done = new Set(checkpoint.domainTargetsDone ?? []);
+    const syncFrom = checkpoint.lastSyncedAt
+      ? subtractSafetyBuffer(checkpoint.lastSyncedAt)
+      : undefined;
+    const seenFileIds = new Set<string>();
+
+    const sharedDriveIds = await this.listDomainSharedDrives(adminAuth);
+    const userEmails = await this.listDomainUsers(directory);
+
+    const targets: Array<{ key: string; driveId?: string; user?: string }> = [
+      ...sharedDriveIds.map((driveId) => ({
+        key: `drive:${driveId}`,
+        driveId,
+      })),
+      ...userEmails.map((user) => ({ key: `user:${user}`, user })),
+    ];
+
+    this.log.info(
+      {
+        sharedDrives: sharedDriveIds.length,
+        users: userEmails.length,
+        alreadyDone: done.size,
+        passStartedAt,
+        syncFrom,
+      },
+      "Starting domain-wide Google Drive sync",
+    );
+
+    const domainCheckpoint = (): GoogleDriveCheckpoint => ({
+      type: "gdrive",
+      lastSyncedAt: checkpoint.lastSyncedAt,
+      domainTargetsDone: [...done],
+      domainSyncStartedAt: passStartedAt,
+    });
+
+    let targetsSinceYield = 0;
+
+    for (const [index, target] of targets.entries()) {
+      if (done.has(target.key)) continue;
+
+      const remaining = targets.length - index - 1;
+      const identityDrive = await this.openDomainTarget({
+        adminAuth,
+        target,
+      });
+
+      if (!identityDrive) {
+        // Recorded rather than dropped: a shared drive the delegated admin
+        // cannot open is exactly the gap this connector exists to close, and
+        // it has to be visible in the run rather than inferred from a
+        // suspiciously low document count.
+        done.add(target.key);
+        targetsSinceYield++;
+        continue;
+      }
+
+      const identityConfig: GoogleDriveConfig = target.driveId
+        ? { ...config, driveId: target.driveId, driveIds: undefined }
+        : { ...config, driveId: undefined, driveIds: undefined };
+
+      const inner = this.syncAsIdentity({
+        drive: identityDrive,
+        config: identityConfig,
+        progress: { maxLastModified: undefined },
+        syncFrom,
+        batchSize,
+        supportsImages,
+        dedupe: seenFileIds,
+      });
+
+      // Peek one batch ahead so the LAST batch of a target is the one that
+      // records the target as finished. Marking it earlier would let an
+      // interruption skip work that never happened.
+      let next = await inner.next();
+      while (!next.done) {
+        const batch = next.value;
+        next = await inner.next();
+        if (next.done) {
+          done.add(target.key);
+          targetsSinceYield = 0;
+        }
+        yield {
+          ...batch,
+          checkpoint: domainCheckpoint(),
+          hasMore: !next.done || remaining > 0,
+        };
+      }
+
+      if (!done.has(target.key)) {
+        done.add(target.key);
+        targetsSinceYield++;
+      }
+
+      // Long stretches of empty accounts yield nothing, so progress would
+      // never reach the database. Checkpoint periodically on its own.
+      if (targetsSinceYield >= DOMAIN_PROGRESS_CHECKPOINT_TARGETS) {
+        targetsSinceYield = 0;
+        yield {
+          documents: [],
+          failures: this.flushFailures(),
+          skipped: this.flushSkipped(),
+          checkpoint: domainCheckpoint(),
+          hasMore: remaining > 0,
+        };
+      }
+    }
+
+    this.log.info(
+      { targets: targets.length, uniqueFiles: seenFileIds.size },
+      "Domain-wide Google Drive sync complete",
+    );
+
+    // Close the pass: clear the per-target progress and move the cursor to
+    // when this pass began.
+    yield {
+      documents: [],
+      failures: this.flushFailures(),
+      skipped: this.flushSkipped(),
+      checkpoint: { type: "gdrive", lastSyncedAt: passStartedAt },
+      hasMore: false,
+    };
+  }
+
+  /**
+   * A Drive client that can actually read the target, or null.
+   *
+   * A shared drive is normally opened as the delegated admin, but being a
+   * domain admin does not by itself grant membership of a shared drive. When
+   * the admin cannot open one, its membership is read with domain-admin access
+   * and a member is impersonated instead — otherwise a drive nobody thought to
+   * add the admin to would silently contribute nothing.
+   */
+  private async openDomainTarget(params: {
+    adminAuth: DelegatedServiceAccountAuth;
+    target: { key: string; driveId?: string; user?: string };
+  }): Promise<drive_v3.Drive | null> {
+    const { adminAuth, target } = params;
+
+    if (target.user) {
+      return buildDriveClient({ ...adminAuth, subject: target.user });
+    }
+
+    const driveId = target.driveId;
+    if (!driveId) return null;
+
+    const adminDrive = buildDriveClient(adminAuth);
+    try {
+      await this.rateLimit();
+      await adminDrive.drives.get({ driveId, fields: "id" });
+      return adminDrive;
+    } catch {
+      // Falls through to impersonating a member.
+    }
+
+    const member = await this.findSharedDriveMember(adminDrive, driveId);
+    if (!member) {
+      this.trackSkipped({
+        itemId: driveId,
+        name: `Shared drive ${driveId}`,
+        reason: "no_reachable_member",
+      });
+      this.log.warn(
+        { driveId },
+        "Shared drive has no impersonable member; skipping",
+      );
+      return null;
+    }
+
+    const memberDrive = buildDriveClient({ ...adminAuth, subject: member });
+    try {
+      await this.rateLimit();
+      await memberDrive.drives.get({ driveId, fields: "id" });
+      this.log.debug(
+        { driveId, member },
+        "Opened shared drive by impersonating a member",
+      );
+      return memberDrive;
+    } catch (error) {
+      this.trackSkipped({
+        itemId: driveId,
+        name: `Shared drive ${driveId}`,
+        reason: "unreachable",
+      });
+      this.log.warn(
+        { driveId, member, error: extractErrorMessage(error) },
+        "Shared drive unreachable even as a member; skipping",
+      );
+      return null;
+    }
+  }
+
+  private async findSharedDriveMember(
+    adminDrive: drive_v3.Drive,
+    driveId: string,
+  ): Promise<string | null> {
+    try {
+      await this.rateLimit();
+      const res = await adminDrive.permissions.list({
+        fileId: driveId,
+        supportsAllDrives: true,
+        useDomainAdminAccess: true,
+        fields: "permissions(type,role,emailAddress)",
+        pageSize: 100,
+      });
+      const members = res.data.permissions ?? [];
+      // Organizers first: the role most likely to see everything in the drive.
+      const ranked = [...members].sort(
+        (a, b) =>
+          (a.role === "organizer" ? 0 : 1) - (b.role === "organizer" ? 0 : 1),
+      );
+      for (const permission of ranked) {
+        if (permission.type === "user" && permission.emailAddress) {
+          return permission.emailAddress;
+        }
+      }
+      return null;
+    } catch (error) {
+      this.log.debug(
+        { driveId, error: extractErrorMessage(error) },
+        "Could not read shared drive membership",
+      );
+      return null;
+    }
+  }
+
+  /** Every shared drive in the domain, seen through domain-admin access. */
+  private async listDomainSharedDrives(
+    adminAuth: DelegatedServiceAccountAuth,
+  ): Promise<string[]> {
+    const drive = buildDriveClient(adminAuth);
+    const ids: string[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      await this.rateLimit();
+      const res = await drive.drives.list({
+        pageSize: 100,
+        pageToken,
+        useDomainAdminAccess: true,
+        fields: "nextPageToken,drives(id,name)",
+      });
+      for (const sharedDrive of res.data.drives ?? []) {
+        if (sharedDrive.id) ids.push(sharedDrive.id);
+      }
+      pageToken = res.data.nextPageToken ?? undefined;
+    } while (pageToken);
+
+    return ids;
+  }
+
+  /**
+   * Every user whose Drive can be impersonated. Suspended and archived
+   * accounts are left out: Google refuses to mint a token for them, so
+   * including them would turn a normal domain into a run full of failures.
+   */
+  private async listDomainUsers(
+    directory: admin_directory_v1.Admin,
+  ): Promise<string[]> {
+    const emails: string[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      await this.rateLimit();
+      const res = await directory.users.list({
+        customer: "my_customer",
+        maxResults: 500,
+        pageToken,
+        orderBy: "email",
+        fields: "nextPageToken,users(primaryEmail,suspended,archived)",
+      });
+      for (const user of res.data.users ?? []) {
+        if (user.suspended || user.archived) continue;
+        if (user.primaryEmail) emails.push(user.primaryEmail);
+      }
+      pageToken = res.data.nextPageToken ?? undefined;
+    } while (pageToken);
+
+    return emails;
+  }
+
+  /**
+   * Turn a probe failure into a connection-test result, preferring an
+   * explanation of the Google auth code over its raw text.
+   */
+  private failedTest(params: {
+    error: unknown;
+    subject: string | undefined;
+    fallback: string;
+  }): { success: boolean; error: string } {
+    const described = describeGoogleAuthFailure({
+      error: params.error,
+      subject: params.subject,
+    });
+    const detail = extractErrorMessage(params.error);
+    const message = described ?? `${params.fallback}: ${detail}`;
+    this.log.error({ error: detail }, "Google Drive connection test failed");
+    return { success: false, error: message };
+  }
+
+  /**
+   * Build a Drive client for the identity the connector is configured to act
+   * as. `impersonate` overrides the delegated admin, which is how the
+   * domain-wide pass walks one user at a time through this same path.
+   */
+  private getDriveClient(params: {
+    config: GoogleDriveConfig;
+    credentials: ConnectorCredentials;
+    impersonate?: string;
+  }): drive_v3.Drive {
+    return buildDriveClient(resolveGoogleDriveAuth(params));
   }
 
   private async *syncDriveFiles(params: {
@@ -336,9 +804,17 @@ export class GoogleDriveConnector extends BaseConnector {
     syncFrom: string | undefined;
     batchSize: number;
     supportsImages: boolean;
+    dedupe?: Set<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
-    const { drive, config, progress, syncFrom, batchSize, supportsImages } =
-      params;
+    const {
+      drive,
+      config,
+      progress,
+      syncFrom,
+      batchSize,
+      supportsImages,
+      dedupe,
+    } = params;
     const useSharedDriveApi = hasSharedDriveTarget(config);
 
     const query = buildFileQuery(config, syncFrom);
@@ -370,23 +846,12 @@ export class GoogleDriveConnector extends BaseConnector {
         );
       }
 
-      // Partition the page into files we can ingest and files whose type is not
-      // ingestable. The latter are tracked as skipped (not silently dropped) so
-      // the run reports "N found, M imported, K unsupported" — otherwise the
-      // total counts every Drive file but only supported types are imported.
       const allFiles = res.data.files ?? [];
-      const files: DriveFile[] = [];
-      for (const file of allFiles) {
-        if (isSupportedFile(file, supportsImages)) {
-          files.push(file);
-        } else {
-          this.trackSkipped({
-            itemId: file.id ?? "unknown",
-            name: file.name ?? "unknown",
-            reason: "unsupported_file_type",
-          });
-        }
-      }
+      const files = this.selectIngestableFiles({
+        files: allFiles,
+        supportsImages,
+        dedupe,
+      });
 
       const documents: ConnectorDocument[] = [];
 
@@ -470,6 +935,7 @@ export class GoogleDriveConnector extends BaseConnector {
     supportsImages: boolean;
     recursive: boolean;
     maxDepth: number;
+    dedupe?: Set<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
       drive,
@@ -481,6 +947,7 @@ export class GoogleDriveConnector extends BaseConnector {
       supportsImages,
       recursive,
       maxDepth,
+      dedupe,
     } = params;
 
     const adapter: FolderTraversalAdapter = {
@@ -509,6 +976,7 @@ export class GoogleDriveConnector extends BaseConnector {
         syncFrom,
         batchSize,
         supportsImages,
+        dedupe,
         hasMoreFolders,
       });
     }
@@ -525,6 +993,7 @@ export class GoogleDriveConnector extends BaseConnector {
     syncFrom: string | undefined;
     batchSize: number;
     supportsImages: boolean;
+    dedupe?: Set<string>;
     hasMoreFolders: boolean;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
@@ -535,6 +1004,7 @@ export class GoogleDriveConnector extends BaseConnector {
       syncFrom,
       batchSize,
       supportsImages,
+      dedupe,
       hasMoreFolders,
     } = params;
     const useSharedDriveApi = hasSharedDriveTarget(config);
@@ -576,23 +1046,12 @@ export class GoogleDriveConnector extends BaseConnector {
         );
       }
 
-      // Partition the page into files we can ingest and files whose type is not
-      // ingestable. The latter are tracked as skipped (not silently dropped) so
-      // the run reports "N found, M imported, K unsupported" — otherwise the
-      // total counts every Drive file but only supported types are imported.
       const allFiles = res.data.files ?? [];
-      const files: DriveFile[] = [];
-      for (const file of allFiles) {
-        if (isSupportedFile(file, supportsImages)) {
-          files.push(file);
-        } else {
-          this.trackSkipped({
-            itemId: file.id ?? "unknown",
-            name: file.name ?? "unknown",
-            reason: "unsupported_file_type",
-          });
-        }
-      }
+      const files = this.selectIngestableFiles({
+        files: allFiles,
+        supportsImages,
+        dedupe,
+      });
 
       const documents: ConnectorDocument[] = [];
 
@@ -685,6 +1144,44 @@ export class GoogleDriveConnector extends BaseConnector {
     } while (pageToken);
 
     return subfolders;
+  }
+
+  /**
+   * Narrow a page of Drive results to the files worth fetching.
+   *
+   * Files whose type cannot be read are recorded as skipped rather than
+   * silently dropped, so a run reports "N found, M imported, K unsupported"
+   * instead of a total that counts every file against an import count that
+   * only covers some. Files another identity already contributed during this
+   * run are dropped outright — the same document reached through a second
+   * viewer is not a new document, and not a skip worth reporting either.
+   */
+  private selectIngestableFiles(params: {
+    files: DriveFile[];
+    supportsImages: boolean;
+    dedupe?: Set<string>;
+  }): DriveFile[] {
+    const { files, supportsImages, dedupe } = params;
+    const selected: DriveFile[] = [];
+
+    for (const file of files) {
+      if (dedupe && file.id) {
+        if (dedupe.has(file.id)) continue;
+        if (dedupe.size < MAX_TRACKED_FILE_IDS) dedupe.add(file.id);
+      }
+
+      if (isSupportedFile(file, supportsImages)) {
+        selected.push(file);
+      } else {
+        this.trackSkipped({
+          itemId: file.id ?? "unknown",
+          name: file.name ?? "unknown",
+          reason: "unsupported_file_type",
+        });
+      }
+    }
+
+    return selected;
   }
 
   private async downloadFileContent(
@@ -937,6 +1434,29 @@ function getFileExtension(name: string): string {
 
 function hasSharedDriveTarget(config: GoogleDriveConfig): boolean {
   return Boolean(config.driveId) || Boolean(config.driveIds?.length);
+}
+
+/** The shared drives named in the config, however they were named. */
+function configuredSharedDriveIds(config: GoogleDriveConfig): string[] {
+  if (config.driveIds && config.driveIds.length > 0) return config.driveIds;
+  return config.driveId ? [config.driveId] : [];
+}
+
+/**
+ * Whether a run will walk the whole domain rather than act as one identity.
+ *
+ * Delegation is what makes it possible, and the absence of a narrower target
+ * is what makes it wanted: naming a folder or specific shared drives is an
+ * explicit statement of scope, and enumerating the domain anyway would ignore
+ * it. So the connector infers the intent from the scope that was set instead
+ * of asking for the same thing twice.
+ */
+function willEnumerateDomain(config: GoogleDriveConfig): boolean {
+  return (
+    config.authMode === "service_account_delegated" &&
+    !config.folderId &&
+    !hasSharedDriveTarget(config)
+  );
 }
 
 function fileToDocument(

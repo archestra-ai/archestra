@@ -1670,6 +1670,14 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
+  // Starting an authorization ends in a credential being written onto the
+  // connector, so it takes the same grant as any other edit.
+  [RouteId.StartGoogleDriveConnectorOAuth]: { knowledgeSource: ["update"] },
+  // Google redirects the browser here from its own origin, which is not
+  // guaranteed to carry the session cookie. The signed `state` issued by the
+  // start route is what authorizes the call, and the handler re-checks that
+  // the user named in it can still reach the connector.
+  [RouteId.CompleteGoogleDriveConnectorOAuth]: {},
 
   // Connector Knowledge Base Assignment Routes
   [RouteId.AssignConnectorToKnowledgeBases]: { knowledgeSource: ["update"] },

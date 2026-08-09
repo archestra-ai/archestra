@@ -45,6 +45,15 @@ import {
   buildGroupToken,
 } from "@/knowledge-base/acl-tokens";
 import { resolveConnectorCredentials } from "@/knowledge-base/connector-credentials";
+import { extractErrorMessage } from "@/knowledge-base/connectors/base-connector";
+import {
+  buildGoogleDriveAuthorizationUrl,
+  exchangeGoogleDriveAuthorizationCode,
+  getGoogleDriveOAuthClient,
+  isGoogleDriveOAuthConfigured,
+  resolveGoogleDriveOAuthReturnTo,
+  verifyGoogleDriveOAuthState,
+} from "@/knowledge-base/connectors/gdrive/gdrive-oauth";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import { invalidateGroupTokenCache } from "@/knowledge-base/group-token-cache";
 import {
@@ -70,6 +79,7 @@ import {
   MemberModel,
   TaskModel,
 } from "@/models";
+import { GOOGLE_DRIVE_OAUTH_CALLBACK_PATH } from "@/routes/route-paths";
 import { secretManager } from "@/secrets-manager";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import { taskQueueService } from "@/task-queue";
@@ -829,6 +839,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.config.githubUrl = appConfigRef.githubUrl;
       }
 
+      // A Google Drive connector in individual mode is authorized through
+      // Google after it exists — there is nothing to paste, and the refresh
+      // token arrives on the OAuth callback.
+      const awaitsGoogleDriveOAuth =
+        body.config.type === "gdrive" && body.config.authMode === "oauth";
+
       let secretId: string | null = null;
       if (usesGithubAppConfig || !requiresCredentials) {
         if (body.credentials) {
@@ -839,6 +855,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : "Web Crawler connectors must not include inline credentials",
           );
         }
+      } else if (awaitsGoogleDriveOAuth) {
+        if (body.credentials) {
+          throw new ApiError(
+            400,
+            "Google Drive connectors in individual mode are authorized through Google, not with a pasted credential",
+          );
+        }
+        const oauthClient = getGoogleDriveOAuthClient();
+        if (!oauthClient) {
+          throw new ApiError(
+            400,
+            "This deployment has no Google OAuth client configured. Set ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID and ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET.",
+          );
+        }
+        // The secret exists from the start, holding only the client the
+        // connector will be authorized against; the callback adds the token.
+        const secret = await secretManager().createSecret(
+          { apiToken: "", googleOAuth: { clientId: oauthClient.clientId } },
+          `connector-${body.name}`,
+        );
+        secretId = secret.id;
       } else {
         if (!body.credentials) {
           throw new ApiError(
@@ -883,6 +920,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             throw new ApiError(404, "Knowledge base not found");
           }
         }
+      }
+
+      // A connector still waiting on its Google authorization has no
+      // credential to sync with, so the first run would only produce a
+      // failure to explain something the UI already says. The OAuth callback
+      // enqueues it the moment there is a token.
+      if (awaitsGoogleDriveOAuth) {
+        return reply.send(connector);
       }
 
       // Auto-trigger initial sync. "queued" (not "running"): the worker
@@ -2002,6 +2047,168 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // ===== Google Drive individual (OAuth) connection =====
+
+  fastify.post(
+    "/api/connectors/:id/gdrive/oauth/start",
+    {
+      schema: {
+        operationId: RouteId.StartGoogleDriveConnectorOAuth,
+        description:
+          "Begin the Google authorization-code flow for a Google Drive " +
+          "connector in individual mode. Returns the URL to send the browser " +
+          "to; the connector being authorized travels in a signed state " +
+          "parameter, because Google matches the redirect URI exactly.",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        body: z.object({
+          /** Where to land once Google is done. Confined to this deployment. */
+          returnTo: z.string().optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({ authorizationUrl: z.string() }),
+        ),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (
+        connector.config.type !== "gdrive" ||
+        connector.config.authMode !== "oauth"
+      ) {
+        throw new ApiError(
+          400,
+          "This connector does not use individual Google account authorization",
+        );
+      }
+      if (!isGoogleDriveOAuthConfigured()) {
+        throw new ApiError(
+          400,
+          "This deployment has no Google OAuth client configured. Set ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID and ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET.",
+        );
+      }
+
+      return reply.send({
+        authorizationUrl: buildGoogleDriveAuthorizationUrl({
+          connectorId: connector.id,
+          userId: user.id,
+          organizationId,
+          returnTo: resolveGoogleDriveOAuthReturnTo(body.returnTo),
+        }),
+      });
+    },
+  );
+
+  fastify.get(
+    GOOGLE_DRIVE_OAUTH_CALLBACK_PATH,
+    {
+      schema: {
+        operationId: RouteId.CompleteGoogleDriveConnectorOAuth,
+        description:
+          "Where Google returns the browser after an individual Google Drive " +
+          "authorization. Trusts the signed state parameter rather than the " +
+          "session: a cross-site redirect is not guaranteed to carry cookies, " +
+          "and state is what binds the response to the request we issued.",
+        tags: ["Connectors"],
+        querystring: z.object({
+          code: z.string().optional(),
+          state: z.string().optional(),
+          error: z.string().optional(),
+        }),
+        // no `response` schema: every outcome is a redirect back into the app,
+        // so the person authorizing sees the connector rather than raw JSON.
+      },
+    },
+    async ({ query }, reply) => {
+      const state = query.state
+        ? verifyGoogleDriveOAuthState(query.state)
+        : null;
+
+      // With no valid state there is nowhere trustworthy to return to, so
+      // fall back to the knowledge page rather than honouring a raw parameter.
+      const returnTo = state
+        ? resolveGoogleDriveOAuthReturnTo(state.returnTo)
+        : resolveGoogleDriveOAuthReturnTo(undefined);
+
+      const failed = (message: string) =>
+        reply.redirect(appendQuery(returnTo, { gdriveOauthError: message }));
+
+      if (query.error) {
+        // The person declined, or Google refused the request outright.
+        return failed(
+          query.error === "access_denied"
+            ? "Google authorization was cancelled."
+            : `Google refused the authorization: ${query.error}`,
+        );
+      }
+      if (!state || !query.code) {
+        return failed(
+          "That Google authorization link is no longer valid. Start the connection again.",
+        );
+      }
+
+      let connector: Awaited<ReturnType<typeof findConnectorOrThrow>>;
+      try {
+        connector = await findConnectorOrThrow({
+          id: state.connectorId,
+          organizationId: state.organizationId,
+          userId: state.userId,
+        });
+      } catch {
+        return failed("That connector no longer exists.");
+      }
+
+      if (
+        connector.config.type !== "gdrive" ||
+        connector.config.authMode !== "oauth"
+      ) {
+        return failed(
+          "That connector no longer uses individual Google account authorization.",
+        );
+      }
+
+      try {
+        const { refreshToken, clientId, accountEmail } =
+          await exchangeGoogleDriveAuthorizationCode(query.code);
+
+        await storeGoogleDriveOAuthConnection({
+          connector,
+          refreshToken,
+          clientId,
+          accountEmail,
+        });
+
+        // First sync now that there is finally something to sync with. Create
+        // deliberately skips this for an unconnected connector.
+        await taskQueueService.enqueue({
+          taskType: "connector_sync",
+          payload: { connectorId: connector.id },
+        });
+        await KnowledgeBaseConnectorModel.update(connector.id, {
+          lastSyncStatus: "queued",
+        });
+
+        return reply.redirect(
+          appendQuery(returnTo, {
+            gdriveConnected: accountEmail ?? "the Google account",
+          }),
+        );
+      } catch (error) {
+        const message = extractErrorMessage(error);
+        logger.error(
+          { connectorId: connector.id, error: message },
+          "Google Drive OAuth callback failed",
+        );
+        return failed(message);
+      }
+    },
+  );
+
   // ===== Connector Knowledge Base Assignments =====
 
   fastify.post(
@@ -2389,6 +2596,59 @@ async function findKnowledgeBaseOrThrow(params: {
     throw new ApiError(404, "Knowledge base not found");
   }
   return kg;
+}
+
+/**
+ * Persist a completed Google authorization onto the connector.
+ *
+ * The refresh token joins the connector's own vaulted secret, next to the id
+ * of the client that issued it. The account it belongs to is written to the
+ * config instead — it is a label, not a credential, and the connector page has
+ * to be able to show who is connected without unsealing a secret.
+ */
+async function storeGoogleDriveOAuthConnection(params: {
+  connector: Awaited<ReturnType<typeof findConnectorOrThrow>>;
+  refreshToken: string;
+  clientId: string;
+  accountEmail: string | null;
+}): Promise<void> {
+  const { connector, refreshToken, clientId, accountEmail } = params;
+  const googleOAuth = { clientId, refreshToken };
+
+  let secretId = connector.secretId;
+  if (secretId) {
+    const existing = await secretManager().getSecret(secretId);
+    await secretManager().updateSecret(secretId, {
+      ...((existing?.secret as Record<string, unknown>) ?? {}),
+      googleOAuth,
+    });
+  } else {
+    const secret = await secretManager().createSecret(
+      { apiToken: "", googleOAuth },
+      `connector-${connector.name}`,
+    );
+    secretId = secret.id;
+  }
+
+  await KnowledgeBaseConnectorModel.update(connector.id, {
+    ...(connector.secretId ? {} : { secretId }),
+    ...(connector.config.type === "gdrive"
+      ? {
+          config: {
+            ...connector.config,
+            connectedAccountEmail: accountEmail ?? undefined,
+          },
+        }
+      : {}),
+  });
+}
+
+function appendQuery(url: string, params: Record<string, string>): string {
+  const parsed = new URL(url);
+  for (const [key, value] of Object.entries(params)) {
+    parsed.searchParams.set(key, value);
+  }
+  return parsed.toString();
 }
 
 async function findConnectorOrThrow(params: {

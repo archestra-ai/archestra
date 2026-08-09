@@ -4,6 +4,7 @@ import {
   createXaiSubscriptionFetch,
   refreshBufferFor,
   xaiOauthEndpoints,
+  xaiSubscriptionTokenManager,
 } from "@/services/xai-subscription-token";
 import { afterEach, describe, expect, test } from "@/test";
 
@@ -163,7 +164,180 @@ describe("refreshBufferFor", () => {
   });
 });
 
+/**
+ * Serves OIDC discovery plus the token endpoint from one fetch stub. `mint`
+ * decides each redemption's response; the redeemed refresh tokens are recorded
+ * so tests can assert which token each redemption spent.
+ */
+function stubRedemptionFetch(
+  mint: (call: { index: number }) => {
+    access_token: string;
+    refresh_token?: string;
+    expires_in?: number;
+  },
+) {
+  const issuer = config.llm.xai.subscription.issuer;
+  const redeemedRefreshTokens: Array<string | null> = [];
+  const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+    if (String(url).includes("/.well-known/openid-configuration")) {
+      return Response.json({
+        device_authorization_endpoint: `${issuer}/oauth2/device/code`,
+        token_endpoint: `${issuer}/oauth2/token`,
+      });
+    }
+    const body = new URLSearchParams(String(init?.body));
+    const index = redeemedRefreshTokens.length;
+    redeemedRefreshTokens.push(body.get("refresh_token"));
+    return Response.json(mint({ index }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return { redeemedRefreshTokens };
+}
+
+// The manager is a module singleton whose token cache survives across tests,
+// so every test uses its own providerApiKeyId (and refresh tokens) instead of
+// resetting shared state.
+describe("xaiSubscriptionTokenManager", () => {
+  test("caches the access token per key row", async () => {
+    const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+      expires_in: 3600,
+    }));
+
+    const first = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_cache",
+      providerApiKeyId: "key-cache",
+    });
+    const second = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_cache",
+      providerApiKeyId: "key-cache",
+    });
+
+    expect(first).toBe("at_0");
+    expect(second).toBe("at_0");
+    expect(redeemedRefreshTokens).toEqual(["rt_cache"]);
+  });
+
+  test("single-flights concurrent redemptions for the same key", async () => {
+    const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+      expires_in: 3600,
+    }));
+
+    const [first, second] = await Promise.all([
+      xaiSubscriptionTokenManager.getAccessToken({
+        refreshToken: "rt_flight",
+        providerApiKeyId: "key-flight",
+      }),
+      xaiSubscriptionTokenManager.getAccessToken({
+        refreshToken: "rt_flight",
+        providerApiKeyId: "key-flight",
+      }),
+    ]);
+
+    expect(first).toBe("at_0");
+    expect(second).toBe("at_0");
+    expect(redeemedRefreshTokens).toEqual(["rt_flight"]);
+  });
+
+  test("drops the cached token when the stored credential was replaced", async () => {
+    // Reconnecting to a different X account swaps the stored refresh token
+    // under the same key row; serving the cached access token would answer as
+    // the old account.
+    const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+      expires_in: 3600,
+    }));
+
+    const first = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_old_account",
+      providerApiKeyId: "key-reconnect",
+    });
+    const second = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_new_account",
+      providerApiKeyId: "key-reconnect",
+    });
+
+    expect(first).toBe("at_0");
+    expect(second).toBe("at_1");
+    expect(redeemedRefreshTokens).toEqual(["rt_old_account", "rt_new_account"]);
+  });
+
+  test("redeems with the rotated refresh token after the access token is invalidated", async () => {
+    const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+      // Only the first redemption rotates; the follow-up must spend the
+      // rotated token rather than the stored (superseded) one.
+      ...(index === 0 ? { refresh_token: "rt_rotated" } : {}),
+      expires_in: 3600,
+    }));
+
+    const first = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_stored",
+      providerApiKeyId: "key-rotation",
+    });
+    xaiSubscriptionTokenManager.invalidate("key-rotation", first);
+    const second = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_stored",
+      providerApiKeyId: "key-rotation",
+    });
+
+    expect(first).toBe("at_0");
+    expect(second).toBe("at_1");
+    expect(redeemedRefreshTokens).toEqual(["rt_stored", "rt_rotated"]);
+  });
+
+  test("keeps a token another request already refreshed when invalidating a stale one", async () => {
+    stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+      expires_in: 3600,
+    }));
+
+    const current = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_stale_check",
+      providerApiKeyId: "key-stale-check",
+    });
+    // A concurrent 401 handler holding an older token must not evict the one
+    // just minted.
+    xaiSubscriptionTokenManager.invalidate("key-stale-check", "at_older");
+    const after = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_stale_check",
+      providerApiKeyId: "key-stale-check",
+    });
+
+    expect(after).toBe(current);
+  });
+});
+
 describe("createXaiSubscriptionFetch", () => {
+  test("retries exactly once with a fresh bearer after a 401", async () => {
+    stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+      expires_in: 3600,
+    }));
+    const innerFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("nope", { status: 401 }))
+      .mockResolvedValue(new Response("ok"));
+
+    const wrapped = createXaiSubscriptionFetch({
+      credential: { refreshToken: "rt_retry" },
+      providerApiKeyId: "key-retry",
+      innerFetch,
+    });
+    const response = await wrapped("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { authorization: "Bearer xai-subscription" },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(200);
+    expect(innerFetch).toHaveBeenCalledTimes(2);
+    const bearers = innerFetch.mock.calls.map(([, init]) =>
+      (init.headers as Headers).get("authorization"),
+    );
+    expect(bearers).toEqual(["Bearer at_0", "Bearer at_1"]);
+  });
   test("replaces the placeholder key with the redeemed bearer", async () => {
     const issuer = config.llm.xai.subscription.issuer;
     vi.stubGlobal(

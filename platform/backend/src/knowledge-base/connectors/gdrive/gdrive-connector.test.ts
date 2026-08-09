@@ -9,12 +9,46 @@ const mockFilesList = vi.fn();
 const mockFilesGet = vi.fn();
 const mockFilesExport = vi.fn();
 const mockAboutGet = vi.fn();
+const mockDrivesList = vi.fn();
+const mockDrivesGet = vi.fn();
+const mockPermissionsList = vi.fn();
+const mockDirectoryUsersList = vi.fn();
+
+/**
+ * Every identity a Drive client was built for, in order. Impersonation is the
+ * whole point of the delegated modes, and it is invisible in the request
+ * mocks — the subject is fixed when the client is constructed, not passed per
+ * call — so it is recorded here instead.
+ */
+const impersonatedSubjects: string[] = [];
+/** Client ids handed to an OAuth2 client, and the credentials set on it. */
+const oauthClients: Array<{
+  clientId?: string;
+  credentials: Record<string, unknown>;
+}> = [];
 
 vi.mock("googleapis", () => {
   class MockOAuth2 {
-    setCredentials = vi.fn();
+    credentials: Record<string, unknown> = {};
+    constructor(
+      public clientId?: string,
+      public clientSecret?: string,
+    ) {
+      oauthClients.push({ clientId, credentials: this.credentials });
+    }
+    setCredentials = vi.fn((next: Record<string, unknown>) => {
+      this.credentials = next;
+      const entry = oauthClients[oauthClients.length - 1];
+      if (entry) entry.credentials = next;
+    });
   }
-  class MockGoogleAuth {}
+  class MockGoogleAuth {
+    subject?: string;
+    constructor(options?: { clientOptions?: { subject?: string } }) {
+      this.subject = options?.clientOptions?.subject;
+      if (this.subject) impersonatedSubjects.push(this.subject);
+    }
+  }
 
   return {
     google: {
@@ -24,8 +58,20 @@ vi.mock("googleapis", () => {
           get: (...args: unknown[]) => mockFilesGet(...args),
           export: (...args: unknown[]) => mockFilesExport(...args),
         },
+        drives: {
+          list: (...args: unknown[]) => mockDrivesList(...args),
+          get: (...args: unknown[]) => mockDrivesGet(...args),
+        },
+        permissions: {
+          list: (...args: unknown[]) => mockPermissionsList(...args),
+        },
         about: {
           get: (...args: unknown[]) => mockAboutGet(...args),
+        },
+      }),
+      admin: () => ({
+        users: {
+          list: (...args: unknown[]) => mockDirectoryUsersList(...args),
         },
       }),
       auth: {
@@ -37,6 +83,15 @@ vi.mock("googleapis", () => {
 });
 
 const credentials = { apiToken: "test-access-token" };
+
+/** A service-account key, which is what the non-legacy modes require. */
+const serviceAccountKey = JSON.stringify({
+  type: "service_account",
+  client_email: "indexer@example.iam.gserviceaccount.com",
+  private_key:
+    "-----BEGIN PRIVATE KEY-----\nnot-a-real-key\n-----END PRIVATE KEY-----\n",
+});
+const serviceAccountCredentials = { apiToken: serviceAccountKey };
 
 function makeDriveFile(
   id: string,
@@ -68,6 +123,12 @@ function resetMocks() {
   mockFilesGet.mockReset();
   mockFilesExport.mockReset();
   mockAboutGet.mockReset();
+  mockDrivesList.mockReset();
+  mockDrivesGet.mockReset();
+  mockPermissionsList.mockReset();
+  mockDirectoryUsersList.mockReset();
+  impersonatedSubjects.length = 0;
+  oauthClients.length = 0;
 }
 
 /** Minimal valid .docx (OOXML zip) wrapping a single paragraph of text. */
@@ -1579,6 +1640,448 @@ describe("GoogleDriveConnector", () => {
       });
 
       expect(result).toBeNull();
+    });
+  });
+  describe("auth modes", () => {
+    it("keeps inferring from the credential when no mode was ever chosen", async () => {
+      // A connector created before auth modes existed: a bare token still
+      // authenticates as a bare token, so upgrading changes nothing for it.
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      mockAboutGet.mockResolvedValueOnce({
+        data: { user: { emailAddress: "legacy@example.com" } },
+      });
+
+      const result = await connector.testConnection({
+        config: {},
+        credentials,
+      });
+
+      expect(result.success).toBe(true);
+      expect(impersonatedSubjects).toEqual([]);
+      expect(oauthClients.at(-1)?.credentials).toEqual({
+        access_token: "test-access-token",
+      });
+    });
+
+    it("impersonates the delegated admin in the Workspace mode", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      mockAboutGet.mockResolvedValueOnce({
+        data: { user: { emailAddress: "admin@example.com" } },
+      });
+      mockDirectoryUsersList.mockResolvedValueOnce({ data: { users: [] } });
+
+      const result = await connector.testConnection({
+        config: {
+          authMode: "service_account_delegated",
+          delegatedAdminEmail: "admin@example.com",
+        },
+        credentials: serviceAccountCredentials,
+      });
+
+      expect(result.success).toBe(true);
+      expect(impersonatedSubjects).toContain("admin@example.com");
+    });
+
+    it("refuses the Workspace mode without an admin to impersonate", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      const result = await connector.testConnection({
+        config: { authMode: "service_account_delegated" },
+        credentials: serviceAccountCredentials,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("delegated admin email");
+    });
+
+    it("refuses a service-account mode given something that is not a key", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      const result = await connector.testConnection({
+        config: { authMode: "service_account" },
+        credentials: { apiToken: "ya29.a-bare-access-token" },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("service account JSON key");
+    });
+
+    it("says to connect an account when OAuth has no refresh token yet", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      const result = await connector.testConnection({
+        config: { authMode: "oauth" },
+        credentials: {
+          apiToken: "",
+          googleOAuth: { clientId: "client-1", clientSecret: "secret-1" },
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Connect Google account");
+      // Nothing was attempted against Google — there is nothing to attempt with.
+      expect(mockAboutGet).not.toHaveBeenCalled();
+    });
+
+    it("hands the refresh token, not an access token, to the OAuth client", async () => {
+      // The old connector set a bare access_token, which stopped working an
+      // hour later with no way to renew it.
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      mockAboutGet.mockResolvedValueOnce({
+        data: { user: { emailAddress: "person@example.com" } },
+      });
+
+      const result = await connector.testConnection({
+        config: { authMode: "oauth" },
+        credentials: {
+          apiToken: "",
+          googleOAuth: {
+            clientId: "client-1",
+            clientSecret: "secret-1",
+            refreshToken: "refresh-1",
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(oauthClients.at(-1)).toMatchObject({
+        clientId: "client-1",
+        credentials: { refresh_token: "refresh-1" },
+      });
+    });
+  });
+
+  describe("testConnection — validating the configured scope", () => {
+    it("fails when the configured folder is not visible to the identity", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      mockAboutGet.mockResolvedValueOnce({
+        data: {
+          user: { emailAddress: "indexer@example.iam.gserviceaccount.com" },
+        },
+      });
+      mockFilesGet.mockRejectedValueOnce(new Error("File not found: folder-1"));
+
+      const result = await connector.testConnection({
+        config: { authMode: "service_account", folderId: "folder-1" },
+        credentials: serviceAccountCredentials,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("folder-1");
+      expect(result.error).toContain("not visible");
+    });
+
+    it("fails when a configured shared drive is not visible to the identity", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      mockAboutGet.mockResolvedValueOnce({
+        data: {
+          user: { emailAddress: "indexer@example.iam.gserviceaccount.com" },
+        },
+      });
+      mockDrivesGet.mockRejectedValueOnce(new Error("notFound"));
+
+      const result = await connector.testConnection({
+        config: { authMode: "service_account", driveIds: ["drive-9"] },
+        credentials: serviceAccountCredentials,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("drive-9");
+    });
+
+    it("explains an unauthorized delegation instead of echoing the OAuth code", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      mockAboutGet.mockRejectedValueOnce(
+        new Error(
+          "unauthorized_client: Client is unauthorized to retrieve access tokens",
+        ),
+      );
+
+      const result = await connector.testConnection({
+        config: {
+          authMode: "service_account_delegated",
+          delegatedAdminEmail: "admin@example.com",
+        },
+        credentials: serviceAccountCredentials,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Domain-wide delegation");
+      expect(result.error).toContain("admin@example.com");
+    });
+
+    it("separates a directory failure from a sign-in failure", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      mockAboutGet.mockResolvedValueOnce({
+        data: { user: { emailAddress: "admin@example.com" } },
+      });
+      mockDirectoryUsersList.mockRejectedValueOnce(new Error("Not Authorized"));
+
+      const result = await connector.testConnection({
+        config: {
+          authMode: "service_account_delegated",
+          delegatedAdminEmail: "admin@example.com",
+        },
+        credentials: serviceAccountCredentials,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Signed in");
+      expect(result.error).toContain("directory");
+    });
+
+    it("does not read the directory when a folder scopes the delegated sync", async () => {
+      // Naming a folder is a statement of scope; the pass acts as the admin
+      // alone, so directory access is not needed and must not be demanded.
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      mockAboutGet.mockResolvedValueOnce({
+        data: { user: { emailAddress: "admin@example.com" } },
+      });
+      mockFilesGet.mockResolvedValueOnce({ data: { id: "folder-1" } });
+
+      const result = await connector.testConnection({
+        config: {
+          authMode: "service_account_delegated",
+          delegatedAdminEmail: "admin@example.com",
+          folderId: "folder-1",
+        },
+        credentials: serviceAccountCredentials,
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockDirectoryUsersList).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("sync — domain-wide delegation", () => {
+    const domainConfig = {
+      authMode: "service_account_delegated",
+      delegatedAdminEmail: "admin@example.com",
+    };
+
+    function drainDomainSync(
+      checkpoint: Record<string, unknown> | null = null,
+    ) {
+      const connector = new GoogleDriveConnector();
+      return (async () => {
+        const batches: ConnectorSyncBatch[] = [];
+        for await (const batch of connector.sync({
+          config: domainConfig,
+          credentials: serviceAccountCredentials,
+          checkpoint,
+        })) {
+          batches.push(batch);
+        }
+        return batches;
+      })();
+    }
+
+    it("walks every shared drive and impersonates every active user", async () => {
+      resetMocks();
+      mockDrivesList.mockResolvedValueOnce({
+        data: { drives: [{ id: "shared-1", name: "Engineering" }] },
+      });
+      mockDrivesGet.mockResolvedValue({ data: { id: "shared-1" } });
+      mockDirectoryUsersList.mockResolvedValueOnce({
+        data: {
+          users: [
+            { primaryEmail: "ada@example.com" },
+            { primaryEmail: "grace@example.com" },
+            { primaryEmail: "gone@example.com", suspended: true },
+            { primaryEmail: "archived@example.com", archived: true },
+          ],
+        },
+      });
+
+      // shared-1, then ada, then grace
+      mockFilesList
+        .mockResolvedValueOnce({
+          data: { files: [makeDriveFile("f-shared", "spec.md")] },
+        })
+        .mockResolvedValueOnce({
+          data: { files: [makeDriveFile("f-ada", "notes.txt")] },
+        })
+        .mockResolvedValueOnce({ data: { files: [] } });
+      mockFilesGet
+        .mockResolvedValueOnce({
+          data: Buffer.from("shared drive file").buffer,
+        })
+        .mockResolvedValueOnce({ data: Buffer.from("ada's file").buffer });
+
+      const batches = await drainDomainSync();
+      const documents = batches.flatMap((b) => b.documents);
+
+      expect(documents.map((d) => d.title)).toEqual(["spec.md", "notes.txt"]);
+      // The admin opens the shared drive; each active user is impersonated in
+      // turn. Suspended and archived accounts cannot be, so they are not tried.
+      expect(impersonatedSubjects).toContain("ada@example.com");
+      expect(impersonatedSubjects).toContain("grace@example.com");
+      expect(impersonatedSubjects).not.toContain("gone@example.com");
+      expect(impersonatedSubjects).not.toContain("archived@example.com");
+    });
+
+    it("indexes a file shared between two people only once", async () => {
+      resetMocks();
+      mockDrivesList.mockResolvedValueOnce({ data: { drives: [] } });
+      mockDirectoryUsersList.mockResolvedValueOnce({
+        data: {
+          users: [
+            { primaryEmail: "ada@example.com" },
+            { primaryEmail: "grace@example.com" },
+          ],
+        },
+      });
+
+      const shared = makeDriveFile("f-shared", "handbook.md");
+      mockFilesList
+        .mockResolvedValueOnce({ data: { files: [shared] } })
+        .mockResolvedValueOnce({ data: { files: [shared] } });
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("the handbook").buffer,
+      });
+
+      const batches = await drainDomainSync();
+      const documents = batches.flatMap((b) => b.documents);
+
+      expect(documents).toHaveLength(1);
+      // Downloaded once, not once per viewer.
+      expect(mockFilesGet).toHaveBeenCalledTimes(1);
+    });
+
+    it("impersonates a member when the admin cannot open a shared drive", async () => {
+      resetMocks();
+      mockDrivesList.mockResolvedValueOnce({
+        data: { drives: [{ id: "shared-1" }] },
+      });
+      mockDrivesGet
+        .mockRejectedValueOnce(new Error("notFound"))
+        .mockResolvedValueOnce({ data: { id: "shared-1" } });
+      mockPermissionsList.mockResolvedValueOnce({
+        data: {
+          permissions: [
+            {
+              type: "group",
+              role: "organizer",
+              emailAddress: "team@example.com",
+            },
+            {
+              type: "user",
+              role: "organizer",
+              emailAddress: "owner@example.com",
+            },
+          ],
+        },
+      });
+      mockDirectoryUsersList.mockResolvedValueOnce({ data: { users: [] } });
+      mockFilesList.mockResolvedValueOnce({
+        data: { files: [makeDriveFile("f-1", "design.md")] },
+      });
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("design doc").buffer,
+      });
+
+      const batches = await drainDomainSync();
+
+      expect(batches.flatMap((b) => b.documents)).toHaveLength(1);
+      expect(impersonatedSubjects).toContain("owner@example.com");
+    });
+
+    it("records a shared drive nobody can open instead of dropping it", async () => {
+      resetMocks();
+      mockDrivesList.mockResolvedValueOnce({
+        data: { drives: [{ id: "orphan-drive" }] },
+      });
+      mockDrivesGet.mockRejectedValue(new Error("notFound"));
+      mockPermissionsList.mockResolvedValueOnce({ data: { permissions: [] } });
+      mockDirectoryUsersList.mockResolvedValueOnce({ data: { users: [] } });
+
+      const batches = await drainDomainSync();
+      const skipped = batches.flatMap((b) => b.skipped ?? []);
+
+      expect(skipped.map((s) => s.itemId)).toContain("orphan-drive");
+    });
+
+    it("resumes at the target it stopped on rather than the first one", async () => {
+      resetMocks();
+      mockDrivesList.mockResolvedValueOnce({ data: { drives: [] } });
+      mockDirectoryUsersList.mockResolvedValueOnce({
+        data: {
+          users: [
+            { primaryEmail: "ada@example.com" },
+            { primaryEmail: "grace@example.com" },
+          ],
+        },
+      });
+      mockFilesList.mockResolvedValueOnce({ data: { files: [] } });
+
+      await drainDomainSync({
+        type: "gdrive",
+        domainTargetsDone: ["user:ada@example.com"],
+        domainSyncStartedAt: "2026-01-01T00:00:00.000Z",
+      });
+
+      expect(impersonatedSubjects).not.toContain("ada@example.com");
+      expect(impersonatedSubjects).toContain("grace@example.com");
+    });
+
+    it("only advances the cursor once the whole pass is done", async () => {
+      resetMocks();
+      mockDrivesList.mockResolvedValueOnce({ data: { drives: [] } });
+      mockDirectoryUsersList.mockResolvedValueOnce({
+        data: { users: [{ primaryEmail: "ada@example.com" }] },
+      });
+      mockFilesList.mockResolvedValueOnce({
+        data: { files: [makeDriveFile("f-1", "a.txt")] },
+      });
+      mockFilesGet.mockResolvedValueOnce({ data: Buffer.from("a").buffer });
+
+      const batches = await drainDomainSync({
+        type: "gdrive",
+        lastSyncedAt: "2026-01-01T00:00:00.000Z",
+      });
+
+      // Mid-pass the cursor is untouched, so a run that dies partway cannot
+      // skip the users it never reached.
+      const midPass = batches[0].checkpoint as Record<string, unknown>;
+      expect(midPass.lastSyncedAt).toBe("2026-01-01T00:00:00.000Z");
+      expect(midPass.domainSyncStartedAt).toBeTruthy();
+
+      // The closing batch advances it and clears the per-target progress.
+      const final = batches.at(-1)?.checkpoint as Record<string, unknown>;
+      expect(final.lastSyncedAt).not.toBe("2026-01-01T00:00:00.000Z");
+      expect(final.domainTargetsDone).toBeUndefined();
+      expect(batches.at(-1)?.hasMore).toBe(false);
+    });
+
+    it("acts as the admin alone when a folder scopes the sync", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      // Folder mode lists subfolders as well as files; neither has anything.
+      mockFilesList.mockResolvedValue({ data: { files: [] } });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...domainConfig, folderId: "folder-1" },
+        credentials: serviceAccountCredentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(mockDirectoryUsersList).not.toHaveBeenCalled();
+      expect(mockDrivesList).not.toHaveBeenCalled();
+      expect(impersonatedSubjects).toEqual(["admin@example.com"]);
     });
   });
 });

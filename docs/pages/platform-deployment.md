@@ -1047,6 +1047,14 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.x.ai/v1`
   - Use this to point to your own proxy or other custom endpoints
 
+- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the X Premium (SuperGrok) sign-in. Its OIDC discovery document supplies the device and token endpoints.
+  - Default: `https://auth.x.ai`
+- **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_ID`** - Public OAuth client id for the X Premium device-code login.
+  - Default: the public Grok CLI client id
+- **`ARCHESTRA_XAI_SUBSCRIPTION_SCOPES`** - Space-separated scopes requested at device-authorization time. Drop `grok-cli:access` if xAI refuses it for your accounts; `offline_access` is required, since it is what yields the refresh token the key stores.
+  - Default: `openid profile email offline_access api:access grok-cli:access`
+  - X Premium subscription traffic uses `ARCHESTRA_XAI_BASE_URL` above — there is no separate inference endpoint
+
 - **`ARCHESTRA_OPENROUTER_BASE_URL`** - Override OpenRouter API base URL.
   - Default: `https://openrouter.ai/api/v1`
   - Use this to point to your own proxy, an OpenRouter-compatible API, or other custom endpoints

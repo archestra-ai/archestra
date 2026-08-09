@@ -2056,6 +2056,34 @@ const config = {
     },
     xai: {
       baseUrl: process.env.ARCHESTRA_XAI_BASE_URL || "https://api.x.ai/v1",
+      /**
+       * "X Premium (SuperGrok)" subscription auth mode on the xAI provider:
+       * reuse a user's X Premium subscription for chat instead of a metered
+       * console API key. Unlike ChatGPT/Codex — which serves subscription
+       * traffic from a separate backend — xAI accepts the redeemed bearer on
+       * its ordinary OpenAI-compatible surface, so `baseUrl` above covers
+       * inference and only the OAuth side is configured here.
+       */
+      subscription: {
+        /** OAuth issuer; its OIDC discovery document supplies the endpoints. */
+        issuer:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_ISSUER || "https://auth.x.ai",
+        /** Public OAuth client id used for the X Premium device-code login. */
+        clientId:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_ID ||
+          "b1a00492-073a-47ea-816f-4c329264a828",
+        /**
+         * Scopes requested at device-authorization time, space-separated.
+         * `offline_access` is what yields the long-lived refresh token the
+         * provider key stores; `api:access`/`grok-cli:access` are what api.x.ai
+         * accepts the redeemed bearer for. Overridable because xAI gates some
+         * scopes by plan — an operator whose accounts are refused
+         * `grok-cli:access` can drop it without a code change.
+         */
+        scopes:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_SCOPES ||
+          "openid profile email offline_access api:access grok-cli:access",
+      },
     },
     vllm: {
       enabled: Boolean(process.env.ARCHESTRA_VLLM_BASE_URL),

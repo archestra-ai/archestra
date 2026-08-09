@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { anthropicAdapterFactory } from "../adapters/anthropic";
 import { openaiAdapterFactory } from "../adapters/openai";
 import { openAiResponsesAdapterFactory } from "../adapters/openai-responses";
+import { xaiAdapterFactory } from "../adapters/xai";
 import { resolveInteractionBillingMode } from "./billing-mode";
 
 describe("resolveInteractionBillingMode", () => {
@@ -102,4 +104,34 @@ describe("openai isSubscriptionCredential (Codex credential format)", () => {
       expect(isSubscription(undefined)).toBe(false);
     });
   }
+});
+
+describe("xai isSubscriptionCredential (X Premium credential format)", () => {
+  const subscriptionCredential = encodeXaiSubscriptionCredential({
+    refreshToken: "rt_test",
+  });
+  const isSubscription = (apiKey: string | undefined) =>
+    xaiAdapterFactory.isSubscriptionCredential?.(apiKey) ?? false;
+
+  test("encoded X Premium credential => subscription", () => {
+    expect(isSubscription(subscriptionCredential)).toBe(true);
+  });
+
+  test("Bearer-prefixed encoded credential => subscription", () => {
+    // extractApiKey returns the authorization header as-is, so the encoded
+    // credential can arrive with a `Bearer ` transport prefix.
+    expect(isSubscription(`Bearer ${subscriptionCredential}`)).toBe(true);
+  });
+
+  test("plain console API key stays metered", () => {
+    expect(isSubscription("xai-abc123")).toBe(false);
+  });
+
+  test("Bearer-prefixed console API key stays metered", () => {
+    expect(isSubscription("Bearer xai-abc123")).toBe(false);
+  });
+
+  test("undefined credential stays metered", () => {
+    expect(isSubscription(undefined)).toBe(false);
+  });
 });

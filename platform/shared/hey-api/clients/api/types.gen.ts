@@ -59551,7 +59551,7 @@ export type GetLlmProviderApiKeysResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
-        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot';
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isChatgptSubscription?: boolean;
     }>;
 };
@@ -59778,7 +59778,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
-        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot';
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isChatgptSubscription?: boolean;
     }>;
 };
@@ -59973,7 +59973,7 @@ export type GetLlmProviderApiKeyResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
-        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot';
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
         isChatgptSubscription?: boolean;
     };
 };
@@ -83861,6 +83861,183 @@ export type XaiChatCompletionsWithAgentResponses = {
 };
 
 export type XaiChatCompletionsWithAgentResponse = XaiChatCompletionsWithAgentResponses[keyof XaiChatCompletionsWithAgentResponses];
+
+export type XaiSubscriptionDeviceAuthStartData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/xai-subscription-auth/device/start';
+};
+
+export type XaiSubscriptionDeviceAuthStartErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type XaiSubscriptionDeviceAuthStartError = XaiSubscriptionDeviceAuthStartErrors[keyof XaiSubscriptionDeviceAuthStartErrors];
+
+export type XaiSubscriptionDeviceAuthStartResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        deviceCode: string;
+        userCode: string;
+        verificationUri: string;
+        interval: number;
+        expiresIn: number;
+    };
+};
+
+export type XaiSubscriptionDeviceAuthStartResponse = XaiSubscriptionDeviceAuthStartResponses[keyof XaiSubscriptionDeviceAuthStartResponses];
+
+export type XaiSubscriptionDeviceAuthPollData = {
+    body: {
+        deviceCode: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/xai-subscription-auth/device/poll';
+};
+
+export type XaiSubscriptionDeviceAuthPollErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type XaiSubscriptionDeviceAuthPollError = XaiSubscriptionDeviceAuthPollErrors[keyof XaiSubscriptionDeviceAuthPollErrors];
+
+export type XaiSubscriptionDeviceAuthPollResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'pending';
+    } | {
+        status: 'slow_down';
+    } | {
+        status: 'complete';
+        credential: string;
+    };
+};
+
+export type XaiSubscriptionDeviceAuthPollResponse = XaiSubscriptionDeviceAuthPollResponses[keyof XaiSubscriptionDeviceAuthPollResponses];
 
 export type ZhipuaiEmbeddingsWithDefaultAgentData = {
     body: {

@@ -15,6 +15,11 @@ import type {
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
 import { metrics } from "@/observability";
+import {
+  decodeXaiSubscriptionCredential,
+  isXaiSubscriptionCredential,
+} from "@/services/xai-subscription-credentials";
+import { createXaiSubscriptionFetch } from "@/services/xai-subscription-token";
 import type {
   CreateClientOptions,
   LLMProvider,
@@ -174,6 +179,16 @@ class XaiStreamAdapter
 // ADAPTER FACTORY
 // =============================================================================
 
+/**
+ * `extractApiKey` returns the authorization header verbatim, so a credential can
+ * reach the adapter with a `Bearer ` transport prefix. Both the billing-mode
+ * classification and the client construction read through this, so a credential
+ * can never be billed as a subscription while being sent as a raw bearer.
+ */
+function stripBearerPrefix(apiKey: string | undefined): string | undefined {
+  return apiKey?.startsWith("Bearer ") ? apiKey.slice(7) : apiKey;
+}
+
 export const xaiAdapterFactory: LLMProvider<
   XaiRequest,
   XaiResponse,
@@ -205,6 +220,15 @@ export const xaiAdapterFactory: LLMProvider<
     return headers.authorization;
   },
 
+  isSubscriptionCredential(apiKey: string | undefined): boolean {
+    // X Premium (SuperGrok) credentials travel through the proxy as
+    // marker-prefixed encoded strings (`xai-subscription:…`). They are covered
+    // by a flat-rate plan, so they must classify as subscription — the same rule
+    // as ChatGPT/Codex credentials on the openai adapter. Plain console API keys
+    // stay metered.
+    return isXaiSubscriptionCredential(stripBearerPrefix(apiKey));
+  },
+
   getBaseUrl(): string | undefined {
     return config.llm.xai.baseUrl;
   },
@@ -222,6 +246,28 @@ export const xaiAdapterFactory: LLMProvider<
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch("xai", options.agent, options.source)
       : undefined;
+
+    // "X Premium (SuperGrok)" subscription auth mode: the resolved credential is
+    // an encoded xAI OAuth credential, not a console key. The base URL is the
+    // same OpenAI-compatible surface either way — only the bearer differs, and
+    // it is swapped in the fetch wrapper because createClient is synchronous.
+    const subscriptionCredential = decodeXaiSubscriptionCredential(
+      stripBearerPrefix(apiKey),
+    );
+    if (subscriptionCredential) {
+      return new OpenAIProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
+        // Placeholder satisfies the SDK; the wrapper sets the real bearer.
+        apiKey: "xai-subscription",
+        baseURL: options.baseUrl,
+        fetch: createXaiSubscriptionFetch({
+          credential: subscriptionCredential,
+          providerApiKeyId: options.llmProviderApiKeyId,
+          innerFetch: customFetch,
+        }),
+        defaultHeaders: options.defaultHeaders,
+      });
+    }
 
     return new OpenAIProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,

@@ -112,6 +112,22 @@ export const SUBSCRIPTION_CREDENTIALS = {
         "Microsoft 365 Copilot keys are per-user — each person connects their own account, so they can only be personal.",
     },
   },
+  "x-premium": {
+    provider: "xai",
+    label: "X Premium (SuperGrok)",
+    displayName: "Grok",
+    marker: "xai-subscription:",
+    connect: {
+      accountLabel: "X Premium (SuperGrok) Subscription",
+      signInHint:
+        "No API key needed — just Sign in with the X account that carries your X Premium (SuperGrok) subscription. Keys are per-user: everyone using a Grok model signs in with their own account.",
+      connectedTitle: "X account connected",
+      connectedDescription:
+        "Your X Premium (SuperGrok) subscription is linked through your X account.",
+      perUserScopeReason:
+        "X Premium (SuperGrok) subscription keys are per-user — each person connects their own X account, so they can only be personal.",
+    },
+  },
 } as const satisfies Record<string, SubscriptionCredentialDefinition>;
 
 export type SubscriptionCredentialKind = keyof typeof SUBSCRIPTION_CREDENTIALS;

@@ -504,6 +504,14 @@ A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama'
 
 You can generate an API key from the [xAI Console](https://console.x.ai/).
 
+### X Premium (SuperGrok) Subscription
+
+Reuse an X Premium (SuperGrok) subscription for chat instead of a metered API key. Add an xAI provider key, pick the **X Premium (SuperGrok)** tab, and use **Sign in with X** to connect the account that holds your subscription.
+
+These keys are per-user and personal-only: each person connects their own X account. Requests are billed to the subscription. An agent set up with a subscription key always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
+
+The model list comes from xAI's own `/models` endpoint under your subscription, so it reflects what the account is actually entitled to.
+
 ### Popular Models
 
 - `grok-2-latest` - Latest Grok model with enhanced capabilities

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
 import { OpenaiCodexSignIn } from "@/components/openai-codex-sign-in";
+import { XaiSubscriptionSignIn } from "@/components/xai-subscription-sign-in";
 
 interface SubscriptionSignInProps {
   kind: SubscriptionCredentialKind;
@@ -44,6 +45,9 @@ const SIGN_IN_FLOWS: Record<
   ),
   "microsoft-365-copilot": ({ onSecret, disabled }) => (
     <Microsoft365CopilotSignIn onToken={onSecret} disabled={disabled} />
+  ),
+  "x-premium": ({ onSecret, disabled }) => (
+    <XaiSubscriptionSignIn onCredential={onSecret} disabled={disabled} />
   ),
 };
 

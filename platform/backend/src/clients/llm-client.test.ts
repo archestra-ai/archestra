@@ -5,6 +5,7 @@ import {
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
+  type SupportedProviderEndpoint,
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
@@ -1349,4 +1350,55 @@ describe("createLLMModel", () => {
       expect(result.model).toBeDefined();
     });
   }
+});
+
+describe("GitHub Copilot surface selection", () => {
+  const baseParams = {
+    provider: "github-copilot" as const,
+    apiKey: "gho_test_token",
+    agentId: "agent-1",
+    modelName: "gpt-5.3-codex",
+    baseUrl: null,
+  };
+
+  test("routes a Responses-only model to the Responses transport", () => {
+    const model = createLLMModel({
+      ...baseParams,
+      supportedEndpoints: ["/responses"],
+    });
+
+    expect(model).toMatchObject({ provider: "openai.responses" });
+  });
+
+  test("routes a chat-completions model to the chat transport", () => {
+    const model = createLLMModel({
+      ...baseParams,
+      modelName: "gpt-4o",
+      supportedEndpoints: ["/chat/completions"],
+    });
+
+    expect(model).toMatchObject({ provider: "openai.chat" });
+  });
+
+  test("prefers chat completions when a model declares both surfaces", () => {
+    const model = createLLMModel({
+      ...baseParams,
+      modelName: "gpt-5.1",
+      supportedEndpoints: ["/chat/completions", "/responses"],
+    });
+
+    expect(model).toMatchObject({ provider: "openai.chat" });
+  });
+
+  // Every caller that does not resolve a model row (subagents, skills, the
+  // knowledge base) passes nothing here, and must keep the behaviour it has
+  // today rather than being guessed onto a surface the model may not serve.
+  test("falls back to chat completions when the surface is unknown", () => {
+    const unknownSurfaces: (SupportedProviderEndpoint[] | null | undefined)[] =
+      [undefined, null, []];
+    for (const supportedEndpoints of unknownSurfaces) {
+      const model = createLLMModel({ ...baseParams, supportedEndpoints });
+      expect(model).toMatchObject({ provider: "openai.chat" });
+    }
+  });
 });

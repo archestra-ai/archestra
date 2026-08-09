@@ -39,6 +39,7 @@ import { cohereAdapterFactory } from "../adapters/cohere";
 import { deepseekAdapterFactory } from "../adapters/deepseek";
 import { geminiAdapterFactory } from "../adapters/gemini";
 import { githubCopilotAdapterFactory } from "../adapters/github-copilot";
+import { githubCopilotResponsesAdapterFactory } from "../adapters/github-copilot-responses";
 import { groqAdapterFactory } from "../adapters/groq";
 import { kimiAdapterFactory } from "../adapters/kimi";
 import { microsoft365CopilotAdapterFactory } from "../adapters/microsoft-365-copilot";
@@ -2068,6 +2069,34 @@ const perplexityResponsesConfig = makeConfig({
   },
 });
 
+const githubCopilotResponsesConfig = makeConfig({
+  providerName: "GitHub Copilot Responses",
+  providerSlug: "github-copilot-responses",
+  provider: "github-copilot",
+  family: "responses",
+  routePlugin: githubCopilotProxyRoutes,
+  adapterFactory: githubCopilotResponsesAdapterFactory,
+  endpoint: (agentId) => `/v1/github-copilot/${agentId}/responses`,
+  headers: () => ({
+    Authorization: "Bearer test-key",
+    "Content-Type": "application/json",
+  }),
+  // Copilot's Responses-only family — the models this surface exists to reach.
+  requestBuilder: makeAzureResponsesBuilder("gpt-5.3-codex"),
+  model: "gpt-5.3-codex",
+  optimizedModel: "gpt-5.1-codex-mini",
+  supportsDeclaredTools: true,
+  supportsStreamingToolCalls: true,
+  // Same reason as the other Responses surfaces: TOON compression rewrites
+  // tool-result message content, which this transport carries as
+  // `function_call_output` items rather than tool-role messages.
+  supportsCompression: false,
+  assertStreamingToolCall(body) {
+    expect(body).toContain("response.completed");
+    expect(body).toContain("read_file");
+  },
+});
+
 const azureResponsesConfig = makeConfig({
   providerName: "Azure Responses",
   providerSlug: "azure-responses",
@@ -2101,6 +2130,7 @@ const providerConfigs = [
   ),
   azureResponsesConfig,
   perplexityResponsesConfig,
+  githubCopilotResponsesConfig,
 ] satisfies ProviderTestConfig[];
 
 describe("LLM proxy provider matrix", () => {

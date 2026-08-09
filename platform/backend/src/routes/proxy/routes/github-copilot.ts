@@ -7,7 +7,10 @@ import config from "@/config";
 import logger from "@/logging";
 import { fetchGithubCopilotModels } from "@/routes/chat/model-fetchers/github-copilot";
 import { constructResponseSchema, GithubCopilot, UuidIdSchema } from "@/types";
-import { githubCopilotAdapterFactory } from "../adapters";
+import {
+  githubCopilotAdapterFactory,
+  githubCopilotResponsesAdapterFactory,
+} from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import {
@@ -22,6 +25,7 @@ import { createProxyPreHandler } from "./proxy-prehandler";
 const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/github-copilot`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
+  const RESPONSES_SUFFIX = "/responses";
 
   logger.info("[UnifiedProxy] Registering unified GitHub Copilot routes");
 
@@ -31,7 +35,7 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
-      endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
+      endpointSuffix: [CHAT_COMPLETIONS_SUFFIX, RESPONSES_SUFFIX],
       upstream: config.llm["github-copilot"].baseUrl,
       providerName: "GitHubCopilot",
       // Copilot's API only accepts the exchanged short-lived bearer, so never
@@ -99,6 +103,74 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         request,
         reply,
         githubCopilotAdapterFactory,
+      );
+    },
+  );
+
+  /**
+   * Copilot's Responses surface. Its Codex and GPT-5.x models declare
+   * `supported_endpoints: ["/responses"]` and reject `/chat/completions`, so
+   * this is the only route that can reach them.
+   */
+  fastify.post(
+    `${API_PREFIX}${RESPONSES_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.GithubCopilotResponsesWithDefaultAgent,
+        description:
+          "Create a response with GitHub Copilot (uses default agent)",
+        tags: ["LLM Proxy"],
+        body: GithubCopilot.API.ResponsesRequestSchema,
+        headers: GithubCopilot.API.ResponsesHeadersSchema,
+        response: constructResponseSchema(
+          GithubCopilot.API.ResponsesResponseSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url },
+        "[UnifiedProxy] Handling GitHub Copilot responses request (default agent)",
+      );
+      return handleLLMProxy(
+        request.body as GithubCopilot.Types.ResponsesRequest,
+        request,
+        reply,
+        githubCopilotResponsesAdapterFactory,
+      );
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}/:agentId${RESPONSES_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.GithubCopilotResponsesWithAgent,
+        description:
+          "Create a response with GitHub Copilot for a specific agent",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: GithubCopilot.API.ResponsesRequestSchema,
+        headers: GithubCopilot.API.ResponsesHeadersSchema,
+        response: constructResponseSchema(
+          GithubCopilot.API.ResponsesResponseSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url, agentId: request.params.agentId },
+        "[UnifiedProxy] Handling GitHub Copilot responses request (with agent)",
+      );
+      return handleLLMProxy(
+        request.body as GithubCopilot.Types.ResponsesRequest,
+        request,
+        reply,
+        githubCopilotResponsesAdapterFactory,
       );
     },
   );

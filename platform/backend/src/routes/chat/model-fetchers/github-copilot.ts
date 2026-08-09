@@ -1,3 +1,4 @@
+import type { SupportedProviderEndpoint } from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
@@ -10,25 +11,26 @@ import { type ModelInfo, modelFetchError } from "./types";
  * GitHub OAuth token. `apiKey` is the GitHub token; the Copilot fetch wrapper
  * exchanges it for the short-lived bearer the /models endpoint requires.
  *
- * Our proxy adapter only speaks `/chat/completions`, so we list every model
- * reachable that way and drop the rest. Copilot's `/models` also returns
- * Responses-API-only models (e.g. `gpt-5.3-codex`, `supported_endpoints:
- * ["/responses"]`), the Anthropic `/v1/messages` shim, embeddings, and
- * `completion` models — all of which 400 on `/chat/completions`. We do NOT
- * filter on `model_picker_enabled`: on some plans the only picker-enabled
- * model is a Responses-only one, while every usable chat model is
- * picker=false, so that flag would surface an unusable model and hide the
- * working ones (verified against a live subscription).
+ * The proxy speaks both of Copilot's generative surfaces — `/chat/completions`
+ * and `/responses` — so a model is catalogued when it is reachable through
+ * either, and the surface it needs is recorded on it (see `supportedEndpoints`
+ * in FetchedModelCapabilities) because nothing in a Copilot model id reveals
+ * which one it is. Everything else `/models` returns is dropped: the Anthropic
+ * `/v1/messages` shim, embeddings, and `completion` models. We do NOT filter on
+ * `model_picker_enabled`: on some plans the only picker-enabled model is a
+ * Responses-only one, while every usable chat model is picker=false, so that
+ * flag would surface an unusable model and hide the working ones (verified
+ * against a live subscription).
  *
- * The catalog fields alone are not enough: `/models` also lists entries that
- * `/chat/completions` rejects outright with `model_not_supported` — retired
+ * The catalog fields alone are not enough: `/models` also lists entries the
+ * declared endpoint rejects outright with `model_not_supported` — retired
  * aliases next to their still-working snapshots (`gpt-4` vs `gpt-4o`,
  * `gpt-3.5-turbo` vs `gpt-3.5-turbo-0613`), client-internal agent models
  * (`copilot-search-*`, `exec-agent-*`), and per-plan-unavailable models that
- * still declare `"/chat/completions"` in `supported_endpoints`. No field
- * discriminates them (verified live: a dead alias can be field-identical to a
- * working model, down to `version`), so every candidate is verified with a
- * zero-inference probe before it is catalogued.
+ * still declare a supported endpoint. No field discriminates them (verified
+ * live: a dead alias can be field-identical to a working model, down to
+ * `version`), so every candidate is verified with a zero-inference probe
+ * against the endpoint it claims before it is catalogued.
  */
 export async function fetchGithubCopilotModels(
   apiKey: string,
@@ -61,7 +63,7 @@ export async function fetchGithubCopilotModels(
   };
 
   const candidates = (Array.isArray(payload.data) ? payload.data : []).filter(
-    isChatCompletionsModel,
+    isInvocableModel,
   );
   const invocable = await dropModelsRejectedUpstream({
     candidates,
@@ -78,6 +80,7 @@ export async function fetchGithubCopilotModels(
       contextLength:
         model.capabilities?.limits?.max_context_window_tokens ?? null,
       supportsToolCalling: model.capabilities?.supports?.tool_calls ?? null,
+      supportedEndpoints: servableEndpoints(model),
     },
   }));
 }
@@ -87,18 +90,31 @@ export async function fetchGithubCopilotModels(
 /** Concurrent invocability probes per sync (a catalog is a few dozen entries). */
 const VERIFY_CONCURRENCY = 8;
 
+const CHAT_COMPLETIONS_ENDPOINT = "/chat/completions" as const;
+
 /**
- * Drops candidates Copilot's `/chat/completions` would reject with
- * `model_not_supported`, using a deliberately invalid, zero-inference request:
- * CAPI validates the model before the payload, so a dead model answers
- * `model_not_supported` while a live one answers "messages must be non-empty"
- * (verified live). No tokens are generated and no model is ever invoked, so
- * the probe cannot consume a premium request.
+ * The Copilot surfaces the proxy speaks, in the order a model is preferred to
+ * be served over. Chat completions first: a model offering both is served over
+ * the surface with the broader feature coverage in the proxy, and the Responses
+ * surface is reserved for the models that have no alternative.
+ */
+const PROXY_SERVABLE_ENDPOINTS: readonly SupportedProviderEndpoint[] = [
+  CHAT_COMPLETIONS_ENDPOINT,
+  "/responses",
+];
+
+/**
+ * Drops candidates Copilot would reject with `model_not_supported`, using a
+ * deliberately invalid, zero-inference request against the endpoint each model
+ * declares: CAPI validates the model before the payload, so a dead model
+ * answers `model_not_supported` while a live one answers with a payload
+ * complaint — "messages must be non-empty" on chat completions, a missing
+ * `input` on responses (verified live). No tokens are generated and no model is
+ * ever invoked, so the probe cannot consume a premium request.
  *
  * Only a definite `model_not_supported` drops a model. Anything inconclusive
  * (429, 5xx, network failure — or a validation-order change upstream) keeps
- * it, so an outage degrades to today's unverified catalog instead of an empty
- * one.
+ * it, so an outage degrades to an unverified catalog instead of an empty one.
  */
 async function dropModelsRejectedUpstream(params: {
   candidates: GithubCopilotModel[];
@@ -121,6 +137,10 @@ async function dropModelsRejectedUpstream(params: {
         nextIndex += 1;
         invocable[index] = await isModelInvocable({
           modelId: candidates[index].id,
+          // Probe the surface the model actually claims; probing a
+          // Responses-only model on chat completions would read as
+          // model_not_supported and drop every GPT-5.x model.
+          endpoint: servableEndpoints(candidates[index])[0],
           copilotFetch,
           baseUrl,
           extraHeaders,
@@ -142,25 +162,30 @@ async function dropModelsRejectedUpstream(params: {
 
 async function isModelInvocable(params: {
   modelId: string;
+  endpoint: SupportedProviderEndpoint;
   copilotFetch: ReturnType<typeof createGithubCopilotFetch>;
   baseUrl: string;
   extraHeaders?: Record<string, string> | null;
 }): Promise<boolean> {
-  const { modelId, copilotFetch, baseUrl, extraHeaders } = params;
+  const { modelId, endpoint, copilotFetch, baseUrl, extraHeaders } = params;
   try {
-    const response = await copilotFetch(
-      joinBaseUrl(baseUrl, "/chat/completions"),
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(extraHeaders ?? {}),
-        },
-        // Invalid on purpose: the model is validated before the payload, so
-        // this never generates output — see dropModelsRejectedUpstream.
-        body: JSON.stringify({ model: modelId, messages: [] }),
+    const response = await copilotFetch(joinBaseUrl(baseUrl, endpoint), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(extraHeaders ?? {}),
       },
-    );
+      // Invalid on purpose: the model is validated before the payload, so
+      // this never generates output — see dropModelsRejectedUpstream. Chat
+      // completions gets an empty `messages`; responses gets no `input` at
+      // all, since an empty `input` array is a valid Responses request and
+      // would actually invoke the model.
+      body: JSON.stringify(
+        endpoint === CHAT_COMPLETIONS_ENDPOINT
+          ? { model: modelId, messages: [] }
+          : { model: modelId },
+      ),
+    });
     if (response.ok) {
       await response.body?.cancel();
       return true;
@@ -178,20 +203,33 @@ async function isModelInvocable(params: {
   }
 }
 
-/** True if the model is usable through Copilot's `/chat/completions` endpoint. */
-function isChatCompletionsModel(model: GithubCopilotModel): boolean {
+/**
+ * The endpoints the proxy can serve this model over, in preference order.
+ * Copilot omits `supported_endpoints` on legacy chat models, which do support
+ * chat completions — so an absent field means chat completions, not "unknown".
+ */
+function servableEndpoints(
+  model: GithubCopilotModel,
+): SupportedProviderEndpoint[] {
+  const declared = model.supported_endpoints;
+  if (!Array.isArray(declared)) {
+    return [CHAT_COMPLETIONS_ENDPOINT];
+  }
+  return PROXY_SERVABLE_ENDPOINTS.filter((endpoint) =>
+    declared.includes(endpoint),
+  );
+}
+
+/** True if the model is reachable through either surface the proxy speaks. */
+function isInvocableModel(model: GithubCopilotModel): boolean {
   if (model.policy?.state === "disabled") return false;
   // Only chat models work here — exclude embeddings and `completion` models.
   if (model.capabilities?.type && model.capabilities.type !== "chat") {
     return false;
   }
-  // When Copilot states the supported transports, require chat/completions.
-  // (The field is often absent on legacy chat models, which do support it.)
-  const endpoints = model.supported_endpoints;
-  if (Array.isArray(endpoints) && !endpoints.includes("/chat/completions")) {
-    return false;
-  }
-  return true;
+  // Drops the surfaces the proxy does not speak (e.g. the Anthropic
+  // `/v1/messages` shim), which would 400 on both of ours.
+  return servableEndpoints(model).length > 0;
 }
 
 function extractErrorMessage(errorText: string): string {

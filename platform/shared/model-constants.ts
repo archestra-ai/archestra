@@ -62,12 +62,65 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:chatCompletions",
   "azure:responses",
   "github-copilot:chatCompletions",
+  "github-copilot:responses",
   "microsoft-365-copilot:chatCompletions",
   "archestra:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
+
+/**
+ * The wire formats a single provider can serve one model catalog over, spelled
+ * as the provider spells them. Only GitHub Copilot publishes this per model
+ * today (`supported_endpoints` on its `/models` entries), and it is the only
+ * discriminator available there: its Codex and GPT-5.x models accept only
+ * `/responses` while the rest accept only `/chat/completions`, and both
+ * families use bare ids like `gpt-5.5` and `gpt-4o`, so — unlike Perplexity,
+ * where a vendor prefix marks the Agent API — nothing about the id says which
+ * surface a model belongs to. Persisted per model so the surface survives to
+ * request time.
+ */
+export const ProviderEndpointSchema = z.enum([
+  "/chat/completions",
+  "/responses",
+]);
+export type SupportedProviderEndpoint = z.infer<typeof ProviderEndpointSchema>;
+
+/**
+ * True for providers that serve one model catalog over more than one wire
+ * format, where the model id alone does not say which. Gates the per-model
+ * surface lookup on the chat hot path so single-surface providers — every
+ * other one — pay nothing for it.
+ *
+ * Perplexity is deliberately absent: it also serves two surfaces, but its
+ * catalogs are disjoint by construction and `requiresPerplexityAgentApi`
+ * reads the answer straight off the id, with no row to fetch.
+ */
+export function providerHasMultipleSurfaces(
+  provider: SupportedProvider,
+): boolean {
+  return provider === "github-copilot";
+}
+
+/**
+ * True when a model must be invoked through the Responses API — i.e. the
+ * provider published its supported endpoints and `/chat/completions` was not
+ * among them. Absent or empty data answers `false` so a model whose surface is
+ * unknown keeps the chat-completions default rather than being routed to a
+ * surface it may not serve.
+ */
+export function requiresResponsesApi(
+  supportedEndpoints: readonly string[] | null | undefined,
+): boolean {
+  if (!supportedEndpoints || supportedEndpoints.length === 0) {
+    return false;
+  }
+  return (
+    supportedEndpoints.includes("/responses") &&
+    !supportedEndpoints.includes("/chat/completions")
+  );
+}
 
 /**
  * Type guard to check if a value is a valid SupportedProvider

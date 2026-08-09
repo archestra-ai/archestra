@@ -6,6 +6,11 @@
  * for Copilot-specific fields; stream chunk type uses OpenAI SDK.
  */
 import type OpenAIProvider from "openai";
+import type {
+  Response,
+  ResponseCreateParams,
+  ResponseStreamEvent,
+} from "openai/resources/responses/responses";
 import type { z } from "zod";
 import * as GithubCopilotAPI from "./api";
 import * as GithubCopilotMessages from "./messages";
@@ -40,6 +45,19 @@ namespace GithubCopilot {
 
     export type ChatCompletionChunk =
       OpenAIProvider.Chat.Completions.ChatCompletionChunk;
+
+    // The Responses surface, typed off the OpenAI Responses SDK types it is
+    // wire-compatible with. This is where Copilot's Codex and GPT-5.x models
+    // live — they are not reachable via chat completions.
+    export type ResponsesHeaders = z.infer<
+      typeof GithubCopilotAPI.ResponsesHeadersSchema
+    >;
+    export type ResponsesRequest = ResponseCreateParams & { model: string };
+    export type ResponsesResponse = Response;
+    export type ResponsesUsage = z.infer<
+      typeof GithubCopilotAPI.ResponsesUsageSchema
+    >;
+    export type ResponseChunk = ResponseStreamEvent;
   }
 }
 

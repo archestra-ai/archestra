@@ -76,10 +76,16 @@ export function createProxyPreHandler(params: {
       // LLM proxy id lands here even though the endpoint itself is supported.
       // Echo the offending path and the expected base-URL shape so the
       // misconfiguration is visible in the client, not only in server logs.
+      // Derived from the configured suffixes rather than hardcoded, so a
+      // provider that gains a surface (e.g. Copilot's /responses) cannot end up
+      // telling clients that surface is unsupported. Every caller that opts
+      // into rejection also registers /models, which is a GET route and so
+      // never appears in endpointSuffixes.
+      const supportedEndpoints = [...endpointSuffixes, "/models"].join(", ");
       reply.code(400).send({
         error: {
           message:
-            `${providerName} only supports the /chat/completions and /models endpoints; ` +
+            `${providerName} only supports the ${supportedEndpoints} endpoints; ` +
             `got ${request.method} ${urlPath}. The configured base URL must be exactly ` +
             `"${apiPrefix}" or "${apiPrefix}/<llm-proxy-id>" with no extra path segments ` +
             `(e.g. no trailing "/v1") — the client appends the endpoint path itself.`,

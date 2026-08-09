@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-27
+lastUpdated: 2026-08-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -596,7 +596,12 @@ Obtain your API key from the [Moonshot AI Platform](https://platform.moonshot.ai
 ### Supported GitHub Copilot APIs
 
 - **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
-- **Models API** (`/models`) - lists the chat models the account can use
+- **Responses API** (`/responses`) - OpenAI-compatible
+- **Models API** (`/models`) - lists the models the account can use
+
+Copilot serves each model over one of the two generative APIs. The Codex and GPT-5.x models are served over the Responses API only; the rest are served over Chat Completions only. Calling a model on the wrong API returns an error, so pick the API that matches the model.
+
+The Models API tells you which one to use. Each entry lists its API in `supported_endpoints`.
 
 ### GitHub Copilot Connection Details
 
@@ -626,7 +631,7 @@ Obtain the token in either way:
 
 - **No static API keys**: access is per-user via a GitHub OAuth token; model availability follows that account's Copilot subscription tier.
 - **Per-user only**: because the token is tied to one GitHub account, Copilot keys are **personal scope only** — they can't be shared via team/org scope or wrapped in a shared (org/team or multi-provider model-router) virtual key. Each user connects their own account. When someone uses an agent with a Copilot model but hasn't connected yet, Archestra resolves *their* key (never the agent owner's) and prompts them to connect: an inline "Connect GitHub Copilot" card in chat, or a message with a Settings link in Slack/Teams. Email and scheduled runs fail with an actionable message.
-- **Chat-completions models only**: the `/models` listing is filtered to models reachable through `/chat/completions`. Copilot also serves Responses-API-only models (e.g. `gpt-5.3-codex`) and an Anthropic `/v1/messages` shim, which Archestra does not route to.
+- **Generative models only**: the `/models` listing covers every model reachable through `/chat/completions` or `/responses`. Copilot also serves an Anthropic `/v1/messages` shim and embedding models, which Archestra does not route to.
 - **GitHub Enterprise**: point the base, token-exchange, and device-auth URLs at your GHE host. Organizations with their own GitHub App can override the client id.
 
 ## Microsoft 365 Copilot

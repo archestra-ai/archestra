@@ -3,13 +3,10 @@ import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/proto
 import {
   type ClientNotification,
   type ClientRequest,
-  ElicitationCompleteNotificationSchema,
   type ElicitRequest,
   ElicitRequestSchema,
   type ElicitResult,
 } from "@modelcontextprotocol/sdk/types.js";
-
-import logger from "@/logging";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 
 // =============================================================================

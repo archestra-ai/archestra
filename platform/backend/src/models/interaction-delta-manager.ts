@@ -3,7 +3,6 @@ import { getHeapStatistics } from "node:v8";
 import { isClaudeSessionSource, TimeInMs } from "@archestra/shared";
 import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
-// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
 import { readInteractionRow } from "@/content-encryption/audit-rows";
 import db, { schema } from "@/database";
 import type { InsertInteraction } from "@/types";

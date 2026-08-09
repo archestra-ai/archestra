@@ -1394,11 +1394,8 @@ describe("GitHub Copilot surface selection", () => {
   // knowledge base) passes nothing here, and must keep the behaviour it has
   // today rather than being guessed onto a surface the model may not serve.
   test("falls back to chat completions when the surface is unknown", () => {
-    const unknownSurfaces: (SupportedProviderEndpoint[] | null | undefined)[] = [
-      undefined,
-      null,
-      [],
-    ];
+    const unknownSurfaces: (SupportedProviderEndpoint[] | null | undefined)[] =
+      [undefined, null, []];
     for (const supportedEndpoints of unknownSurfaces) {
       const model = createLLMModel({ ...baseParams, supportedEndpoints });
       expect(model).toMatchObject({ provider: "openai.chat" });

@@ -119,6 +119,7 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
       name: "Microsoft 365 Copilot",
     },
     openai: { icon: "/openai.svg", name: "OpenAI" },
+    xai: { icon: "/icons/xai.png", name: "xAI" },
   },
 }));
 
@@ -273,7 +274,7 @@ describe("ApiKeysPage", () => {
     });
   });
 
-  it("always shows the three personal subscription credentials", () => {
+  it("always shows the personal subscription credentials from the registry", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -284,7 +285,8 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("GitHub Copilot")).toBeInTheDocument();
     expect(screen.getByText("Microsoft 365 Copilot")).toBeInTheDocument();
-    expect(screen.getAllByText("Connect")).toHaveLength(3);
+    expect(screen.getByText("Grok")).toBeInTheDocument();
+    expect(screen.getAllByText("Connect")).toHaveLength(4);
   });
 
   it("represents a connected subscription once and removes its connect action", () => {
@@ -311,7 +313,7 @@ describe("ApiKeysPage", () => {
     expect(
       screen.queryByText("Existing ChatGPT credential"),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("Connect")).toHaveLength(2);
+    expect(screen.getAllByText("Connect")).toHaveLength(3);
   });
 
   it("names who each scoped credential is accessible to", () => {
@@ -355,9 +357,9 @@ describe("ApiKeysPage", () => {
 
     // The owner is the point: the backend already joins userName, and before
     // this column showed only a generic scope word for every personal key.
-    // "Me" appears four times — the viewer's own key plus the three
+    // "Me" appears five times — the viewer's own key plus the four
     // subscription rows, which are the viewer's own accounts by definition.
-    expect(screen.getAllByText("Me")).toHaveLength(4);
+    expect(screen.getAllByText("Me")).toHaveLength(5);
     expect(screen.getByText("Dana")).toBeInTheDocument();
     expect(screen.getByText("Organization")).toBeInTheDocument();
   });

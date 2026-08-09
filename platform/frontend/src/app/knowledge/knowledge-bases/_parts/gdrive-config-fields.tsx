@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface GoogleDriveConfigFieldsProps {
   // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different form schemas
@@ -40,6 +41,7 @@ export function GoogleDriveAuthFields({
   form,
   prefix = "config",
 }: GoogleDriveConfigFieldsProps) {
+  const appName = useAppName();
   const oauth = useFeature("kbGoogleDriveOAuth");
   // Left undefined for a connector predating auth modes. Those still infer the
   // identity from their credential's shape, and naming a mode they are not in
@@ -59,7 +61,7 @@ export function GoogleDriveAuthFields({
         name={`${prefix}.authMode`}
         render={({ field }) => (
           <FormItem>
-            <FormLabel>How should Archestra reach Drive?</FormLabel>
+            <FormLabel>How should {appName} reach Drive?</FormLabel>
             <Select
               value={(field.value as string) ?? ""}
               onValueChange={field.onChange}
@@ -89,7 +91,7 @@ export function GoogleDriveAuthFields({
                   : "The service account impersonates users across your domain: every shared drive, plus every user's My Drive. Nothing has to be shared by hand.")}
               {authMode === "oauth" &&
                 (oauth?.configured
-                  ? "Connect one Google account after saving. Archestra indexes exactly what that person can already see."
+                  ? `Connect one Google account after saving. ${appName} indexes exactly what that person can already see.`
                   : "This deployment has no Google OAuth client. Set ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID and ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET to offer this mode.")}
               {authMode === "service_account" &&
                 "The service account sees only what has been shared with its own email address — every folder, by hand, forever."}

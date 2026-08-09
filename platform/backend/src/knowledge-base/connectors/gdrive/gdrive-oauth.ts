@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { google } from "googleapis";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { GOOGLE_DRIVE_OAUTH_CALLBACK_PATH } from "@/routes/route-paths";
 import { DRIVE_READONLY_SCOPE } from "./gdrive-auth";
@@ -101,7 +102,7 @@ export async function exchangeGoogleDriveAuthorizationCode(
   const { tokens } = await oauth2.getToken(code);
   if (!tokens.refresh_token) {
     throw new Error(
-      "Google did not return a refresh token. Remove Archestra from the account's third-party access at myaccount.google.com/permissions and connect again.",
+      `Google did not return a refresh token. Remove ${archestraMcpBranding.appName} from the account's third-party access at myaccount.google.com/permissions and connect again.`,
     );
   }
 

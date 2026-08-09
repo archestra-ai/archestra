@@ -5,6 +5,7 @@ import {
   SUPPORTED_EMBEDDING_DIMENSIONS,
   type SupportedEmbeddingDimension,
   type SupportedProvider,
+  type SupportedProviderEndpoint,
 } from "@archestra/shared";
 import {
   type ModelsDevApiResponse,
@@ -258,6 +259,7 @@ interface ProviderModelCapabilities {
   inputModalities: ModelInputModality[] | null;
   outputModalities: ModelOutputModality[] | null;
   supportsToolCalling: boolean | null;
+  supportedEndpoints: SupportedProviderEndpoint[] | null;
   promptPricePerToken: string | null;
   completionPricePerToken: string | null;
   cacheReadPricePerToken: string | null;
@@ -355,6 +357,7 @@ export function buildModelsToUpsert(params: {
       inputModalities: capabilities.inputModalities,
       outputModalities: capabilities.outputModalities,
       supportsToolCalling: capabilities.supportsToolCalling,
+      supportedEndpoints: capabilities.supportedEndpoints,
       promptPricePerToken: capabilities.promptPricePerToken,
       completionPricePerToken: capabilities.completionPricePerToken,
       cacheReadPricePerToken: capabilities.cacheReadPricePerToken,
@@ -536,6 +539,10 @@ export function resolveModelCapabilities(params: {
         inferredCapabilities.supportsToolCalling ??
         crossProviderMetadata?.supportsToolCalling ??
         null,
+      // Fetcher-only: no other tier knows which wire format a provider serves
+      // a given model over. models.dev describes the model, not the transport
+      // a particular reseller exposes it on.
+      supportedEndpoints: fetched?.supportedEndpoints ?? null,
       promptPricePerToken:
         fetched?.promptPricePerToken ??
         capabilities?.promptPricePerToken ??
@@ -624,6 +631,9 @@ function buildCapabilitiesMap(
         inputModalities,
         outputModalities,
         supportsToolCalling: model.tool_call ?? null,
+        // models.dev describes the model, not which transport a given provider
+        // exposes it on — only a fetcher can know that.
+        supportedEndpoints: null,
         promptPricePerToken: prices.promptPricePerToken,
         completionPricePerToken: prices.completionPricePerToken,
         cacheReadPricePerToken: prices.cacheReadPricePerToken,
@@ -877,6 +887,7 @@ function emptyCapabilities(): ProviderModelCapabilities {
     inputModalities: null,
     outputModalities: null,
     supportsToolCalling: null,
+    supportedEndpoints: null,
     promptPricePerToken: null,
     completionPricePerToken: null,
     cacheReadPricePerToken: null,

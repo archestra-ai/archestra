@@ -560,6 +560,17 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["github-copilot:responses"]),
+    request: withReadFallback(GithubCopilot.API.ResponsesRequestSchema),
+    processedRequest: withReadFallback(GithubCopilot.API.ResponsesRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(GithubCopilot.API.ResponsesResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
 ]);
 
 /**

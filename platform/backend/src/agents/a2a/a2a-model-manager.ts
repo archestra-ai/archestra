@@ -13,7 +13,6 @@ import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   type A2AArchestraApprovalRequest,
   A2AArchestraApprovalRequestSchema,
-  type A2AArchestraTaskApprovalDecision,
   type A2AProtocolArtifact,
   type A2AProtocolMessage,
   type A2AProtocolPart,

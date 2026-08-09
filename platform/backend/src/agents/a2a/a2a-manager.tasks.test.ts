@@ -4,7 +4,7 @@ import { describe, expect, test } from "@/test";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import { buildApprovalDecisionSendMessageRequest } from "./a2a-helper";
 import { A2AManager } from "./a2a-manager";
-import { A2AContextManager, A2ATaskManager } from "./a2a-model-manager";
+import { A2AContextManager } from "./a2a-model-manager";
 import {
   type A2AProtocolPart,
   A2AProtocolRole,

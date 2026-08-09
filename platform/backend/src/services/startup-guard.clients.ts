@@ -1,3 +1,6 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: these files build bash/PowerShell source as JS strings, so `${VAR}` is shell
+// parameter expansion for the emitted script, not a JS template placeholder
+
 import {
   ARCHESTRA_TOKEN_PREFIX,
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,

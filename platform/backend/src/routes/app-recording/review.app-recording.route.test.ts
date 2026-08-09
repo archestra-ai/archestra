@@ -61,7 +61,6 @@ function bundleOfAtLeast(bytes: number) {
 
 describe("GET /api/app-recording/review", () => {
   const ctx = useRouteTestApp(appRecordingRoutes);
-  // biome-ignore lint/correctness/useHookAtTopLevel: vitest lifecycle helper (per-test MSW server), not a React hook
   const server = useMswServer();
 
   test("admits a bundle as large as the gallery itself accepts", async () => {

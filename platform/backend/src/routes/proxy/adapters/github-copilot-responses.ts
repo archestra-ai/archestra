@@ -20,6 +20,7 @@
  * `createClient` is synchronous. Inheriting OpenAI's `createClient` here would
  * send the raw GitHub token upstream and 401 on every call.
  */
+import { randomUUID } from "node:crypto";
 import OpenAIProvider from "openai";
 import type { ResponseInput } from "openai/resources/responses/responses";
 import config from "@/config";
@@ -89,4 +90,83 @@ export const githubCopilotResponsesAdapterFactory: LLMProvider<
       defaultHeaders: options.defaultHeaders,
     });
   },
+
+  async executeStream(client: unknown, request: GithubCopilotResponsesRequest) {
+    return withStableReasoningIds(
+      await openAiResponsesAdapterFactory.executeStream(client, request),
+    );
+  },
 };
+
+// ===== Internal helpers =====
+
+/**
+ * Repairs the one place Copilot's Responses stream diverges from OpenAI's.
+ *
+ * On OpenAI, `response.output_item.added` announces an item with an `item.id`,
+ * and every event that belongs to that item repeats the same value in
+ * `item_id`. That shared id is the only thing binding a delta to the part it
+ * extends. Copilot instead emits a DIFFERENT opaque string in `item_id` on
+ * every single event, none of them equal to the item's own `id` — verified
+ * against a live subscription, where one reasoning item and one message item
+ * produced a distinct id on each of their events.
+ *
+ * Consumers register a part when the item is added, then look it up by each
+ * event's `item_id`. Under Copilot every lookup misses, and the AI SDK's
+ * Responses parser fails on the miss — "Cannot read properties of undefined
+ * (reading 'summaryParts')" for reasoning, "Received text-delta for missing
+ * text part" for message text. Either kills the turn, so Archestra's own chat
+ * could not complete a single Copilot Responses turn.
+ *
+ * Re-anchoring each event onto the id of the item currently open restores the
+ * invariant consumers rely on. Ordering guarantees this is sound: an item's
+ * events always sit between its `output_item.added` and its `output_item.done`
+ * (Copilot streams one item at a time, verified live), so the most recently
+ * opened item owns whatever follows. Only ids change — nothing is added,
+ * dropped, or reordered — and gateway clients get the same repair, which is
+ * the point: the stream they receive is the conformant one either way.
+ */
+async function* withStableReasoningIds(
+  stream: AsyncIterable<GithubCopilotResponseChunk>,
+): AsyncIterable<GithubCopilotResponseChunk> {
+  let currentItemId: string | null = null;
+
+  for await (const chunk of stream) {
+    const type = (chunk as { type?: string }).type;
+    const item = (chunk as { item?: { type?: string; id?: string } }).item;
+
+    // Opening an item defines the id everything up to its close must carry.
+    // Copilot has been seen to omit `id` on a reasoning item, so mint one
+    // rather than propagate an undefined key.
+    if (type === "response.output_item.added" && item) {
+      currentItemId = item.id ?? `item_${randomUUID()}`;
+      yield {
+        ...chunk,
+        item: { ...item, id: currentItemId },
+      } as GithubCopilotResponseChunk;
+      continue;
+    }
+
+    if (type === "response.output_item.done" && item) {
+      const id = currentItemId ?? item.id;
+      currentItemId = null;
+      yield {
+        ...chunk,
+        item: { ...item, id },
+      } as GithubCopilotResponseChunk;
+      continue;
+    }
+
+    // Every other per-item event (content parts, text deltas, reasoning
+    // summaries, function-call arguments) is bound to the open item.
+    if (currentItemId && "item_id" in (chunk as unknown as object)) {
+      yield {
+        ...chunk,
+        item_id: currentItemId,
+      } as GithubCopilotResponseChunk;
+      continue;
+    }
+
+    yield chunk;
+  }
+}

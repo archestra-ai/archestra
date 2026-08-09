@@ -59551,6 +59551,7 @@ export type GetLlmProviderApiKeysResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot';
         isChatgptSubscription?: boolean;
     }>;
 };
@@ -59777,6 +59778,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot';
         isChatgptSubscription?: boolean;
     }>;
 };
@@ -59971,6 +59973,7 @@ export type GetLlmProviderApiKeyResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
+        subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot';
         isChatgptSubscription?: boolean;
     };
 };

@@ -358,6 +358,25 @@ describe("InlineChatError", () => {
     );
   });
 
+  it("points at Model Providers for a provider that has no subscription flow", () => {
+    // The card picks a sign-in by looking the provider up in the subscription
+    // registry; a provider with no entry has no device flow to offer, so it
+    // must fall back to the Model Providers link rather than render nothing.
+    render(
+      <ProviderAuthRequiredCard
+        provider="anthropic"
+        providerLabel="anthropic"
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Connect in Model Providers" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Sign in with/i }),
+    ).not.toBeInTheDocument();
+  });
+
   const retryableError = () =>
     new Error(
       JSON.stringify({

@@ -35,7 +35,7 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
   vaultSecretKey: null,
   isPrimary: false,
   bedrockAuthMethod: "api-key",
-  openaiAuthMethod: "api-key",
+  authMethod: "api-key",
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
@@ -123,7 +123,7 @@ describe("LlmProviderApiKeyForm", () => {
       credentialMode: "subscription",
       defaults: {
         provider: "openai",
-        openaiAuthMethod: "chatgpt-subscription",
+        authMethod: "subscription",
       },
     });
 
@@ -270,7 +270,7 @@ describe("LlmProviderApiKeyForm", () => {
     });
 
     act(() => {
-      form.setValue("openaiAuthMethod", "chatgpt-subscription");
+      form.setValue("authMethod", "subscription");
     });
     await waitFor(() => {
       expect(form.getValues("name")).toBe("ChatGPT Subscription");
@@ -278,7 +278,7 @@ describe("LlmProviderApiKeyForm", () => {
 
     // Switching back to the API-key tab restores the plain provider default.
     act(() => {
-      form.setValue("openaiAuthMethod", "api-key");
+      form.setValue("authMethod", "api-key");
     });
     await waitFor(() => {
       expect(form.getValues("name")).toBe("OpenAI");
@@ -310,7 +310,7 @@ describe("LlmProviderApiKeyForm", () => {
 
     renderForm({
       existingKey,
-      defaults: { openaiAuthMethod: "chatgpt-subscription" },
+      defaults: { authMethod: "subscription" },
     });
 
     await waitFor(() => {
@@ -342,7 +342,7 @@ describe("LlmProviderApiKeyForm", () => {
 
     renderForm({
       existingKey,
-      defaults: { openaiAuthMethod: "chatgpt-subscription" },
+      defaults: { authMethod: "subscription" },
     });
 
     await waitFor(() => {

@@ -166,7 +166,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
           name: "ChatGPT Subscription",
           provider: "openai",
           scope: "personal",
-          openaiAuthMethod: "chatgpt-subscription",
+          authMethod: "subscription",
         }}
       />,
     );
@@ -207,7 +207,7 @@ describe("CreateLlmProviderApiKeyDialog", () => {
           name: "ChatGPT Subscription",
           provider: "openai",
           scope: "personal",
-          openaiAuthMethod: "chatgpt-subscription",
+          authMethod: "subscription",
         }}
       />,
     );

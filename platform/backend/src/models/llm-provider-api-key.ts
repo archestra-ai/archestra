@@ -1,9 +1,13 @@
 import {
   getProvidersWithOptionalApiKey,
+  isCredentialLevelSubscriptionProvider,
   isVaultReference,
   parseVaultReference,
   providerRequiresPerUserCredential,
+  SUBSCRIPTION_CREDENTIALS,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindFromCredential,
 } from "@archestra/shared";
 import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
@@ -11,7 +15,6 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
-import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type {
   InsertLlmProviderApiKey,
   LlmProviderApiKey,
@@ -488,20 +491,23 @@ class LlmProviderApiKeyModel {
   }
 
   /**
-   * The acting user's own personal ChatGPT-subscription (Codex) key together
-   * with its decrypted credential (prefer isPrimary, then oldest). Codex
+   * The acting user's own personal key for a given subscription, together with
+   * its decrypted credential (prefer isPrimary, then oldest). Subscription
    * credentials are per-user, so when resolution lands on someone else's
    * subscription key (e.g. attached to a shared agent) the acting user's own
    * subscription is substituted — this is that lookup. The marker lives inside
-   * the encrypted secret, so the user's personal `openai` keys are decrypted
-   * here (the value is only handed to the credential-resolution caller).
+   * the encrypted secret, so the user's personal keys for the subscription's
+   * provider are decrypted here (the value is only handed to the
+   * credential-resolution caller).
    */
-  static async findPersonalCodexKey({
+  static async findPersonalSubscriptionKey({
     organizationId,
     userId,
+    kind,
   }: {
     organizationId: string;
     userId: string;
+    kind: SubscriptionCredentialKind;
   }): Promise<{ apiKey: LlmProviderApiKey; apiKeyValue: string } | null> {
     const candidates = await db
       .select({
@@ -516,7 +522,10 @@ class LlmProviderApiKeyModel {
       .where(
         and(
           eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
-          eq(schema.llmProviderApiKeysTable.provider, "openai"),
+          eq(
+            schema.llmProviderApiKeysTable.provider,
+            SUBSCRIPTION_CREDENTIALS[kind].provider,
+          ),
           eq(schema.llmProviderApiKeysTable.scope, "personal"),
           eq(schema.llmProviderApiKeysTable.userId, userId),
         ),
@@ -528,7 +537,10 @@ class LlmProviderApiKeyModel {
 
     for (const candidate of candidates) {
       const apiKeyValue = decryptApiKeyValue(candidate.secret);
-      if (apiKeyValue !== null && isOpenAiCodexCredential(apiKeyValue)) {
+      if (
+        apiKeyValue !== null &&
+        subscriptionKindFromCredential(apiKeyValue) === kind
+      ) {
         return { apiKey: candidate.apiKey, apiKeyValue };
       }
     }
@@ -878,13 +890,15 @@ function toApiKeyWithScopeInfo<
   vaultSecretPath: string | null;
   vaultSecretKey: string | null;
   secretStorageType: SecretStorageType;
+  subscriptionKind: SubscriptionCredentialKind | null;
   isChatgptSubscription: boolean;
 } {
   const apiKeyValue =
-    key.provider === "openai" || key.secretIsByosVault
+    isCredentialLevelSubscriptionProvider(key.provider) || key.secretIsByosVault
       ? decryptApiKeyValue(key.secret)
       : null;
   const vaultRef = parseVaultReferenceFromApiKey(apiKeyValue);
+  const subscriptionKind = subscriptionKindFromCredential(apiKeyValue);
   const { secret: _secret, secretIsVault, secretIsByosVault, ...rest } = key;
   return {
     ...rest,
@@ -895,9 +909,10 @@ function toApiKeyWithScopeInfo<
       secretIsVault,
       secretIsByosVault,
     ),
-    isChatgptSubscription:
-      key.provider === "openai" &&
-      isOpenAiCodexCredential(apiKeyValue ?? undefined),
+    subscriptionKind,
+    // Retained alongside `subscriptionKind` for the surfaces that still branch
+    // on ChatGPT specifically; both derive from the same marker read.
+    isChatgptSubscription: subscriptionKind === "chatgpt",
   };
 }
 

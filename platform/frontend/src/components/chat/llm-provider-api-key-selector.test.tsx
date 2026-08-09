@@ -50,13 +50,13 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
     reconnectKeyId,
   }: {
     title: string;
-    defaultValues: { provider?: string; openaiAuthMethod?: string };
+    defaultValues: { provider?: string; authMethod?: string };
     reconnectKeyId?: string;
   }) => (
     <div>
       <span>{title}</span>
       <span>{defaultValues.provider}</span>
-      <span>{defaultValues.openaiAuthMethod}</span>
+      <span>{defaultValues.authMethod}</span>
       {reconnectKeyId && <span>{`reconnect:${reconnectKeyId}`}</span>}
     </div>
   ),
@@ -252,7 +252,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     );
 
     expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
-    expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
+    expect(screen.getByText("subscription")).toBeInTheDocument();
   });
 
   it("re-opens the sign-in flow to reconnect a connected subscription that is already selected", async () => {
@@ -303,7 +303,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
-    expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
+    expect(screen.getByText("subscription")).toBeInTheDocument();
   });
 });
 

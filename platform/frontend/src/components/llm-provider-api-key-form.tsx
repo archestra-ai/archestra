@@ -5,22 +5,22 @@ import {
   BEDROCK_REGIONS,
   bedrockRegionFromBaseUrl,
   bedrockRuntimeBaseUrl,
-  CHATGPT_SUBSCRIPTION_LABEL,
   DEFAULT_BEDROCK_REGION,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
+  isCredentialLevelSubscriptionProvider,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   providerRequiresPerUserCredential,
+  SUBSCRIPTION_CREDENTIALS,
+  subscriptionKindForProvider,
 } from "@archestra/shared";
 import { CheckCircle2, ChevronDown, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
-import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
-import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
-import { OpenaiCodexSignIn } from "@/components/openai-codex-sign-in";
 import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
+import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -83,12 +83,13 @@ export type LlmProviderApiKeyFormValues = {
   awsSecretAccessKey: string | null;
   awsSessionToken: string | null;
   /**
-   * OpenAI auth mode selector:
-   * - "api-key": a standard `sk-…` API key.
-   * - "chatgpt-subscription": reuse a ChatGPT/Codex subscription via the
-   *   "Sign in with ChatGPT" device flow (stores an OAuth credential instead).
+   * Auth mode selector for providers that accept either credential type:
+   * - "api-key": a standard provider API key.
+   * - "subscription": reuse the vendor subscription via its device flow
+   *   (stores an OAuth credential instead of a key). Ignored for providers with
+   *   no credential-level subscription.
    */
-  openaiAuthMethod: "api-key" | "chatgpt-subscription";
+  authMethod: "api-key" | "subscription";
 };
 
 /** Convert the form's array shape to the API's Record shape, dropping empty-name rows. */
@@ -452,12 +453,15 @@ export function LlmProviderApiKeyForm({
     provider === "bedrock" && bedrockAuthMethod === "sigv4";
   const baseUrl = form.watch("baseUrl");
   const isBedrock = provider === "bedrock";
-  const openaiAuthMethod = form.watch("openaiAuthMethod");
-  // OpenAI "ChatGPT subscription" (Codex) auth mode: the credential is an
-  // individual's ChatGPT subscription, so it behaves like the per-user Copilot
-  // providers (personal scope only, "Sign in" instead of a key field).
-  const isOpenaiChatgptSub =
-    provider === "openai" && openaiAuthMethod === "chatgpt-subscription";
+  const authMethod = form.watch("authMethod");
+  const providerSubscriptionKind = subscriptionKindForProvider(provider);
+  // Credential-level subscription mode (e.g. ChatGPT on `openai`): the provider
+  // also takes plain API keys, so the auth-method tabs decide which credential
+  // this key holds. It then behaves like the per-user Copilot providers —
+  // personal scope only, "Sign in" instead of a key field.
+  const isCredentialSubscriptionMode =
+    isCredentialLevelSubscriptionProvider(provider) &&
+    authMethod === "subscription";
 
   const extraHeadersFieldArray = useFieldArray({
     control: form.control,
@@ -476,9 +480,10 @@ export function LlmProviderApiKeyForm({
   const providerConfig = PROVIDER_CONFIG[provider];
   // The auto-filled key name follows the selected credential type, so choosing
   // ChatGPT Subscription renames the key from "OpenAI" to "ChatGPT Subscription".
-  const defaultKeyName = isOpenaiChatgptSub
-    ? CHATGPT_SUBSCRIPTION_LABEL
-    : providerConfig.name;
+  const defaultKeyName =
+    isCredentialSubscriptionMode && providerSubscriptionKind
+      ? SUBSCRIPTION_CREDENTIALS[providerSubscriptionKind].label
+      : providerConfig.name;
   const isBaseUrlRequired =
     providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
 
@@ -586,16 +591,26 @@ export function LlmProviderApiKeyForm({
   // so keys are personal-only — each user connects their own account. The
   // OpenAI "ChatGPT subscription" auth mode is the same shape.
   const isPerUserProvider = providerRequiresPerUserCredential(provider);
-  const isPerUserCredential = isPerUserProvider || isOpenaiChatgptSub;
-  const perUserScopeReason = isOpenaiChatgptSub
-    ? "ChatGPT subscription keys are per-user — each person connects their own ChatGPT account, so they can only be personal."
-    : `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
-  // The connected card: for Copilot providers editing implies an existing
-  // credential. For the OpenAI ChatGPT-subscription mode, editing a key whose
-  // stored credential is already a subscription (known from the key metadata)
-  // counts as connected too; otherwise a fresh sign-in must have set it.
-  const perUserCredentialConnected = isOpenaiChatgptSub
-    ? (isEditMode && existingKey?.isChatgptSubscription === true) ||
+  const isPerUserCredential = isPerUserProvider || isCredentialSubscriptionMode;
+  // The subscription this form is currently connecting, if any: implied by the
+  // provider when it is per-user outright, chosen by the auth-method tabs when
+  // the provider also accepts API keys. Drives every piece of vendor copy below.
+  const activeSubscriptionKind = isPerUserCredential
+    ? providerSubscriptionKind
+    : null;
+  const connectCopy = activeSubscriptionKind
+    ? SUBSCRIPTION_CREDENTIALS[activeSubscriptionKind].connect
+    : null;
+  const perUserScopeReason =
+    connectCopy?.perUserScopeReason ??
+    `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
+  // The connected card: for provider-level subscriptions (Copilot) editing
+  // implies an existing credential. For a credential-level one, editing a key
+  // whose stored credential is already that subscription (known from the key
+  // metadata) counts as connected too; otherwise a fresh sign-in must have set
+  // it.
+  const perUserCredentialConnected = isCredentialSubscriptionMode
+    ? (isEditMode && existingKey?.subscriptionKind === activeSubscriptionKind) ||
       (!!apiKey && apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER)
     : hasCopilotCredential;
 
@@ -740,9 +755,9 @@ export function LlmProviderApiKeyForm({
     // Reset the Bedrock auth method too: a stale "iam" would otherwise keep the
     // API key input hidden after switching to a non-Bedrock provider.
     form.setValue("bedrockAuthMethod", "api-key");
-    // Same for the OpenAI auth method, so a stale "chatgpt-subscription" can't
+    // Same for the subscription auth method, so a stale "subscription" can't
     // hide the API key field after switching providers.
-    form.setValue("openaiAuthMethod", "api-key");
+    form.setValue("authMethod", "api-key");
   }, [form, isEditMode, provider]);
 
   const vaultSecretSelector =
@@ -1038,19 +1053,20 @@ export function LlmProviderApiKeyForm({
               </div>
             )}
 
-            {provider === "openai" &&
+            {isCredentialLevelSubscriptionProvider(provider) &&
+              providerSubscriptionKind &&
               allowPersonalSubscriptions &&
               credentialMode === undefined && (
                 <Tabs
-                  value={openaiAuthMethod}
+                  value={authMethod}
                   onValueChange={(value) => {
                     form.setValue(
-                      "openaiAuthMethod",
-                      value as "api-key" | "chatgpt-subscription",
+                      "authMethod",
+                      value as "api-key" | "subscription",
                       { shouldDirty: true },
                     );
                     // Clear any credential carried over from the other auth mode:
-                    // a typed sk- key must not leak into ChatGPT-subscription mode
+                    // a typed API key must not leak into subscription mode
                     // (false "connected" card / submit-before-sign-in), and an
                     // OAuth credential must not surface in the visible API Key
                     // field when switching back. Fires only on user interaction,
@@ -1062,11 +1078,8 @@ export function LlmProviderApiKeyForm({
                     <TabsTrigger value="api-key" disabled={isPending}>
                       API Key
                     </TabsTrigger>
-                    <TabsTrigger
-                      value="chatgpt-subscription"
-                      disabled={isPending}
-                    >
-                      {CHATGPT_SUBSCRIPTION_LABEL}
+                    <TabsTrigger value="subscription" disabled={isPending}>
+                      {SUBSCRIPTION_CREDENTIALS[providerSubscriptionKind].label}
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
@@ -1074,23 +1087,14 @@ export function LlmProviderApiKeyForm({
 
             {!isBedrockSigV4 &&
               bedrockAuthMethod !== "iam" &&
-              (isPerUserProvider || isOpenaiChatgptSub ? (
+              (activeSubscriptionKind && connectCopy ? (
                 <>
                   {!isSubscriptionFlow && (
                     <>
-                      <Label>
-                        {provider === "github-copilot"
-                          ? "GitHub Copilot account"
-                          : provider === "microsoft-365-copilot"
-                            ? "Microsoft 365 Copilot account"
-                            : CHATGPT_SUBSCRIPTION_LABEL}
-                      </Label>
-                      {isOpenaiChatgptSub ? (
+                      <Label>{connectCopy.accountLabel}</Label>
+                      {connectCopy.signInHint ? (
                         <p className="text-xs text-muted-foreground">
-                          No API key needed — just Sign in with the OpenAI
-                          account to connect your ChatGPT subscription. Keys are
-                          per-user: everyone using a Codex model signs in with
-                          their own account.
+                          {connectCopy.signInHint}
                         </p>
                       ) : (
                         providerConfig.description && (
@@ -1106,19 +1110,11 @@ export function LlmProviderApiKeyForm({
                       <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
                       <div>
                         <p className="font-medium text-green-600 dark:text-green-400">
-                          {provider === "github-copilot"
-                            ? "GitHub account connected"
-                            : provider === "microsoft-365-copilot"
-                              ? "Microsoft account connected"
-                              : "ChatGPT account connected"}
+                          {connectCopy.connectedTitle}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          {provider === "github-copilot"
-                            ? "Your Copilot subscription is linked through your GitHub account."
-                            : provider === "microsoft-365-copilot"
-                              ? "Your Microsoft 365 Copilot license is linked through your Microsoft account."
-                              : "Your Codex/ChatGPT subscription is linked through your ChatGPT account."}
-                          {isEditMode && !isOpenaiChatgptSub ? (
+                          {connectCopy.connectedDescription}
+                          {isEditMode && !isCredentialSubscriptionMode ? (
                             <span>
                               {" Sign in again below to refresh the token."}
                             </span>
@@ -1127,33 +1123,14 @@ export function LlmProviderApiKeyForm({
                       </div>
                     </div>
                   )}
-                  {provider === "github-copilot" ? (
-                    <GithubCopilotSignIn
-                      disabled={isPending}
-                      onToken={(token) => {
-                        form.setValue("apiKey", token, { shouldDirty: true });
-                        onSubscriptionCredential?.(token);
-                      }}
-                    />
-                  ) : provider === "microsoft-365-copilot" ? (
-                    <Microsoft365CopilotSignIn
-                      disabled={isPending}
-                      onToken={(token) => {
-                        form.setValue("apiKey", token, { shouldDirty: true });
-                        onSubscriptionCredential?.(token);
-                      }}
-                    />
-                  ) : (
-                    <OpenaiCodexSignIn
-                      disabled={isPending}
-                      onCredential={(credential) => {
-                        form.setValue("apiKey", credential, {
-                          shouldDirty: true,
-                        });
-                        onSubscriptionCredential?.(credential);
-                      }}
-                    />
-                  )}
+                  <SubscriptionSignIn
+                    kind={activeSubscriptionKind}
+                    disabled={isPending}
+                    onSecret={(secret) => {
+                      form.setValue("apiKey", secret, { shouldDirty: true });
+                      onSubscriptionCredential?.(secret);
+                    }}
+                  />
                 </>
               ) : (
                 <>

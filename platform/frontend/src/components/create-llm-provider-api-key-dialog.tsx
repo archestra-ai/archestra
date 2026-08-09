@@ -1,8 +1,9 @@
 "use client";
 
 import {
-  CHATGPT_SUBSCRIPTION_LABEL,
   isProviderApiKeyOptional,
+  SUBSCRIPTION_CREDENTIALS,
+  subscriptionKindForProvider,
 } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
@@ -103,13 +104,18 @@ export function CreateLlmProviderApiKeyDialog({
   const createCredential = async (values: LlmProviderApiKeyFormValues) => {
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
+    // A subscription key defaults to the subscription's own name rather than the
+    // provider's, so an unnamed ChatGPT key isn't just called "OpenAI".
+    const subscriptionKind =
+      values.authMethod === "subscription"
+        ? subscriptionKindForProvider(values.provider)
+        : null;
     try {
       await createMutation.mutateAsync({
         name:
           values.name?.trim() ||
-          (values.provider === "openai" &&
-          values.openaiAuthMethod === "chatgpt-subscription"
-            ? CHATGPT_SUBSCRIPTION_LABEL
+          (subscriptionKind
+            ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].label
             : PROVIDER_CONFIG[values.provider].name),
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
@@ -238,7 +244,7 @@ function getDefaultFormValues(params: {
     awsAccessKeyId: null,
     awsSecretAccessKey: null,
     awsSessionToken: null,
-    openaiAuthMethod: "api-key",
+    authMethod: "api-key",
     ...defaultValues,
   };
 }

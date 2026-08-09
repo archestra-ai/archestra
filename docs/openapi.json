@@ -235151,6 +235151,15 @@
                       "isAgentKey": {
                         "type": "boolean"
                       },
+                      "subscriptionKind": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "chatgpt",
+                          "github-copilot",
+                          "microsoft-365-copilot"
+                        ]
+                      },
                       "isChatgptSubscription": {
                         "type": "boolean"
                       }
@@ -236061,6 +236070,15 @@
                       "isAgentKey": {
                         "type": "boolean"
                       },
+                      "subscriptionKind": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "chatgpt",
+                          "github-copilot",
+                          "microsoft-365-copilot"
+                        ]
+                      },
                       "isChatgptSubscription": {
                         "type": "boolean"
                       }
@@ -236472,6 +236490,15 @@
                     },
                     "isAgentKey": {
                       "type": "boolean"
+                    },
+                    "subscriptionKind": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "chatgpt",
+                        "github-copilot",
+                        "microsoft-365-copilot"
+                      ]
                     },
                     "isChatgptSubscription": {
                       "type": "boolean"

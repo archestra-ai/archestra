@@ -297,6 +297,7 @@ describe("ApiKeysPage", () => {
       name: "Existing ChatGPT credential",
       provider: "openai",
       scope: "personal",
+      subscriptionKind: "chatgpt",
       isChatgptSubscription: true,
     };
     mockUseLlmProviderApiKeys.mockReturnValue({
@@ -374,7 +375,7 @@ describe("ApiKeysPage", () => {
       "Sign in with ChatGPT",
     );
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
-      '"openaiAuthMethod":"chatgpt-subscription"',
+      '"authMethod":"subscription"',
     );
     expect(screen.getByTestId("create-dialog")).toHaveTextContent('["openai"]');
   });

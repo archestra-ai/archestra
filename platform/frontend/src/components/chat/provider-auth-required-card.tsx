@@ -1,14 +1,13 @@
 "use client";
 
 import {
-  CHATGPT_SUBSCRIPTION_LABEL,
+  SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
+  subscriptionKindForProvider,
 } from "@archestra/shared";
 import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
-import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
-import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
-import { OpenaiCodexSignIn } from "@/components/openai-codex-sign-in";
+import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { Button } from "@/components/ui/button";
 import { useCreateLlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
@@ -27,10 +26,10 @@ interface ProviderAuthRequiredCardProps {
 }
 
 /**
- * Lets users connect a required personal subscription inline via each
- * credential's device-flow sign-in (GitHub Copilot, Microsoft 365 Copilot,
- * ChatGPT subscription on `openai`). Used proactively above the composer and
- * as the fallback for a ProviderAuthRequired error in the message stream.
+ * Lets users connect a required personal subscription inline via that
+ * subscription's device-flow sign-in, resolved from the shared subscription
+ * registry. Used proactively above the composer and as the fallback for a
+ * ProviderAuthRequired error in the message stream.
  */
 export function ProviderAuthRequiredCard({
   provider,
@@ -41,6 +40,11 @@ export function ProviderAuthRequiredCard({
 }: ProviderAuthRequiredCardProps) {
   const createKey = useCreateLlmProviderApiKey();
   const isPreflight = variant === "preflight";
+  // An auth-required error only ever names a provider that carries a
+  // subscription — `openai` reaches here solely through its credential-level
+  // ChatGPT mode, since the provider itself is not per-user. Anything else
+  // falls back to the Model Providers link.
+  const subscriptionKind = subscriptionKindForProvider(provider);
 
   return (
     <div
@@ -64,78 +68,30 @@ export function ProviderAuthRequiredCard({
             </p>
           </div>
 
-          {provider === "github-copilot" ? (
-            <GithubCopilotSignIn
+          {subscriptionKind ? (
+            <SubscriptionSignIn
+              kind={subscriptionKind}
               disabled={createKey.isPending}
-              onToken={async (token) => {
+              onSecret={async (secret) => {
+                const { label } = SUBSCRIPTION_CREDENTIALS[subscriptionKind];
                 try {
                   await createKey.mutateAsync({
-                    name: "GitHub Copilot",
-                    provider: "github-copilot",
-                    apiKey: token,
+                    name: label,
+                    provider,
+                    apiKey: secret,
                     scope: "personal",
                   });
                   toast.success(
                     isPreflight
-                      ? "GitHub Copilot connected"
-                      : "GitHub Copilot connected — retrying…",
+                      ? `${label} connected`
+                      : `${label} connected — retrying…`,
                   );
                   // Re-run the original prompt now that the key exists; the
                   // create mutation already invalidated the model/key caches.
                   onConnected?.();
                 } catch {
-                  // handleApiError already surfaced the failure (e.g. no seat)
-                }
-              }}
-            />
-          ) : provider === "microsoft-365-copilot" ? (
-            <Microsoft365CopilotSignIn
-              disabled={createKey.isPending}
-              onToken={async (token) => {
-                try {
-                  await createKey.mutateAsync({
-                    name: "Microsoft 365 Copilot",
-                    provider: "microsoft-365-copilot",
-                    apiKey: token,
-                    scope: "personal",
-                  });
-                  toast.success(
-                    isPreflight
-                      ? "Microsoft 365 Copilot connected"
-                      : "Microsoft 365 Copilot connected — retrying…",
-                  );
-                  // Re-run the original prompt now that the key exists; the
-                  // create mutation already invalidated the model/key caches.
-                  onConnected?.();
-                } catch {
-                  // handleApiError already surfaced the failure (e.g. no license)
-                }
-              }}
-            />
-          ) : provider === "openai" ? (
-            // The `openai` provider itself is never per-user, so an
-            // auth-required error for it always means the ChatGPT-subscription
-            // (Codex) credential mode — connect via the ChatGPT device flow.
-            <OpenaiCodexSignIn
-              disabled={createKey.isPending}
-              onCredential={async (credential) => {
-                try {
-                  await createKey.mutateAsync({
-                    name: CHATGPT_SUBSCRIPTION_LABEL,
-                    provider: "openai",
-                    apiKey: credential,
-                    scope: "personal",
-                  });
-                  toast.success(
-                    isPreflight
-                      ? `${CHATGPT_SUBSCRIPTION_LABEL} connected`
-                      : `${CHATGPT_SUBSCRIPTION_LABEL} connected — retrying…`,
-                  );
-                  // Re-run the original prompt now that the key exists; the
-                  // create mutation already invalidated the model/key caches.
-                  onConnected?.();
-                } catch {
-                  // handleApiError already surfaced the failure
+                  // handleApiError already surfaced the failure (e.g. no seat,
+                  // no license, no active subscription)
                 }
               }}
             />

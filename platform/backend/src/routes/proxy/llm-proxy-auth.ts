@@ -6,9 +6,11 @@
  */
 
 import {
+  credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
   isSupportedProvider,
   LLM_PROXY_OAUTH_SCOPE,
+  perUserCredentialLabel,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
@@ -29,10 +31,6 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
-import {
-  credentialRequiresPerUserScope,
-  perUserCredentialLabel,
-} from "@/services/openai-codex-credentials";
 import {
   ApiError,
   type GatewayAgent,

@@ -121,7 +121,7 @@ const SUBSCRIPTION_SETUP_OPTIONS: SetupOption[] = [
       name: CHATGPT_SUBSCRIPTION_LABEL,
       provider: "openai",
       scope: "personal",
-      openaiAuthMethod: "chatgpt-subscription",
+      authMethod: "subscription",
     },
   },
   {

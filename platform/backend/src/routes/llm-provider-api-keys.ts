@@ -1,6 +1,8 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
+  credentialRequiresPerUserScope,
   isProviderApiKeyOptional,
+  perUserCredentialLabel,
   providerDisplayNames,
   RouteId,
   type SupportedProvider,
@@ -36,10 +38,6 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
-import {
-  credentialRequiresPerUserScope,
-  perUserCredentialLabel,
-} from "@/services/openai-codex-credentials";
 import {
   ApiError,
   constructResponseSchema,

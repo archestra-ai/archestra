@@ -40622,6 +40622,9 @@
                           "accessAllTools": {
                             "type": "boolean"
                           },
+                          "accessAllSkills": {
+                            "type": "boolean"
+                          },
                           "accessAllSubagents": {
                             "type": "boolean"
                           },
@@ -41092,6 +41095,7 @@
                           "passthroughHeaders",
                           "toolExposureMode",
                           "accessAllTools",
+                          "accessAllSkills",
                           "accessAllSubagents",
                           "builtInAgentConfig",
                           "builtIn",
@@ -41513,6 +41517,9 @@
                   "accessAllTools": {
                     "type": "boolean"
                   },
+                  "accessAllSkills": {
+                    "type": "boolean"
+                  },
                   "accessAllSubagents": {
                     "type": "boolean"
                   },
@@ -41846,6 +41853,9 @@
                       ]
                     },
                     "accessAllTools": {
+                      "type": "boolean"
+                    },
+                    "accessAllSkills": {
                       "type": "boolean"
                     },
                     "accessAllSubagents": {
@@ -42318,6 +42328,7 @@
                     "passthroughHeaders",
                     "toolExposureMode",
                     "accessAllTools",
+                    "accessAllSkills",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -42798,6 +42809,9 @@
                       "accessAllTools": {
                         "type": "boolean"
                       },
+                      "accessAllSkills": {
+                        "type": "boolean"
+                      },
                       "accessAllSubagents": {
                         "type": "boolean"
                       },
@@ -43268,6 +43282,7 @@
                       "passthroughHeaders",
                       "toolExposureMode",
                       "accessAllTools",
+                      "accessAllSkills",
                       "accessAllSubagents",
                       "builtInAgentConfig",
                       "builtIn",
@@ -43657,6 +43672,9 @@
                     "accessAllTools": {
                       "type": "boolean"
                     },
+                    "accessAllSkills": {
+                      "type": "boolean"
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -44127,6 +44145,7 @@
                     "passthroughHeaders",
                     "toolExposureMode",
                     "accessAllTools",
+                    "accessAllSkills",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -44516,6 +44535,9 @@
                     "accessAllTools": {
                       "type": "boolean"
                     },
+                    "accessAllSkills": {
+                      "type": "boolean"
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -44986,6 +45008,7 @@
                     "passthroughHeaders",
                     "toolExposureMode",
                     "accessAllTools",
+                    "accessAllSkills",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -45719,6 +45742,9 @@
                         "accessAllTools": {
                           "type": "boolean"
                         },
+                        "accessAllSkills": {
+                          "type": "boolean"
+                        },
                         "accessAllSubagents": {
                           "type": "boolean"
                         },
@@ -46189,6 +46215,7 @@
                         "passthroughHeaders",
                         "toolExposureMode",
                         "accessAllTools",
+                        "accessAllSkills",
                         "accessAllSubagents",
                         "builtInAgentConfig",
                         "builtIn",
@@ -46625,6 +46652,9 @@
                     "accessAllTools": {
                       "type": "boolean"
                     },
+                    "accessAllSkills": {
+                      "type": "boolean"
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -47095,6 +47125,7 @@
                     "passthroughHeaders",
                     "toolExposureMode",
                     "accessAllTools",
+                    "accessAllSkills",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -47468,6 +47499,9 @@
                   "accessAllTools": {
                     "type": "boolean"
                   },
+                  "accessAllSkills": {
+                    "type": "boolean"
+                  },
                   "accessAllSubagents": {
                     "type": "boolean"
                   },
@@ -47805,6 +47839,9 @@
                       ]
                     },
                     "accessAllTools": {
+                      "type": "boolean"
+                    },
+                    "accessAllSkills": {
                       "type": "boolean"
                     },
                     "accessAllSubagents": {
@@ -48277,6 +48314,7 @@
                     "passthroughHeaders",
                     "toolExposureMode",
                     "accessAllTools",
+                    "accessAllSkills",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -49943,6 +49981,9 @@
                     "accessAllTools": {
                       "type": "boolean"
                     },
+                    "accessAllSkills": {
+                      "type": "boolean"
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -50413,6 +50454,7 @@
                     "passthroughHeaders",
                     "toolExposureMode",
                     "accessAllTools",
+                    "accessAllSkills",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -50842,6 +50884,9 @@
                     "accessAllTools": {
                       "type": "boolean"
                     },
+                    "accessAllSkills": {
+                      "type": "boolean"
+                    },
                     "accessAllSubagents": {
                       "type": "boolean"
                     },
@@ -51312,6 +51357,7 @@
                     "passthroughHeaders",
                     "toolExposureMode",
                     "accessAllTools",
+                    "accessAllSkills",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -53336,6 +53382,1399 @@
         }
       }
     },
+    "/api/agents/{id}/skills": {
+      "get": {
+        "operationId": "getAgentSkills",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Get the skills this gateway publishes over MCP: the explicitly assigned set, plus whether Auto mode ('access all skills') is on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessAllSkills": {
+                      "type": "boolean",
+                      "description": "Auto mode: expose every org-scoped skill visible in the agent's environment"
+                    },
+                    "skillIds": {
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "description": "Skills explicitly assigned to the agent (Custom mode)"
+                    },
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "templated": {
+                            "type": "boolean"
+                          },
+                          "agentName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "authorId": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "scope",
+                          "templated",
+                          "agentName",
+                          "authorId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "The assigned skills themselves, in `skillIds` order"
+                    }
+                  },
+                  "required": [
+                    "accessAllSkills",
+                    "skillIds",
+                    "skills"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:read"
+          ]
+        }
+      },
+      "put": {
+        "operationId": "updateAgentSkills",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Replace the skills this gateway publishes over MCP (full replace of the assigned set) and set Auto mode\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accessAllSkills": {
+                    "type": "boolean",
+                    "description": "Auto mode: expose every org-scoped skill visible in the agent's environment"
+                  },
+                  "skillIds": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "description": "Skills explicitly assigned to the agent (Custom mode)"
+                  }
+                },
+                "required": [
+                  "accessAllSkills",
+                  "skillIds"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessAllSkills": {
+                      "type": "boolean",
+                      "description": "Auto mode: expose every org-scoped skill visible in the agent's environment"
+                    },
+                    "skillIds": {
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "description": "Skills explicitly assigned to the agent (Custom mode)"
+                    },
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "templated": {
+                            "type": "boolean"
+                          },
+                          "agentName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "authorId": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "scope",
+                          "templated",
+                          "agentName",
+                          "authorId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "The assigned skills themselves, in `skillIds` order"
+                    }
+                  },
+                  "required": [
+                    "accessAllSkills",
+                    "skillIds",
+                    "skills"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:read"
+          ]
+        }
+      }
+    },
+    "/api/agents/{id}/skill-exclusions": {
+      "get": {
+        "operationId": "getAgentSkillExclusions",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Get the agent's Auto-skill-mode exclusions: skills removed from its published skill surface while 'access all skills' is on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "excludedSkillIds": {
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "description": "Individual skill IDs excluded from the agent's skill surface"
+                    },
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "templated": {
+                            "type": "boolean"
+                          },
+                          "agentName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "authorId": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "scope",
+                          "templated",
+                          "agentName",
+                          "authorId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "The excluded skills themselves, in `excludedSkillIds` order"
+                    }
+                  },
+                  "required": [
+                    "excludedSkillIds",
+                    "skills"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:read"
+          ]
+        }
+      },
+      "put": {
+        "operationId": "updateAgentSkillExclusions",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Replace the agent's Auto-skill-mode exclusions (full replace of the excluded skill set)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "excludedSkillIds": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "description": "Individual skill IDs excluded from the agent's skill surface"
+                  }
+                },
+                "required": [
+                  "excludedSkillIds"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "excludedSkillIds": {
+                      "maxItems": 1000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "description": "Individual skill IDs excluded from the agent's skill surface"
+                    },
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "templated": {
+                            "type": "boolean"
+                          },
+                          "agentName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "authorId": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "scope",
+                          "templated",
+                          "agentName",
+                          "authorId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "The excluded skills themselves, in `excludedSkillIds` order"
+                    }
+                  },
+                  "required": [
+                    "excludedSkillIds",
+                    "skills"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:read"
+          ]
+        }
+      }
+    },
     "/api/agents/{id}/restore": {
       "post": {
         "operationId": "restoreAgent",
@@ -53479,6 +54918,9 @@
                       ]
                     },
                     "accessAllTools": {
+                      "type": "boolean"
+                    },
+                    "accessAllSkills": {
                       "type": "boolean"
                     },
                     "accessAllSubagents": {
@@ -53951,6 +55393,7 @@
                     "passthroughHeaders",
                     "toolExposureMode",
                     "accessAllTools",
+                    "accessAllSkills",
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
@@ -119803,6 +121246,9 @@
                           ],
                           "additionalProperties": false
                         },
+                        "mcpGatewaySkillsEnabled": {
+                          "type": "boolean"
+                        },
                         "hackathonRecorderEnabled": {
                           "type": "boolean"
                         },
@@ -119860,6 +121306,7 @@
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
                         "kbGoogleDriveOAuth",
+                        "mcpGatewaySkillsEnabled",
                         "hackathonRecorderEnabled",
                         "hackathonVideoDownloadEnabled",
                         "hackathonMaxFinalCutMs",
@@ -301645,6 +303092,10 @@
                           "content": {
                             "type": "string"
                           },
+                          "digest": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "latestVersion": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -301838,6 +303289,7 @@
                           "name",
                           "description",
                           "content",
+                          "digest",
                           "latestVersion",
                           "license",
                           "compatibility",
@@ -302285,6 +303737,10 @@
                     "content": {
                       "type": "string"
                     },
+                    "digest": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "latestVersion": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -302426,6 +303882,10 @@
                               "base64"
                             ]
                           },
+                          "digest": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "kind": {
                             "type": "string",
                             "enum": [
@@ -302445,6 +303905,7 @@
                           "path",
                           "content",
                           "encoding",
+                          "digest",
                           "kind",
                           "createdAt"
                         ],
@@ -302521,6 +303982,7 @@
                     "name",
                     "description",
                     "content",
+                    "digest",
                     "latestVersion",
                     "license",
                     "compatibility",
@@ -302868,6 +304330,10 @@
                         "content": {
                           "type": "string"
                         },
+                        "digest": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "latestVersion": {
                           "type": "integer",
                           "minimum": -2147483648,
@@ -303009,6 +304475,10 @@
                                   "base64"
                                 ]
                               },
+                              "digest": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "kind": {
                                 "type": "string",
                                 "enum": [
@@ -303028,6 +304498,7 @@
                               "path",
                               "content",
                               "encoding",
+                              "digest",
                               "kind",
                               "createdAt"
                             ],
@@ -303104,6 +304575,7 @@
                         "name",
                         "description",
                         "content",
+                        "digest",
                         "latestVersion",
                         "license",
                         "compatibility",
@@ -303764,6 +305236,10 @@
                     "content": {
                       "type": "string"
                     },
+                    "digest": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "latestVersion": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -303905,6 +305381,10 @@
                               "base64"
                             ]
                           },
+                          "digest": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "kind": {
                             "type": "string",
                             "enum": [
@@ -303924,6 +305404,7 @@
                           "path",
                           "content",
                           "encoding",
+                          "digest",
                           "kind",
                           "createdAt"
                         ],
@@ -304000,6 +305481,7 @@
                     "name",
                     "description",
                     "content",
+                    "digest",
                     "latestVersion",
                     "license",
                     "compatibility",
@@ -304413,6 +305895,10 @@
                     "content": {
                       "type": "string"
                     },
+                    "digest": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "latestVersion": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -304554,6 +306040,10 @@
                               "base64"
                             ]
                           },
+                          "digest": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "kind": {
                             "type": "string",
                             "enum": [
@@ -304573,6 +306063,7 @@
                           "path",
                           "content",
                           "encoding",
+                          "digest",
                           "kind",
                           "createdAt"
                         ],
@@ -304649,6 +306140,7 @@
                     "name",
                     "description",
                     "content",
+                    "digest",
                     "latestVersion",
                     "license",
                     "compatibility",
@@ -306588,6 +308080,10 @@
                     "content": {
                       "type": "string"
                     },
+                    "digest": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "latestVersion": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -306729,6 +308225,10 @@
                               "base64"
                             ]
                           },
+                          "digest": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "kind": {
                             "type": "string",
                             "enum": [
@@ -306748,6 +308248,7 @@
                           "path",
                           "content",
                           "encoding",
+                          "digest",
                           "kind",
                           "createdAt"
                         ],
@@ -306824,6 +308325,7 @@
                     "name",
                     "description",
                     "content",
+                    "digest",
                     "latestVersion",
                     "license",
                     "compatibility",
@@ -307419,6 +308921,10 @@
                     "content": {
                       "type": "string"
                     },
+                    "digest": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "latestVersion": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -307560,6 +309066,10 @@
                               "base64"
                             ]
                           },
+                          "digest": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "kind": {
                             "type": "string",
                             "enum": [
@@ -307579,6 +309089,7 @@
                           "path",
                           "content",
                           "encoding",
+                          "digest",
                           "kind",
                           "createdAt"
                         ],
@@ -307655,6 +309166,7 @@
                     "name",
                     "description",
                     "content",
+                    "digest",
                     "latestVersion",
                     "license",
                     "compatibility",
@@ -308012,6 +309524,10 @@
                     "content": {
                       "type": "string"
                     },
+                    "digest": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "latestVersion": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -308153,6 +309669,10 @@
                               "base64"
                             ]
                           },
+                          "digest": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "kind": {
                             "type": "string",
                             "enum": [
@@ -308172,6 +309692,7 @@
                           "path",
                           "content",
                           "encoding",
+                          "digest",
                           "kind",
                           "createdAt"
                         ],
@@ -308248,6 +309769,7 @@
                     "name",
                     "description",
                     "content",
+                    "digest",
                     "latestVersion",
                     "license",
                     "compatibility",
@@ -309986,6 +311508,10 @@
                           "content": {
                             "type": "string"
                           },
+                          "digest": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "latestVersion": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -310108,6 +311634,7 @@
                           "name",
                           "description",
                           "content",
+                          "digest",
                           "latestVersion",
                           "license",
                           "compatibility",

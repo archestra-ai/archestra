@@ -185,6 +185,17 @@ export function describeGoogleAuthFailure(params: {
   const raw = rawErrorText(error).toLowerCase();
   const who = subject ? ` as ${subject}` : "";
 
+  // OpenSSL rejected the key before any request went out. Almost always a
+  // paste that lost the key's line breaks, and the raw error
+  // ("error:1E08010C:DECODER routines::unsupported") says none of that.
+  if (
+    raw.includes("decoder routines") ||
+    raw.includes("no start line") ||
+    raw.includes("unsupported") ||
+    raw.includes("asn1")
+  ) {
+    return "The service account key could not be read. Paste the key file exactly as Google downloaded it — a private_key whose line breaks were flattened will not parse.";
+  }
   if (raw.includes("unauthorized_client")) {
     return `Google refused to impersonate${who}: the service account's client ID is not authorized for the requested scopes. Add it under Security → Access and data control → API controls → Domain-wide delegation in the Google Admin console, with the scope ${DRIVE_READONLY_SCOPE}.`;
   }

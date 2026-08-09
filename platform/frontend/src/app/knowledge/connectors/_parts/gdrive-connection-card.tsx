@@ -23,8 +23,6 @@ export function GoogleDriveConnectionCard({
 }: {
   connector: Connector;
 }) {
-  useGoogleDriveOAuthResultToast();
-
   const startOAuth = useStartGoogleDriveOAuth();
   const config = connector.config as
     | {
@@ -73,12 +71,18 @@ export function GoogleDriveConnectionCard({
 }
 
 /**
- * Report the outcome of a return trip from Google.
+ * Reports the outcome of a return trip from Google.
  *
- * The callback redirects here with one of two markers rather than rendering
- * anything itself, so the person ends up back on the connector instead of
- * looking at an API response.
+ * Mounted wherever the callback can land, not just next to the connection
+ * card: an authorization that failed before a connector could be identified
+ * comes back to the connectors list, and arriving there with no explanation
+ * is how someone concludes the button is broken.
  */
+export function GoogleDriveOAuthResultToast() {
+  useGoogleDriveOAuthResultToast();
+  return null;
+}
+
 function useGoogleDriveOAuthResultToast() {
   const searchParams = useSearchParams();
   const connected = searchParams.get("gdriveConnected");

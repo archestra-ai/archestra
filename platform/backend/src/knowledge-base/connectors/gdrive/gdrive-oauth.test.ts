@@ -109,13 +109,13 @@ describe("return-to confinement", () => {
     // The value survives a round trip through Google, so an unchecked one
     // would make the callback an open redirect.
     expect(resolveGoogleDriveOAuthReturnTo(candidate)).toBe(
-      "https://archestra.example.com/knowledge",
+      "https://archestra.example.com/knowledge/connectors",
     );
   });
 
   test("falls back when nothing was supplied", () => {
     expect(resolveGoogleDriveOAuthReturnTo(undefined)).toBe(
-      "https://archestra.example.com/knowledge",
+      "https://archestra.example.com/knowledge/connectors",
     );
   });
 });

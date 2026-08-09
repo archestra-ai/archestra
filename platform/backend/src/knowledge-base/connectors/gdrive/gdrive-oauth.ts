@@ -185,7 +185,7 @@ export function verifyGoogleDriveOAuthState(
  */
 export function resolveGoogleDriveOAuthReturnTo(
   candidate: string | undefined,
-  fallbackPath = "/knowledge",
+  fallbackPath = "/knowledge/connectors",
 ): string {
   const base = trimTrailingSlash(config.frontendBaseUrl);
   const fallback = `${base}${fallbackPath}`;

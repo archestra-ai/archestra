@@ -1819,6 +1819,24 @@ describe("GoogleDriveConnector", () => {
       expect(result.error).toContain("admin@example.com");
     });
 
+    it("explains a key whose line breaks were flattened", async () => {
+      // OpenSSL rejects it before any request goes out, and its own wording
+      // ("DECODER routines::unsupported") names nothing an admin can act on.
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      mockAboutGet.mockRejectedValueOnce(
+        new Error("error:1E08010C:DECODER routines::unsupported"),
+      );
+
+      const result = await connector.testConnection({
+        config: { authMode: "service_account" },
+        credentials: serviceAccountCredentials,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("exactly as Google downloaded it");
+    });
+
     it("separates a directory failure from a sign-in failure", async () => {
       resetMocks();
       const connector = new GoogleDriveConnector();

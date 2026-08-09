@@ -15,8 +15,11 @@
  *
  * Adding a subscription means adding an entry here. The per-user scoping rules,
  * the enforcement labels, the "Connect subscription" rows on Model Providers,
- * and the inline connect card in chat all read from this map rather than
- * branching on provider names, so a new entry reaches all of them at once.
+ * the inline connect card in chat, the chat key selector's connect entries, and
+ * the no-key empty state all read from this map rather than branching on
+ * provider names, so a new entry reaches all of them at once — plus its
+ * device-flow component in the frontend's SubscriptionSignIn map, which the
+ * compiler enforces.
  */
 
 import { z } from "zod";
@@ -49,6 +52,10 @@ interface SubscriptionCredentialDefinition {
 }
 
 interface SubscriptionConnectCopy {
+  /** Heading of the standalone connect dialogs ("Sign in with <vendor>"). */
+  signInTitle: string;
+  /** Subtitle under that heading explaining what connecting does. */
+  signInDescription: string;
   /** Field label above the sign-in button. */
   accountLabel: string;
   /**
@@ -72,6 +79,9 @@ export const SUBSCRIPTION_CREDENTIALS = {
     displayName: "ChatGPT",
     marker: "chatgpt-oauth:",
     connect: {
+      signInTitle: "Sign in with ChatGPT",
+      signInDescription:
+        "Connect your ChatGPT account to use your subscription",
       accountLabel: "ChatGPT Subscription",
       signInHint:
         "No API key needed — just Sign in with the OpenAI account to connect your ChatGPT subscription. Keys are per-user: everyone using a Codex model signs in with their own account.",
@@ -88,6 +98,8 @@ export const SUBSCRIPTION_CREDENTIALS = {
     displayName: "GitHub Copilot",
     marker: null,
     connect: {
+      signInTitle: "Sign in with GitHub Copilot",
+      signInDescription: "Connect your GitHub Copilot subscription",
       accountLabel: "GitHub Copilot account",
       signInHint: null,
       connectedTitle: "GitHub account connected",
@@ -103,6 +115,8 @@ export const SUBSCRIPTION_CREDENTIALS = {
     displayName: "Microsoft 365 Copilot",
     marker: null,
     connect: {
+      signInTitle: "Sign in with Microsoft 365 Copilot",
+      signInDescription: "Connect your Microsoft 365 Copilot subscription",
       accountLabel: "Microsoft 365 Copilot account",
       signInHint: null,
       connectedTitle: "Microsoft account connected",
@@ -118,6 +132,9 @@ export const SUBSCRIPTION_CREDENTIALS = {
     displayName: "Grok",
     marker: "xai-subscription:",
     connect: {
+      signInTitle: "Sign in with X",
+      signInDescription:
+        "Connect the X account that holds your X Premium (SuperGrok) subscription",
       accountLabel: "X Premium (SuperGrok) Subscription",
       signInHint:
         "No API key needed — just Sign in with the X account that carries your X Premium (SuperGrok) subscription. Keys are per-user: everyone using a Grok model signs in with their own account.",

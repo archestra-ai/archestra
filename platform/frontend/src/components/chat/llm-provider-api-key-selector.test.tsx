@@ -91,6 +91,9 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     expect(
       screen.getByRole("button", { name: "Microsoft 365 Copilot Connect" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+    ).toBeInTheDocument();
   });
 
   it("does not duplicate a connected subscription", () => {
@@ -100,6 +103,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       provider: "openai",
       scope: "personal",
       userId: "current-user",
+      subscriptionKind: "chatgpt",
       isChatgptSubscription: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -123,6 +127,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       provider: "openai",
       scope: "personal",
       userId: "another-user",
+      subscriptionKind: "chatgpt",
       isChatgptSubscription: true,
       isAgentKey: true,
     } as LlmProviderApiKey;
@@ -263,6 +268,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       provider: "openai",
       scope: "personal",
       userId: "current-user",
+      subscriptionKind: "chatgpt",
       isChatgptSubscription: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -304,6 +310,80 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
     expect(screen.getByText("subscription")).toBeInTheDocument();
+  });
+
+  it("recognizes an X Premium key as connected without absorbing plain xAI API keys", () => {
+    // Both keys live on the `xai` provider; only the subscriptionKind the
+    // backend read off the stored secret distinguishes the subscription.
+    const xPremiumKey = {
+      id: "x-premium-key",
+      name: "X Premium (SuperGrok)",
+      provider: "xai",
+      scope: "personal",
+      userId: "current-user",
+      subscriptionKind: "x-premium",
+    } as LlmProviderApiKey;
+    const xaiApiKey = {
+      id: "xai-api-key",
+      name: "Plain xAI key",
+      provider: "xai",
+      scope: "org",
+      userId: null,
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [xPremiumKey, xaiApiKey],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    renderSelector();
+
+    expect(
+      screen.getByRole("button", { name: "X Premium (SuperGrok) Connected" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+    ).not.toBeInTheDocument();
+    // The plain key stays an ordinary credential row, untouched by the
+    // subscription matching.
+    expect(
+      screen.getByRole("button", { name: "Plain xAI key Connected" }),
+    ).toBeInTheDocument();
+  });
+
+  it("re-opens the X sign-in flow to reconnect a selected X Premium key", async () => {
+    const user = userEvent.setup();
+    const xPremiumKey = {
+      id: "x-premium-key",
+      name: "X Premium (SuperGrok)",
+      provider: "xai",
+      scope: "personal",
+      userId: "current-user",
+      subscriptionKind: "x-premium",
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [xPremiumKey],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    render(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId="x-premium-key"
+        currentProvider="xai"
+        onApiKeyChange={() => {}}
+        suppressAutoSelect
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /^X Premium \(SuperGrok\) Connected\s*Selected$/,
+      }),
+    );
+
+    expect(
+      screen.getByText("Reconnect X Premium (SuperGrok)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("reconnect:x-premium-key")).toBeInTheDocument();
   });
 });
 

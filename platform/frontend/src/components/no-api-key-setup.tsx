@@ -1,8 +1,9 @@
 "use client";
 
 import {
-  CHATGPT_SUBSCRIPTION_LABEL,
   E2eTestId,
+  SUBSCRIPTION_CREDENTIAL_KINDS,
+  SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
 } from "@archestra/shared";
 import { Plus } from "lucide-react";
@@ -111,39 +112,26 @@ const API_KEY_SETUP_OPTION: SetupOption = {
   showConsoleLink: true,
 };
 
-const SUBSCRIPTION_SETUP_OPTIONS: SetupOption[] = [
-  {
-    title: "Sign in with ChatGPT",
-    description: "Connect your ChatGPT account to use your subscription",
-    credentialMode: "subscription",
-    allowedProviders: ["openai"],
-    defaultValues: {
-      name: CHATGPT_SUBSCRIPTION_LABEL,
-      provider: "openai",
-      scope: "personal",
-      authMethod: "subscription",
-    },
-  },
-  {
-    title: "Sign in with GitHub Copilot",
-    description: "Connect your GitHub Copilot subscription",
-    credentialMode: "subscription",
-    allowedProviders: ["github-copilot"],
-    defaultValues: {
-      name: "GitHub Copilot",
-      provider: "github-copilot",
-      scope: "personal",
-    },
-  },
-  {
-    title: "Sign in with Microsoft 365 Copilot",
-    description: "Connect your Microsoft 365 Copilot subscription",
-    credentialMode: "subscription",
-    allowedProviders: ["microsoft-365-copilot"],
-    defaultValues: {
-      name: "Microsoft 365 Copilot",
-      provider: "microsoft-365-copilot",
-      scope: "personal",
-    },
-  },
-];
+/**
+ * One "Sign in with <vendor>" entry per subscription in the shared registry,
+ * so a new subscription appears on this empty state without editing it.
+ */
+const SUBSCRIPTION_SETUP_OPTIONS: SetupOption[] =
+  SUBSCRIPTION_CREDENTIAL_KINDS.map((kind) => {
+    const { provider, label, marker, connect } = SUBSCRIPTION_CREDENTIALS[kind];
+    return {
+      title: connect.signInTitle,
+      description: connect.signInDescription,
+      credentialMode: "subscription" as const,
+      allowedProviders: [provider],
+      defaultValues: {
+        name: label,
+        provider,
+        scope: "personal" as const,
+        // Credential-level subscriptions share their provider with ordinary
+        // API keys, so the form has to open on the subscription tab.
+        // Provider-level ones have no tabs and ignore this.
+        ...(marker !== null ? { authMethod: "subscription" as const } : {}),
+      },
+    };
+  });

@@ -75,12 +75,12 @@ import {
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
-  SelectSkillSchema,
   SelectSkillVersionFileSchema,
   SelectSkillVersionSchema,
   type Skill,
   SkillFileEncodingSchema,
   SkillGithubSyncIntervalSchema,
+  SkillResponseSchema,
   SkillSortBy,
   SkillUsageStatisticsSchema,
   SkillVersionMetadataSchema,
@@ -149,7 +149,7 @@ const SkillUserSchema = z.object({
 const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 
 /** A skill row plus its resource-file count, team assignments, and author. */
-const SkillListItemSchema = SelectSkillSchema.extend({
+const SkillListItemSchema = SkillResponseSchema.extend({
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
   users: z.array(SkillUserSchema),
@@ -1524,7 +1524,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }),
         response: constructResponseSchema(
           z.object({
-            created: z.array(SelectSkillSchema),
+            created: z.array(SkillResponseSchema),
             skipped: z.array(z.string()),
             skippedFiles: z
               .array(

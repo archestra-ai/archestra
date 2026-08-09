@@ -25,6 +25,7 @@ import {
   type AgentTypePermissionChecker,
   assertAgentTeams,
 } from "@/auth/agent-type-permissions";
+import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
@@ -40,6 +41,7 @@ import {
 import { initializeObservabilityMetrics } from "@/observability";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
+import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
@@ -49,6 +51,10 @@ import {
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
+  AgentSkillAssignmentsResponseSchema,
+  AgentSkillAssignmentsSchema,
+  AgentSkillExclusionsResponseSchema,
+  AgentSkillExclusionsSchema,
   AgentSubagentExclusionsSchema,
   AgentToolExclusionsSchema,
   ApiError,
@@ -1213,6 +1219,112 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/agents/:id/skills",
+    {
+      schema: {
+        operationId: RouteId.GetAgentSkills,
+        description:
+          "Get the skills this gateway publishes over MCP: the explicitly assigned set, plus whether Auto mode ('access all skills') is on",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentSkillAssignmentsResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireAgentSkillReadAccess({ id, user, organizationId });
+      return reply.send(await agentSkillAssignmentService.getAssignments(id));
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/skills",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentSkills,
+        description:
+          "Replace the skills this gateway publishes over MCP (full replace of the assigned set) and set Auto mode",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: AgentSkillAssignmentsSchema,
+        response: constructResponseSchema(AgentSkillAssignmentsResponseSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const { isSkillAdmin } = await requireAgentSkillWriteAccess({
+        id,
+        user,
+        organizationId,
+      });
+      return reply.send(
+        await agentSkillAssignmentService.replaceAssignments({
+          agentId: id,
+          organizationId,
+          userId: user.id,
+          isSkillAdmin,
+          assignments: body,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/skill-exclusions",
+    {
+      schema: {
+        operationId: RouteId.GetAgentSkillExclusions,
+        description:
+          "Get the agent's Auto-skill-mode exclusions: skills removed from its published skill surface while 'access all skills' is on",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentSkillExclusionsResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      await requireAgentSkillReadAccess({ id, user, organizationId });
+      return reply.send(await agentSkillAssignmentService.getExclusions(id));
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/skill-exclusions",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentSkillExclusions,
+        description:
+          "Replace the agent's Auto-skill-mode exclusions (full replace of the excluded skill set)",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: AgentSkillExclusionsSchema,
+        response: constructResponseSchema(AgentSkillExclusionsResponseSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const { isSkillAdmin } = await requireAgentSkillWriteAccess({
+        id,
+        user,
+        organizationId,
+      });
+      return reply.send(
+        await agentSkillAssignmentService.replaceExclusions({
+          agentId: id,
+          organizationId,
+          userId: user.id,
+          isSkillAdmin,
+          excludedSkillIds: body.excludedSkillIds,
+        }),
+      );
+    },
+  );
+
   fastify.put(
     "/api/agents/:id",
     {
@@ -1963,6 +2075,117 @@ async function assertEnvironmentAssignable(params: {
     organizationId,
     canDeployToRestricted: hasResourceDeploy,
   });
+}
+
+/**
+ * Read-permission gate for the skill-publication endpoints.
+ *
+ * Same shape as the tool/subagent exclusion endpoints: every failure is a 404
+ * rather than a 403, so the response cannot be used to discover which agents
+ * exist.
+ */
+async function requireAgentSkillReadAccess(params: {
+  id: string;
+  user: { id: string };
+  organizationId: string;
+}): Promise<void> {
+  const { id, user, organizationId } = params;
+
+  const agent = await AgentModel.findById(id, user.id, true);
+  // findById is not org-scoped, so check it here: an admin must not reach
+  // across organizations either.
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const checker = await getAgentTypePermissionChecker({
+    userId: user.id,
+    organizationId,
+  });
+
+  try {
+    checker.require(agent.agentType, "read");
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  if (!checker.isAdmin(agent.agentType)) {
+    const filteredAgent = await AgentModel.findById(id, user.id, false);
+    if (!filteredAgent) {
+      throw new ApiError(404, "Agent not found");
+    }
+  }
+}
+
+/**
+ * Write-permission gate for the skill-publication endpoints, in two halves.
+ *
+ * The gateway half is here: editing what a gateway publishes requires the same
+ * permission as editing the gateway itself, so this runs the identical
+ * agent-type and scope checks `PUT /api/agents/:id` runs.
+ *
+ * The skill half is in two places, and both are load-bearing. The capability
+ * — `skill:read` — is enforced by the middleware from
+ * `requiredEndpointPermissionsMap`, so a role deliberately stripped of the
+ * skill resource cannot reach these routes at all. The per-skill visibility
+ * check is enforced by the assignment service, and this function only resolves
+ * the `skill:admin` flag that service needs: publishing or excluding a skill
+ * requires that the caller could already read it (org-scoped, their own,
+ * shared with them, or assigned to one of their teams), with `skill:admin`
+ * bypassing that as it does everywhere else. Neither half implies the other —
+ * visibility is a property of the skill, the capability a property of the
+ * role. Gateway permission alone is not sufficient for either, because
+ * `mcpGateway:update` is a default member permission and publishing hands the
+ * skill's full body to every holder of the gateway's token.
+ *
+ * Deliberately NOT re-checked at serve time: revoking a user's team membership
+ * (or narrowing a skill's team assignments) does not retroactively un-publish
+ * what they already published. The audit log records who published what; a
+ * serve-time re-check is a known follow-up.
+ */
+async function requireAgentSkillWriteAccess(params: {
+  id: string;
+  user: { id: string };
+  organizationId: string;
+}): Promise<{ isSkillAdmin: boolean }> {
+  const { id, user, organizationId } = params;
+
+  const agent = await AgentModel.findById(id, user.id, true);
+  if (!agent || agent.organizationId !== organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const checker = await getAgentTypePermissionChecker({
+    userId: user.id,
+    organizationId,
+  });
+
+  try {
+    checker.require(agent.agentType, "update");
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const userTeamIds = !checker.isAdmin(agent.agentType)
+    ? await TeamModel.getUserTeamIds(user.id)
+    : [];
+  requireAgentModifyPermission({
+    checker,
+    agentType: agent.agentType,
+    agentScope: agent.scope,
+    agentAuthorId: agent.authorId,
+    agentTeamIds: agent.teams.map((t) => t.id),
+    userTeamIds,
+    userId: user.id,
+  });
+
+  // Skill permissions are a separate resource from the agent's: an mcpGateway
+  // admin is not automatically a skill admin.
+  const skillChecker = await getSkillPermissionChecker({
+    userId: user.id,
+    organizationId,
+  });
+  return { isSkillAdmin: skillChecker.isAdmin };
 }
 
 /**

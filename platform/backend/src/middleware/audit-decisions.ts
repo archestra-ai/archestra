@@ -318,6 +318,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × connector; parent (agent) audited",
   },
+  agentExcludedSkillsTable: {
+    audited: false,
+    reason: "join: agent × skill exclusion; parent (agent) audited",
+  },
   agentExcludedSubagentsTable: {
     audited: false,
     reason: "join: agent × subagent exclusion; parent (agent) audited",
@@ -329,6 +333,10 @@ export const AUDIT_DECISIONS = {
   agentKnowledgeBasesTable: {
     audited: false,
     reason: "join: agent × knowledge base; parent (agent) audited",
+  },
+  agentSkillsTable: {
+    audited: false,
+    reason: "join: agent × skill assignment; parent (agent) audited",
   },
   agentLabelsTable: {
     audited: false,

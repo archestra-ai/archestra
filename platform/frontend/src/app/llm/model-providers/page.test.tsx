@@ -285,7 +285,7 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("GitHub Copilot")).toBeInTheDocument();
     expect(screen.getByText("Microsoft 365 Copilot")).toBeInTheDocument();
-    expect(screen.getByText("Grok")).toBeInTheDocument();
+    expect(screen.getByText("X Premium (SuperGrok)")).toBeInTheDocument();
     expect(screen.getAllByText("Connect")).toHaveLength(4);
   });
 

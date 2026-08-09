@@ -129,7 +129,7 @@ export const SUBSCRIPTION_CREDENTIALS = {
   "x-premium": {
     provider: "xai",
     label: "X Premium (SuperGrok)",
-    displayName: "Grok",
+    displayName: "X Premium (SuperGrok)",
     marker: "xai-subscription:",
     connect: {
       signInTitle: "Sign in with X",

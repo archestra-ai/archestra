@@ -13,6 +13,14 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import { extractTextFromDocx } from "../docx-text-extractor";
+import {
+  type FolderTraversalAdapter,
+  traverseFolders,
+} from "../folder-traversal";
+import { parsePdfBuffer } from "../pdf-utils";
+import { extractTextFromPptx } from "../pptx-text-extractor";
+import { extractTextFromXlsx } from "../xlsx-text-extractor";
 import {
   asDelegatedAuth,
   buildAdminDirectoryClient,
@@ -23,14 +31,6 @@ import {
   GoogleDriveAuthConfigError,
   resolveGoogleDriveAuth,
 } from "./gdrive-auth";
-import { extractTextFromDocx } from "../docx-text-extractor";
-import {
-  type FolderTraversalAdapter,
-  traverseFolders,
-} from "../folder-traversal";
-import { parsePdfBuffer } from "../pdf-utils";
-import { extractTextFromPptx } from "../pptx-text-extractor";
-import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_CONTENT_LENGTH = 500_000; // 500 KB text limit per document
@@ -182,7 +182,10 @@ export class GoogleDriveConnector extends BaseConnector {
 
     let auth: GoogleDriveAuth;
     try {
-      auth = resolveGoogleDriveAuth({ config, credentials: params.credentials });
+      auth = resolveGoogleDriveAuth({
+        config,
+        credentials: params.credentials,
+      });
     } catch (error) {
       if (error instanceof GoogleDriveAuthConfigError) {
         return { success: false, error: error.message };

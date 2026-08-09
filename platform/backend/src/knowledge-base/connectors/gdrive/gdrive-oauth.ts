@@ -80,7 +80,9 @@ export function buildGoogleDriveAuthorizationUrl(
  * The account email comes from Drive's own `about.get`, so no profile scope
  * has to be requested just to label the connection.
  */
-export async function exchangeGoogleDriveAuthorizationCode(code: string): Promise<{
+export async function exchangeGoogleDriveAuthorizationCode(
+  code: string,
+): Promise<{
   refreshToken: string;
   clientId: string;
   accountEmail: string | null;
@@ -121,7 +123,9 @@ export async function exchangeGoogleDriveAuthorizationCode(code: string): Promis
   };
 }
 
-export function signGoogleDriveOAuthState(state: GoogleDriveOAuthState): string {
+export function signGoogleDriveOAuthState(
+  state: GoogleDriveOAuthState,
+): string {
   const payload = {
     ...state,
     nonce: randomBytes(16).toString("base64url"),
@@ -191,7 +195,9 @@ export function resolveGoogleDriveOAuthReturnTo(
 
   try {
     const resolved = new URL(candidate, base);
-    return resolved.origin === new URL(base).origin ? resolved.toString() : fallback;
+    return resolved.origin === new URL(base).origin
+      ? resolved.toString()
+      : fallback;
   } catch {
     return fallback;
   }
@@ -224,7 +230,9 @@ function verifySignature(encoded: string, signature: string): boolean {
   const key = hmacKey();
   if (!key) return false;
 
-  const expected = createHmac("sha256", key).update(encoded).digest("base64url");
+  const expected = createHmac("sha256", key)
+    .update(encoded)
+    .digest("base64url");
   const a = Buffer.from(expected);
   const b = Buffer.from(signature);
   // timingSafeEqual throws on a length mismatch, and comparing equal-length

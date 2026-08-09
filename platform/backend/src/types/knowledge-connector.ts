@@ -49,6 +49,13 @@ export const ConnectorSyncStatusSchema = z.enum([
   "running",
   "success",
   "completed_with_errors",
+  // Ran cleanly and indexed nothing, with nothing indexed previously either.
+  // Distinct from `success` because it almost always means the connector is
+  // pointed somewhere it cannot see: nothing shared with the identity it
+  // authenticates as, a folder or project filter aimed at something invisible
+  // to it, or a file-type filter that excludes every file found. A green tick
+  // on that is how a connector silently indexes nothing for weeks.
+  "no_documents",
   "failed",
   "partial",
   // A newer sync run for the same connector replaced this one. Distinct from

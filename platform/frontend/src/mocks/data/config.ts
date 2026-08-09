@@ -55,6 +55,11 @@ export function makeConfig(
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,
+      kbGoogleDriveOAuth: {
+        configured: false,
+        redirectUri:
+          "http://localhost:3000/api/connectors/gdrive/oauth/callback",
+      },
       hackathonRecorderEnabled: true,
       // Off by default, exactly as a real deployment has it.
       hackathonVideoDownloadEnabled: false,

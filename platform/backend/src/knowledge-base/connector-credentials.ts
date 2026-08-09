@@ -1,12 +1,12 @@
 import GithubAppConfigModel from "@/models/github-app-config";
 import { secretManager } from "@/secrets-manager";
-import { getGoogleDriveOAuthClient } from "./connectors/gdrive/gdrive-oauth";
 import {
   ApiError,
   type ConnectorConfig,
   type ConnectorCredentials,
   type KnowledgeBaseConnector,
 } from "@/types";
+import { getGoogleDriveOAuthClient } from "./connectors/gdrive/gdrive-oauth";
 
 /**
  * Resolve the runtime credentials a connector authenticates with. GitHub App

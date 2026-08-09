@@ -30,7 +30,12 @@ export const ADMIN_DIRECTORY_USER_READONLY_SCOPE =
  */
 export type GoogleDriveAuth =
   | { kind: "service_account"; key: ServiceAccountKey; subject?: string }
-  | { kind: "oauth"; clientId: string; clientSecret: string; refreshToken: string }
+  | {
+      kind: "oauth";
+      clientId: string;
+      clientSecret: string;
+      refreshToken: string;
+    }
   | { kind: "legacy_access_token"; accessToken: string };
 
 type ServiceAccountKey = Record<string, unknown>;
@@ -244,13 +249,15 @@ function parseServiceAccountKey(apiToken: string): ServiceAccountKey {
   return key;
 }
 
-function tryParseServiceAccountKey(
-  apiToken: string,
-): ServiceAccountKey | null {
+function tryParseServiceAccountKey(apiToken: string): ServiceAccountKey | null {
   if (!apiToken.trim().startsWith("{")) return null;
   try {
     const parsed = JSON.parse(apiToken) as unknown;
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
       return null;
     }
     return parsed as ServiceAccountKey;
@@ -281,7 +288,8 @@ function rawErrorText(error: unknown): string {
     if (candidate.response?.data !== undefined) {
       parts.push(safeStringify(candidate.response.data));
     }
-    if (candidate.errors !== undefined) parts.push(safeStringify(candidate.errors));
+    if (candidate.errors !== undefined)
+      parts.push(safeStringify(candidate.errors));
   }
   return parts.join(" ");
 }

@@ -17,6 +17,7 @@ import type {
   AclEntry,
   ConnectorDocument,
   ConnectorRun,
+  ConnectorSyncStatus,
   KnowledgeBaseConnector,
 } from "@/types";
 import { chunkDocument } from "./chunker";
@@ -458,8 +459,26 @@ class ConnectorSyncService {
       if (batchCount === 0) {
         // No documents ingested — finalize immediately.
         const now = new Date();
-        const finalStatus =
-          itemErrors > 0 ? "completed_with_errors" : "success";
+
+        // An incremental run that finds nothing new is the normal steady
+        // state and stays green. A run that indexes nothing when the
+        // connector holds nothing either is the misconfiguration signature:
+        // the identity cannot see the content, or a filter excludes all of
+        // it. Reporting that as plain success is how a connector goes weeks
+        // indexing nothing with a green tick beside it.
+        const emptyConnector =
+          itemErrors === 0 &&
+          (await KbDocumentModel.countByConnector(connectorId)) === 0;
+        const finalStatus: ConnectorSyncStatus =
+          itemErrors > 0
+            ? "completed_with_errors"
+            : emptyConnector
+              ? "no_documents"
+              : "success";
+        const diagnosis = emptyConnector
+          ? describeEmptySync({ itemsSkipped, documentsProcessed })
+          : null;
+
         const updated = await ConnectorRunModel.updateIfOwned({
           runId: run.id,
           epoch,
@@ -470,15 +489,19 @@ class ConnectorSyncService {
             documentsIngested,
             itemErrors,
             itemsSkipped,
+            error: diagnosis,
             logs: options?.getLogOutput?.() ?? null,
           },
         });
 
         if (updated) {
+          if (diagnosis) {
+            runLog.warn({ itemsSkipped, documentsProcessed }, diagnosis);
+          }
           await KnowledgeBaseConnectorModel.update(connectorId, {
             lastSyncStatus: finalStatus,
             lastSyncAt: now,
-            lastSyncError: null,
+            lastSyncError: diagnosis,
           });
           // Even an ingest-free sync triggers a (deduped, cheap-delta)
           // permission pass: it may follow an interrupted run whose own
@@ -875,6 +898,29 @@ class ConnectorSyncService {
 }
 
 export const connectorSyncService = new ConnectorSyncService();
+
+/**
+ * Why a run that indexed nothing probably indexed nothing.
+ *
+ * Only reached when the connector holds no documents at all, so this never
+ * second-guesses a healthy incremental sync that simply found no changes.
+ * Names the cause when the counters give one away, and otherwise lists the
+ * three things that are actually worth checking.
+ */
+function describeEmptySync(params: {
+  itemsSkipped: number;
+  documentsProcessed: number;
+}): string {
+  const { itemsSkipped, documentsProcessed } = params;
+
+  if (itemsSkipped > 0 && itemsSkipped === documentsProcessed) {
+    return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped as unsupported types. Widen or remove the file-type filter, or point the connector at content it can read.`;
+  }
+  if (itemsSkipped > 0) {
+    return `Indexed nothing, and skipped ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} as unsupported types. Check the file-type filter and that the content is shared with the identity this connector authenticates as.`;
+  }
+  return "Indexed nothing: the source returned no items at all. Check that the content is shared with the identity this connector authenticates as, that any folder or project scope points at something that identity can see, and that a file-type filter is not excluding everything. Test connection reports which of those it is.";
+}
 
 /**
  * Remove NUL (U+0000) bytes from a string. Postgres `text`/`jsonb` columns

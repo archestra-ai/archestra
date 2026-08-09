@@ -29,6 +29,7 @@ const {
   assignConnectorToKnowledgeBases,
   unassignConnectorFromKnowledgeBase,
   getConnectorKnowledgeBases,
+  startGoogleDriveConnectorOAuth,
 } = archestraApiSdk;
 
 type ConnectorsQuery = NonNullable<
@@ -349,6 +350,39 @@ export function useTestConnectorConnection() {
           errorMessage: clipErrorMessage(data.error),
         });
         toast.error(data.error || "Connection test failed");
+      }
+    },
+  });
+}
+
+/**
+ * Send the browser to Google to authorize a Drive connector.
+ *
+ * A full-page redirect rather than a popup: the flow ends on a backend
+ * callback that stores the refresh token and redirects back here, so no token
+ * is handed between windows and the browser returns to the page it left with
+ * the connector already connected.
+ */
+export function useStartGoogleDriveOAuth() {
+  return useMutation({
+    mutationFn: async (params: { connectorId: string; returnTo?: string }) => {
+      const { data, error } = await startGoogleDriveConnectorOAuth({
+        path: { id: params.connectorId },
+        body: {
+          returnTo:
+            params.returnTo ??
+            (typeof window === "undefined" ? undefined : window.location.href),
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.authorizationUrl) {
+        window.location.href = data.authorizationUrl;
       }
     },
   });

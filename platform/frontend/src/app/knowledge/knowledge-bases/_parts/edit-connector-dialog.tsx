@@ -135,6 +135,7 @@ export function EditConnectorDialog({
   const needsEmail = connectorNeedsEmail(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const authMethod = form.watch("config.authMethod") as string | undefined;
+  const authMode = form.watch("config.authMode") as string | undefined;
   // App-auth GitHub connectors inherit their host from the App config, so the
   // connector's own URL field is hidden to avoid a misleading second host
   const usesGithubApp =
@@ -151,6 +152,7 @@ export function EditConnectorDialog({
     emailRequired,
     mode: "edit",
     authMethod,
+    authMode,
   });
 
   const handleSubmit = async (values: EditConnectorFormValues) => {

@@ -1918,8 +1918,18 @@ class AgentModel {
   /**
    * Includes `environmentId` so callers can apply the environment fence beside
    * the permission checks, without a second round-trip per target.
+   *
+   * `organizationId` is an OPTIONAL tenant fence. The scope checks downstream
+   * cannot supply one: `requireScopedModifyPermission` returns early for an
+   * admin, and that admin flag is the caller's role in the caller's OWN org, so
+   * nothing ever compares the target's tenant. Callers that accept agent ids
+   * straight from a request body should pass it, which drops foreign-org agents
+   * from the map and makes them indistinguishable from ids that do not exist.
    */
-  static async findByIdsForPermissionCheck(ids: string[]): Promise<
+  static async findByIdsForPermissionCheck(
+    ids: string[],
+    organizationId?: string,
+  ): Promise<
     Map<
       string,
       {
@@ -1949,6 +1959,9 @@ class AgentModel {
           and(
             inArray(schema.agentsTable.id, ids),
             notDeleted(schema.agentsTable),
+            organizationId
+              ? eq(schema.agentsTable.organizationId, organizationId)
+              : undefined,
           ),
         ),
       AgentTeamModel.getTeamDetailsForAgents(ids),
@@ -2307,6 +2320,38 @@ class AgentModel {
           eq(schema.agentsTable.organizationId, params.organizationId),
           eq(schema.agentsTable.agentType, params.agentType),
           eq(schema.agentsTable.isDefault, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * A project's `default_agent_id` as a candidate: a live, non-built-in chat
+   * agent in the given organization, with the `scope` its caller needs to judge
+   * whether the project's audience can reach it (`projectService`).
+   *
+   * Callers run this on read as well as write — agents soft-delete, so the FK's
+   * SET NULL never fires and a pin outlives its target.
+   */
+  static async findPinnableProjectDefault(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<{ id: string; name: string; scope: AgentScope } | null> {
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        scope: schema.agentsTable.scope,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.id),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
           notDeleted(schema.agentsTable),
         ),
       )

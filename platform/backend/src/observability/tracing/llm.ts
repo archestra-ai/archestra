@@ -85,6 +85,12 @@ export async function startActiveLlmSpan<T>(params: {
   source?: InteractionSource;
   serverAddress?: string;
   promptMessages?: unknown;
+  /**
+   * Suppress prompt/completion content capture for this span even when
+   * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (incognito chat sessions). Metadata
+   * attributes (model, usage, cost) are unaffected.
+   */
+  suppressContent?: boolean;
   parentContext?: Context;
   user?: SpanUserInfo | null;
   callback: (span: Span) => Promise<T>;
@@ -155,7 +161,7 @@ export async function startActiveLlmSpan<T>(params: {
 
     setUserAttributes(span, params.user);
 
-    if (captureContent && params.promptMessages) {
+    if (captureContent && !params.suppressContent && params.promptMessages) {
       span.addEvent(EVENT_GENAI_CONTENT_PROMPT, {
         [ATTR_GENAI_PROMPT]: truncateContent(params.promptMessages),
       });

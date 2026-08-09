@@ -33,6 +33,10 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
+  INCOGNITO_KEY_HEADER,
+  parseIncognitoDekHeader,
+} from "@/content-encryption/incognito";
+import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
 } from "@/guardrails/dual-llm-progress-bus";
@@ -70,6 +74,7 @@ import {
   DUAL_LLM_KEEPALIVE_SSE_COMMENT,
   type DualLlmAnalysis,
   type GatewayAgent,
+  type InsertInteraction,
   type InteractionAuthMethod,
   type InteractionRequest,
   type InteractionResponse,
@@ -105,6 +110,11 @@ import {
 } from "./llm-proxy-helpers";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
+import {
+  type IncognitoAuditDisposition,
+  redactIncognitoInteraction,
+  resolveIncognitoAuditContext,
+} from "./utils/incognito-session";
 
 const {
   observability: {
@@ -130,6 +140,18 @@ export interface LLMProxyContext<TRequest> {
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
+  /**
+   * Incognito chat session: span content capture is suppressed and persisted
+   * content is either encrypted or redacted (usage/cost metadata untouched).
+   * True whenever `incognito.kind !== "none"`.
+   */
+  suppressContent: boolean;
+  /**
+   * How this request's persisted audit content must be keyed. `encrypt`
+   * carries the validated conversation key; `redact` is the fail-closed
+   * fallback. Resolved once per request so every write site agrees.
+   */
+  incognito: IncognitoAuditDisposition;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
@@ -641,6 +663,26 @@ export async function handleLLMProxy<
         ? "internal"
         : "provider_key";
   }
+
+  // Incognito chat sessions: interaction rows keep all usage/cost/session
+  // metadata, but their content-bearing fields are encrypted under the
+  // conversation's browser-held key (or redacted if that cannot be done
+  // safely), and span content capture is suppressed either way. Resolved once
+  // up front (server-derived, fail closed) so the catch below and both stream
+  // handlers agree on it.
+  const incognito = await resolveIncognitoAuditContext({
+    source,
+    // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
+    // from forwarded headers, and this seam must only ever match the
+    // loopback socket the in-app chat actually dials.
+    requestIp: request.socket.remoteAddress,
+    sessionId,
+    userId,
+    dek: readIncognitoDek(request),
+  });
+  // Content never reaches spans or logs for an incognito session, whether it
+  // ends up encrypted or redacted.
+  const suppressContent = incognito.kind !== "none";
 
   // Check usage limits
   try {
@@ -1169,6 +1211,8 @@ export async function handleLLMProxy<
       toonSkipReason,
       dualLlmAnalyses,
       unsafeContextBoundary,
+      suppressContent,
+      incognito,
       externalAgentId,
       authMethod,
       billingMode,
@@ -1217,7 +1261,7 @@ export async function handleLLMProxy<
         { profileId: resolvedAgent.id, errorMessage },
         "Persisting error interaction record",
       );
-      await InteractionModel.create({
+      const record: InsertInteraction = {
         profileId: resolvedAgent.id,
         externalAgentId,
         executionId,
@@ -1240,7 +1284,8 @@ export async function handleLLMProxy<
         ),
         inputTokens: 0,
         outputTokens: 0,
-      });
+      };
+      await persistProxyInteraction(record, incognito);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1290,6 +1335,8 @@ async function handleStreaming<
     toonSkipReason,
     dualLlmAnalyses,
     unsafeContextBoundary,
+    suppressContent,
+    incognito,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1329,7 +1376,7 @@ async function handleStreaming<
     usagelessInteractionRecorded = true;
 
     try {
-      await InteractionModel.create({
+      const record: InsertInteraction = {
         profileId: agent.id,
         externalAgentId,
         executionId,
@@ -1350,7 +1397,8 @@ async function handleStreaming<
         baselineModel,
         inputTokens: 0,
         outputTokens: 0,
-      });
+      };
+      await persistProxyInteraction(record, incognito);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -1385,6 +1433,7 @@ async function handleStreaming<
       promptMessages: provider
         .createRequestAdapter(originalRequest)
         .getProviderMessages(),
+      suppressContent,
       parentContext,
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
@@ -1534,8 +1583,8 @@ async function handleStreaming<
           ]);
         }
 
-        // Capture streamed completion content
-        if (captureContent && state.text) {
+        // Capture streamed completion content (suppressed for incognito chats)
+        if (captureContent && !suppressContent && state.text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
             [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
           });
@@ -1735,34 +1784,33 @@ async function handleStreaming<
       });
 
       try {
-        await InteractionModel.create(
-          buildInteractionRecord({
-            agent,
-            externalAgentId,
-            authMethod,
-            billingMode,
-            authenticatedApp,
-            executionId,
-            userId,
-            virtualKeyId,
-            passthroughVirtualKeyId,
-            sessionId,
-            sessionSource,
-            source,
-            providerType: provider.interactionType,
-            request: originalRequest,
-            processedRequest: request,
-            response: streamAdapter.toProviderResponse(),
-            actualModel,
-            baselineModel,
-            usage,
-            costs,
-            toonStats,
-            toonSkipReason,
-            dualLlmAnalyses,
-            unsafeContextBoundary,
-          }),
-        );
+        const record = buildInteractionRecord({
+          agent,
+          externalAgentId,
+          authMethod,
+          billingMode,
+          authenticatedApp,
+          executionId,
+          userId,
+          virtualKeyId,
+          passthroughVirtualKeyId,
+          sessionId,
+          sessionSource,
+          source,
+          providerType: provider.interactionType,
+          request: originalRequest,
+          processedRequest: request,
+          response: streamAdapter.toProviderResponse(),
+          actualModel,
+          baselineModel,
+          usage,
+          costs,
+          toonStats,
+          toonSkipReason,
+          dualLlmAnalyses,
+          unsafeContextBoundary,
+        });
+        await persistProxyInteraction(record, incognito);
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -1808,6 +1856,8 @@ async function handleNonStreaming<
     toonSkipReason,
     dualLlmAnalyses,
     unsafeContextBoundary,
+    suppressContent,
+    incognito,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1853,6 +1903,7 @@ async function handleNonStreaming<
     promptMessages: provider
       .createRequestAdapter(originalRequest)
       .getProviderMessages(),
+    suppressContent,
     parentContext,
     user: toSpanUserInfo(resolvedUser),
     callback: async (llmSpan) => {
@@ -1958,8 +2009,8 @@ async function handleNonStreaming<
         adapter.getFinishReasons(),
       );
 
-      // Capture completion content
-      if (captureContent) {
+      // Capture completion content (suppressed for incognito chats)
+      if (captureContent && !suppressContent) {
         const text = adapter.getText?.();
         if (text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
@@ -2052,34 +2103,33 @@ async function handleNonStreaming<
         );
       });
 
-      await InteractionModel.create(
-        buildInteractionRecord({
-          agent,
-          externalAgentId,
-          authMethod,
-          billingMode,
-          authenticatedApp,
-          executionId,
-          userId,
-          virtualKeyId,
-          passthroughVirtualKeyId,
-          sessionId,
-          sessionSource,
-          source,
-          providerType: provider.interactionType,
-          request: originalRequest,
-          processedRequest: request,
-          response: refusalResponse,
-          actualModel,
-          baselineModel,
-          usage,
-          costs,
-          toonStats,
-          toonSkipReason,
-          dualLlmAnalyses,
-          unsafeContextBoundary,
-        }),
-      );
+      const refusalRecord = buildInteractionRecord({
+        agent,
+        externalAgentId,
+        authMethod,
+        billingMode,
+        authenticatedApp,
+        executionId,
+        userId,
+        virtualKeyId,
+        passthroughVirtualKeyId,
+        sessionId,
+        sessionSource,
+        source,
+        providerType: provider.interactionType,
+        request: originalRequest,
+        processedRequest: request,
+        response: refusalResponse,
+        actualModel,
+        baselineModel,
+        usage,
+        costs,
+        toonStats,
+        toonSkipReason,
+        dualLlmAnalyses,
+        unsafeContextBoundary,
+      });
+      await persistProxyInteraction(refusalRecord, incognito);
 
       return reply.send(refusalResponse);
     }
@@ -2126,38 +2176,37 @@ async function handleNonStreaming<
   });
 
   try {
-    await InteractionModel.create(
-      buildInteractionRecord({
-        agent,
-        externalAgentId,
-        authMethod,
-        billingMode,
-        authenticatedApp,
-        executionId,
-        userId,
-        virtualKeyId,
-        passthroughVirtualKeyId,
-        sessionId,
-        sessionSource,
-        source,
-        providerType: provider.interactionType,
-        request: originalRequest,
-        processedRequest: request,
-        // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
-        // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
-        response:
-          responseAdapter.getLoggedResponse?.() ??
-          responseAdapter.getOriginalResponse(),
-        actualModel,
-        baselineModel,
-        usage,
-        costs,
-        toonStats,
-        toonSkipReason,
-        dualLlmAnalyses,
-        unsafeContextBoundary,
-      }),
-    );
+    const record = buildInteractionRecord({
+      agent,
+      externalAgentId,
+      authMethod,
+      billingMode,
+      authenticatedApp,
+      executionId,
+      userId,
+      virtualKeyId,
+      passthroughVirtualKeyId,
+      sessionId,
+      sessionSource,
+      source,
+      providerType: provider.interactionType,
+      request: originalRequest,
+      processedRequest: request,
+      // Bedrock<->OpenAI compat need to return OpenAI response to client, but store bedrock response for interaction log.
+      // Providers which need this behavior should implement getLoggedResponse() for persisting interaction and getOriginalResponse() for returning to client.
+      response:
+        responseAdapter.getLoggedResponse?.() ??
+        responseAdapter.getOriginalResponse(),
+      actualModel,
+      baselineModel,
+      usage,
+      costs,
+      toonStats,
+      toonSkipReason,
+      dualLlmAnalyses,
+      unsafeContextBoundary,
+    });
+    await persistProxyInteraction(record, incognito);
   } catch (interactionError) {
     logger.error(
       { err: interactionError, profileId: agent.id },
@@ -2285,4 +2334,40 @@ function headerNamePeek(
 function extractDurationStatusCode(error: unknown): string {
   const statusCode = (error as { statusCode?: number } | null)?.statusCode;
   return typeof statusCode === "number" ? String(statusCode) : "0";
+}
+
+/**
+ * The single funnel every proxy interaction write goes through, so all five
+ * sites treat incognito identically.
+ *
+ * - `encrypt`: store the full record, keyed to the conversation's browser-held
+ *   DEK (recoverable offline via that conversation's escrow record).
+ * - `redact`: fail-closed — content is replaced with the redaction marker
+ *   rather than risking a plaintext write or an unrecoverable one.
+ * - `none`: ordinary write; at-rest rules apply.
+ */
+async function persistProxyInteraction(
+  record: InsertInteraction,
+  incognito: IncognitoAuditDisposition,
+): Promise<void> {
+  await InteractionModel.create(
+    incognito.kind === "redact" ? redactIncognitoInteraction(record) : record,
+    incognito.kind === "encrypt" ? incognito.audit : null,
+  );
+}
+
+/**
+ * Read the incognito conversation key off the request. A malformed header is
+ * treated as absent (the resolver then fails closed to redaction) rather than
+ * failing the LLM call — the proxy's job is to serve the request; losing the
+ * key costs audit fidelity, not the user's turn.
+ */
+function readIncognitoDek(request: FastifyRequest): Buffer | null {
+  const raw = request.headers[INCOGNITO_KEY_HEADER];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  try {
+    return parseIncognitoDekHeader(value);
+  } catch {
+    return null;
+  }
 }

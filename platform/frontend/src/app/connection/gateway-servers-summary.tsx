@@ -90,6 +90,7 @@ export function GatewayServersSummary({
   const totalTools = accessAll
     ? servers.reduce((sum, s) => sum + s.toolCount, 0)
     : (gateway.tools?.length ?? 0);
+  const summaryLabel = `${accessAll ? "All " : ""}${servers.length} MCP ${servers.length === 1 ? "server" : "servers"} · ${totalTools} ${totalTools === 1 ? "tool" : "tools"}`;
 
   const editLink =
     canManage && gatewayId ? (
@@ -137,12 +138,7 @@ export function GatewayServersSummary({
               !expanded && "-rotate-90",
             )}
           />
-          {accessAll ? <span>All </span> : null}
-          <span>{servers.length} MCP server</span>
-          {servers.length === 1 ? null : <span>s</span>}
-          <span> · </span>
-          <span>{totalTools} tool</span>
-          {totalTools === 1 ? null : <span>s</span>}
+          <span>{summaryLabel}</span>
         </button>
         {accessAll && (
           <span className="text-muted-foreground/70">

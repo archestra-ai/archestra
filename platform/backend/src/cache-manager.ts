@@ -54,6 +54,8 @@ export const CacheKey = {
     "microsoft-365-copilot-device-auth-rate-limit",
   /** ChatGPT/Codex subscription device-flow sign-in rate limiting per user */
   OpenaiCodexDeviceAuthRateLimit: "openai-codex-device-auth-rate-limit",
+  /** RUM event-batch ingest rate limiting per user */
+  RumIngestRateLimit: "rum-ingest-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
   /** Organization-scoped settings cache */
@@ -92,6 +94,14 @@ export const CacheKey = {
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
   TelegramLinkCode: "chatops-telegram-link",
+  /** Positive "this chat session is incognito" lookups for LLM proxy redaction */
+  /**
+   * v2: entries changed from a bare `true` to a facts object (fingerprint +
+   * escrow presence). The suffix is load-bearing — the cache is Postgres-backed
+   * and shared across replicas, so during a rolling deploy new code must not
+   * read an old boolean and mistake it for "not incognito".
+   */
+  IncognitoChatSession: "incognito-chat-session-v2",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
@@ -354,13 +364,36 @@ export const cacheManager = new CacheManager();
 /**
  * Configuration options for LRU cache instances.
  */
-interface LRUCacheOptions {
+interface LRUCacheOptions<T = unknown> {
   /** Maximum number of entries in the cache (required) */
   maxSize: number;
   /** Default TTL in milliseconds for cache entries (optional, defaults to 1 hour) */
   defaultTtl?: number;
   /** Callback fired when an entry is evicted from the cache */
   onEviction?: (key: string, value: unknown) => void;
+  /**
+   * Optional ceiling on total retained bytes, measured with `sizeOf`.
+   *
+   * An entry count only approximates memory when entries are of similar size.
+   * For a cache holding values whose size varies by orders of magnitude it is
+   * not a bound at all — a few hundred large entries can exhaust the heap while
+   * the cache still looks nearly empty against `maxSize`. Setting this evicts
+   * oldest-written entries until the total fits, making `maxSize` a coarse
+   * backstop and this the real bound.
+   *
+   * Eviction order is QuickLRU's approximation, the same one its count-based
+   * eviction uses: reads do not reorder entries within a generation, so this is
+   * oldest-written-first rather than strictly least-recently-used.
+   *
+   * Requires `sizeOf`. Enforcement walks the retained entries on write, so
+   * callers that set this should keep `maxSize` modest.
+   */
+  maxBytes?: number;
+  /**
+   * Approximate retained size of a value, in bytes. Called once per write, and
+   * only when `maxBytes` is set.
+   */
+  sizeOf?: (value: T) => number;
 }
 
 /**
@@ -369,6 +402,8 @@ interface LRUCacheOptions {
 interface LRUCacheEntry<T> {
   value: T;
   expiresAt: number;
+  /** Size recorded at write time. Always 0 when the cache is not byte-bounded. */
+  bytes: number;
 }
 
 /**
@@ -392,10 +427,14 @@ export class LRUCacheManager<T = unknown> {
   private lruStore: QuickLRU<string, LRUCacheEntry<T>>;
   private defaultTtl: number;
   private onEviction?: (key: string, value: unknown) => void;
+  private maxBytes?: number;
+  private sizeOf?: (value: T) => number;
 
-  constructor(options: LRUCacheOptions) {
+  constructor(options: LRUCacheOptions<T>) {
     this.defaultTtl = options.defaultTtl ?? TimeInMs.Hour;
     this.onEviction = options.onEviction;
+    this.sizeOf = options.sizeOf;
+    this.maxBytes = options.sizeOf ? options.maxBytes : undefined;
 
     this.lruStore = new QuickLRU<string, LRUCacheEntry<T>>({
       maxSize: options.maxSize,
@@ -439,8 +478,10 @@ export class LRUCacheManager<T = unknown> {
     const entry: LRUCacheEntry<T> = {
       value,
       expiresAt: effectiveTtl > 0 ? Date.now() + effectiveTtl : 0,
+      bytes: this.maxBytes === undefined ? 0 : (this.sizeOf?.(value) ?? 0),
     };
     this.lruStore.set(key, entry);
+    this.enforceByteBudget();
   }
 
   /**
@@ -501,10 +542,58 @@ export class LRUCacheManager<T = unknown> {
     return this.lruStore.keys();
   }
 
+  /**
+   * Total bytes recorded at write time across retained entries. Always 0 when
+   * the cache is not byte-bounded.
+   */
+  get retainedBytes(): number {
+    let total = 0;
+    for (const [, entry] of this.lruStore.entriesAscending()) {
+      total += entry.bytes;
+    }
+    return total;
+  }
+
   private evictExpiredEntry(key: string, entry: LRUCacheEntry<T>): void {
     if (this.onEviction) {
       this.onEviction(key, entry.value);
     }
     this.lruStore.delete(key);
+  }
+
+  /**
+   * Evict oldest-written entries until the retained total fits `maxBytes`.
+   *
+   * Sizes are summed from the retained entries rather than tracked incrementally
+   * on purpose: QuickLRU fires `onEviction` for capacity evictions but not for
+   * `delete`, so a running counter would drift out of sync with the store and
+   * silently under- or over-report. At the modest `maxSize` a byte-bounded cache
+   * should use, summing is a handful of integer adds.
+   *
+   * A value larger than the whole budget is evicted immediately, so callers must
+   * not assume a `set` is observable by a later `get` — use the value they wrote.
+   */
+  private enforceByteBudget(): void {
+    const budget = this.maxBytes;
+    if (budget === undefined) {
+      return;
+    }
+
+    const entries = [...this.lruStore.entriesAscending()];
+    let total = 0;
+    for (const [, entry] of entries) {
+      total += entry.bytes;
+    }
+
+    for (const [key, entry] of entries) {
+      if (total <= budget) {
+        break;
+      }
+      total -= entry.bytes;
+      this.lruStore.delete(key);
+      if (this.onEviction) {
+        this.onEviction(key, entry.value);
+      }
+    }
   }
 }

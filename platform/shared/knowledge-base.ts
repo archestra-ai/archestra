@@ -46,6 +46,75 @@ export const PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE = 0;
  */
 export const PERMISSION_SYNC_FULL_RECONCILE_INTERVAL_SECONDS = 24 * 60 * 60;
 
+/**
+ * PostgreSQL text-search configurations available for a connector's keyword
+ * (full-text) index. Each name is a stock `pg_ts_config` entry, so every value
+ * here resolves on any standard PostgreSQL installation without extensions.
+ *
+ * The choice controls stemming and stop words: indexing a German corpus under
+ * `english` leaves "laufende" and "läuft" as unrelated tokens, so keyword search
+ * silently under-matches. `simple` disables stemming and stop-word removal
+ * entirely — the right pick for code, identifiers, or a mixed-language corpus
+ * where a wrong stemmer is worse than none.
+ */
+export const TEXT_SEARCH_LANGUAGES = [
+  "simple",
+  "arabic",
+  "armenian",
+  "basque",
+  "catalan",
+  "danish",
+  "dutch",
+  "english",
+  "finnish",
+  "french",
+  "german",
+  "greek",
+  "hindi",
+  "hungarian",
+  "indonesian",
+  "irish",
+  "italian",
+  "lithuanian",
+  "nepali",
+  "norwegian",
+  "portuguese",
+  "romanian",
+  "russian",
+  "serbian",
+  "spanish",
+  "swedish",
+  "tamil",
+  "turkish",
+  "yiddish",
+] as const;
+
+export type TextSearchLanguage = (typeof TEXT_SEARCH_LANGUAGES)[number];
+
+/** Matches the `kb_chunks.fts_language` column default. */
+export const DEFAULT_TEXT_SEARCH_LANGUAGE: TextSearchLanguage = "english";
+
+export const TextSearchLanguageSchema = z
+  .enum(TEXT_SEARCH_LANGUAGES)
+  .meta({ id: "TextSearchLanguage" });
+
+/**
+ * Bounds for the configurable chunk size. The floor keeps a chunk large enough
+ * to carry a coherent passage once the title prefix and metadata suffix are
+ * subtracted; the ceiling stays under the input limit of every embedding model
+ * we support.
+ */
+export const MIN_CHUNK_SIZE_TOKENS = 128;
+export const MAX_CHUNK_SIZE_TOKENS = 2048;
+export const DEFAULT_CHUNK_SIZE_TOKENS = 512;
+
+/**
+ * How many chunks either side of a search hit are stitched back on before the
+ * result is returned. 0 disables the expansion.
+ */
+export const DEFAULT_CONTEXT_EXPANSION_RADIUS = 1;
+export const MAX_CONTEXT_EXPANSION_RADIUS = 4;
+
 export const SUPPORTED_EMBEDDING_DIMENSIONS = [
   3072, 1536, 1024, 768, 384,
 ] as const;

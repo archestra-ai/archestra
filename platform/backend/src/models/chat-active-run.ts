@@ -1,11 +1,18 @@
 import type { UIMessageChunk } from "ai";
 import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
+import {
+  decryptIncognitoValue,
+  encryptIncognitoValue,
+  type IncognitoAuditContext,
+} from "@/content-encryption/incognito";
 import db, { schema, withDbTransaction } from "@/database";
+import logger from "@/logging";
 import type {
   ChatActiveRun,
   ChatActiveRunEvent,
   ChatActiveRunStatus,
 } from "@/types";
+import { isContentEnvelope } from "@/utils/crypto";
 
 // "run_missing" means the parent run row was deleted (e.g. its conversation was
 // hard-deleted and cascaded) before this append landed, so the write is a
@@ -30,13 +37,43 @@ class ActiveChatRunModel {
     return run ?? null;
   }
 
+  /**
+   * `incognitoAudit` encrypts the batch under the conversation's browser-held
+   * key. Replay payloads are raw stream chunks, so without a key they cannot
+   * be stored at all — and a run whose batches are dropped loses its
+   * reconnect-after-reload replay entirely.
+   */
   static async appendEvents(params: {
     runId: string;
     seq: number;
     payloads: UIMessageChunk[];
     touchRun?: boolean;
+    incognitoAudit?: IncognitoAuditContext | null;
   }): Promise<AppendEventsResult> {
+    const payloads = params.incognitoAudit
+      ? (encryptIncognitoValue(params.payloads, {
+          ...params.incognitoAudit,
+          context: RUN_EVENT_PAYLOADS_CONTEXT,
+          // The column holds an array; the envelope replaces it wholesale, so
+          // the cast is the same one every incognito column write makes.
+        }) as unknown as UIMessageChunk[])
+      : params.payloads;
+
     if (params.payloads.length === 0) {
+      // A due liveness touch must still land even with nothing to append —
+      // an incognito run with no escrow record still flushes empty batches
+      // (its payloads cannot be encrypted, so they are dropped), and without
+      // the touch a long silent stream would be reaped as stale.
+      if (params.touchRun) {
+        const [touched] = await db
+          .update(schema.chatActiveRunsTable)
+          .set({ updatedAt: new Date() })
+          .where(eq(schema.chatActiveRunsTable.id, params.runId))
+          .returning({ id: schema.chatActiveRunsTable.id });
+        if (!touched) {
+          return "run_missing";
+        }
+      }
       return "appended";
     }
 
@@ -45,7 +82,7 @@ class ActiveChatRunModel {
         await db.insert(schema.chatActiveRunEventsTable).values({
           runId: params.runId,
           seq: params.seq,
-          payloads: params.payloads,
+          payloads,
         });
         return "appended";
       }
@@ -54,7 +91,7 @@ class ActiveChatRunModel {
         await tx.insert(schema.chatActiveRunEventsTable).values({
           runId: params.runId,
           seq: params.seq,
-          payloads: params.payloads,
+          payloads,
         });
         await tx
           .update(schema.chatActiveRunsTable)
@@ -141,8 +178,9 @@ class ActiveChatRunModel {
   static async readEventsAfter(params: {
     runId: string;
     seq: number;
+    incognitoAudit?: IncognitoAuditContext | null;
   }): Promise<ChatActiveRunEvent[]> {
-    return db
+    const events = await db
       .select()
       .from(schema.chatActiveRunEventsTable)
       .where(
@@ -152,6 +190,10 @@ class ActiveChatRunModel {
         ),
       )
       .orderBy(asc(schema.chatActiveRunEventsTable.seq));
+
+    return events.map((event) =>
+      decryptEventPayloads(event, params.incognitoAudit ?? null),
+    );
   }
 
   /**
@@ -169,6 +211,7 @@ class ActiveChatRunModel {
   static async readStatusAndEventsAfter(params: {
     runId: string;
     seq: number;
+    incognitoAudit?: IncognitoAuditContext | null;
   }): Promise<{
     status: ChatActiveRunStatus;
     events: ChatActiveRunEvent[];
@@ -201,7 +244,10 @@ class ActiveChatRunModel {
       status: first.status,
       events: rows
         .map((row) => row.event)
-        .filter((event): event is ChatActiveRunEvent => event !== null),
+        .filter((event): event is ChatActiveRunEvent => event !== null)
+        .map((event) =>
+          decryptEventPayloads(event, params.incognitoAudit ?? null),
+        ),
     };
   }
 
@@ -315,6 +361,37 @@ class ActiveChatRunModel {
 export default ActiveChatRunModel;
 
 // === internal helpers ===
+
+const RUN_EVENT_PAYLOADS_CONTEXT = "chat_active_run_events.payloads" as const;
+
+/**
+ * A batch this reader cannot open replays as nothing rather than throwing:
+ * losing a reconnect's tail is a degraded stream, an exception is a broken
+ * one, and the conversation refetch is the source of truth either way.
+ */
+function decryptEventPayloads(
+  event: ChatActiveRunEvent,
+  incognitoAudit: IncognitoAuditContext | null,
+): ChatActiveRunEvent {
+  if (!isContentEnvelope(event.payloads)) return event;
+  if (incognitoAudit) {
+    try {
+      return {
+        ...event,
+        payloads: decryptIncognitoValue(event.payloads, {
+          ...incognitoAudit,
+          context: RUN_EVENT_PAYLOADS_CONTEXT,
+        }) as UIMessageChunk[],
+      };
+    } catch (error) {
+      logger.warn(
+        { error, runId: event.runId, seq: event.seq },
+        "Active chat run event payloads could not be decrypted; skipping the batch",
+      );
+    }
+  }
+  return { ...event, payloads: [] };
+}
 
 const RUN_EVENTS_RUN_FK_CONSTRAINT =
   "chat_active_run_events_run_id_chat_active_runs_id_fk";

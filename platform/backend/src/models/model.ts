@@ -382,8 +382,17 @@ class ModelModel {
    * PostgreSQL has a 65535 parameter limit, so we batch to stay well under.
    * All batches are wrapped in a transaction to ensure atomicity.
    * NOTE: Does NOT overwrite customPricePerMillionInput/Output on conflict.
+   *
+   * `fromProviderCatalog` marks the rows as models a configured provider's own
+   * catalog returned, which clears `discoveredViaLlmProxy`. The models.dev
+   * registry import must leave it unset: it upserts the whole registry
+   * regardless of which providers are configured, so a row appearing there is
+   * no evidence anyone can reach the model.
    */
-  static async bulkUpsert(dataArray: CreateModel[]): Promise<Model[]> {
+  static async bulkUpsert(
+    dataArray: CreateModel[],
+    { fromProviderCatalog = false }: { fromProviderCatalog?: boolean } = {},
+  ): Promise<Model[]> {
     if (dataArray.length === 0) {
       return [];
     }
@@ -439,6 +448,14 @@ class ModelModel {
               recommendedForAgents: sql`COALESCE(excluded.recommended_for_agents, ${schema.modelsTable.recommendedForAgents})`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
+              // The proxy marks a row it creates for an id no catalog had
+              // listed, which exempts it from deleteOrphanedModels so a custom
+              // price survives having no API key link. A configured provider's
+              // catalog returning the id makes it an ordinary synced model, and
+              // leaving the mark set would exempt it from that cleanup forever.
+              ...(fromProviderCatalog
+                ? { discoveredViaLlmProxy: sql`false` }
+                : {}),
               // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
               // NOTE: capability fields only backfill when the existing DB value is null
               // to preserve user-edited values while still populating missing metadata
@@ -463,6 +480,11 @@ class ModelModel {
   /**
    * Bulk upsert models, overwriting ALL fields including user-edited values.
    * Used by the "full refresh" flow to reset models to provider defaults.
+   *
+   * Resetting a row to provider defaults is only meaningful for a model the
+   * provider actually serves, so this path is always a provider-catalog sync
+   * and clears `discoveredViaLlmProxy` unconditionally — unlike
+   * {@link ModelModel.bulkUpsert}, which the registry import also uses.
    */
   static async bulkUpsertFull(dataArray: CreateModel[]): Promise<Model[]> {
     if (dataArray.length === 0) {
@@ -516,6 +538,7 @@ class ModelModel {
               customPricePerMillionOutput: sql`NULL`,
               customPricePerMillionCacheRead: sql`NULL`,
               customPricePerMillionCacheWrite: sql`NULL`,
+              discoveredViaLlmProxy: sql`false`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
             },

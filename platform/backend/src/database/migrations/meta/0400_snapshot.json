@@ -1,5 +1,5 @@
 {
-  "id": "5f3c1683-5c1c-4c07-a0ed-36a8c6e82be0",
+  "id": "8c75f0ce-a17a-40b6-a743-3ffd882ecbcc",
   "prevId": "4601c8c7-bb51-438a-ac00-0660a13a5d76",
   "version": "7",
   "dialect": "postgresql",
@@ -5355,6 +5355,12 @@
         },
         "messages_cursor_id": {
           "name": "messages_cursor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mcp_tool_calls_cursor_id": {
+          "name": "mcp_tool_calls_cursor_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -12075,13 +12081,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "recommended_for_agents": {
-          "name": "recommended_for_agents",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": true
         },
         "default_parameters": {
           "name": "default_parameters",

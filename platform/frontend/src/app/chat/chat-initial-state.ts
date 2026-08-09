@@ -48,29 +48,50 @@ export type CreateConversationInput = {
   projectId?: string;
 };
 
+/**
+ * Which agent a new chat starts on. `fromProjectDefault` tells the caller the
+ * winner came from the project rather than a user-level preference, so it can
+ * be kept out of the (global) saved-agent store.
+ */
+export type InitialAgentSelection<TAgent> = {
+  agent: TAgent;
+  fromProjectDefault: boolean;
+};
+
 export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
   agents: TAgent[];
+  /** The project's pinned agent, when the chat is being started in one. */
+  projectDefaultAgentId?: string | null;
   organizationDefaultAgentId?: string | null;
   savedAgentId?: string | null;
   memberDefaultAgentId?: string | null;
   canUseSavedAgent: boolean;
-}): TAgent | null {
+}): InitialAgentSelection<TAgent> | null {
   const { agents } = params;
   if (agents.length === 0) {
     return null;
+  }
+
+  // Outranks the org default: a project is the narrower workspace, and its
+  // agent is chosen for the work the project's chats do.
+  const projectDefaultAgent = agents.find(
+    (agent) => agent.id === params.projectDefaultAgentId,
+  );
+  if (projectDefaultAgent) {
+    return { agent: projectDefaultAgent, fromProjectDefault: true };
   }
 
   const organizationDefaultAgent = agents.find(
     (agent) => agent.id === params.organizationDefaultAgentId,
   );
   if (organizationDefaultAgent) {
-    return organizationDefaultAgent;
+    return { agent: organizationDefaultAgent, fromProjectDefault: false };
   }
 
   if (params.canUseSavedAgent) {
     const savedAgent = agents.find((agent) => agent.id === params.savedAgentId);
     if (savedAgent) {
-      return savedAgent;
+      return { agent: savedAgent, fromProjectDefault: false };
     }
   }
 
@@ -78,10 +99,10 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
     (agent) => agent.id === params.memberDefaultAgentId,
   );
   if (memberDefaultAgent) {
-    return memberDefaultAgent;
+    return { agent: memberDefaultAgent, fromProjectDefault: false };
   }
 
-  return agents[0];
+  return { agent: agents[0], fromProjectDefault: false };
 }
 
 export function resolveInitialAgentState(params: {

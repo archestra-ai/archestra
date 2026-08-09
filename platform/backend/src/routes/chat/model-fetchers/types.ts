@@ -1,4 +1,7 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type {
+  SupportedProvider,
+  SupportedProviderEndpoint,
+} from "@archestra/shared";
 import { ApiError } from "@/types";
 import type { ModelDefaultParameters } from "@/types/model";
 
@@ -52,6 +55,15 @@ export interface FetchedModelCapabilities {
    * them except Ollama, vLLM included (its `ModelCard` carries no size field).
    */
   parameterCount?: number | null;
+  /**
+   * Provider surfaces this model can be invoked through, when the provider
+   * publishes that per model (GitHub Copilot's `supported_endpoints`). Needed
+   * where a provider serves two wire formats off one catalog and the model id
+   * does not reveal which: Copilot's Codex and GPT-5.x models accept only
+   * `/responses`, while the rest accept only `/chat/completions`, and both
+   * families use bare ids. `undefined` means the provider said nothing.
+   */
+  supportedEndpoints?: SupportedProviderEndpoint[] | null;
 }
 
 export interface ModelInfo {

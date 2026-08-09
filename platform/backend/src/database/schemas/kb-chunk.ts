@@ -1,4 +1,8 @@
 import {
+  DEFAULT_TEXT_SEARCH_LANGUAGE,
+  type TextSearchLanguage,
+} from "@archestra/shared";
+import {
   customType,
   index,
   integer,
@@ -37,6 +41,22 @@ const tsvector = customType<{ data: string; driverParam: string }>({
   },
 });
 
+/**
+ * A PostgreSQL text-search configuration name (`english`, `german`, `simple`,
+ * ...). Typed as `regconfig` rather than `text` so the generated
+ * `search_vector` column can pass it straight to `to_tsvector` — that function
+ * is IMMUTABLE over `(regconfig, text)`, which a generated column requires,
+ * while a `text::regconfig` cast is only STABLE and would be rejected.
+ */
+const regconfig = customType<{
+  data: TextSearchLanguage;
+  driverParam: string;
+}>({
+  dataType() {
+    return "regconfig";
+  },
+});
+
 const kbChunksTable = pgTable(
   "kb_chunks",
   {
@@ -54,6 +74,25 @@ const kbChunksTable = pgTable(
     searchVector: tsvector("search_vector"),
     metadataSuffixSemantic: text("metadata_suffix_semantic"),
     metadataSuffixKeyword: text("metadata_suffix_keyword"),
+    /**
+     * Document-level context produced once per document at ingest and copied
+     * onto each of its chunks (contextual retrieval). Denormalized rather than
+     * joined from `kb_documents` because the generated `search_vector` column
+     * can only reference columns of its own row.
+     *
+     * Prepended to the chunk's embedding input and folded into `search_vector`,
+     * but deliberately NOT part of `content` — it is an indexing-time retrieval
+     * signal, not text the model needs repeated on every returned chunk.
+     */
+    contextualHeader: text("contextual_header"),
+    /**
+     * Text-search configuration for this chunk's keyword index, inherited from
+     * its connector at ingest. Stored per chunk so one deployment can index an
+     * English wiki and a German one correctly at the same time.
+     */
+    ftsLanguage: regconfig("fts_language")
+      .notNull()
+      .default(DEFAULT_TEXT_SEARCH_LANGUAGE),
     acl: jsonb("acl").$type<string[]>().notNull().default([]),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },

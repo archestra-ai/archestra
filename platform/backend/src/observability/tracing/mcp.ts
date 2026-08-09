@@ -60,6 +60,12 @@ export async function startActiveMcpSpan<T>(params: {
   agentType?: AgentType;
   toolCallId?: string;
   toolArgs?: unknown;
+  /**
+   * Suppress tool argument/result content capture for this span even when
+   * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (incognito chat sessions). Metadata
+   * attributes (tool name, agent, session) are unaffected.
+   */
+  suppressContent?: boolean;
   user?: SpanUserInfo | null;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
@@ -100,7 +106,7 @@ export async function startActiveMcpSpan<T>(params: {
 
       setUserAttributes(span, params.user);
 
-      if (captureContent && params.toolArgs) {
+      if (captureContent && !params.suppressContent && params.toolArgs) {
         span.addEvent(EVENT_GENAI_CONTENT_INPUT, {
           [ATTR_GENAI_TOOL_CALL_ARGUMENTS]: truncateContent(params.toolArgs),
         });
@@ -110,7 +116,7 @@ export async function startActiveMcpSpan<T>(params: {
         const result = await params.callback(span);
         span.setStatus({ code: SpanStatusCode.OK });
 
-        if (captureContent) {
+        if (captureContent && !params.suppressContent) {
           span.addEvent(EVENT_GENAI_CONTENT_OUTPUT, {
             [ATTR_GENAI_TOOL_CALL_RESULT]: truncateContent(result),
           });

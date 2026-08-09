@@ -26,10 +26,11 @@ import {
   sum,
 } from "drizzle-orm";
 import {
-  decryptInteractionRow,
-  encryptInteractionInsert,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
-} from "@/content-encryption/rows.ee";
+  decryptInteractionContent,
+  encryptInteractionContent,
+  readInteractionRow,
+} from "@/content-encryption/audit-rows";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -332,7 +333,17 @@ class InteractionModel {
     return result !== undefined;
   }
 
-  static async create(data: InsertInteraction) {
+  /**
+   * @param auditContext when present, this interaction belongs to an incognito
+   * conversation: its content columns are encrypted under that conversation's
+   * browser-held key and the row is stamped with the discriminator, instead of
+   * being encrypted under the server key (or left plaintext).
+   */
+  static async create(
+    data: InsertInteraction,
+    auditContext?: IncognitoAuditContext | null,
+  ) {
+    const audit = auditContext ?? null;
     // Snapshot the environment from the agent at creation time (single funnel
     // for all interaction writes) so per-environment cost-limit usage stays
     // stable under later agent reassignment. The agent is authoritative: when a
@@ -354,26 +365,26 @@ class InteractionModel {
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
     // whole conversation on every row (no-op for all other interactions, and
     // disabled entirely under content encryption — see isEligible).
-    const { values, tip } =
-      await InteractionDeltaManager.encodeOnWrite(sanitized);
+    //
+    // Incognito rows are excluded outright. Today they could not qualify anyway
+    // (isEligible demands a Claude session source, and these are chat sources),
+    // but relying on that coincidence would be fragile: a delta chain mixes rows
+    // across requests and only the request that created a row carries its key,
+    // so a chain spanning keys could not be reconstructed by any reader.
+    const { values, tip } = audit
+      ? { values: sanitized, tip: null }
+      : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
     const [interaction] = await db
       .insert(schema.interactionsTable)
       // Monotonic v7 id: created_at ties happen under load, and the delta
       // manager's "most recent interaction" lookup breaks ties with the id.
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      .values({ id: uuidv7(), ...encryptInteractionInsert(values) })
-      // SPDX-SnippetEnd
+      .values({ id: uuidv7(), ...encryptInteractionContent(values, audit) })
       .returning();
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes.
-    decryptInteractionRow(interaction);
-    // SPDX-SnippetEnd
+    // callers never see envelopes. Safe for incognito rows too: this caller
+    // supplied the very key that just encrypted them.
+    decryptInteractionContent(interaction, audit);
 
     if (tip) {
       InteractionDeltaManager.commitTip(interaction.id, tip);
@@ -605,7 +616,7 @@ class InteractionModel {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    decryptInteractionRow(interaction);
+    readInteractionRow(interaction);
     // SPDX-SnippetEnd
 
     // Check access control for non-agent admins
@@ -1440,15 +1451,21 @@ class InteractionModel {
       response: unknown;
       type: string;
       created_at: Date;
+      // Selected so readInteractionRow can tell an incognito row from an
+      // ordinary one; without it the guard cannot fire and a DEK envelope
+      // would be handed to the server-key decryptor.
+      incognito_conversation_id: string | null;
     }>(sql`
       WITH ranked AS (
         SELECT
           id, session_id, thread_id, request, response, type, created_at,
+          incognito_conversation_id,
           ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC) as rn
         FROM interactions
         WHERE ${whereClause}
       )
-      SELECT id, session_id, thread_id, request, response, type, created_at
+      SELECT id, session_id, thread_id, request, response, type, created_at,
+             incognito_conversation_id
       FROM ranked
       WHERE rn <= ${INTERACTIONS_PER_SESSION}
       ORDER BY session_id, created_at DESC
@@ -1460,7 +1477,7 @@ class InteractionModel {
     // Raw-SQL rows bypass the model select paths — decrypt before the JS
     // content scanning below.
     for (const row of interactionsResult.rows) {
-      decryptInteractionRow(row);
+      readInteractionRow(row);
     }
     // SPDX-SnippetEnd
 
@@ -1630,7 +1647,7 @@ function reconstructInteractionRequests(
   // Decrypt in place BEFORE delta folding — every list read path funnels
   // through here, and callers keep using the same row objects afterwards.
   for (const row of rows) {
-    decryptInteractionRow(row);
+    readInteractionRow(row);
   }
   // SPDX-SnippetEnd
   return InteractionDeltaManager.reconstructMany(rows);

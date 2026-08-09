@@ -131,6 +131,12 @@ export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
 // Change who can see a project (org-wide, teams, or owner-only).
 export const TOOL_SET_PROJECT_SHARE_SHORT_NAME = "set_project_share";
+// Discover the projects the caller can reach, and read one project's context
+// (its instructions plus the files it owns). Both work headlessly — unlike the
+// two tools above they never consult the current chat — so an external MCP
+// client on a gateway can pull a project's context into its own session.
+export const TOOL_LIST_PROJECTS_SHORT_NAME = "list_projects";
+export const TOOL_GET_PROJECT_SHORT_NAME = "get_project";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
@@ -257,6 +263,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_SET_PROJECT_SHARE_SHORT_NAME,
+  TOOL_LIST_PROJECTS_SHORT_NAME,
+  TOOL_GET_PROJECT_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -425,6 +433,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   todo_write: "chat",
   create_project_from_conversation: "chat",
   set_project_share: "chat",
+  list_projects: "chat",
+  get_project: "chat",
 
   search_tools: "meta",
   run_tool: "meta",

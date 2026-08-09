@@ -117,6 +117,91 @@ describe("useInitialChatModelState", () => {
     await waitFor(() => expect(result.current.agentId).toBe("agent-1"));
   });
 
+  it("honors the project default over the org default", async () => {
+    const { result } = renderHook(() =>
+      useInitialChatModelState({
+        ...baseParams,
+        organization: { defaultAgentId: "agent-1" },
+        projectDefaultAgentId: "agent-2",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.agentId).toBe("agent-2"));
+  });
+
+  it("holds resolution while the project is loading, then applies its pinned agent", async () => {
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useInitialChatModelState>[0]) =>
+        useInitialChatModelState(props),
+      {
+        initialProps: {
+          ...baseParams,
+          organization: { defaultAgentId: "agent-1" },
+          isProjectLoading: true,
+          projectDefaultAgentId: null as string | null,
+        },
+      },
+    );
+
+    await Promise.resolve();
+    expect(result.current.agentId).toBeNull();
+
+    // Resolution runs once, so a pin that arrives after the effect would be
+    // lost without the gate — the org default would have won permanently.
+    rerender({
+      ...baseParams,
+      organization: { defaultAgentId: "agent-1" },
+      isProjectLoading: false,
+      projectDefaultAgentId: "agent-2",
+    });
+    await waitFor(() => expect(result.current.agentId).toBe("agent-2"));
+  });
+
+  it("does not persist a project-resolved agent as the global saved pick", async () => {
+    const { result } = renderHook(() =>
+      useInitialChatModelState({
+        ...baseParams,
+        projectDefaultAgentId: "agent-2",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.agentId).toBe("agent-2"));
+    // The store is global, so persisting here would carry the project's agent
+    // into later unrelated chats.
+    expect(localStorage.getItem(CHAT_STORAGE_KEYS.selectedAgent)).toBeNull();
+  });
+
+  it("persists a manual pick made inside a project", async () => {
+    const { result } = renderHook(() =>
+      useInitialChatModelState({
+        ...baseParams,
+        projectDefaultAgentId: "agent-2",
+      }),
+    );
+
+    await waitFor(() => expect(result.current.agentId).toBe("agent-2"));
+
+    act(() => result.current.onAgentChange("agent-1"));
+
+    expect(localStorage.getItem(CHAT_STORAGE_KEYS.selectedAgent)).toBe(
+      "agent-1",
+    );
+  });
+
+  it("still persists a non-project resolution as the saved pick", async () => {
+    const { result } = renderHook(() =>
+      useInitialChatModelState({
+        ...baseParams,
+        organization: { defaultAgentId: "agent-2" },
+      }),
+    );
+
+    await waitFor(() => expect(result.current.agentId).toBe("agent-2"));
+    expect(localStorage.getItem(CHAT_STORAGE_KEYS.selectedAgent)).toBe(
+      "agent-2",
+    );
+  });
+
   it("resolves the URL agent when supplied, regardless of the saved agent", async () => {
     localStorage.setItem(CHAT_STORAGE_KEYS.selectedAgent, "agent-1");
 

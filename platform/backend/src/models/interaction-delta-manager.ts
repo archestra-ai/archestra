@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
+import { getHeapStatistics } from "node:v8";
 import { isClaudeSessionSource, TimeInMs } from "@archestra/shared";
 import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
-// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
-import { decryptInteractionRow } from "@/content-encryption/rows.ee";
+import { readInteractionRow } from "@/content-encryption/audit-rows";
 import db, { schema } from "@/database";
 import type { InsertInteraction } from "@/types";
 
@@ -92,6 +92,48 @@ interface ReconstructableRow {
 
 const CACHE_MAX_SIZE = 5000;
 
+/**
+ * Entry ceiling for the reconstruct cache.
+ *
+ * Deliberately far below CACHE_MAX_SIZE. A tipCache entry is a few scalars, but
+ * a reconstruct entry is a whole reconstructed request, which for a Claude Code
+ * session runs to megabytes. RECONSTRUCT_CACHE_MAX_BYTES is the real bound; this
+ * is the backstop, kept small so the byte sweep stays cheap.
+ */
+const RECONSTRUCT_CACHE_MAX_ENTRIES = 512;
+
+/**
+ * Share of the V8 heap the reconstruct cache may retain.
+ *
+ * Derived from the heap limit rather than hardcoded so the budget tracks the
+ * container: the production launcher sizes --max-old-space-size from the pod's
+ * memory limit, so a larger pod gets a proportionally larger cache without a
+ * second knob to keep in sync.
+ */
+const RECONSTRUCT_CACHE_HEAP_FRACTION = 0.1;
+
+const RECONSTRUCT_CACHE_MAX_BYTES = Math.floor(
+  getHeapStatistics().heap_size_limit * RECONSTRUCT_CACHE_HEAP_FRACTION,
+);
+
+/**
+ * Approximate retained size of a reconstructed request.
+ *
+ * `.length` counts UTF-16 code units rather than bytes, which understates
+ * multi-byte text. That is fine for a budget whose job is to stop a cache from
+ * consuming the heap, and it avoids a second full pass over the payload.
+ */
+function approximateRetainedBytes(value: FullRequest): number {
+  try {
+    return JSON.stringify(value)?.length ?? 0;
+  } catch {
+    // Unexpected for these payloads, but a sizing helper must never be the
+    // reason a request fails. Counting it as free is safe — the entry ceiling
+    // still bounds it.
+    return 0;
+  }
+}
+
 class InteractionDeltaManager {
   /** Branch tip per (sessionId, threadId) — write-path parent fast path. */
   private static tipCache = new LRUCacheManager<CachedTip>({
@@ -99,9 +141,19 @@ class InteractionDeltaManager {
     defaultTtl: TimeInMs.Hour,
   });
 
-  /** Reconstructed full request/processedRequest per interaction id — read-path memo. */
+  /**
+   * Reconstructed full request/processedRequest per interaction id — read-path
+   * memo and write-path parent source.
+   *
+   * Bounded by bytes, not entry count. Entries here are whole reconstructed
+   * requests whose size spans orders of magnitude, so a count is not a memory
+   * bound: at Claude Code payload sizes the heap is exhausted by a few hundred
+   * entries, a few percent of a nominal 5000-entry capacity.
+   */
   private static reconstructCache = new LRUCacheManager<FullRequest>({
-    maxSize: CACHE_MAX_SIZE,
+    maxSize: RECONSTRUCT_CACHE_MAX_ENTRIES,
+    maxBytes: RECONSTRUCT_CACHE_MAX_BYTES,
+    sizeOf: approximateRetainedBytes,
     defaultTtl: TimeInMs.Hour,
   });
 
@@ -441,29 +493,32 @@ class InteractionDeltaManager {
     }>(sql`
       WITH RECURSIVE chain AS (
         SELECT id, parent_id, thread_id, request_shared_prefix,
-               processed_request_shared_prefix, request, processed_request
+               processed_request_shared_prefix, request, processed_request,
+               incognito_conversation_id
         FROM interactions
         WHERE id IN (${seedList})
         UNION
         SELECT i.id, i.parent_id, i.thread_id, i.request_shared_prefix,
-               i.processed_request_shared_prefix, i.request, i.processed_request
+               i.processed_request_shared_prefix, i.request, i.processed_request,
+               i.incognito_conversation_id
         FROM interactions i
         JOIN chain c ON i.id = c.parent_id
       )
       SELECT id, parent_id, thread_id, request_shared_prefix,
-             processed_request_shared_prefix, request, processed_request
+             processed_request_shared_prefix, request, processed_request,
+             incognito_conversation_id
       FROM chain
     `);
 
     const map = new Map<string, ChainRow>();
     for (const row of rows.rows) {
-      // SPDX-SnippetBegin
-      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // A chain may mix plaintext delta rows with rows the backfill has
-      // already encrypted — decrypt each row independently before folding.
-      decryptInteractionRow(row);
-      // SPDX-SnippetEnd
+      // already encrypted — resolve each row independently before folding.
+      // An incognito row cannot appear here (they are written
+      // delta-ineligible, so nothing links to them), but going through the
+      // locked-safe reader keeps that a property of this code rather than an
+      // assumption about a different file.
+      readInteractionRow(row);
       map.set(row.id, {
         id: row.id,
         parentId: row.parent_id,
@@ -509,6 +564,12 @@ class InteractionDeltaManager {
     // The previous row's reconstructed full request — the source for inheriting
     // omitted `tools`/`system`. Null at the head (which stores the full envelope).
     let parentFull: FullRequest | null = null;
+    // The fold result, held locally rather than read back out of the cache. The
+    // cache is byte-bounded, so writing an entry does not guarantee it is still
+    // there a moment later: a request larger than the whole budget is evicted
+    // immediately. Reading it back would turn that into a spurious null and send
+    // the caller down the "no delta" path with a partial request.
+    let foldedTarget: FullRequest | null = null;
 
     for (const row of chain) {
       const cached = InteractionDeltaManager.reconstructCache.get(row.id);
@@ -516,6 +577,7 @@ class InteractionDeltaManager {
         requestMessages = getMessages(cached.request) ?? [];
         processedMessages = getMessages(cached.processedRequest);
         parentFull = cached;
+        foldedTarget = cached;
         continue;
       }
 
@@ -544,9 +606,10 @@ class InteractionDeltaManager {
       );
       InteractionDeltaManager.reconstructCache.set(row.id, full);
       parentFull = full;
+      foldedTarget = full;
     }
 
-    return InteractionDeltaManager.reconstructCache.get(id) ?? null;
+    return foldedTarget;
   }
 }
 

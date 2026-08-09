@@ -68,3 +68,52 @@ export async function resolveProjectFileScope(params: {
 
   return { projectId: project.id, projectName: project.name };
 }
+
+/**
+ * Resolve the file scope of an explicitly named project — the headless path for
+ * callers with no conversation to derive scope from (an external MCP client on a
+ * gateway, which finds the id via `list_projects` / `get_project`).
+ *
+ * Authorization is identical to {@link resolveProjectFileScope}: the project
+ * must live in the caller's organization, not be soft-deleted, and be reachable
+ * by them (owner, or shared with them / a team they are in). Re-checked on EVERY
+ * call, and fails CLOSED.
+ *
+ * `project:admin` oversight deliberately does NOT apply. Reading another
+ * member's project files is an oversight action that belongs to the REST/UI
+ * surface; an agent tool grants only the caller's own reach.
+ *
+ * "Missing" and "no access" raise the SAME error on purpose, so probing ids
+ * cannot be used to discover which projects exist.
+ */
+export async function resolveExplicitProjectFileScope(params: {
+  projectId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<ProjectFileScope> {
+  const { projectId, userId, organizationId } = params;
+
+  const denied = new SkillSandboxError(
+    `no project ${projectId} exists, or you do not have access to it`,
+  );
+
+  const [project] = await db
+    .select()
+    .from(schema.projectsTable)
+    .where(eq(schema.projectsTable.id, projectId));
+  if (
+    !project ||
+    project.organizationId !== organizationId ||
+    project.deletedAt
+  )
+    throw denied;
+
+  const canAccess = await ProjectShareModel.userCanAccessProject({
+    project,
+    userId,
+    organizationId,
+  });
+  if (!canAccess) throw denied;
+
+  return { projectId: project.id, projectName: project.name };
+}

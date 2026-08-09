@@ -20,12 +20,15 @@ import {
   LOOPBACK_HOST,
   PROVIDER_BASE_URL_HEADER,
   perplexityAgentApiBaseUrl,
+  providerHasMultipleSurfaces,
   providerRequiresPerUserCredential,
   requiresOpenAiResponsesApi,
   requiresPerplexityAgentApi,
+  requiresResponsesApi,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
   type SupportedProvider,
+  type SupportedProviderEndpoint,
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
@@ -55,7 +58,9 @@ import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
+import { INCOGNITO_KEY_HEADER } from "@/content-encryption/incognito";
 import logger from "@/logging";
+import ModelModel from "@/models/model";
 import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
@@ -173,6 +178,15 @@ export function createLLMModel(params: {
   contextIsTrusted?: boolean;
   chatApiKeyId?: string;
   dualLlmProgressChannel?: string;
+  /**
+   * Incognito conversation key. Forwarded so the proxy can store this
+   * interaction's content encrypted under it instead of redacting it. The
+   * proxy re-validates it against the conversation's stored fingerprint and
+   * only honours it on its loopback chat path.
+   */
+  incognitoKey?: Buffer | null;
+  /** See ProviderModelConfig.createModel — resolved only on the agent path. */
+  supportedEndpoints?: SupportedProviderEndpoint[] | null;
 }): LLMModel {
   const {
     provider,
@@ -187,6 +201,8 @@ export function createLLMModel(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
+    incognitoKey,
+    supportedEndpoints,
   } = params;
 
   // Build headers for LLM Proxy
@@ -230,6 +246,12 @@ export function createLLMModel(params: {
     clientHeaders[DUAL_LLM_PROGRESS_CHANNEL_HEADER] = dualLlmProgressChannel;
   }
 
+  // Never logged: the header name is on the logging redaction denylist and
+  // OTel captures no request headers.
+  if (incognitoKey) {
+    clientHeaders[INCOGNITO_KEY_HEADER] = incognitoKey.toString("base64url");
+  }
+
   const headers =
     Object.keys(clientHeaders).length > 0 ? clientHeaders : undefined;
 
@@ -245,6 +267,7 @@ export function createLLMModel(params: {
     baseURL,
     headers,
     fetch: createTracedFetch(),
+    supportedEndpoints,
   });
 }
 
@@ -267,6 +290,11 @@ export async function createLLMModelForAgent(params: {
   contextIsTrusted?: boolean;
   /** Per-turn dual LLM progress channel id; only the chat main turn sets it. */
   dualLlmProgressChannel?: string;
+  /**
+   * Incognito conversation key, forwarded to the proxy so this turn's
+   * interaction content is stored encrypted rather than redacted.
+   */
+  incognitoKey?: Buffer | null;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -370,6 +398,15 @@ export async function createLLMModelForAgent(params: {
     );
   }
 
+  // Providers that serve one catalog over two wire formats need the surface
+  // this model was catalogued on; it lives on the model row because the id
+  // does not carry it. Only looked up for such providers — every other one
+  // has a single surface, and this is on the chat hot path.
+  const supportedEndpoints = providerHasMultipleSurfaces(provider)
+    ? ((await ModelModel.findByProviderAndModelId(provider, modelName))
+        ?.supportedEndpoints ?? null)
+    : null;
+
   const model = createLLMModel({
     provider,
     apiKey,
@@ -383,6 +420,8 @@ export async function createLLMModelForAgent(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
+    incognitoKey: params.incognitoKey,
+    supportedEndpoints,
   });
 
   const anthropicNativeEndpoint = isAnthropicNativeEndpoint({
@@ -425,6 +464,14 @@ type ProviderModelConfig = {
      * proxy flattens both onto the agent-id prefix, the host does not.
      */
     direct?: boolean;
+    /**
+     * Provider surfaces the model row records for this model, for providers
+     * that serve one catalog over more than one wire format and whose ids do
+     * not reveal which (GitHub Copilot). Only the agent path resolves a model
+     * row, so this is undefined on every other caller — and undefined must
+     * mean "use the provider's default surface", never a guess.
+     */
+    supportedEndpoints?: SupportedProviderEndpoint[] | null;
   }) => LLMModel;
   /** Default base URL for direct calls (falls back to provider's built-in default when undefined) */
   defaultBaseUrl: string | undefined;
@@ -740,8 +787,25 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     // the proxy's github-copilot adapter exchanges the GitHub OAuth token for
     // the short-lived Copilot bearer — exchanging here too would hand the
     // proxy an already-exchanged bearer it cannot exchange again.
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    //
+    // One provider, two transports, discriminated per model like Perplexity's —
+    // but Copilot's id says nothing about which (`gpt-5.5` and `gpt-4o` are
+    // both bare), so the surface is read from the catalog data synced onto the
+    // model row. Absent that data the model keeps the chat-completions default,
+    // which is what every caller that does not resolve a model row gets.
+    createModel: ({
+      apiKey,
+      modelName,
+      baseURL,
+      headers,
+      fetch,
+      supportedEndpoints,
+    }) => {
+      const client = createOpenAI({ apiKey, baseURL, headers, fetch });
+      return requiresResponsesApi(supportedEndpoints)
+        ? client.responses(modelName)
+        : client.chat(modelName);
+    },
     defaultBaseUrl: config.llm["github-copilot"].baseUrl,
     apiKeyRequiredMessage:
       "GitHub Copilot requires a GitHub OAuth token. Connect your GitHub account or configure ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY.",

@@ -3,7 +3,9 @@
 import {
   type archestraApiTypes,
   DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS,
+  DEFAULT_TEXT_SEARCH_LANGUAGE,
   getConnectorNamePlaceholder,
+  type TextSearchLanguage,
 } from "@archestra/shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -59,6 +61,7 @@ import {
 import { ConnectorTypeIcon } from "./connector-icons";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
+import { TextSearchLanguagePicker } from "./text-search-language-picker";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type CreateConnectorFormValues = {
@@ -71,6 +74,7 @@ type CreateConnectorFormValues = {
   adminApiKey: string;
   schedule: string;
   permissionSyncIntervalSeconds: number;
+  ftsLanguage: TextSearchLanguage;
   environmentId: string | null;
 };
 
@@ -112,6 +116,7 @@ export function CreateConnectorDialog({
       adminApiKey: "",
       schedule: "0 */6 * * *",
       permissionSyncIntervalSeconds: DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS,
+      ftsLanguage: DEFAULT_TEXT_SEARCH_LANGUAGE,
       environmentId: null,
     },
   });
@@ -169,6 +174,7 @@ export function CreateConnectorDialog({
             },
           }),
       schedule: values.schedule,
+      ftsLanguage: values.ftsLanguage,
       ...(visibility === "auto-sync-permissions" && {
         permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
       }),
@@ -517,6 +523,7 @@ export function CreateConnectorDialog({
                         )}
                       />
                     )}
+                    <TextSearchLanguagePicker form={form} name="ftsLanguage" />
                     <ConnectorAdvancedConfigFields
                       connectorType={connectorType}
                       form={form}

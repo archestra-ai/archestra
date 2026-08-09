@@ -525,9 +525,16 @@ ${client.skillsDisconnectVerify}
 
 # Reversing a connect step animates the same way the probes do: the commands
 # run in the background while the dots grow, then the row lands on a check.
+#
+# The explicit ( ) around the call is load-bearing, not style. Backgrounding a
+# bare function call lets bash 3.2 — still /bin/bash on every macOS — replace
+# the subshell with an exec of the arm's FIRST command, silently discarding the
+# rest. disconnect_actions issues two removals for Claude Code (user scope then
+# local scope), so without the subshell the local-scope entry was never removed
+# on macOS. Wrapping in ( ) forces a real fork and runs the whole arm.
 disconnect_resource() { # $1 kind, $2 label
   spin_start "Disconnecting $2"
-  disconnect_actions "$1" >/dev/null 2>&1 &
+  ( disconnect_actions "$1" ) >/dev/null 2>&1 &
   arch_dp=$!
   pad=0
   while kill -0 "$arch_dp" 2>/dev/null || [ "$pad" -lt "$MIN_CHECK_FRAMES" ]; do
@@ -608,7 +615,8 @@ menu_paint_row() { # $1 pos, $2 idx — draw its current menu state in place
 menu_disconnect_row() { # $1 pos, $2 idx — animate the reversal on its own row
   menu_at_row "$1"
   spin_start "Disconnecting \${GUARD_LABELS[$2]}"
-  disconnect_actions "\${GUARD_KINDS[$2]}" >/dev/null 2>&1 &
+  # Subshell for the same bash 3.2 reason as disconnect_resource above.
+  ( disconnect_actions "\${GUARD_KINDS[$2]}" ) >/dev/null 2>&1 &
   arch_dp=$!
   pad=0
   while kill -0 "$arch_dp" 2>/dev/null || [ "$pad" -lt "$MIN_CHECK_FRAMES" ]; do

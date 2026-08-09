@@ -13,6 +13,7 @@ import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
@@ -37,8 +38,10 @@ import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
@@ -431,7 +434,11 @@ type CreateProjectForm = {
   name: string;
   description: string;
   icon: string | null;
+  defaultAgentId: string | null;
 };
+
+/** Sentinel for "no pinned agent" — the picker cannot hold an empty value. */
+const NO_DEFAULT_AGENT = "__org_default__";
 
 function CreateProjectDialog({
   open,
@@ -442,29 +449,47 @@ function CreateProjectDialog({
 }) {
   const router = useRouter();
   const form = useForm<CreateProjectForm>({
-    defaultValues: { name: "", description: "", icon: null },
+    defaultValues: {
+      name: "",
+      description: "",
+      icon: null,
+      defaultAgentId: null,
+    },
     mode: "onChange",
   });
   const createProject = useCreateProject();
+  // Without `agent:read` the list comes back empty, which would read as "this
+  // org has no agents" rather than "not yours to set" — hide the field instead.
+  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+  // A new project is unshared and you are its owner, so anything you can run
+  // qualifies. Sharing it later narrows the offer (and drops a pin the new
+  // audience cannot reach) in the edit dialog.
+  const { data: accessibleAgents = [] } = useInternalAgents({
+    enabled: open && canReadAgents === true,
+  });
   const icon = form.watch("icon");
   const name = form.watch("name");
   const description = form.watch("description");
+  const defaultAgentId = form.watch("defaultAgentId");
   const hasLengthError =
     name.length > PROJECT_NAME_MAX_LENGTH ||
     description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
 
-  const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
-    const project = await createProject.mutateAsync({
-      name: name.trim(),
-      description: description.trim() || null,
-      icon,
-    });
-    if (project) {
-      form.reset();
-      onOpenChange(false);
-      router.push(`/projects/${project.id}`);
-    }
-  });
+  const onSubmit = form.handleSubmit(
+    async ({ name, description, icon, defaultAgentId }) => {
+      const project = await createProject.mutateAsync({
+        name: name.trim(),
+        description: description.trim() || null,
+        icon,
+        defaultAgentId,
+      });
+      if (project) {
+        form.reset();
+        onOpenChange(false);
+        router.push(`/projects/${project.id}`);
+      }
+    },
+  );
 
   return (
     <StandardFormDialog
@@ -537,6 +562,33 @@ function CreateProjectDialog({
           )}
         </div>
       </div>
+
+      {canReadAgents === true && (
+        <div className="space-y-1.5">
+          <Label>Default agent</Label>
+          <AgentSelector
+            mode="single"
+            agents={accessibleAgents}
+            value={defaultAgentId ?? NO_DEFAULT_AGENT}
+            onValueChange={(value) =>
+              form.setValue(
+                "defaultAgentId",
+                value === NO_DEFAULT_AGENT ? null : value,
+                { shouldDirty: true },
+              )
+            }
+            hint="Any agent you can use"
+            personalDefaultOption={{
+              value: NO_DEFAULT_AGENT,
+              label: "Default",
+            }}
+            className="w-full"
+          />
+          <p className="text-xs text-muted-foreground">
+            Preselected for new chats and scheduled tasks in this project.
+          </p>
+        </div>
+      )}
     </StandardFormDialog>
   );
 }

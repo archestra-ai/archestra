@@ -400,11 +400,11 @@ exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__read_file 1`] = `
 {
-  "description": "Read a persistent file directly, without copying it into the sandbox. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can view them. Identify the file by \`id\` (the \`id\` or \`ref\` from search_files / save_file) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types, copy the file into the sandbox with upload_file and inspect it with run_command.",
+  "description": "Read a persistent file directly, without copying it into the sandbox. Text files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are returned inline so you can view them. Identify the file by \`id\` (the \`id\` or \`ref\` from search_files / save_file) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. Pass project_id to read a project's file — including its instructions.md — which is how you reach them outside a chat. For other binary types, copy the file into the sandbox with upload_file and inspect it with run_command.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Read a persistent file directly, without copying it into the sandbox. Text files come back as numbered lines (\`<n>\\t<line>\`); images (PNG, JPEG, WebP, GIF) are returned inline so you can view them. Identify the file by \`id\` (the \`id\` or \`ref\` from search_files / save_file) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. For other binary types (PDF, archives, …), copy the file into the sandbox with upload_file + run_command.",
+    "description": "Read a persistent file directly, without copying it into the sandbox. Text files come back as numbered lines (\`<n>\\t<line>\`); images (PNG, JPEG, WebP, GIF) are returned inline so you can view them. Identify the file by \`id\` (the \`id\` or \`ref\` from search_files / save_file) or by \`filename\`. Page large text files with \`offset\`/\`limit\`. Pass project_id to read a project's file (e.g. its instructions.md) instead of the chat's. For other binary types (PDF, archives, …), copy the file into the sandbox with upload_file + run_command.",
     "properties": {
       "filename": {
         "description": "Filename to read instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
@@ -427,6 +427,10 @@ exports[`skill and sandbox tool text > archestra__read_file 1`] = `
         "maximum": 9007199254740991,
         "minimum": 1,
         "type": "integer",
+      },
+      "project_id": {
+        "description": "Read this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be read. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app".",
+        "type": "string",
       },
     },
     "type": "object",
@@ -558,12 +562,16 @@ exports[`skill and sandbox tool text > archestra__save_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__search_files 1`] = `
 {
-  "description": "List or search the conversation's persistent files. The query is a case-insensitive substring matched against filenames only, not contents — omit it (or pass empty) to list the files (the first 200; narrow with a substring if there are more). Returns metadata only — each result carries a stable \`ref\` you pass to read_file, edit_file, or delete_file, or to upload_file to copy the file into the sandbox. Pass scope: "app" to list the files of the app the user has open instead — the only way to see what an app holds, and the discovery step before copying one of its files out with copy_file.",
+  "description": "List or search the conversation's persistent files. The query is a case-insensitive substring matched against filenames only, not contents — omit it (or pass empty) to list the files (the first 200; narrow with a substring if there are more). Returns metadata only — each result carries a stable \`ref\` you pass to read_file, edit_file, or delete_file, or to upload_file to copy the file into the sandbox. Pass scope: "app" to list the files of the app the user has open instead — the only way to see what an app holds, and the discovery step before copying one of its files out with copy_file. Pass project_id to list a project's files instead, which is how you reach them outside a chat.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "List or search persistent files by filename substring; omit the query to list them (the first 200). Filenames only, not contents. Lists this chat's files, or the open app's files with scope: "app".",
+    "description": "List or search persistent files by filename substring; omit the query to list them (the first 200). Filenames only, not contents. Lists this chat's files, the open app's files with scope: "app", or a project's files with project_id.",
     "properties": {
+      "project_id": {
+        "description": "Read this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be read. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app".",
+        "type": "string",
+      },
       "query": {
         "description": "Case-insensitive substring matched against filenames only. Omit it (or pass empty) to list the files (the first 200).",
         "type": "string",

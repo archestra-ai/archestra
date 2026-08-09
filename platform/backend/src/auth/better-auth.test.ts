@@ -7,6 +7,7 @@ import { allAvailableActions } from "@archestra/shared/access-control";
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
 import { eq } from "drizzle-orm";
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
@@ -29,6 +30,7 @@ import InvitationModel from "@/models/invitation";
 import McpServerModel from "@/models/mcp-server";
 import SecretModel from "@/models/secret";
 import { beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
 
 // Create a hoisted ref to control disableInvitations in tests
 const mockDisableInvitations = vi.hoisted(() => ({ value: false }));
@@ -4200,5 +4202,137 @@ describe("membership removal cleanup", () => {
       .from(schema.usersTable)
       .where(eq(schema.usersTable.id, leaver.id));
     expect(userRow).toBeUndefined();
+  });
+});
+
+describe("SSO account linking onto existing password users", () => {
+  // Regression guard for instances that switch to SSO sign-in after users
+  // already exist with email/password accounts. Archestra never sends
+  // verification email, so those local users stay emailVerified=false
+  // forever; without accountLinking.requireLocalEmailVerified: false,
+  // better-auth refuses to implicitly link their first SSO login
+  // (redirecting with error=account_not_linked), which permanently locks
+  // them out once basic auth is disabled.
+  const IDP_ORIGIN = "https://sso-idp.archestra-test.invalid";
+
+  const mswServer = useMswServer();
+
+  test("OIDC callback links onto an existing email/password user whose email was never verified", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAccount,
+    makeIdentityProvider,
+  }) => {
+    const user = await makeUser({
+      email: "unverified-password-user@example.com",
+      emailVerified: false,
+    });
+    const org = await makeOrganization();
+    await makeMember(user.id, org.id, { role: "member" });
+    await makeAccount(user.id, {
+      providerId: CREDENTIAL_PROVIDER_ID,
+      accountId: user.id,
+    });
+
+    const provider = await makeIdentityProvider(org.id, {
+      providerId: "oidc-unverified-link",
+      issuer: IDP_ORIGIN,
+      domain: "example.com",
+      oidcConfig: {
+        clientId: "test-client-id",
+        clientSecret: "test-client-secret",
+        authorizationEndpoint: `${IDP_ORIGIN}/authorize`,
+        tokenEndpoint: `${IDP_ORIGIN}/token`,
+        userInfoEndpoint: `${IDP_ORIGIN}/userinfo`,
+        jwksEndpoint: `${IDP_ORIGIN}/jwks`,
+        pkce: false,
+      },
+    });
+
+    // Initiate SSO sign-in to mint the server-side state row and the signed
+    // state cookie the callback validates.
+    const signInResponse = await auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/sso", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://localhost:3000",
+        },
+        body: JSON.stringify({
+          providerId: provider.providerId,
+          callbackURL: "http://localhost:3000/chat",
+        }),
+      }),
+    );
+    expect(signInResponse.status).toBe(200);
+    const { url: authorizationUrl } = (await signInResponse.json()) as {
+      url: string;
+    };
+    const state = new URL(authorizationUrl).searchParams.get("state");
+    expect(state).toBeTruthy();
+    const stateCookies = signInResponse.headers
+      .getSetCookie()
+      .map((cookie) => cookie.split(";")[0])
+      .join("; ");
+
+    // Fake the IdP: code exchange + userinfo with a verified email that
+    // matches the existing local user.
+    mswServer.use(
+      http.post(`${IDP_ORIGIN}/token`, () =>
+        HttpResponse.json({
+          access_token: "sso-access-token",
+          token_type: "Bearer",
+        }),
+      ),
+      http.get(`${IDP_ORIGIN}/userinfo`, () =>
+        HttpResponse.json({
+          sub: "external-subject-1",
+          email: user.email,
+          email_verified: true,
+          name: "Unverified Password User",
+        }),
+      ),
+    );
+
+    const callbackResponse = await auth.handler(
+      new Request(
+        `http://localhost:3000/api/auth/sso/callback/${provider.providerId}?code=fake-code&state=${state}`,
+        { headers: { cookie: stateCookies } },
+      ),
+    );
+
+    expect(callbackResponse.status).toBe(302);
+    const location = callbackResponse.headers.get("location") ?? "";
+    // Without requireLocalEmailVerified: false this redirect carries
+    // ?error=account_not_linked instead of completing the sign-in.
+    expect(location).not.toContain("error=");
+    expect(location).toContain("http://localhost:3000/chat");
+
+    // The SSO account is linked to the pre-existing user...
+    const linkedAccounts = await db
+      .select()
+      .from(schema.accountsTable)
+      .where(eq(schema.accountsTable.userId, user.id));
+    const ssoAccount = linkedAccounts.find(
+      (account) => account.providerId === provider.providerId,
+    );
+    expect(ssoAccount).toBeDefined();
+    expect(ssoAccount?.accountId).toBe("external-subject-1");
+
+    // ...a session was created for that user (not a duplicate user)...
+    const [sessionRow] = await db
+      .select()
+      .from(schema.sessionsTable)
+      .where(eq(schema.sessionsTable.userId, user.id));
+    expect(sessionRow).toBeDefined();
+
+    // ...and the verified IdP assertion flipped the local flag, so the
+    // account self-heals on first SSO login.
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, user.id));
+    expect(userRow.emailVerified).toBe(true);
   });
 });

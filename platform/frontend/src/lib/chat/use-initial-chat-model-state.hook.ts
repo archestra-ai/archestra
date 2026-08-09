@@ -45,12 +45,23 @@ type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
   // ---- caller-owned policy, kept explicit at the boundary ----
   /** Resolve to this agent if it is present (page passes the URL param). */
   urlAgentId?: string | null;
+  /**
+   * The pinned agent of the project this chat is being started in, when there
+   * is one. Outranks the org default.
+   */
+  projectDefaultAgentId?: string | null;
   /** Honor the localStorage saved-agent step (page gates this on RBAC). */
   canUseSavedAgent: boolean;
   /** Hold resolution until the caller's permission flags settle. */
   isPermissionResolving: boolean;
   /** Hold resolution until the organization data is available. */
   isOrgLoading: boolean;
+  /**
+   * Hold resolution until the project data is available. Resolution runs once,
+   * so without this a chat started in a project settles on the org default
+   * before its pin arrives and never re-resolves.
+   */
+  isProjectLoading?: boolean;
   /**
    * The conversation id from the route, if any. When it transitions from a
    * conversation to the initial chat route (defined -> undefined), the resolved
@@ -74,8 +85,9 @@ export type InitialChatModelState = {
 
 /**
  * The shared new-chat initialization orchestration: the agent/model/key
- * resolution chain (org default > saved pick > member default > first), the
- * resolution effects, member-default persistence, and the change handlers.
+ * resolution chain (project default > org default > saved pick > member default
+ * > first), the resolution effects, member-default persistence, and the change
+ * handlers.
  *
  * It does NO data fetching — every query result is passed in so query policy
  * (which queries run and when they are enabled) stays at the caller boundary.
@@ -92,9 +104,11 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     chatApiKeys,
     memberDefault,
     urlAgentId,
+    projectDefaultAgentId,
     canUseSavedAgent,
     isPermissionResolving,
     isOrgLoading,
+    isProjectLoading,
     routeConversationId,
   } = params;
 
@@ -147,12 +161,16 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   );
 
   // Resolve which agent to use on load.
-  // Priority: URL param > org default > saved pick > member default > first.
+  // Priority: URL param > project default > org default > saved pick >
+  // member default > first.
   useEffect(() => {
     if (agents.length === 0) return;
     // Wait for organization data to avoid a race where agents load before org,
     // causing the org default to be skipped.
     if (isOrgLoading) return;
+    // Same race for a chat started in a project: this effect resolves once, so
+    // a pin that lands afterwards would never be applied.
+    if (isProjectLoading) return;
 
     // Process the URL agentId param, but only if it's a new value (not one we
     // already consumed). This allows navigating from different agent pages
@@ -174,17 +192,23 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     if (!agentId && !urlParamsConsumedRef.current) {
       if (isPermissionResolving) return;
 
-      const selectedAgent = resolveInitialAgentSelection({
+      const selection = resolveInitialAgentSelection({
         agents,
+        projectDefaultAgentId,
         organizationDefaultAgentId: organization?.defaultAgentId,
         savedAgentId: getSavedAgent(),
         memberDefaultAgentId: defaultAgentId,
         canUseSavedAgent,
       });
-      if (!selectedAgent) return;
+      if (!selection) return;
 
-      applyAgentSelection(selectedAgent);
-      saveAgent(selectedAgent.id);
+      applyAgentSelection(selection.agent);
+      // The saved-agent store is global, not per-project, so persisting a
+      // project's pin here would carry it into unrelated chats afterwards. A
+      // manual pick still saves (see onAgentChange).
+      if (!selection.fromProjectDefault) {
+        saveAgent(selection.agent.id);
+      }
     }
   }, [
     applyAgentSelection,
@@ -192,8 +216,10 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     urlAgentId,
     agents,
     defaultAgentId,
+    projectDefaultAgentId,
     organization?.defaultAgentId,
     isOrgLoading,
+    isProjectLoading,
     canUseSavedAgent,
     isPermissionResolving,
   ]);

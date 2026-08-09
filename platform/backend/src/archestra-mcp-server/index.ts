@@ -115,77 +115,123 @@ interface ArchestraValidationMeta {
   issues: Array<{ code: string; path: string }>;
 }
 
-const toolEntries: Partial<
+/**
+ * The aggregations below are built on FIRST USE, not at module scope.
+ *
+ * This module sits in an import cycle: a group module (e.g. `./sandbox`) pulls
+ * the `@/models` barrel, which reaches `models/agent.ts` →
+ * `clients/chat-mcp-client.ts` → back here. Whichever side is entered first
+ * leaves the other's exports uninitialized while it evaluates, so spreading the
+ * group modules at module scope made correctness depend on import order: any
+ * entrypoint that reached a group module before this one (a test importing
+ * `./sandbox` directly, for instance) got `undefined` here and threw
+ * "tools is not iterable".
+ *
+ * Deferring to first call removes the eval-time dependency entirely — by the
+ * time anything asks for a tool, every group module has finished loading. Each
+ * result is memoized, so callers still see one stable array/object identity.
+ */
+
+let toolEntriesCache:
+  | Partial<Record<ArchestraToolFullName, ArchestraRuntimeToolEntry>>
+  | undefined;
+
+function getToolEntries(): Partial<
   Record<ArchestraToolFullName, ArchestraRuntimeToolEntry>
-> = {
-  ...identityToolEntries,
-  ...agentToolEntries,
-  ...hookToolEntries,
-  ...llmProxyToolEntries,
-  ...mcpGatewayToolEntries,
-  ...mcpServerToolEntries,
-  ...teamToolEntries,
-  ...limitToolEntries,
-  ...policyToolEntries,
-  ...toolAssignmentToolEntries,
-  ...knowledgeManagementToolEntries,
-  ...chatToolEntries,
-  ...projectToolEntries,
-  ...searchToolEntries,
-  ...runToolEntries,
-  ...skillToolEntries,
-  ...sandboxToolEntries,
-  ...appToolEntries,
-  ...appDataToolEntries,
-  ...appLlmToolEntries,
-};
+> {
+  if (!toolEntriesCache) {
+    toolEntriesCache = {
+      ...identityToolEntries,
+      ...agentToolEntries,
+      ...hookToolEntries,
+      ...llmProxyToolEntries,
+      ...mcpGatewayToolEntries,
+      ...mcpServerToolEntries,
+      ...teamToolEntries,
+      ...limitToolEntries,
+      ...policyToolEntries,
+      ...toolAssignmentToolEntries,
+      ...knowledgeManagementToolEntries,
+      ...chatToolEntries,
+      ...projectToolEntries,
+      ...searchToolEntries,
+      ...runToolEntries,
+      ...skillToolEntries,
+      ...sandboxToolEntries,
+      ...appToolEntries,
+      ...appDataToolEntries,
+      ...appLlmToolEntries,
+    };
+  }
+  return toolEntriesCache;
+}
+
+let allToolsCache: (typeof identityTools)[number][] | undefined;
+
+/**
+ * Every built-in, in registration order, with no deployment-config filtering.
+ * Groups whose runtime is unconfigured are dropped downstream by
+ * `getArchestraMcpTools`; keeping one array means a tool can never be reachable
+ * for dispatch while missing from the list a caller enumerates.
+ */
+function getAllTools(): (typeof identityTools)[number][] {
+  if (!allToolsCache) {
+    allToolsCache = [
+      ...identityTools,
+      ...agentTools,
+      ...llmProxyTools,
+      ...mcpGatewayTools,
+      ...mcpServerTools,
+      ...teamTools,
+      ...limitTools,
+      ...policyTools,
+      ...toolAssignmentTools,
+      ...knowledgeManagementTools,
+      ...chatTools,
+      ...projectTools,
+      ...searchToolTools,
+      ...runToolTools,
+      ...skillTools,
+      ...sandboxTools,
+      ...hookTools,
+      ...appTools,
+      ...appDataTools,
+      ...appLlmTools,
+    ];
+  }
+  return allToolsCache;
+}
+
+let sandboxToolNamesCache: ReadonlySet<string> | undefined;
+function getSandboxToolNames(): ReadonlySet<string> {
+  if (!sandboxToolNamesCache) {
+    sandboxToolNamesCache = new Set(sandboxTools.map((tool) => tool.name));
+  }
+  return sandboxToolNamesCache;
+}
+
+let hookToolNamesCache: ReadonlySet<string> | undefined;
+function getHookToolNames(): ReadonlySet<string> {
+  if (!hookToolNamesCache) {
+    hookToolNamesCache = new Set(hookTools.map((tool) => tool.name));
+  }
+  return hookToolNamesCache;
+}
 
 export function getArchestraMcpTools() {
-  const tools = [
-    ...identityTools,
-    ...agentTools,
-    ...llmProxyTools,
-    ...mcpGatewayTools,
-    ...mcpServerTools,
-    ...teamTools,
-    ...limitTools,
-    ...policyTools,
-    ...toolAssignmentTools,
-    ...knowledgeManagementTools,
-    ...chatTools,
-    ...projectTools,
-    ...searchToolTools,
-    ...runToolTools,
-    ...skillTools,
-    ...(config.skillsSandbox.enabled ? sandboxTools : []),
-    // Lifecycle hooks execute in the conversation sandbox; hide their
-    // management tools when the runtime (and thus hooks) is unavailable.
-    ...(config.hooks.enabled ? hookTools : []),
-    ...appTools,
-    ...appDataTools,
-    ...appLlmTools,
-  ];
+  return brandTools(
+    getAllTools().filter((tool) => isToolRuntimeEnabled(tool.name)),
+  );
+}
 
-  // Descriptions are shipped strings frozen at module load, so they cannot read
-  // the branding singleton inline — it is only synced once an organization has
-  // been loaded. Rebranding them here, where the tool list is built per
-  // reconcile, is what lets a white-labeled deployment advertise built-ins under
-  // its own name. `brandBuiltInText` is a no-op for non-branded orgs.
-  return tools.map((tool) => {
-    const shortName = getArchestraToolShortName(tool.name);
-    const description =
-      typeof tool.description === "string"
-        ? archestraMcpBranding.brandBuiltInText(tool.description)
-        : tool.description;
-
-    return {
-      ...tool,
-      description,
-      ...(shortName
-        ? { name: archestraMcpBranding.getToolName(shortName) }
-        : {}),
-    };
-  });
+/**
+ * The complete built-in surface, including groups this deployment has not
+ * configured a runtime for. Only the generated tools-reference docs want this —
+ * they describe the product, not one process's live capabilities. Everything
+ * that serves or dispatches tools wants `getArchestraMcpTools`.
+ */
+export function getAllArchestraMcpTools() {
+  return brandTools(getAllTools());
 }
 
 /**
@@ -202,7 +248,7 @@ export function getArchestraToolInputSchema(
   if (!shortName) {
     return undefined;
   }
-  const entry = toolEntries[getArchestraToolFullName(shortName)];
+  const entry = getToolEntries()[getArchestraToolFullName(shortName)];
   if (!entry) {
     return undefined;
   }
@@ -260,11 +306,11 @@ export async function executeArchestraTool(
   if (assignmentDenied) return assignmentDenied;
 
   const resolvedToolName =
-    toolEntries[toolName as ArchestraToolFullName] != null
+    getToolEntries()[toolName as ArchestraToolFullName] != null
       ? toolName
       : resolveArchestraToolName(toolName);
   const toolEntry = resolvedToolName
-    ? toolEntries[resolvedToolName as ArchestraToolFullName]
+    ? getToolEntries()[resolvedToolName as ArchestraToolFullName]
     : undefined;
   if (!toolEntry) {
     throw {
@@ -326,6 +372,42 @@ export async function executeArchestraTool(
     }
     throw error;
   }
+}
+
+/**
+ * Whether a built-in's runtime is configured on this deployment. Sandbox tools
+ * materialize a Dagger container and lifecycle hooks execute inside that same
+ * sandbox, so both are unusable without the code runtime and advertising them
+ * would promise the model a capability the call cannot deliver.
+ */
+function isToolRuntimeEnabled(canonicalName: string): boolean {
+  if (getSandboxToolNames().has(canonicalName))
+    return config.skillsSandbox.enabled;
+  if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;
+  return true;
+}
+
+// Descriptions are shipped strings frozen at module load, so they cannot read
+// the branding singleton inline — it is only synced once an organization has
+// been loaded. Rebranding here, where the tool list is built per reconcile, is
+// what lets a white-labeled deployment advertise built-ins under its own name.
+// `brandBuiltInText` is a no-op for non-branded orgs.
+function brandTools(tools: ReturnType<typeof getAllTools>) {
+  return tools.map((tool) => {
+    const shortName = getArchestraToolShortName(tool.name);
+    const description =
+      typeof tool.description === "string"
+        ? archestraMcpBranding.brandBuiltInText(tool.description)
+        : tool.description;
+
+    return {
+      ...tool,
+      description,
+      ...(shortName
+        ? { name: archestraMcpBranding.getToolName(shortName) }
+        : {}),
+    };
+  });
 }
 
 // run_tool / search_tools are the dispatch surface (advertised implicitly in

@@ -1,3 +1,5 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: asserts on emitted shell source, where `${VAR}` is shell parameter expansion
+
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import {

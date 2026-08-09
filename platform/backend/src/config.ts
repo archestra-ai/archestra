@@ -10,11 +10,16 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
   DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+  DEFAULT_CHUNK_SIZE_TOKENS,
+  DEFAULT_CONTEXT_EXPANSION_RADIUS,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
+  MAX_CHUNK_SIZE_TOKENS,
+  MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
+  MIN_CHUNK_SIZE_TOKENS,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -88,12 +93,23 @@ const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
  * Returns undefined if authentication is not properly configured
  * @public — exported for testability
  */
-export const getOtlpAuthHeaders = (): Record<string, string> | undefined => {
-  const username =
-    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME?.trim();
-  const password =
-    process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD?.trim();
-  const bearer = process.env.ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER?.trim();
+export const getOtlpAuthHeaders = (): Record<string, string> | undefined =>
+  buildOtlpAuthHeaders("ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH");
+
+/**
+ * OTLP authentication headers for the RUM (product-usage telemetry) export
+ * pipeline — same contract as getOtlpAuthHeaders, separate credentials.
+ * @public — exported for testability
+ */
+export const getRumOtlpAuthHeaders = (): Record<string, string> | undefined =>
+  buildOtlpAuthHeaders("ARCHESTRA_RUM_EXPORTER_OTLP_AUTH");
+
+const buildOtlpAuthHeaders = (
+  envPrefix: string,
+): Record<string, string> | undefined => {
+  const username = process.env[`${envPrefix}_USERNAME`]?.trim();
+  const password = process.env[`${envPrefix}_PASSWORD`]?.trim();
+  const bearer = process.env[`${envPrefix}_BEARER`]?.trim();
 
   // Bearer token takes precedence
   if (bearer) {
@@ -106,7 +122,7 @@ export const getOtlpAuthHeaders = (): Record<string, string> | undefined => {
   if (username || password) {
     if (!username || !password) {
       logger.warn(
-        "OTEL authentication misconfigured: both ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
+        `OTEL authentication misconfigured: both ${envPrefix}_USERNAME and ${envPrefix}_PASSWORD must be provided for basic auth`,
       );
       return undefined;
     }
@@ -416,6 +432,11 @@ const MAX_TCP_PORT = 65_535;
 const OTEL_TRACES_PATH = "/v1/traces";
 const OTEL_LOGS_PATH = "/v1/logs";
 
+// RUM export is opt-in: no endpoint means the feature is off entirely (the
+// frontend never loads its RUM module, the ingest route accepts nothing).
+const rumExporterOtlpEndpoint =
+  process.env.ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT?.trim() || "";
+
 /**
  * Get OTEL exporter endpoint for traces.
  * Reads from ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT and intelligently ensures
@@ -507,6 +528,35 @@ export const parseContentMaxLength = (
     return DEFAULT_OTEL_CONTENT_MAX_LENGTH;
   }
 
+  return parsed;
+};
+
+/**
+ * Fraction of RUM sessions to record, 0–1. Invalid or out-of-range values
+ * fall back to 1 (record everything) so a typo never silently disables RUM.
+ *
+ * @public — exercised by config.rum.test.ts
+ */
+export const parseRumSampleRate = (value?: string): number => {
+  if (!value) return 1;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) return 1;
+  return parsed;
+};
+
+/**
+ * A positive-integer RUM setting (batch tuning, ingest budget); anything
+ * else falls back to the given default.
+ *
+ * @public — exercised by config.rum.test.ts
+ */
+export const parseRumBatchSetting = (
+  value: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!value) return defaultValue;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return defaultValue;
   return parsed;
 };
 
@@ -863,6 +913,27 @@ export const parseNonNegativeInt = (
   if (!envValue) return defaultValue;
   const parsed = Number.parseInt(envValue, 10);
   return !Number.isNaN(parsed) && parsed >= 0 ? parsed : defaultValue;
+};
+
+/**
+ * Parse an integer knob that only makes sense inside a fixed range, clamping
+ * out-of-range values to the nearest bound rather than falling back to the
+ * default. A chunk size of 8 is a typo, not a request for 512 — clamping keeps
+ * the corpus indexable and the intent ("smaller") visible, where a silent
+ * fallback to the default would look like the setting was ignored.
+ *
+ * @public — exported for testability
+ */
+export const parseClampedInt = (
+  envValue: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseInt(envValue, 10);
+  if (Number.isNaN(parsed)) return defaultValue;
+  return Math.min(Math.max(parsed, min), max);
 };
 
 /** @public — exported for testability */
@@ -2551,6 +2622,48 @@ const config = {
         headers: getOtlpAuthHeaders(),
       } satisfies Partial<OTLPExporterNodeConfigBase>,
     },
+    /**
+     * RUM (Real User Monitoring): product-usage events emitted by the web
+     * frontend, forwarded as OTLP log records to a customer-controlled
+     * collector. Off unless an endpoint is configured, and deliberately a
+     * separate pipeline from `otel` above — that one carries this backend's
+     * traces/logs, this one carries browser usage events.
+     */
+    rum: {
+      enabled: Boolean(rumExporterOtlpEndpoint),
+      sampleRate: parseRumSampleRate(process.env.ARCHESTRA_RUM_SAMPLE_RATE),
+      logExporter: {
+        url: rumExporterOtlpEndpoint
+          ? getOtelExporterOtlpLogEndpoint(rumExporterOtlpEndpoint)
+          : "",
+        headers: getRumOtlpAuthHeaders(),
+        // OTLP/HTTP with gzip: log-record batches are highly repetitive and
+        // compress roughly an order of magnitude.
+        compression: "gzip" as OTLPExporterNodeConfigBase["compression"],
+      } satisfies Partial<OTLPExporterNodeConfigBase>,
+      // BatchLogRecordProcessor knobs. The SDK defaults drain ~100 records/s;
+      // large deployments raise batch size / lower the delay to keep up.
+      batchProcessor: {
+        maxQueueSize: parseRumBatchSetting(
+          process.env.ARCHESTRA_RUM_EXPORTER_MAX_QUEUE_SIZE,
+          2048,
+        ),
+        maxExportBatchSize: parseRumBatchSetting(
+          process.env.ARCHESTRA_RUM_EXPORTER_MAX_EXPORT_BATCH_SIZE,
+          512,
+        ),
+        scheduledDelayMillis: parseRumBatchSetting(
+          process.env.ARCHESTRA_RUM_EXPORTER_SCHEDULE_DELAY_MS,
+          5000,
+        ),
+      },
+      // Per-user ceiling on accepted ingest batches; with the per-batch event
+      // cap this bounds what one runaway client can push to the collector.
+      ingestMaxBatchesPerMinute: parseRumBatchSetting(
+        process.env.ARCHESTRA_RUM_INGEST_MAX_BATCHES_PER_MINUTE,
+        120,
+      ),
+    },
     metrics: {
       endpoint: "/metrics",
       port: parseMetricsPort(process.env.ARCHESTRA_METRICS_PORT),
@@ -2606,6 +2719,39 @@ const config = {
     ),
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
+    /**
+     * Token budget for one chunk, inclusive of its title prefix and metadata
+     * suffix. Applies at ingest only: existing chunks keep the size they were
+     * written at until their connector re-syncs.
+     */
+    chunkSizeTokens: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS,
+      DEFAULT_CHUNK_SIZE_TOKENS,
+      MIN_CHUNK_SIZE_TOKENS,
+      MAX_CHUNK_SIZE_TOKENS,
+    ),
+    /**
+     * How many neighbouring chunks either side of a search hit are stitched
+     * back onto it before the result is returned. Retrieval still ranks single
+     * chunks — this only widens what the model gets to read, so a hit that
+     * lands mid-sentence or mid-table still arrives with the passage around it.
+     * 0 disables it and returns bare chunks.
+     */
+    contextExpansionRadius: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS,
+      DEFAULT_CONTEXT_EXPANSION_RADIUS,
+      0,
+      MAX_CONTEXT_EXPANSION_RADIUS,
+    ),
+    /**
+     * Contextual retrieval: summarize each document once at ingest and index
+     * that summary alongside every one of its chunks, so a chunk that never
+     * names its subject still matches a query that does. Costs one LLM call per
+     * document per sync, billed against the configured reranking model.
+     */
+    contextualRetrievalEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED ===
+      "true",
     taskWorkerPollIntervalSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
       5,
@@ -2703,6 +2849,23 @@ const config = {
       process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET?.trim() || undefined,
     secretPrevious:
       process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
+      undefined,
+  },
+  /**
+   * Incognito chats: per-conversation encryption under a browser-held key.
+   * Configuring `escrowPublicKey` is the whole switch — the feature is off
+   * until one is set, and unsetting it turns the feature off again.
+   */
+  chatIncognito: {
+    /**
+     * The PEM (or base64-of-PEM) RSA public key conversation keys are escrowed
+     * to for break-glass recovery; the private half stays offline with the
+     * customer's security team. Setting it enables incognito chats; an
+     * unparseable or undersized key fails startup (see
+     * verifyIncognitoChatConfig).
+     */
+    escrowPublicKey:
+      process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
       undefined,
   },
   test: {

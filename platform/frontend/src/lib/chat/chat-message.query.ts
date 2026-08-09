@@ -1,6 +1,7 @@
 import { archestraApiSdk, type ChatMessageFeedback } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { callApi } from "@/lib/chat/api-call";
+import { incognitoRequestHeaders } from "@/lib/chat/incognito";
 import { handleApiError, toApiError } from "@/lib/utils";
 
 const { updateChatMessage, setChatMessageFeedback } = archestraApiSdk;
@@ -31,6 +32,9 @@ export function useUpdateChatMessage(conversationId: string | undefined) {
           updateChatMessage({
             path: { id: messageId },
             body: { conversationId, partIndex, text, deleteSubsequentMessages },
+            // Incognito conversations require the browser-held key on every
+            // request touching their content.
+            headers: incognitoRequestHeaders(conversationId),
           }),
         null,
       );
@@ -68,6 +72,9 @@ export function useSetChatMessageFeedback() {
       const { data, error } = await setChatMessageFeedback({
         path: { id: messageId },
         body: { conversationId, feedback },
+        // Incognito conversations require the browser-held key on every
+        // request touching their content.
+        headers: incognitoRequestHeaders(conversationId),
       });
       if (error) {
         handleApiError(error);

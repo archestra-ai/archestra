@@ -41,6 +41,7 @@ import {
 } from "@/skills-sandbox/mime-sniff";
 import {
   type ProjectFileScope,
+  resolveExplicitProjectFileScope,
   resolveProjectFileScope,
 } from "@/skills-sandbox/project-file-scope";
 import {
@@ -370,6 +371,23 @@ const UploadFileOutputSchema = z.object({
   sizeBytes: z.number(),
 });
 
+/**
+ * Opt a read tool out of the chat-derived scope and onto a named project. The
+ * point is headless use: a client with no conversation (an external MCP client
+ * on a gateway) has nothing to derive scope from, so it names the project it
+ * found via `list_projects` / `get_project`.
+ */
+const PROJECT_ID_FILE_ARG = z
+  .string()
+  .optional()
+  .describe(
+    "Read this project's files instead of the current chat's — how you reach " +
+      "project files when working outside a chat (get_project returns the id). " +
+      "Only projects you own or that are shared with you can be read. Cannot " +
+      "be used from a chat that already belongs to a different project, nor " +
+      'combined with scope: "app".',
+  );
+
 const SearchFilesSchema = z
   .strictObject({
     query: z
@@ -386,11 +404,13 @@ const SearchFilesSchema = z
           "the user has open, which is how you find what the app has produced " +
           "before copying one out with copy_file.",
       ),
+    project_id: PROJECT_ID_FILE_ARG,
   })
   .describe(
     "List or search persistent files by filename substring; omit the query to " +
       "list them (the first 200). Filenames only, not contents. Lists this " +
-      "chat's files, or the open app's files with scope: \"app\".",
+      "chat's files, the open app's files with scope: \"app\", or a project's " +
+      "files with project_id.",
   );
 
 const SearchFilesOutputSchema = z.object({
@@ -446,6 +466,7 @@ const ReadFileSchema = z
       .describe(
         `Maximum number of lines to read. Defaults to ${READ_FILE_DEFAULT_LINES}.`,
       ),
+    project_id: PROJECT_ID_FILE_ARG,
   })
   .refine((v) => (v.id != null) !== (v.filename != null), {
     message: "provide exactly one of `id` or `filename`",
@@ -455,8 +476,10 @@ const ReadFileSchema = z
       "files come back as numbered lines (`<n>\\t<line>`); images (PNG, JPEG, " +
       "WebP, GIF) are returned inline so you can view them. Identify the file by " +
       "`id` (the `id` or `ref` from search_files / save_file) or by `filename`. Page " +
-      "large text files with `offset`/`limit`. For other binary types (PDF, archives, " +
-      "…), copy the file into the sandbox with upload_file + run_command.",
+      "large text files with `offset`/`limit`. Pass project_id to read a project's " +
+      "file (e.g. its instructions.md) instead of the chat's. For other binary types " +
+      "(PDF, archives, …), copy the file into the sandbox with upload_file + " +
+      "run_command.",
   );
 
 const ReadFileOutputSchema = z.object({
@@ -964,7 +987,8 @@ const registry = defineArchestraTools([
       "pass to read_file, edit_file, or delete_file, or to upload_file to copy the file " +
       'into the sandbox. Pass scope: "app" to list the files of the app the user has ' +
       "open instead — the only way to see what an app holds, and the discovery step " +
-      "before copying one of its files out with copy_file.",
+      "before copying one of its files out with copy_file. Pass project_id to list a " +
+      "project's files instead, which is how you reach them outside a chat.",
     schema: SearchFilesSchema,
     outputSchema: SearchFilesOutputSchema,
     async handler({ args, context }) {
@@ -983,13 +1007,19 @@ const registry = defineArchestraTools([
           "No app is open in this chat, so there are no app files to list. Ask the user to open the app first, then retry.",
         );
       }
+      if (args.scope === "app" && args.project_id) {
+        return errorResult(
+          "project_id cannot be combined with scope: \"app\" — ask for the project's files or the open app's, not both.",
+        );
+      }
 
-      let scope: ProjectFileScope | null;
+      let fileScope: MyFileScope | null;
       try {
-        scope = await resolveProjectFileScope({
+        fileScope = await resolveReadFileScope({
+          projectId: args.project_id,
           conversationId: context.conversationId,
-          userId: guard.userCtx.userId,
-          organizationId: guard.userCtx.organizationId,
+          appId,
+          userCtx: guard.userCtx,
         });
       } catch (error) {
         if (error instanceof SkillSandboxError)
@@ -997,11 +1027,6 @@ const registry = defineArchestraTools([
         throw error;
       }
 
-      const fileScope = resolveChatFileScope(
-        scope,
-        context.conversationId,
-        appId,
-      );
       // A headless no-project call has no conversation to scope to — no files.
       if (!fileScope) {
         return structuredSuccessResult(
@@ -1054,20 +1079,24 @@ const registry = defineArchestraTools([
       "files come back as numbered lines; images (PNG, JPEG, WebP, GIF) are " +
       "returned inline so you can view them. Identify the file by `id` (the `id` or " +
       "`ref` from search_files / save_file) or by `filename`. Page large text files " +
-      "with `offset`/`limit`. For other binary types, copy the file into the sandbox " +
-      "with upload_file and inspect it with run_command.",
+      "with `offset`/`limit`. Pass project_id to read a project's file — including " +
+      "its instructions.md — which is how you reach them outside a chat. For other " +
+      "binary types, copy the file into the sandbox with upload_file and inspect it " +
+      "with run_command.",
     schema: ReadFileSchema,
     outputSchema: ReadFileOutputSchema,
     async handler({ args, context }) {
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
-      let scope: ProjectFileScope | null;
+      const ref = args.id ?? args.filename ?? "";
+      let fileScope: MyFileScope | null;
       try {
-        scope = await resolveProjectFileScope({
+        fileScope = await resolveReadFileScope({
+          projectId: args.project_id,
           conversationId: context.conversationId,
-          userId: guard.userCtx.userId,
-          organizationId: guard.userCtx.organizationId,
+          appId: context.appId,
+          userCtx: guard.userCtx,
         });
       } catch (error) {
         if (error instanceof SkillSandboxError)
@@ -1075,12 +1104,6 @@ const registry = defineArchestraTools([
         throw error;
       }
 
-      const ref = args.id ?? args.filename ?? "";
-      const fileScope = resolveChatFileScope(
-        scope,
-        context.conversationId,
-        context.appId,
-      );
       if (!fileScope) {
         return errorResult(describeMyFileError("not_found", ref));
       }
@@ -2370,6 +2393,64 @@ function resolveChatFileScope(
     };
   }
   return conversationId ? { kind: "conversation", conversationId } : null;
+}
+
+/** A resolved My Files scope (the non-null result of {@link resolveChatFileScope}). */
+type MyFileScope = NonNullable<ReturnType<typeof resolveChatFileScope>>;
+
+/**
+ * Scope for the two READ tools, which additionally accept an explicit
+ * `project_id`. Without one this is exactly the chat scope; with one the named
+ * project is used after re-verifying the caller's access to it.
+ *
+ * The explicit id is REFUSED, never silently ignored, when it cannot apply — a
+ * caller told it read a project must not have been served something else:
+ *  - an app runtime is confined to its own (app, viewer) namespace;
+ *  - a chat that already belongs to a project stays confined to THAT project,
+ *    so content inside a project chat cannot steer the model into a second
+ *    project the user happens to have access to.
+ *
+ * Only reads take this argument. Writes stay chat-derived, so nothing can be
+ * created in or deleted from a project the caller is not actually working in.
+ */
+async function resolveReadFileScope(params: {
+  projectId: string | undefined;
+  conversationId: string | undefined;
+  appId: string | undefined;
+  userCtx: UserContext;
+}): Promise<MyFileScope | null> {
+  const { projectId, conversationId, appId, userCtx } = params;
+
+  const chatScope = await resolveProjectFileScope({
+    conversationId,
+    userId: userCtx.userId,
+    organizationId: userCtx.organizationId,
+  });
+  if (!projectId) {
+    return resolveChatFileScope(chatScope, conversationId, appId);
+  }
+
+  if (appId) {
+    throw new SkillSandboxError(
+      "project_id cannot be used here — an app can only reach its own files",
+    );
+  }
+  if (chatScope && chatScope.projectId !== projectId) {
+    throw new SkillSandboxError(
+      `this chat belongs to project "${chatScope.projectName}"; only its files can be used here — drop project_id`,
+    );
+  }
+
+  const scope = await resolveExplicitProjectFileScope({
+    projectId,
+    userId: userCtx.userId,
+    organizationId: userCtx.organizationId,
+  });
+  return {
+    kind: "project",
+    projectId: scope.projectId,
+    projectName: scope.projectName,
+  };
 }
 
 function describeMyFileError(

@@ -112,6 +112,24 @@ export function isEncryptedEnvelope(value: unknown): value is string {
 }
 
 /**
+ * Strict envelope-object check: exactly `{ __encrypted: "<v1 envelope>" }`
+ * and nothing else, so arbitrary user JSON that merely contains an
+ * `__encrypted` key can never be misread as ciphertext. Shared by the
+ * incognito-chat layer and the enterprise at-rest layer (which re-exports it).
+ */
+export function isContentEnvelope(
+  value: unknown,
+): value is { __encrypted: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    isEncryptedEnvelope((value as Record<string, unknown>).__encrypted)
+  );
+}
+
+/**
  * Encrypt a value under an explicit key. Exposed for the re-encryption
  * migration; normal call sites use {@link encryptSecretValue}.
  * @public — used by standalone-scripts/reencrypt-secrets.ts

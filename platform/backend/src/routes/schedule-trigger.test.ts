@@ -278,6 +278,83 @@ describe("schedule trigger routes", () => {
     expect(response.json().agentId).toBe(defaultAgent.id);
   });
 
+  test("POST create without an agentId prefers the project's default agent over the org's", async ({
+    makeInternalAgent,
+  }) => {
+    // Same "basic user" path, but the project pins its own agent. Without this
+    // the pin is honored only for callers whose UI can send an agentId.
+    const orgDefault = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+      isDefault: true,
+    });
+    const projectAgent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "pinned-agent-project",
+      description: null,
+      defaultAgentId: projectAgent.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/schedule-triggers",
+      payload: {
+        name: "Project pin wins",
+        projectId: project.id,
+        messageTemplate: "go",
+        cronExpression: "* * * * *",
+        timezone: "UTC",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().agentId).toBe(projectAgent.id);
+    expect(response.json().agentId).not.toBe(orgDefault.id);
+  });
+
+  test("POST create with an explicit agentId keeps it over the project's pin", async ({
+    makeInternalAgent,
+  }) => {
+    const projectAgent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const chosenAgent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "explicit-over-pin",
+      description: null,
+      defaultAgentId: projectAgent.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/schedule-triggers",
+      payload: {
+        name: "Explicit wins",
+        projectId: project.id,
+        agentId: chosenAgent.id,
+        messageTemplate: "go",
+        cronExpression: "* * * * *",
+        timezone: "UTC",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().agentId).toBe(chosenAgent.id);
+  });
+
   test("POST create without an agentId and no default agent returns 400", async () => {
     const project = await projectService.create({
       organizationId,

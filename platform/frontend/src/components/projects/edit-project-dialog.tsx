@@ -6,9 +6,10 @@ import {
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
 import { Globe, Lock, Users } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { AgentSelector } from "@/components/agent-selector";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +27,9 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
+import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { agentsForProjectAudience } from "@/lib/projects/project-agent-audience";
 import {
   useProject,
   useSetProjectShare,
@@ -39,13 +42,17 @@ type EditProjectForm = {
   name: string;
   description: string;
   icon: string | null;
+  defaultAgentId: string | null;
 };
 
+/** Sentinel for "no pinned agent" — the picker cannot hold an empty value. */
+const NO_DEFAULT_AGENT = "__org_default__";
+
 /**
- * Single edit entry point for a project's owner/admin: name, description, and
- * icon plus the shared visibility control. Fetches the project detail by id so
- * it works from the projects list (whose rows lack share team ids) as well as
- * the project page. Renders nothing until the detail has loaded.
+ * Single edit entry point for a project's owner/admin: name, description, icon,
+ * and default agent plus the shared visibility control. Fetches the project
+ * detail by id so it works from the projects list (whose rows lack share team
+ * ids) as well as the project page. Renders nothing until the detail has loaded.
  */
 export function EditProjectDialog({
   projectId,
@@ -83,24 +90,63 @@ function EditProjectDialogForm({
   const setShare = useSetProjectShare();
   const { data: teams = [] } = useTeams({ enabled: open });
   const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
+  // Without `agent:read` the list comes back empty, which would read as "this
+  // org has no agents" rather than "not yours to set" — hide the field instead.
+  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+  const { data: accessibleAgents = [], isPending: isAgentsPending } =
+    useInternalAgents({
+      enabled: open && canReadAgents === true,
+    });
 
   const form = useForm<EditProjectForm>({
     defaultValues: {
       name: project.name,
       description: project.description ?? "",
       icon: project.icon,
+      defaultAgentId: project.defaultAgent?.id ?? null,
     },
     mode: "onChange",
   });
   const icon = form.watch("icon");
   const name = form.watch("name");
   const description = form.watch("description");
+  const defaultAgentId = form.watch("defaultAgentId");
   const initialVisibility: ProjectVisibility = project.visibility ?? "none";
   const [visibility, setVisibility] =
     useState<ProjectVisibility>(initialVisibility);
   const [teamIds, setTeamIds] = useState<string[]>(project.shareTeamIds ?? []);
   const [userIds, setUserIds] = useState<string[]>(project.shareUserIds ?? []);
   const userOption = useUserShareOption<ProjectVisibility>("user");
+
+  // Sharing is edited in this same dialog, so the offer follows the pending
+  // choice rather than what is saved — pick Teams and the list narrows before
+  // you press Save.
+  const editorIsOwner = project.viewerRole === "owner";
+  const selectableAgents = useMemo(
+    () =>
+      agentsForProjectAudience(accessibleAgents, {
+        share: { visibility, teamIds, userIds },
+        editorIsOwner,
+      }),
+    [accessibleAgents, visibility, teamIds, userIds, editorIsOwner],
+  );
+
+  // Widening the audience can strand the pinned agent. Fall back to the
+  // organization default rather than leave a selection the save would reject.
+  useEffect(() => {
+    // Every agent looks unreachable before the list arrives, which would clear
+    // the project's saved pin the moment the dialog opened. `isPending` also
+    // stays true while the query is disabled, so a hidden field never resets.
+    if (isAgentsPending) return;
+    // On someone else's project the offer is deliberately conservative (the
+    // owner's reach is unknowable here), so absence from it is no evidence the
+    // pin is broken. Resetting on that would let an admin fixing a typo wipe
+    // the owner's choice.
+    if (!editorIsOwner) return;
+    if (!defaultAgentId) return;
+    if (selectableAgents.some((agent) => agent.id === defaultAgentId)) return;
+    form.setValue("defaultAgentId", null, { shouldDirty: true });
+  }, [defaultAgentId, selectableAgents, isAgentsPending, editorIsOwner, form]);
 
   // Org-wide sharing (both entering and leaving it) is gated behind
   // `project:share-org` on the backend; mirror that here so the dialog doesn't
@@ -160,39 +206,53 @@ function EditProjectDialogForm({
     name.length > PROJECT_NAME_MAX_LENGTH ||
     description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
 
-  const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
-    if (teamSelectionMissing || userSelectionMissing) return;
-    const ok = await updateProject.mutateAsync({
-      id: project.id,
-      name: name.trim(),
-      description: description.trim() || null,
-      icon,
-    });
-    if (!ok) return;
+  const onSubmit = form.handleSubmit(
+    async ({ name, description, icon, defaultAgentId }) => {
+      if (teamSelectionMissing || userSelectionMissing) return;
 
-    const nextTeamIds = visibility === "team" ? teamIds : [];
-    // Both lists are always sent, so leaving Teams or Users revokes what that
-    // choice left behind instead of stranding it.
-    const nextUserIds = visibility === "user" ? userIds : [];
-    const shareChanged =
-      visibility !== initialVisibility ||
-      (visibility === "team" &&
-        nextTeamIds.slice().sort().join() !==
-          (project.shareTeamIds ?? []).slice().sort().join()) ||
-      (visibility === "user" &&
-        nextUserIds.slice().sort().join() !==
-          (project.shareUserIds ?? []).slice().sort().join());
-    if (shareChanged) {
-      const shareOk = await setShare.mutateAsync({
+      const nextTeamIds = visibility === "team" ? teamIds : [];
+      // Both lists are always sent, so leaving Teams or Users revokes what that
+      // choice left behind instead of stranding it.
+      const nextUserIds = visibility === "user" ? userIds : [];
+      const shareChanged =
+        visibility !== initialVisibility ||
+        (visibility === "team" &&
+          nextTeamIds.slice().sort().join() !==
+            (project.shareTeamIds ?? []).slice().sort().join()) ||
+        (visibility === "user" &&
+          nextUserIds.slice().sort().join() !==
+            (project.shareUserIds ?? []).slice().sort().join());
+      // Sharing goes first: the default agent is picked against the sharing
+      // chosen here, and the server judges it against the sharing on record.
+      // Saving the agent first would validate it against the old audience and
+      // reject a choice this dialog legitimately offered.
+      if (shareChanged) {
+        const shareOk = await setShare.mutateAsync({
+          id: project.id,
+          visibility,
+          teamIds: nextTeamIds,
+          userIds: nextUserIds,
+        });
+        if (!shareOk) return;
+      }
+
+      const ok = await updateProject.mutateAsync({
         id: project.id,
-        visibility,
-        teamIds: nextTeamIds,
-        userIds: nextUserIds,
+        name: name.trim(),
+        description: description.trim() || null,
+        icon,
+        // Sent only when actually changed. The value here is whatever was
+        // loaded when the dialog opened, so sending it unconditionally would
+        // revert a default another admin set in the meantime.
+        ...(form.formState.dirtyFields.defaultAgentId
+          ? { defaultAgentId }
+          : {}),
       });
-      if (!shareOk) return;
-    }
-    onOpenChange(false);
-  });
+      if (!ok) return;
+
+      onOpenChange(false);
+    },
+  );
 
   return (
     <StandardFormDialog
@@ -323,6 +383,49 @@ function EditProjectDialogForm({
         People you share with can read every chat, start their own, and work
         with the project's files through chats.
       </p>
+
+      {canReadAgents === true && (
+        <div className="space-y-1.5">
+          <Label>Default agent</Label>
+          <AgentSelector
+            mode="single"
+            agents={selectableAgents}
+            value={defaultAgentId ?? NO_DEFAULT_AGENT}
+            onValueChange={(value) =>
+              form.setValue(
+                "defaultAgentId",
+                value === NO_DEFAULT_AGENT ? null : value,
+                { shouldDirty: true },
+              )
+            }
+            hint={audienceHint(visibility)}
+            emptyMessage="No agents this project's members can all use."
+            personalDefaultOption={{
+              value: NO_DEFAULT_AGENT,
+              label: "Default",
+            }}
+            className="w-full"
+          />
+          <p className="text-xs text-muted-foreground">
+            Preselected for new chats and scheduled tasks in this project.
+            Anyone can still pick a different agent for an individual chat.
+          </p>
+        </div>
+      )}
     </StandardFormDialog>
   );
+}
+
+/** Says why the list is what it is, so a short list doesn't read as a bug. */
+function audienceHint(visibility: ProjectVisibility): string {
+  switch (visibility) {
+    case "organization":
+      return "Only org-wide agents, so everyone can use them";
+    case "team":
+      return "Only agents assigned to every selected team";
+    case "user":
+      return "Only agents everyone you share with can use";
+    default:
+      return "Any agent you can use";
+  }
 }

@@ -49,13 +49,14 @@ export async function runContentEncryptionBackfill(params: {
     return { status: "disabled", rowsRewritten: 0 };
   }
 
-  // Never rewrite messages while the content trigram index is still live —
-  // the drop is fired at worker boot (index-maintenance), but it swallows
-  // failures by design, so verify here and defer instead of paying GIN
-  // maintenance on ciphertext.
-  if (await messagesContentTrgmIndexExists()) {
+  // Never rewrite rows while a trigram index over an encrypted column is
+  // still live — the drop is fired at worker boot (index-maintenance), but it
+  // swallows failures by design, so verify here and defer instead of paying
+  // GIN maintenance on ciphertext.
+  const liveContentIndex = await anyContentTrgmIndexExists();
+  if (liveContentIndex) {
     logger.warn(
-      "content encryption backfill deferred: messages_content_trgm_idx still exists",
+      `content encryption backfill deferred: ${liveContentIndex} still exists`,
     );
     return { status: "deferred", rowsRewritten: 0 };
   }
@@ -111,7 +112,20 @@ export async function runContentEncryptionBackfill(params: {
     messagesDone = batch.exhausted;
   }
 
-  if (interactionsDone && messagesDone) {
+  let mcpToolCallsCursorId = state.mcpToolCallsCursorId;
+  let mcpToolCallsDone = false;
+  while (batchBudget > 0 && messagesDone && !mcpToolCallsDone) {
+    batchBudget--;
+    const batch = await sweepMcpToolCallsBatch(mcpToolCallsCursorId, batchSize);
+    rowsRewritten += batch.rewritten;
+    if (batch.lastId) {
+      mcpToolCallsCursorId = batch.lastId;
+      await ContentEncryptionStateModel.advanceMcpToolCallsCursor(batch.lastId);
+    }
+    mcpToolCallsDone = batch.exhausted;
+  }
+
+  if (interactionsDone && messagesDone && mcpToolCallsDone) {
     // Every row now carries the current key — safe to advance the canary
     // (no-op outside a rotation).
     await remintContentCanaryForCurrentKey();
@@ -298,9 +312,89 @@ async function sweepMessagesBatch(
   };
 }
 
-async function messagesContentTrgmIndexExists(): Promise<boolean> {
-  const result = await db.execute<{ exists: boolean }>(
-    sql`SELECT to_regclass('messages_content_trgm_idx') IS NOT NULL AS exists`,
-  );
-  return Boolean(result.rows[0]?.exists);
+const MCP_TOOL_CALL_COLUMNS: Array<{
+  column: string;
+  context: ContentEncryptionContext;
+}> = [
+  { column: "tool_call", context: "mcp_tool_calls.tool_call" },
+  { column: "tool_result", context: "mcp_tool_calls.tool_result" },
+];
+
+async function sweepMcpToolCallsBatch(
+  cursorId: string | null,
+  batchSize: number,
+): Promise<{ rewritten: number; lastId: string | null; exhausted: boolean }> {
+  const cursorClause = cursorId ? sql`WHERE id > ${cursorId}::uuid` : sql``;
+  // Ids only for the same reason as the other sweeps: tool results can run to
+  // MBs, so payloads are fetched one row at a time. Ids are uuidv4 here — the
+  // order is stable, not time-correlated, which a full sweep doesn't need.
+  const page = await db.execute<{ id: string }>(sql`
+    SELECT id
+    FROM ${schema.mcpToolCallsTable}
+    ${cursorClause}
+    ORDER BY id ASC
+    LIMIT ${batchSize}
+  `);
+
+  let rewritten = 0;
+  for (const { id } of page.rows) {
+    const payload = await db.execute<Record<string, unknown>>(sql`
+      SELECT tool_call, tool_result
+      FROM ${schema.mcpToolCallsTable}
+      WHERE id = ${id}::uuid
+    `);
+    const record = payload.rows[0];
+    if (!record) continue; // deleted concurrently (e.g. retention sweep)
+
+    const assignments = [];
+    const guards = [];
+    for (const { column, context } of MCP_TOOL_CALL_COLUMNS) {
+      const next = rewriteFor(record[column], context);
+      if (next === undefined) continue;
+      assignments.push(
+        sql`${sql.raw(column)} = ${JSON.stringify(next)}::jsonb`,
+      );
+      guards.push(
+        sql`${sql.raw(column)} = ${JSON.stringify(record[column])}::jsonb`,
+      );
+    }
+    if (assignments.length === 0) continue;
+
+    let result: { rows: Array<{ updated: number }> };
+    try {
+      result = await db.execute<{ updated: number }>(sql`
+        WITH updated AS (
+          UPDATE ${schema.mcpToolCallsTable}
+          SET ${sql.join(assignments, sql`, `)}
+          WHERE id = ${id}::uuid AND ${sql.join(guards, sql` AND `)}
+          RETURNING 1
+        )
+        SELECT COUNT(*)::int AS updated FROM updated
+      `);
+    } catch (error) {
+      throw rowRewriteError("mcp_tool_calls", id, error);
+    }
+    rewritten += Number(result.rows[0]?.updated ?? 0);
+  }
+
+  const last = page.rows.at(-1);
+  return {
+    rewritten,
+    lastId: last ? last.id : null,
+    exhausted: page.rows.length < batchSize,
+  };
+}
+
+/** Name of the first still-live encrypted-content trgm index, or null. */
+async function anyContentTrgmIndexExists(): Promise<string | null> {
+  for (const indexName of [
+    "messages_content_trgm_idx",
+    "mcp_tool_calls_tool_result_trgm_idx",
+  ]) {
+    const result = await db.execute<{ exists: boolean }>(
+      sql`SELECT to_regclass(${indexName}) IS NOT NULL AS exists`,
+    );
+    if (result.rows[0]?.exists) return indexName;
+  }
+  return null;
 }

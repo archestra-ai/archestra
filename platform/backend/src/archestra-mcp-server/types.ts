@@ -3,6 +3,7 @@ import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 
 /**
  * Context for the Archestra MCP server
@@ -107,4 +108,18 @@ export interface ArchestraContext {
    * handled the approval gate.
    */
   approvalRequiredPoliciesHandled?: boolean;
+  /**
+   * Incognito conversation: any real tool dispatch made on behalf of this call
+   * (e.g. `run_tool` reaching mcpClient) must not persist its content in the
+   * clear.
+   */
+  suppressContentLogging?: boolean;
+  /**
+   * The conversation key for that dispatch, when one is available. Present, the
+   * dispatched row is encrypted under it like any other incognito audit row;
+   * absent, `suppressContentLogging` alone makes it fall back to redaction.
+   * Without this a dispatched call is the one incognito tool call that loses
+   * its content permanently.
+   */
+  incognitoAudit?: IncognitoAuditContext | null;
 }

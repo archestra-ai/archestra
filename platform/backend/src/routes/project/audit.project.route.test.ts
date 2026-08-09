@@ -151,6 +151,25 @@ describe("project routes — audit trail", () => {
     expect(rows[0].after).toMatchObject({ visibility: "organization" });
   });
 
+  test("pinning the default agent is recorded on project.updated", async ({
+    makeInternalAgent,
+  }) => {
+    const project = await makeProject("audited-default-agent");
+    const agent = await makeInternalAgent({ organizationId, scope: "org" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${project.id}`,
+      payload: { defaultAgentId: agent.id },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const rows = await auditRowsFor(project.id, "project.updated");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].before).toMatchObject({ defaultAgentId: null });
+    expect(rows[0].after).toMatchObject({ defaultAgentId: agent.id });
+  });
+
   test("pinning is NOT audited — it is per-user state, not a project change", async () => {
     const project = await makeProject("audited-pin");
 

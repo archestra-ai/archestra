@@ -14,10 +14,10 @@ import { ViewTransition } from "@/lib/view-transition";
 /**
  * The /chat "new conversation" composer as a standalone component: the SAME
  * ArchestraPromptInput driven by the shared new-chat resolution chain
- * (org default → saved pick → member default → first available) and the same
- * persistence (saved agent, member-default model). The only difference is
- * what happens on submit: the prompt is handed to `onSubmitPrompt` instead of
- * creating a conversation in place.
+ * (project default → org default → saved pick → member default → first
+ * available) and the same persistence (saved agent, member-default model). The
+ * only difference is what happens on submit: the prompt is handed to
+ * `onSubmitPrompt` instead of creating a conversation in place.
  *
  * Used by surfaces that start a chat elsewhere (e.g. a project page). The
  * resolved agent/model/key are handed to `onSubmit` alongside the prompt so the
@@ -30,6 +30,8 @@ import { ViewTransition } from "@/lib/view-transition";
  */
 export function NewChatComposer({
   onSubmit,
+  projectDefaultAgentId,
+  isProjectLoading,
 }: {
   onSubmit: (submission: {
     text: string;
@@ -37,6 +39,15 @@ export function NewChatComposer({
     modelId: string;
     apiKeyId: string | null;
   }) => void;
+  /** The pinned agent of the project this composer starts chats in, if any. */
+  projectDefaultAgentId?: string | null;
+  /**
+   * Set while that project is still loading. Agent resolution runs once, so a
+   * caller that mounts this before the pin arrives must say so or the pin is
+   * lost to the org default. Callers that render only after the project has
+   * loaded can omit it.
+   */
+  isProjectLoading?: boolean;
 }) {
   const { data: internalAgents = [] } = useInternalAgents();
   const { data: defaultAgentId } = useDefaultAgentId();
@@ -62,6 +73,8 @@ export function NewChatComposer({
     agents: internalAgents,
     organization: organization ?? null,
     defaultAgentId,
+    projectDefaultAgentId,
+    isProjectLoading,
     modelsByProvider,
     chatApiKeys,
     memberDefault: memberDefault ?? null,

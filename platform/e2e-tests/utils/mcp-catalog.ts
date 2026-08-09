@@ -135,6 +135,11 @@ export async function addCustomSelfHostedCatalogItem({
     await expect(envVarDialog).not.toBeVisible({ timeout: 15_000 });
   }
   if (scope && scope !== "personal") {
+    // The access selector lives behind the collapsed "Sharing & placement"
+    // bar — expand it before reaching for the scope trigger.
+    await createForm
+      .getByRole("button", { name: /Sharing & placement/ })
+      .click();
     await createForm
       .getByRole("button", { name: /Only you can access this MCP server/i })
       .click();

@@ -1,4 +1,8 @@
-import { getEmbeddingColumnName } from "@archestra/shared";
+import {
+  DEFAULT_TEXT_SEARCH_LANGUAGE,
+  getEmbeddingColumnName,
+  type TextSearchLanguage,
+} from "@archestra/shared";
 import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
@@ -188,9 +192,40 @@ class KbChunkModel {
     return dimensions;
   }
 
+  /**
+   * Distinct text-search configurations in use across a set of connectors.
+   *
+   * Read from the connector rows rather than from `kb_chunks`, because the
+   * connector table is small and indexed while the chunk table is the largest
+   * in the corpus. Callers pass the result to `fullTextSearch`, which needs the
+   * languages as literals to keep its tsquery constant-folded (see there).
+   */
+  static async getTextSearchLanguages(
+    connectorIds: string[],
+  ): Promise<TextSearchLanguage[]> {
+    if (connectorIds.length === 0) return [];
+    const ids = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const result = await db.execute(sql`
+      SELECT DISTINCT fts_language AS "ftsLanguage"
+      FROM knowledge_base_connectors
+      WHERE id IN (${ids}) AND deleted_at IS NULL
+    `);
+    return (result.rows as Array<{ ftsLanguage: TextSearchLanguage }>).map(
+      (row) => row.ftsLanguage,
+    );
+  }
+
   static async fullTextSearch(params: {
     connectorIds: string[];
     queryText: string;
+    /**
+     * Text-search configurations to parse the query under, from
+     * {@link getTextSearchLanguages}. Empty falls back to the column default.
+     */
+    languages?: TextSearchLanguage[];
     userAcl: AclEntry[];
     bypassAcl?: boolean;
     /** Defense-in-depth env isolation: require the connector to be in this env. */
@@ -200,6 +235,7 @@ class KbChunkModel {
     const {
       connectorIds,
       queryText,
+      languages,
       userAcl,
       bypassAcl = false,
       environmentId,
@@ -225,17 +261,66 @@ class KbChunkModel {
 
     const orQuery = queryText.split(/\s+/).filter(Boolean).join(" OR ");
 
+    // The query is parsed once per text-search configuration present, and the
+    // per-language predicates are OR-ed together.
+    //
+    // The obvious formulation — `websearch_to_tsquery(c.fts_language, ...)`,
+    // matching each chunk under its own stored configuration — is a per-row
+    // expression, so PostgreSQL cannot constant-fold it into an index lookup
+    // key and the GIN index on search_vector becomes unusable. Measured on a
+    // 300k-chunk corpus that turned a bitmap index scan into a full sequential
+    // scan: ~18 buffers to ~14,000, growing with the corpus rather than with
+    // the number of matches, on the keyword leg of every hybrid query.
+    //
+    // Each branch here uses a literal configuration, so each is index-driven
+    // and PostgreSQL combines them with a BitmapOr. A single-language corpus —
+    // the common case — collapses to exactly one indexed predicate.
+    //
+    // A chunk is therefore matched under every configuration present, not only
+    // its own. In a mixed-language corpus that trades a little precision for
+    // recall, which RRF and the reranker downstream are well placed to absorb;
+    // the alternative failure (a chunk matched under no configuration at all,
+    // and so invisible to keyword search) is far worse.
+    const searchLanguages =
+      languages && languages.length > 0
+        ? languages
+        : [DEFAULT_TEXT_SEARCH_LANGUAGE];
+
+    // Bound parameters, not interpolated literals: a bound `regconfig` is still
+    // constant at execution time, so it stays index-eligible, and nothing from
+    // the column reaches the SQL text.
+    const matchPredicate = sql.join(
+      searchLanguages.map(
+        (language) =>
+          sql`c.search_vector @@ websearch_to_tsquery(${language}::regconfig, ${orQuery})`,
+      ),
+      sql` OR `,
+    );
+    // Rank under the best-matching configuration, so a chunk is not penalized
+    // for the languages it is not written in.
+    const scoreExpression = sql.join(
+      searchLanguages.map(
+        (language) =>
+          sql`ts_rank(c.search_vector, websearch_to_tsquery(${language}::regconfig, ${orQuery}))`,
+      ),
+      sql`, `,
+    );
+
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
-        ts_rank(c.search_vector, websearch_to_tsquery('english', ${orQuery})) AS score
+        GREATEST(${scoreExpression}) AS score
       FROM kb_chunks c
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
-        AND c.search_vector @@ websearch_to_tsquery('english', ${orQuery})
+        -- Mirrors the same guard in vectorSearch: retrieval is a security
+        -- surface, so never serve chunks from a soft-deleted connector even if
+        -- a stale connectorId reaches this far.
+        AND kbc.deleted_at IS NULL
+        AND (${matchPredicate})
         ${envFilter}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY score DESC
@@ -243,6 +328,107 @@ class KbChunkModel {
     `);
 
     return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  /**
+   * Fetch the chunks surrounding a set of search hits, for context expansion.
+   *
+   * Re-applies the full ACL, environment, and soft-delete filters rather than
+   * trusting that a neighbour of a visible chunk is itself visible: chunk ACLs
+   * are per-row and a permission-sync pass can legitimately leave two chunks of
+   * one document with different audiences. A neighbour the user cannot read is
+   * simply absent from the result.
+   *
+   * Media chunks (base64 data URLs) are excluded — stitching one into a prose
+   * neighbour would emit megabytes of base64 into the model's context.
+   */
+  static async findNeighbors(params: {
+    /** The hits to expand around, as (documentId, chunkIndex) pairs. */
+    anchors: Array<{ documentId: string; chunkIndex: number }>;
+    radius: number;
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    environmentId?: string | null;
+  }): Promise<
+    Array<{
+      id: string;
+      documentId: string;
+      chunkIndex: number;
+      content: string;
+    }>
+  > {
+    const {
+      anchors,
+      radius,
+      userAcl,
+      bypassAcl = false,
+      environmentId,
+    } = params;
+    if (anchors.length === 0 || radius <= 0) return [];
+    if (!bypassAcl && userAcl.length === 0) return [];
+
+    // Explicit (documentId, chunkIndex) pairs rather than per-document ranges:
+    // the pair list is bounded by anchors x 2*radius and lets Postgres use the
+    // document_id index without over-fetching a whole document.
+    const pairs: Array<{ documentId: string; chunkIndex: number }> = [];
+    const seen = new Set<string>();
+    for (const anchor of anchors) {
+      for (
+        let index = anchor.chunkIndex - radius;
+        index <= anchor.chunkIndex + radius;
+        index++
+      ) {
+        if (index < 0 || index === anchor.chunkIndex) continue;
+        const key = `${anchor.documentId}:${index}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        pairs.push({ documentId: anchor.documentId, chunkIndex: index });
+      }
+    }
+    if (pairs.length === 0) return [];
+
+    const pairList = sql.join(
+      pairs.map((p) => sql`(${p.documentId}::uuid, ${p.chunkIndex})`),
+      sql`, `,
+    );
+    const documentIds = sql.join(
+      [...new Set(pairs.map((p) => p.documentId))].map(
+        (id) => sql`${id}::uuid`,
+      ),
+      sql`, `,
+    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
+    const envFilter =
+      environmentId !== undefined
+        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
+        : sql``;
+
+    const rows = await db.execute(sql`
+      SELECT
+        c.id, c.document_id AS "documentId",
+        c.chunk_index AS "chunkIndex", c.content
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE c.document_id IN (${documentIds})
+        AND (c.document_id, c.chunk_index) IN (${pairList})
+        AND kbc.deleted_at IS NULL
+        AND c.content NOT LIKE 'data:image/%'
+        ${envFilter}
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
+    `);
+
+    return rows.rows as unknown as Array<{
+      id: string;
+      documentId: string;
+      chunkIndex: number;
+      content: string;
+    }>;
   }
 
   static async updateEmbeddings(

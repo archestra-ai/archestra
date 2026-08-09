@@ -248,6 +248,7 @@ Environment network policies require the chart's default MCP manager RBAC so Arc
 - `archestra.tolerations` - Tolerations for scheduling pods on nodes with specific taints (e.g., dedicated nodes, GPU nodes, spot instances). These values are also inherited by MCP server pods as defaults. See [Kubernetes docs](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
 - `archestra.deploymentStrategy` - Deployment strategy configuration (default: RollingUpdate with `maxUnavailable: 25%` and `maxSurge: 25%`)
 - `archestra.resources` - CPU and memory requests/limits for the container (default: 2 vCPU request, 2Gi memory request, 3Gi memory limit)
+- `archestra.webContainerReservedMemoryMib` - Memory in the web container reserved for the Next.js server instead of the backend's V8 heap (default: 384). The container runs both processes under one limit, so the backend's heap ceiling is a percentage of the limit minus this reservation. Raise it if you run an unusually heavy frontend workload.
 - `archestra.horizontalPodAutoscaler` - Optional HPA for the main `archestra-platform` Deployment. When enabled, the chart defaults to `minReplicas: 2`, `maxReplicas: 10`, a memory utilization target of 70%, immediate scale-up, and a 5-minute scale-down stabilization window.
 - `archestra.worker.replicaCount` - Manual replica count for the separate worker Deployment
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
@@ -874,12 +875,18 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Startup verifies this key against previously encrypted secrets and aborts on a mismatch (see `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`).
   - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets on startup, decrypting each with the previous key and re-encrypting with the new one (idempotent, and a no-op when the key is unchanged). You can also run it explicitly with `pnpm --filter backend db:reencrypt-secrets`. Vault-managed secrets are unaffected.
 
-- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Enables enterprise content encryption at rest: LLM interaction payloads and chat message content are encrypted in the database with a key derived from this secret, separate from the stored-secrets key.
+- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Enables enterprise content encryption at rest: LLM interaction payloads, chat message content, and MCP tool call arguments/results are encrypted in the database with a key derived from this secret, separate from the stored-secrets key.
   - Default: not set (disabled). Operator-supplied only — never auto-generated.
   - Requires an enterprise license; startup fails when set without one.
   - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
   - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
-  - See [Content Encryption at Rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) for the enable and rotation procedures.
+  - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
+- **`ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`** - Enables [incognito chats](/docs/platform-content-encryption#incognito-chats): conversations, and the audit records they produce, encrypted under a browser-held per-conversation key the server never stores. The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery. The wrapped key is stored on the conversation row; the private half stays offline with your security team, and without it the stored copy is useless.
+  - Default: not set — incognito chats are unavailable. Unsetting it later turns the feature off again.
+  - Escrow is required, not optional: an incognito chat encrypts its own audit trail, so without an escrowed key those records could be read by nobody.
+  - Startup fails when the value is not a valid RSA public key of at least 2048 bits.
+  - Set it in its own rollout, after the release is deployed, so no replica writes a record an older one cannot read.
+  - See [Incognito Chats](/docs/platform-content-encryption#incognito-chats) for setup and the recovery procedure.
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
@@ -1376,7 +1383,7 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Example: `your-bearer-token`
 
 - **`ARCHESTRA_OTEL_CAPTURE_CONTENT`** - Enable or disable prompt/completion content capture in trace spans.
-  - Default: `true` (enabled) — **unless [content encryption at rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) is configured, in which case the default flips to `false`**: exporting the same content in plaintext to a telemetry backend would bypass the at-rest guarantee. Setting `true` explicitly still enables capture (for telemetry pipelines protected to the same standard) and logs a startup warning.
+  - Default: `true` (enabled) — **unless [content encryption at rest](/docs/platform-content-encryption) is configured, in which case the default flips to `false`**: exporting the same content in plaintext to a telemetry backend would bypass the at-rest guarantee. Setting `true` explicitly still enables capture (for telemetry pipelines protected to the same standard) and logs a startup warning.
   - Set to `false` to disable content capture for privacy or to reduce span sizes
 
 - **`ARCHESTRA_OTEL_CONTENT_MAX_LENGTH`** - Maximum character length for captured content in span events (prompt messages, completions, tool arguments, tool results).
@@ -1393,6 +1400,28 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `false` (disabled)
   - When disabled, traces only contain GenAI-specific spans (LLM calls, MCP tool calls) for a clean, focused view
   - Set to `true` to include infrastructure spans for debugging request flows
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT`** - OTLP endpoint for [Real User Monitoring](/docs/platform-observability#real-user-monitoring) export. Product-usage events from the web UI go to this collector as OTLP log records. Requires an active [enterprise license](/docs/platform-pricing-model); the backend refuses to start when this is set without one.
+  - Default: unset (RUM is off)
+  - Setting the endpoint turns the feature on
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME`** - Username for RUM export basic authentication.
+  - Optional: Only used if both username and password are provided
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD`** - Password for RUM export basic authentication.
+  - Optional: Only used if both username and password are provided
+
+- **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_BEARER`** - Bearer token for RUM export authentication.
+  - Optional: Takes precedence over basic authentication if provided
+
+- **`ARCHESTRA_RUM_SAMPLE_RATE`** - Fraction of RUM sessions to record, 0 to 1. Whole sessions are kept or skipped, so funnels stay coherent. Client errors are always reported.
+  - Default: 1 (record every session)
+
+- **`ARCHESTRA_RUM_EXPORTER_MAX_QUEUE_SIZE`** / **`ARCHESTRA_RUM_EXPORTER_MAX_EXPORT_BATCH_SIZE`** / **`ARCHESTRA_RUM_EXPORTER_SCHEDULE_DELAY_MS`** - RUM OTLP batch tuning. Raise batch size and lower the delay for deployments with thousands of concurrent users. Export uses gzip.
+  - Defaults: 2048 / 512 / 5000
+
+- **`ARCHESTRA_RUM_INGEST_MAX_BATCHES_PER_MINUTE`** - How many RUM event batches one user may submit per minute. Batches over the limit are rejected and their events dropped.
+  - Default: 120
 
 - **`ARCHESTRA_METRICS_PORT`** - TCP port for the metrics server.
   - Default: `9050`
@@ -1573,6 +1602,18 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title prefix and metadata suffix.
+  - Default: `512`. Clamped to `128`–`2048`.
+  - Smaller chunks make a hit more precise but carry less surrounding context; larger chunks do the reverse. Applies at ingest only — existing chunks keep the size they were written at until their connector re-syncs, so changing this mid-corpus leaves a mix until everything has been re-indexed.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS`** - How many neighbouring chunks either side of a search hit are stitched back onto it before the result is returned.
+  - Default: `1`. Clamped to `0`–`4`; `0` disables it.
+  - Ranking is unaffected — this only widens the passage the model reads around a hit it already earned, so a hit landing mid-sentence or mid-table still arrives with its surroundings. Each step of radius adds up to two more chunks per result, so raising it increases the tokens sent to the model roughly proportionally.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED`** - Summarize each document once at ingest and index that summary alongside every one of its chunks.
+  - Default: `false`
+  - Improves recall for chunks that never name their own subject: a chunk reading "the limit was raised to 5,000" becomes findable by "billing API rate limit". Costs one LLM call per document per sync, billed against the configured reranking model; unchanged documents are skipped, so a steady-state re-sync costs nothing. Requires a reranking model that can generate text — with a dedicated Cohere Rerank model configured it is skipped.
 
 Permission sync for connectors using [auto-sync permissions](/docs/platform-knowledge#auto-sync-permissions) runs in its own worker lane, independent of content sync. Its cadence is not an environment variable: each connector's permission sync interval is set in the connector form, and a pass also runs automatically after a content sync ingests new documents or when triggered manually.
 

@@ -62,12 +62,13 @@ import config, {
 } from "@/config";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
+import { verifyIncognitoChatConfig } from "@/content-encryption/incognito-escrow";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import {
+  dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
-  dropMessagesContentTrgmIndexUnderEncryption,
 } from "@/database/index-maintenance";
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -79,11 +80,21 @@ import { enterpriseLicenseMiddleware } from "@/middleware";
 import { initAuditDecisions } from "@/middleware/audit-decisions";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
+import {
+  getBrowserApiFaviconHref,
+  isApiRequestUrl,
+  isJsonContentType,
+  renderBrowserApiDocument,
+  shouldRenderBrowserApiDocument,
+} from "@/middleware/browser-api-document";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { reportAbnormalPreviousTermination } from "@/observability/previous-termination-report";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { rumExporter } from "@/observability/rum/exporter.ee";
+import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -140,6 +151,11 @@ import {
 /** Max time to wait for cleanup operations during graceful shutdown before exiting */
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
 const ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS = 60 * 1000;
+const BROWSER_API_FAVICON_HREF = Symbol("browserApiFaviconHref");
+
+type BrowserApiRequest = FastifyRequest & {
+  [BROWSER_API_FAVICON_HREF]?: string;
+};
 
 // Enterprise routes are always loaded. Access is gated at request time by the
 // EnterpriseTierService, which auto-enables enterprise features for teams below
@@ -495,6 +511,24 @@ export const createFastifyInstance = () =>
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
+    // Resolve white-label branding before a top-level API navigation reaches
+    // onSend. Keeping onSend synchronous is required for routes (Better Auth)
+    // that write directly to the raw response.
+    .addHook("preHandler", (request, _reply, done) => {
+      if (!shouldRenderBrowserApiDocument(request)) {
+        done();
+        return;
+      }
+
+      void OrganizationModel.getAppearanceSettings().then(
+        ({ favicon }) => {
+          (request as BrowserApiRequest)[BROWSER_API_FAVICON_HREF] =
+            getBrowserApiFaviconHref(favicon);
+          done();
+        },
+        () => done(),
+      );
+    })
     // REST API responses are per-user and must never be cached by
     // intermediaries. Reverse proxies/CDNs in front of a deployment default to
     // caching responses that carry no Cache-Control header, which replays one
@@ -502,13 +536,37 @@ export const createFastifyInstance = () =>
     // that keeps showing pre-pin state until a hard refresh). Routes that
     // intentionally cache set their own header, which wins.
     .addHook("onSend", (request, reply, _payload, done) => {
-      if (
-        request.url.startsWith("/api/") &&
-        !reply.hasHeader("cache-control")
-      ) {
+      if (isApiRequestUrl(request.url) && !reply.hasHeader("cache-control")) {
         void reply.header("Cache-Control", "no-store");
       }
       done();
+    })
+    // Raw JSON documents have no <head>, so user agents can fall back to an
+    // origin-wide favicon cache. Render only top-level navigations as HTML with
+    // an explicit versioned icon; fetch/XHR/API clients keep the original JSON.
+    .addHook("onSend", (request, reply, payload, done) => {
+      const browserRequest = request as BrowserApiRequest;
+      const faviconHref = browserRequest[BROWSER_API_FAVICON_HREF];
+      delete browserRequest[BROWSER_API_FAVICON_HREF];
+      if (
+        reply.raw.headersSent ||
+        typeof payload !== "string" ||
+        !faviconHref ||
+        !isJsonContentType(reply.getHeader("content-type"))
+      ) {
+        done();
+        return;
+      }
+
+      try {
+        const document = renderBrowserApiDocument(payload, faviconHref);
+        void reply.type("text/html; charset=utf-8");
+        void reply.removeHeader("content-length");
+        done(null, document);
+      } catch {
+        // Branding must never turn a successful API response into an error.
+        done();
+      }
     })
     // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
     .setErrorHandler<ApiError | Error>(function (error, request, reply) {
@@ -1247,6 +1305,7 @@ const startWebServer = async () => {
     // Fail-closed content-key verification, before any write could encrypt
     // (or silently plaintext) interaction/message content.
     await verifyContentEncryptionKey();
+    verifyIncognitoChatConfig();
     // SPDX-SnippetEnd
 
     await seedRequiredStartingData();
@@ -1306,6 +1365,8 @@ const startWebServer = async () => {
       logger.warn({ err: error }, "Failed to track instance analytics");
     });
 
+    rumExporter.initialize();
+
     posthogErrorTrackingService.init().catch((error) => {
       logger.warn(
         { err: error },
@@ -1362,7 +1423,7 @@ const startWebServer = async () => {
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-      void dropMessagesContentTrgmIndexUnderEncryption();
+      void dropContentTrgmIndexesUnderEncryption();
       // SPDX-SnippetEnd
     }
 
@@ -1476,8 +1537,12 @@ const startWebServer = async () => {
     await registerSwaggerPlugin(fastify);
 
     // Register routes
-    fastify.get("/openapi.json", async () =>
-      enrichOpenApiWithRbac(fastify.swagger()),
+    fastify.get(
+      "/openapi.json",
+      createCachedOpenApiRouteHandler({
+        buildDocument: () => enrichOpenApiWithRbac(fastify.swagger()),
+        getCacheKey: () => JSON.stringify(archestraMcpBranding.identity),
+      }),
     );
 
     if (enableE2eTestEndpoints) {
@@ -1621,6 +1686,9 @@ function registerWebServerShutdown(
 
       instanceAnalyticsService.stop();
 
+      // Flush any buffered RUM events before the process exits.
+      await rumExporter.shutdown();
+
       metrics.activeUsers.activeUsersMetricCollector.stop();
 
       const completedCleanups = new Set<
@@ -1694,6 +1762,7 @@ const startWorker = async () => {
     // Workers write messages and interactions (scheduled runs, triggers), so
     // the content-key guard must hold here too.
     await verifyContentEncryptionKey();
+    verifyIncognitoChatConfig();
     // SPDX-SnippetEnd
     cacheManager.start();
     await enterpriseTier.start();
@@ -1727,7 +1796,7 @@ const startWorker = async () => {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    void dropMessagesContentTrgmIndexUnderEncryption();
+    void dropContentTrgmIndexesUnderEncryption();
     // SPDX-SnippetEnd
 
     posthogErrorTrackingService.init().catch((error) => {

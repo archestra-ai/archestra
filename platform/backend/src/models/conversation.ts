@@ -34,7 +34,13 @@ import ProjectModel from "./project";
 import ProjectShareModel from "./project-share";
 
 class ConversationModel {
-  static async create(data: InsertConversation): Promise<Conversation> {
+  /**
+   * `id` may be supplied by the caller when row fields must be derived from
+   * it before insert (incognito key fingerprints are bound to the id).
+   */
+  static async create(
+    data: InsertConversation & { id?: string },
+  ): Promise<Conversation> {
     const [conversation] = await db
       .insert(schema.conversationsTable)
       .values(data)
@@ -239,6 +245,13 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
+        // Incognito rows are encrypted under a browser-held key the server
+        // does not have: skip them entirely so the list carries no message
+        // content (not even ciphertext) and the server-key decrypt is never
+        // attempted (it would throw on the foreign envelope).
+        if (row.conversation.incognito) {
+          continue;
+        }
         if (row?.message) {
           decryptMessageRow(row.message);
         }
@@ -413,6 +426,12 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
+      // Incognito rows are ciphertext under a browser-held key: the route
+      // layer decrypts them (or returns the locked shape) — never attempt the
+      // server-key decrypt here.
+      if (firstRow.conversation.incognito) {
+        break;
+      }
       if (row.message) {
         decryptMessageRow(row.message);
       }
@@ -431,6 +450,81 @@ class ConversationModel {
       messages,
       chatErrors,
       compactions,
+    };
+  }
+
+  /**
+   * Incognito key bookkeeping for a conversation the caller has already
+   * authorized: the flag plus the stored key fingerprint (the fingerprint is
+   * deliberately absent from API response shapes).
+   *
+   * `hasEscrow` gates whether this conversation's audit trail may be encrypted
+   * rather than redacted. It is exact: the wrapped key lives on the row.
+   */
+  static async getIncognitoKeyInfo(id: string): Promise<{
+    id: string;
+    incognito: boolean;
+    incognitoDekFingerprint: string | null;
+    hasEscrow: boolean;
+  } | null> {
+    const [row] = await db
+      .select({
+        id: schema.conversationsTable.id,
+        incognito: schema.conversationsTable.incognito,
+        incognitoDekFingerprint:
+          schema.conversationsTable.incognitoDekFingerprint,
+        incognitoEscrow: schema.conversationsTable.incognitoEscrow,
+      })
+      .from(schema.conversationsTable)
+      .where(and(notDeletedConversation, eq(schema.conversationsTable.id, id)));
+    if (!row) return null;
+    return {
+      id: row.id,
+      incognito: row.incognito,
+      incognitoDekFingerprint: row.incognitoDekFingerprint,
+      hasEscrow: row.incognitoEscrow !== null,
+    };
+  }
+
+  /**
+   * Incognito bookkeeping for a conversation, scoped to its owner. Used by the
+   * LLM proxy to decide how a chat-loopback session's audit content must be
+   * stored; the owner check keeps a spoofed session id from suppressing (or
+   * re-keying) someone else's audit trail.
+   *
+   * Returns null when `id` is not a non-deleted conversation owned by
+   * `userId`. `hasEscrow` is exact: the wrapped key lives on the row, so its
+   * presence is read directly rather than inferred.
+   */
+  static async getIncognitoAuditInfoOwnedBy(params: {
+    id: string;
+    userId: string;
+  }): Promise<{
+    incognito: boolean;
+    incognitoDekFingerprint: string | null;
+    hasEscrow: boolean;
+  } | null> {
+    const [row] = await db
+      .select({
+        incognito: schema.conversationsTable.incognito,
+        incognitoDekFingerprint:
+          schema.conversationsTable.incognitoDekFingerprint,
+        incognitoEscrow: schema.conversationsTable.incognitoEscrow,
+      })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+        ),
+      )
+      .limit(1);
+    if (!row) return null;
+    return {
+      incognito: row.incognito,
+      incognitoDekFingerprint: row.incognitoDekFingerprint,
+      hasEscrow: row.incognitoEscrow !== null,
     };
   }
 
@@ -632,6 +726,12 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
+      // Incognito rows are ciphertext under a browser-held key: the route
+      // layer decrypts them (or returns the locked shape) — never attempt the
+      // server-key decrypt here.
+      if (firstRow.conversation.incognito) {
+        break;
+      }
       if (row.message) {
         decryptMessageRow(row.message);
       }
@@ -1097,6 +1197,30 @@ function isConversationUnread(conversation: {
 }): boolean {
   const lastRead = conversation.lastReadAt ?? conversation.createdAt;
   return conversation.lastMessageAt.getTime() > lastRead.getTime();
+}
+
+/**
+ * Assemble the API-facing message list from already-decrypted message rows.
+ * Used by the incognito GET path, which loads and decrypts rows itself (the
+ * model cannot: the key only exists on the request). Applies the same
+ * filtering/metadata rules as the standard conversation reads above.
+ */
+export function toConversationApiMessages(
+  rows: Array<{
+    id: string;
+    role: string;
+    content: unknown;
+    feedback: MessageFeedback | null;
+    createdAt: Date;
+  }>,
+): unknown[] {
+  const messages: unknown[] = [];
+  for (const row of rows) {
+    if (row.content && shouldReturnPersistedMessageRow(row)) {
+      messages.push(addMessagePersistenceMetadata(row));
+    }
+  }
+  return messages;
 }
 
 function shouldReturnPersistedMessageRow(message: {

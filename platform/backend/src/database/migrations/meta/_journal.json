@@ -2805,8 +2805,57 @@
     {
       "idx": 400,
       "version": "7",
-      "when": 1786117544187,
-      "tag": "0400_recommended_for_agents",
+      "when": 1785979524658,
+      "tag": "0400_brave_mystique",
+      "breakpoints": true
+    },
+    {
+      "idx": 401,
+      "version": "7",
+      "when": 1786015823588,
+      "tag": "0401_project_default_agent",
+      "breakpoints": true
+    },
+    {
+      "idx": 402,
+      "version": "7",
+      "when": 1786089936635,
+      "tag": "0402_resweep-stale-context-variant-proxy-models",
+      "breakpoints": true
+    },
+    {
+      "idx": 403,
+      "version": "7",
+      "when": 1786099394141,
+      "tag": "0403_resweep-context-variant-pricing-by-price",
+      "breakpoints": true
+    },
+    {
+      "idx": 404,
+      "version": "7",
+      "when": 1786111254203,
+      "tag": "0404_lumpy_echo",
+      "breakpoints": true
+    },
+    {
+      "idx": 405,
+      "version": "7",
+      "when": 1786122777580,
+      "tag": "0405_incognito_chats",
+      "breakpoints": true
+    },
+    {
+      "idx": 406,
+      "version": "7",
+      "when": 1786212322560,
+      "tag": "0406_model_supported_endpoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 407,
+      "version": "7",
+      "when": 1786308431577,
+      "tag": "0407_recommended_for_agents",
       "breakpoints": true
     }
   ]

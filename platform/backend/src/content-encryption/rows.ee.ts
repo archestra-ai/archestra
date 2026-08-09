@@ -34,6 +34,27 @@ export function encryptInteractionInsert<T extends object>(values: T): T {
   return values;
 }
 
+export function decryptMcpToolCallRow<T extends object>(row: T): T {
+  const target = row as Record<string, unknown>;
+  for (const [key, context] of MCP_TOOL_CALL_COLUMN_CONTEXTS) {
+    if (key in target) {
+      target[key] = decryptContentValue(target[key], context);
+    }
+  }
+  return row;
+}
+
+/** Encrypt the content-bearing fields of a tool-call insert, in place. */
+export function encryptMcpToolCallInsert<T extends object>(values: T): T {
+  const target = values as Record<string, unknown>;
+  for (const [key, context] of MCP_TOOL_CALL_COLUMN_CONTEXTS) {
+    if (key in target && target[key] !== null && target[key] !== undefined) {
+      target[key] = encryptContentValue(target[key], context);
+    }
+  }
+  return values;
+}
+
 export function decryptMessageRow<T extends object>(row: T): T {
   const target = row as Record<string, unknown>;
   if ("content" in target) {
@@ -47,6 +68,18 @@ export function encryptMessageContent<T>(content: T): unknown {
 }
 
 // === Internal ===
+
+/**
+ * camelCase (drizzle) and snake_case (raw SQL) spellings of each encrypted
+ * tool-call column, mapped to its AAD context.
+ */
+const MCP_TOOL_CALL_COLUMN_CONTEXTS: Array<[string, ContentEncryptionContext]> =
+  [
+    ["toolCall", "mcp_tool_calls.tool_call"],
+    ["tool_call", "mcp_tool_calls.tool_call"],
+    ["toolResult", "mcp_tool_calls.tool_result"],
+    ["tool_result", "mcp_tool_calls.tool_result"],
+  ];
 
 /**
  * camelCase (drizzle) and snake_case (raw SQL) spellings of each encrypted

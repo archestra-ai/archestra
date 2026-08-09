@@ -242,13 +242,13 @@ test.describe("MCP environment validation rule", () => {
     const installDialog = page
       .getByRole("dialog")
       .filter({ hasText: /Install Server/ });
-    const stepInstallButton = page.getByRole("button", {
-      name: "Install",
+    const stepConnectButton = page.getByRole("button", {
+      name: "Connect",
       exact: true,
     });
-    await expect(stepInstallButton).toBeVisible();
+    await expect(stepConnectButton).toBeVisible();
     await expect(async () => {
-      await stepInstallButton.click();
+      await stepConnectButton.click();
       await expect(installDialog).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 30_000 });
 

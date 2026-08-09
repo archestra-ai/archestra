@@ -23,6 +23,24 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: "2Gi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_REQUEST_MIB
+            valueFrom:
+              resourceFieldRef:
+                containerName: archestra-platform-worker
+                resource: requests.memory
+                divisor: 1Mi
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_LIMIT_MIB
+            valueFrom:
+              resourceFieldRef:
+                containerName: archestra-platform-worker
+                resource: limits.memory
+                divisor: 1Mi
 
   - it: worker deployment uses percentage-based rolling update defaults
     asserts:
@@ -162,6 +180,17 @@ tests:
           content:
             name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
             value: "1"
+
+  # The worker runs a single Node process, so it owns its whole memory limit and
+  # must keep the unreserved old-space ceiling. Reserving here would shrink its
+  # heap to pay for a frontend it does not run.
+  - it: worker does not reserve memory for a co-located frontend
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: ARCHESTRA_NODE_MEMORY_RESERVED_MIB
 
   - it: worker supports overriding the wait-for-postgres image
     set:

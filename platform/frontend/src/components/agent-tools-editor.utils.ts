@@ -1,8 +1,176 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  type archestraApiTypes,
   getCreationDefaultArchestraToolShortNames,
+  isPlaywrightCatalogItem,
   parseFullToolName,
 } from "@archestra/shared";
+import { DYNAMIC_CREDENTIAL_VALUE } from "./token-select";
+
+type BulkToolUpdateBody = NonNullable<
+  archestraApiTypes.BulkUpdateAgentToolsData["body"]
+>;
+// Both default to `[]` server-side, so the generated body types them optional.
+// This builder always returns an array — an empty one means "nothing to send".
+type BulkToolAssignments = NonNullable<BulkToolUpdateBody["assignments"]>;
+type BulkToolRemovals = NonNullable<BulkToolUpdateBody["removals"]>;
+
+/** The parts of one catalog's pending edits a bulk save reads. */
+type PendingCatalogChangesInput = {
+  selectedToolIds: Set<string>;
+  credentialSourceId: string | null;
+  catalogItem: {
+    id: string;
+    serverType?: string | null;
+    enterpriseManagedConfig?: unknown;
+  };
+};
+
+/** The parts of an already-saved assignment a bulk save reads. */
+type AssignedToolInput = {
+  tool: { id: string };
+  mcpServerId: string | null;
+  credentialResolutionMode: "static" | "dynamic" | "enterprise_managed";
+};
+
+/**
+ * Fold every catalog's pending edits into ONE assignments/removals pair.
+ *
+ * Sending them per tool (the shape this replaced) forked an agent config version
+ * per request, so adding a 30-tool server burned 30 of the 100 retained versions
+ * and an add-then-remove cycle evicted the edits a human made.
+ */
+export function buildBulkToolUpdate(params: {
+  targetAgentId: string;
+  pendingChanges: Iterable<readonly [string, PendingCatalogChangesInput]>;
+  assignedToolsByCatalog: Map<string, AssignedToolInput[]>;
+  /**
+   * True while creating: `AgentModel.create` already assigned the creation
+   * defaults, but the assigned-tools query still reflects the pre-create state.
+   */
+  isNewAgent: boolean;
+  creationDefaultToolIds?: Iterable<string>;
+}): {
+  assignments: BulkToolAssignments;
+  removals: BulkToolRemovals;
+  hasChanges: boolean;
+} {
+  const { targetAgentId, assignedToolsByCatalog, isNewAgent } = params;
+  const assignments: BulkToolAssignments = [];
+  const removals: BulkToolRemovals = [];
+  let hasChanges = false;
+
+  for (const [catalogId, changes] of params.pendingChanges) {
+    const currentAssigned = assignedToolsByCatalog.get(catalogId) ?? [];
+    const currentAssignedIds = new Set(currentAssigned.map((at) => at.tool.id));
+    // Diff the built-in catalog against the defaults the backend just assigned,
+    // so unchecking a pre-selected default produces a real unassign and a
+    // default left checked is not redundantly re-assigned.
+    if (isNewAgent && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+      for (const id of params.creationDefaultToolIds ?? []) {
+        currentAssignedIds.add(id);
+      }
+    }
+
+    const toAdd = [...changes.selectedToolIds].filter(
+      (id) => !currentAssignedIds.has(id),
+    );
+    const toRemove = [...currentAssignedIds].filter(
+      (id) => !changes.selectedToolIds.has(id),
+    );
+
+    if (toAdd.length > 0 || toRemove.length > 0) {
+      hasChanges = true;
+    }
+
+    const prefersEnterpriseManaged =
+      changes.catalogItem.enterpriseManagedConfig != null;
+
+    // Apps resolve their launch tool in-process per viewer, so they bind
+    // dynamically like Playwright — there is no credential to pick.
+    const useDynamicCredential =
+      isPlaywrightCatalogItem(changes.catalogItem.id) ||
+      changes.catalogItem.serverType === "app" ||
+      changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
+    const useEnterpriseManagedCredential =
+      prefersEnterpriseManaged && useDynamicCredential;
+
+    const credentialResolutionMode = useEnterpriseManagedCredential
+      ? "enterprise_managed"
+      : useDynamicCredential
+        ? "dynamic"
+        : "static";
+    // A late-bound mode resolves the server per call, so any previously pinned
+    // server is cleared rather than carried over.
+    const mcpServerId =
+      !useDynamicCredential && !useEnterpriseManagedCredential
+        ? (changes.credentialSourceId ?? null)
+        : null;
+
+    for (const toolId of toRemove) {
+      removals.push({ agentId: targetAgentId, toolId });
+    }
+    for (const toolId of toAdd) {
+      assignments.push({
+        agentId: targetAgentId,
+        toolId,
+        mcpServerId,
+        resolveAtCallTime: useDynamicCredential,
+        credentialResolutionMode,
+      });
+    }
+
+    // Tools that stay assigned but whose credential changed. Re-assigning is
+    // the correct upsert — the bulk write reports these as `updated`.
+    const toKeep = currentAssigned.filter((at) =>
+      changes.selectedToolIds.has(at.tool.id),
+    );
+    for (const agentTool of toKeep) {
+      const currentCred =
+        agentTool.credentialResolutionMode === "dynamic"
+          ? DYNAMIC_CREDENTIAL_VALUE
+          : agentTool.credentialResolutionMode === "enterprise_managed"
+            ? DYNAMIC_CREDENTIAL_VALUE
+            : (agentTool.mcpServerId ?? null);
+      if (currentCred !== changes.credentialSourceId) {
+        hasChanges = true;
+        assignments.push({
+          agentId: targetAgentId,
+          toolId: agentTool.tool.id,
+          mcpServerId,
+          resolveAtCallTime: useDynamicCredential,
+          credentialResolutionMode,
+        });
+      }
+    }
+  }
+
+  return { assignments, removals, hasChanges };
+}
+
+/**
+ * The one error the bulk-update response carries, or undefined when the save
+ * succeeded.
+ *
+ * ONLY `failed` is an error. `notAssigned` means the row was already gone (a
+ * concurrent edit, or a stale view) and `duplicates` that it already matched —
+ * both are benign, and on the create path agent-dialog reacts to a throw by
+ * DELETING the agent it just created.
+ *
+ * The batch spans every catalog, so one save can fail several tools for
+ * unrelated reasons. Report the first and count the rest — dropping them
+ * silently would have the user fix one problem, re-save, and meet the next.
+ */
+export function summarizeBulkFailure(
+  failed: { error: string }[] | undefined,
+): string | undefined {
+  const failures = failed ?? [];
+  const first = failures[0];
+  if (!first) return undefined;
+  return failures.length > 1
+    ? `${first.error} (and ${failures.length - 1} more)`
+    : first.error;
+}
 
 /**
  * The IDs of the creation-default Archestra tools within a single catalog's

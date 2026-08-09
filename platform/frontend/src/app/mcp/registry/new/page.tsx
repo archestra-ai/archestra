@@ -33,6 +33,9 @@ import {
 
 type SourceSubStep = "source" | "configure";
 
+// Which source panel is open while on the "source" step.
+type SourceView = "cards" | "catalog";
+
 export default function NewMcpCatalogItemPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -65,7 +68,7 @@ export default function NewMcpCatalogItemPage() {
   const [step, setStep] = useState<SourceSubStep>(
     cloneSourceId ? "configure" : "source",
   );
-  const [browsingCatalog, setBrowsingCatalog] = useState(false);
+  const [sourceView, setSourceView] = useState<SourceView>("cards");
   const [prefilledValues, setPrefilledValues] = useState<
     McpCatalogFormValues | undefined
   >(undefined);
@@ -108,9 +111,9 @@ export default function NewMcpCatalogItemPage() {
     });
   };
 
-  const handleSelectFromCatalog = (formValues: McpCatalogFormValues) => {
+  const handlePrefilledValues = (formValues: McpCatalogFormValues) => {
     setPrefilledValues(formValues);
-    setBrowsingCatalog(false);
+    setSourceView("cards");
     setStep("configure");
   };
 
@@ -146,7 +149,7 @@ export default function NewMcpCatalogItemPage() {
 
       <SetupStepper activeStep="configuration" />
 
-      {catalogEnabled && step === "source" && !browsingCatalog && (
+      {catalogEnabled && step === "source" && sourceView === "cards" && (
         <div className="grid gap-4 sm:grid-cols-2">
           <button
             type="button"
@@ -172,7 +175,7 @@ export default function NewMcpCatalogItemPage() {
           <button
             type="button"
             className="text-left"
-            onClick={() => setBrowsingCatalog(true)}
+            onClick={() => setSourceView("catalog")}
           >
             <Card className="h-full transition-colors hover:border-primary/50 hover:bg-muted/40">
               <CardHeader>
@@ -190,67 +193,76 @@ export default function NewMcpCatalogItemPage() {
         </div>
       )}
 
-      {catalogEnabled && step === "source" && browsingCatalog && (
+      {catalogEnabled && step === "source" && sourceView === "catalog" && (
         <div className="space-y-3">
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setBrowsingCatalog(false)}
+            onClick={() => setSourceView("cards")}
           >
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
           <ArchestraCatalogTab
             catalogItems={catalogItems}
-            onSelectServer={handleSelectFromCatalog}
+            onSelectServer={handlePrefilledValues}
           />
         </div>
       )}
 
       {(!catalogEnabled || step === "configure") && (
-        <div className="flex flex-col rounded-lg border">
-          <McpCatalogForm
-            mode="create"
-            onSubmit={onSubmit}
-            formValues={prefilledValues ?? cloneValues}
-            notice={
-              cloneSource ? (
-                <Alert>
-                  <Copy className="h-4 w-4" />
-                  <AlertDescription>
-                    Cloning "{cloneSource.name}" — its configuration (including
-                    secrets) is pre-filled here. Adjust anything you like, then
-                    save to create a new registry entry.
-                  </AlertDescription>
-                </Alert>
-              ) : undefined
-            }
-            footer={({ hasBlockingErrors }) => (
-              <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 rounded-b-lg border-t bg-background px-6 py-4">
-                {cloneSourceId || !catalogEnabled ? (
-                  <Button variant="outline" type="button" asChild>
-                    <Link href="/mcp/registry">Cancel</Link>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    type="button"
-                    onClick={() => setStep("source")}
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                  </Button>
-                )}
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || hasBlockingErrors}
-                >
-                  {createMutation.isPending ? "Adding..." : "Add Server"}
-                </Button>
-              </div>
-            )}
-          />
+        <div className="space-y-3">
+          {catalogEnabled && !cloneSourceId && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setStep("source")}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
+          )}
+          <div className="flex flex-col rounded-lg border">
+            <McpCatalogForm
+              mode="create"
+              onSubmit={onSubmit}
+              formValues={prefilledValues ?? cloneValues}
+              catalogAutofillEnabled={catalogEnabled}
+              notice={
+                cloneSource ? (
+                  <Alert>
+                    <Copy className="h-4 w-4" />
+                    <AlertDescription>
+                      Cloning "{cloneSource.name}" — its configuration
+                      (including secrets) is pre-filled here. Adjust anything
+                      you like, then save to create a new registry entry.
+                    </AlertDescription>
+                  </Alert>
+                ) : undefined
+              }
+              footer={({ hasBlockingErrors, duplicateNotice }) => (
+                // The duplicate warning docks INSIDE the sticky container:
+                // the commit point is the one region guaranteed on screen
+                // the moment a match is detected, at any scroll position.
+                <div className="sticky bottom-0 z-10 rounded-b-lg border-t bg-background">
+                  {duplicateNotice}
+                  <div className="flex items-center justify-between gap-2 px-6 py-4">
+                    <Button variant="outline" type="button" asChild>
+                      <Link href="/mcp/registry">Cancel</Link>
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={createMutation.isPending || hasBlockingErrors}
+                    >
+                      {createMutation.isPending ? "Adding..." : "Add Server"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            />
+          </div>
         </div>
       )}
     </div>

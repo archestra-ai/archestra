@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.3.30](https://github.com/archestra-ai/archestra/compare/platform-v1.3.29...platform-v1.3.30) (2026-08-09)
+
+
+### Features
+
+* **advisor:** instruct advisor-enabled agents to consult before final answers ([#7170](https://github.com/archestra-ai/archestra/issues/7170)) ([f86c813](https://github.com/archestra-ai/archestra/commit/f86c8131d6026f0071cf1e8fb8a0534e0e01858e))
+* **chat:** incognito chats — browser-held encryption for the conversation and its audit trail ([#7119](https://github.com/archestra-ai/archestra/issues/7119)) ([fc88f7c](https://github.com/archestra-ai/archestra/commit/fc88f7c0c415b67a344a0017581eb329ce787ae6))
+* **frontend:** one Import & export JSON surface for MCP server configs in the registry form ([#7133](https://github.com/archestra-ai/archestra/issues/7133)) ([c7d55db](https://github.com/archestra-ai/archestra/commit/c7d55db188737a9a5ba259e4123349b25f843c5f))
+* **frontend:** warn in the sidebar when the cluster does not enforce network policy ([#7148](https://github.com/archestra-ai/archestra/issues/7148)) ([fcce6b6](https://github.com/archestra-ai/archestra/commit/fcce6b6447f094fe3741732cbb14df38566e604e))
+* **github-copilot:** serve the Responses API surface, unlocking Codex and GPT-5.x models ([#7185](https://github.com/archestra-ai/archestra/issues/7185)) ([93e8f1b](https://github.com/archestra-ai/archestra/commit/93e8f1b0fe33809a61184fa39d35f52496992cab))
+* **knowledge:** contextual retrieval, context expansion, and per-connector keyword search language ([#7164](https://github.com/archestra-ai/archestra/issues/7164)) ([21dc390](https://github.com/archestra-ai/archestra/commit/21dc390d943175e112002658b230e69acb4fc81e))
+* **knowledge:** trash with restore and permanent delete for knowledge bases and connectors ([#7069](https://github.com/archestra-ai/archestra/issues/7069)) ([d952243](https://github.com/archestra-ai/archestra/commit/d9522438b5421b4d1de0de8623747828bf8ffb51))
+* **projects:** expose project context to MCP clients ([#7169](https://github.com/archestra-ai/archestra/issues/7169)) ([b08ff81](https://github.com/archestra-ai/archestra/commit/b08ff817aa83bedde73ae1431ee2513ba5a07f9c))
+
+
+### Bug Fixes
+
+* **agents:** batch a tool save into one request instead of one per tool ([#7139](https://github.com/archestra-ai/archestra/issues/7139)) ([f51bda6](https://github.com/archestra-ai/archestra/commit/f51bda64e78bfa205c4ab1879bdd81cf53d6956d))
+* **backend:** prevent OpenAPI saturation from OOM-killing web pods ([#7151](https://github.com/archestra-ai/archestra/issues/7151)) ([54b5112](https://github.com/archestra-ai/archestra/commit/54b5112da4473acaa73d00c96762f5bf6cf24f7b))
+* **deps:** bump nanoid to 5.1.16 for CVE-2026-67214 ([#7180](https://github.com/archestra-ai/archestra/issues/7180)) ([b822dc5](https://github.com/archestra-ai/archestra/commit/b822dc5adbe5579c4692ed4a4b37af58680fdafe))
+* **deps:** pin nanoid to 3.3.17 for CVE-2026-67213 ([#7178](https://github.com/archestra-ai/archestra/issues/7178)) ([8d1e33b](https://github.com/archestra-ai/archestra/commit/8d1e33ba8c41cdf80ac2aa6ce4d87fd4732feaab))
+* **docker:** bump go-git to 5.19.2 for cve-2026-71556 ([#7176](https://github.com/archestra-ai/archestra/issues/7176)) ([2772d60](https://github.com/archestra-ai/archestra/commit/2772d602f2599436407534f3f92a233f843d0279))
+* **docs:** document the Skill Sandbox and agent-hook built-in tools ([#7167](https://github.com/archestra-ai/archestra/issues/7167)) ([b7d794c](https://github.com/archestra-ai/archestra/commit/b7d794c82e8c10548741145e932b450b077bd09b))
+* **frontend:** correct connect summary plural spacing ([#7146](https://github.com/archestra-ai/archestra/issues/7146)) ([b19fef1](https://github.com/archestra-ai/archestra/commit/b19fef139ac936b1c509d3138bd4b69c62afeaf6))
+* **frontend:** don't show the browser setup card while the install check is in flight ([#7150](https://github.com/archestra-ai/archestra/issues/7150)) ([9b1cf75](https://github.com/archestra-ai/archestra/commit/9b1cf7530f13cfcd18d7e6e459e49af7068197d3))
+* **frontend:** make the agent picker scrollable inside a dialog ([#7129](https://github.com/archestra-ai/archestra/issues/7129)) ([c8c5d4d](https://github.com/archestra-ai/archestra/commit/c8c5d4d942d9a5b071a6434f192643205d11eb25))
+* **helm:** stop the enforcement probe reporting a verdict it never measured ([#7143](https://github.com/archestra-ai/archestra/issues/7143)) ([9f8b94c](https://github.com/archestra-ai/archestra/commit/9f8b94c98052d59551386fc00801be0db13ecea4))
+* **helm:** stop the web container's heap ceiling from overcommitting its limit ([#7183](https://github.com/archestra-ai/archestra/issues/7183)) ([a9b0a43](https://github.com/archestra-ai/archestra/commit/a9b0a436c7e33eb5320c01a97b71d08b7316acd6))
+* **helm:** use one warning sign across both probe outcomes ([#7171](https://github.com/archestra-ai/archestra/issues/7171)) ([991472a](https://github.com/archestra-ai/archestra/commit/991472ad7f31dcc0bfa6bc891f8d46c1f989daaa))
+* **interactions:** bound the delta reconstruct cache by bytes, not entry count ([#7175](https://github.com/archestra-ai/archestra/issues/7175)) ([a981efc](https://github.com/archestra-ai/archestra/commit/a981efc82a27cf47ed299fcb4814aad2e7c1d07a))
+* keep white-label favicon across page loads ([#7153](https://github.com/archestra-ai/archestra/issues/7153)) ([8536a5a](https://github.com/archestra-ai/archestra/commit/8536a5a99d2fe0d893e63cc2eac0529f9269bc61))
+* **llm-cost:** match context-variant rows to a priced model, not a flag ([#7149](https://github.com/archestra-ai/archestra/issues/7149)) ([7f905ed](https://github.com/archestra-ai/archestra/commit/7f905edebf6d72f8abf9e2a9601e4b04843a0b14))
+* **llm-cost:** re-sweep stale Claude context-variant proxy rows ([#7145](https://github.com/archestra-ai/archestra/issues/7145)) ([2eece32](https://github.com/archestra-ai/archestra/commit/2eece32dc7764c538df32fe97748fdfdffc7934c))
+* **llm-cost:** reclassify a proxy-discovered model once its provider lists it ([#7147](https://github.com/archestra-ai/archestra/issues/7147)) ([acd5453](https://github.com/archestra-ai/archestra/commit/acd5453b296c5dc4e8d3ee4f884556c185c012e9))
+* **netpol:** point the unenforced warning at what it exposes ([#7165](https://github.com/archestra-ai/archestra/issues/7165)) ([92f1414](https://github.com/archestra-ai/archestra/commit/92f141403c37ef18af7557224d47c71de910766e))
+
+
+### Miscellaneous Chores
+
+* **backend:** clear the backend biome warnings ([#7186](https://github.com/archestra-ai/archestra/issues/7186)) ([d4c3259](https://github.com/archestra-ai/archestra/commit/d4c3259efec4022a0620fdc3b318ae33364448f1))
+
 ## [1.3.29](https://github.com/archestra-ai/archestra/compare/platform-v1.3.28...platform-v1.3.29) (2026-08-07)
 
 

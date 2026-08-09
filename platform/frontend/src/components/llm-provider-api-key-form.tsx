@@ -610,7 +610,8 @@ export function LlmProviderApiKeyForm({
   // metadata) counts as connected too; otherwise a fresh sign-in must have set
   // it.
   const perUserCredentialConnected = isCredentialSubscriptionMode
-    ? (isEditMode && existingKey?.subscriptionKind === activeSubscriptionKind) ||
+    ? (isEditMode &&
+        existingKey?.subscriptionKind === activeSubscriptionKind) ||
       (!!apiKey && apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER)
     : hasCopilotCredential;
 

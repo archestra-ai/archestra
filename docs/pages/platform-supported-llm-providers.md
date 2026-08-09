@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-07
+lastUpdated: 2026-08-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -429,7 +429,7 @@ A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama'
 
 ### Agent Suitability
 
-Ollama reports each model's parameter count. Archestra marks any model of 8B or fewer parameters as **not recommended for agents**. An 8B build stays unmarked.
+Ollama reports each model's parameter count. Archestra marks any model of 8B or fewer parameters as **Limited for complex tasks**. An 8B build stays unmarked.
 
 The marker shows on the model in the picker. It also shows next to the composer when the agent in that chat brings tools. A 4B model, for example, often calls those tools unreliably over a multi-step task — switch to a larger model for tool-heavy work.
 

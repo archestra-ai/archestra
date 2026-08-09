@@ -325,7 +325,7 @@ describe("ModelSelector coverage matrix", () => {
     renderSelector({ selectedModel: "o1", variant: "default" });
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
-    expect(screen.getByText("not recommended for agents")).toBeInTheDocument();
+    expect(screen.getByText("Limited for complex tasks")).toBeInTheDocument();
   });
 
   // `true` is the column default, so it says nothing and must stay silent —
@@ -345,7 +345,7 @@ describe("ModelSelector coverage matrix", () => {
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
     expect(
-      screen.queryByText("not recommended for agents"),
+      screen.queryByText("Limited for complex tasks"),
     ).not.toBeInTheDocument();
   });
 
@@ -361,7 +361,7 @@ describe("ModelSelector coverage matrix", () => {
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
     expect(
-      screen.queryByText("not recommended for agents"),
+      screen.queryByText("Limited for complex tasks"),
     ).not.toBeInTheDocument();
   });
 
@@ -378,7 +378,7 @@ describe("ModelSelector coverage matrix", () => {
     fireEvent.click(screen.getByTestId("dialog-toggle"));
     expect(screen.getByText("capabilities unknown")).toBeInTheDocument();
     expect(
-      screen.queryByText("not recommended for agents"),
+      screen.queryByText("Limited for complex tasks"),
     ).not.toBeInTheDocument();
   });
 });

@@ -20,13 +20,12 @@ export function NotRecommendedForAgentsNoticeBadge() {
       <TooltipTrigger asChild>
         <ComposerBadge className="cursor-default">
           <InfoIcon className="size-3" />
-          not recommended for agents
+          Limited for complex tasks
         </ComposerBadge>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={4} className="max-w-60">
-        This model isn&apos;t recommended for agent work, so this agent&apos;s
-        tools may be called unreliably over a multi-step task. Switch to a
-        larger model for tool-heavy work.
+        This model works best for simple questions and chat. For complex work,
+        switch to a more capable model.
       </TooltipContent>
     </Tooltip>
   );

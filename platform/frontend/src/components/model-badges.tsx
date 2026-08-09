@@ -94,7 +94,7 @@ export function NoToolsBadge() {
 export function NotRecommendedForAgentsBadge() {
   return (
     <InlineTag className="text-muted-foreground bg-muted">
-      not recommended for agents
+      Limited for complex tasks
     </InlineTag>
   );
 }

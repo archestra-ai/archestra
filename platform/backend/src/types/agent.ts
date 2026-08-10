@@ -320,6 +320,11 @@ export const InsertAgentSchemaBase = createInsertSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
+    // Which skills a gateway publishes over skill:// is decided by the
+    // skill-assignment routes, which carry a `skill:read` floor. Accepting the
+    // flag in the generic agent body would let a caller without that
+    // permission flip a gateway to publish-all.
+    accessAllSkills: true,
     // Server-managed head pointer into agent_versions — forked by
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).
@@ -355,6 +360,11 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
+    // Which skills a gateway publishes over skill:// is decided by the
+    // skill-assignment routes, which carry a `skill:read` floor. Accepting the
+    // flag in the generic agent body would let a caller without that
+    // permission flip a gateway to publish-all.
+    accessAllSkills: true,
     // Server-managed head pointer into agent_versions — forked by
     // AgentVersionModel, never client-settable (a supplied value would corrupt
     // the version counter and can collide on the (agent_id, version) index).

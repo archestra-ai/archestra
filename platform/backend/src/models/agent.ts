@@ -411,7 +411,14 @@ class AgentModel {
       connectorIds,
       suggestedPrompts,
       ...agent
-    }: InsertAgent & { isPersonalGateway?: boolean; slug?: string },
+    }: InsertAgent & {
+      isPersonalGateway?: boolean;
+      // Server-owned like isPersonalGateway: omitted from the request schemas
+      // (the skill-assignment routes are the only client-facing write path)
+      // but a real column create() honours for internal callers and fixtures.
+      accessAllSkills?: boolean;
+      slug?: string;
+    },
     authorId?: string,
     options?: {
       /**

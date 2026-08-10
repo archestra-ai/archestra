@@ -259,11 +259,12 @@ async function makeTeamMember(
  * Auto-creates an organization if not provided.
  */
 async function makeAgent(
-  // `isPersonalGateway` mirrors AgentModel.create's own signature: it is a real
-  // column create() honours, but not part of InsertAgent.
+  // `isPersonalGateway` and `accessAllSkills` mirror AgentModel.create's own
+  // signature: real columns create() honours, but not part of InsertAgent.
   overrides: Partial<InsertAgent> & {
     authorId?: string;
     isPersonalGateway?: boolean;
+    accessAllSkills?: boolean;
   } = {},
 ): Promise<Agent> {
   // Auto-create organization if not provided

@@ -41517,9 +41517,6 @@
                   "accessAllTools": {
                     "type": "boolean"
                   },
-                  "accessAllSkills": {
-                    "type": "boolean"
-                  },
                   "accessAllSubagents": {
                     "type": "boolean"
                   },
@@ -47497,9 +47494,6 @@
                     ]
                   },
                   "accessAllTools": {
-                    "type": "boolean"
-                  },
-                  "accessAllSkills": {
                     "type": "boolean"
                   },
                   "accessAllSubagents": {

@@ -12267,7 +12267,6 @@ export type CreateAgentData = {
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         accessAllTools?: boolean;
-        accessAllSkills?: boolean;
         accessAllSubagents?: boolean;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';
@@ -13688,7 +13687,6 @@ export type UpdateAgentData = {
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
         accessAllTools?: boolean;
-        accessAllSkills?: boolean;
         accessAllSubagents?: boolean;
         builtInAgentConfig?: {
             name: 'policy-configuration-subagent';

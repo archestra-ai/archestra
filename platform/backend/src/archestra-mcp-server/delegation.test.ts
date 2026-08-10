@@ -787,8 +787,12 @@ describe("Auto-mode subagent delegation", () => {
       },
     );
     expect(result.isError).toBe(false);
+    // The caller's environment rides along so the consultation bills to it.
     expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: advisor.id }),
+      expect.objectContaining({
+        agentId: advisor.id,
+        callerEnvironmentId: env.id,
+      }),
     );
   });
 

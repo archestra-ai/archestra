@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-07
+lastUpdated: 2026-08-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -113,6 +113,18 @@ Pick the API key and embedding model. The embedding model vectorizes ingested do
 - **Model** — any embedding-capable model exposed by the selected key.
 
 To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions cannot be edited until the configuration is dropped.
+
+### Image Embedding
+
+Connectors index image files only when the configured embedding model accepts image input. These models do:
+
+| Provider    | Model                                                                 |
+| ----------- | --------------------------------------------------------------------- |
+| Gemini      | `gemini-embedding-2-preview`                                          |
+| AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) |
+| AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           |
+
+Every other embedding model is text-only, and cannot be marked as accepting image input in **LLM Providers > Models**. Images ingested under an earlier configuration are skipped at embedding time — the document completes without them, and the run shows the skipped count.
 
 ### Reranking Configuration
 
@@ -369,7 +381,7 @@ Where to find each value:
 
 ### OneDrive
 
-Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (e.g., `gemini-embedding-2-preview`), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
+Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (see [Image Embedding](#image-embedding)), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
 
 | Field         | Description                                                                                                          |
 | ------------- | -------------------------------------------------------------------------------------------------------------------- |

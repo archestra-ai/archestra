@@ -25,11 +25,14 @@ const RETRY_BASE_DELAY_MS = 1000;
 /**
  * The outcome of an embedding batch, reported to the connector run so a failure's
  * cause is visible (not just server logs). `errorMessage` carries the same typed,
- * user-facing message the query path surfaces.
+ * user-facing message the query path surfaces. `skippedImageChunkCount` counts
+ * image chunks the configured embedding model can't take, which are skipped
+ * (documents complete without them) rather than sent to a certain rejection.
  */
 interface EmbeddingBatchOutcome {
   failedDocumentCount: number;
   errorMessage: string | null;
+  skippedImageChunkCount: number;
 }
 
 class EmbeddingService {
@@ -64,10 +67,26 @@ class EmbeddingService {
         return;
       }
 
+      const { embeddable, skippedImageChunkCount } = partitionEmbeddableChunks(
+        chunks,
+        ctx,
+      );
+      if (skippedImageChunkCount > 0) {
+        logger.warn(
+          {
+            documentId,
+            skippedImageChunkCount,
+            provider: ctx.provider,
+            model: ctx.model,
+          },
+          "[Embedder] Skipped image chunks the configured embedding model can't embed",
+        );
+      }
+
       const allUpdates: Array<{ chunkId: string; embedding: number[] }> = [];
 
-      for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
-        const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+      for (let i = 0; i < embeddable.length; i += EMBEDDING_BATCH_SIZE) {
+        const batch = embeddable.slice(i, i + EMBEDDING_BATCH_SIZE);
         const inputs = batch.map((c) =>
           chunkToEmbeddingInput({
             model: ctx.model,
@@ -200,7 +219,11 @@ class EmbeddingService {
     }
 
     if (allChunks.length === 0) {
-      return { failedDocumentCount: 0, errorMessage: null };
+      return {
+        failedDocumentCount: 0,
+        errorMessage: null,
+        skippedImageChunkCount: 0,
+      };
     }
 
     // 2. Get embedding config
@@ -222,6 +245,7 @@ class EmbeddingService {
       return {
         failedDocumentCount: docChunkMap.length,
         errorMessage: message,
+        skippedImageChunkCount: 0,
       };
     }
     if (!orgConfig) {
@@ -236,16 +260,43 @@ class EmbeddingService {
           embeddingStatus: "pending",
         });
       }
-      return { failedDocumentCount: 0, errorMessage: null };
+      return {
+        failedDocumentCount: 0,
+        errorMessage: null,
+        skippedImageChunkCount: 0,
+      };
     }
 
     const ctx = orgConfig.config;
+
+    // Image chunks the configured embedding model can't take (already-ingested
+    // media after a model switch, or a mid-sync config change) are skipped, not
+    // sent to a certain rejection: their documents complete with the remaining
+    // chunks — a media document simply embeds none — instead of sticking in
+    // "failed" with a cause only visible in server logs. The count is surfaced
+    // on the connector run.
+    const { embeddable, skippedImageChunkCount } = partitionEmbeddableChunks(
+      allChunks,
+      ctx,
+    );
+    if (skippedImageChunkCount > 0) {
+      logger.warn(
+        {
+          runId: connectorRunId,
+          skippedImageChunkCount,
+          provider: ctx.provider,
+          model: ctx.model,
+        },
+        "[Embedder] Skipped image chunks the configured embedding model can't embed",
+      );
+    }
+
     const embeddingResults = new Map<string, number[]>();
     const failedChunkIds = new Set<string>();
     let firstErrorMessage: string | null = null;
 
-    for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
-      const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+    for (let i = 0; i < embeddable.length; i += EMBEDDING_BATCH_SIZE) {
+      const batch = embeddable.slice(i, i + EMBEDDING_BATCH_SIZE);
       try {
         const inputs = batch.map((c) =>
           chunkToEmbeddingInput({
@@ -340,6 +391,7 @@ class EmbeddingService {
     return {
       failedDocumentCount,
       errorMessage: failedDocumentCount > 0 ? firstErrorMessage : null,
+      skippedImageChunkCount,
     };
   }
 
@@ -455,18 +507,57 @@ function chunkToEmbeddingInput(params: {
 }): EmbeddingInput {
   const { model, content, metadataSuffix, contextualHeader } = params;
 
-  if (content.startsWith("data:image/")) {
-    // Parse the data URL: data:<mimeType>;base64,<data>
-    const semicolonIdx = content.indexOf(";base64,");
-    if (semicolonIdx > 5) {
-      const mimeType = content.slice(5, semicolonIdx);
-      const data = content.slice(semicolonIdx + 8); // len(";base64,") === 8
-      return { mimeType, data };
-    }
+  const image = parseImageDataUrl(content);
+  if (image) {
+    return image;
   }
   return addNomicTaskPrefix(
     model,
     (contextualHeader ?? "") + content + (metadataSuffix ?? ""),
     "search_document",
   );
+}
+
+/**
+ * Parse an image data URL (`data:<mimeType>;base64,<data>`) into an inline
+ * image input, or null when the content is ordinary text.
+ */
+function parseImageDataUrl(
+  content: string,
+): { mimeType: string; data: string } | null {
+  if (!content.startsWith("data:image/")) {
+    return null;
+  }
+  const semicolonIdx = content.indexOf(";base64,");
+  if (semicolonIdx <= 5) {
+    return null;
+  }
+  return {
+    mimeType: content.slice(5, semicolonIdx),
+    data: content.slice(semicolonIdx + 8), // len(";base64,") === 8
+  };
+}
+
+/**
+ * Split chunks into ones the configured embedding model can embed and image
+ * chunks it can't (`inputModalities` excludes "image" — including `null`, which
+ * means the model's capabilities are unknown and image support can't be
+ * assumed). Connectors gate NEW image ingestion on the same resolved
+ * modalities, so this catches what ingested earlier under a different
+ * configuration.
+ */
+function partitionEmbeddableChunks<T extends { content: string }>(
+  chunks: T[],
+  ctx: EmbeddingConfig,
+): { embeddable: T[]; skippedImageChunkCount: number } {
+  if (ctx.inputModalities?.includes("image")) {
+    return { embeddable: chunks, skippedImageChunkCount: 0 };
+  }
+  const embeddable = chunks.filter(
+    (chunk) => parseImageDataUrl(chunk.content) === null,
+  );
+  return {
+    embeddable,
+    skippedImageChunkCount: chunks.length - embeddable.length,
+  };
 }

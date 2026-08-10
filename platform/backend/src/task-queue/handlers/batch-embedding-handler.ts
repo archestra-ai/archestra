@@ -47,14 +47,22 @@ export async function handleBatchEmbedding(
     return;
   }
 
-  // Record any embedding failures on the connector run atomically with the batch
-  // completion, so the failure's cause is visible in the run (not just the logs).
+  // Record any embedding failures — and skipped image chunks — on the connector
+  // run atomically with the batch completion, so the cause is visible in the run
+  // (not just the logs).
+  const hasFailure = outcome.failedDocumentCount > 0;
+  const hasSkips = outcome.skippedImageChunkCount > 0;
   const updatedRun = await ConnectorRunModel.completeBatch(
     connectorRunId,
-    outcome.failedDocumentCount > 0
+    hasFailure || hasSkips
       ? {
-          failedItems: outcome.failedDocumentCount,
-          error: outcome.errorMessage ?? "Embedding failed",
+          ...(hasFailure
+            ? {
+                failedItems: outcome.failedDocumentCount,
+                error: outcome.errorMessage ?? "Embedding failed",
+              }
+            : {}),
+          ...(hasSkips ? { skippedItems: outcome.skippedImageChunkCount } : {}),
         }
       : undefined,
   );

@@ -602,4 +602,110 @@ describe("EmbeddingService", () => {
     const [interaction] = await waitForKbInteractions(1);
     expect(interaction.connectorId).toBeNull();
   });
+
+  test("processDocument skips image chunks the model can't embed and still completes", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Mixed Doc",
+      content: "Text with an inline image",
+      contentHash: "hash-skip-single",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: doc.id, content: "Text chunk", chunkIndex: 0 },
+      {
+        documentId: doc.id,
+        content: "data:image/png;base64,aW1hZ2U=",
+        chunkIndex: 1,
+      },
+    ]);
+
+    responseQueue.push({ kind: "ok", embeddings: [makeFakeEmbedding(1)] });
+
+    // makeEmbeddingContext resolves inputModalities: null — image support
+    // unknown, so the image chunk must be skipped, not sent to a rejection.
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("completed");
+
+    expect(embeddingRequests).toHaveLength(1);
+    expect(embeddingRequests[0].input).toEqual(["Text chunk"]);
+
+    const chunks = await KbChunkModel.findByDocument(doc.id);
+    const textChunk = chunks.find((c) => c.chunkIndex === 0);
+    const imageChunk = chunks.find((c) => c.chunkIndex === 1);
+    expect(textChunk?.embedding).toHaveLength(1536);
+    expect(imageChunk?.embedding).toBeNull();
+  });
+
+  test("processDocuments completes a media document with zero embedded chunks and surfaces the skip count", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: makeEmbeddingContext(),
+    });
+
+    // A media document is a single image chunk (ingested when a previous
+    // configuration allowed images).
+    const mediaDoc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Screenshot",
+      content: "data:image/png;base64,aW1hZ2U=",
+      contentHash: "hash-skip-media",
+      embeddingStatus: "pending",
+    });
+    const textDoc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Notes",
+      content: "Notes content",
+      contentHash: "hash-skip-text",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      {
+        documentId: mediaDoc.id,
+        content: "data:image/png;base64,aW1hZ2U=",
+        chunkIndex: 0,
+      },
+      { documentId: textDoc.id, content: "Notes chunk", chunkIndex: 0 },
+    ]);
+
+    responseQueue.push({ kind: "ok", embeddings: [makeFakeEmbedding(1)] });
+
+    const outcome = await embeddingService.processDocuments([
+      mediaDoc.id,
+      textDoc.id,
+    ]);
+
+    // Neither document fails; the skip is reported, not swallowed into logs.
+    expect(outcome.failedDocumentCount).toBe(0);
+    expect(outcome.skippedImageChunkCount).toBe(1);
+
+    const updatedMedia = await KbDocumentModel.findById(mediaDoc.id);
+    expect(updatedMedia?.embeddingStatus).toBe("completed");
+    const updatedText = await KbDocumentModel.findById(textDoc.id);
+    expect(updatedText?.embeddingStatus).toBe("completed");
+
+    expect(embeddingRequests).toHaveLength(1);
+    expect(embeddingRequests[0].input).toEqual(["Notes chunk"]);
+  });
 });

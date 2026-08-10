@@ -14,7 +14,11 @@ vi.mock("@/clients/llm-client", () => ({
 
 import config from "@/config";
 import db, { schema } from "@/database";
-import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  ModelModel,
+  OrganizationModel,
+} from "@/models";
 import { afterEach, describe, expect, test } from "@/test";
 import {
   EmbeddingConfigUnresolvableError,
@@ -225,6 +229,103 @@ describe("resolveEmbeddingConfig", () => {
     );
 
     expect(result).toBeNull();
+  });
+
+  test("clamps image off a text-only Bedrock embedding model marked image-capable", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Bedrock Key",
+      provider: "bedrock",
+      secretId: null,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingModel: "amazon.titan-embed-text-v2:0",
+    });
+    // The modalities editor let this text-only model be marked image-capable;
+    // the resolved config must not propagate that to connectors.
+    await ModelModel.create({
+      externalId: "bedrock/amazon.titan-embed-text-v2:0",
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-text-v2:0",
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      embeddingDimensions: 1024,
+    });
+
+    const result = await resolveEmbeddingConfig(org.id);
+
+    expect(result?.inputModalities).toEqual(["text"]);
+  });
+
+  test("keeps image for a multimodal Bedrock embedding model", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Bedrock Key",
+      provider: "bedrock",
+      secretId: null,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingModel: "amazon.titan-embed-image-v1",
+    });
+    await ModelModel.create({
+      externalId: "bedrock/amazon.titan-embed-image-v1",
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-image-v1",
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      embeddingDimensions: 1024,
+    });
+
+    const result = await resolveEmbeddingConfig(org.id);
+
+    expect(result?.inputModalities).toEqual(["text", "image"]);
+  });
+
+  test("trusts the models table for Gemini (no client-side clamp)", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Gemini Key",
+      provider: "gemini",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingModel: "gemini-embedding-2-preview",
+    });
+    await ModelModel.create({
+      externalId: "google/gemini-embedding-2-preview",
+      provider: "gemini",
+      modelId: "gemini-embedding-2-preview",
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      embeddingDimensions: 1536,
+    });
+    mockGetSecretValue.mockResolvedValueOnce("gemini-key");
+
+    const result = await resolveEmbeddingConfig(org.id);
+
+    expect(result?.inputModalities).toEqual(["text", "image"]);
   });
 });
 

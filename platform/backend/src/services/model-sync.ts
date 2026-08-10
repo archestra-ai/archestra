@@ -13,6 +13,7 @@ import {
   modelsDevCostToPerToken,
   sanitizeOutputLimit,
 } from "@/clients/models-dev-client";
+import { findBedrockEmbeddingModel } from "@/knowledge-base/embedding-clients/bedrock-models";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModelLinkModel,
@@ -506,6 +507,7 @@ export function resolveModelCapabilities(params: {
   return normalizeKnownModelCapabilities({
     provider,
     modelId,
+    underlyingModelName,
     capabilities: {
       description: capabilities?.description ?? null,
       contextLength:
@@ -859,9 +861,10 @@ function inferGeminiCapabilities(modelId: string): ProviderModelCapabilities {
 function normalizeKnownModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
+  underlyingModelName?: string | null;
   capabilities: ProviderModelCapabilities;
 }): ProviderModelCapabilities {
-  const { provider, modelId, capabilities } = params;
+  const { provider, modelId, underlyingModelName, capabilities } = params;
   const normalizedModelId = modelId.toLowerCase();
 
   if (
@@ -874,6 +877,26 @@ function normalizeKnownModelCapabilities(params: {
       outputModalities: [],
       supportsToolCalling: false,
     };
+  }
+
+  // KB-supported Bedrock embedding models: the KB's own Bedrock client is the
+  // only thing that drives them, so its declared modality support outranks
+  // whatever the models.dev / cross-provider tiers say about the vendor's model
+  // (Cohere Embed v3 direct also takes images, but that's a different client).
+  if (provider === "bedrock") {
+    const embedding =
+      findBedrockEmbeddingModel(modelId) ??
+      (underlyingModelName
+        ? findBedrockEmbeddingModel(underlyingModelName)
+        : undefined);
+    if (embedding) {
+      return {
+        ...capabilities,
+        inputModalities: [...embedding.inputModalities],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
   }
 
   return capabilities;

@@ -1,4 +1,5 @@
 import type {
+  ModelInputModality,
   SupportedProvider,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
@@ -10,6 +11,7 @@ import {
 } from "../errors";
 import { AzureEmbeddingError } from "./azure";
 import { BedrockEmbeddingError } from "./bedrock";
+import { findBedrockEmbeddingModel } from "./bedrock-models";
 import { GeminiEmbeddingError } from "./gemini";
 import { OpenAIEmbeddingError } from "./openai";
 import { EMBEDDING_ADAPTERS } from "./registry";
@@ -99,6 +101,29 @@ function validateEmbeddingResponse(
       );
     }
   }
+}
+
+/**
+ * Input modalities the embedding client for `provider` can actually drive for
+ * `model` — the client-side half of the capability gate. `null` means "no
+ * clamp": the client handles whatever the models table declares (Gemini's SDK
+ * embeds images natively across its multimodal models). Everything else is
+ * text-only except the Bedrock models the KB's own client has an image path
+ * for; an unknown Bedrock model degrades to text so a mis-tagged row can never
+ * make connectors ingest images the embed call will reject.
+ */
+export function getEmbeddingClientInputModalities(
+  provider: SupportedProvider,
+  model: string,
+): ModelInputModality[] | null {
+  if (provider === "gemini") {
+    return null;
+  }
+  if (provider === "bedrock") {
+    const entry = findBedrockEmbeddingModel(model);
+    return entry ? [...entry.inputModalities] : ["text"];
+  }
+  return ["text"];
 }
 
 /**

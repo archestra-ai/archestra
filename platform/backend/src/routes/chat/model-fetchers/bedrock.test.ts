@@ -344,6 +344,42 @@ describe("fetchBedrockModels", () => {
     expect(titanV2?.capabilities?.embeddingDimensions).toBe(1024);
     const titanV1 = models.find((m) => m.id === "amazon.titan-embed-text-v1");
     expect(titanV1?.capabilities?.embeddingDimensions).toBe(1536);
+    const titanImage = models.find(
+      (m) => m.id === "amazon.titan-embed-image-v1",
+    );
+    expect(titanImage?.capabilities?.embeddingDimensions).toBe(1024);
+  });
+
+  test("classifies Cohere Embed v3 profiles as embedding models instead of dropping them", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId: "us.cohere.embed-english-v3",
+              inferenceProfileName: "Cohere Embed English v3",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "eu.cohere.embed-multilingual-v3",
+              inferenceProfileName: "Cohere Embed Multilingual v3",
+              status: "ACTIVE",
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    // Cohere v3 HAS inference profiles, so it flows from the same listing —
+    // tagged with its dimension (embedding picker) rather than dropped.
+    const english = models.find((m) => m.id === "us.cohere.embed-english-v3");
+    expect(english?.capabilities?.embeddingDimensions).toBe(1024);
+    const multilingual = models.find(
+      (m) => m.id === "eu.cohere.embed-multilingual-v3",
+    );
+    expect(multilingual?.capabilities?.embeddingDimensions).toBe(1024);
   });
 
   test("does not inject Titan when amazon is not in the allowed providers", async () => {

@@ -14,6 +14,7 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import { getEmbeddingClientInputModalities } from "./embedding-clients";
 import {
   EmbeddingConfigUnresolvableError,
   RerankerConfigUnresolvableError,
@@ -90,7 +91,13 @@ export async function resolveEmbeddingConfig(
      */
     dimensions: model?.embeddingDimensions ?? org.embeddingDimensions ?? 1536,
     provider: resolved.provider,
-    inputModalities: model?.inputModalities ?? null,
+    inputModalities: clampInputModalities({
+      declared: model?.inputModalities ?? null,
+      clientSupported: getEmbeddingClientInputModalities(
+        resolved.provider,
+        org.embeddingModel,
+      ),
+    }),
   };
 }
 
@@ -213,4 +220,25 @@ export async function resolveApiKeyFromChatApiKey(
   if (isOpenAiCodexCredential(apiKey)) return null;
 
   return { apiKey, baseUrl, provider: chatApiKey.provider };
+}
+
+// ===== Internal helpers =====
+
+/**
+ * Intersect the models table's (admin-editable) input modalities with what the
+ * provider's embedding client can actually drive. Connectors gate image
+ * ingestion on the resolved value, so this single intersection guarantees no
+ * UI-reachable configuration makes them ingest images the embed call will
+ * reject. A `null` client capability means "trust the table"; a `null` declared
+ * list (no models row) stays `null`, which downstream treats as text-only.
+ */
+function clampInputModalities(params: {
+  declared: ModelInputModality[] | null;
+  clientSupported: ModelInputModality[] | null;
+}): ModelInputModality[] | null {
+  const { declared, clientSupported } = params;
+  if (!declared || !clientSupported) {
+    return declared;
+  }
+  return declared.filter((modality) => clientSupported.includes(modality));
 }

@@ -165,6 +165,18 @@ export class BedrockClient {
     modelId: string,
     request: Record<string, unknown>,
   ): Promise<InvokeResponse> {
+    return this.invokeJson<InvokeResponse>(modelId, request);
+  }
+
+  /**
+   * Non-streaming InvokeModel request with a caller-typed JSON response, for
+   * model families that don't speak the Anthropic wire format (e.g. Titan and
+   * Cohere embedding models).
+   */
+  async invokeJson<T>(
+    modelId: string,
+    request: Record<string, unknown>,
+  ): Promise<T> {
     const url = this.buildUrl(modelId, "invoke");
     const body = JSON.stringify(request);
 
@@ -190,7 +202,7 @@ export class BedrockClient {
       throw error;
     }
 
-    return (await response.json()) as InvokeResponse;
+    return (await response.json()) as T;
   }
 
   /**

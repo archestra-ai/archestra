@@ -117,7 +117,7 @@ describe("callBedrockEmbedding", () => {
     expect(captured[0].authorization).toBe("Bearer test-key");
   });
 
-  test("rejects image inputs (Titan is text-only)", async () => {
+  test("rejects image inputs for text-only models (Titan text)", async () => {
     await expect(
       callBedrockEmbedding({
         inputs: [{ mimeType: "image/png", data: "abc" }],
@@ -126,5 +126,216 @@ describe("callBedrockEmbedding", () => {
         baseUrl: BEDROCK_HOST,
       }),
     ).rejects.toBeInstanceOf(BedrockEmbeddingError);
+  });
+
+  test("rejects image inputs for an unknown model", async () => {
+    const error = await callBedrockEmbedding({
+      inputs: [{ mimeType: "image/png", data: "abc" }],
+      model: "amazon.nova-embed-v1:0",
+      apiKey: "test-key",
+      baseUrl: BEDROCK_HOST,
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BedrockEmbeddingError);
+    expect((error as BedrockEmbeddingError).status).toBe(400);
+    expect((error as BedrockEmbeddingError).message).toContain(
+      "amazon.nova-embed-v1:0",
+    );
+  });
+
+  describe("Titan Multimodal G1", () => {
+    test("sends inputText for texts and inputImage for images, preserving order", async () => {
+      captured.length = 0;
+      const result = await callBedrockEmbedding({
+        inputs: ["a caption", { mimeType: "image/png", data: "aW1hZ2U=" }],
+        model: "amazon.titan-embed-image-v1",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      });
+      expect(captured).toHaveLength(2);
+      const bodies = captured.map((c) => c.body);
+      expect(bodies).toContainEqual(
+        expect.objectContaining({ inputText: "a caption" }),
+      );
+      expect(bodies).toContainEqual(
+        expect.objectContaining({ inputImage: "aW1hZ2U=" }),
+      );
+      // The image body carries raw base64, never a data URI.
+      expect(JSON.stringify(bodies)).not.toContain("data:image");
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].index).toBe(0);
+      expect(result.data[1].index).toBe(1);
+    });
+
+    test("forwards a supported on-request dimension via embeddingConfig", async () => {
+      captured.length = 0;
+      await callBedrockEmbedding({
+        inputs: ["hello"],
+        model: "amazon.titan-embed-image-v1",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+        dimensions: 384,
+      });
+      expect(captured[0].body.embeddingConfig).toEqual({
+        outputEmbeddingLength: 384,
+      });
+    });
+
+    test("omits embeddingConfig for a dimension the model doesn't take on request", async () => {
+      captured.length = 0;
+      await callBedrockEmbedding({
+        inputs: ["hello"],
+        model: "amazon.titan-embed-image-v1",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+        dimensions: 768,
+      });
+      expect(captured[0].body.embeddingConfig).toBeUndefined();
+    });
+
+    test("maps a provider error to BedrockEmbeddingError with its status", async () => {
+      server.use(
+        http.post(`${BEDROCK_HOST}/model/:modelId/invoke`, () =>
+          HttpResponse.json(
+            { message: "The provided image must have a valid format" },
+            { status: 400 },
+          ),
+        ),
+      );
+      const error = await callBedrockEmbedding({
+        inputs: [{ mimeType: "image/png", data: "aW1hZ2U=" }],
+        model: "amazon.titan-embed-image-v1",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BedrockEmbeddingError);
+      expect((error as BedrockEmbeddingError).status).toBe(400);
+      expect((error as BedrockEmbeddingError).message).toContain(
+        "valid format",
+      );
+    });
+  });
+
+  describe("Cohere Embed v3", () => {
+    test("batches texts into one call and gives each image its own call", async () => {
+      const cohereCaptured: Array<Record<string, unknown>> = [];
+      server.use(
+        http.post(
+          `${BEDROCK_HOST}/model/:modelId/invoke`,
+          async ({ request }) => {
+            const body = (await request.json()) as Record<string, unknown>;
+            cohereCaptured.push(body);
+            const count = Array.isArray(body.texts)
+              ? (body.texts as string[]).length
+              : 1;
+            return HttpResponse.json({
+              embeddings: Array.from({ length: count }, (_, i) => [i + 1, 0.5]),
+            });
+          },
+        ),
+      );
+
+      const result = await callBedrockEmbedding({
+        inputs: [
+          "first text",
+          { mimeType: "image/jpeg", data: "aW1n" },
+          "second text",
+        ],
+        model: "cohere.embed-english-v3",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      });
+
+      const textCall = cohereCaptured.find((body) => "texts" in body);
+      const imageCall = cohereCaptured.find((body) => "images" in body);
+      expect(textCall).toMatchObject({
+        texts: ["first text", "second text"],
+        input_type: "search_document",
+        truncate: "END",
+      });
+      expect(imageCall).toMatchObject({
+        images: ["data:image/jpeg;base64,aW1n"],
+        input_type: "image",
+      });
+
+      // Results reassemble in input order: texts at 0 and 2, image at 1.
+      expect(result.data).toHaveLength(3);
+      expect(result.data[0].embedding).toEqual([1, 0.5]);
+      expect(result.data[2].embedding).toEqual([2, 0.5]);
+      expect(result.data[1].embedding).toEqual([1, 0.5]);
+    });
+
+    test("takes the multimodal path for a region-prefixed inference-profile id", async () => {
+      captured.length = 0;
+      server.use(
+        http.post(
+          `${BEDROCK_HOST}/model/:modelId/invoke`,
+          async ({ params, request }) => {
+            captured.push({
+              modelId: String(params.modelId),
+              body: (await request.json()) as Record<string, unknown>,
+              authorization: request.headers.get("authorization"),
+            });
+            return HttpResponse.json({ embeddings: [[0.1, 0.2]] });
+          },
+        ),
+      );
+      await callBedrockEmbedding({
+        inputs: [{ mimeType: "image/png", data: "aW1n" }],
+        model: "us.cohere.embed-english-v3",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      });
+      // The configured id goes to the API verbatim (profile ids are invokable).
+      expect(captured[0].modelId).toBe("us.cohere.embed-english-v3");
+      expect(captured[0].body.input_type).toBe("image");
+    });
+
+    test("parses the embedding_types-keyed response shape", async () => {
+      server.use(
+        http.post(`${BEDROCK_HOST}/model/:modelId/invoke`, () =>
+          HttpResponse.json({ embeddings: { float: [[0.7, 0.8]] } }),
+        ),
+      );
+      const result = await callBedrockEmbedding({
+        inputs: ["hello"],
+        model: "cohere.embed-multilingual-v3",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      });
+      expect(result.data[0].embedding).toEqual([0.7, 0.8]);
+    });
+
+    test("rejects an oversized image before spending the request", async () => {
+      // ~6MB decoded — over the 5MB limit. No MSW handler runs (a network call
+      // would fail the test as unhandled).
+      const oversized = "A".repeat(8 * 1024 * 1024);
+      const error = await callBedrockEmbedding({
+        inputs: [{ mimeType: "image/png", data: oversized }],
+        model: "cohere.embed-english-v3",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BedrockEmbeddingError);
+      expect((error as BedrockEmbeddingError).status).toBe(400);
+      expect((error as BedrockEmbeddingError).message).toContain("5MB limit");
+    });
+
+    test("throws when the embedding count doesn't match the input count", async () => {
+      server.use(
+        http.post(`${BEDROCK_HOST}/model/:modelId/invoke`, () =>
+          HttpResponse.json({ embeddings: [[0.1]] }),
+        ),
+      );
+      const error = await callBedrockEmbedding({
+        inputs: ["a", "b"],
+        model: "cohere.embed-english-v3",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BedrockEmbeddingError);
+      expect((error as BedrockEmbeddingError).message).toContain(
+        "1 embedding(s) for 2 input(s)",
+      );
+    });
   });
 });

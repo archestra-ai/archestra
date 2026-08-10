@@ -930,6 +930,35 @@ describe("ConnectorRunModel", () => {
       expect(result?.completedBatches).toBe(1);
       expect(result?.completedAt).not.toBeNull();
     });
+
+    test("accumulates skipped items without failing the run", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 2,
+        completedBatches: 0,
+      });
+
+      await ConnectorRunModel.completeBatch(run.id, { skippedItems: 2 });
+      const result = await ConnectorRunModel.completeBatch(run.id, {
+        skippedItems: 1,
+      });
+
+      // Skips are informational: they add up on the run but never turn a clean
+      // run into completed_with_errors.
+      expect(result?.itemsSkipped).toBe(3);
+      expect(result?.itemErrors).toBe(0);
+      expect(result?.status).toBe("success");
+    });
   });
 
   describe("finalizeBatchesIfComplete", () => {

@@ -1,5 +1,10 @@
 import { embedMany } from "ai";
-import { buildBedrockProvider } from "@/clients/bedrock-credentials";
+import type { BedrockClient } from "@/clients/bedrock-client";
+import {
+  buildBedrockClient,
+  buildBedrockProvider,
+} from "@/clients/bedrock-credentials";
+import { findBedrockEmbeddingModel } from "./bedrock-models";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
 export class BedrockEmbeddingError extends Error {
@@ -13,13 +18,19 @@ export class BedrockEmbeddingError extends Error {
 }
 
 /**
- * Embed text using AWS Bedrock, reusing the same credential resolution (IAM/IRSA,
- * static SigV4, or bearer key) as Bedrock chat via `buildBedrockProvider`.
+ * Embed text and images using AWS Bedrock, reusing the same credential
+ * resolution (IAM/IRSA, static SigV4, or bearer key) as Bedrock chat.
+ *
+ * Two request paths, dispatched on the configured model:
+ *   - Multimodal models (Titan Multimodal G1, Cohere Embed v3) are driven over
+ *     raw InvokeModel via `BedrockClient` — the AI SDK's Bedrock embedding path
+ *     only produces text-shaped request bodies.
+ *   - Everything else keeps the AI SDK `embedMany` path and rejects image
+ *     inputs with a typed 400 naming the model.
  *
  * Like every other embedding client, this attempts the embed and surfaces the
- * provider's own error — it does not pre-screen the model. Titan v2 accepts an
- * on-request output dimension (256/512/1024); Titan v1 is fixed and rejects the
- * parameter, so a dimension is only forwarded when it is one Titan v2 accepts.
+ * provider's own error — it does not pre-screen whether the account/region
+ * offers the model.
  */
 export async function callBedrockEmbedding(params: {
   inputs: EmbeddingInput[];
@@ -29,22 +40,44 @@ export async function callBedrockEmbedding(params: {
   dimensions?: number;
 }): Promise<EmbeddingApiResponse> {
   const { inputs, model, apiKey, baseUrl, dimensions } = params;
+  const entry = findBedrockEmbeddingModel(model);
+
+  if (entry?.inputModalities.includes("image")) {
+    const client = buildBedrockClient({ apiKey, baseUrl });
+    try {
+      const { embeddings, tokens } = entry.modelId.startsWith("cohere.")
+        ? await embedWithCohere({ client, model, inputs })
+        : await embedWithTitanMultimodal({
+            client,
+            model,
+            inputs,
+            dimensions,
+            onRequestDimensions: entry.onRequestDimensions,
+          });
+      return toEmbeddingApiResponse({ embeddings, tokens, model });
+    } catch (err: unknown) {
+      throw toBedrockEmbeddingError(err);
+    }
+  }
 
   const texts = inputs.map((input) => {
     if (typeof input === "string") return input;
     throw new BedrockEmbeddingError(
       400,
-      "Selected model doesn't support embedding image inputs. Use a multimodal embedding model to embed images.",
+      `Model "${model}" doesn't support embedding image inputs. Use a multimodal embedding model (e.g. Amazon Titan Multimodal Embeddings G1) to embed images.`,
     );
   });
 
   const provider = buildBedrockProvider({ apiKey, baseUrl });
 
-  // Titan v2 accepts an on-request output dimension (256/512/1024); Titan v1 (and
-  // any model with a fixed dimension) rejects the parameter. Forward the dimension
-  // only when it is one Titan v2 accepts; otherwise let the model use its default.
+  // Titan v2 accepts an on-request output dimension (256/512/1024); Titan v1
+  // (and any model with a fixed dimension) rejects the parameter. Forward the
+  // dimension only when the model accepts it; an unknown model falls back to
+  // the Titan v2 set so its behavior is unchanged.
+  const acceptedDimensions =
+    entry?.onRequestDimensions ?? DEFAULT_ON_REQUEST_DIMENSIONS;
   const providerOptions =
-    dimensions !== undefined && BEDROCK_ON_REQUEST_DIMENSIONS.has(dimensions)
+    dimensions !== undefined && acceptedDimensions.includes(dimensions)
       ? { bedrock: { dimensions } }
       : undefined;
 
@@ -61,43 +94,248 @@ export async function callBedrockEmbedding(params: {
       ...(providerOptions ? { providerOptions } : {}),
     });
 
-    return {
-      object: "list",
-      data: embeddings.map((embedding, index) => ({
-        object: "embedding",
-        embedding,
-        index,
-      })),
+    return toEmbeddingApiResponse({
+      embeddings,
+      tokens: usage?.tokens ?? 0,
       model,
-      usage: {
-        prompt_tokens: usage?.tokens ?? 0,
-        total_tokens: usage?.tokens ?? 0,
-      },
-    };
+    });
   } catch (err: unknown) {
-    if (err instanceof BedrockEmbeddingError) {
-      throw err;
-    }
-    const status =
-      (err as { statusCode?: number; status?: number }).statusCode ??
-      (err as { statusCode?: number; status?: number }).status ??
-      500;
-    // The AI SDK formats every Bedrock error as `${error.type}: ${error.message}`;
-    // Bedrock validation errors carry no `type`, so the message arrives prefixed
-    // with a literal "undefined: ". Drop that artifact so the raw provider message
-    // reads cleanly.
-    const message = (err instanceof Error ? err.message : String(err)).replace(
-      /^undefined:\s*/,
-      "",
-    );
-    throw new BedrockEmbeddingError(status, message);
+    throw toBedrockEmbeddingError(err);
   }
+}
+
+// ===== Internal helpers =====
+
+/**
+ * Embed via Amazon Titan Multimodal Embeddings G1: one InvokeModel call per
+ * input (the model takes a single text and/or image per request), body
+ * `{inputText}` or `{inputImage: <base64>}` plus `embeddingConfig` when the
+ * requested dimension is one the model accepts on request.
+ */
+async function embedWithTitanMultimodal(params: {
+  client: BedrockClient;
+  model: string;
+  inputs: EmbeddingInput[];
+  dimensions?: number;
+  onRequestDimensions?: readonly number[];
+}): Promise<{ embeddings: number[][]; tokens: number }> {
+  const { client, model, inputs, dimensions, onRequestDimensions } = params;
+
+  const embeddingConfig =
+    dimensions !== undefined && onRequestDimensions?.includes(dimensions)
+      ? { embeddingConfig: { outputEmbeddingLength: dimensions } }
+      : {};
+
+  let tokens = 0;
+  const embeddings = await mapWithConcurrency(
+    inputs,
+    BEDROCK_EMBEDDING_MAX_PARALLEL,
+    async (input) => {
+      const body =
+        typeof input === "string"
+          ? { inputText: input, ...embeddingConfig }
+          : { inputImage: input.data, ...embeddingConfig };
+      const response = await client.invokeJson<{
+        embedding?: number[];
+        inputTextTokenCount?: number;
+        /** Titan reports generation errors here, on an otherwise-200 response. */
+        message?: string;
+      }>(model, body);
+      if (!Array.isArray(response.embedding)) {
+        throw new BedrockEmbeddingError(
+          500,
+          response.message ??
+            `Bedrock returned no embedding vector (model "${model}")`,
+        );
+      }
+      tokens += response.inputTextTokenCount ?? 0;
+      return response.embedding;
+    },
+  );
+
+  return { embeddings, tokens };
+}
+
+/**
+ * Embed via Cohere Embed v3 on Bedrock. Texts are batched (the API takes up to
+ * 96 per call); each image is its own call (the API takes exactly one image per
+ * request, as a data URI, under `input_type: "image"`). Results are reassembled
+ * in input order. The invoke response carries no token usage.
+ */
+async function embedWithCohere(params: {
+  client: BedrockClient;
+  model: string;
+  inputs: EmbeddingInput[];
+}): Promise<{ embeddings: number[][]; tokens: number }> {
+  const { client, model, inputs } = params;
+  const embeddings = new Array<number[]>(inputs.length);
+
+  const textEntries: Array<{ index: number; text: string }> = [];
+  const imageEntries: Array<{ index: number; dataUri: string }> = [];
+  inputs.forEach((input, index) => {
+    if (typeof input === "string") {
+      textEntries.push({ index, text: input });
+      return;
+    }
+    assertCohereImageSize(input, model);
+    imageEntries.push({
+      index,
+      dataUri: `data:${input.mimeType};base64,${input.data}`,
+    });
+  });
+
+  const textBatches: Array<Array<{ index: number; text: string }>> = [];
+  for (let i = 0; i < textEntries.length; i += COHERE_MAX_TEXTS_PER_CALL) {
+    textBatches.push(textEntries.slice(i, i + COHERE_MAX_TEXTS_PER_CALL));
+  }
+
+  const calls: Array<() => Promise<void>> = [
+    ...textBatches.map((batch) => async () => {
+      const response = await client.invokeJson<CohereEmbeddingResponse>(model, {
+        texts: batch.map((entry) => entry.text),
+        input_type: "search_document",
+        // A chunk slightly over the model's token limit degrades to a truncated
+        // vector instead of failing the whole document.
+        truncate: "END",
+      });
+      const vectors = cohereVectors(response, model, batch.length);
+      batch.forEach((entry, i) => {
+        embeddings[entry.index] = vectors[i];
+      });
+    }),
+    ...imageEntries.map((entry) => async () => {
+      const response = await client.invokeJson<CohereEmbeddingResponse>(model, {
+        images: [entry.dataUri],
+        input_type: "image",
+      });
+      embeddings[entry.index] = cohereVectors(response, model, 1)[0];
+    }),
+  ];
+
+  await mapWithConcurrency(calls, BEDROCK_EMBEDDING_MAX_PARALLEL, (call) =>
+    call(),
+  );
+
+  return { embeddings, tokens: 0 };
+}
+
+/**
+ * Cohere's embeddings arrive either as a bare array of vectors or keyed by
+ * embedding type (`{float: [...]}`) depending on whether `embedding_types` was
+ * sent — parse both defensively.
+ */
+interface CohereEmbeddingResponse {
+  embeddings?: number[][] | { float?: number[][] };
+}
+
+function cohereVectors(
+  response: CohereEmbeddingResponse,
+  model: string,
+  expectedCount: number,
+): number[][] {
+  const raw = response.embeddings;
+  const vectors = Array.isArray(raw) ? raw : raw?.float;
+  if (!Array.isArray(vectors) || vectors.length !== expectedCount) {
+    throw new BedrockEmbeddingError(
+      500,
+      `Bedrock returned ${Array.isArray(vectors) ? vectors.length : 0} embedding(s) for ${expectedCount} input(s) (model "${model}")`,
+    );
+  }
+  return vectors;
+}
+
+/**
+ * Reject an image over Cohere's per-image size limit up front — the provider's
+ * own error for an oversized payload is an opaque 400, and the base64 size is
+ * known before spending the request.
+ */
+function assertCohereImageSize(
+  input: { mimeType: string; data: string },
+  model: string,
+): void {
+  const decodedBytes = Math.floor((input.data.length * 3) / 4);
+  if (decodedBytes > COHERE_MAX_IMAGE_BYTES) {
+    throw new BedrockEmbeddingError(
+      400,
+      `Image of ${Math.round(decodedBytes / (1024 * 1024))}MB exceeds the ${Math.round(COHERE_MAX_IMAGE_BYTES / (1024 * 1024))}MB limit of model "${model}"`,
+    );
+  }
+}
+
+function toEmbeddingApiResponse(params: {
+  embeddings: number[][];
+  tokens: number;
+  model: string;
+}): EmbeddingApiResponse {
+  const { embeddings, tokens, model } = params;
+  return {
+    object: "list",
+    data: embeddings.map((embedding, index) => ({
+      object: "embedding",
+      embedding,
+      index,
+    })),
+    model,
+    usage: { prompt_tokens: tokens, total_tokens: tokens },
+  };
+}
+
+function toBedrockEmbeddingError(err: unknown): BedrockEmbeddingError {
+  if (err instanceof BedrockEmbeddingError) {
+    return err;
+  }
+  const status =
+    (err as { statusCode?: number; status?: number }).statusCode ??
+    (err as { statusCode?: number; status?: number }).status ??
+    500;
+  // The AI SDK formats every Bedrock error as `${error.type}: ${error.message}`;
+  // Bedrock validation errors carry no `type`, so the message arrives prefixed
+  // with a literal "undefined: ". Drop that artifact so the raw provider message
+  // reads cleanly.
+  const message = (err instanceof Error ? err.message : String(err)).replace(
+    /^undefined:\s*/,
+    "",
+  );
+  return new BedrockEmbeddingError(status, message);
+}
+
+/**
+ * Run `fn` over `items` with bounded concurrency, preserving input order.
+ * Rejects with the first failure.
+ */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex++;
+        results[index] = await fn(items[index]);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 // ===== Internal constants =====
 
-/** Output dimensions the AI SDK accepts on-request for Titan v2. */
-const BEDROCK_ON_REQUEST_DIMENSIONS = new Set([256, 512, 1024]);
+/**
+ * Output dimensions assumed accepted on-request for a Bedrock model not in
+ * `BEDROCK_EMBEDDING_MODELS` (the Titan v2 set — the historical behavior).
+ */
+const DEFAULT_ON_REQUEST_DIMENSIONS: readonly number[] = [256, 512, 1024];
 
-/** Bound Titan's per-input fan-out (one InvokeModel call per value). */
+/** Bound the per-input fan-out (one InvokeModel call per value). */
 const BEDROCK_EMBEDDING_MAX_PARALLEL = 8;
+
+/** Cohere Embed v3 on Bedrock takes at most 96 texts per InvokeModel call. */
+const COHERE_MAX_TEXTS_PER_CALL = 96;
+
+/** Cohere's documented per-image limit (base64-decoded size). */
+const COHERE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;

@@ -298,23 +298,27 @@ class ConnectorRunModel {
   static async completeBatch(
     runId: string,
     /**
-     * An embedding batch failure to record on the run, atomically with the batch
+     * An embedding batch outcome to record on the run, atomically with the batch
      * completion. `failedItems` is added to `itemErrors` (which drives the
      * completed_with_errors status); `error` is recorded as the run error, keeping
-     * any earlier error. Recording via a separate read-then-write would race with
-     * concurrent batch handlers, so it happens in this single UPDATE.
+     * any earlier error; `skippedItems` is added to `itemsSkipped` and is purely
+     * informational (skips don't fail a run). Recording via a separate
+     * read-then-write would race with concurrent batch handlers, so it happens in
+     * this single UPDATE.
      */
-    failure?: { failedItems: number; error: string },
+    outcome?: { failedItems?: number; error?: string; skippedItems?: number },
   ): Promise<ConnectorRun | null> {
     const t = schema.connectorRunsTable;
-    const failedItems = failure?.failedItems ?? 0;
+    const failedItems = outcome?.failedItems ?? 0;
+    const skippedItems = outcome?.skippedItems ?? 0;
     const [result] = await db
       .update(t)
       .set({
         completedBatches: sql`${t.completedBatches} + 1`,
         itemErrors: sql`${t.itemErrors} + ${failedItems}`,
-        ...(failure?.error
-          ? { error: sql`COALESCE(${t.error}, ${failure.error})` }
+        itemsSkipped: sql`COALESCE(${t.itemsSkipped}, 0) + ${skippedItems}`,
+        ...(outcome?.error
+          ? { error: sql`COALESCE(${t.error}, ${outcome.error})` }
           : {}),
         // Include this batch's failures in the terminal-status decision — SET
         // expressions all see the pre-update row, so add `failedItems` explicitly.

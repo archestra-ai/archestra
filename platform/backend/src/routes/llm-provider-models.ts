@@ -20,6 +20,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
+import { getEmbeddingClientInputModalities } from "@/knowledge-base/embedding-clients";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModel,
@@ -456,6 +457,36 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // An embedding model can only be marked image-capable when the embedding
+      // client can actually send images to it — otherwise connectors would
+      // ingest images that fail at embed time. Checked on the post-patch state
+      // so setting embedding dimensions on an image-capable chat model is
+      // caught too.
+      const effectiveEmbeddingDimensions =
+        body.embeddingDimensions !== undefined
+          ? body.embeddingDimensions
+          : existing.embeddingDimensions;
+      const effectiveInputModalities =
+        body.inputModalities !== undefined
+          ? body.inputModalities
+          : existing.inputModalities;
+      if (
+        effectiveEmbeddingDimensions !== null &&
+        effectiveInputModalities?.includes("image")
+      ) {
+        const clientModalities = getEmbeddingClientInputModalities(
+          existing.provider,
+          existing.modelId,
+        );
+        if (clientModalities !== null && !clientModalities.includes("image")) {
+          throw new ApiError(
+            400,
+            `Embedding for "${existing.modelId}" is text-only: the ${existing.provider} embedding client cannot send images to this model, so it cannot accept the image input modality while configured as an embedding model.`,
+            "embedding_validation_failed",
+          );
+        }
+      }
+
       const { teamIds, userIds, ...modelUpdates } = body;
       const updated = await ModelModel.update(id, modelUpdates);
       if (!updated) {
@@ -770,6 +801,7 @@ function toModelWithApiKeysResponse(params: {
     // the ceiling for `num_ctx` validation. Displaying it would over-promise
     // when Ollama enforces a smaller window, so the resolved one rides along.
     effectiveContextLength: capabilities.contextLength,
+    embeddingClientImageCapable: embeddingClientImageCapable(model),
     pricePerMillionInput: capabilities.pricePerMillionInput,
     pricePerMillionOutput: capabilities.pricePerMillionOutput,
     isCustomPrice: capabilities.isCustomPrice,
@@ -779,4 +811,17 @@ function toModelWithApiKeysResponse(params: {
     cachePriceSource: capabilities.cachePriceSource,
     isFree: isFreeModel(model),
   };
+}
+
+/**
+ * Whether the platform's embedding client can send images to this model —
+ * `null` when the client imposes no per-model limit (Gemini). Drives the edit
+ * dialog's image-modality restriction; the PATCH route enforces the same rule.
+ */
+function embeddingClientImageCapable(model: Model): boolean | null {
+  const clientModalities = getEmbeddingClientInputModalities(
+    model.provider,
+    model.modelId,
+  );
+  return clientModalities === null ? null : clientModalities.includes("image");
 }

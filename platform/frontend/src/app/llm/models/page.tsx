@@ -755,6 +755,25 @@ function EditModelDialog({
   const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
   const accessScope = form.watch("accessScope");
 
+  // An embedding model whose embedding client is text-only can't take image
+  // input — the backend rejects the save, so disable the option here with the
+  // reason instead of letting the form run into a 400.
+  const imageInputUnavailable =
+    !!selectedEmbeddingDimensions &&
+    model.embeddingClientImageCapable === false;
+  const inputModalityOptions = imageInputUnavailable
+    ? INPUT_MODALITY_OPTIONS.map((option) =>
+        option.value === "image"
+          ? {
+              ...option,
+              disabled: true,
+              description:
+                "Unavailable: the embedding client for this model supports text input only.",
+            }
+          : option,
+      )
+    : INPUT_MODALITY_OPTIONS;
+
   // Top-level field errors, surfaced next to the submit button — see the footer
   // for why. Nested `configuredParameters.*` errors are deliberately not
   // included: those inputs spread `field` onto a real DOM node, so
@@ -1135,15 +1154,22 @@ function EditModelDialog({
                 control={form.control}
                 name="inputModalities"
                 rules={{
-                  validate: (v) =>
-                    v.length > 0 || "At least one input modality is required",
+                  validate: (v) => {
+                    if (v.length === 0) {
+                      return "At least one input modality is required";
+                    }
+                    if (imageInputUnavailable && v.includes("image")) {
+                      return "The embedding client for this model supports text input only — remove the Image input modality or unset the embedding dimensions.";
+                    }
+                    return true;
+                  },
                 }}
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Input</FormLabel>
                     <FormControl>
                       <ModalitySelectField
-                        options={INPUT_MODALITY_OPTIONS}
+                        options={inputModalityOptions}
                         value={field.value}
                         onValueChange={field.onChange}
                         selectValue={inputModalityToAdd}
@@ -1474,7 +1500,13 @@ function ollamaDefaultPlaceholder(
 // --- Internal helpers ---
 
 function ModalitySelectField<T extends string>(params: {
-  options: Array<{ value: T; label: string; description: string }>;
+  options: Array<{
+    value: T;
+    label: string;
+    description: string;
+    /** Not addable (already-selected values stay removable via their badge). */
+    disabled?: boolean;
+  }>;
   value: string[];
   onValueChange: (value: string[]) => void;
   selectValue: string;
@@ -1517,7 +1549,7 @@ function ModalitySelectField<T extends string>(params: {
             </span>
           ),
           checked: value.includes(option.value),
-          disabled: value.includes(option.value),
+          disabled: value.includes(option.value) || option.disabled,
         }))}
       />
       <div className="flex flex-wrap gap-1">

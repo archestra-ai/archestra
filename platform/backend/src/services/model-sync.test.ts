@@ -361,6 +361,67 @@ describe("ModelSyncService", () => {
     expect(capabilities.supportsToolCalling).toBe(false);
   });
 
+  test("normalizes KB-supported Bedrock embedding models to the KB client's modality support", () => {
+    // Titan Multimodal G1: whatever the registries say, the row must reflect the
+    // KB client's image path.
+    const titanImage = resolveModelCapabilities({
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-image-v1",
+      capabilities: {
+        description: "Titan Multimodal Embeddings G1",
+        contextLength: null,
+        outputLength: null,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: null,
+        supportedEndpoints: null,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
+      },
+    });
+    expect(titanImage.inputModalities).toEqual(["text", "image"]);
+    expect(titanImage.outputModalities).toEqual([]);
+    expect(titanImage.supportsToolCalling).toBe(false);
+
+    // Titan text: the vendor entry (Cohere direct also takes images for their
+    // models; Titan text does not) can't out-vote the KB client's text-only path.
+    const titanText = resolveModelCapabilities({
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-text-v2:0",
+      capabilities: {
+        description: "Titan Text Embeddings V2",
+        contextLength: null,
+        outputLength: null,
+        inputModalities: ["text", "image"],
+        outputModalities: null,
+        supportsToolCalling: null,
+        supportedEndpoints: null,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
+      },
+    });
+    expect(titanText.inputModalities).toEqual(["text"]);
+
+    // A Cohere profile resolves through its underlying foundation-model id.
+    const cohereProfile = resolveModelCapabilities({
+      provider: "bedrock",
+      modelId: "us.cohere.embed-english-v3",
+      underlyingModelName: "cohere.embed-english-v3",
+    });
+    expect(cohereProfile.inputModalities).toEqual(["text", "image"]);
+
+    // Non-embedding Bedrock models are untouched by the normalization.
+    const chat = resolveModelCapabilities({
+      provider: "bedrock",
+      modelId: "us.anthropic.claude-opus-5-v1:0",
+    });
+    expect(chat.inputModalities).toBeNull();
+  });
+
   test("records perplexity models as tool-less when nothing upstream declares tool support", () => {
     // Neither the provider's endpoint nor models.dev carries `tool_call` for
     // sonar, and an undeclared capability reads as "send tools anyway" — which

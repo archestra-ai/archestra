@@ -537,6 +537,74 @@ describe("chat model routes", () => {
     expect(benignResponse.json().ignored).toBe(true);
   });
 
+  test("PATCH /api/llm-models/:id rejects marking a text-only embedding model image-capable", async () => {
+    const titanText = await ModelModel.create({
+      externalId: "bedrock/amazon.titan-embed-text-v2:0",
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-text-v2:0",
+      inputModalities: ["text"],
+      outputModalities: [],
+      embeddingDimensions: 1024,
+    });
+
+    // Marking image on a text-only embedding model would make connectors
+    // ingest images the embed call rejects.
+    const markImage = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${titanText.id}`,
+      payload: { inputModalities: ["text", "image"] },
+    });
+    expect(markImage.statusCode).toBe(400);
+    expect(markImage.json().error.internal_code).toBe(
+      "embedding_validation_failed",
+    );
+    expect(markImage.json().error.message).toContain("text-only");
+
+    // The same broken state via the other edge: setting embedding dimensions
+    // on an image-capable model whose embedding client is text-only.
+    const chatModel = await ModelModel.create({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+    });
+    const convert = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${chatModel.id}`,
+      payload: { embeddingDimensions: 1024 },
+    });
+    expect(convert.statusCode).toBe(400);
+    expect(convert.json().error.internal_code).toBe(
+      "embedding_validation_failed",
+    );
+
+    // A multimodal Bedrock embedding model takes the image modality fine.
+    const titanImage = await ModelModel.create({
+      externalId: "bedrock/amazon.titan-embed-image-v1",
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-image-v1",
+      inputModalities: ["text"],
+      outputModalities: [],
+      embeddingDimensions: 1024,
+    });
+    const markMultimodal = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${titanImage.id}`,
+      payload: { inputModalities: ["text", "image"] },
+    });
+    expect(markMultimodal.statusCode).toBe(200);
+    expect(markMultimodal.json().inputModalities).toEqual(["text", "image"]);
+
+    // A chat model (no embedding dimensions) keeps image input freely.
+    const chatImage = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${chatModel.id}`,
+      payload: { inputModalities: ["text", "image"] },
+    });
+    expect(chatImage.statusCode).toBe(200);
+  });
+
   test("PATCH /api/llm-models/:id embedding lock is scoped to the embedding key's provider and lifts after drop", async ({
     makeSecret,
     makeLlmProviderApiKey,

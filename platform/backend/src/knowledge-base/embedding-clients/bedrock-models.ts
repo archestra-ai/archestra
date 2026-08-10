@@ -1,4 +1,7 @@
-import type { SupportedEmbeddingDimension } from "@archestra/shared";
+import type {
+  ModelInputModality,
+  SupportedEmbeddingDimension,
+} from "@archestra/shared";
 
 /**
  * The single source of truth for which AWS Bedrock models the KB supports for
@@ -14,9 +17,7 @@ import type { SupportedEmbeddingDimension } from "@archestra/shared";
  *     embed call in validate-on-save.
  *   - `staticInject: false` — models that DO have an inference profile (Cohere on
  *     Bedrock). Discovery already fetches them region-accurately in the call it
- *     makes; they only need classifying (tag + keep) instead of dropping. Adding
- *     one here is the entire "Cohere fast-follow": it surfaces from the existing
- *     call the moment the client supports it.
+ *     makes; they only need classifying (tag + keep) instead of dropping.
  */
 interface BedrockEmbeddingModel {
   /** The foundation-model id (e.g. "amazon.titan-embed-text-v2:0"). */
@@ -25,8 +26,15 @@ interface BedrockEmbeddingModel {
   dimensions: SupportedEmbeddingDimension;
   /** Inject into the model list (true) vs discover from inference profiles (false). */
   staticInject: boolean;
-  /** Whether the model accepts an on-request output dimension (Titan v2 does; v1 is fixed). */
-  supportsDimensionsParam: boolean;
+  /**
+   * Output dimensions the model accepts on request, or `undefined` when the
+   * dimension is fixed and the model rejects the parameter (Titan text v1,
+   * Cohere). Titan text v2 takes 256/512/1024; Titan Multimodal G1 takes
+   * 256/384/1024.
+   */
+  onRequestDimensions?: readonly number[];
+  /** Input modalities the KB embedding client can drive for this model. */
+  inputModalities: readonly ModelInputModality[];
 }
 
 export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
@@ -35,21 +43,41 @@ export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
     displayName: "Amazon Titan Text Embeddings V1",
     dimensions: 1536,
     staticInject: true,
-    supportsDimensionsParam: false,
+    inputModalities: ["text"],
   },
   {
     modelId: "amazon.titan-embed-text-v2:0",
     displayName: "Amazon Titan Text Embeddings V2",
     dimensions: 1024,
     staticInject: true,
-    supportsDimensionsParam: true,
+    onRequestDimensions: [256, 512, 1024],
+    inputModalities: ["text"],
   },
-  // Cohere-on-Bedrock fast-follow — these HAVE inference profiles, so they are
-  // discovered (staticInject: false), not injected. Uncommenting here (plus
-  // giving the client a Cohere request/response path) surfaces them from the
-  // existing /inference-profiles call:
-  // { modelId: "cohere.embed-english-v3", displayName: "Cohere Embed English v3", dimensions: 1024, staticInject: false, supportsDimensionsParam: false },
-  // { modelId: "cohere.embed-multilingual-v3", displayName: "Cohere Embed Multilingual v3", dimensions: 1024, staticInject: false, supportsDimensionsParam: false },
+  {
+    modelId: "amazon.titan-embed-image-v1",
+    displayName: "Amazon Titan Multimodal Embeddings G1",
+    dimensions: 1024,
+    staticInject: true,
+    onRequestDimensions: [256, 384, 1024],
+    inputModalities: ["text", "image"],
+  },
+  // Cohere-on-Bedrock: these HAVE inference profiles, so they are discovered
+  // (staticInject: false), not injected — they surface from the existing
+  // /inference-profiles call.
+  {
+    modelId: "cohere.embed-english-v3",
+    displayName: "Cohere Embed English v3",
+    dimensions: 1024,
+    staticInject: false,
+    inputModalities: ["text", "image"],
+  },
+  {
+    modelId: "cohere.embed-multilingual-v3",
+    displayName: "Cohere Embed Multilingual v3",
+    dimensions: 1024,
+    staticInject: false,
+    inputModalities: ["text", "image"],
+  },
 ];
 
 /**

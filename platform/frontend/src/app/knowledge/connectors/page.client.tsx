@@ -13,6 +13,7 @@ import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
+import { GoogleDriveOAuthResultToast } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
@@ -64,6 +65,7 @@ const CONNECTOR_TYPE_OPTIONS = [
 export default function ConnectorsPage() {
   return (
     <div className="w-full h-full">
+      <GoogleDriveOAuthResultToast />
       <ErrorBoundary>
         <ConnectorsList />
       </ErrorBoundary>

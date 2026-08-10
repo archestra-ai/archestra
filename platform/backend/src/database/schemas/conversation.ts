@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type { SupportedProvider, ThinkingEffort } from "@archestra/shared";
 import { desc, isNull, sql } from "drizzle-orm";
 import {
   boolean,
@@ -46,6 +46,18 @@ const conversationsTable = softDeletablePgTable(
     modelId: uuid("model_id").references(() => modelsTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * How hard the model should reason before answering. Each provider decides
+     * what the three levels mean for a given model, and a model with no such
+     * control ignores it — so the value survives a switch to one of those and
+     * applies again on the way back.
+     *
+     * Null is "auto": no depth was chosen, so the request carries no reasoning
+     * field and the model reasons as it would have anyway. Nullable rather than
+     * defaulted because model defaults disagree with each other, so no level of
+     * ours could stand in for "unchanged" — see ThinkingEffortSetting.
+     */
+    thinkingEffort: text("thinking_effort").$type<ThinkingEffort>(),
     hasCustomToolSelection: boolean("has_custom_tool_selection")
       .notNull()
       .default(false),

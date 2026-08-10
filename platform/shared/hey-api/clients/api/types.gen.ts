@@ -27318,6 +27318,7 @@ export type StreamChatData = {
         messages: Array<unknown>;
         trigger?: 'submit-message' | 'regenerate-message';
         temperature?: number;
+        thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path?: never;
     query?: never;
@@ -27825,6 +27826,7 @@ export type GetChatConversationsResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -27908,6 +27910,7 @@ export type CreateChatConversationData = {
         chatApiKeyId?: string | null;
         projectId?: string | null;
         incognito?: boolean;
+        thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path?: never;
     query?: never;
@@ -27993,6 +27996,7 @@ export type CreateChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -28154,6 +28158,7 @@ export type GetDeletedChatConversationsResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -28402,6 +28407,7 @@ export type GetChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -28485,6 +28491,7 @@ export type UpdateChatConversationData = {
         agentId?: string;
         artifact?: string | null;
         pinnedAt?: string | null;
+        thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path: {
         id: string;
@@ -28572,6 +28579,7 @@ export type UpdateChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -29175,6 +29183,7 @@ export type ForkChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -29427,6 +29436,7 @@ export type RestoreChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -29690,6 +29700,7 @@ export type CompactChatConversationResponses = {
             selectedModel: string;
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
             modelId: string | null;
+            thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
             todoList: string | number | boolean | null | {
@@ -30127,6 +30138,7 @@ export type GetSharedConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -30293,6 +30305,7 @@ export type ForkSharedConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -30461,6 +30474,7 @@ export type GenerateChatConversationTitleResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -30629,6 +30643,7 @@ export type UpdateChatMessageResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -32890,6 +32905,10 @@ export type GetConfigResponses = {
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
+            kbGoogleDriveOAuth: {
+                configured: boolean;
+                redirectUri: string;
+            };
             hackathonRecorderEnabled: boolean;
             hackathonVideoDownloadEnabled: boolean;
             hackathonMaxFinalCutMs: number;
@@ -55713,6 +55732,9 @@ export type GetConnectorsResponses = {
                 batchSize?: number;
             } | {
                 type: 'gdrive';
+                authMode?: 'service_account' | 'service_account_delegated' | 'oauth';
+                delegatedAdminEmail?: string;
+                connectedAccountEmail?: string;
                 driveId?: string;
                 driveIds?: Array<string>;
                 folderId?: string;
@@ -55790,10 +55812,10 @@ export type GetConnectorsResponses = {
             permissionSyncIntervalSeconds: number;
             enabled: boolean;
             lastSyncAt: string | null;
-            lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+            lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
             lastSyncError: string | null;
             lastPermissionSyncAt: string | null;
-            lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+            lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
@@ -55895,6 +55917,9 @@ export type CreateConnectorData = {
             batchSize?: number;
         } | {
             type: 'gdrive';
+            authMode?: 'service_account' | 'service_account_delegated' | 'oauth';
+            delegatedAdminEmail?: string;
+            connectedAccountEmail?: string;
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
@@ -55971,6 +55996,11 @@ export type CreateConnectorData = {
                 githubUrl: string;
                 appId: string;
                 installationId: string;
+            };
+            googleOAuth?: {
+                clientId: string;
+                clientSecret: string;
+                refreshToken?: string;
             };
         };
         schedule?: string;
@@ -56130,6 +56160,9 @@ export type CreateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'gdrive';
+            authMode?: 'service_account' | 'service_account_delegated' | 'oauth';
+            delegatedAdminEmail?: string;
+            connectedAccountEmail?: string;
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
@@ -56205,10 +56238,10 @@ export type CreateConnectorResponses = {
         permissionSyncIntervalSeconds: number;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
         lastPermissionSyncAt: string | null;
-        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -56460,6 +56493,9 @@ export type GetConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'gdrive';
+            authMode?: 'service_account' | 'service_account_delegated' | 'oauth';
+            delegatedAdminEmail?: string;
+            connectedAccountEmail?: string;
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
@@ -56535,10 +56571,10 @@ export type GetConnectorResponses = {
         permissionSyncIntervalSeconds: number;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
         lastPermissionSyncAt: string | null;
-        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -56626,6 +56662,9 @@ export type UpdateConnectorData = {
             batchSize?: number;
         } | {
             type: 'gdrive';
+            authMode?: 'service_account' | 'service_account_delegated' | 'oauth';
+            delegatedAdminEmail?: string;
+            connectedAccountEmail?: string;
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
@@ -56702,6 +56741,11 @@ export type UpdateConnectorData = {
                 githubUrl: string;
                 appId: string;
                 installationId: string;
+            };
+            googleOAuth?: {
+                clientId: string;
+                clientSecret: string;
+                refreshToken?: string;
             };
         };
         schedule?: string;
@@ -56862,6 +56906,9 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
         } | {
             type: 'gdrive';
+            authMode?: 'service_account' | 'service_account_delegated' | 'oauth';
+            delegatedAdminEmail?: string;
+            connectedAccountEmail?: string;
             driveId?: string;
             driveIds?: Array<string>;
             folderId?: string;
@@ -56937,10 +56984,10 @@ export type UpdateConnectorResponses = {
         permissionSyncIntervalSeconds: number;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
         lastPermissionSyncAt: string | null;
-        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -58138,6 +58185,111 @@ export type TestConnectorConnectionResponses = {
 
 export type TestConnectorConnectionResponse = TestConnectorConnectionResponses[keyof TestConnectorConnectionResponses];
 
+export type StartGoogleDriveConnectorOAuthData = {
+    body: {
+        returnTo?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/gdrive/oauth/start';
+};
+
+export type StartGoogleDriveConnectorOAuthErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartGoogleDriveConnectorOAuthError = StartGoogleDriveConnectorOAuthErrors[keyof StartGoogleDriveConnectorOAuthErrors];
+
+export type StartGoogleDriveConnectorOAuthResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        authorizationUrl: string;
+    };
+};
+
+export type StartGoogleDriveConnectorOAuthResponse = StartGoogleDriveConnectorOAuthResponses[keyof StartGoogleDriveConnectorOAuthResponses];
+
+export type CompleteGoogleDriveConnectorOAuthData = {
+    body?: never;
+    path?: never;
+    query?: {
+        code?: string;
+        state?: string;
+        error?: string;
+    };
+    url: '/api/connectors/gdrive/oauth/callback';
+};
+
+export type CompleteGoogleDriveConnectorOAuthResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type GetConnectorKnowledgeBasesData = {
     body?: never;
     path: {
@@ -58414,7 +58566,7 @@ export type GetConnectorRunsData = {
         limit?: number;
         offset?: number;
         runType?: 'content' | 'permission';
-        status?: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        status?: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
         /**
          * Only runs that changed something (or nothing)
          */
@@ -58496,7 +58648,7 @@ export type GetConnectorRunsResponses = {
         data: Array<{
             id: string;
             connectorId: string;
-            status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+            status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
             runType: 'content' | 'permission';
             startedAt: string;
             completedAt: string | null;
@@ -58631,7 +58783,7 @@ export type GetConnectorRunResponses = {
     200: {
         id: string;
         connectorId: string;
-        status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'no_documents' | 'failed' | 'partial' | 'superseded';
         runType: 'content' | 'permission';
         startedAt: string;
         completedAt: string | null;
@@ -75567,6 +75719,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {

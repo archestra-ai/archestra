@@ -913,4 +913,121 @@ describe("ConnectorSyncService", () => {
       payload: { connectorId: connector.id },
     });
   });
+
+  describe("a run that indexes nothing", () => {
+    function makeEmptyConnector(
+      skipped?: Array<{ itemId: string; name: string; reason: string }>,
+    ) {
+      return {
+        estimateTotalItems: vi.fn().mockResolvedValue(0),
+        sync: vi.fn().mockImplementation(() =>
+          (async function* () {
+            yield {
+              documents: [],
+              ...(skipped ? { skipped } : {}),
+              checkpoint: { page: 1 },
+              hasMore: false,
+            };
+          })(),
+        ),
+      };
+    }
+
+    test("reports no_documents, with the likely cause, when the connector holds nothing", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const secretId = await createSecret();
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+      setupSecret();
+      mockGetConnector.mockReturnValue(makeEmptyConnector());
+
+      const result = await connectorSyncService.executeSync(connector.id);
+
+      // A green tick here is how a misconfigured connector indexes nothing
+      // for weeks without anyone noticing.
+      const run = await ConnectorRunModel.findById(result.runId);
+      expect(run?.status).toBe("no_documents");
+      expect(run?.error).toContain("Indexed nothing");
+
+      const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(updated?.lastSyncStatus).toBe("no_documents");
+      expect(updated?.lastSyncError).toContain("shared with the identity");
+    });
+
+    test("names the file-type filter when every item found was skipped", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const secretId = await createSecret();
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+      setupSecret();
+      mockGetConnector.mockReturnValue(
+        makeEmptyConnector([
+          {
+            itemId: "f-1",
+            name: "diagram.psd",
+            reason: "unsupported_file_type",
+          },
+          {
+            itemId: "f-2",
+            name: "archive.zip",
+            reason: "unsupported_file_type",
+          },
+        ]),
+      );
+
+      const result = await connectorSyncService.executeSync(connector.id);
+
+      const run = await ConnectorRunModel.findById(result.runId);
+      expect(run?.status).toBe("no_documents");
+      expect(run?.error).toContain("all 2 items found were skipped");
+    });
+
+    test("stays a plain success when an incremental run simply found no changes", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const secretId = await createSecret();
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+      // Documents from an earlier run: nothing new is the steady state here,
+      // not a misconfiguration, and flagging it would cry wolf on every
+      // healthy connector between changes.
+      await KbDocumentModel.create({
+        connectorId: connector.id,
+        organizationId: org.id,
+        title: "Indexed earlier",
+        content: "Still here",
+        contentHash: "hash-existing",
+      });
+
+      setupSecret();
+      mockGetConnector.mockReturnValue(makeEmptyConnector());
+
+      const result = await connectorSyncService.executeSync(connector.id);
+
+      const run = await ConnectorRunModel.findById(result.runId);
+      expect(run?.status).toBe("success");
+      expect(run?.error).toBeNull();
+
+      const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(updated?.lastSyncStatus).toBe("success");
+      expect(updated?.lastSyncError).toBeNull();
+    });
+  });
 });

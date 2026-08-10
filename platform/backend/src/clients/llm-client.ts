@@ -14,6 +14,7 @@ import {
   anthropicSupportsThinkingDisabled,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
+  DELEGATION_BILLING_ENVIRONMENT_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
@@ -185,6 +186,11 @@ export function createLLMModel(params: {
    * only honours it on its loopback chat path.
    */
   incognitoKey?: Buffer | null;
+  /**
+   * Caller environment for advisor delegation billing. Loopback-gated on the
+   * proxy side; see DELEGATION_BILLING_ENVIRONMENT_HEADER.
+   */
+  delegationBillingEnvironmentId?: string | null;
   /** See ProviderModelConfig.createModel — resolved only on the agent path. */
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
 }): LLMModel {
@@ -202,6 +208,7 @@ export function createLLMModel(params: {
     chatApiKeyId,
     dualLlmProgressChannel,
     incognitoKey,
+    delegationBillingEnvironmentId,
     supportedEndpoints,
   } = params;
 
@@ -244,6 +251,12 @@ export function createLLMModel(params: {
   // text into the response stream.
   if (dualLlmProgressChannel) {
     clientHeaders[DUAL_LLM_PROGRESS_CHANNEL_HEADER] = dualLlmProgressChannel;
+  }
+  // Advisor consultations bill to the delegating caller's environment; the
+  // proxy re-validates this against the executing agent row and its org.
+  if (delegationBillingEnvironmentId) {
+    clientHeaders[DELEGATION_BILLING_ENVIRONMENT_HEADER] =
+      delegationBillingEnvironmentId;
   }
 
   // Never logged: the header name is on the logging redaction denylist and
@@ -295,6 +308,12 @@ export async function createLLMModelForAgent(params: {
    * interaction content is stored encrypted rather than redacted.
    */
   incognitoKey?: Buffer | null;
+  /**
+   * Caller environment for advisor delegation billing; forwarded as a
+   * loopback-gated proxy header. Set only by the A2A executor when the
+   * executed agent is the advisor built-in.
+   */
+  delegationBillingEnvironmentId?: string | null;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -421,6 +440,7 @@ export async function createLLMModelForAgent(params: {
     chatApiKeyId,
     dualLlmProgressChannel,
     incognitoKey: params.incognitoKey,
+    delegationBillingEnvironmentId: params.delegationBillingEnvironmentId,
     supportedEndpoints,
   });
 

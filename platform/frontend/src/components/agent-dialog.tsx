@@ -930,10 +930,7 @@ export function AgentDialog({
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
     isPolicyConfigBuiltIn ||
-    isDualLlmMainBuiltIn ||
-    // The advisor is the one built-in that exists per environment, so which one
-    // you are editing is not otherwise visible on the form.
-    isAdvisorBuiltIn;
+    isDualLlmMainBuiltIn;
   const showToolsAndSubagents =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
@@ -1082,12 +1079,10 @@ export function AgentDialog({
     }
   }, [open, agentId, currentExcludedSubagentIds, subagentExclusionsFetched]);
 
-  // One advisor per environment, because delegation never crosses environments:
-  // the switch has to target the one this agent could actually reach.
+  // One org-wide advisor: delegation reaches it from every environment, so the
+  // switch targets the same row wherever this agent lives.
   const advisorAgentId = allInternalAgents.find(
-    (a) =>
-      a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
-      (a.environmentId ?? null) === (environmentId ?? null),
+    (a) => a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR,
   )?.id;
 
   // Consulting the advisor is off until someone turns it on, and a new agent
@@ -1144,25 +1139,12 @@ export function AgentDialog({
   // the Auto surface. So the advisor has to match the switch in both sets, not
   // just the one the current mode reads — a grant stranded in the other set is
   // a live consultation nothing in the dialog can show or clear.
-  // Another environment's advisor can only have been left by an earlier
-  // configuration: it is undispatchable from here, invisible in the dialog, and
-  // would come alive the moment this agent moved to that environment.
-  const foreignAdvisorIds = allInternalAgents
-    .filter(
-      (a) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
-        a.id !== advisorAgentId,
-    )
-    .map((a) => a.id);
-  const withoutForeignAdvisors = (ids: string[]) =>
-    ids.filter((id) => !foreignAdvisorIds.includes(id));
-
   const delegationTargetIdsToSave = advisorListedWhen(
-    withoutForeignAdvisors(selectedDelegationTargetIds),
+    selectedDelegationTargetIds,
     advisorEnabled,
   );
   const disabledSubagentIdsToSave = advisorListedWhen(
-    withoutForeignAdvisors(disabledSubagentIds),
+    disabledSubagentIds,
     !advisorEnabled,
   );
 
@@ -1178,36 +1160,6 @@ export function AgentDialog({
   const handleSubagentModeChange = (value: string) => {
     setAccessAllSubagents(value === "auto");
     writeAdvisorEnabled(advisorEnabled);
-  };
-
-  // Each environment has its own advisor, so moving the agent has to move the
-  // setting onto that environment's row and retire the old one from both sets
-  // — a grant left pointing at another environment's advisor can never be
-  // dispatched, and nothing in the dialog would show it.
-  const handleEnvironmentChange = (nextEnvironmentId: string | null) => {
-    const enabled = advisorEnabled;
-    const previousAdvisorId = advisorAgentId;
-    const nextAdvisorId = allInternalAgents.find(
-      (a) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
-        (a.environmentId ?? null) === nextEnvironmentId,
-    )?.id;
-
-    setEnvironmentId(nextEnvironmentId);
-    setDisabledSubagentIds((ids) =>
-      listedWhen(
-        listedWhen(ids, previousAdvisorId, false),
-        nextAdvisorId,
-        !enabled,
-      ),
-    );
-    setSelectedDelegationTargetIds((ids) =>
-      listedWhen(
-        listedWhen(ids, previousAdvisorId, false),
-        nextAdvisorId,
-        enabled,
-      ),
-    );
   };
 
   // LLM Configuration: computed values and bidirectional auto-linking
@@ -1773,23 +1725,20 @@ export function AgentDialog({
                         Dagger engine + egress policy.
                       - LLM proxy / MCP gateway: assigns the deployment environment
                         so its usage falls under environment-scoped cost limits.
+                      The advisor renders no selector: it is configured once for
+                      the organization and reachable from every environment.
                       Renders disabled when only the default environment exists. */}
                     {(isInternalAgent ||
                       agentType === "llm_proxy" ||
-                      agentType === "mcp_gateway") && (
-                      <EnvironmentSelector
-                        value={environmentId ?? null}
-                        onChange={handleEnvironmentChange}
-                        resource={getResourceForAgentType(agentType)}
-                        helpText={
-                          isAdvisorBuiltIn
-                            ? "Each environment has its own advisor, reachable only by the agents in that environment. Set a model on each one you want consulted."
-                            : environmentHelpText
-                        }
-                        // Moving it would strand every agent that consults it.
-                        disabled={isAdvisorBuiltIn}
-                      />
-                    )}
+                      agentType === "mcp_gateway") &&
+                      !isAdvisorBuiltIn && (
+                        <EnvironmentSelector
+                          value={environmentId ?? null}
+                          onChange={setEnvironmentId}
+                          resource={getResourceForAgentType(agentType)}
+                          helpText={environmentHelpText}
+                        />
+                      )}
 
                     {/* Built-in agent config */}
                     {isPolicyConfigBuiltIn && (
@@ -2524,9 +2473,17 @@ export function AgentDialog({
                       {advisorAgentId && (
                         <div className="flex items-center justify-between gap-4 border-t pt-4">
                           <div className="space-y-0.5">
-                            <Label htmlFor="consult-advisor">
-                              Enable Advisor
-                            </Label>
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor="consult-advisor">
+                                Enable Advisor
+                              </Label>
+                              <Badge
+                                variant="secondary"
+                                className="px-1.5 py-0 text-[10px]"
+                              >
+                                Beta
+                              </Badge>
+                            </div>
                             <p className="text-xs text-muted-foreground">
                               Pairs this{" "}
                               {agentTypeDisplayName[agentType] || "agent"} with

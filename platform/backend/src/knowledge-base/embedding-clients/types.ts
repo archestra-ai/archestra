@@ -14,3 +14,12 @@ export interface EmbeddingApiResponse {
  * Image inputs are only supported by multimodal embedding models (e.g. gemini-embedding-2-preview).
  */
 export type EmbeddingInput = string | { mimeType: string; data: string };
+
+/**
+ * What the embedding is for. Some models condition the vector on this —
+ * Cohere on Bedrock takes it as `input_type` and expects documents embedded
+ * as `search_document` and queries as `search_query`; mixing the two silently
+ * degrades ranking. Clients with no such parameter ignore it. Defaults to
+ * `search_document` (the ingestion path) when omitted.
+ */
+export type EmbeddingPurpose = "search_document" | "search_query";

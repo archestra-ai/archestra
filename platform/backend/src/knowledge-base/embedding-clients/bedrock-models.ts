@@ -46,6 +46,14 @@ interface BedrockEmbeddingModel {
    */
   maxInputTextTokens?: number;
   /**
+   * The request schema's hard per-text CHARACTER cap, or `undefined` when
+   * there is none. Bedrock's Cohere schema rejects any `texts` entry over
+   * 2048 characters ("Malformed input request: expected maxLength: 2048")
+   * BEFORE the token-level `truncate` parameter ever applies, so the
+   * embedding client must clamp texts to this cap client-side.
+   */
+  maxInputTextChars?: number;
+  /**
    * Image MIME types the model accepts, for models with an image modality.
    * Both Titan Multimodal G1 and Cohere Embed v3 take JPEG/PNG only — a GIF or
    * WebP reaching them is an opaque 400 — so connectors skip other formats at
@@ -86,6 +94,7 @@ export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
     dimensions: 1024,
     staticInject: true,
     inputModalities: ["text", "image"],
+    maxInputTextChars: 2048,
     acceptedImageMimeTypes: ["image/jpeg", "image/png"],
   },
   {
@@ -94,6 +103,7 @@ export const BEDROCK_EMBEDDING_MODELS: readonly BedrockEmbeddingModel[] = [
     dimensions: 1024,
     staticInject: true,
     inputModalities: ["text", "image"],
+    maxInputTextChars: 2048,
     acceptedImageMimeTypes: ["image/jpeg", "image/png"],
   },
 ];

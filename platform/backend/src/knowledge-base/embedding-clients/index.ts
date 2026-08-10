@@ -15,7 +15,11 @@ import { findBedrockEmbeddingModel } from "./bedrock-models";
 import { GeminiEmbeddingError } from "./gemini";
 import { OpenAIEmbeddingError } from "./openai";
 import { EMBEDDING_ADAPTERS } from "./registry";
-import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
+import type {
+  EmbeddingApiResponse,
+  EmbeddingInput,
+  EmbeddingPurpose,
+} from "./types";
 
 export type { EmbeddingApiResponse, EmbeddingInput };
 /** @public — re-exported for testability */
@@ -42,6 +46,12 @@ export async function callEmbedding(params: {
   baseUrl?: string | null;
   dimensions?: number;
   provider: SupportedProvider;
+  /**
+   * Document vs query embedding — clients that condition the vector on it
+   * (Bedrock/Cohere via `input_type`) receive it; the rest ignore it.
+   * Defaults to the document side when omitted.
+   */
+  purpose?: EmbeddingPurpose;
 }): Promise<EmbeddingApiResponse> {
   const { provider, ...rest } = params;
 
@@ -135,9 +145,9 @@ export function getEmbeddingClientInputModalities(
  * Image MIME types the embedding client for `provider` can send to `model`, or
  * `null` for no per-format restriction. Only meaningful when the resolved
  * input modalities include "image": Bedrock's multimodal models take JPEG/PNG
- * only (anything else is an opaque provider 400), while the Gemini SDK
- * forwards any image payload. Connectors skip other formats at ingestion and
- * the embedder skips them at embed time.
+ * only and Gemini's inline-image API takes PNG/JPEG/WebP/HEIC/HEIF (anything
+ * else — a GIF, say — is a provider error that fails the document). Connectors
+ * skip other formats at ingestion and the embedder skips them at embed time.
  */
 export function getEmbeddingClientAcceptedImageMimeTypes(
   provider: SupportedProvider,
@@ -148,6 +158,12 @@ export function getEmbeddingClientAcceptedImageMimeTypes(
     return entry?.acceptedImageMimeTypes
       ? [...entry.acceptedImageMimeTypes]
       : null;
+  }
+  if (
+    provider === "gemini" &&
+    GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS.has(model.replace(/^models\//, ""))
+  ) {
+    return [...GEMINI_ACCEPTED_IMAGE_MIME_TYPES];
   }
   return null;
 }
@@ -214,3 +230,16 @@ export function getEmbeddingRetryDelayMs(
 const GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS = new Set([
   "gemini-embedding-2-preview",
 ]);
+
+/**
+ * Gemini's documented inline-image formats. The SDK forwards any payload
+ * as-is, so the format gate has to live here: an undocumented format (GIF)
+ * reaching the API fails the embed call and with it the whole document.
+ */
+const GEMINI_ACCEPTED_IMAGE_MIME_TYPES: readonly string[] = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+];

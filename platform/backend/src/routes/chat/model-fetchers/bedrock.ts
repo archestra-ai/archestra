@@ -286,11 +286,13 @@ function mapInferenceProfilesToModels(
 
       // Classify supported embedding models instead of dropping them: tag with
       // their dimension so they flow to the embedding picker (and out of chat via
-      // supportsTextChat). This surfaces profile-backed embedding models (Cohere)
-      // region-accurately from the call we already make.
-      const embedding =
-        findBedrockEmbeddingModel(underlyingModelName ?? base.id) ??
-        findBedrockEmbeddingModel(base.id);
+      // supportsTextChat). Classification is by profile id ONLY (geo prefixes
+      // normalize away): an application inference profile wrapping an embedding
+      // model has an opaque ARN id the embedding client cannot dispatch on — it
+      // would take the text-model path and send the wrong request body — so
+      // those fall through untagged and are dropped by the non-chat filter
+      // below. The bare on-demand ids stay selectable via static injection.
+      const embedding = findBedrockEmbeddingModel(base.id);
       if (embedding) {
         return {
           ...base,

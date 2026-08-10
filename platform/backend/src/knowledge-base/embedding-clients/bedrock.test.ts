@@ -91,6 +91,21 @@ describe("callBedrockEmbedding", () => {
     expect(captured[0].body.dimensions).toBeUndefined();
   });
 
+  test("omits the dimensions parameter for Titan v1 even for a dimension in the unknown-model fallback set", async () => {
+    captured.length = 0;
+    // A cataloged model without `onRequestDimensions` REJECTS the parameter
+    // with a ValidationException — it must never inherit the Titan v2
+    // fallback set reserved for unknown models.
+    await callBedrockEmbedding({
+      inputs: ["hello"],
+      model: "amazon.titan-embed-text-v1",
+      apiKey: "test-key",
+      baseUrl: BEDROCK_HOST,
+      dimensions: 512,
+    });
+    expect(captured[0].body.dimensions).toBeUndefined();
+  });
+
   test("normalizes the response to the OpenAI embedding shape, preserving order", async () => {
     captured.length = 0;
     const result = await callBedrockEmbedding({
@@ -242,6 +257,43 @@ describe("callBedrockEmbedding", () => {
         "valid format",
       );
     });
+
+    test("maps Titan's error-on-200 (message, no vector) to a non-retryable 400", async () => {
+      server.use(
+        http.post(`${BEDROCK_HOST}/model/:modelId/invoke`, () =>
+          // Titan reports deterministic generation errors as `message` on an
+          // otherwise-200 response; a 500 would make the embedder retry it.
+          HttpResponse.json({ message: "Input image dimensions too large" }),
+        ),
+      );
+      const error = await callBedrockEmbedding({
+        inputs: [{ mimeType: "image/png", data: "aW1hZ2U=" }],
+        model: "amazon.titan-embed-image-v1",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BedrockEmbeddingError);
+      expect((error as BedrockEmbeddingError).status).toBe(400);
+      expect((error as BedrockEmbeddingError).message).toContain(
+        "dimensions too large",
+      );
+    });
+
+    test("keeps a vectorless response with no message a 500", async () => {
+      server.use(
+        http.post(`${BEDROCK_HOST}/model/:modelId/invoke`, () =>
+          HttpResponse.json({}),
+        ),
+      );
+      const error = await callBedrockEmbedding({
+        inputs: ["hello"],
+        model: "amazon.titan-embed-image-v1",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BedrockEmbeddingError);
+      expect((error as BedrockEmbeddingError).status).toBe(500);
+    });
   });
 
   describe("Cohere Embed v3", () => {
@@ -291,6 +343,106 @@ describe("callBedrockEmbedding", () => {
       expect(result.data[0].embedding).toEqual([1, 0.5]);
       expect(result.data[2].embedding).toEqual([2, 0.5]);
       expect(result.data[1].embedding).toEqual([1, 0.5]);
+    });
+
+    test("clamps texts over the 2048-character request cap client-side", async () => {
+      const cohereCaptured: Array<Record<string, unknown>> = [];
+      server.use(
+        http.post(
+          `${BEDROCK_HOST}/model/:modelId/invoke`,
+          async ({ request }) => {
+            const body = (await request.json()) as Record<string, unknown>;
+            cohereCaptured.push(body);
+            const count = (body.texts as string[]).length;
+            return HttpResponse.json({
+              embeddings: Array.from({ length: count }, () => [0.1, 0.2]),
+            });
+          },
+        ),
+      );
+
+      // Bedrock's Cohere request schema rejects any `texts` entry over 2048
+      // characters BEFORE the token-level `truncate: "END"` applies, and the
+      // KB's default chunk plus contextual header already crosses it.
+      const longText = "alpha bravo charlie ".repeat(250); // 5000 chars
+      await callBedrockEmbedding({
+        inputs: [longText, "short text"],
+        model: "cohere.embed-english-v3",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      });
+
+      const texts = cohereCaptured[0].texts as string[];
+      expect(texts).toHaveLength(2);
+      expect(texts[0].length).toBeLessThanOrEqual(2048);
+      expect(longText.startsWith(texts[0])).toBe(true);
+      expect(texts[1]).toBe("short text");
+    });
+
+    test("embeds queries as search_query, images untouched", async () => {
+      const cohereCaptured: Array<Record<string, unknown>> = [];
+      server.use(
+        http.post(
+          `${BEDROCK_HOST}/model/:modelId/invoke`,
+          async ({ request }) => {
+            const body = (await request.json()) as Record<string, unknown>;
+            cohereCaptured.push(body);
+            return HttpResponse.json({ embeddings: [[0.1, 0.2]] });
+          },
+        ),
+      );
+
+      // Cohere conditions the vector on input_type: documents embedded as
+      // search_document must be searched with search_query vectors, or
+      // ranking silently degrades.
+      await callBedrockEmbedding({
+        inputs: [
+          "what is in the picture?",
+          { mimeType: "image/jpeg", data: "aW1n" },
+        ],
+        model: "cohere.embed-english-v3",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+        purpose: "search_query",
+      });
+
+      const textCall = cohereCaptured.find((body) => "texts" in body);
+      const imageCall = cohereCaptured.find((body) => "images" in body);
+      expect(textCall?.input_type).toBe("search_query");
+      expect(imageCall?.input_type).toBe("image");
+    });
+
+    test("records token usage from the X-Amzn-Bedrock-Input-Token-Count header", async () => {
+      server.use(
+        http.post(
+          `${BEDROCK_HOST}/model/:modelId/invoke`,
+          async ({ request }) => {
+            const body = (await request.json()) as Record<string, unknown>;
+            const count = Array.isArray(body.texts)
+              ? (body.texts as string[]).length
+              : 1;
+            return HttpResponse.json(
+              {
+                embeddings: Array.from({ length: count }, () => [0.1, 0.2]),
+              },
+              // The Cohere response body carries no usage; the header is the
+              // only place Bedrock reports the input token count.
+              { headers: { "X-Amzn-Bedrock-Input-Token-Count": "7" } },
+            );
+          },
+        ),
+      );
+
+      const result = await callBedrockEmbedding({
+        inputs: ["a", "b", { mimeType: "image/png", data: "aW1n" }],
+        model: "cohere.embed-english-v3",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      });
+
+      // One text batch (7) + one image call (7).
+      expect(result.usage.prompt_tokens).toBe(14);
+      expect(result.usage.total_tokens).toBe(14);
     });
 
     test("takes the multimodal path for a region-prefixed inference-profile id", async () => {

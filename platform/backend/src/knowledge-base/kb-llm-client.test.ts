@@ -329,7 +329,15 @@ describe("resolveEmbeddingConfig", () => {
     const result = await resolveEmbeddingConfig(org.id);
 
     expect(result?.inputModalities).toEqual(["text", "image"]);
-    expect(result?.acceptedImageMimeTypes).toBeNull();
+    // Gemini's inline-image API takes a documented format list — a GIF
+    // reaching it fails the embed call, so the gate rides along here too.
+    expect(result?.acceptedImageMimeTypes).toEqual([
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/heic",
+      "image/heif",
+    ]);
   });
 
   test("clamps image off a text-only Gemini embedding model marked image-capable", async ({

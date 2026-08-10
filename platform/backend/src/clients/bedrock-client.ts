@@ -177,6 +177,20 @@ export class BedrockClient {
     modelId: string,
     request: Record<string, unknown>,
   ): Promise<T> {
+    const { body } = await this.invokeJsonWithHeaders<T>(modelId, request);
+    return body;
+  }
+
+  /**
+   * Like `invokeJson`, but also surfaces the input token count Bedrock reports
+   * in the `X-Amzn-Bedrock-Input-Token-Count` response header — the only place
+   * it exists for model families whose response body carries no usage (Cohere
+   * embeddings). `null` when the header is absent or not a number.
+   */
+  async invokeJsonWithHeaders<T>(
+    modelId: string,
+    request: Record<string, unknown>,
+  ): Promise<{ body: T; inputTokenCount: number | null }> {
     const url = this.buildUrl(modelId, "invoke");
     const body = JSON.stringify(request);
 
@@ -202,7 +216,15 @@ export class BedrockClient {
       throw error;
     }
 
-    return (await response.json()) as T;
+    const rawTokenCount = response.headers.get(
+      "X-Amzn-Bedrock-Input-Token-Count",
+    );
+    const inputTokenCount =
+      rawTokenCount !== null && Number.isFinite(Number(rawTokenCount))
+        ? Number(rawTokenCount)
+        : null;
+
+    return { body: (await response.json()) as T, inputTokenCount };
   }
 
   /**

@@ -8,7 +8,11 @@ import logger from "@/logging";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { getEncoding, truncateToTokens } from "../tokenizer";
 import { findBedrockEmbeddingModel } from "./bedrock-models";
-import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
+import type {
+  EmbeddingApiResponse,
+  EmbeddingInput,
+  EmbeddingPurpose,
+} from "./types";
 
 export class BedrockEmbeddingError extends Error {
   constructor(
@@ -41,15 +45,22 @@ export async function callBedrockEmbedding(params: {
   apiKey: string | null;
   baseUrl?: string | null;
   dimensions?: number;
+  purpose?: EmbeddingPurpose;
 }): Promise<EmbeddingApiResponse> {
-  const { inputs, model, apiKey, baseUrl, dimensions } = params;
+  const { inputs, model, apiKey, baseUrl, dimensions, purpose } = params;
   const entry = findBedrockEmbeddingModel(model);
 
   if (entry?.inputModalities.includes("image")) {
     const client = buildBedrockClient({ apiKey, baseUrl });
     try {
       const { embeddings, tokens } = entry.modelId.startsWith("cohere.")
-        ? await embedWithCohere({ client, model, inputs })
+        ? await embedWithCohere({
+            client,
+            model,
+            inputs,
+            maxInputTextChars: entry.maxInputTextChars,
+            purpose,
+          })
         : await embedWithTitanMultimodal({
             client,
             model,
@@ -76,10 +87,13 @@ export async function callBedrockEmbedding(params: {
 
   // Titan v2 accepts an on-request output dimension (256/512/1024); Titan v1
   // (and any model with a fixed dimension) rejects the parameter. Forward the
-  // dimension only when the model accepts it; an unknown model falls back to
-  // the Titan v2 set so its behavior is unchanged.
-  const acceptedDimensions =
-    entry?.onRequestDimensions ?? DEFAULT_ON_REQUEST_DIMENSIONS;
+  // dimension only when the model accepts it: a cataloged model without
+  // `onRequestDimensions` declares "rejects the parameter" and forwards
+  // nothing, while an unknown model falls back to the Titan v2 set so its
+  // behavior is unchanged.
+  const acceptedDimensions = entry
+    ? (entry.onRequestDimensions ?? [])
+    : DEFAULT_ON_REQUEST_DIMENSIONS;
   const providerOptions =
     dimensions !== undefined && acceptedDimensions.includes(dimensions)
       ? { bedrock: { dimensions } }
@@ -161,8 +175,12 @@ async function embedWithTitanMultimodal(params: {
         message?: string;
       }>(model, body);
       if (!Array.isArray(response.embedding)) {
+        // A `message` on a 200 is Titan reporting a deterministic generation
+        // error — 400 keeps the embedder's retry policy from retrying it.
+        // Only a vectorless response with no message stays a 500 (unknown,
+        // possibly transient).
         throw new BedrockEmbeddingError(
-          500,
+          response.message ? 400 : 500,
           response.message ??
             `Bedrock returned no embedding vector (model "${model}")`,
         );
@@ -179,21 +197,37 @@ async function embedWithTitanMultimodal(params: {
  * Embed via Cohere Embed v3 on Bedrock. Texts are batched (the API takes up to
  * 96 per call); each image is its own call (the API takes exactly one image per
  * request, as a data URI, under `input_type: "image"`). Results are reassembled
- * in input order. The invoke response carries no token usage.
+ * in input order. Token usage comes from the `X-Amzn-Bedrock-Input-Token-Count`
+ * response header (the response body carries none).
  */
 async function embedWithCohere(params: {
   client: BedrockClient;
   model: string;
   inputs: EmbeddingInput[];
+  maxInputTextChars?: number;
+  purpose?: EmbeddingPurpose;
 }): Promise<{ embeddings: number[][]; tokens: number }> {
-  const { client, model, inputs } = params;
+  const { client, model, inputs, maxInputTextChars, purpose } = params;
   const embeddings = new Array<number[]>(inputs.length);
 
   const textEntries: Array<{ index: number; text: string }> = [];
   const imageEntries: Array<{ index: number; dataUri: string }> = [];
+  let truncatedCount = 0;
   inputs.forEach((input, index) => {
     if (typeof input === "string") {
-      textEntries.push({ index, text: input });
+      // Bedrock's Cohere request schema REJECTS any `texts` entry over the
+      // character cap ("Malformed input request: expected maxLength: 2048")
+      // before the token-level `truncate` parameter applies — the KB's
+      // default chunk plus contextual header already crosses it, so clamp
+      // client-side. Warned with a count below, like the Titan path.
+      const text =
+        maxInputTextChars === undefined
+          ? input
+          : truncateToChars(input, maxInputTextChars);
+      if (text !== input) {
+        truncatedCount++;
+      }
+      textEntries.push({ index, text });
       return;
     }
     assertCohereImageSize(input, model);
@@ -202,42 +236,52 @@ async function embedWithCohere(params: {
       dataUri: `data:${input.mimeType};base64,${input.data}`,
     });
   });
+  if (truncatedCount > 0) {
+    logger.warn(
+      { model, truncatedCount, maxInputTextChars },
+      "[BedrockEmbedding] Truncated text inputs over the model's character cap",
+    );
+  }
 
   const textBatches: Array<Array<{ index: number; text: string }>> = [];
   for (let i = 0; i < textEntries.length; i += COHERE_MAX_TEXTS_PER_CALL) {
     textBatches.push(textEntries.slice(i, i + COHERE_MAX_TEXTS_PER_CALL));
   }
 
+  let tokens = 0;
   const calls: Array<() => Promise<void>> = [
     ...textBatches.map((batch) => async () => {
-      const response = await client.invokeJson<CohereEmbeddingResponse>(model, {
-        texts: batch.map((entry) => entry.text),
-        input_type: "search_document",
-        // Cohere embeds at most 512 tokens per text; "END" makes the API drop
-        // the excess so an over-limit chunk degrades to a truncated vector
-        // instead of failing the whole document. Unlike the Titan path (local
-        // truncation, logged with a count), this happens server-side and
-        // SILENTLY: a chunk-size setting above 512 tokens embeds only each
-        // chunk's prefix, with no signal in the logs.
-        truncate: "END",
-      });
+      const { body: response, inputTokenCount } =
+        await client.invokeJsonWithHeaders<CohereEmbeddingResponse>(model, {
+          texts: batch.map((entry) => entry.text),
+          input_type: purpose ?? "search_document",
+          // Texts are already clamped to the request schema's character cap
+          // above; "END" remains as the token-level backstop (Cohere embeds at
+          // most 512 tokens per text) so a cap-fitting chunk that still
+          // exceeds the token limit degrades to a truncated vector instead of
+          // failing the whole document.
+          truncate: "END",
+        });
       const vectors = cohereVectors(response, model, batch.length);
       batch.forEach((entry, i) => {
         embeddings[entry.index] = vectors[i];
       });
+      tokens += inputTokenCount ?? 0;
     }),
     ...imageEntries.map((entry) => async () => {
-      const response = await client.invokeJson<CohereEmbeddingResponse>(model, {
-        images: [entry.dataUri],
-        input_type: "image",
-      });
+      const { body: response, inputTokenCount } =
+        await client.invokeJsonWithHeaders<CohereEmbeddingResponse>(model, {
+          images: [entry.dataUri],
+          input_type: "image",
+        });
       embeddings[entry.index] = cohereVectors(response, model, 1)[0];
+      tokens += inputTokenCount ?? 0;
     }),
   ];
 
   await mapAllOrThrow(calls, BEDROCK_EMBEDDING_MAX_PARALLEL, (call) => call());
 
-  return { embeddings, tokens: 0 };
+  return { embeddings, tokens };
 }
 
 /**
@@ -301,6 +345,23 @@ function truncateTextInputs(params: {
     );
   }
   return prepared;
+}
+
+/**
+ * Truncate a text to a hard character cap. A string of N UTF-16 code units is
+ * at most N code points, so slicing by `length` can never exceed a cap the
+ * server counts in code points; a trailing lone high surrogate (a split
+ * astral character) is stripped rather than sent broken.
+ */
+function truncateToChars(text: string, maxChars: number): string {
+  if (text.length <= maxChars) {
+    return text;
+  }
+  const truncated = text.slice(0, maxChars);
+  const lastCode = truncated.charCodeAt(truncated.length - 1);
+  return lastCode >= 0xd800 && lastCode <= 0xdbff
+    ? truncated.slice(0, -1)
+    : truncated;
 }
 
 /**

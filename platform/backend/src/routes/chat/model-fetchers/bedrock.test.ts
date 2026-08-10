@@ -369,6 +369,42 @@ describe("fetchBedrockModels", () => {
     expect(multilingual?.capabilities?.embeddingDimensions).toBe(1024);
   });
 
+  test("drops an application inference profile wrapping an embedding model", async () => {
+    // The embedding client dispatches on the configured model id, and an app
+    // profile's opaque ARN misses the catalog (only geo prefixes normalize
+    // away) — selected, it would take the text path and send the wrong
+    // request body. The bare on-demand id stays selectable via static
+    // injection, so nothing is lost by dropping the profile.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123",
+              inferenceProfileName: "Team Cohere Embeddings",
+              status: "ACTIVE",
+              models: [
+                {
+                  modelArn:
+                    "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-english-v3",
+                },
+              ],
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    expect(
+      models.some((m) => m.id.includes("application-inference-profile")),
+    ).toBe(false);
+    const bare = models.find((m) => m.id === "cohere.embed-english-v3");
+    expect(bare?.capabilities?.embeddingDimensions).toBe(1024);
+  });
+
   test("does not inject embedding models whose vendor is not in the allowed providers", async () => {
     const originalAllowedProviders = config.llm.bedrock.allowedProviders;
     config.llm.bedrock.allowedProviders = ["anthropic"];

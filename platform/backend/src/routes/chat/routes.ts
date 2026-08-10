@@ -18,6 +18,7 @@ import {
   supportsGeminiThoughtSummaries,
   TimeInMs,
   type TitleRejectionReason,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   type TokenUsage,
   toConversationTitle,
   toPlaceholderTitle,
@@ -91,6 +92,10 @@ import {
   toCollectedRuns,
 } from "@/hooks/hook-run-parts";
 import { extractAndIngestDocuments } from "@/knowledge-base";
+import {
+  type KbChunkForQuoteCheck,
+  verifyQuotes,
+} from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import {
   ActiveChatRunModel,
@@ -115,6 +120,7 @@ import {
 } from "@/models";
 import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
+import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
@@ -1359,7 +1365,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       }
                     }
                   },
-                  onFinish: async ({ usage, finishReason }) => {
+                  onFinish: async ({ usage, finishReason, steps, text }) => {
                     // abort listeners are removed in the toUIMessageStream
                     // onFinish, which fires only for the final merged result —
                     // not for discarded empty-response retry attempts, whose
@@ -1372,6 +1378,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       },
                       "Chat stream finished",
                     );
+
+                    // Verifiable citations (issue #7161): check the verbatim
+                    // quotes the model tagged with a chunk ref against the
+                    // chunks query_knowledge_sources returned this turn. Log-only
+                    // and best-effort — a failure here must never disturb the
+                    // finished answer.
+                    if (config.kb.quoteVerificationEnabled) {
+                      try {
+                        verifyChatCitedQuotes({
+                          steps,
+                          answerText: text,
+                          conversationId,
+                          agentId,
+                        });
+                      } catch (error) {
+                        logger.warn(
+                          { error, conversationId },
+                          "KB quote verification failed",
+                        );
+                      }
+                    }
                   },
                 };
 
@@ -4181,6 +4208,128 @@ async function persistRegeneratedTurn(params: {
 function storedMessageIds(row: { id: string; content: unknown }): string[] {
   const contentId = getMessageContentId(row.content);
   return contentId ? [row.id, contentId] : [row.id];
+}
+
+/**
+ * Verifiable citations (issue #7161), the internal-chat half. Collects the
+ * chunks `query_knowledge_sources` returned across the turn's steps, then checks
+ * the verbatim quotes the model tagged with a chunk ref against them. Log-only:
+ * a quote found in no returned chunk is a fabrication surfaced to logs and a
+ * metric, never blocked or spliced into the answer. Only this surface can do
+ * this — external MCP clients answer where Archestra cannot see the text.
+ */
+function verifyChatCitedQuotes(params: {
+  steps: Array<{ toolResults?: Array<{ toolName: string; output: unknown }> }>;
+  answerText: string;
+  conversationId: string;
+  agentId: string;
+}): void {
+  const { steps, answerText, conversationId, agentId } = params;
+
+  const chunksByRef = new Map<string, KbChunkForQuoteCheck>();
+  for (const step of steps) {
+    for (const toolResult of step.toolResults ?? []) {
+      if (toolResult.toolName !== TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME) {
+        continue;
+      }
+      for (const chunk of readKbChunksFromToolOutput(toolResult.output)) {
+        chunksByRef.set(chunk.ref, chunk);
+      }
+    }
+  }
+
+  // No knowledge was pulled this turn, so there is nothing to verify.
+  if (chunksByRef.size === 0) return;
+
+  const result = verifyQuotes({
+    answerText,
+    chunks: [...chunksByRef.values()],
+  });
+
+  reportQuoteVerification({
+    matched: result.matched,
+    failed: result.failed.length,
+    unparseable: result.unparseable ? 1 : 0,
+  });
+
+  if (result.failed.length > 0) {
+    logger.warn(
+      {
+        conversationId,
+        agentId,
+        checked: result.checked,
+        failedCount: result.failed.length,
+        failedRefs: result.failed.map((quote) => quote.ref),
+      },
+      "KB quote verification: cited quote(s) not found in the cited chunk",
+    );
+  }
+}
+
+/**
+ * Reads the `{ ref, content }` chunks out of one `query_knowledge_sources` tool
+ * result. The AI SDK stores the raw execute return (the MCP CallToolResult), so
+ * the chunks live under `structuredContent.results`; the plain-text `content`
+ * carries the same JSON as a fallback for any path that drops structured output.
+ */
+function readKbChunksFromToolOutput(output: unknown): KbChunkForQuoteCheck[] {
+  const results = extractKbResultsArray(output);
+  if (!results) return [];
+
+  const chunks: KbChunkForQuoteCheck[] = [];
+  for (const item of results) {
+    if (
+      item !== null &&
+      typeof item === "object" &&
+      typeof (item as { ref?: unknown }).ref === "string" &&
+      typeof (item as { content?: unknown }).content === "string"
+    ) {
+      const { ref, content } = item as { ref: string; content: string };
+      chunks.push({ ref, content });
+    }
+  }
+  return chunks;
+}
+
+function extractKbResultsArray(output: unknown): unknown[] | null {
+  if (output === null || typeof output !== "object") return null;
+
+  const structured = (output as { structuredContent?: unknown })
+    .structuredContent;
+  if (
+    structured !== null &&
+    typeof structured === "object" &&
+    Array.isArray((structured as { results?: unknown }).results)
+  ) {
+    return (structured as { results: unknown[] }).results;
+  }
+
+  const content = (output as { content?: unknown }).content;
+  if (Array.isArray(content)) {
+    const firstText = content.find(
+      (part): part is { type: "text"; text: string } =>
+        part !== null &&
+        typeof part === "object" &&
+        (part as { type?: unknown }).type === "text" &&
+        typeof (part as { text?: unknown }).text === "string",
+    );
+    if (firstText) {
+      try {
+        const parsed: unknown = JSON.parse(firstText.text);
+        if (
+          parsed !== null &&
+          typeof parsed === "object" &&
+          Array.isArray((parsed as { results?: unknown }).results)
+        ) {
+          return (parsed as { results: unknown[] }).results;
+        }
+      } catch {
+        // Not JSON we can read; nothing to verify from this result.
+      }
+    }
+  }
+
+  return null;
 }
 
 /**

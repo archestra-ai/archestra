@@ -28,6 +28,7 @@ let ragEmbeddingDocumentsTotal: client.Counter<string>;
 let ragQueryDuration: client.Histogram<string>;
 let ragQueriesTotal: client.Counter<string>;
 let ragQueryResultsCount: client.Histogram<string>;
+let ragQuoteVerificationTotal: client.Counter<string>;
 
 // ===== Permission-sync metrics (auto-sync-permissions connectors) =====
 let ragPermissionSyncsTotal: client.Counter<string>;
@@ -110,6 +111,12 @@ export function initializeRagMetrics(): void {
     labelNames: ["search_type"],
     buckets: [0, 1, 2, 5, 10, 20, 50],
     enableExemplars: true,
+  });
+
+  ragQuoteVerificationTotal = new client.Counter({
+    name: "rag_quote_verification_total",
+    help: "Chat-answer quotes checked against their cited knowledge chunk (issue #7161). result=matched|failed|unparseable; `unparseable` (once per turn) means chunks were returned but the answer carried no parseable quote, i.e. thin citation coverage",
+    labelNames: ["result"],
   });
 
   ragPermissionSyncsTotal = new client.Counter({
@@ -369,6 +376,33 @@ export function reportAccessTokenTruncation(params: {
 export function reportKnowledgeQueryUnresolvedIdentity(): void {
   if (!ragKnowledgeQueryUnresolvedIdentityTotal) return;
   ragKnowledgeQueryUnresolvedIdentityTotal.inc();
+}
+
+/**
+ * Reports the outcome of verifying a chat answer's cited quotes against the
+ * knowledge chunks that were returned (issue #7161). `matched`/`failed` count
+ * individual quotes; `unparseable` is 0 or 1 for the whole turn (chunks returned
+ * but no quote parsed) — a rising `unparseable` rate means models are largely
+ * ignoring the quote convention, so real coverage is thin.
+ */
+export function reportQuoteVerification(params: {
+  matched: number;
+  failed: number;
+  unparseable: number;
+}): void {
+  if (!ragQuoteVerificationTotal) return;
+  if (params.matched > 0) {
+    ragQuoteVerificationTotal.inc({ result: "matched" }, params.matched);
+  }
+  if (params.failed > 0) {
+    ragQuoteVerificationTotal.inc({ result: "failed" }, params.failed);
+  }
+  if (params.unparseable > 0) {
+    ragQuoteVerificationTotal.inc(
+      { result: "unparseable" },
+      params.unparseable,
+    );
+  }
 }
 
 /**

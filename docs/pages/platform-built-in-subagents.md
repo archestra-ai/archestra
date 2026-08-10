@@ -14,6 +14,8 @@ An admin can open a built-in subagent in its settings and change its **system pr
 
 ## Advisor
 
+The Advisor is in beta.
+
 The Advisor is a stronger model an agent consults at the decisions that shape a task: which approach to take, an error that keeps coming back, whether the work is really done. Everything else stays on the agent's own model.
 
 Turn it on per agent or MCP gateway with **Enable Advisor**, under **Subagents**. It works the same in Auto and Custom mode. Pick the Advisor's model in its own settings — a stronger model than the callers use is the point.

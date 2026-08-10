@@ -234784,6 +234784,10 @@
                             "nullable": true,
                             "type": "boolean"
                           },
+                          "recommendedForAgents": {
+                            "nullable": true,
+                            "type": "boolean"
+                          },
                           "pricePerMillionInput": {
                             "nullable": true,
                             "type": "string"
@@ -234830,6 +234834,7 @@
                           "inputModalities",
                           "outputModalities",
                           "supportsToolCalling",
+                          "recommendedForAgents",
                           "pricePerMillionInput",
                           "pricePerMillionOutput",
                           "isCustomPrice",

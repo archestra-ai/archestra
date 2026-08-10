@@ -1,4 +1,5 @@
 import {
+  isSmallModel,
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
   requiresPerplexityAgentApi,
@@ -133,15 +134,31 @@ class ModelSyncService {
         "Upserted models to database",
       );
 
-      // 4. Link models to the API key with best-model detection
+      // 4. Link models to the API key with best-model detection. The
+      // agent-suitability verdict rides the link, not the `models` row: the
+      // row is globally unique on (provider, model_id) while the evidence is
+      // endpoint-local (two Ollama keys can serve different builds under the
+      // same tag), so a row-level verdict would let whichever sync finished
+      // last speak for every key.
+      const verdictByProviderModelId = new Map(
+        providerModels.map((model) => [
+          model.id,
+          deriveRecommendedForAgents(model.capabilities),
+        ]),
+      );
       const modelsWithIds = upsertedModels.map((m) => ({
         id: m.id,
         modelId: m.modelId,
+        recommendedForAgents: verdictByProviderModelId.get(m.modelId) ?? null,
       }));
       await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
         apiKeyId,
         modelsWithIds,
         provider,
+        // A tag is mutable (`ollama create` can repoint it), so the full
+        // refresh overwrites the verdict verbatim to self-correct; a normal
+        // sync COALESCEs so a time-boxed /api/show miss can't wipe it.
+        { overwriteRecommendedForAgents: forceRefresh === true },
       );
 
       logger.info(
@@ -372,6 +389,19 @@ export function buildModelsToUpsert(params: {
       lastSyncedAt: new Date(),
     };
   });
+}
+
+/**
+ * The one place the size threshold is applied. Null (not `true`) when the
+ * provider reported no count, so the link upsert can tell "no evidence this
+ * round" from "evidence says fine" and COALESCE the former away.
+ */
+function deriveRecommendedForAgents(
+  capabilities?: FetchedModelCapabilities,
+): boolean | null {
+  return capabilities?.parameterCount == null
+    ? null
+    : !isSmallModel(capabilities.parameterCount);
 }
 
 /**

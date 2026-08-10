@@ -28,12 +28,132 @@ describe("ModelSyncService", () => {
   const originalAzureFetcher = modelFetchers.azure;
   const originalGeminiFetcher = modelFetchers.gemini;
   const originalOpenrouterFetcher = modelFetchers.openrouter;
+  const originalOllamaFetcher = modelFetchers.ollama;
 
   afterEach(() => {
     modelFetchers.openai = originalOpenAiFetcher;
     modelFetchers.azure = originalAzureFetcher;
     modelFetchers.gemini = originalGeminiFetcher;
     modelFetchers.openrouter = originalOpenrouterFetcher;
+    modelFetchers.ollama = originalOllamaFetcher;
+  });
+
+  test("two Ollama endpoints sharing a tag keep independent agent verdicts", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secretA = await makeSecret({ secret: { apiKey: "endpoint-a" } });
+    const secretB = await makeSecret({ secret: { apiKey: "endpoint-b" } });
+    const keyA = await makeLlmProviderApiKey(org.id, secretA.id, {
+      provider: "ollama",
+    });
+    const keyB = await makeLlmProviderApiKey(org.id, secretB.id, {
+      provider: "ollama",
+    });
+
+    // The same tag on both endpoints, naming different builds: a 4B on A and
+    // a 70B on B. Both syncs upsert the same globally unique (provider,
+    // model_id) row, so only the link can tell the two endpoints apart.
+    modelFetchers.ollama = async (apiKeyValue) => [
+      {
+        id: "custom:latest",
+        displayName: "custom:latest",
+        provider: "ollama" as SupportedProvider,
+        capabilities: {
+          parameterCount:
+            apiKeyValue === "endpoint-a" ? 4_000_000_000 : 70_000_000_000,
+        },
+      },
+    ];
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: keyA.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint-a",
+    });
+    // B finishing last must not flip A's verdict, as a row-level column would.
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: keyB.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint-b",
+    });
+
+    const [forA] = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      keyA.id,
+    ]);
+    const [forB] = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      keyB.id,
+    ]);
+    expect(forA.recommendedForAgents).toBe(false);
+    expect(forB.recommendedForAgents).toBe(true);
+
+    // A listing spanning both keys collapses to one row per model; the
+    // warning must survive the merge rather than be averaged away.
+    const merged = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      keyA.id,
+      keyB.id,
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].recommendedForAgents).toBe(false);
+  });
+
+  test("a sync that learns nothing keeps the link verdict; a full refresh corrects it", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "endpoint" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "ollama",
+    });
+
+    const serve = (parameterCount: number | null) => async () => [
+      {
+        id: "custom:latest",
+        displayName: "custom:latest",
+        provider: "ollama" as SupportedProvider,
+        capabilities: { parameterCount },
+      },
+    ];
+
+    modelFetchers.ollama = serve(4_000_000_000);
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint",
+    });
+
+    // A time-boxed /api/show miss reports no size, so the sync derives no
+    // verdict. The known one must survive rather than silently un-flag.
+    modelFetchers.ollama = serve(null);
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint",
+    });
+
+    let [linked] = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      apiKey.id,
+    ]);
+    expect(linked.recommendedForAgents).toBe(false);
+
+    // The tag was repointed at a 70B build; a full refresh is the way a
+    // stale verdict self-corrects.
+    modelFetchers.ollama = serve(70_000_000_000);
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint",
+      forceRefresh: true,
+    });
+
+    [linked] = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      apiKey.id,
+    ]);
+    expect(linked.recommendedForAgents).toBe(true);
   });
 
   test("stores models with the API key's provider, not detected provider", async ({

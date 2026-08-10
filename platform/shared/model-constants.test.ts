@@ -4,7 +4,9 @@ import {
   getProvidersWithOptionalApiKey,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
+  isSmallModel,
   requiresOpenAiResponsesApi,
+  SMALL_MODEL_MAX_PARAMETERS,
   stripClaudeContextVariantSuffix,
 } from "./model-constants";
 
@@ -169,5 +171,24 @@ describe("stripClaudeContextVariantSuffix", () => {
     expect(stripClaudeContextVariantSuffix("claude-[1m]-opus")).toBe(
       "claude-[1m]-opus",
     );
+  });
+});
+
+describe("isSmallModel", () => {
+  test("makes no claim when the serving backend reported no size", () => {
+    // Only Ollama reports a parameter count today; everywhere else this is null
+    // and the model must go unmarked rather than be assumed large or small.
+    expect(isSmallModel(null)).toBe(false);
+  });
+
+  test("includes a model sitting exactly on the threshold", () => {
+    expect(isSmallModel(SMALL_MODEL_MAX_PARAMETERS)).toBe(true);
+  });
+
+  test("marks models below the threshold and spares those above it", () => {
+    expect(isSmallModel(1_000_000_000)).toBe(true);
+    expect(isSmallModel(3_212_749_888)).toBe(true);
+    expect(isSmallModel(8_030_261_248)).toBe(false);
+    expect(isSmallModel(70_000_000_000)).toBe(false);
   });
 });

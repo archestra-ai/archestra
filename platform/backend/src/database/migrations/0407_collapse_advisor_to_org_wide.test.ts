@@ -15,8 +15,6 @@ async function runMigration() {
   const statements = migrationSql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
-    // SET LOCAL is a no-op outside the migrator's transaction; the data
-    // statements are what the test exercises.
     .filter(
       (statement) => statement.length > 0 && !statement.startsWith("SET"),
     );
@@ -33,8 +31,6 @@ async function runMigration() {
 async function makeAdvisorRow(params: {
   organizationId: string;
   environmentId?: string | null;
-  deletedAt?: Date | null;
-  createdAt?: Date;
 }): Promise<{ id: string }> {
   const [row] = await db
     .insert(schema.agentsTable)
@@ -46,8 +42,6 @@ async function makeAdvisorRow(params: {
       systemPrompt: "advisor prompt",
       builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
       environmentId: params.environmentId ?? null,
-      deletedAt: params.deletedAt ?? null,
-      ...(params.createdAt ? { createdAt: params.createdAt } : {}),
     })
     .returning({ id: schema.agentsTable.id });
   return row;
@@ -61,42 +55,9 @@ async function makeEnvironment(organizationId: string, name: string) {
   return row;
 }
 
-async function makeDelegationToolRow(
-  targetAgentId: string,
-  createdAt?: Date,
-): Promise<{ id: string }> {
-  const [row] = await db
-    .insert(schema.toolsTable)
-    .values({
-      name: "agent__advisor",
-      delegateToAgentId: targetAgentId,
-      parameters: {
-        type: "object",
-        properties: { message: { type: "string" } },
-        required: ["message"],
-      },
-      ...(createdAt ? { createdAt } : {}),
-    })
-    .returning({ id: schema.toolsTable.id });
-  return row;
-}
-
-async function grantTool(agentId: string, toolId: string) {
-  await db.insert(schema.agentToolsTable).values({ agentId, toolId });
-}
-
-async function excludeSubagent(agentId: string, targetAgentId: string) {
-  await db
-    .insert(schema.agentExcludedSubagentsTable)
-    .values({ agentId, targetAgentId });
-}
-
-async function liveAdvisorRows(organizationId: string) {
-  return db
-    .select({
-      id: schema.agentsTable.id,
-      environmentId: schema.agentsTable.environmentId,
-    })
+async function liveAdvisorIds(organizationId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: schema.agentsTable.id })
     .from(schema.agentsTable)
     .where(
       and(
@@ -105,6 +66,7 @@ async function liveAdvisorRows(organizationId: string) {
         isNull(schema.agentsTable.deletedAt),
       ),
     );
+  return rows.map((r) => r.id);
 }
 
 async function agentIsRetired(id: string): Promise<boolean> {
@@ -115,252 +77,41 @@ async function agentIsRetired(id: string): Promise<boolean> {
   return row?.deletedAt != null;
 }
 
-async function grantedToolIds(agentId: string): Promise<string[]> {
-  const rows = await db
-    .select({ toolId: schema.agentToolsTable.toolId })
-    .from(schema.agentToolsTable)
-    .where(eq(schema.agentToolsTable.agentId, agentId));
-  return rows.map((r) => r.toolId);
-}
-
-async function excludedTargetIds(agentId: string): Promise<string[]> {
-  const rows = await db
-    .select({ targetId: schema.agentExcludedSubagentsTable.targetAgentId })
-    .from(schema.agentExcludedSubagentsTable)
-    .where(eq(schema.agentExcludedSubagentsTable.agentId, agentId));
-  return rows.map((r) => r.targetId);
-}
-
-const past = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000);
-
 describe("0407 collapse advisor to org-wide", () => {
-  test("collapses per-env advisors onto the org-wide row, remapping grants and exclusions", async ({
+  test("soft-deletes every environment-scoped advisor and keeps the org-wide row", async ({
     makeOrganization,
-    makeAgent,
   }) => {
     const org = await makeOrganization();
     const envA = await makeEnvironment(org.id, "env-a");
     const envB = await makeEnvironment(org.id, "env-b");
 
-    const orgAdvisor = await makeAdvisorRow({
-      organizationId: org.id,
-      createdAt: past(30),
-    });
+    const orgAdvisor = await makeAdvisorRow({ organizationId: org.id });
     const envAdvisorA = await makeAdvisorRow({
       organizationId: org.id,
       environmentId: envA.id,
-      createdAt: past(20),
     });
     const envAdvisorB = await makeAdvisorRow({
       organizationId: org.id,
       environmentId: envB.id,
-      createdAt: past(10),
     });
-
-    const envToolA = await makeDelegationToolRow(envAdvisorA.id);
-    const granted = await makeAgent({
-      organizationId: org.id,
-      environmentId: envA.id,
-    });
-    await grantTool(granted.id, envToolA.id);
-
-    const excluder = await makeAgent({
-      organizationId: org.id,
-      environmentId: envB.id,
-    });
-    await excludeSubagent(excluder.id, envAdvisorB.id);
 
     await runMigration();
 
-    const survivors = await liveAdvisorRows(org.id);
-    expect(survivors).toEqual([{ id: orgAdvisor.id, environmentId: null }]);
+    expect(await liveAdvisorIds(org.id)).toEqual([orgAdvisor.id]);
     expect(await agentIsRetired(envAdvisorA.id)).toBe(true);
     expect(await agentIsRetired(envAdvisorB.id)).toBe(true);
-
-    // The env advisor's tool was promoted to the survivor (it had none), so
-    // the existing grant row now reaches the survivor without remapping.
-    const [promotedTool] = await db
-      .select({
-        id: schema.toolsTable.id,
-        delegateToAgentId: schema.toolsTable.delegateToAgentId,
-      })
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.id, envToolA.id));
-    expect(promotedTool.delegateToAgentId).toBe(orgAdvisor.id);
-    expect(await grantedToolIds(granted.id)).toEqual([envToolA.id]);
-
-    // The survivor exclusion is added; the old one to the retired advisor
-    // lingers, inert (its target is soft-deleted).
-    expect(await excludedTargetIds(excluder.id)).toContain(orgAdvisor.id);
   });
 
-  test("keeps a single grant when an agent was granted both its env advisor and the org advisor", async ({
+  test("leaves each retired row's interaction history attributed in place", async ({
     makeOrganization,
-    makeAgent,
   }) => {
     const org = await makeOrganization();
     const env = await makeEnvironment(org.id, "env");
 
-    const orgAdvisor = await makeAdvisorRow({
-      organizationId: org.id,
-      createdAt: past(30),
-    });
+    await makeAdvisorRow({ organizationId: org.id });
     const envAdvisor = await makeAdvisorRow({
       organizationId: org.id,
       environmentId: env.id,
-      createdAt: past(20),
-    });
-
-    const orgTool = await makeDelegationToolRow(orgAdvisor.id, past(30));
-    const envTool = await makeDelegationToolRow(envAdvisor.id, past(20));
-    const agent = await makeAgent({ organizationId: org.id });
-    await grantTool(agent.id, orgTool.id);
-    await grantTool(agent.id, envTool.id);
-
-    await runMigration();
-
-    // The agent already held the survivor's tool, so the remap
-    // INSERT ... ON CONFLICT added no duplicate — exactly one orgTool grant.
-    // The env-tool grant lingers (the retired advisor is only soft-deleted)
-    // but is inert behind the notDeleted() filter every read path applies.
-    const grants = await grantedToolIds(agent.id);
-    expect(grants.filter((id) => id === orgTool.id)).toEqual([orgTool.id]);
-    expect(grants).toContain(envTool.id);
-  });
-
-  test("promotes the oldest per-env advisor when the org has no live org-wide row", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const envA = await makeEnvironment(org.id, "env-a");
-    const envB = await makeEnvironment(org.id, "env-b");
-
-    // Soft-deleted null-env residue (old deleteEnvironment behavior): must
-    // not be chosen as survivor, must be gone afterwards.
-    const residue = await makeAdvisorRow({
-      organizationId: org.id,
-      deletedAt: past(5),
-      createdAt: past(40),
-    });
-    const oldest = await makeAdvisorRow({
-      organizationId: org.id,
-      environmentId: envA.id,
-      createdAt: past(30),
-    });
-    const newer = await makeAdvisorRow({
-      organizationId: org.id,
-      environmentId: envB.id,
-      createdAt: past(20),
-    });
-
-    await runMigration();
-
-    const survivors = await liveAdvisorRows(org.id);
-    expect(survivors).toEqual([{ id: oldest.id, environmentId: null }]);
-    expect(await agentIsRetired(newer.id)).toBe(true);
-    expect(await agentIsRetired(residue.id)).toBe(true);
-  });
-
-  test("keeps the survivor's own tool canonical when both it and env tools exist", async ({
-    makeOrganization,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const env = await makeEnvironment(org.id, "env");
-
-    const orgAdvisor = await makeAdvisorRow({
-      organizationId: org.id,
-      createdAt: past(30),
-    });
-    const envAdvisor = await makeAdvisorRow({
-      organizationId: org.id,
-      environmentId: env.id,
-      createdAt: past(20),
-    });
-
-    const orgTool = await makeDelegationToolRow(orgAdvisor.id, past(30));
-    const envTool = await makeDelegationToolRow(envAdvisor.id, past(20));
-    const agent = await makeAgent({
-      organizationId: org.id,
-      environmentId: env.id,
-    });
-    await grantTool(agent.id, envTool.id);
-
-    await runMigration();
-
-    // Grant remapped onto the survivor's own tool (the survivor already had
-    // one, so the env tool was not promoted). The remapped grant is present.
-    expect(await grantedToolIds(agent.id)).toContain(orgTool.id);
-    // The survivor's own tool still points at it.
-    const [orgToolRow] = await db
-      .select({ delegateToAgentId: schema.toolsTable.delegateToAgentId })
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.id, orgTool.id));
-    expect(orgToolRow.delegateToAgentId).toBe(orgAdvisor.id);
-  });
-
-  test("adopts a configured sibling's model onto an unconfigured survivor", async ({
-    makeOrganization,
-    makeLlmProviderApiKey,
-    makeSecret,
-  }) => {
-    const org = await makeOrganization();
-    const env = await makeEnvironment(org.id, "env");
-    const [model] = await db
-      .insert(schema.modelsTable)
-      .values({ externalId: "m-adv", modelId: "m-adv", provider: "openai" })
-      .returning({ id: schema.modelsTable.id });
-    const secret = await makeSecret({ secret: { apiKey: "sk-x" } });
-    const key = await makeLlmProviderApiKey(org.id, secret.id, {
-      provider: "openai",
-    });
-
-    // The Default (null-env) survivor was never configured; the Staging
-    // advisor carries the org's real model/key/prompt.
-    const survivor = await makeAdvisorRow({
-      organizationId: org.id,
-      createdAt: past(30),
-    });
-    const configured = await makeAdvisorRow({
-      organizationId: org.id,
-      environmentId: env.id,
-      createdAt: past(20),
-    });
-    await db
-      .update(schema.agentsTable)
-      .set({
-        modelId: model.id,
-        llmApiKeyId: key.id,
-        systemPrompt: "custom advisor prompt",
-      })
-      .where(eq(schema.agentsTable.id, configured.id));
-
-    await runMigration();
-
-    const [survivorRow] = await db
-      .select({
-        modelId: schema.agentsTable.modelId,
-        llmApiKeyId: schema.agentsTable.llmApiKeyId,
-        systemPrompt: schema.agentsTable.systemPrompt,
-      })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, survivor.id));
-    expect(survivorRow.modelId).toBe(model.id);
-    expect(survivorRow.llmApiKeyId).toBe(key.id);
-    expect(survivorRow.systemPrompt).toBe("custom advisor prompt");
-  });
-
-  test("retires the env advisor by soft delete, leaving its history attributed in place", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const env = await makeEnvironment(org.id, "env");
-
-    await makeAdvisorRow({ organizationId: org.id, createdAt: past(30) });
-    const envAdvisor = await makeAdvisorRow({
-      organizationId: org.id,
-      environmentId: env.id,
-      createdAt: past(20),
     });
 
     const [interaction] = await db
@@ -376,9 +127,9 @@ describe("0407 collapse advisor to org-wide", () => {
 
     await runMigration();
 
-    // Soft delete keeps the row and its history intact and attributable —
-    // the profile pointer and the environment snapshot are untouched.
     expect(await agentIsRetired(envAdvisor.id)).toBe(true);
+    // Soft delete keeps the row, so its history stays attributable — the
+    // profile pointer and environment snapshot are untouched.
     const [row] = await db
       .select({
         profileId: schema.interactionsTable.profileId,
@@ -398,43 +149,24 @@ describe("0407 collapse advisor to org-wide", () => {
     const orgB = await makeOrganization();
     const envA = await makeEnvironment(orgA.id, "env-a");
 
-    const advisorA = await makeAdvisorRow({
-      organizationId: orgA.id,
-      createdAt: past(30),
-    });
+    const advisorA = await makeAdvisorRow({ organizationId: orgA.id });
     const envAdvisorA = await makeAdvisorRow({
       organizationId: orgA.id,
       environmentId: envA.id,
-      createdAt: past(20),
     });
-    const advisorB = await makeAdvisorRow({
-      organizationId: orgB.id,
-      createdAt: past(30),
-    });
-
+    const advisorB = await makeAdvisorRow({ organizationId: orgB.id });
+    // An ordinary env-scoped agent must not be mistaken for an advisor.
     const regular = await makeAgent({
       organizationId: orgA.id,
       environmentId: envA.id,
       name: "Regular env agent",
     });
-    const regularTool = await makeDelegationToolRow(regular.id);
-    const caller = await makeAgent({ organizationId: orgA.id });
-    await grantTool(caller.id, regularTool.id);
-    await excludeSubagent(caller.id, regular.id);
 
     await runMigration();
 
-    expect(await liveAdvisorRows(orgA.id)).toEqual([
-      { id: advisorA.id, environmentId: null },
-    ]);
-    expect(await liveAdvisorRows(orgB.id)).toEqual([
-      { id: advisorB.id, environmentId: null },
-    ]);
+    expect(await liveAdvisorIds(orgA.id)).toEqual([advisorA.id]);
+    expect(await liveAdvisorIds(orgB.id)).toEqual([advisorB.id]);
     expect(await agentIsRetired(envAdvisorA.id)).toBe(true);
-
-    // Non-advisor delegation state is untouched, env scoping included.
     expect(await agentIsRetired(regular.id)).toBe(false);
-    expect(await grantedToolIds(caller.id)).toEqual([regularTool.id]);
-    expect(await excludedTargetIds(caller.id)).toEqual([regular.id]);
   });
 });

@@ -257,9 +257,10 @@ export function ConnectorRunDetailsDialog({
               {!isPermissionRun && (run.documentsWithoutText ?? 0) > 0 && (
                 <p className="text-xs text-amber-600">
                   {run.documentsWithoutText} document(s) contained no
-                  extractable text — typically scanned or image-only PDFs — so
-                  they are not searchable and will not appear in any knowledge
-                  base answer. The run log names each one.
+                  extractable text — scanned or image-only PDFs, unreadable
+                  files, or files that failed to download — so they are not
+                  searchable and will not appear in any knowledge base answer.
+                  The run log names each one.
                 </p>
               )}
 

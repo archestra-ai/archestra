@@ -43,10 +43,10 @@ const connectorRunsTable = pgTable(
     completedBatches: integer("completed_batches").default(0),
     itemErrors: integer("item_errors").default(0),
     itemsSkipped: integer("items_skipped").default(0),
-    // Documents found by the connector but yielding no indexable text (scanned
-    // PDF with no text layer, unparseable PDF, empty file). A subset of
-    // itemsSkipped; counted separately so silent data loss is visible on the
-    // run summary (issue #7157).
+    // Documents found by the connector but yielding nothing indexable (scanned
+    // PDF with no text layer, unparseable or empty file, failed export,
+    // oversized image). A subset of itemsSkipped; counted separately so silent
+    // data loss is visible on the run summary (issue #7157).
     documentsWithoutText: integer("documents_without_text").default(0),
     error: text("error"),
     logs: text("logs"),

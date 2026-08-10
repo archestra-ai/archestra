@@ -15,17 +15,6 @@ interface PdfExtractionResult {
 }
 
 /**
- * Extracts text from a PDF buffer.
- *
- * Uses the internal pdf-parse entrypoint directly to avoid the test-file code
- * that pdf-parse v1 runs at the top level of its public entry point, which
- * fails when executed outside its own repository.
- *
- * Never throws: parse failures (password-protected, malformed/corrupt
- * structure, truncated) come back as `parse_failed` with empty text, so
- * callers can skip the item while still reporting why it was unreadable.
- */
-/**
  * Human-readable explanation of why a PDF yielded no text, for skip
  * reporting on the connector run. Returns undefined when extraction
  * succeeded.
@@ -45,6 +34,17 @@ export function describePdfEmptyText(
   }
 }
 
+/**
+ * Extracts text from a PDF buffer.
+ *
+ * Uses the internal pdf-parse entrypoint directly to avoid the test-file code
+ * that pdf-parse v1 runs at the top level of its public entry point, which
+ * fails when executed outside its own repository.
+ *
+ * Never throws: parse failures (password-protected, malformed/corrupt
+ * structure, truncated) come back as `parse_failed` with empty text, so
+ * callers can skip the item while still reporting why it was unreadable.
+ */
 export async function parsePdfBuffer(
   buffer: Buffer,
 ): Promise<PdfExtractionResult> {

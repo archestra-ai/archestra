@@ -628,8 +628,9 @@ export interface ConnectorItemFailure {
 /**
  * Machine-readable classification of a skipped item. `no_extractable_text`
  * marks documents that were found but yielded nothing indexable (scanned PDF
- * with no text layer, unparseable PDF, empty file) — counted separately on the
- * run so silent data loss is visible (issue #7157).
+ * with no text layer, unparseable or empty file, failed export, oversized
+ * image) — counted separately on the run so silent data loss is visible
+ * (issue #7157).
  */
 export type ConnectorSkipCategory = "no_extractable_text";
 

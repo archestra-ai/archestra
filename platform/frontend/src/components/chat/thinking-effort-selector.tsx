@@ -54,9 +54,9 @@ interface ThinkingEffortSelectorProps {
 }
 
 /**
- * Reasoning depth for the Gemini flash models that let a caller choose one.
- * Renders nothing for every other model, so the composer is unchanged wherever
- * the choice would not reach the provider.
+ * Reasoning depth for the models that let a caller choose one. Renders nothing
+ * for every other model, so the composer is unchanged wherever the choice would
+ * not reach the provider.
  */
 export const ThinkingEffortSelector = memo(function ThinkingEffortSelector({
   selectedModel,
@@ -72,7 +72,7 @@ export const ThinkingEffortSelector = memo(function ThinkingEffortSelector({
   // name, so the selected row has to be resolved before either can be applied.
   const supported = useMemo(() => {
     const model = models?.find((m) => m.dbId === selectedModel);
-    return model?.provider === "gemini" && supportsThinkingEffort(model.id);
+    return model ? supportsThinkingEffort(model.provider, model.id) : false;
   }, [models, selectedModel]);
 
   const current = toThinkingEffortOption(value);

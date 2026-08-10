@@ -187,10 +187,48 @@ describe("ThinkingEffortSelector", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders nothing for a non-Gemini provider", () => {
+  it("renders nothing for a provider the control does not reach", () => {
     // A provider whose model name happens to look Gemini-shaped must not
     // acquire the control through the id alone.
     setModels([{ ...GEMINI_FLASH, provider: "openrouter" }]);
+
+    const { container } = renderSelector();
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it.each([
+    ["an OpenAI reasoning model", "openai", "gpt-5.2"],
+    ["an Anthropic model that already reasons", "anthropic", "claude-opus-5"],
+  ] as const)("offers auto and all three depths on %s", async (_label, provider, id) => {
+    const user = userEvent.setup();
+    setModels([{ ...GEMINI_FLASH, provider, id }]);
+
+    renderSelector();
+    await user.click(trigger());
+
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(4);
+    expect(option("Auto")).toBeInTheDocument();
+  });
+
+  it.each([
+    // Non-reasoning family: the field is a 400 there.
+    ["a non-reasoning OpenAI model", "openai", "gpt-4o"],
+    // Fixed at one depth, so there is nothing to pick.
+    ["the OpenAI pro tier", "openai", "gpt-5-pro"],
+    // Another vendor's catalog behind the same OpenAI-compatible credential.
+    ["a foreign catalog on the openai protocol", "openai", "deepseek-ai/R1"],
+    // Accepts the field but keeps thinking off; offering a depth would start
+    // billing reasoning on chats nobody has touched.
+    [
+      "an Anthropic model that reasons only on request",
+      "anthropic",
+      "claude-opus-4-8",
+    ],
+    // Rejects the field outright.
+    ["an Anthropic model without the field", "anthropic", "claude-haiku-4-5"],
+  ] as const)("renders nothing for %s", (_label, provider, id) => {
+    setModels([{ ...GEMINI_FLASH, provider, id }]);
 
     const { container } = renderSelector();
 

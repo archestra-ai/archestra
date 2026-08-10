@@ -653,7 +653,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, organizationId, user }, reply) => {
-      const apiKey = await LlmProviderApiKeyModel.findById(params.id);
+      // Subscription metadata included: the edit dialog's URL-param path
+      // resolves a single key through this route and needs the derived kind to
+      // reopen a subscription key on its connected card rather than the
+      // API-key tab.
+      const apiKey = await LlmProviderApiKeyModel.findByIdWithSubscriptionInfo(
+        params.id,
+      );
 
       if (!apiKey || apiKey.organizationId !== organizationId) {
         throw new ApiError(404, "LLM provider API key not found");

@@ -424,6 +424,39 @@ describe("LLM Provider API Keys CRUD", () => {
     expect(apiKey.name).toBe("Get By ID Test Key");
   });
 
+  test("returns subscription metadata for a single key fetched by ID", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // The edit dialog's URL-param path (?edit=<id>) resolves through this
+    // route; without the derived kind an F5 mid-edit would reopen an
+    // X Premium key on the API-key tab with no connected card.
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "rt-get-by-id",
+        }),
+      },
+    });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: user.id,
+      name: "X Premium (SuperGrok)",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${key.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: key.id,
+      subscriptionKind: "x-premium",
+    });
+  });
+
   test("should update an LLM provider API key name", async () => {
     const createResponse = await app.inject({
       method: "POST",

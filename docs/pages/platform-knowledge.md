@@ -126,7 +126,7 @@ Connectors index image files only when the configured embedding model accepts im
 
 Every other embedding model is text-only, and cannot be marked as accepting image input in **LLM Providers > Models**. Connectors skip image formats the model does not accept — a GIF under a Bedrock configuration, for example. Images ingested under an earlier configuration are skipped at embedding time. The document completes without them, and the run shows the skipped count.
 
-Titan Multimodal G1 accepts 256 text tokens per input. Longer text chunks are truncated before embedding. Use a text embedding model when your corpus is mostly documents.
+Titan Multimodal G1 accepts 256 text tokens per input. Cohere Embed v3 accepts 512. Longer text chunks are truncated before embedding — only the start of the chunk lands in the vector. Use a text embedding model when your corpus is mostly documents.
 
 ### Reranking Configuration
 

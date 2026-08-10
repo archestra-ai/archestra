@@ -213,8 +213,12 @@ async function embedWithCohere(params: {
       const response = await client.invokeJson<CohereEmbeddingResponse>(model, {
         texts: batch.map((entry) => entry.text),
         input_type: "search_document",
-        // A chunk slightly over the model's token limit degrades to a truncated
-        // vector instead of failing the whole document.
+        // Cohere embeds at most 512 tokens per text; "END" makes the API drop
+        // the excess so an over-limit chunk degrades to a truncated vector
+        // instead of failing the whole document. Unlike the Titan path (local
+        // truncation, logged with a count), this happens server-side and
+        // SILENTLY: a chunk-size setting above 512 tokens embeds only each
+        // chunk's prefix, with no signal in the logs.
         truncate: "END",
       });
       const vectors = cohereVectors(response, model, batch.length);

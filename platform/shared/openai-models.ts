@@ -28,7 +28,8 @@ export function openAiReasoningEffortForEffort(
  * - `pro` models accept `high` and nothing else, so there is no choice to offer.
  * - `chat-latest` is the non-reasoning tier of each generation and rejects
  *   the field.
- * - `o1-mini` shipped before the knob existed.
+ * - the first `o1` wave (`o1-preview`, `o1-mini`) shipped before the knob
+ *   existed and answers `Unknown parameter: 'reasoning_effort'`.
  *
  * The `openai` provider is an OpenAI-compatible bucket, not a vendor: the same
  * credential serves Fireworks, DeepSeek and Cerebras catalogs, whose ids are
@@ -46,7 +47,8 @@ export function supportsOpenAiThinkingEffort(modelId: string): boolean {
   // happens to carry one of the carve-out tokens can never fall through to a
   // `true`.
   const isGpt5 = id.startsWith("gpt-5");
-  const isOSeries = OPENAI_O_SERIES_RE.test(id) && !id.startsWith("o1-mini");
+  const isOSeries =
+    OPENAI_O_SERIES_RE.test(id) && !OPENAI_PRE_EFFORT_O1_RE.test(id);
   if (!isGpt5 && !isOSeries) {
     return false;
   }
@@ -72,3 +74,6 @@ export function supportsOpenAiThinkingEffort(modelId: string): boolean {
 const OPENAI_PRO_TOKEN_RE = /(?:^|[-/])pro(?:[-/]|$)/;
 
 const OPENAI_O_SERIES_RE = /^o[134](?:$|-)/;
+
+/** The o1 models that predate `reasoning_effort`, dated snapshots included. */
+const OPENAI_PRE_EFFORT_O1_RE = /^o1-(?:mini|preview)/;

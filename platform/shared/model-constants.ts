@@ -806,12 +806,13 @@ export function anthropicSupportsThinkingDisabled(modelId: string): boolean {
  * Deliberately the same set as {@link anthropicThinksByDefault}, and delegating
  * rather than listing markers again so the two cannot drift. The reasoning is
  * that `output_config.effort` only *means* reasoning depth while thinking is
- * on. Opus 4.5–4.8 and Sonnet 4.6 accept the field but keep thinking off until
- * a request asks for it, and asking would start billing reasoning on every
- * existing conversation of theirs — the column is `NOT NULL DEFAULT`, so a
- * mapping applies to chats nobody has touched. Offering nothing there is the
- * honest option; a model that already reasons is one whose depth we can move
- * without changing what a chat costs by default.
+ * on: Opus 4.5–4.8 and Sonnet 4.6 accept the field but keep thinking off until
+ * a request asks for it, so a depth there would move token spend without
+ * producing any of the reasoning the control names.
+ *
+ * Reaching them would mean sending `thinking: {type: "adaptive"}` alongside the
+ * effort, which the display wrapper in `clients/llm-client.ts` currently treats
+ * as a caller opting out of summaries — a bigger change than this control.
  *
  * Older models (Sonnet 4.5, Haiku 4.5 and earlier) reject the field outright.
  */

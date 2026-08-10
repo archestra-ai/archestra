@@ -40,8 +40,11 @@ describe("supportsOpenAiThinkingEffort", () => {
     // Search is a retrieval surface with its own request shape.
     ["gpt-5-search-api", false],
     ["gpt-4o-search-preview", false],
-    // Shipped before the knob existed.
+    // The first o1 wave predates the knob and 400s on it.
     ["o1-mini", false],
+    ["o1-preview", false],
+    ["o1-preview-2024-09-12", false],
+    ["o1-mini-2024-09-12", false],
     // Non-reasoning families 400 on the field.
     ["gpt-4o", false],
     ["gpt-4.1", false],

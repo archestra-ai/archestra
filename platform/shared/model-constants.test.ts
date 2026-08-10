@@ -44,9 +44,8 @@ describe("anthropicSupportsThinkingEffort", () => {
   });
 
   test("offers none where a depth would mean switching thinking on", () => {
-    // These accept output_config.effort, but keep thinking off until asked.
-    // Turning it on would start billing reasoning on conversations nobody has
-    // touched, since the column is NOT NULL DEFAULT.
+    // These accept output_config.effort but keep thinking off until asked, so a
+    // depth would move token spend without producing any reasoning.
     expect(anthropicSupportsThinkingEffort("claude-opus-4-8")).toBe(false);
     expect(anthropicSupportsThinkingEffort("claude-opus-4-7")).toBe(false);
     expect(anthropicSupportsThinkingEffort("claude-opus-4-6")).toBe(false);

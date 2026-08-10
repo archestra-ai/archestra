@@ -55,8 +55,8 @@ describe("buildAnthropicProviderOptions", () => {
   });
 
   test.each([
-    // Accept the field but keep thinking off, so a depth would silently start
-    // billing reasoning on conversations nobody has touched.
+    // Accept the field but keep thinking off, so a depth would move token
+    // spend without producing any reasoning.
     "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-sonnet-4-6",

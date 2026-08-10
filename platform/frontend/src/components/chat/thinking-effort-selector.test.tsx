@@ -218,8 +218,8 @@ describe("ThinkingEffortSelector", () => {
     ["the OpenAI pro tier", "openai", "gpt-5-pro"],
     // Another vendor's catalog behind the same OpenAI-compatible credential.
     ["a foreign catalog on the openai protocol", "openai", "deepseek-ai/R1"],
-    // Accepts the field but keeps thinking off; offering a depth would start
-    // billing reasoning on chats nobody has touched.
+    // Accepts the field but keeps thinking off, so a depth would move token
+    // spend without producing any reasoning.
     [
       "an Anthropic model that reasons only on request",
       "anthropic",

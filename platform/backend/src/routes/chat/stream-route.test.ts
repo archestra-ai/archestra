@@ -1726,7 +1726,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   }) => {
     const anthropicModelIds = [
       // Accepts output_config.effort but keeps thinking off, so a depth would
-      // start billing reasoning on chats nobody has touched.
+      // move token spend without producing any reasoning.
       "claude-opus-4-8",
       // Rejects the field outright.
       "claude-haiku-4-5",

@@ -24,7 +24,7 @@ Enabling the Advisor also instructs the agent to consult it before delivering a 
 
 The Advisor cannot see the conversation, the files, or the tools. It reads only the message the calling model writes, then returns advice. It changes nothing.
 
-There is one Advisor per organization, reachable from every environment. Consultations still count against the consulting agent's environment [cost limits](/docs/platform-costs-and-limits). Each consultation is a separate interaction, billed at the Advisor's model rates. The agent consults at decision points rather than on every turn, so a cheap agent model paired with a strong Advisor usually costs less than running the strong model throughout.
+There is one Advisor per organization, reachable from every environment. Consultations count against the consulting agent's environment [cost limits](/docs/platform-costs-and-limits). Each consultation is a separate interaction, billed at the Advisor's model rates. The agent consults at decision points rather than on every turn, so a cheap agent model paired with a strong Advisor usually costs less than running the strong model throughout.
 
 ## Policy Configuration Subagent
 

@@ -576,24 +576,6 @@ describe("ModelModel", () => {
       expect(updated?.defaultParameters).toEqual({ num_ctx: 4096 });
     });
 
-    test("keeps the last known agent verdict when a non-full sync omits it", async () => {
-      await ModelModel.bulkUpsert([
-        { ...ollamaBase, recommendedForAgents: false },
-      ]);
-      // A time-boxed /api/show miss reports no size, so the sync derives no
-      // verdict. The known one must survive rather than fall back to the
-      // column default and silently un-flag the model.
-      await ModelModel.bulkUpsert([
-        { ...ollamaBase, recommendedForAgents: null },
-      ]);
-
-      const updated = await ModelModel.findByProviderAndModelId(
-        "ollama",
-        "llama3",
-      );
-      expect(updated?.recommendedForAgents).toBe(false);
-    });
-
     test("refreshes default parameters on non-full sync when the provider reports new values", async () => {
       await ModelModel.bulkUpsert([
         { ...ollamaBase, defaultParameters: { num_ctx: 4096 } },
@@ -760,34 +742,6 @@ describe("ModelModel", () => {
         "llama3-full",
       );
       expect(refreshed?.defaultParameters).toEqual({ num_ctx: 8192 });
-    });
-
-    test("clears a stale agent verdict on full refresh", async () => {
-      const base = {
-        externalId: "ollama/llama3-resize",
-        provider: "ollama" as const,
-        modelId: "llama3-resize",
-        description: "Llama 3",
-        contextLength: 8192,
-        inputModalities: ["text" as const],
-        outputModalities: ["text" as const],
-        supportsToolCalling: false,
-        promptPricePerToken: null,
-        completionPricePerToken: null,
-        lastSyncedAt: new Date(),
-      };
-      await ModelModel.bulkUpsert([{ ...base, recommendedForAgents: false }]);
-      // A full refresh is the way to correct a verdict that went stale because
-      // the tag was repointed at a different model.
-      await ModelModel.bulkUpsertFull([
-        { ...base, recommendedForAgents: null },
-      ]);
-
-      const refreshed = await ModelModel.findByProviderAndModelId(
-        "ollama",
-        "llama3-resize",
-      );
-      expect(refreshed?.recommendedForAgents).toBeNull();
     });
 
     test("clears the proxy-discovery flag when a catalog sync returns the model", async () => {

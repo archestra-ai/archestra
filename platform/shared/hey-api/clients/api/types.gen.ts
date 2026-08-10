@@ -59614,7 +59614,6 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
-        recommendedForAgents: boolean | null;
         defaultParameters: {
             [key: string]: string | number | Array<string>;
         } | null;
@@ -59788,7 +59787,6 @@ export type UpdateModelResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
-        recommendedForAgents: boolean | null;
         defaultParameters: {
             [key: string]: string | number | Array<string>;
         } | null;

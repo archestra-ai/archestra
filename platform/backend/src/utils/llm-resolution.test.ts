@@ -52,7 +52,6 @@ const MOCK_MODEL = {
   customPricePerMillionCacheRead: null,
   customPricePerMillionCacheWrite: null,
   embeddingDimensions: null,
-  recommendedForAgents: null,
   defaultParameters: null,
   configuredParameters: null,
   ignored: false,

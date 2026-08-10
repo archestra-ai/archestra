@@ -171,8 +171,15 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   inputModalities: true,
   outputModalities: true,
   supportsToolCalling: true,
-  recommendedForAgents: true,
 }).extend({
+  /**
+   * Endpoint-scoped agent-suitability verdict from the `api_key_models` link
+   * (not a `models` column). Tri-state: `false` is evidence-backed, `true`
+   * means the evidence says fine, null means no evidence. Only `false` is
+   * ever surfaced. Aggregated pessimistically when a listing spans several
+   * keys.
+   */
+  recommendedForAgents: z.boolean().nullable(),
   /** Price per million tokens for input (computed from per-token price) */
   pricePerMillionInput: z.string().nullable(),
   /** Price per million tokens for output (computed from per-token price) */

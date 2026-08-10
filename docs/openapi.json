@@ -235557,10 +235557,6 @@
                           }
                         ]
                       },
-                      "recommendedForAgents": {
-                        "nullable": true,
-                        "type": "boolean"
-                      },
                       "defaultParameters": {
                         "nullable": true,
                         "type": "object",
@@ -235801,7 +235797,6 @@
                       "customPricePerMillionCacheWrite",
                       "ignored",
                       "embeddingDimensions",
-                      "recommendedForAgents",
                       "defaultParameters",
                       "configuredParameters",
                       "discoveredViaLlmProxy",
@@ -236386,10 +236381,6 @@
                         }
                       ]
                     },
-                    "recommendedForAgents": {
-                      "nullable": true,
-                      "type": "boolean"
-                    },
                     "defaultParameters": {
                       "nullable": true,
                       "type": "object",
@@ -236505,7 +236496,6 @@
                     "customPricePerMillionCacheWrite",
                     "ignored",
                     "embeddingDimensions",
-                    "recommendedForAgents",
                     "defaultParameters",
                     "configuredParameters",
                     "discoveredViaLlmProxy",

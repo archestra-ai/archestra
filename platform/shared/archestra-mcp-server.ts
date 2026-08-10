@@ -331,7 +331,9 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "chat", label: "Chat" },
   { id: "meta", label: "Meta" },
   { id: "skills", label: "Skills" },
-  { id: "skill_sandbox", label: "Skill Sandbox" },
+  // `id` keeps the original spelling so the taxonomy keys stay stable; the
+  // label follows the feature's user-facing name (docs page "Code Sandbox").
+  { id: "skill_sandbox", label: "Code Sandbox" },
   { id: "apps", label: "Apps" },
 ] as const;
 

@@ -2,6 +2,7 @@
 
 import {
   type ContextWindowBreakdown,
+  DEFAULT_THINKING_EFFORT,
   E2eTestId,
   providerDisplayNames,
   type SupportedProvider,
@@ -176,7 +177,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   modelSource,
   toolsUnavailable = false,
   onResetModelOverride,
-  thinkingEffort = "low",
+  thinkingEffort = DEFAULT_THINKING_EFFORT,
   onThinkingEffortChange,
   agentRequiresPerUserConnect = false,
   subscriptionConnectRequired = false,

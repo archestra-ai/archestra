@@ -1,4 +1,8 @@
-import type { SupportedProvider, ThinkingEffort } from "@archestra/shared";
+import {
+  DEFAULT_THINKING_EFFORT,
+  type SupportedProvider,
+  type ThinkingEffort,
+} from "@archestra/shared";
 import { desc, isNull, sql } from "drizzle-orm";
 import {
   boolean,
@@ -55,7 +59,7 @@ const conversationsTable = softDeletablePgTable(
     thinkingEffort: text("thinking_effort")
       .$type<ThinkingEffort>()
       .notNull()
-      .default("medium"),
+      .default(DEFAULT_THINKING_EFFORT),
     hasCustomToolSelection: boolean("has_custom_tool_selection")
       .notNull()
       .default(false),

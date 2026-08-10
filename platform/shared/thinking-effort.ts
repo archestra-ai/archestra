@@ -12,3 +12,14 @@
 export const THINKING_EFFORTS = ["low", "medium", "high"] as const;
 
 export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
+
+/**
+ * What a conversation reasons at until someone chooses otherwise.
+ *
+ * `medium` is what the models this currently reaches already do untouched, so
+ * gaining the control changes no existing chat's behaviour. Every default — the
+ * column, the new-chat composer, the control's own fallback — reads from here,
+ * because when they were written out separately they drifted and new chats
+ * quietly stopped reasoning.
+ */
+export const DEFAULT_THINKING_EFFORT: ThinkingEffort = "medium";

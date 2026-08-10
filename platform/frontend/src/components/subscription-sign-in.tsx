@@ -56,5 +56,8 @@ export function SubscriptionSignIn({
   onSecret,
   disabled,
 }: SubscriptionSignInProps) {
-  return SIGN_IN_FLOWS[kind]({ onSecret, disabled });
+  // Rendered as a component (not invoked as a function) so each flow keeps its
+  // own hook state and a kind change remounts instead of mismatching hooks.
+  const Flow = SIGN_IN_FLOWS[kind];
+  return <Flow onSecret={onSecret} disabled={disabled} />;
 }

@@ -8,6 +8,7 @@ import {
   SUBSCRIPTION_CREDENTIAL_KINDS,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
+  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -376,11 +377,14 @@ export default function ApiKeysPage() {
             credential.scope === "personal" &&
             credential.provider === subscription.provider &&
             // A credential-level subscription shares its provider with ordinary
-            // API keys, so match on the kind the backend read off the secret;
-            // a provider-level one is identified by its provider alone.
+            // API keys, so match on the kind the backend read off the secret
+            // (with the connect-flow name fallback for secrets the metadata
+            // endpoint can't read); a provider-level one is identified by its
+            // provider alone.
             (SUBSCRIPTION_CREDENTIALS[subscription.subscriptionKind].marker ===
               null ||
-              credential.subscriptionKind === subscription.subscriptionKind),
+              subscriptionKindFromKeyMetadata(credential) ===
+                subscription.subscriptionKind),
         ) ?? null,
     }));
     const connectedIds = new Set(

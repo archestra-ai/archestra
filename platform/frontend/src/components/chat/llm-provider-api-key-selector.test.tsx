@@ -350,6 +350,43 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     ).toBeInTheDocument();
   });
 
+  it("recognizes a name-only X Premium key when secret metadata is unavailable", () => {
+    // Vault-backed deployments: the metadata endpoint cannot read the stored
+    // secret, so subscriptionKind arrives null and only the connect-flow name
+    // identifies the subscription. A differently-named plain key must still
+    // stay an ordinary credential row.
+    const nameOnlyXPremiumKey = {
+      id: "x-premium-name-only",
+      name: "X Premium (SuperGrok)",
+      provider: "xai",
+      scope: "personal",
+      userId: "current-user",
+    } as LlmProviderApiKey;
+    const xaiApiKey = {
+      id: "xai-api-key",
+      name: "Plain xAI key",
+      provider: "xai",
+      scope: "org",
+      userId: null,
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [nameOnlyXPremiumKey, xaiApiKey],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    renderSelector();
+
+    expect(
+      screen.getByRole("button", { name: "X Premium (SuperGrok) Connected" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Plain xAI key Connected" }),
+    ).toBeInTheDocument();
+  });
+
   it("re-opens the X sign-in flow to reconnect a selected X Premium key", async () => {
     const user = userEvent.setup();
     const xPremiumKey = {

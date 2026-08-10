@@ -9,6 +9,7 @@ import {
   resolveModelSelection,
   type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 
 export type { ModelSource };
@@ -317,13 +318,11 @@ export function getAgentSubscriptionConnection(params: {
     (credential) => credential.id === agent?.llmApiKeyId,
   );
   // Which subscription the pinned credential encodes, from the server-derived
-  // metadata (populated for included agent keys too), with the legacy ChatGPT
-  // name/boolean fallback for keys whose secret was unreadable.
-  const pinnedSubscriptionKind =
-    pinnedCredential?.subscriptionKind ??
-    (pinnedCredential && isLegacyChatgptSubscriptionKey(pinnedCredential)
-      ? "chatgpt"
-      : null);
+  // metadata (populated for included agent keys too), with the connect-flow
+  // name fallback for keys whose secret was unreadable.
+  const pinnedSubscriptionKind = pinnedCredential
+    ? subscriptionKindFromKeyMetadata(pinnedCredential)
+    : null;
   const requiresConnection = Boolean(
     agent?.llmProviderRequiresPerUserCredential ||
       pinnedSubscriptionKind != null,
@@ -344,26 +343,12 @@ export function getAgentSubscriptionConnection(params: {
         (credential) =>
           credential.userId === userId &&
           (pinnedSubscriptionKind != null
-            ? credential.subscriptionKind === pinnedSubscriptionKind ||
-              (pinnedSubscriptionKind === "chatgpt" &&
-                isLegacyChatgptSubscriptionKey(credential))
+            ? subscriptionKindFromKeyMetadata(credential) ===
+              pinnedSubscriptionKind
             : credential.provider === provider),
       ),
   );
   return { requiresConnection, isConnected };
-}
-
-function isLegacyChatgptSubscriptionKey(
-  credential: Pick<
-    AgentSubscriptionCredential,
-    "provider" | "name" | "isChatgptSubscription"
-  >,
-) {
-  return (
-    credential.provider === "openai" &&
-    (credential.isChatgptSubscription === true ||
-      credential.name.trim().toLowerCase() === "chatgpt subscription")
-  );
 }
 
 /**

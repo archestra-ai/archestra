@@ -1,9 +1,11 @@
 "use client";
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseLlmProviderApiKeys = vi.fn();
+const mockUseLlmProviderApiKey = vi.fn();
+const mockLlmProviderApiKeyForm = vi.fn();
 
 vi.mock("next/image", () => ({
   default: ({
@@ -29,9 +31,8 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
-  useLlmProviderApiKey: () => ({
-    data: null,
-  }),
+  useLlmProviderApiKey: (...args: unknown[]) =>
+    mockUseLlmProviderApiKey(...args),
   useLlmProviderApiKeys: (...args: unknown[]) =>
     mockUseLlmProviderApiKeys(...args),
   useUpdateLlmProviderApiKey: () => ({
@@ -106,7 +107,11 @@ vi.mock("@/components/form-dialog", () => ({
 
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "__placeholder__",
-  LlmProviderApiKeyForm: () => null,
+  LlmProviderApiKeyForm: (props: unknown) => {
+    mockLlmProviderApiKeyForm(props);
+    return null;
+  },
+  deserializeExtraHeaders: () => [],
   PROVIDER_CONFIG: {
     anthropic: { icon: "/anthropic.svg", name: "Anthropic" },
     gemini: { icon: "/gemini.svg", name: "Gemini" },
@@ -236,6 +241,9 @@ describe("ApiKeysPage", () => {
       data: [],
       isPending: false,
     });
+    mockUseLlmProviderApiKey.mockReturnValue({
+      data: null,
+    });
   });
 
   it("does not query API keys while read permission is still loading", () => {
@@ -314,6 +322,77 @@ describe("ApiKeysPage", () => {
       screen.queryByText("Existing ChatGPT credential"),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText("Connect")).toHaveLength(3);
+  });
+
+  it("shows a name-only X Premium key as connected when secret metadata is unavailable", () => {
+    // Vault-backed deployments: subscriptionKind arrives null even for a
+    // connected key, so the row falls back to the name the connect flow
+    // assigned instead of rendering "Not connected".
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "x-premium-key",
+          name: "X Premium (SuperGrok)",
+          provider: "xai",
+          scope: "personal",
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getAllByText("X Premium (SuperGrok)")).toHaveLength(1);
+    expect(screen.getAllByText("Connect")).toHaveLength(3);
+  });
+
+  it("reopens an X Premium key from the edit URL param in subscription mode", async () => {
+    // The reviewer-reported F5 case: ?edit=<id> resolves the key through the
+    // single-key endpoint, which must carry subscriptionKind so the dialog
+    // reopens on the subscription auth mode, not the API-key tab.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("edit=x-premium-key") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockUseLlmProviderApiKey.mockReturnValue({
+      data: {
+        id: "x-premium-key",
+        name: "X Premium (SuperGrok)",
+        provider: "xai",
+        scope: "personal",
+        secretId: "secret-1",
+        subscriptionKind: "x-premium",
+        isChatgptSubscription: false,
+        baseUrl: null,
+        inferenceBaseUrl: null,
+        extraHeaders: null,
+        teamId: null,
+        isPrimary: false,
+      },
+    });
+
+    render(<ApiKeysPage />);
+
+    await waitFor(() => {
+      expect(mockLlmProviderApiKeyForm).toHaveBeenCalled();
+    });
+    const formProps = mockLlmProviderApiKeyForm.mock.lastCall?.[0] as {
+      existingKey: { subscriptionKind?: string | null };
+      form: { getValues: (name: string) => unknown };
+    };
+    expect(formProps.existingKey.subscriptionKind).toBe("x-premium");
+    await waitFor(() => {
+      expect(formProps.form.getValues("authMethod")).toBe("subscription");
+    });
   });
 
   it("names who each scoped credential is accessible to", () => {

@@ -2,6 +2,7 @@ import {
   providerRequiresPerUserCredential,
   type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 
 /**
@@ -23,14 +24,10 @@ interface SubscriptionCheckableLlmKey {
  * they never offer a credential the backend will reject.
  */
 export function isPersonalSubscription(key: SubscriptionCheckableLlmKey) {
+  // subscriptionKindFromKeyMetadata carries the name fallback for keys whose
+  // secret is unreadable to the metadata endpoint (vault-backed deployments).
   return (
-    key.subscriptionKind != null ||
-    providerRequiresPerUserCredential(key.provider) ||
-    // Legacy fallback: ChatGPT keys whose secret is unreadable to the metadata
-    // endpoint carry no kind but are still recognized by the boolean flag or
-    // their default name.
-    (key.provider === "openai" &&
-      (key.isChatgptSubscription === true ||
-        key.name.trim().toLowerCase() === "chatgpt subscription"))
+    subscriptionKindFromKeyMetadata(key) != null ||
+    providerRequiresPerUserCredential(key.provider)
   );
 }

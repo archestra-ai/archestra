@@ -478,6 +478,45 @@ describe("getAgentSubscriptionConnection", () => {
     ).toEqual({ requiresConnection: true, isConnected: true });
   });
 
+  test("X Premium key metadata (name only, no kind) still gates and connects", () => {
+    // Vault-backed deployments: the metadata endpoint cannot read the stored
+    // secret, so the kind rides on the name the connect flow assigned — same
+    // fallback the legacy ChatGPT keys rely on.
+    const agent = {
+      llmApiKeyId: "owner-x-premium-nokind",
+      resolvedLlmProvider: "xai" as const,
+      llmProviderRequiresPerUserCredential: false,
+    };
+    const pinnedNameOnly = {
+      id: "owner-x-premium-nokind",
+      provider: "xai" as const,
+      name: "X Premium (SuperGrok)",
+      userId: "owner",
+    };
+    expect(
+      getAgentSubscriptionConnection({
+        agent,
+        credentials: [pinnedNameOnly],
+        userId: "viewer",
+      }),
+    ).toEqual({ requiresConnection: true, isConnected: false });
+    expect(
+      getAgentSubscriptionConnection({
+        agent,
+        credentials: [
+          pinnedNameOnly,
+          {
+            id: "viewer-x-premium-nokind",
+            provider: "xai",
+            name: "X Premium (SuperGrok)",
+            userId: "viewer",
+          },
+        ],
+        userId: "viewer",
+      }),
+    ).toEqual({ requiresConnection: true, isConnected: true });
+  });
+
   test("an ordinary shared key requires no connection", () => {
     expect(
       getAgentSubscriptionConnection({

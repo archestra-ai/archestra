@@ -6,6 +6,7 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
@@ -448,13 +449,9 @@ function subscriptionMatchesKind(
   const { provider, marker } = SUBSCRIPTION_CREDENTIALS[kind];
   if (key.provider !== provider) return false;
   if (marker === null) return true;
-  return (
-    key.subscriptionKind === kind ||
-    // Legacy fallback: ChatGPT keys whose secret is unreadable to the metadata
-    // endpoint are still recognized by their default name.
-    (kind === "chatgpt" &&
-      key.name.trim().toLowerCase() === "chatgpt subscription")
-  );
+  // The metadata helper carries the connect-flow name fallback for keys whose
+  // secret is unreadable to the metadata endpoint (vault-backed deployments).
+  return subscriptionKindFromKeyMetadata(key) === kind;
 }
 
 function subscriptionDebug(event: string, data: Record<string, unknown>) {

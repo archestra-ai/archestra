@@ -5,7 +5,7 @@ import {
   hasAnyAgentTypeReadPermission,
   isAgentTypeAdmin,
 } from "@/auth";
-import { AgentModel } from "@/models";
+import { AgentModel, EnvironmentModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -146,6 +146,54 @@ describe("built-in agents routes", () => {
     });
 
     expect(deleteResponse.statusCode).toBe(403);
+  });
+
+  test("the advisor rejects scope, team, and environment changes but accepts prompt edits", async ({
+    makeTeam,
+  }) => {
+    const advisor = await AgentModel.create({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      organizationId,
+      agentType: "agent",
+      scope: "org",
+      systemPrompt: "You are the advisor.",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+    const team = await makeTeam(organizationId, user.id);
+
+    // One org-wide advisor serves every environment's agents through
+    // delegation, so narrowing it to a team or environment is rejected
+    // outright rather than silently dropped.
+    const scopeResponse = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${advisor.id}`,
+      payload: { scope: "team", teams: [team.id] },
+    });
+    expect(scopeResponse.statusCode).toBe(400);
+
+    const environment = await EnvironmentModel.create({
+      organizationId,
+      name: "Staging",
+    });
+    const envResponse = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${advisor.id}`,
+      payload: { environmentId: environment.id },
+    });
+    expect(envResponse.statusCode).toBe(400);
+
+    const promptResponse = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${advisor.id}`,
+      payload: { systemPrompt: "Updated advisor prompt" },
+    });
+    expect(promptResponse.statusCode).toBe(200);
+    expect(promptResponse.json().systemPrompt).toBe("Updated advisor prompt");
+    expect(promptResponse.json().environmentId).toBeNull();
   });
 
   test("can update builtInAgentConfig", async () => {

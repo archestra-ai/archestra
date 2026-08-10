@@ -1,5 +1,6 @@
 import {
   type AgentType,
+  BUILT_IN_AGENT_IDS,
   createPaginatedResponseSchema,
   getResourceForAgentType,
   isModelSelectionComplete,
@@ -1371,6 +1372,28 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
           if (!parsed.success) {
             throw new ApiError(400, "Invalid built-in agent configuration");
+          }
+        }
+
+        // The advisor is one org-wide row every environment's agents reach
+        // through delegation. A team scope would hide it from everyone
+        // outside that team's delegation surface, and an environment would
+        // re-fence it — reject both rather than silently narrowing a shared
+        // resource.
+        if (
+          existingAgent.builtInAgentConfig.name === BUILT_IN_AGENT_IDS.ADVISOR
+        ) {
+          if (body.scope !== undefined || body.teams !== undefined) {
+            throw new ApiError(
+              400,
+              "The Advisor is shared by the whole organization and cannot be scoped to teams",
+            );
+          }
+          if (body.environmentId !== undefined && body.environmentId !== null) {
+            throw new ApiError(
+              400,
+              "The Advisor is org-wide and cannot be assigned to an environment",
+            );
           }
         }
 

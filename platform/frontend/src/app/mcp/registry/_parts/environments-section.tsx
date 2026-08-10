@@ -1163,8 +1163,7 @@ function DeleteEnvironmentDialog({
         <div className="space-y-2 text-sm">
           <p>
             This removes the <span className="font-medium">{target.name}</span>{" "}
-            environment and its Advisor agent, including the model configured on
-            it. This cannot be undone.
+            environment. This cannot be undone.
           </p>
         </div>
       }

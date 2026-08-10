@@ -515,10 +515,9 @@ describe("AgentDialog delegation state", () => {
     });
   });
 
-  it("shows the advisor which environment it belongs to, without offering to move it", async () => {
-    // The advisor is the one built-in with a row per environment, and the rest
-    // of the built-in form is hidden — so without this the dialog gives no clue
-    // which of several identically named advisors is open.
+  it("renders no environment selector for the advisor", async () => {
+    // The advisor is configured once for the whole organization and reachable
+    // from every environment, so there is no environment to show or move.
     const advisorBuiltIn = {
       ...baseAgent,
       id: advisorAgent.id,
@@ -538,9 +537,8 @@ describe("AgentDialog delegation state", () => {
       />,
     );
 
-    const selector = await screen.findByTestId("environment-selector");
-    // Moving it would strand every agent that consults it.
-    expect(selector).toHaveAttribute("data-disabled", "true");
+    await screen.findByRole("heading", { name: "Edit Advisor" });
+    expect(screen.queryByTestId("environment-selector")).toBeNull();
   });
 
   it("keeps the advisor out of the subagent lists, so only its switch offers it", async () => {
@@ -701,25 +699,28 @@ describe("AgentDialog delegation state", () => {
     ).not.toBeChecked();
   });
 
-  it("drops a grant to another environment's advisor on save", async () => {
+  it("keeps an existing advisor grant on save for an agent in a named environment", async () => {
     const user = userEvent.setup();
     const syncDelegations = vi
       .fn()
       .mockResolvedValue({ added: [], removed: [] });
-    const otherEnvAdvisor = {
-      ...advisorAgent,
-      id: "00000000-0000-4000-8000-000000000004",
+    const updateAgent = vi.fn();
+    // The advisor row is org-wide (env-less); the agent sits in a named
+    // environment and still holds a live grant on it. The old per-env dialog
+    // treated that grant as another environment's advisor and scrubbed it on
+    // save — now it reads as the switch being on and survives untouched.
+    const customAgent = {
+      ...baseAgent,
+      accessAllSubagents: false,
       environmentId: "00000000-0000-4000-8000-0000000000ff",
     };
-    const customAgent = { ...baseAgent, accessAllSubagents: false };
+    updateAgent.mockResolvedValue(customAgent);
     useProfileMock.mockReturnValue({ data: customAgent, refetch: vi.fn() });
     useDelegationTargetAgentsMock.mockReturnValue({
-      data: [targetAgent, advisorAgent, otherEnvAdvisor],
+      data: [targetAgent, advisorAgent],
     });
-    // Left by an earlier configuration, when this agent sat in that
-    // environment: undispatchable now, and invisible in the dialog.
     useAgentDelegationsMock.mockReturnValue({
-      data: [targetAgent, otherEnvAdvisor],
+      data: [targetAgent, advisorAgent],
       isFetched: true,
     });
     useSyncAgentDelegationsMock.mockReturnValue({
@@ -727,7 +728,7 @@ describe("AgentDialog delegation state", () => {
       isPending: false,
     });
     useUpdateProfileMock.mockReturnValue({
-      mutateAsync: vi.fn().mockResolvedValue(customAgent),
+      mutateAsync: updateAgent,
       isPending: false,
     });
 
@@ -740,13 +741,13 @@ describe("AgentDialog delegation state", () => {
       />,
     );
 
-    await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
+    const toggle = await screen.findByTestId(E2eTestId.ConsultAdvisorSwitch);
+    expect(toggle).toBeChecked();
     await user.click(screen.getByRole("button", { name: /update/i }));
 
-    await waitFor(() => expect(syncDelegations).toHaveBeenCalled());
-    const { targetAgentIds } = syncDelegations.mock.calls[0][0];
-    expect(targetAgentIds).not.toContain(otherEnvAdvisor.id);
-    expect(targetAgentIds).toContain(targetAgent.id);
+    await waitFor(() => expect(updateAgent).toHaveBeenCalled());
+    // The saved grant set is unchanged — no scrub, so no delegation resync.
+    expect(syncDelegations).not.toHaveBeenCalled();
   });
 
   it("saves no advisor grant when the switch ends up off after a trip through Custom", async () => {

@@ -32,7 +32,7 @@ export interface KbChunkForQuoteCheck {
 }
 
 /**
- * A `> "quote" — ref` pair extracted from the model's answer.
+ * A `"quote" — ref` pair extracted from the model's answer.
  *
  * @public — part of the verify result shape; asserted directly in unit tests.
  */
@@ -70,7 +70,7 @@ export interface QuoteVerificationResult {
  * below so the requested format and the parser cannot drift apart.
  */
 export const QUOTE_CITATION_INSTRUCTION =
-  'When you state a fact drawn from these results, immediately back it with a short verbatim quote from the exact chunk that supports it, tagged with that chunk\'s "ref", formatted as: > "<verbatim quote>" — <ref>. Copy the quote exactly as it appears in the chunk\'s content, so the claim can be verified against its source.';
+  'When you state a fact drawn from these results, mark it inline with a numbered reference like [1], and list every reference in a "Sources" section at the end of your answer. Format each source line exactly as: [1] "<verbatim quote>" — <ref>, where the quote is a short excerpt (one sentence or fragment, at most 15 words) copied exactly as it appears in the supporting chunk\'s content, and <ref> is that chunk\'s "ref" value. Cite each distinct fact once and never repeat a quote.';
 
 /** Builds the stable, model-visible citation anchor for a chunk. */
 export function buildChunkRef(documentId: string, chunkIndex: number): string {
@@ -79,10 +79,12 @@ export function buildChunkRef(documentId: string, chunkIndex: number): string {
 
 /**
  * Extracts `"quote" — ref` pairs written in the {@link QUOTE_CITATION_INSTRUCTION}
- * convention. Tolerant of the variance models introduce: straight or curly
- * quotes, em/en/hyphen dashes, and an optional backtick/bracket around the ref.
- * Duplicate (quote, ref) pairs are collapsed so repetition does not inflate
- * counts.
+ * convention — canonically `[n] "quote" — ref` lines in a trailing Sources
+ * section, but position-independent: any `"quote" — ref` adjacency in the
+ * answer parses, so inline or blockquoted citations still count. Tolerant of
+ * the variance models introduce: straight or curly quotes, em/en/hyphen
+ * dashes, and an optional backtick/bracket around the ref. Duplicate
+ * (quote, ref) pairs are collapsed so repetition does not inflate counts.
  *
  * @public — exercised directly by unit tests; also used by verifyQuotes below.
  */
@@ -235,7 +237,8 @@ const MIN_BROAD_SEARCH_QUOTE_CHARS = 12;
  * ref-shaped token, so only the delimiter that actually precedes the citation
  * anchor terminates it — an embedded quote cannot end the match early and
  * truncate what gets verified. The body still excludes newlines; the ref is a
- * uuid-shaped token followed by `#<index>`.
+ * uuid-shaped token followed by `#<index>`. A Sources line's leading `[n]`
+ * marker sits before the opening quote, outside the match.
  */
 const CITATION_PATTERN =
   /["“”]([^\n]{1,400}?)["“”]\s*[—–-]{1,2}\s*[`[(]?\s*([0-9a-fA-F][0-9a-fA-F-]{7,}#\d+)/g;

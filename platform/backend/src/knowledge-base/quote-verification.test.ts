@@ -70,6 +70,19 @@ describe("extractCitedQuotes", () => {
     ]);
   });
 
+  it("parses the numbered Sources-section convention the instruction asks for", () => {
+    // The canonical shape: inline [n] markers in the prose, with each
+    // quote/ref pair on its own `[n] "quote" — ref` line under a Sources
+    // heading. The markers and heading sit outside the match.
+    const quotes = extractCitedQuotes(
+      `The retention period is 90 days [1] and billing is monthly [2].\n\nSources:\n[1] "retention period is 90 days" — ${REF_A}\n[2] "billing cycles are monthly" — ${REF_B}`,
+    );
+    expect(quotes).toEqual<CitedQuote[]>([
+      { quote: "retention period is 90 days", ref: REF_A },
+      { quote: "billing cycles are monthly", ref: REF_B },
+    ]);
+  });
+
   it("parses multiple citations on one line independently", () => {
     const quotes = extractCitedQuotes(
       `"first passage here" — ${REF_A} and "second passage here" — ${REF_B}`,

@@ -432,6 +432,8 @@ Paste the JSON key into the connector and enter a Workspace admin address as the
 
 Someone authorizes their own Drive through Google, and the connector indexes what they can see. Archestra stores a refresh token, so the sync keeps working once the first hour is up.
 
+Only that one person authorizes -- whoever sets the connector up. Nobody else signs in to Google, and there is no per-user prompt. What they can see becomes readable by everyone the Knowledge Base is shared with, so pick the account whose view of Drive matches the audience you intend.
+
 This mode needs a Google OAuth client on the deployment. Create a **Web application** client in the Cloud Console, enable the Google Drive API, and register the redirect URI the connector form shows you. Set `ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID` and `ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET` to that client's credentials.
 
 Saving the connector sends you to Google. The connector page then names the connected account and offers **Reconnect** -- you need it if that account ever revokes access.

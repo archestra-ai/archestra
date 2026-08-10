@@ -197,7 +197,7 @@ export function describeGoogleAuthFailure(params: {
     return "The service account key could not be read. Paste the key file exactly as Google downloaded it — a private_key whose line breaks were flattened will not parse.";
   }
   if (raw.includes("unauthorized_client")) {
-    return `Google refused to impersonate${who}: the service account's client ID is not authorized for the requested scopes. Add it under Security → Access and data control → API controls → Domain-wide delegation in the Google Admin console, with the scope ${DRIVE_READONLY_SCOPE}.`;
+    return `Google refused the impersonation${who}: the service account's client ID is not authorized for the requested scopes. Add it under Security → Access and data control → API controls → Domain-wide delegation in the Google Admin console, with the scope ${DRIVE_READONLY_SCOPE}.`;
   }
   if (raw.includes("invalid_grant")) {
     return subject

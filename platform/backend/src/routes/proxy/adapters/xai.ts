@@ -20,13 +20,14 @@ import {
   isXaiSubscriptionCredential,
 } from "@/services/xai-subscription-credentials";
 import { createXaiSubscriptionFetch } from "@/services/xai-subscription-token";
-import type {
-  CreateClientOptions,
-  LLMProvider,
-  LLMRequestAdapter,
-  LLMResponseAdapter,
-  LLMStreamAdapter,
-  Xai,
+import {
+  ApiError,
+  type CreateClientOptions,
+  type LLMProvider,
+  type LLMRequestAdapter,
+  type LLMResponseAdapter,
+  type LLMStreamAdapter,
+  type Xai,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -251,9 +252,24 @@ export const xaiAdapterFactory: LLMProvider<
     // an encoded xAI OAuth credential, not a console key. The base URL is the
     // same OpenAI-compatible surface either way — only the bearer differs, and
     // it is swapped in the fetch wrapper because createClient is synchronous.
-    const subscriptionCredential = decodeXaiSubscriptionCredential(
-      stripBearerPrefix(apiKey),
-    );
+    const strippedApiKey = stripBearerPrefix(apiKey);
+    const subscriptionCredential =
+      decodeXaiSubscriptionCredential(strippedApiKey);
+    // A marker-prefixed value that doesn't decode is a corrupted subscription
+    // credential, never a console key: falling through to the plain-key branch
+    // would send it as a raw bearer to options.baseUrl, which per-key
+    // overrides make user-supplied — the exact leak the subscription fetch's
+    // origin pin fails closed against.
+    if (
+      !subscriptionCredential &&
+      isXaiSubscriptionCredential(strippedApiKey)
+    ) {
+      throw new ApiError(
+        401,
+        "Your X Premium (SuperGrok) sign-in is unreadable. Reconnect your X account to keep using your subscription.",
+        ArchestraInternalErrorCode.ProviderAuthRequired,
+      );
+    }
     if (subscriptionCredential) {
       return new OpenAIProvider({
         maxRetries: PROXY_SDK_MAX_RETRIES,

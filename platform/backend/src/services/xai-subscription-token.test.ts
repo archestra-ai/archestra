@@ -238,6 +238,53 @@ describe("xaiSubscriptionTokenManager", () => {
     expect(redeemedRefreshTokens).toEqual(["rt_cache"]);
   });
 
+  test("honors a JWT exp shorter than the default TTL when expires_in is absent", async () => {
+    // xAI may omit expires_in; when the access token is a JWT its own exp
+    // claim is authoritative. An already-expired exp must force a fresh
+    // redemption instead of being served from cache for the default hour.
+    const expiredJwt = () => {
+      const b64url = (value: object) =>
+        Buffer.from(JSON.stringify(value)).toString("base64url");
+      return `${b64url({ alg: "none" })}.${b64url({
+        exp: Math.floor(Date.now() / 1000) - 10,
+      })}.sig`;
+    };
+    const { redeemedRefreshTokens } = stubRedemptionFetch(() => ({
+      access_token: expiredJwt(),
+      refresh_token: "rt_jwt_exp",
+    }));
+
+    await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_jwt_exp",
+      providerApiKeyId: "key-jwt-exp",
+    });
+    await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_jwt_exp",
+      providerApiKeyId: "key-jwt-exp",
+    });
+
+    expect(redeemedRefreshTokens).toHaveLength(2);
+  });
+
+  test("falls back to the default TTL for an opaque token without expires_in", async () => {
+    const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+    }));
+
+    const first = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_opaque",
+      providerApiKeyId: "key-opaque",
+    });
+    const second = await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: "rt_opaque",
+      providerApiKeyId: "key-opaque",
+    });
+
+    expect(first).toBe("at_0");
+    expect(second).toBe("at_0");
+    expect(redeemedRefreshTokens).toEqual(["rt_opaque"]);
+  });
+
   test("single-flights concurrent redemptions for the same key", async () => {
     const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
       access_token: `at_${index}`,

@@ -12,6 +12,7 @@ import {
   DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
+  isSubscriptionCredential,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
@@ -540,7 +541,7 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       continue;
     }
 
-    const decision = decideEnvSeed(provider);
+    const decision = decideEnvSeed(provider, apiKeyValue);
     if (decision.kind === "skip") {
       logger.warn(
         { provider },
@@ -613,7 +614,10 @@ type EnvSeedDecision =
  *
  * @public — unit-tested in seed.test.ts
  */
-export function decideEnvSeed(provider: SupportedProvider): EnvSeedDecision {
+export function decideEnvSeed(
+  provider: SupportedProvider,
+  apiKeyValue: string,
+): EnvSeedDecision {
   const baseUrl = getProviderConfiguredBaseUrl(provider);
 
   // Per-user providers (GitHub Copilot) must never be seeded as an org-wide key
@@ -622,6 +626,17 @@ export function decideEnvSeed(provider: SupportedProvider): EnvSeedDecision {
     return {
       kind: "skip",
       reason: "per-user provider; each user connects their own account",
+    };
+  }
+
+  // A subscription credential in the env var is one person's vendor account;
+  // seeding it as an org-wide primary key would redeem that personal token for
+  // everyone. resolveProviderApiKey refuses the same value at request time.
+  if (isSubscriptionCredential(apiKeyValue)) {
+    return {
+      kind: "skip",
+      reason:
+        "subscription credentials are per-user; refusing to seed an org-wide key",
     };
   }
 

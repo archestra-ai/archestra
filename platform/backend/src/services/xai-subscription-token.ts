@@ -36,6 +36,7 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { ApiError } from "@/types";
+import { decodeJwtClaims } from "./openai-codex-credentials";
 import {
   decodeXaiSubscriptionCredential,
   encodeXaiSubscriptionCredential,
@@ -656,11 +657,33 @@ async function redeemWithXai(refreshToken: string): Promise<{
 
   return {
     accessToken: payload.access_token,
-    expiresAtMs:
-      Date.now() +
-      (typeof payload.expires_in === "number" && payload.expires_in > 0
-        ? payload.expires_in * 1000
-        : DEFAULT_ACCESS_TOKEN_TTL_MS),
+    expiresAtMs: accessTokenExpiryMs(payload.access_token, payload.expires_in),
     rotatedRefreshToken: payload.refresh_token,
   };
+}
+
+/**
+ * Determines when an xAI access token expires: prefer the JWT `exp` claim when
+ * the token is one, fall back to the response `expires_in`, then to a
+ * conservative default. Mirrors the Codex token manager — the real lifetime is
+ * not a documented constant, and over-estimating it would cost every request
+ * in the gap a 401 + re-redemption round-trip.
+ */
+function accessTokenExpiryMs(
+  accessToken: string,
+  expiresIn: number | undefined,
+): number {
+  const exp = jwtExpMs(accessToken);
+  if (exp !== undefined) {
+    return exp;
+  }
+  if (typeof expiresIn === "number") {
+    return Date.now() + expiresIn * 1000;
+  }
+  return Date.now() + DEFAULT_ACCESS_TOKEN_TTL_MS;
+}
+
+function jwtExpMs(jwt: string): number | undefined {
+  const exp = decodeJwtClaims(jwt)?.exp;
+  return typeof exp === "number" ? exp * 1000 : undefined;
 }

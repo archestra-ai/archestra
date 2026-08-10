@@ -11,6 +11,7 @@ import {
   DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach } from "vitest";
@@ -786,12 +787,12 @@ describe("decideEnvSeed", () => {
 
   test("skips vLLM when no base URL is configured", () => {
     config.llm.vllm.baseUrl = undefined;
-    expect(decideEnvSeed("vllm").kind).toBe("skip");
+    expect(decideEnvSeed("vllm", "sk-env").kind).toBe("skip");
   });
 
   test("creates vLLM with the base URL persisted when configured", () => {
     config.llm.vllm.baseUrl = "https://vllm.example.com/v1";
-    expect(decideEnvSeed("vllm")).toEqual({
+    expect(decideEnvSeed("vllm", "sk-env")).toEqual({
       kind: "create",
       persistedBaseUrl: "https://vllm.example.com/v1",
     });
@@ -799,17 +800,17 @@ describe("decideEnvSeed", () => {
 
   test("skips Azure when no base URL is configured", () => {
     config.llm.azure.baseUrl = "";
-    expect(decideEnvSeed("azure").kind).toBe("skip");
+    expect(decideEnvSeed("azure", "sk-env").kind).toBe("skip");
   });
 
   test("treats a whitespace-only base URL as not configured", () => {
     config.llm.azure.baseUrl = "   ";
-    expect(decideEnvSeed("azure").kind).toBe("skip");
+    expect(decideEnvSeed("azure", "sk-env").kind).toBe("skip");
   });
 
   test("creates Azure with the base URL persisted when configured", () => {
     config.llm.azure.baseUrl = "https://my-resource.openai.azure.com/openai";
-    expect(decideEnvSeed("azure")).toEqual({
+    expect(decideEnvSeed("azure", "sk-env")).toEqual({
       kind: "create",
       persistedBaseUrl: "https://my-resource.openai.azure.com/openai",
     });
@@ -817,7 +818,7 @@ describe("decideEnvSeed", () => {
 
   test("creates a normal provider without persisting its base URL", () => {
     config.llm.openai.baseUrl = "https://api.openai.com/v1";
-    expect(decideEnvSeed("openai")).toEqual({
+    expect(decideEnvSeed("openai", "sk-env")).toEqual({
       kind: "create",
       persistedBaseUrl: null,
     });
@@ -825,9 +826,22 @@ describe("decideEnvSeed", () => {
 
   test("creates Bedrock without a base URL (region fallback)", () => {
     config.llm.bedrock.baseUrl = "";
-    expect(decideEnvSeed("bedrock")).toEqual({
+    expect(decideEnvSeed("bedrock", "sk-env")).toEqual({
       kind: "create",
       persistedBaseUrl: null,
+    });
+  });
+
+  test("skips a subscription credential in the env var", () => {
+    // The encoded value is one person's refresh token; seeding it org-wide
+    // would redeem that personal subscription for every user on every boot.
+    const encoded = `${SUBSCRIPTION_CREDENTIALS["x-premium"].marker}${Buffer.from(
+      JSON.stringify({ refreshToken: "rt" }),
+    ).toString("base64")}`;
+    expect(decideEnvSeed("xai", encoded)).toEqual({
+      kind: "skip",
+      reason:
+        "subscription credentials are per-user; refusing to seed an org-wide key",
     });
   });
 });

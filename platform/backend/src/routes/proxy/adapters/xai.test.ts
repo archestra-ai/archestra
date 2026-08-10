@@ -1,6 +1,41 @@
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  SUBSCRIPTION_CREDENTIALS,
+} from "@archestra/shared";
 import { describe, expect, test } from "@/test";
+import type { ApiError } from "@/types";
 import { xaiAdapterFactory } from "./xai";
+
+describe("createClient", () => {
+  test("fails closed on a marker-prefixed credential that does not decode", () => {
+    // The value classifies as subscription for billing, so letting it fall
+    // through to the plain-key branch would send it as a raw bearer to a
+    // possibly user-supplied base URL.
+    const corrupted = `${SUBSCRIPTION_CREDENTIALS["x-premium"].marker}not-base64-json`;
+    let thrown: unknown;
+    try {
+      xaiAdapterFactory.createClient(corrupted, {
+        baseUrl: "https://api.x.ai/v1",
+        source: "chat",
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as ApiError).statusCode).toBe(401);
+    expect((thrown as ApiError).internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderAuthRequired,
+    );
+  });
+
+  test("still builds a plain client for a console key", () => {
+    expect(() =>
+      xaiAdapterFactory.createClient("xai-console-key", {
+        baseUrl: "https://api.x.ai/v1",
+        source: "chat",
+      }),
+    ).not.toThrow();
+  });
+});
 
 describe("extractInternalCode", () => {
   test("classifies the structured context_length_exceeded code", () => {

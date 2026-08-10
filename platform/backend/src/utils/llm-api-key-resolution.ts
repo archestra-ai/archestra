@@ -1,6 +1,7 @@
 import {
   isProviderApiKeyOptional,
   isSubscriptionCredential,
+  providerDisplayNames,
   providerRequiresPerUserCredential,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
@@ -10,6 +11,7 @@ import {
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { getProviderEnvApiKey } from "@/config";
+import logger from "@/logging";
 import { LlmProviderApiKeyModel, TeamModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 
@@ -97,6 +99,36 @@ export async function resolveProviderApiKey(params: {
         const subscriptionKind = subscriptionKindFromCredential(
           secretValue as string,
         );
+        // A marker belonging to another provider's subscription means the
+        // stored value was corrupted or swapped (e.g. rotated out of band —
+        // nothing re-validates a BYOS vault value). No adapter can use it:
+        // this provider's adapter would send the encoded refresh token
+        // upstream as a raw bearer. Refuse resolution outright — even for the
+        // owner's own key.
+        if (
+          subscriptionKind &&
+          SUBSCRIPTION_CREDENTIALS[subscriptionKind].provider !== provider
+        ) {
+          logger.warn(
+            {
+              provider,
+              markerProvider:
+                SUBSCRIPTION_CREDENTIALS[subscriptionKind].provider,
+              llmProviderApiKeyId: resolvedApiKey.id,
+            },
+            "Refusing subscription credential whose marker belongs to another provider",
+          );
+          return {
+            apiKey: undefined,
+            source: resolvedApiKey.scope,
+            chatApiKeyId: undefined,
+            baseUrl: null,
+            authRequired: {
+              provider,
+              providerLabel: providerDisplayNames[provider],
+            },
+          };
+        }
         if (
           subscriptionKind &&
           !(

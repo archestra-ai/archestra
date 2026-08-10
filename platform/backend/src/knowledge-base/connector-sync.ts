@@ -178,6 +178,12 @@ class ConnectorSyncService {
     let documentsIngested = 0;
     let itemErrors = 0;
     let itemsSkipped = 0;
+    // Item counters are written as deltas (`increments`), never absolute:
+    // batch-embedding handlers add their own failures/skips to the same run
+    // columns concurrently via `completeBatch`, and an absolute SET here would
+    // erase those. These markers track what this loop has already flushed.
+    let flushedItemErrors = 0;
+    let flushedItemsSkipped = 0;
     let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
@@ -367,11 +373,17 @@ class ConnectorSyncService {
           data: {
             documentsProcessed,
             documentsIngested,
-            itemErrors,
-            itemsSkipped,
             logs: options?.getLogOutput?.() ?? null,
           },
+          increments: {
+            itemErrors: itemErrors - flushedItemErrors,
+            itemsSkipped: itemsSkipped - flushedItemsSkipped,
+          },
         });
+        if (stillOwned) {
+          flushedItemErrors = itemErrors;
+          flushedItemsSkipped = itemsSkipped;
+        }
 
         if (!stillOwned) {
           runLog.info(
@@ -430,9 +442,11 @@ class ConnectorSyncService {
             completedAt: new Date(),
             documentsProcessed,
             documentsIngested,
-            itemErrors,
-            itemsSkipped,
             logs: options?.getLogOutput?.() ?? null,
+          },
+          increments: {
+            itemErrors: itemErrors - flushedItemErrors,
+            itemsSkipped: itemsSkipped - flushedItemsSkipped,
           },
         });
 
@@ -473,9 +487,11 @@ class ConnectorSyncService {
             completedAt: now,
             documentsProcessed,
             documentsIngested,
-            itemErrors,
-            itemsSkipped,
             logs: options?.getLogOutput?.() ?? null,
+          },
+          increments: {
+            itemErrors: itemErrors - flushedItemErrors,
+            itemsSkipped: itemsSkipped - flushedItemsSkipped,
           },
         });
 
@@ -561,10 +577,12 @@ class ConnectorSyncService {
           completedAt: new Date(),
           documentsProcessed,
           documentsIngested,
-          itemErrors,
-          itemsSkipped,
           error: errorMessage,
           logs: options?.getLogOutput?.() ?? null,
+        },
+        increments: {
+          itemErrors: itemErrors - flushedItemErrors,
+          itemsSkipped: itemsSkipped - flushedItemsSkipped,
         },
       });
 

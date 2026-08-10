@@ -245,16 +245,37 @@ class ConnectorRunModel {
    * (status still `running` AND `lease_epoch` unchanged). Returns `null` if the
    * run was reclaimed/finalized — the fencing signal that tells a paused-then-
    * revived owner to stop writing (its epoch is now stale).
+   *
+   * `increments` applies counter deltas additively (`col + delta`) in the same
+   * UPDATE. The item counters have TWO writers — the sync loop and concurrent
+   * `completeBatch` calls from batch-embedding handlers — so an absolute SET
+   * from one would silently erase what the other added in the interim; both
+   * must go through additive SQL. An increment wins over a same-named key in
+   * `data`.
    */
   static async updateIfOwned(params: {
     runId: string;
     epoch: number;
     data: Partial<UpdateConnectorRun>;
+    increments?: { itemErrors?: number; itemsSkipped?: number };
   }): Promise<ConnectorRun | null> {
     const t = schema.connectorRunsTable;
+    const { increments } = params;
     const [result] = await db
       .update(t)
-      .set(params.data)
+      .set({
+        ...params.data,
+        ...(increments?.itemErrors
+          ? {
+              itemErrors: sql`COALESCE(${t.itemErrors}, 0) + ${increments.itemErrors}`,
+            }
+          : {}),
+        ...(increments?.itemsSkipped
+          ? {
+              itemsSkipped: sql`COALESCE(${t.itemsSkipped}, 0) + ${increments.itemsSkipped}`,
+            }
+          : {}),
+      })
       .where(
         and(
           eq(t.id, params.runId),

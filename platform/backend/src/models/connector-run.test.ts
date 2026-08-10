@@ -714,6 +714,50 @@ describe("ConnectorRunModel", () => {
       const after = await ConnectorRunModel.findById(run.id);
       expect(after?.documentsProcessed).toBe(3);
     });
+
+    test("counter increments compose with concurrent completeBatch additions instead of clobbering them", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const run = await makeConnectorRun(connector.id, { status: "running" });
+
+      // A batch-embedding handler records embed-time skips and failures while
+      // the sync loop is still paging (totalBatches is unset until the loop
+      // finishes, so the run stays "running").
+      await ConnectorRunModel.completeBatch(run.id, {
+        failedItems: 1,
+        error: "Embedding failed",
+        skippedItems: 3,
+      });
+
+      // The sync loop's next progress flush writes its own deltas — it must
+      // add to the embed-side counts, not overwrite them with its local total.
+      const result = await ConnectorRunModel.updateIfOwned({
+        runId: run.id,
+        epoch: 0,
+        data: { documentsProcessed: 10 },
+        increments: { itemErrors: 2, itemsSkipped: 5 },
+      });
+
+      expect(result?.itemErrors).toBe(3);
+      expect(result?.itemsSkipped).toBe(8);
+      expect(result?.documentsProcessed).toBe(10);
+
+      // A zero delta leaves the counters untouched.
+      const unchanged = await ConnectorRunModel.updateIfOwned({
+        runId: run.id,
+        epoch: 0,
+        data: { documentsProcessed: 11 },
+        increments: { itemErrors: 0, itemsSkipped: 0 },
+      });
+      expect(unchanged?.itemErrors).toBe(3);
+      expect(unchanged?.itemsSkipped).toBe(8);
+    });
   });
 
   describe("renewLease", () => {

@@ -706,9 +706,8 @@ describe("AgentDialog delegation state", () => {
       .mockResolvedValue({ added: [], removed: [] });
     const updateAgent = vi.fn();
     // The advisor row is org-wide (env-less); the agent sits in a named
-    // environment and still holds a live grant on it. The old per-env dialog
-    // treated that grant as another environment's advisor and scrubbed it on
-    // save — now it reads as the switch being on and survives untouched.
+    // environment and still holds a live grant on it, which reads as the
+    // switch being on and survives the save untouched.
     const customAgent = {
       ...baseAgent,
       accessAllSubagents: false,

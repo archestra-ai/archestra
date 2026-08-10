@@ -561,9 +561,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Omit teams if scope is not 'team' — scope takes precedence
+      // Omit teams if scope is not 'team' — scope takes precedence.
+      // `builtInAgentConfig` is server-owned: only the seeder sets it, and it
+      // is a trust attribute (the advisor discriminator drives the delegation
+      // environment exception), so a client-supplied value is dropped here.
       const createData = {
         ...body,
+        builtInAgentConfig: null,
         ...(body.scope !== "team" && { teams: [] }),
       };
       const agent = await AgentModel.create(createData, user.id);
@@ -1378,12 +1382,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // The advisor is one org-wide row every environment's agents reach
         // through delegation. A team scope would hide it from everyone
         // outside that team's delegation surface, and an environment would
-        // re-fence it — reject both rather than silently narrowing a shared
-        // resource.
+        // re-fence it — reject a narrowing change rather than silently scoping
+        // a shared resource. A no-op that restates org scope or an empty team
+        // list is allowed (the dialog may resend it).
         if (
           existingAgent.builtInAgentConfig.name === BUILT_IN_AGENT_IDS.ADVISOR
         ) {
-          if (body.scope !== undefined || body.teams !== undefined) {
+          const narrowsScope = body.scope !== undefined && body.scope !== "org";
+          const assignsTeams =
+            body.teams !== undefined && body.teams.length > 0;
+          if (narrowsScope || assignsTeams) {
             throw new ApiError(
               400,
               "The Advisor is shared by the whole organization and cannot be scoped to teams",
@@ -1413,9 +1421,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ...(body.teams !== undefined && { teams: body.teams }),
         };
       } else {
-        // Omit teams if scope is not 'team' — scope takes precedence
+        // Omit teams if scope is not 'team' — scope takes precedence.
+        // `builtInAgentConfig` is server-owned and a trust attribute (drives
+        // the advisor delegation exception), so a client cannot promote an
+        // ordinary agent into a built-in by supplying it on update.
+        const { builtInAgentConfig: _ignoredBuiltIn, ...bodyWithoutBuiltIn } =
+          body;
         updateData = {
-          ...body,
+          ...bodyWithoutBuiltIn,
           ...((body.scope ?? existingAgent.scope) !== "team" &&
             body.teams !== undefined && { teams: [] }),
         };

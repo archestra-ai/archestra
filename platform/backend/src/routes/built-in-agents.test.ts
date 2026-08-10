@@ -186,6 +186,15 @@ describe("built-in agents routes", () => {
     });
     expect(envResponse.statusCode).toBe(400);
 
+    // A no-op that restates org scope with an empty team list is allowed —
+    // the dialog may resend it alongside a real edit.
+    const noopScopeResponse = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${advisor.id}`,
+      payload: { scope: "org", teams: [] },
+    });
+    expect(noopScopeResponse.statusCode).toBe(200);
+
     const promptResponse = await app.inject({
       method: "PUT",
       url: `/api/agents/${advisor.id}`,

@@ -2443,10 +2443,23 @@ async function resolveDelegationBillingEnvironment(
     );
     return undefined;
   }
-  const environment = await EnvironmentModel.findByIdForOrganization(
-    value,
-    agent.organizationId,
-  );
+  // A lookup failure must not fail the LLM call — the header only refines
+  // billing attribution, so on any error fall back to the agent's own env.
+  let environment: Awaited<
+    ReturnType<typeof EnvironmentModel.findByIdForOrganization>
+  >;
+  try {
+    environment = await EnvironmentModel.findByIdForOrganization(
+      value,
+      agent.organizationId,
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, agentId: agent.id },
+      "Ignoring delegation billing environment header after a lookup error",
+    );
+    return undefined;
+  }
   if (!environment) {
     logger.warn(
       { agentId: agent.id, environmentId: value },

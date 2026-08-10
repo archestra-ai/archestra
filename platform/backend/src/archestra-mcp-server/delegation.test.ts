@@ -796,6 +796,98 @@ describe("Auto-mode subagent delegation", () => {
     );
   });
 
+  test("an environment-scoped stray advisor stays fenced to its own environment", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "member" });
+    const envA = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Env A",
+    });
+    const envB = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Env B",
+    });
+    const parent = await makeAgent({
+      name: "Env A Parent",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      environmentId: envA.id,
+    });
+    await AgentModel.update(parent.id, { accessAllSubagents: true });
+    // Residue a pre-collapse replica could leave: an advisor row carrying the
+    // discriminator but pinned to an environment. The exception is env-less
+    // only, so it must NOT cross from Env A into Env B.
+    const strayAdvisor = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      environmentId: envB.id,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+
+    const names = (
+      await getAgentTools({
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      })
+    ).map((t) => t.name);
+    expect(names).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(strayAdvisor.name)}`,
+    );
+  });
+
+  test("the advisor exception does not surface another organization's advisor", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const orgA = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, orgA.id, { role: "member" });
+    const env = await EnvironmentModel.create({
+      organizationId: orgA.id,
+      name: "Staging",
+    });
+    const parent = await makeAgent({
+      name: "Org A Parent",
+      agentType: "agent",
+      organizationId: orgA.id,
+      scope: "org",
+      environmentId: env.id,
+    });
+    await AgentModel.update(parent.id, { accessAllSubagents: true });
+
+    const orgB = await makeOrganization();
+    const foreignAdvisor = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: orgB.id,
+      scope: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+
+    const names = (
+      await getAgentTools({
+        agentId: parent.id,
+        organizationId: orgA.id,
+        userId: user.id,
+      })
+    ).map((t) => t.name);
+    expect(names).not.toContain(
+      `${AGENT_TOOL_PREFIX}${slugify(foreignAdvisor.name)}`,
+    );
+  });
+
   test("an exclusion still hides the advisor from a cross-environment caller", async ({
     makeOrganization,
     makeUser,

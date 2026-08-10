@@ -48,8 +48,7 @@ describe("EnvironmentService", () => {
     });
     await deleteEnvironment({ id: created.id, organizationId: org.id });
 
-    // The advisor is org-wide: environments no longer carry their own row, so
-    // neither hook touches it.
+    // The advisor is org-wide, so neither hook touches it.
     const after = await AgentModel.getBuiltInAgent(
       BUILT_IN_AGENT_IDS.ADVISOR,
       org.id,

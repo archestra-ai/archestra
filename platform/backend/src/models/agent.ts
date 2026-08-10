@@ -1794,6 +1794,7 @@ class AgentModel {
   static async findAccessibleDelegationTargets(params: {
     userId: string;
     isAdmin: boolean;
+    organizationId: string;
     excludeAgentId: string;
     /**
      * The calling agent's environment: delegation never crosses environment
@@ -1805,9 +1806,22 @@ class AgentModel {
   }): Promise<
     Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
   > {
-    const { userId, isAdmin, excludeAgentId, environmentId } = params;
+    const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
+      params;
+
+    // The env-less advisor is reachable from every environment; scoping to the
+    // caller's organization keeps that exception from surfacing another org's
+    // advisor (the admin branch below has no other org fence).
+    const advisorException = and(
+      isNull(schema.agentsTable.environmentId),
+      eq(
+        sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+        BUILT_IN_AGENT_IDS.ADVISOR,
+      ),
+    );
 
     const baseConditions = [
+      eq(schema.agentsTable.organizationId, organizationId),
       eq(schema.agentsTable.agentType, "agent"),
       or(
         eq(schema.agentsTable.builtIn, false),
@@ -1821,10 +1835,7 @@ class AgentModel {
         environmentId === null
           ? isNull(schema.agentsTable.environmentId)
           : eq(schema.agentsTable.environmentId, environmentId),
-        eq(
-          sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-          BUILT_IN_AGENT_IDS.ADVISOR,
-        ),
+        advisorException,
       ),
       notDeleted(schema.agentsTable),
     ];

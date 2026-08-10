@@ -297,6 +297,7 @@ async function buildAutoDelegationTools(params: {
     AgentModel.findAccessibleDelegationTargets({
       userId,
       isAdmin: isAgentAdmin,
+      organizationId,
       excludeAgentId: agentId,
       environmentId,
     }),
@@ -369,6 +370,7 @@ async function resolveAutoDelegationTarget(params: {
     AgentModel.findAccessibleDelegationTargets({
       userId,
       isAdmin: isAgentAdmin,
+      organizationId,
       excludeAgentId: agentId,
       environmentId,
     }),
@@ -434,7 +436,10 @@ async function resolveExplicitDelegationTarget(params: {
 
 /**
  * Delegation never crosses environment boundaries, with one exception: the
- * advisor's org-wide (env-less) row is reachable from every environment.
+ * advisor's org-wide row is reachable from every environment. The exception is
+ * pinned to `environmentId === null` so only the genuine env-less advisor
+ * crosses — an environment-scoped row carrying the advisor discriminator (stray
+ * residue) stays fenced to its own environment.
  */
 function isReachableDelegationTarget(
   targetAgent: {
@@ -443,18 +448,21 @@ function isReachableDelegationTarget(
   },
   environmentId: string | null,
 ): boolean {
+  if (targetAgent.environmentId === environmentId) {
+    return true;
+  }
   return (
-    targetAgent.environmentId === environmentId ||
+    targetAgent.environmentId === null &&
     targetAgent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
   );
 }
 
 /**
  * Deterministic Auto-mode ordering shared by the surface builder and dispatch:
- * slug order, with the built-in advisor winning any slug tie. Org-wide reach
- * means a user agent named "Advisor" in another environment can now collide
- * with the built-in on `agent__advisor`; the built-in wins, and both dedup
- * (first-wins) and `.find()` dispatch read this order so they never disagree.
+ * slug order, with the built-in advisor winning any slug tie. A user agent
+ * named "Advisor" in any environment collides with the built-in on
+ * `agent__advisor`; the built-in wins, and both dedup (first-wins) and
+ * `.find()` dispatch read this order so they never disagree.
  */
 function preferAdvisorOnSlugTies<
   T extends Pick<Agent, "id" | "name" | "builtInAgentConfig">,

@@ -1323,6 +1323,56 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       ]);
     });
 
+    test("reuses a cached sanitization when context starts untrusted", async () => {
+      await createSanitizePolicy(toolId);
+      stubCacheStore();
+
+      const analysis = {
+        toolCallId: "call_sanitized_cached",
+        conversations: [],
+        result: "Sanitized summary",
+      };
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue(analysis),
+      } as unknown as DualLlmSubagent);
+
+      const evaluate = () =>
+        evaluateIfContextIsTrusted({
+          messages: [
+            { role: "user", content: "Summarize the tool results" },
+            {
+              role: "tool",
+              toolCalls: [
+                {
+                  id: "call_sanitized_cached",
+                  name: "get_emails",
+                  content: { source: "external", payload: "raw" },
+                  isError: false,
+                },
+              ],
+            },
+          ],
+          agentId: agentId,
+          organizationId: organizationId,
+          considerContextUntrusted: true,
+          policyContext: { teamIds: [] },
+        });
+
+      await evaluate();
+      const replayed = await evaluate();
+
+      // The agentic loop replays the whole history every turn, so past the
+      // first turn this cached branch is what redacts the result.
+      expect(createSpy).toHaveBeenCalledOnce();
+      expect(replayed.toolResultUpdates).toEqual({
+        call_sanitized_cached: sanitized("Sanitized summary"),
+      });
+      expect(replayed.dualLlmAnalyses).toEqual([analysis]);
+      // The cached branch marks the result trusted; the seeded verdict must
+      // still hold the context untrusted.
+      expect(replayed.contextIsTrusted).toBe(false);
+    });
+
     test("fails closed when sanitization fails and context starts untrusted", async () => {
       await createSanitizePolicy(toolId);
       stubCacheStore();

@@ -2524,9 +2524,17 @@ export function AgentDialog({
                       {advisorAgentId && (
                         <div className="flex items-center justify-between gap-4 border-t pt-4">
                           <div className="space-y-0.5">
-                            <Label htmlFor="consult-advisor">
-                              Enable Advisor
-                            </Label>
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor="consult-advisor">
+                                Enable Advisor
+                              </Label>
+                              <Badge
+                                variant="secondary"
+                                className="px-1.5 py-0 text-[10px]"
+                              >
+                                Beta
+                              </Badge>
+                            </div>
                             <p className="text-xs text-muted-foreground">
                               Pairs this{" "}
                               {agentTypeDisplayName[agentType] || "agent"} with

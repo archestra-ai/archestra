@@ -1,6 +1,7 @@
 import {
   CHAT_API_KEY_ID_HEADER,
   CHATGPT_SUBSCRIPTION_LABEL,
+  DELEGATION_BILLING_ENVIRONMENT_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
@@ -1321,6 +1322,41 @@ describe("createLLMModel", () => {
         }),
       }),
     );
+  });
+
+  test("sets the delegation billing environment header only when one is provided", () => {
+    createLLMModel({
+      provider: "anthropic",
+      apiKey: "test-key",
+      agentId: "agent-1",
+      modelName: "claude-3-5-haiku-20241022",
+      baseUrl: null,
+      delegationBillingEnvironmentId: "env-1",
+    });
+
+    expect(mockCreateAnthropic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          [DELEGATION_BILLING_ENVIRONMENT_HEADER]: "env-1",
+        }),
+      }),
+    );
+
+    mockCreateAnthropic.mockClear();
+
+    createLLMModel({
+      provider: "anthropic",
+      apiKey: "test-key",
+      agentId: "agent-1",
+      modelName: "claude-3-5-haiku-20241022",
+      baseUrl: null,
+      delegationBillingEnvironmentId: null,
+    });
+
+    const { headers } = mockCreateAnthropic.mock.calls[0][0] as {
+      headers?: Record<string, string>;
+    };
+    expect(headers?.[DELEGATION_BILLING_ENVIRONMENT_HEADER]).toBeUndefined();
   });
 
   for (const provider of ["ollama", "ollama-native", "vllm"] as const) {

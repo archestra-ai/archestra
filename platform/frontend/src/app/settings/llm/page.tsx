@@ -18,6 +18,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -271,7 +272,14 @@ export default function LlmSettingsPage() {
         )}
       </SettingsBlock>
       <SettingsBlock
-        title="Advisor"
+        title={
+          <span className="flex items-center gap-2">
+            Advisor
+            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+              Beta
+            </Badge>
+          </span>
+        }
         description={
           <>
             Pair a cheaper model with a stronger advisor model consulted at key

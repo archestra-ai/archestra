@@ -340,6 +340,7 @@ async function findDelegationTargetsBySlug(params: {
   const targets = await AgentModel.findAccessibleDelegationTargets({
     userId,
     isAdmin: isAgentAdmin,
+    organizationId,
     excludeAgentId: agentId,
     environmentId,
   });

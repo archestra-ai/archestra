@@ -4,19 +4,17 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
-import { getFrontendEdgeSentryOptions } from "./sentry.shared";
+import {
+  getFrontendEdgeSentryOptions,
+  shouldEnableFrontendTelemetry,
+} from "./sentry.shared";
 
 // Use process.env directly since config module uses next-runtime-env which is not available during build
 const dsn = process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN || "";
+const environment =
+  process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() ||
+  process.env.NODE_ENV?.toLowerCase();
 
-// Only initialize Sentry if DSN is configured
-if (dsn) {
-  Sentry.init(
-    getFrontendEdgeSentryOptions({
-      dsn,
-      environment:
-        process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() ||
-        process.env.NODE_ENV?.toLowerCase(),
-    }),
-  );
+if (shouldEnableFrontendTelemetry({ dsn, environment })) {
+  Sentry.init(getFrontendEdgeSentryOptions({ dsn, environment }));
 }

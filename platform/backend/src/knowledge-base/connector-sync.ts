@@ -17,6 +17,7 @@ import type {
   AclEntry,
   ConnectorDocument,
   ConnectorRun,
+  ConnectorSyncStatus,
   KnowledgeBaseConnector,
 } from "@/types";
 import { chunkDocument } from "./chunker";
@@ -156,7 +157,35 @@ class ConnectorSyncService {
     // and no ACL writer may trust a start-of-run snapshot. The current ownership
     // rule is re-read from the connector row at each batch boundary (ACL-write
     // time) — see the batch loop below.
-    const credentials = await resolveConnectorCredentials(connector);
+    // Resolving credentials can fail on its own (a missing secret, a Google
+    // OAuth client that was rotated out from under the connector). That has to
+    // land on the run row: it already exists, so an escaping throw would leave
+    // it "running" until the lease reaper collects it, with nothing saying why.
+    let credentials: Awaited<ReturnType<typeof resolveConnectorCredentials>>;
+    try {
+      credentials = await resolveConnectorCredentials(connector);
+    } catch (error) {
+      const message = extractErrorMessage(error);
+      runLog.error(
+        { error: message },
+        "Could not resolve connector credentials",
+      );
+      await ConnectorRunModel.updateIfOwned({
+        runId: run.id,
+        epoch,
+        data: {
+          status: "failed",
+          completedAt: new Date(),
+          error: message,
+          logs: options?.getLogOutput?.() ?? null,
+        },
+      });
+      await KnowledgeBaseConnectorModel.update(connectorId, {
+        lastSyncStatus: "failed",
+        lastSyncError: message,
+      });
+      return { runId: run.id, status: "failed" };
+    }
 
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
@@ -184,6 +213,10 @@ class ConnectorSyncService {
     // erase those. These markers track what this loop has already flushed.
     let flushedItemErrors = 0;
     let flushedItemsSkipped = 0;
+    // Per-item fetch fallbacks. These stay warnings (the run is not "completed
+    // with errors" for them), but a run that ingested nothing needs to know
+    // they happened before blaming the sharing configuration.
+    let itemFetchFailures = 0;
     let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
@@ -345,6 +378,7 @@ class ConnectorSyncService {
         // run to completed_with_errors. Only documents that actually failed
         // to ingest leave data missing and deserve that status.
         if (batch.failures?.length) {
+          itemFetchFailures += batch.failures.length;
           runLog.warn(
             { failures: batch.failures.length },
             "Batch completed with sub-resource fallbacks (see item warnings above)",
@@ -477,8 +511,30 @@ class ConnectorSyncService {
       if (batchCount === 0) {
         // No documents ingested — finalize immediately.
         const now = new Date();
-        const finalStatus =
-          itemErrors > 0 ? "completed_with_errors" : "success";
+
+        // An incremental run that finds nothing new is the normal steady
+        // state and stays green. A run that indexes nothing when the
+        // connector holds nothing either is the misconfiguration signature:
+        // the identity cannot see the content, or a filter excludes all of
+        // it. Reporting that as plain success is how a connector goes weeks
+        // indexing nothing with a green tick beside it.
+        const emptyConnector =
+          itemErrors === 0 &&
+          (await KbDocumentModel.countByConnector(connectorId)) === 0;
+        const finalStatus: ConnectorSyncStatus =
+          itemErrors > 0
+            ? "completed_with_errors"
+            : emptyConnector
+              ? "no_documents"
+              : "success";
+        const diagnosis = emptyConnector
+          ? describeEmptySync({
+              itemsSkipped,
+              documentsProcessed,
+              itemFetchFailures,
+            })
+          : null;
+
         const updated = await ConnectorRunModel.updateIfOwned({
           runId: run.id,
           epoch,
@@ -487,6 +543,7 @@ class ConnectorSyncService {
             completedAt: now,
             documentsProcessed,
             documentsIngested,
+            error: diagnosis,
             logs: options?.getLogOutput?.() ?? null,
           },
           increments: {
@@ -496,10 +553,16 @@ class ConnectorSyncService {
         });
 
         if (updated) {
+          if (diagnosis) {
+            runLog.warn(
+              { itemsSkipped, documentsProcessed, itemFetchFailures },
+              diagnosis,
+            );
+          }
           await KnowledgeBaseConnectorModel.update(connectorId, {
             lastSyncStatus: finalStatus,
             lastSyncAt: now,
-            lastSyncError: null,
+            lastSyncError: diagnosis,
           });
           // Even an ingest-free sync triggers a (deduped, cheap-delta)
           // permission pass: it may follow an interrupted run whose own
@@ -898,6 +961,35 @@ class ConnectorSyncService {
 }
 
 export const connectorSyncService = new ConnectorSyncService();
+
+/**
+ * Why a run that indexed nothing probably indexed nothing.
+ *
+ * Only reached when the connector holds no documents at all, so this never
+ * second-guesses a healthy incremental sync that simply found no changes.
+ * Names the cause when the counters give one away, and otherwise lists the
+ * three things that are actually worth checking.
+ */
+function describeEmptySync(params: {
+  itemsSkipped: number;
+  documentsProcessed: number;
+  itemFetchFailures: number;
+}): string {
+  const { itemsSkipped, documentsProcessed, itemFetchFailures } = params;
+
+  // Items were found and every one of them failed to come back. Pointing at
+  // the sharing configuration here would send someone to the wrong console.
+  if (itemFetchFailures > 0) {
+    return `Indexed nothing: ${itemFetchFailures} item${itemFetchFailures === 1 ? "" : "s"} were found but could not be fetched. See the run logs for the individual failures — the credential can list this source but not read its contents.`;
+  }
+  if (itemsSkipped > 0 && itemsSkipped === documentsProcessed) {
+    return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped as unsupported types. Widen or remove the file-type filter, or point the connector at content it can read.`;
+  }
+  if (itemsSkipped > 0) {
+    return `Indexed nothing, and skipped ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} as unsupported types. Check the file-type filter and that the content is shared with the identity this connector authenticates as.`;
+  }
+  return "Indexed nothing: the source returned no items at all. Check that the content is shared with the identity this connector authenticates as, that any folder or project scope points at something that identity can see, and that a file-type filter is not excluding everything. Test connection reports which of those it is.";
+}
 
 /**
  * Remove NUL (U+0000) bytes from a string. Postgres `text`/`jsonb` columns

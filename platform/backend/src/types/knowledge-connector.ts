@@ -49,6 +49,13 @@ export const ConnectorSyncStatusSchema = z.enum([
   "running",
   "success",
   "completed_with_errors",
+  // Ran cleanly and indexed nothing, with nothing indexed previously either.
+  // Distinct from `success` because it almost always means the connector is
+  // pointed somewhere it cannot see: nothing shared with the identity it
+  // authenticates as, a folder or project filter aimed at something invisible
+  // to it, or a file-type filter that excludes every file found. A green tick
+  // on that is how a connector silently indexes nothing for weeks.
+  "no_documents",
   "failed",
   "partial",
   // A newer sync run for the same connector replaced this one. Distinct from
@@ -87,6 +94,18 @@ export const ConnectorCredentialsSchema = z.object({
       githubUrl: z.string(),
       appId: z.string(),
       installationId: z.string(),
+    })
+    .optional(),
+  // Google OAuth credentials for a Drive connector in `oauth` mode. The client
+  // the token was issued to travels with the token because refreshing needs
+  // all three: Google mints a new access token only for the same client.
+  // `refreshToken` is absent until the authorization-code flow completes, which
+  // is what "created but not yet connected" looks like on disk.
+  googleOAuth: z
+    .object({
+      clientId: z.string(),
+      clientSecret: z.string(),
+      refreshToken: z.string().optional(),
     })
     .optional(),
 });
@@ -264,8 +283,41 @@ export type SharePointCheckpoint = z.infer<typeof SharePointCheckpointSchema>;
 
 // ===== Google Drive Config & Checkpoint =====
 
+/**
+ * Which identity the Drive client acts as. Chosen deliberately rather than
+ * inferred from whether the stored credential happens to parse as JSON:
+ *
+ * - `service_account` — a service-account key on its own. The connector sees
+ *   exactly what somebody remembered to share with the key's email address.
+ * - `service_account_delegated` — the same key with domain-wide delegation, so
+ *   it can impersonate users in the Workspace domain. Coverage follows the
+ *   organization instead of a manual share list.
+ * - `oauth` — one person's own Drive, via the authorization-code flow.
+ */
+export const GoogleDriveAuthModeSchema = z.enum([
+  "service_account",
+  "service_account_delegated",
+  "oauth",
+]);
+export type GoogleDriveAuthMode = z.infer<typeof GoogleDriveAuthModeSchema>;
+
 export const GoogleDriveConfigSchema = z.object({
   type: GDRIVE,
+  /**
+   * Absent on connectors created before auth modes existed. Those keep the old
+   * behavior — a credential that parses as JSON is a service-account key, and
+   * anything else is a bare access token — so an upgrade does not change which
+   * identity an existing connector syncs as.
+   */
+  authMode: GoogleDriveAuthModeSchema.optional(),
+  /** Workspace user the service account impersonates in delegated mode. */
+  delegatedAdminEmail: z.string().optional(),
+  /**
+   * Google account the OAuth flow last connected, for display. Overwritten
+   * from the token response on every (re)connect, so it cannot drift into
+   * claiming an account that is not the one syncing.
+   */
+  connectedAccountEmail: z.string().optional(),
   driveId: z.string().optional(),
   driveIds: z.array(z.string()).optional(),
   folderId: z.string().optional(),
@@ -279,6 +331,33 @@ export type GoogleDriveConfig = z.infer<typeof GoogleDriveConfigSchema>;
 export const GoogleDriveCheckpointSchema = z.object({
   type: GDRIVE,
   lastSyncedAt: z.string().optional(),
+  /**
+   * Domain-wide sync progress. The pass walks the domain's shared drives and
+   * users one at a time, so an interrupted run has to know where it got to —
+   * without this it would restart at the first target every time and a domain
+   * bigger than one run could never finish.
+   *
+   * Progress is a count into the ordered target list, not the list of finished
+   * targets: a domain of twenty thousand identities would otherwise write a
+   * list that size into this checkpoint on every batch. `domainTargetsFingerprint`
+   * is what makes the count meaningful — when the domain's membership changes
+   * the count refers to different targets, so the pass starts over rather than
+   * skipping ones it never visited.
+   *
+   * `domainSyncStartedAt` stamps the pass the count belongs to; when a pass
+   * completes, both are cleared and `lastSyncedAt` advances to it.
+   */
+  domainTargetsCompleted: z.number().int().nonnegative().optional(),
+  domainTargetsFingerprint: z.string().optional(),
+  domainSyncStartedAt: z.string().optional(),
+  /**
+   * Targets a pass could not read — an account with no Drive licence, a shared
+   * drive with no reachable member, a request that hit a rate limit. The next
+   * pass crawls these in full: everything that existed while they were
+   * unreachable is older than the cursor, so an incremental query would never
+   * look at it again.
+   */
+  domainFullCrawlTargets: z.array(z.string()).optional(),
 });
 export type GoogleDriveCheckpoint = z.infer<typeof GoogleDriveCheckpointSchema>;
 

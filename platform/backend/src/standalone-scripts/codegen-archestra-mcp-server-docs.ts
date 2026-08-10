@@ -77,13 +77,19 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
  * surface, so a reader whose deployment omits the runtime needs to know why
  * these tools are absent from their `tools/list`.
  */
+const CODE_RUNTIME_PREREQUISITE =
+  "served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
+
 const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
-  skill_sandbox:
-    "These tools are served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`. See [Code Sandbox](/docs/platform-code-sandbox).",
+  skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/platform-code-sandbox) page covers what the runtime is and how an agent uses it.`,
+  // Same gate as the sandbox, since these tools ship from the same module —
+  // but they read and write saved files rather than entering a container, so
+  // the note says what they are instead of pointing at the runtime page.
+  files: `These tools are ${CODE_RUNTIME_PREREQUISITE} They operate on the conversation's persistent files, not inside the sandbox container.`,
 };
 
 const HOOK_RUNTIME_NOTE =
-  "Served only when the code runtime is enabled (the same prerequisite as the [Skill Sandbox](#skill-sandbox) tools), because a hook executes in the conversation sandbox.";
+  "Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.";
 
 /**
  * Availability notes for individual tools whose group is otherwise

@@ -290,6 +290,18 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
 export const EXTERNAL_AGENT_ID_HEADER = "X-Archestra-Agent-Id";
 
 /**
+ * Environment the delegating caller runs in, set by the in-process A2A
+ * executor on advisor consultations so the proxy bills the spend to the
+ * caller's environment (the advisor's own row is org-wide and env-less).
+ * Honored only over the loopback socket, only when the executing agent is
+ * the advisor built-in, and only for an environment of the agent's own
+ * organization — external clients cannot use it to shift spend between
+ * environment budgets.
+ */
+export const DELEGATION_BILLING_ENVIRONMENT_HEADER =
+  "X-Archestra-Delegation-Environment-Id";
+
+/**
  * Header name for user ID.
  * Clients can pass this header to associate interactions with a specific user (by their Archestra user UUID).
  * Particularly useful for identifying which user was using the Archestra Chat.

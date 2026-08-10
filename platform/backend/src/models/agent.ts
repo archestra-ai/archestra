@@ -74,12 +74,6 @@ import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
-/** The columns a boot-time sync reconciles against a shipped built-in definition. */
-type BuiltInAgentSyncRow = Pick<
-  typeof schema.agentsTable.$inferSelect,
-  "id" | "name" | "description" | "systemPrompt" | "builtInAgentConfig"
->;
-
 class AgentModel {
   /**
    * Process-local cache for {@link AgentModel.resolveIdFromIdOrSlug}. The
@@ -1800,18 +1794,34 @@ class AgentModel {
   static async findAccessibleDelegationTargets(params: {
     userId: string;
     isAdmin: boolean;
+    organizationId: string;
     excludeAgentId: string;
     /**
      * The calling agent's environment: delegation never crosses environment
      * boundaries (null is the Default environment), mirroring tool isolation.
+     * The advisor is the one exception — its org-wide (env-less) row is
+     * reachable from every environment.
      */
     environmentId: string | null;
   }): Promise<
     Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
   > {
-    const { userId, isAdmin, excludeAgentId, environmentId } = params;
+    const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
+      params;
+
+    // The env-less advisor is reachable from every environment; scoping to the
+    // caller's organization keeps that exception from surfacing another org's
+    // advisor (the admin branch below has no other org fence).
+    const advisorException = and(
+      isNull(schema.agentsTable.environmentId),
+      eq(
+        sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+        BUILT_IN_AGENT_IDS.ADVISOR,
+      ),
+    );
 
     const baseConditions = [
+      eq(schema.agentsTable.organizationId, organizationId),
       eq(schema.agentsTable.agentType, "agent"),
       or(
         eq(schema.agentsTable.builtIn, false),
@@ -1821,9 +1831,12 @@ class AgentModel {
         ),
       ),
       ne(schema.agentsTable.id, excludeAgentId),
-      environmentId === null
-        ? isNull(schema.agentsTable.environmentId)
-        : eq(schema.agentsTable.environmentId, environmentId),
+      or(
+        environmentId === null
+          ? isNull(schema.agentsTable.environmentId)
+          : eq(schema.agentsTable.environmentId, environmentId),
+        advisorException,
+      ),
       notDeleted(schema.agentsTable),
     ];
 
@@ -2651,42 +2664,6 @@ class AgentModel {
       connectorIds: currentConnectorIds,
       suggestedPrompts: currentSuggestedPrompts.get(id) ?? [],
     };
-  }
-
-  /**
-   * The advisor is the one built-in that exists per environment rather than
-   * once per organization: delegation never crosses environments, so an agent
-   * can only reach the advisor sitting in its own. `null` is the Default
-   * environment, and is a distinct row from every named one.
-   */
-  static async getAdvisorForEnvironment(params: {
-    organizationId: string;
-    environmentId: string | null;
-  }): Promise<BuiltInAgentSyncRow | null> {
-    const { organizationId, environmentId } = params;
-
-    const [row] = await db
-      .select({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-        description: schema.agentsTable.description,
-        systemPrompt: schema.agentsTable.systemPrompt,
-        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
-      })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.ADVISOR}`,
-          eq(schema.agentsTable.organizationId, organizationId),
-          environmentId === null
-            ? isNull(schema.agentsTable.environmentId)
-            : eq(schema.agentsTable.environmentId, environmentId),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .limit(1);
-
-    return row ?? null;
   }
 
   /**

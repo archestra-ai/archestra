@@ -44,11 +44,7 @@ interface EnvironmentSelectorProps {
    * rendered as muted helper text under the label.
    */
   helpText?: ReactNode;
-  /**
-   * Render the current value without letting it change. The advisor's
-   * environment is what makes it reachable by the agents in it, so it is shown
-   * for orientation rather than offered as a choice.
-   */
+  /** Render the current value for orientation without letting it change. */
   disabled?: boolean;
 }
 

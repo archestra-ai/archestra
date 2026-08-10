@@ -1234,6 +1234,262 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
     });
 
+    test("blocks a matching tool result even when context starts untrusted", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [
+          { key: "emails[*].from", operator: "contains", value: "hacker" },
+        ],
+        action: "block_always",
+        description: "Block hacker emails",
+      });
+
+      const result = await evaluateIfContextIsTrusted({
+        messages: [
+          { role: "user" },
+          {
+            role: "tool",
+            toolCalls: [
+              {
+                id: "call_blocked_untrusted",
+                name: "get_emails",
+                content: {
+                  emails: [{ from: "hacker@evil.com", subject: "Malicious" }],
+                },
+                isError: false,
+              },
+            ],
+          },
+        ],
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: true,
+        policyContext: { teamIds: [] },
+      });
+
+      expect(result.toolResultUpdates).toEqual({
+        call_blocked_untrusted:
+          "[Content blocked by Archestra security guardrails: Data blocked by policy: Block hacker emails]",
+      });
+      expect(result.contextIsTrusted).toBe(false);
+    });
+
+    test("sanitizes a matching tool result even when context starts untrusted", async () => {
+      await createSanitizePolicy(toolId);
+      stubCacheStore();
+
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue({
+          toolCallId: "call_sanitized_untrusted",
+          conversations: [],
+          result: "Sanitized summary",
+        }),
+      } as unknown as DualLlmSubagent);
+
+      const result = await evaluateIfContextIsTrusted({
+        messages: [
+          { role: "user" },
+          {
+            role: "tool",
+            toolCalls: [
+              {
+                id: "call_sanitized_untrusted",
+                name: "get_emails",
+                content: { source: "external", payload: "raw" },
+                isError: false,
+              },
+            ],
+          },
+        ],
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: true,
+        policyContext: { teamIds: [] },
+      });
+
+      expect(createSpy).toHaveBeenCalledOnce();
+      expect(result.toolResultUpdates).toEqual({
+        call_sanitized_untrusted: sanitized("Sanitized summary"),
+      });
+      expect(result.contextIsTrusted).toBe(false);
+      // Persisted on the interaction and rendered against the tool part, so an
+      // untrusted-start turn has to carry the analysis like any other.
+      expect(result.dualLlmAnalyses).toEqual([
+        {
+          toolCallId: "call_sanitized_untrusted",
+          conversations: [],
+          result: "Sanitized summary",
+        },
+      ]);
+    });
+
+    test("reuses a cached sanitization when context starts untrusted", async () => {
+      await createSanitizePolicy(toolId);
+      stubCacheStore();
+
+      const analysis = {
+        toolCallId: "call_sanitized_cached",
+        conversations: [],
+        result: "Sanitized summary",
+      };
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue(analysis),
+      } as unknown as DualLlmSubagent);
+
+      const evaluate = () =>
+        evaluateIfContextIsTrusted({
+          messages: [
+            { role: "user", content: "Summarize the tool results" },
+            {
+              role: "tool",
+              toolCalls: [
+                {
+                  id: "call_sanitized_cached",
+                  name: "get_emails",
+                  content: { source: "external", payload: "raw" },
+                  isError: false,
+                },
+              ],
+            },
+          ],
+          agentId: agentId,
+          organizationId: organizationId,
+          considerContextUntrusted: true,
+          policyContext: { teamIds: [] },
+        });
+
+      await evaluate();
+      const replayed = await evaluate();
+
+      // The agentic loop replays the whole history every turn, so past the
+      // first turn this cached branch is what redacts the result.
+      expect(createSpy).toHaveBeenCalledOnce();
+      expect(replayed.toolResultUpdates).toEqual({
+        call_sanitized_cached: sanitized("Sanitized summary"),
+      });
+      expect(replayed.dualLlmAnalyses).toEqual([analysis]);
+      // The cached branch marks the result trusted; the seeded verdict must
+      // still hold the context untrusted.
+      expect(replayed.contextIsTrusted).toBe(false);
+    });
+
+    test("fails closed when sanitization fails and context starts untrusted", async () => {
+      await createSanitizePolicy(toolId);
+      stubCacheStore();
+
+      vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockRejectedValue(
+          new DualLlmAgentCallError({
+            provider: "openai",
+            modelName: "gpt-4",
+            cause: new Error("provider unavailable"),
+          }),
+        ),
+      } as unknown as DualLlmSubagent);
+
+      const rejection = await evaluateIfContextIsTrusted({
+        messages: [
+          { role: "user", content: "Summarize the tool results" },
+          {
+            role: "tool",
+            toolCalls: [
+              {
+                id: "call_dual",
+                name: "get_emails",
+                content: { source: "external", payload: "raw secret payload" },
+                isError: false,
+              },
+            ],
+          },
+        ],
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: true,
+        policyContext: { teamIds: [] },
+      }).then(
+        () => null,
+        (error) => error,
+      );
+
+      // An already-untrusted context must not soften the quarantine promise
+      // into "mark untrusted and forward the raw result".
+      expect(rejection).toBeInstanceOf(DualLlmSanitizationError);
+      expect(rejection.message).not.toContain("raw secret payload");
+    });
+
+    test("keeps context untrusted when every tool result is trusted by policy", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "trusted" }],
+        action: "mark_as_trusted",
+        description: "Trust internal data",
+      });
+
+      const result = await evaluateIfContextIsTrusted({
+        messages: [
+          { role: "user" },
+          {
+            role: "tool",
+            toolCalls: [
+              {
+                id: "call_trusted",
+                name: "get_emails",
+                content: { source: "trusted", payload: "internal" },
+                isError: false,
+              },
+            ],
+          },
+        ],
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: true,
+        policyContext: { teamIds: [] },
+      });
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.toolResultUpdates).toEqual({});
+    });
+
+    test("keeps the preexisting boundary when a later tool result is blocked", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [
+          { key: "emails[*].from", operator: "contains", value: "hacker" },
+        ],
+        action: "block_always",
+        description: "Block hacker emails",
+      });
+
+      const result = await evaluateIfContextIsTrusted({
+        messages: [
+          { role: "user" },
+          {
+            role: "tool",
+            toolCalls: [
+              {
+                id: "call_boundary",
+                name: "get_emails",
+                content: {
+                  emails: [{ from: "hacker@evil.com", subject: "Malicious" }],
+                },
+                isError: false,
+              },
+            ],
+          },
+        ],
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: true,
+        policyContext: { teamIds: [] },
+        initialUntrustedReason: "inherited_from_parent",
+      });
+
+      expect(result.unsafeContextBoundary).toEqual({
+        kind: "preexisting_untrusted",
+        reason: "inherited_from_parent",
+      });
+    });
+
     test("handles multiple tool calls with mixed trust", async () => {
       // Create policies
       await TrustedDataPolicyModel.create({

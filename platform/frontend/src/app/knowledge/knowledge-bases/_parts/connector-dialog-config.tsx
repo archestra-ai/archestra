@@ -22,7 +22,11 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { AsanaConfigFields } from "./asana-config-fields";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { DropboxConfigFields } from "./dropbox-config-fields";
-import { GoogleDriveConfigFields } from "./gdrive-config-fields";
+import {
+  DEFAULT_GDRIVE_AUTH_MODE,
+  GoogleDriveAuthFields,
+  GoogleDriveConfigFields,
+} from "./gdrive-config-fields";
 import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
@@ -318,7 +322,7 @@ export function getConnectorTypeLabel(type: ConnectorType): string {
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Connector types whose backend implementation supports auto-sync-permissions
- * (`supportsPermissionSync`). Stage 1: GitHub, Confluence, Jira. Keep in sync
+ * (`supportsPermissionSync`). Stage 1: GitHub, Confluence, Jira, Google Drive. Keep in sync
  * with the connectors that set `supportsPermissionSync = true`; the backend
  * re-validates on create/update (400 otherwise), so this only gates the UI.
  */
@@ -326,6 +330,7 @@ const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "github",
   "confluence",
   "jira",
+  "gdrive",
 ]);
 
 export function connectorSupportsAutoSync(type: ConnectorType): boolean {
@@ -425,7 +430,7 @@ export function getDefaultConnectorConfig(
     servicenow: { type, syncDataForLastMonths: 6 },
     notion: { type },
     sharepoint: { type, includePages: true, recursive: true },
-    gdrive: { type, recursive: true },
+    gdrive: { type, recursive: true, authMode: DEFAULT_GDRIVE_AUTH_MODE },
     dropbox: { type, rootPath: "" },
     asana: { type },
     onedrive: { type, userIds: "", recursive: true },
@@ -453,7 +458,13 @@ export function getConnectorCredentialConfig(params: {
   emailRequired: boolean;
   mode: "create" | "edit";
   authMethod?: string;
+  /** Google Drive's auth mode; decides whether a credential is pasted at all. */
+  authMode?: string;
 }): ConnectorCredentialConfig {
+  // In individual mode the credential arrives from Google, so there is nothing
+  // to type — the field is dropped the same way web_crawler drops it.
+  const gdriveUsesOAuth =
+    params.type === "gdrive" && params.authMode === "oauth";
   const jiraConfluenceApiTokenLabel = params.emailRequired
     ? "API Token"
     : "API Token / Personal Access Token";
@@ -470,7 +481,7 @@ export function getConnectorCredentialConfig(params: {
     servicenow: "Password",
     notion: "Integration Token",
     sharepoint: "Client Secret",
-    gdrive: "Service Account Key / OAuth Token",
+    gdrive: gdriveUsesOAuth ? undefined : "Service Account JSON Key",
     dropbox: "Access Token",
     outline: "API Key",
     jira: jiraConfluenceApiTokenLabel,
@@ -492,7 +503,9 @@ export function getConnectorCredentialConfig(params: {
       servicenow: "Your ServiceNow password",
       notion: "secret_...",
       sharepoint: "Your Azure AD client secret",
-      gdrive: "Paste service account JSON key or OAuth access token",
+      gdrive: gdriveUsesOAuth
+        ? undefined
+        : "Paste the whole service account key file",
       dropbox: "Your Dropbox access token",
       outline: "Your Outline API key (starts with ol_api_)",
       jira: jiraConfluenceApiTokenPlaceholder,
@@ -514,7 +527,9 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Leave empty to keep existing password + security token",
     notion: "Leave empty to keep existing token",
     sharepoint: "Leave empty to keep existing token",
-    gdrive: "Leave empty to keep existing token",
+    gdrive: gdriveUsesOAuth
+      ? undefined
+      : "Leave empty to keep the existing service account key",
     dropbox: "Leave empty to keep existing token",
     outline: "Leave empty to keep existing token",
     jira: "Leave empty to keep existing token",
@@ -534,7 +549,9 @@ export function getConnectorCredentialConfig(params: {
     servicenow: "Password is required",
     notion: "Integration token is required",
     sharepoint: "Client secret is required",
-    gdrive: "Service account key or OAuth token is required",
+    gdrive: gdriveUsesOAuth
+      ? undefined
+      : "A service account JSON key is required",
     dropbox: "Access token is required",
     outline: "API key is required",
     jira: jiraConfluenceApiTokenRequiredMessage,
@@ -554,6 +571,7 @@ export function getConnectorCredentialConfig(params: {
   const apiTokenHelpText = getApiTokenHelpText({
     type: params.type,
     mode: params.mode,
+    authMode: params.authMode,
   });
 
   return {
@@ -571,6 +589,7 @@ export function getConnectorCredentialConfig(params: {
 function getApiTokenHelpText(params: {
   type: ConnectorType;
   mode: "create" | "edit";
+  authMode?: string;
 }): ReactNode | undefined {
   if (params.type === "sharepoint") {
     return (
@@ -593,8 +612,10 @@ function getApiTokenHelpText(params: {
   if (params.type === "gdrive") {
     return (
       <p className="text-[0.8rem] text-muted-foreground">
-        Paste a service account JSON key (entire file content) or an OAuth2
-        access token with <code>drive.readonly</code> scope.
+        The entire key file, including its <code>private_key</code>.{" "}
+        {params.authMode === "service_account_delegated"
+          ? "Its client ID must be authorized for domain-wide delegation with the drive.readonly and admin.directory.user.readonly scopes."
+          : "Grant it access by sharing each folder or shared drive with the key's own email address."}
       </p>
     );
   }
@@ -891,7 +912,7 @@ const INLINE_CONFIG_FIELDS: Record<
       />
     </>
   ),
-  gdrive: () => <></>,
+  gdrive: ({ form }) => <GoogleDriveAuthFields form={form} />,
   dropbox: () => <></>,
   asana: ({ form, mode }) =>
     mode === "create" ? (

@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner");
 
+const captureException = vi.fn();
+vi.mock("@sentry/nextjs", () => ({
+  captureException: (...args: unknown[]) => captureException(...args),
+}));
+
 import { getApiErrorMessage, handleApiError, throwOnApiError } from "./api";
 
 describe("throwOnApiError", () => {
@@ -86,6 +91,47 @@ describe("handleApiError toast dedupe", () => {
       .mocked(toast.error)
       .mock.calls.map(([, options]) => options?.id);
     expect(new Set(ids).size).toBe(2);
+  });
+});
+
+describe("handleApiError exception reporting", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  // The dynamic import of the reporting client resolves on the microtask queue.
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it.each([
+    "api_authentication_error",
+    "api_authorization_error",
+    "api_not_found_error",
+    "api_validation_error",
+    "api_conflict_error",
+  ])("does not report an expected %s", async (type) => {
+    handleApiError({ error: { message: "expected failure", type } });
+    await flush();
+
+    expect(captureException).not.toHaveBeenCalled();
+    // Still surfaced to the user — it is expected, not hidden.
+    expect(toast.error).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a server-side failure", async () => {
+    handleApiError({
+      error: { message: "boom", type: "api_internal_server_error" },
+    });
+    await flush();
+
+    expect(captureException).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports an error with no recognisable type", async () => {
+    handleApiError(new Error("something unexpected"));
+    await flush();
+
+    expect(captureException).toHaveBeenCalledTimes(1);
   });
 });
 

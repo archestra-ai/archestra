@@ -127,6 +127,7 @@ export const E2eTestId = {
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
+  ChatThinkingEffortSelector: "chat-thinking-effort-selector",
   ChatPromptTextarea: "chat-prompt-textarea",
   // Queue of messages composed while a response was in-flight
   ChatMessageQueue: "chat-message-queue",

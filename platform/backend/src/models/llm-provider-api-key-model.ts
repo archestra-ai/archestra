@@ -3,7 +3,7 @@ import {
   MODEL_MARKER_PATTERNS,
   type SupportedProvider,
 } from "@archestra/shared";
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
 import ModelModel from "./model";
@@ -94,27 +94,51 @@ class LlmProviderApiKeyModelLinkModel {
 
   /**
    * Sync models for an API key.
-   * This replaces all existing model links with the new set.
-   * Also detects and marks the "best" model for the provider.
+   * This replaces the set of model links with the new set (stale links are
+   * deleted, current ones updated in place). Also detects and marks the
+   * "best" model for the provider.
+   *
+   * `recommendedForAgents` is the endpoint-scoped agent-suitability verdict.
+   * By default a null verdict keeps the link's last known one (Ollama's
+   * `/api/show` is time-boxed and degrades to null per model, and a transient
+   * miss must not silently un-flag a 4B model). `overwriteRecommendedForAgents`
+   * writes the verdict verbatim: an Ollama tag is mutable (`ollama create` can
+   * repoint it), so a full refresh has to stay the way to correct a stale one.
    *
    * @param apiKeyId - The database ID of the API key
-   * @param models - Array of models with their database ID and modelId string
+   * @param models - Array of models with their database ID, modelId string, and verdict
    * @param provider - The provider for pattern matching
+   * @param options - `overwriteRecommendedForAgents` for the full-refresh path
    */
   static async syncModelsForApiKey(
     apiKeyId: string,
-    models: Array<{ id: string; modelId: string }>,
+    models: Array<{
+      id: string;
+      modelId: string;
+      recommendedForAgents?: boolean | null;
+    }>,
     provider: SupportedProvider,
+    options: { overwriteRecommendedForAgents?: boolean } = {},
   ): Promise<void> {
     const uniqueModels = Array.from(
       new Map(models.map((model) => [model.id, model])).values(),
     );
 
     await withDbTransaction(async (tx) => {
-      // Delete existing links for this API key
-      await tx
-        .delete(schema.llmProviderApiKeyModelsTable)
-        .where(eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId));
+      // Delete links to models the provider no longer serves. Kept links are
+      // updated in place below so their last known verdict can survive a
+      // sync that learned nothing.
+      await tx.delete(schema.llmProviderApiKeyModelsTable).where(
+        uniqueModels.length > 0
+          ? and(
+              eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId),
+              notInArray(
+                schema.llmProviderApiKeyModelsTable.modelId,
+                uniqueModels.map((model) => model.id),
+              ),
+            )
+          : eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId),
+      );
 
       // Insert new links
       if (uniqueModels.length > 0) {
@@ -133,6 +157,7 @@ class LlmProviderApiKeyModelLinkModel {
           apiKeyId,
           modelId: model.id,
           isBest: model.id === bestModel?.id,
+          recommendedForAgents: model.recommendedForAgents ?? null,
         }));
 
         // Batch insert
@@ -149,6 +174,9 @@ class LlmProviderApiKeyModelLinkModel {
               ],
               set: {
                 isBest: sql`excluded.is_best`,
+                recommendedForAgents: options.overwriteRecommendedForAgents
+                  ? sql`excluded.recommended_for_agents`
+                  : sql`COALESCE(excluded.recommended_for_agents, ${schema.llmProviderApiKeyModelsTable.recommendedForAgents})`,
               },
             });
         }
@@ -375,10 +403,20 @@ class LlmProviderApiKeyModelLinkModel {
    * Returns models with their data and isBest marker,
    * ordered by provider and modelId.
    * A model is marked as best if ANY of the provided API keys marks it so.
+   *
+   * `recommendedForAgents` aggregates pessimistically: the listing collapses
+   * the given keys' links into one row per model, so if ANY key's endpoint
+   * serves a build judged unfit, the merged row carries `false` — over-warning
+   * beats a key hiding another key's evidence. Keys with no evidence (null)
+   * don't vote; all-null stays null.
    */
-  static async getModelsForApiKeyIds(
-    apiKeyIds: string[],
-  ): Promise<Array<{ model: Model; isBest: boolean }>> {
+  static async getModelsForApiKeyIds(apiKeyIds: string[]): Promise<
+    Array<{
+      model: Model;
+      isBest: boolean;
+      recommendedForAgents: boolean | null;
+    }>
+  > {
     if (apiKeyIds.length === 0) {
       return [];
     }
@@ -391,6 +429,13 @@ class LlmProviderApiKeyModelLinkModel {
           sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isBest})`.as(
             "is_best_agg",
           ),
+        // bool_and skips NULLs: false if any key says false, true if every
+        // key with evidence says true, null when no key has evidence.
+        recommendedForAgents: sql<
+          boolean | null
+        >`bool_and(${schema.llmProviderApiKeyModelsTable.recommendedForAgents})`.as(
+          "recommended_for_agents_agg",
+        ),
       })
       .from(schema.llmProviderApiKeyModelsTable)
       .innerJoin(
@@ -407,6 +452,7 @@ class LlmProviderApiKeyModelLinkModel {
     return results.map((r) => ({
       model: r.model,
       isBest: r.isBest,
+      recommendedForAgents: r.recommendedForAgents,
     }));
   }
   /**

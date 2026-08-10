@@ -1,5 +1,5 @@
 {
-  "id": "d3e7366a-5731-4aa6-8eb6-805ebe0b2462",
+  "id": "9f249061-758f-42f0-8716-8187c2c0f2d2",
   "prevId": "aa97301f-1f4f-4405-8bd7-74eeb7310e36",
   "version": "7",
   "dialect": "postgresql",
@@ -1128,73 +1128,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.agent_excluded_skills": {
-      "name": "agent_excluded_skills",
-      "schema": "",
-      "columns": {
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "skill_id": {
-          "name": "skill_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "agent_excluded_skills_agent_id_agents_id_fk": {
-          "name": "agent_excluded_skills_agent_id_agents_id_fk",
-          "tableFrom": "agent_excluded_skills",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "agent_excluded_skills_skill_id_skills_id_fk": {
-          "name": "agent_excluded_skills_skill_id_skills_id_fk",
-          "tableFrom": "agent_excluded_skills",
-          "tableTo": "skills",
-          "columnsFrom": [
-            "skill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "agent_excluded_skills_agent_id_skill_id_pk": {
-          "name": "agent_excluded_skills_agent_id_skill_id_pk",
-          "columns": [
-            "agent_id",
-            "skill_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.agent_excluded_subagents": {
       "name": "agent_excluded_subagents",
       "schema": "",
@@ -1509,88 +1442,6 @@
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.agent_skills": {
-      "name": "agent_skills",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "skill_id": {
-          "name": "skill_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "agent_skills_agent_id_agents_id_fk": {
-          "name": "agent_skills_agent_id_agents_id_fk",
-          "tableFrom": "agent_skills",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "agent_skills_skill_id_skills_id_fk": {
-          "name": "agent_skills_skill_id_skills_id_fk",
-          "tableFrom": "agent_skills",
-          "tableTo": "skills",
-          "columnsFrom": [
-            "skill_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "agent_skills_agent_id_skill_id_unique": {
-          "name": "agent_skills_agent_id_skill_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "agent_id",
-            "skill_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -2200,13 +2051,6 @@
         },
         "access_all_tools": {
           "name": "access_all_tools",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "access_all_skills": {
-          "name": "access_all_skills",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -10406,6 +10250,12 @@
           "notNull": true,
           "default": false
         },
+        "recommended_for_agents": {
+          "name": "recommended_for_agents",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -15141,12 +14991,6 @@
           "notNull": true,
           "default": "'utf8'"
         },
-        "digest": {
-          "name": "digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "kind": {
           "name": "kind",
           "type": "text",
@@ -16868,18 +16712,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "frontmatter_blob": {
-          "name": "frontmatter_blob",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "digest": {
-          "name": "digest",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "latest_version": {
           "name": "latest_version",

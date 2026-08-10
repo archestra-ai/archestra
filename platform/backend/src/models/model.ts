@@ -1002,13 +1002,23 @@ class ModelModel {
       : Math.min(resolved, architectural);
   }
 
-  static toCapabilities(model: Model | null): ModelCapabilities {
+  /**
+   * `recommendedForAgents` is not a `models` column: the verdict is
+   * endpoint-scoped and lives on the `api_key_models` link, so callers that
+   * list models per key pass the aggregate along. Callers with no link in
+   * hand omit it, which reads as "no evidence" and surfaces nothing.
+   */
+  static toCapabilities(
+    model: Model | null,
+    recommendedForAgents: boolean | null = null,
+  ): ModelCapabilities {
     if (!model) {
       return {
         contextLength: null,
         inputModalities: null,
         outputModalities: null,
         supportsToolCalling: null,
+        recommendedForAgents: null,
         pricePerMillionInput: null,
         pricePerMillionOutput: null,
         isCustomPrice: false,
@@ -1026,6 +1036,7 @@ class ModelModel {
       inputModalities: model.inputModalities,
       outputModalities: model.outputModalities,
       supportsToolCalling: model.supportsToolCalling,
+      recommendedForAgents,
       pricePerMillionInput: pricing.pricePerMillionInput,
       pricePerMillionOutput: pricing.pricePerMillionOutput,
       isCustomPrice: pricing.source === "custom",

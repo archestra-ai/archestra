@@ -241,6 +241,7 @@ const PromptInputContent = ({
   onAgentChange,
   modelSource,
   toolsUnavailable,
+  notRecommendedForAgents,
   onResetModelOverride,
   thinkingEffort,
   onThinkingEffortChange,
@@ -967,6 +968,7 @@ const PromptInputContent = ({
             onAgentChange={onAgentChange}
             modelSource={modelSource}
             toolsUnavailable={toolsUnavailable}
+            notRecommendedForAgents={notRecommendedForAgents}
             onResetModelOverride={onResetModelOverride}
             thinkingEffort={thinkingEffort}
             onThinkingEffortChange={onThinkingEffortChange}
@@ -1068,6 +1070,7 @@ const ArchestraPromptInput = ({
   onAgentChange,
   modelSource,
   toolsUnavailable,
+  notRecommendedForAgents,
   onResetModelOverride,
   thinkingEffort,
   onThinkingEffortChange,
@@ -1178,6 +1181,7 @@ const ArchestraPromptInput = ({
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           toolsUnavailable={toolsUnavailable}
+          notRecommendedForAgents={notRecommendedForAgents}
           onResetModelOverride={onResetModelOverride}
           thinkingEffort={thinkingEffort}
           onThinkingEffortChange={onThinkingEffortChange}

@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-09
+lastUpdated: 2026-08-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -426,6 +426,14 @@ Open **LLM → Models**, edit a native-transport model, and set any generation p
 Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the [chat context ring](/docs/platform-chat#context-window-visualizer).
 
 A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama's model API and cannot be detected. If you run a capped server, set `num_ctx` on the model — a request-level value takes precedence.
+
+### Agent Suitability
+
+Ollama reports each model's exact parameter count. Archestra marks a model **Limited for complex tasks** when that count is 8,000,000,000 or lower. The threshold applies to the reported count, not the name — models sold as "8B" usually report slightly more (Llama 3.1 8B reports about 8.03 billion), so they stay unmarked.
+
+The marker shows on the model in the picker. It also shows next to the composer when the agent in that chat brings tools. A 4B model, for example, often calls those tools unreliably over a multi-step task — switch to a larger model for tool-heavy work.
+
+The marker is advice, not a quality verdict. Models are treated as suitable unless something says otherwise, and no provider other than Ollama reports a parameter count today — so no model outside Ollama carries the marker. Each Ollama server is judged separately: the same tag can name different builds on two servers, and each key's marker reflects what its own server reports.
 
 ### Environment Variables
 

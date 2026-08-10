@@ -1324,6 +1324,7 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
 - The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
+- Publishing Agent Skills over the gateway as `skill://` resources is gated by `ARCHESTRA_BETA`, not a flag of its own. It implements the draft MCP Skills extension (SEP-2640). See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills) for what a gateway publishes and how to choose it.
 
 ### MCP Servers
 

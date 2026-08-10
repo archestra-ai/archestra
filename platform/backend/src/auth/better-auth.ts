@@ -45,6 +45,7 @@ import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
 import SessionModel from "@/models/session";
+import SkillModel from "@/models/skill";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
@@ -414,6 +415,17 @@ export const auth = betterAuth({
             logger.error(
               { err: error, userId: user.id },
               "[databaseHooks:user] Failed to delete personal LLM proxies",
+            );
+          }
+          // Personal skills must not outlive their author either: author_id
+          // is `set null`, and a personal row without an author can be named
+          // by no `skill://` URI, seen by no one, and edited by no one.
+          try {
+            await SkillModel.deletePersonalSkillsForUser(user.id);
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to delete personal skills",
             );
           }
           // Personal apps first: purging their backing install without

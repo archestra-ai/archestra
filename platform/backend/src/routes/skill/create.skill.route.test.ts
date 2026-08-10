@@ -231,6 +231,81 @@ describe("POST /api/skills", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  test("rejects absolute and traversing resource file paths", async () => {
+    for (const path of ["/absolute.md", "references/../secrets.md"]) {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: MANIFEST,
+          files: [{ path, content: "x" }],
+        },
+      });
+
+      expect(response.statusCode, path).toBe(400);
+    }
+  });
+
+  test("still accepts paths the MCP gateway cannot publish", async () => {
+    // Publishing wants paths that round-trip through a skill:// URI, and a
+    // top-level SKILL.md would be shadowed by the served manifest. Neither is
+    // enforced at input: a skill stored under an older rule must stay editable,
+    // so the gateway withholds it instead of the API refusing the save.
+    const paths = [
+      "references//double.md",
+      "references/./here.md",
+      "trailing/",
+      "SKILL.md",
+    ];
+    for (const [index, path] of paths.entries()) {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        // one skill per path: names are unique within an organization
+        payload: {
+          content: manifestNamed(`unpublishable-${index}`),
+          files: [{ path, content: "x" }],
+        },
+      });
+
+      expect(response.statusCode, path).toBe(200);
+    }
+  });
+
+  test("rejects non-canonical base64 file content", async () => {
+    // Decoders disagree on non-canonical base64 (`QQ==QQ==` is two bytes to
+    // Postgres, one to Node, an error to Python), so a digest over it could
+    // never verify for every client. Canonical spellings — what every platform
+    // writer emits — are accepted; anything else is refused at the door.
+    for (const content of ["QQ==QQ==", "QQ==\nQQ==", "QUJD====", "QU!JD"]) {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: {
+          content: MANIFEST,
+          files: [{ path: "assets/blob.bin", content, encoding: "base64" }],
+        },
+      });
+      expect(response.statusCode, JSON.stringify(content)).toBe(400);
+    }
+
+    const canonical = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: MANIFEST,
+        files: [
+          {
+            path: "assets/blob.bin",
+            content: Buffer.from("real bytes").toString("base64"),
+            encoding: "base64",
+          },
+        ],
+      },
+    });
+    expect(canonical.statusCode).toBe(200);
+  });
+
   test("rejects a manifest larger than the size cap", async () => {
     const response = await ctx.app.inject({
       method: "POST",

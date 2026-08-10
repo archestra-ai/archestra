@@ -740,6 +740,18 @@ export const requiredEndpointPermissionsMap: Partial<
   // Subagent (delegation-target) exclusions: agent-type read/update permission checked dynamically in handler
   [RouteId.GetAgentSubagentExclusions]: {},
   [RouteId.UpdateAgentSubagentExclusions]: {},
+  // Skill assignments/exclusions (what the gateway publishes over skill://):
+  // agent-type read/update permission checked dynamically in handler, on top
+  // of this floor. `skill:read` is the floor rather than `{}` because these
+  // routes both disclose skills (name, description, scope, author) and decide
+  // which ones a gateway hands to every holder of its token — neither belongs
+  // to a caller whose role was deliberately stripped of the skill resource.
+  // Visibility of each named skill is checked per id in the assignment
+  // service; this is the capability half, and both are load-bearing.
+  [RouteId.GetAgentSkills]: { skill: ["read"] },
+  [RouteId.UpdateAgentSkills]: { skill: ["read"] },
+  [RouteId.GetAgentSkillExclusions]: { skill: ["read"] },
+  [RouteId.UpdateAgentSkillExclusions]: { skill: ["read"] },
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },

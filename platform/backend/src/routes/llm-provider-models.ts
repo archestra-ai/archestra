@@ -228,12 +228,12 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         .filter(({ model }) =>
           isEmbedding ? true : ModelModel.supportsTextChat(model),
         )
-        .map(({ model, isBest }) => ({
+        .map(({ model, isBest, recommendedForAgents }) => ({
           id: model.modelId,
           dbId: model.id,
           displayName: model.description || model.modelId,
           provider: model.provider,
-          capabilities: ModelModel.toCapabilities(model),
+          capabilities: ModelModel.toCapabilities(model, recommendedForAgents),
           isBest,
           isFree: isFreeModel(model),
           embeddingDimensions: model.embeddingDimensions,

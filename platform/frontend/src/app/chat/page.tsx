@@ -176,6 +176,7 @@ import {
   writePendingThinkingEffort,
 } from "@/lib/chat/thinking-effort-cache";
 import {
+  agentNotRecommendedForModel,
   agentRequiresPerUserConnect,
   agentToolsUnavailableForModel,
   deriveModelSource,
@@ -1004,6 +1005,29 @@ export function ChatPageContent({
   const conversationToolsUnavailable = useMemo(
     () =>
       agentToolsUnavailableForModel({
+        agent: conversationAgent,
+        selectedModelId: conversationModelId,
+        models: chatModels,
+      }),
+    [conversationAgent, conversationModelId, chatModels],
+  );
+
+  // A small local model (e.g. a 4B Ollama tag) paired with a tooled agent will
+  // usually still run the loop, just unreliably — so this warns where the
+  // no-tools notice states, and defers to it when both would apply.
+  const initialNotRecommended = useMemo(
+    () =>
+      agentNotRecommendedForModel({
+        agent: internalAgents.find((a) => a.id === initialAgentId),
+        selectedModelId: initialModel,
+        models: chatModels,
+      }),
+    [internalAgents, initialAgentId, initialModel, chatModels],
+  );
+
+  const conversationNotRecommended = useMemo(
+    () =>
+      agentNotRecommendedForModel({
         agent: conversationAgent,
         selectedModelId: conversationModelId,
         models: chatModels,
@@ -3293,6 +3317,9 @@ export function ChatPageContent({
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               toolsUnavailable={conversationToolsUnavailable}
+                              notRecommendedForAgents={
+                                conversationNotRecommended
+                              }
                               onStop={handleStopStreaming}
                               status={status}
                               selectedModel={conversationModelId ?? ""}
@@ -3489,6 +3516,9 @@ export function ChatPageContent({
                                 <ArchestraPromptInput
                                   onSubmit={handleInitialSubmit}
                                   toolsUnavailable={initialToolsUnavailable}
+                                  notRecommendedForAgents={
+                                    initialNotRecommended
+                                  }
                                   status={
                                     createConversationMutation.isPending
                                       ? "submitted"

@@ -1810,6 +1810,17 @@ const config = {
       process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
       60000,
     ),
+    /**
+     * Publish this deployment's Agent Skills over the gateway as `skill://`
+     * resources, per the MCP Skills extension (SEP-2640).
+     *
+     * Rides the ARCHESTRA_BETA master switch rather than a flag of its own: the
+     * SEP is still a draft with no shipped interoperating client, which is
+     * exactly what that switch already means. Deployment-global for v1 —
+     * enabling turns the capability on for every organization and gateway at
+     * once; per-tenant gating is a follow-up.
+     */
+    skillsEnabled: process.env.ARCHESTRA_BETA === "true",
   },
   mcpServer: {
     /**

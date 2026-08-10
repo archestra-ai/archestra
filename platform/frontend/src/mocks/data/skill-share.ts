@@ -18,6 +18,7 @@ function makeOrgSkill(id: string, name: string): OrgSkill {
     name,
     description: `${name} description`,
     content: `# ${name}`,
+    digest: null,
     latestVersion: 1,
     license: null,
     compatibility: null,

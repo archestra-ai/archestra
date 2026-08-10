@@ -16,6 +16,7 @@ import {
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
 import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
+import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-recommendation-notice";
 import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
@@ -110,6 +111,12 @@ export interface ChatPromptInputToolsProps {
    * shifts when it toggles.
    */
   toolsUnavailable?: boolean;
+  /**
+   * The selected model is small enough that the agent's tools may be called
+   * unreliably over a multi-step task. Same compact-chip treatment as
+   * {@link toolsUnavailable}, and mutually exclusive with it.
+   */
+  notRecommendedForAgents?: boolean;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
   /** Reasoning depth for Gemini flash models; ignored by every other model. */
@@ -175,6 +182,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
+  notRecommendedForAgents = false,
   onResetModelOverride,
   thinkingEffort = null,
   onThinkingEffortChange,
@@ -461,6 +469,15 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </Popover>
         ))}
 
+      {/* Rendered beside whichever control the collapsed toolbar picked (the
+          logo shortcut or the three-dots menu) and outside the RBAC gate: a
+          warning that only exists inside a popover — or only for users who can
+          see provider settings — is a warning most narrow-viewport users never
+          get. The wide toolbar renders its own copy below. */}
+      {isNarrow && notRecommendedForAgents && (
+        <NotRecommendedForAgentsNoticeBadge />
+      )}
+
       {/* File attachment button - always visible, except on incognito
           conversations where the affordance is hidden entirely (the backend
           rejects attachments there). */}
@@ -672,6 +689,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </div>
           )}
           {toolsUnavailable && <NoToolsModelBadge />}
+          {notRecommendedForAgents && <NotRecommendedForAgentsNoticeBadge />}
           {tokensUsed > 0 && maxContextLength && (
             <ContextWindowDialog
               breakdown={contextWindow ?? null}

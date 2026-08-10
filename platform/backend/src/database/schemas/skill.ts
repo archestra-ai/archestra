@@ -54,6 +54,48 @@ const skillsTable = softDeletablePgTable(
     /** Full markdown instructions (the SKILL.md body). */
     content: text("content").notNull(),
     /**
+     * Canonical serialized YAML frontmatter for this skill — the exact bytes
+     * that precede `content` in the `SKILL.md` published over MCP (SEP-2640).
+     * Derived from the frontmatter columns above (`name`, `description`,
+     * `license`, …) and rewritten by the same write that changes them, so it
+     * never drifts from them.
+     *
+     * Persisted rather than serialized per read so the published bytes are
+     * fixed at write time: a change to the serializer (or to js-yaml) can only
+     * affect a skill on its next write, never retroactively churn the digest a
+     * host already approved. Null on rows written before the column existed,
+     * until the `skill_publication_backfill` tick digests them — reads never
+     * fill anything, they withhold a row in this state.
+     *
+     * That freezing is also why this is NOT derived in the database: a
+     * generated column would recompute on every write, so one edit to the
+     * expression would rewrite every digest at once and every host would see
+     * mass tampering. The database enforces the weaker, correct guarantee
+     * instead — see `digest` below.
+     */
+    frontmatterBlob: text("frontmatter_blob"),
+    /**
+     * `sha256:<hex>` over the canonical `SKILL.md` bytes (`frontmatterBlob` +
+     * `content`) — the digest published for the manifest. Recomputed by every
+     * write that touches either half; filled for legacy rows alongside
+     * `frontmatterBlob` by the backfill tick.
+     *
+     * STALENESS IS DATABASE-ENFORCED. The
+     * `skills_invalidate_publication_artifacts` BEFORE UPDATE trigger
+     * (migration 0407) resets this column and `frontmatterBlob` to null
+     * whenever a write moves a covered field (`name`, `description`,
+     * `license`, `compatibility`, `allowedTools`, `metadata`, `content`)
+     * without supplying a fresh digest. The row is then withheld from
+     * publication until a model-layer write or the backfill tick restores the
+     * pair. A stale digest — which a conforming MCP host reads as tampering
+     * rather than staleness — is therefore not reachable, whatever a future
+     * write path forgets to do.
+     *
+     * Triggers are invisible in a Drizzle schema; see the migration before
+     * assuming a nulled digest is a bug.
+     */
+    digest: text("digest"),
+    /**
      * Head version number, pointing at the latest `skill_versions` row. Bumped
      * in the same transaction as an edit that forks a new version. Every skill
      * has at least version 1 (written on create / backfilled on migration).

@@ -19,6 +19,7 @@ import {
   BaseConnector,
   buildCheckpoint,
   extractErrorMessage,
+  resolveIngestibleImageMimeTypes,
 } from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
@@ -123,6 +124,8 @@ export class SharePointConnector extends BaseConnector {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
+    embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): Promise<number | null> {
     const parsed = parseSharePointConfig(params.config);
     if (!parsed) return null;
@@ -135,6 +138,11 @@ export class SharePointConnector extends BaseConnector {
       const safetyBufferedSyncFrom = syncFrom
         ? subtractSafetyBuffer(syncFrom)
         : undefined;
+      const imageMimeTypes = resolveIngestibleImageMimeTypes({
+        connectorImageMimeTypes: Object.values(IMAGE_MIME_TYPES),
+        embeddingInputModalities: params.embeddingInputModalities,
+        embeddingAcceptedImageMimeTypes: params.embeddingAcceptedImageMimeTypes,
+      });
 
       const client = this.getGraphClient(params.credentials, parsed);
       const siteResolution = await this.resolveSite(client, parsed.siteUrl);
@@ -161,6 +169,7 @@ export class SharePointConnector extends BaseConnector {
           recursive,
           maxDepth,
           syncFrom: safetyBufferedSyncFrom,
+          imageMimeTypes,
         });
       }
 
@@ -189,6 +198,7 @@ export class SharePointConnector extends BaseConnector {
     startTime?: Date;
     endTime?: Date;
     embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): AsyncGenerator<ConnectorSyncBatch> {
     const parsed = parseSharePointConfig(params.config);
     if (!parsed) {
@@ -204,8 +214,11 @@ export class SharePointConnector extends BaseConnector {
     const safetyBufferedSyncFrom = syncFrom
       ? subtractSafetyBuffer(syncFrom)
       : undefined;
-    const supportsImages =
-      params.embeddingInputModalities?.includes("image") ?? false;
+    const imageMimeTypes = resolveIngestibleImageMimeTypes({
+      connectorImageMimeTypes: Object.values(IMAGE_MIME_TYPES),
+      embeddingInputModalities: params.embeddingInputModalities,
+      embeddingAcceptedImageMimeTypes: params.embeddingAcceptedImageMimeTypes,
+    });
 
     // Single client instance — SDK handles token acquisition and refresh automatically.
     const client = this.getGraphClient(params.credentials, parsed);
@@ -239,7 +252,7 @@ export class SharePointConnector extends BaseConnector {
         recursive,
         includePages: parsed.includePages,
         syncFrom,
-        supportsImages,
+        imageMimeTypes: [...imageMimeTypes],
       },
       "Starting SharePoint sync",
     );
@@ -254,7 +267,7 @@ export class SharePointConnector extends BaseConnector {
       progress,
       syncFrom: safetyBufferedSyncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
     });
 
     // Sync site pages if enabled
@@ -337,7 +350,7 @@ export class SharePointConnector extends BaseConnector {
     };
     syncFrom: string | undefined;
     batchSize: number;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
       client,
@@ -348,7 +361,7 @@ export class SharePointConnector extends BaseConnector {
       progress,
       syncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
     } = params;
 
     const driveIds =
@@ -370,7 +383,7 @@ export class SharePointConnector extends BaseConnector {
         syncFrom,
         batchSize,
         hasMoreDrives: !isLastDrive,
-        supportsImages,
+        imageMimeTypes,
       });
     }
   }
@@ -405,7 +418,7 @@ export class SharePointConnector extends BaseConnector {
     syncFrom: string | undefined;
     batchSize: number;
     hasMoreDrives: boolean;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
       client,
@@ -417,7 +430,7 @@ export class SharePointConnector extends BaseConnector {
       syncFrom,
       batchSize,
       hasMoreDrives,
-      supportsImages,
+      imageMimeTypes,
     } = params;
 
     const adapter: FolderTraversalAdapter = {
@@ -451,7 +464,7 @@ export class SharePointConnector extends BaseConnector {
         syncFrom,
         batchSize,
         hasMoreFolders: hasMoreFolders || hasMoreDrives,
-        supportsImages,
+        imageMimeTypes,
       });
     }
   }
@@ -468,7 +481,7 @@ export class SharePointConnector extends BaseConnector {
     syncFrom: string | undefined;
     batchSize: number;
     hasMoreFolders: boolean;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
       client,
@@ -479,7 +492,7 @@ export class SharePointConnector extends BaseConnector {
       syncFrom,
       batchSize,
       hasMoreFolders,
-      supportsImages,
+      imageMimeTypes,
     } = params;
 
     let url: string =
@@ -505,7 +518,7 @@ export class SharePointConnector extends BaseConnector {
         (item) =>
           item.file &&
           !item.folder &&
-          isSupportedFile(item.name, supportsImages) &&
+          isSupportedFile(item.name, imageMimeTypes) &&
           // Client-side incremental filter: Graph API does not support
           // $filter on lastModifiedDateTime for drive item children.
           isModifiedSince(item.lastModifiedDateTime, syncFrom),
@@ -824,9 +837,17 @@ export class SharePointConnector extends BaseConnector {
     recursive: boolean;
     maxDepth: number | undefined;
     syncFrom: string | undefined;
+    imageMimeTypes: ReadonlySet<string>;
   }): Promise<number> {
-    const { client, driveId, folderPath, recursive, maxDepth, syncFrom } =
-      params;
+    const {
+      client,
+      driveId,
+      folderPath,
+      recursive,
+      maxDepth,
+      syncFrom,
+      imageMimeTypes,
+    } = params;
 
     const adapter: FolderTraversalAdapter = {
       listDirectSubfolders: (parentId) =>
@@ -850,6 +871,7 @@ export class SharePointConnector extends BaseConnector {
         folderId,
         rootFolderPath: folderId === "root" ? folderPath : undefined,
         syncFrom,
+        imageMimeTypes,
       });
     }
 
@@ -862,8 +884,16 @@ export class SharePointConnector extends BaseConnector {
     folderId: string;
     rootFolderPath: string | undefined;
     syncFrom: string | undefined;
+    imageMimeTypes: ReadonlySet<string>;
   }): Promise<number> {
-    const { client, driveId, folderId, rootFolderPath, syncFrom } = params;
+    const {
+      client,
+      driveId,
+      folderId,
+      rootFolderPath,
+      syncFrom,
+      imageMimeTypes,
+    } = params;
 
     let url: string | undefined =
       folderId === "root"
@@ -879,7 +909,7 @@ export class SharePointConnector extends BaseConnector {
         (item) =>
           item.file &&
           !item.folder &&
-          isSupportedFile(item.name) &&
+          isSupportedFile(item.name, imageMimeTypes) &&
           isModifiedSince(item.lastModifiedDateTime, syncFrom),
       ).length;
       url = result["@odata.nextLink"] ?? undefined;
@@ -1155,12 +1185,15 @@ function buildSitePagesUrl(siteId: string, batchSize: number): string {
   return `${GRAPH_API_BASE}/sites/${siteId}/pages?${params.toString()}`;
 }
 
-function isSupportedFile(name: string, supportsImages = false): boolean {
+function isSupportedFile(
+  name: string,
+  imageMimeTypes: ReadonlySet<string>,
+): boolean {
   const ext = getFileExtension(name);
   return (
     SUPPORTED_TEXT_EXTENSIONS.has(ext) ||
     SUPPORTED_BINARY_EXTENSIONS.has(ext) ||
-    (supportsImages && SUPPORTED_IMAGE_EXTENSIONS.has(ext))
+    imageMimeTypes.has(IMAGE_MIME_TYPES[ext] ?? "")
   );
 }
 

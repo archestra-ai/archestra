@@ -1,6 +1,7 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { countTokens, getEncoding } from "../tokenizer";
 import { BedrockEmbeddingError, callBedrockEmbedding } from "./bedrock";
 
 const BEDROCK_HOST = "https://bedrock-runtime.us-east-1.amazonaws.com";
@@ -190,6 +191,34 @@ describe("callBedrockEmbedding", () => {
         dimensions: 768,
       });
       expect(captured[0].body.embeddingConfig).toBeUndefined();
+    });
+
+    test("truncates a text input over the model's 256-token limit", async () => {
+      captured.length = 0;
+      const longText = "alpha bravo charlie delta ".repeat(100);
+      await callBedrockEmbedding({
+        inputs: [longText, "short caption"],
+        model: "amazon.titan-embed-image-v1",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      });
+      // Titan MM REJECTS text over 256 tokens with a ValidationException (no
+      // truncate parameter), so the client must send a truncated input.
+      const bodies = captured.map((c) => c.body);
+      const truncated = bodies.find(
+        (body) =>
+          typeof body.inputText === "string" &&
+          (body.inputText as string).length > "short caption".length,
+      );
+      expect(truncated).toBeDefined();
+      const sentText = truncated?.inputText as string;
+      expect(sentText.length).toBeLessThan(longText.length);
+      expect(countTokens(getEncoding(), sentText)).toBeLessThanOrEqual(256);
+      expect(longText.startsWith(sentText)).toBe(true);
+      // The short input passes through unmodified.
+      expect(bodies).toContainEqual(
+        expect.objectContaining({ inputText: "short caption" }),
+      );
     });
 
     test("maps a provider error to BedrockEmbeddingError with its status", async () => {

@@ -4,6 +4,9 @@ import {
   buildBedrockClient,
   buildBedrockProvider,
 } from "@/clients/bedrock-credentials";
+import logger from "@/logging";
+import { mapWithConcurrency } from "@/utils/concurrency";
+import { getEncoding, truncateToTokens } from "../tokenizer";
 import { findBedrockEmbeddingModel } from "./bedrock-models";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
@@ -53,6 +56,7 @@ export async function callBedrockEmbedding(params: {
             inputs,
             dimensions,
             onRequestDimensions: entry.onRequestDimensions,
+            maxInputTextTokens: entry.maxInputTextTokens,
           });
       return toEmbeddingApiResponse({ embeddings, tokens, model });
     } catch (err: unknown) {
@@ -111,6 +115,11 @@ export async function callBedrockEmbedding(params: {
  * input (the model takes a single text and/or image per request), body
  * `{inputText}` or `{inputImage: <base64>}` plus `embeddingConfig` when the
  * requested dimension is one the model accepts on request.
+ *
+ * Text inputs are truncated to the model's hard token limit (Titan MM takes
+ * 256 text tokens and REJECTS over-limit input with a ValidationException —
+ * there is no truncate parameter). The KB's default chunk is larger than
+ * that, so without this an ordinary text chunk fails the whole batch.
  */
 async function embedWithTitanMultimodal(params: {
   client: BedrockClient;
@@ -118,17 +127,27 @@ async function embedWithTitanMultimodal(params: {
   inputs: EmbeddingInput[];
   dimensions?: number;
   onRequestDimensions?: readonly number[];
+  maxInputTextTokens?: number;
 }): Promise<{ embeddings: number[][]; tokens: number }> {
-  const { client, model, inputs, dimensions, onRequestDimensions } = params;
+  const {
+    client,
+    model,
+    inputs,
+    dimensions,
+    onRequestDimensions,
+    maxInputTextTokens,
+  } = params;
 
   const embeddingConfig =
     dimensions !== undefined && onRequestDimensions?.includes(dimensions)
       ? { embeddingConfig: { outputEmbeddingLength: dimensions } }
       : {};
 
+  const prepared = truncateTextInputs({ inputs, model, maxInputTextTokens });
+
   let tokens = 0;
-  const embeddings = await mapWithConcurrency(
-    inputs,
+  const embeddings = await mapAllOrThrow(
+    prepared,
     BEDROCK_EMBEDDING_MAX_PARALLEL,
     async (input) => {
       const body =
@@ -212,9 +231,7 @@ async function embedWithCohere(params: {
     }),
   ];
 
-  await mapWithConcurrency(calls, BEDROCK_EMBEDDING_MAX_PARALLEL, (call) =>
-    call(),
-  );
+  await mapAllOrThrow(calls, BEDROCK_EMBEDDING_MAX_PARALLEL, (call) => call());
 
   return { embeddings, tokens: 0 };
 }
@@ -242,6 +259,44 @@ function cohereVectors(
     );
   }
   return vectors;
+}
+
+/**
+ * Truncate text inputs to fit a model's hard per-request token limit. We count
+ * cl100k tokens (the KB's tokenizer) but the model counts its own, so only a
+ * margin-reduced share of the limit is used. Unlike Cohere's server-side
+ * `truncate: "END"`, this loses content locally — warn with the count so the
+ * degradation is visible.
+ */
+function truncateTextInputs(params: {
+  inputs: EmbeddingInput[];
+  model: string;
+  maxInputTextTokens?: number;
+}): EmbeddingInput[] {
+  const { inputs, model, maxInputTextTokens } = params;
+  if (maxInputTextTokens === undefined) {
+    return inputs;
+  }
+  const tokenBudget = Math.floor(maxInputTextTokens * TOKEN_LIMIT_MARGIN);
+  const encoding = getEncoding();
+  let truncatedCount = 0;
+  const prepared = inputs.map((input) => {
+    if (typeof input !== "string") {
+      return input;
+    }
+    const truncated = truncateToTokens(encoding, input, tokenBudget);
+    if (truncated !== input) {
+      truncatedCount++;
+    }
+    return truncated;
+  });
+  if (truncatedCount > 0) {
+    logger.warn(
+      { model, truncatedCount, maxInputTextTokens },
+      "[BedrockEmbedding] Truncated text inputs over the model's token limit",
+    );
+  }
+  return prepared;
 }
 
 /**
@@ -301,26 +356,21 @@ function toBedrockEmbeddingError(err: unknown): BedrockEmbeddingError {
 
 /**
  * Run `fn` over `items` with bounded concurrency, preserving input order.
- * Rejects with the first failure.
+ * Every item runs to completion (no InvokeModel calls left detached
+ * mid-flight), then the first failure in input order is rethrown.
  */
-async function mapWithConcurrency<T, R>(
+async function mapAllOrThrow<T, R>(
   items: readonly T[],
   limit: number,
   fn: (item: T) => Promise<R>,
 ): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-  const workers = Array.from(
-    { length: Math.min(limit, items.length) },
-    async () => {
-      while (nextIndex < items.length) {
-        const index = nextIndex++;
-        results[index] = await fn(items[index]);
-      }
-    },
-  );
-  await Promise.all(workers);
-  return results;
+  const settled = await mapWithConcurrency(items, limit, fn);
+  return settled.map((result) => {
+    if (result.status === "rejected") {
+      throw result.reason;
+    }
+    return result.value;
+  });
 }
 
 // ===== Internal constants =====
@@ -339,3 +389,10 @@ const COHERE_MAX_TEXTS_PER_CALL = 96;
 
 /** Cohere's documented per-image limit (base64-decoded size). */
 const COHERE_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Share of a model's token limit the local cl100k count may fill. The model's
+ * own tokenizer segments differently, so aiming at the exact limit would still
+ * trip its ValidationException on unlucky inputs.
+ */
+const TOKEN_LIMIT_MARGIN = 0.85;

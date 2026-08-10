@@ -1,3 +1,4 @@
+import type { ModelInputModality } from "@archestra/shared";
 import type pino from "pino";
 import defaultLogger from "@/logging";
 import type {
@@ -8,6 +9,37 @@ import type {
   ConnectorSyncBatch,
   ConnectorType,
 } from "@/types";
+
+/**
+ * The image MIME types a connector should ingest: empty unless the configured
+ * embedding model accepts image input, then the connector's own supported
+ * types intersected with the formats the embedding client accepts for the
+ * model (`undefined` accepted list = no per-format restriction). Ingestion and
+ * the embedder's embed-time skip gate on the same resolved capability, so a
+ * format filtered here can never reach a rejecting embed call.
+ */
+export function resolveIngestibleImageMimeTypes(params: {
+  connectorImageMimeTypes: Iterable<string>;
+  embeddingInputModalities?: ModelInputModality[];
+  embeddingAcceptedImageMimeTypes?: string[];
+}): ReadonlySet<string> {
+  const {
+    connectorImageMimeTypes,
+    embeddingInputModalities,
+    embeddingAcceptedImageMimeTypes,
+  } = params;
+  if (!embeddingInputModalities?.includes("image")) {
+    return new Set();
+  }
+  const supported = [...connectorImageMimeTypes];
+  return new Set(
+    embeddingAcceptedImageMimeTypes
+      ? supported.filter((mimeType) =>
+          embeddingAcceptedImageMimeTypes.includes(mimeType),
+        )
+      : supported,
+  );
+}
 
 /**
  * Build a connector checkpoint with `lastSyncedAt` derived from the last
@@ -131,7 +163,8 @@ export abstract class BaseConnector implements Connector {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
-    embeddingInputModalities?: import("@archestra/shared").ModelInputModality[];
+    embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): Promise<number | null> {
     return null;
   }

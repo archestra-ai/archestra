@@ -6,7 +6,6 @@ import {
   checkNamespaceDeployAccess,
   createK8sClients,
   loadKubeConfig,
-  mapWithConcurrency,
   namespaceAccessMessage,
   sanitizeLabelValue,
 } from "@/k8s/shared";
@@ -25,6 +24,7 @@ import type {
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+import { mapWithConcurrency } from "@/utils/concurrency";
 import { ensureEgressBaselineNetworkPolicy } from "./egress-baseline";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,

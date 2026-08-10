@@ -15,6 +15,7 @@ import {
   BaseConnector,
   buildCheckpoint,
   extractErrorMessage,
+  resolveIngestibleImageMimeTypes,
 } from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
@@ -115,6 +116,7 @@ export class OneDriveConnector extends BaseConnector {
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
     embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): Promise<number | null> {
     const parsed = parseOneDriveConfig(params.config);
     if (!parsed) return null;
@@ -127,8 +129,11 @@ export class OneDriveConnector extends BaseConnector {
       const safetyBufferedSyncFrom = syncFrom
         ? subtractSafetyBuffer(syncFrom)
         : undefined;
-      const supportsImages =
-        params.embeddingInputModalities?.includes("image") ?? false;
+      const imageMimeTypes = resolveIngestibleImageMimeTypes({
+        connectorImageMimeTypes: Object.values(IMAGE_MIME_TYPES),
+        embeddingInputModalities: params.embeddingInputModalities,
+        embeddingAcceptedImageMimeTypes: params.embeddingAcceptedImageMimeTypes,
+      });
 
       const client = this.getGraphClient(params.credentials, parsed);
       let total = 0;
@@ -139,7 +144,7 @@ export class OneDriveConnector extends BaseConnector {
           userId,
           config: parsed,
           syncFrom: safetyBufferedSyncFrom,
-          supportsImages,
+          imageMimeTypes,
         });
       }
 
@@ -160,6 +165,7 @@ export class OneDriveConnector extends BaseConnector {
     startTime?: Date;
     endTime?: Date;
     embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): AsyncGenerator<ConnectorSyncBatch> {
     const parsed = parseOneDriveConfig(params.config);
     if (!parsed) {
@@ -175,8 +181,11 @@ export class OneDriveConnector extends BaseConnector {
     const safetyBufferedSyncFrom = syncFrom
       ? subtractSafetyBuffer(syncFrom)
       : undefined;
-    const supportsImages =
-      params.embeddingInputModalities?.includes("image") ?? false;
+    const imageMimeTypes = resolveIngestibleImageMimeTypes({
+      connectorImageMimeTypes: Object.values(IMAGE_MIME_TYPES),
+      embeddingInputModalities: params.embeddingInputModalities,
+      embeddingAcceptedImageMimeTypes: params.embeddingAcceptedImageMimeTypes,
+    });
     const recursive = parsed.recursive ?? true;
     const maxDepth = parsed.maxDepth;
 
@@ -193,7 +202,7 @@ export class OneDriveConnector extends BaseConnector {
         folderId: parsed.folderId,
         recursive,
         syncFrom,
-        supportsImages,
+        imageMimeTypes: [...imageMimeTypes],
       },
       "Starting OneDrive sync",
     );
@@ -209,7 +218,7 @@ export class OneDriveConnector extends BaseConnector {
         progress,
         syncFrom: safetyBufferedSyncFrom,
         batchSize,
-        supportsImages,
+        imageMimeTypes,
         recursive,
         maxDepth,
         fileTypes: parsed.fileTypes,
@@ -256,7 +265,7 @@ export class OneDriveConnector extends BaseConnector {
     };
     syncFrom: string | undefined;
     batchSize: number;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
     recursive: boolean;
     maxDepth: number | undefined;
     fileTypes: string[] | undefined;
@@ -269,7 +278,7 @@ export class OneDriveConnector extends BaseConnector {
       progress,
       syncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
       recursive,
       maxDepth,
       fileTypes,
@@ -304,7 +313,7 @@ export class OneDriveConnector extends BaseConnector {
         progress,
         syncFrom,
         batchSize,
-        supportsImages,
+        imageMimeTypes,
         fileTypes,
         hasMoreFolders: hasMoreFolders || hasMoreUsers,
       });
@@ -321,7 +330,7 @@ export class OneDriveConnector extends BaseConnector {
     };
     syncFrom: string | undefined;
     batchSize: number;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
     fileTypes: string[] | undefined;
     hasMoreFolders: boolean;
   }): AsyncGenerator<ConnectorSyncBatch> {
@@ -332,7 +341,7 @@ export class OneDriveConnector extends BaseConnector {
       progress,
       syncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
       fileTypes,
       hasMoreFolders,
     } = params;
@@ -357,7 +366,7 @@ export class OneDriveConnector extends BaseConnector {
         (item) =>
           item.file &&
           !item.folder &&
-          isSupportedFile(item.name, supportsImages, fileTypes) &&
+          isSupportedFile(item.name, imageMimeTypes, fileTypes) &&
           isModifiedSince(item.lastModifiedDateTime, syncFrom),
       );
 
@@ -527,9 +536,9 @@ export class OneDriveConnector extends BaseConnector {
     userId: string;
     config: OneDriveConfig;
     syncFrom: string | undefined;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): Promise<number> {
-    const { client, userId, config, syncFrom, supportsImages } = params;
+    const { client, userId, config, syncFrom, imageMimeTypes } = params;
     const rootItemId = config.folderId ?? "root";
     const recursive = config.recursive ?? true;
     const maxDepth = config.maxDepth;
@@ -551,7 +560,7 @@ export class OneDriveConnector extends BaseConnector {
         folderId,
         syncFrom,
         fileTypes: config.fileTypes,
-        supportsImages,
+        imageMimeTypes,
       });
     }
 
@@ -564,9 +573,9 @@ export class OneDriveConnector extends BaseConnector {
     folderId: string;
     syncFrom: string | undefined;
     fileTypes: string[] | undefined;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): Promise<number> {
-    const { client, userId, folderId, syncFrom, fileTypes, supportsImages } =
+    const { client, userId, folderId, syncFrom, fileTypes, imageMimeTypes } =
       params;
     let url = buildFolderChildrenUrl(userId, folderId, 500);
     let count = 0;
@@ -579,7 +588,7 @@ export class OneDriveConnector extends BaseConnector {
         (item) =>
           item.file &&
           !item.folder &&
-          isSupportedFile(item.name, supportsImages, fileTypes) &&
+          isSupportedFile(item.name, imageMimeTypes, fileTypes) &&
           isModifiedSince(item.lastModifiedDateTime, syncFrom),
       ).length;
       url = result["@odata.nextLink"] ?? "";
@@ -665,7 +674,7 @@ function buildFolderSubfoldersUrl(userId: string, itemId: string): string {
 
 function isSupportedFile(
   name: string,
-  supportsImages = false,
+  imageMimeTypes: ReadonlySet<string>,
   fileTypes?: string[],
 ): boolean {
   const ext = getFileExtension(name);
@@ -675,7 +684,7 @@ function isSupportedFile(
   return (
     SUPPORTED_TEXT_EXTENSIONS.has(ext) ||
     SUPPORTED_BINARY_EXTENSIONS.has(ext) ||
-    (supportsImages && SUPPORTED_IMAGE_EXTENSIONS.has(ext))
+    imageMimeTypes.has(IMAGE_MIME_TYPES[ext] ?? "")
   );
 }
 

@@ -4,6 +4,7 @@ import {
   BaseConnector,
   buildCheckpoint,
   extractErrorMessage,
+  resolveIngestibleImageMimeTypes,
 } from "./base-connector";
 
 /**
@@ -446,5 +447,43 @@ describe("extractErrorMessage", () => {
     expect(extractErrorMessage(new Error("Invalid PDF structure"))).toBe(
       "Invalid PDF structure",
     );
+  });
+});
+
+describe("resolveIngestibleImageMimeTypes", () => {
+  const connectorImageMimeTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
+
+  test("is empty when the embedding model takes no image input", () => {
+    expect(
+      resolveIngestibleImageMimeTypes({
+        connectorImageMimeTypes,
+        embeddingInputModalities: ["text"],
+      }).size,
+    ).toBe(0);
+    expect(
+      resolveIngestibleImageMimeTypes({ connectorImageMimeTypes }).size,
+    ).toBe(0);
+  });
+
+  test("keeps every connector-supported format when the client has no restriction", () => {
+    const result = resolveIngestibleImageMimeTypes({
+      connectorImageMimeTypes,
+      embeddingInputModalities: ["text", "image"],
+    });
+    expect([...result]).toEqual(connectorImageMimeTypes);
+  });
+
+  test("intersects with the embedding client's accepted formats", () => {
+    const result = resolveIngestibleImageMimeTypes({
+      connectorImageMimeTypes,
+      embeddingInputModalities: ["text", "image"],
+      embeddingAcceptedImageMimeTypes: ["image/jpeg", "image/png"],
+    });
+    expect([...result]).toEqual(["image/jpeg", "image/png"]);
   });
 });

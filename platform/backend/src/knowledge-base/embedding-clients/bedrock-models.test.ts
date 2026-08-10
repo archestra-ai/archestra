@@ -29,16 +29,24 @@ describe("findBedrockEmbeddingModel", () => {
       dimensions: 1024,
       onRequestDimensions: [256, 384, 1024],
       inputModalities: ["text", "image"],
+      // Titan MM rejects text over 256 tokens (no truncate parameter), so the
+      // client truncates to this limit.
+      maxInputTextTokens: 256,
+      acceptedImageMimeTypes: ["image/jpeg", "image/png"],
     });
+    // AWS publishes no inference profiles for embedding models, so Cohere is
+    // statically injected by its bare on-demand id, exactly like Titan.
     expect(findBedrockEmbeddingModel("cohere.embed-english-v3")).toMatchObject({
       dimensions: 1024,
-      staticInject: false,
+      staticInject: true,
       inputModalities: ["text", "image"],
+      acceptedImageMimeTypes: ["image/jpeg", "image/png"],
     });
     expect(
       findBedrockEmbeddingModel("cohere.embed-multilingual-v3"),
     ).toMatchObject({
       dimensions: 1024,
+      staticInject: true,
       inputModalities: ["text", "image"],
     });
   });

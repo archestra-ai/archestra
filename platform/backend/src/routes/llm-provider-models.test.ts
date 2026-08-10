@@ -579,6 +579,27 @@ describe("chat model routes", () => {
       "embedding_validation_failed",
     );
 
+    // A text-only Gemini embedding model is clamped the same way: the Gemini
+    // client forwards images for any model, but the API rejects them, so image
+    // capability is allowlisted per model.
+    const geminiText = await ModelModel.create({
+      externalId: "google/gemini-embedding-001",
+      provider: "gemini",
+      modelId: "gemini-embedding-001",
+      inputModalities: ["text"],
+      outputModalities: [],
+      embeddingDimensions: 1536,
+    });
+    const markGeminiImage = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${geminiText.id}`,
+      payload: { inputModalities: ["text", "image"] },
+    });
+    expect(markGeminiImage.statusCode).toBe(400);
+    expect(markGeminiImage.json().error.internal_code).toBe(
+      "embedding_validation_failed",
+    );
+
     // A multimodal Bedrock embedding model takes the image modality fine.
     const titanImage = await ModelModel.create({
       externalId: "bedrock/amazon.titan-embed-image-v1",

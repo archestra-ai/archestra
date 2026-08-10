@@ -293,9 +293,12 @@ describe("resolveEmbeddingConfig", () => {
     const result = await resolveEmbeddingConfig(org.id);
 
     expect(result?.inputModalities).toEqual(["text", "image"]);
+    // The client's accepted image formats ride along so connectors and the
+    // embedder can gate on them.
+    expect(result?.acceptedImageMimeTypes).toEqual(["image/jpeg", "image/png"]);
   });
 
-  test("trusts the models table for Gemini (no client-side clamp)", async ({
+  test("trusts the models table for an allowlisted multimodal Gemini model", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -326,6 +329,42 @@ describe("resolveEmbeddingConfig", () => {
     const result = await resolveEmbeddingConfig(org.id);
 
     expect(result?.inputModalities).toEqual(["text", "image"]);
+    expect(result?.acceptedImageMimeTypes).toBeNull();
+  });
+
+  test("clamps image off a text-only Gemini embedding model marked image-capable", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secretId = await createSecret();
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Gemini Key",
+      provider: "gemini",
+      secretId,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    await OrganizationModel.patch(org.id, {
+      embeddingChatApiKeyId: chatApiKey.id,
+      embeddingModel: "gemini-embedding-001",
+    });
+    // The Gemini client forwards images for ANY model, but the API rejects
+    // them for text-only embedding models — so the clamp is allowlist-based.
+    await ModelModel.create({
+      externalId: "google/gemini-embedding-001",
+      provider: "gemini",
+      modelId: "gemini-embedding-001",
+      inputModalities: ["text", "image"],
+      outputModalities: [],
+      embeddingDimensions: 1536,
+    });
+    mockGetSecretValue.mockResolvedValueOnce("gemini-key");
+
+    const result = await resolveEmbeddingConfig(org.id);
+
+    expect(result?.inputModalities).toEqual(["text"]);
   });
 });
 

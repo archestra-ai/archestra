@@ -1384,6 +1384,46 @@ describe("GoogleDriveConnector", () => {
       expect(doc.mediaContent?.data).toBe(expectedBase64);
     });
 
+    it("skips image formats the embedding model does not accept", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("img-1", "diagram.png", { mimeType: "image/png" }),
+            makeDriveFile("img-2", "animation.webp", {
+              mimeType: "image/webp",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("png-bytes").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+        embeddingInputModalities: ["text", "image"],
+        embeddingAcceptedImageMimeTypes: ["image/jpeg", "image/png"],
+      })) {
+        batches.push(batch);
+      }
+
+      // The PNG is ingested; the WebP would be rejected at embed time (the
+      // model takes JPEG/PNG only), so it never leaves the connector.
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].title).toBe("diagram.png");
+      expect(batches[0].skipped).toContainEqual(
+        expect.objectContaining({ name: "animation.webp" }),
+      );
+    });
+
     it("skips image files when embeddingInputModalities does not include image", async () => {
       resetMocks();
       const connector = new GoogleDriveConnector();

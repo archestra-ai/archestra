@@ -103,6 +103,7 @@ function makeEmbeddingContext() {
     dimensions: 1536,
     provider: "openai" as const,
     inputModalities: null,
+    acceptedImageMimeTypes: null,
   };
 }
 
@@ -646,6 +647,53 @@ describe("EmbeddingService", () => {
     const imageChunk = chunks.find((c) => c.chunkIndex === 1);
     expect(textChunk?.embedding).toHaveLength(1536);
     expect(imageChunk?.embedding).toBeNull();
+  });
+
+  test("processDocument skips image formats outside the model's accepted list", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Animated Doc",
+      content: "Text with an inline GIF",
+      contentHash: "hash-skip-format",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: doc.id, content: "Text chunk", chunkIndex: 0 },
+      {
+        documentId: doc.id,
+        content: "data:image/gif;base64,Z2lm",
+        chunkIndex: 1,
+      },
+    ]);
+
+    responseQueue.push({ kind: "ok", embeddings: [makeFakeEmbedding(1)] });
+
+    // Image modality is allowed, but the model takes JPEG/PNG only — the GIF
+    // chunk is skipped instead of sent to a certain provider rejection.
+    await embeddingService.processDocument(doc.id, {
+      ...makeEmbeddingContext(),
+      inputModalities: ["text", "image"],
+      acceptedImageMimeTypes: ["image/jpeg", "image/png"],
+    });
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("completed");
+
+    expect(embeddingRequests).toHaveLength(1);
+    expect(embeddingRequests[0].input).toEqual(["Text chunk"]);
+
+    const chunks = await KbChunkModel.findByDocument(doc.id);
+    const gifChunk = chunks.find((c) => c.chunkIndex === 1);
+    expect(gifChunk?.embedding).toBeNull();
   });
 
   test("processDocuments completes a media document with zero embedded chunks and surfaces the skip count", async ({

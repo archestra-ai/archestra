@@ -118,13 +118,15 @@ To change the embedding model, click **Drop** to clear the existing index — ev
 
 Connectors index image files only when the configured embedding model accepts image input. These models do:
 
-| Provider    | Model                                                                 |
-| ----------- | --------------------------------------------------------------------- |
-| Gemini      | `gemini-embedding-2-preview`                                          |
-| AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) |
-| AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           |
+| Provider    | Model                                                                 | Image formats  |
+| ----------- | --------------------------------------------------------------------- | -------------- |
+| Gemini      | `gemini-embedding-2-preview`                                          | All supported  |
+| AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) | JPEG, PNG      |
+| AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           | JPEG, PNG      |
 
-Every other embedding model is text-only, and cannot be marked as accepting image input in **LLM Providers > Models**. Images ingested under an earlier configuration are skipped at embedding time — the document completes without them, and the run shows the skipped count.
+Every other embedding model is text-only, and cannot be marked as accepting image input in **LLM Providers > Models**. Connectors skip image formats the model does not accept — a GIF under a Bedrock configuration, for example. Images ingested under an earlier configuration are skipped at embedding time. The document completes without them, and the run shows the skipped count.
+
+Titan Multimodal G1 accepts 256 text tokens per input. Longer text chunks are truncated before embedding. Use a text embedding model when your corpus is mostly documents.
 
 ### Reranking Configuration
 

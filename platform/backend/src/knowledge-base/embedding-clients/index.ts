@@ -106,24 +106,50 @@ function validateEmbeddingResponse(
 /**
  * Input modalities the embedding client for `provider` can actually drive for
  * `model` — the client-side half of the capability gate. `null` means "no
- * clamp": the client handles whatever the models table declares (Gemini's SDK
- * embeds images natively across its multimodal models). Everything else is
- * text-only except the Bedrock models the KB's own client has an image path
- * for; an unknown Bedrock model degrades to text so a mis-tagged row can never
- * make connectors ingest images the embed call will reject.
+ * clamp": the client handles whatever the models table declares. Everything
+ * else is text-only except the models the KB's own clients have an image path
+ * for; an unknown model degrades to text so a mis-tagged row can never make
+ * connectors ingest images the embed call will reject. The Gemini client
+ * forwards inline images for ANY model, so its image capability is allowlisted
+ * per model — Gemini's text-only embedding models reject images at the API.
  */
 export function getEmbeddingClientInputModalities(
   provider: SupportedProvider,
   model: string,
 ): ModelInputModality[] | null {
   if (provider === "gemini") {
-    return null;
+    return GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS.has(
+      model.replace(/^models\//, ""),
+    )
+      ? null
+      : ["text"];
   }
   if (provider === "bedrock") {
     const entry = findBedrockEmbeddingModel(model);
     return entry ? [...entry.inputModalities] : ["text"];
   }
   return ["text"];
+}
+
+/**
+ * Image MIME types the embedding client for `provider` can send to `model`, or
+ * `null` for no per-format restriction. Only meaningful when the resolved
+ * input modalities include "image": Bedrock's multimodal models take JPEG/PNG
+ * only (anything else is an opaque provider 400), while the Gemini SDK
+ * forwards any image payload. Connectors skip other formats at ingestion and
+ * the embedder skips them at embed time.
+ */
+export function getEmbeddingClientAcceptedImageMimeTypes(
+  provider: SupportedProvider,
+  model: string,
+): string[] | null {
+  if (provider === "bedrock") {
+    const entry = findBedrockEmbeddingModel(model);
+    return entry?.acceptedImageMimeTypes
+      ? [...entry.acceptedImageMimeTypes]
+      : null;
+  }
+  return null;
 }
 
 /**
@@ -176,3 +202,15 @@ export function getEmbeddingRetryDelayMs(
 
   return fallbackDelayMs;
 }
+
+// ===== Internal constants =====
+
+/**
+ * Gemini embedding models the KB's Gemini client can drive image inputs for
+ * (matched with any "models/" prefix stripped). A future multimodal Gemini
+ * embedding model needs an entry here before connectors will ingest images for
+ * it — safe-by-default, same as Bedrock's unknown-model→text degradation.
+ */
+const GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS = new Set([
+  "gemini-embedding-2-preview",
+]);

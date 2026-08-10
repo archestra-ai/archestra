@@ -14,7 +14,10 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
-import { getEmbeddingClientInputModalities } from "./embedding-clients";
+import {
+  getEmbeddingClientAcceptedImageMimeTypes,
+  getEmbeddingClientInputModalities,
+} from "./embedding-clients";
 import {
   EmbeddingConfigUnresolvableError,
   RerankerConfigUnresolvableError,
@@ -38,6 +41,10 @@ export interface EmbeddingConfig {
    * Null when no matching record exists in the models table (e.g. the model name
    * hasn't been synced from models.dev yet, or no model is configured). */
   inputModalities: ModelInputModality[] | null;
+  /** Image MIME types the embedding client can send to this model, or null for
+   * no per-format restriction. Only meaningful when `inputModalities` includes
+   * "image"; connectors and the embedder skip images in other formats. */
+  acceptedImageMimeTypes: string[] | null;
 }
 
 /**
@@ -98,6 +105,10 @@ export async function resolveEmbeddingConfig(
         org.embeddingModel,
       ),
     }),
+    acceptedImageMimeTypes: getEmbeddingClientAcceptedImageMimeTypes(
+      resolved.provider,
+      org.embeddingModel,
+    ),
   };
 }
 

@@ -182,15 +182,18 @@ class ConnectorSyncService {
     const startTime = Date.now();
     let stoppedEarly = false;
 
-    // Resolve the embedding model's supported input modalities so connectors
-    // can conditionally ingest non-text content (e.g. images).
+    // Resolve the embedding model's supported input modalities (and accepted
+    // image formats) so connectors can conditionally ingest non-text content.
     // Must happen before estimateTotalItems so the estimate matches sync behavior.
     let embeddingInputModalities: ModelInputModality[] | undefined;
+    let embeddingAcceptedImageMimeTypes: string[] | undefined;
     try {
       const embeddingConfig = await resolveEmbeddingConfig(
         connector.organizationId,
       );
       embeddingInputModalities = embeddingConfig?.inputModalities ?? undefined;
+      embeddingAcceptedImageMimeTypes =
+        embeddingConfig?.acceptedImageMimeTypes ?? undefined;
     } catch {
       // Non-fatal: proceed without modality info
     }
@@ -202,6 +205,7 @@ class ConnectorSyncService {
         credentials,
         checkpoint: connector.checkpoint as Record<string, unknown> | null,
         embeddingInputModalities,
+        embeddingAcceptedImageMimeTypes,
       });
 
       if (totalItems !== null && totalItems > 0) {
@@ -227,6 +231,7 @@ class ConnectorSyncService {
         credentials,
         checkpoint: connector.checkpoint as Record<string, unknown> | null,
         embeddingInputModalities,
+        embeddingAcceptedImageMimeTypes,
       });
 
       for await (const batch of syncGenerator) {

@@ -540,24 +540,46 @@ function parseImageDataUrl(
 
 /**
  * Split chunks into ones the configured embedding model can embed and image
- * chunks it can't (`inputModalities` excludes "image" — including `null`, which
+ * chunks it can't: `inputModalities` excludes "image" (including `null`, which
  * means the model's capabilities are unknown and image support can't be
- * assumed). Connectors gate NEW image ingestion on the same resolved
- * modalities, so this catches what ingested earlier under a different
- * configuration.
+ * assumed), or the image's format is outside the model's accepted MIME types
+ * (Bedrock's multimodal models take JPEG/PNG only). Connectors gate NEW image
+ * ingestion on the same resolved capability, so this catches what ingested
+ * earlier under a different configuration.
  */
 function partitionEmbeddableChunks<T extends { content: string }>(
   chunks: T[],
   ctx: EmbeddingConfig,
 ): { embeddable: T[]; skippedImageChunkCount: number } {
-  if (ctx.inputModalities?.includes("image")) {
+  const imageAllowed = ctx.inputModalities?.includes("image") ?? false;
+  const acceptedMimeTypes = ctx.acceptedImageMimeTypes;
+  if (imageAllowed && acceptedMimeTypes === null) {
     return { embeddable: chunks, skippedImageChunkCount: 0 };
   }
-  const embeddable = chunks.filter(
-    (chunk) => parseImageDataUrl(chunk.content) === null,
-  );
+  const embeddable = chunks.filter((chunk) => {
+    const image = parseImageDataUrl(chunk.content);
+    if (image === null) {
+      return true;
+    }
+    if (!imageAllowed) {
+      return false;
+    }
+    return (
+      acceptedMimeTypes === null ||
+      acceptedMimeTypes.includes(normalizeImageMimeType(image.mimeType))
+    );
+  });
   return {
     embeddable,
     skippedImageChunkCount: chunks.length - embeddable.length,
   };
+}
+
+/**
+ * Canonicalize an image MIME type for capability checks: lowercase, with the
+ * common non-standard "image/jpg" spelling mapped to "image/jpeg".
+ */
+function normalizeImageMimeType(mimeType: string): string {
+  const lower = mimeType.toLowerCase();
+  return lower === "image/jpg" ? "image/jpeg" : lower;
 }

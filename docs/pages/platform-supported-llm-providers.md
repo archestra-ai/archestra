@@ -429,11 +429,11 @@ A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama'
 
 ### Agent Suitability
 
-Ollama reports each model's parameter count. Archestra marks any model of 8B or fewer parameters as **Limited for complex tasks**. An 8B build stays unmarked.
+Ollama reports each model's exact parameter count. Archestra marks a model **Limited for complex tasks** when that count is 8,000,000,000 or lower. The threshold applies to the reported count, not the name — models sold as "8B" usually report slightly more (Llama 3.1 8B reports about 8.03 billion), so they stay unmarked.
 
 The marker shows on the model in the picker. It also shows next to the composer when the agent in that chat brings tools. A 4B model, for example, often calls those tools unreliably over a multi-step task — switch to a larger model for tool-heavy work.
 
-The marker is advice, not a quality verdict. Models are treated as suitable unless something says otherwise, and no provider other than Ollama reports a parameter count today — so no model outside Ollama carries the marker.
+The marker is advice, not a quality verdict. Models are treated as suitable unless something says otherwise, and no provider other than Ollama reports a parameter count today — so no model outside Ollama carries the marker. Each Ollama server is judged separately: the same tag can name different builds on two servers, and each key's marker reflects what its own server reports.
 
 ### Environment Variables
 

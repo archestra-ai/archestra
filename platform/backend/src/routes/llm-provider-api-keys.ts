@@ -272,14 +272,18 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         query.provider,
       );
 
-      // If includeKeyId is provided and not already in results, fetch it separately
+      // If includeKeyId is provided and not already in results, fetch it separately.
+      // Subscription metadata rides along so the chat/agent preflight can tell
+      // that the pinned key is somebody's personal subscription (and which one)
+      // even though the viewer can't list the key itself.
       if (
         query.includeKeyId &&
         !apiKeys.some((k) => k.id === query.includeKeyId)
       ) {
-        const agentKey = await LlmProviderApiKeyModel.findById(
-          query.includeKeyId,
-        );
+        const agentKey =
+          await LlmProviderApiKeyModel.findByIdWithSubscriptionInfo(
+            query.includeKeyId,
+          );
         if (agentKey && agentKey.organizationId === organizationId) {
           apiKeys.push({
             ...agentKey,

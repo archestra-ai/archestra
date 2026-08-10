@@ -70,6 +70,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
 const mockAnthropicWifIsEnabled = vi.mocked(
@@ -213,6 +214,73 @@ describe("GET /api/llm-provider-api-keys/available", () => {
     ]);
     expect(getBestModelsForApiKeysSpy).toHaveBeenCalledWith([apiKey.id]);
     expect(getBestModelSpy).not.toHaveBeenCalled();
+  });
+
+  test("includeKeyId carries subscription metadata for another user's X Premium key", async ({
+    makeSecret,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "owner-refresh-token",
+        }),
+      },
+    });
+    const ownerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+      name: "X Premium (SuperGrok)",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/available?includeKeyId=${ownerKey.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const includedKey = response
+      .json()
+      .find((key: { id: string }) => key.id === ownerKey.id);
+    // The viewer can't list the owner's personal key, but the included agent
+    // key must say it is an X Premium credential so the chat/agent preflight
+    // gates sending behind "connect your own account".
+    expect(includedKey).toMatchObject({
+      isAgentKey: true,
+      subscriptionKind: "x-premium",
+    });
+  });
+
+  test("includeKeyId reports no subscription kind for a plain xAI key", async ({
+    makeSecret,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: { apiKey: "xai-plain-console-key" },
+    });
+    const ownerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+      name: "Owner xAI Key",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/available?includeKeyId=${ownerKey.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const includedKey = response
+      .json()
+      .find((key: { id: string }) => key.id === ownerKey.id);
+    expect(includedKey).toMatchObject({ isAgentKey: true });
+    expect(includedKey.subscriptionKind ?? null).toBeNull();
   });
 });
 

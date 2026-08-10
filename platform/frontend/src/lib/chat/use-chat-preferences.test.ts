@@ -4,6 +4,7 @@ import {
   agentToolsUnavailableForModel,
   CHAT_STORAGE_KEYS,
   deriveModelSource,
+  getAgentSubscriptionConnection,
   getSavedAgent,
   resolveAutoSelectedModel,
   resolveInitialModel,
@@ -372,6 +373,152 @@ describe("agentRequiresPerUserConnect", () => {
         selectedModel: undefined,
       }),
     ).toBe(false);
+  });
+});
+
+describe("getAgentSubscriptionConnection", () => {
+  const xPremiumAgent = {
+    llmApiKeyId: "owner-x-premium",
+    resolvedLlmProvider: "xai" as const,
+    llmProviderRequiresPerUserCredential: false,
+  };
+  // The owner's pinned X Premium key, as the included agent key (`isAgentKey`)
+  // path returns it to a viewer who can't list it: metadata only, another
+  // user's row.
+  const pinnedXPremiumKey = {
+    id: "owner-x-premium",
+    provider: "xai" as const,
+    name: "X Premium (SuperGrok)",
+    userId: "owner",
+    subscriptionKind: "x-premium" as const,
+  };
+
+  test("gates an X Premium shared agent for a viewer with no credentials", () => {
+    expect(
+      getAgentSubscriptionConnection({
+        agent: xPremiumAgent,
+        credentials: [pinnedXPremiumKey],
+        userId: "viewer",
+      }),
+    ).toEqual({ requiresConnection: true, isConnected: false });
+  });
+
+  test("a plain personal xAI console key does not count as connected (kind-matched, like the send path)", () => {
+    expect(
+      getAgentSubscriptionConnection({
+        agent: xPremiumAgent,
+        credentials: [
+          pinnedXPremiumKey,
+          {
+            id: "viewer-xai-console",
+            provider: "xai",
+            name: "My xAI Key",
+            userId: "viewer",
+            subscriptionKind: null,
+          },
+        ],
+        userId: "viewer",
+      }),
+    ).toEqual({ requiresConnection: true, isConnected: false });
+  });
+
+  test("the viewer's own X Premium key connects the agent", () => {
+    expect(
+      getAgentSubscriptionConnection({
+        agent: xPremiumAgent,
+        credentials: [
+          pinnedXPremiumKey,
+          {
+            id: "viewer-x-premium",
+            provider: "xai",
+            name: "X Premium (SuperGrok)",
+            userId: "viewer",
+            subscriptionKind: "x-premium",
+          },
+        ],
+        userId: "viewer",
+      }),
+    ).toEqual({ requiresConnection: true, isConnected: true });
+  });
+
+  test("legacy ChatGPT key metadata (name only, no kind) still gates and connects", () => {
+    const agent = {
+      llmApiKeyId: "owner-chatgpt",
+      resolvedLlmProvider: "openai" as const,
+      llmProviderRequiresPerUserCredential: false,
+    };
+    const pinnedLegacyChatgpt = {
+      id: "owner-chatgpt",
+      provider: "openai" as const,
+      name: "ChatGPT Subscription",
+      userId: "owner",
+    };
+    expect(
+      getAgentSubscriptionConnection({
+        agent,
+        credentials: [pinnedLegacyChatgpt],
+        userId: "viewer",
+      }),
+    ).toEqual({ requiresConnection: true, isConnected: false });
+    expect(
+      getAgentSubscriptionConnection({
+        agent,
+        credentials: [
+          pinnedLegacyChatgpt,
+          {
+            id: "viewer-chatgpt",
+            provider: "openai",
+            name: "ChatGPT Subscription",
+            userId: "viewer",
+            isChatgptSubscription: true,
+          },
+        ],
+        userId: "viewer",
+      }),
+    ).toEqual({ requiresConnection: true, isConnected: true });
+  });
+
+  test("an ordinary shared key requires no connection", () => {
+    expect(
+      getAgentSubscriptionConnection({
+        agent: {
+          llmApiKeyId: "org-openai",
+          resolvedLlmProvider: "openai" as const,
+          llmProviderRequiresPerUserCredential: false,
+        },
+        credentials: [
+          {
+            id: "org-openai",
+            provider: "openai",
+            name: "OpenAI Key",
+            userId: null,
+            subscriptionKind: null,
+          },
+        ],
+        userId: "viewer",
+      }),
+    ).toEqual({ requiresConnection: false, isConnected: undefined });
+  });
+
+  test("a provider-level subscription (Copilot) accepts any personal key of the provider", () => {
+    expect(
+      getAgentSubscriptionConnection({
+        agent: {
+          llmApiKeyId: "owner-copilot",
+          resolvedLlmProvider: "github-copilot" as const,
+          llmProviderRequiresPerUserCredential: true,
+        },
+        credentials: [
+          {
+            id: "viewer-copilot",
+            provider: "github-copilot",
+            name: "GitHub Copilot",
+            userId: "viewer",
+          },
+        ],
+        userId: "viewer",
+      }),
+    ).toEqual({ requiresConnection: true, isConnected: true });
   });
 });
 

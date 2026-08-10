@@ -84,6 +84,52 @@ class LlmProviderApiKeyModel {
   }
 
   /**
+   * Find a key by ID with its subscription metadata (`subscriptionKind`,
+   * `isChatgptSubscription`) derived from the stored secret. Serves the
+   * agent-pinned key a viewer can't otherwise list (`includeKeyId`): the
+   * chat/agent preflight needs to know that the pinned credential is somebody's
+   * personal subscription — and which one — to gate sending behind "connect
+   * your own account" for every subscription kind, not just ChatGPT. Only
+   * credential-level subscription providers' secrets are ever decrypted, and
+   * only the derived kind is returned — never the value.
+   */
+  static async findByIdWithSubscriptionInfo(id: string): Promise<
+    | (LlmProviderApiKey & {
+        subscriptionKind: SubscriptionCredentialKind | null;
+        isChatgptSubscription: boolean;
+      })
+    | null
+  > {
+    const [row] = await db
+      .select({
+        apiKey: schema.llmProviderApiKeysTable,
+        secret: schema.secretsTable.secret,
+      })
+      .from(schema.llmProviderApiKeysTable)
+      .leftJoin(
+        schema.secretsTable,
+        eq(schema.llmProviderApiKeysTable.secretId, schema.secretsTable.id),
+      )
+      .where(eq(schema.llmProviderApiKeysTable.id, id));
+
+    if (!row) {
+      return null;
+    }
+
+    const subscriptionKind = isCredentialLevelSubscriptionProvider(
+      row.apiKey.provider,
+    )
+      ? subscriptionKindFromCredential(decryptApiKeyValue(row.secret))
+      : null;
+
+    return {
+      ...row.apiKey,
+      subscriptionKind,
+      isChatgptSubscription: subscriptionKind === "chatgpt",
+    };
+  }
+
+  /**
    * Find all LLM provider API keys for an organization.
    */
   static async findByOrganizationId(

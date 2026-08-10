@@ -9,7 +9,7 @@ import {
  * credential". Structural so both the full generated key type and trimmed picks
  * of it satisfy the predicate.
  */
-export interface SubscriptionCheckableLlmKey {
+interface SubscriptionCheckableLlmKey {
   provider: SupportedProvider;
   name: string;
   subscriptionKind?: SubscriptionCredentialKind | null;

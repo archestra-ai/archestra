@@ -1215,6 +1215,202 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     ).toBeUndefined();
   });
 
+  test("sends the conversation's flash effort as a minimal thinking level", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-3.6-flash");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "low",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { thinkingLevel: "minimal" },
+    });
+  });
+
+  test("sends the conversation's thinking effort as a high level with summaries", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-3.6-flash");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
+    });
+  });
+
+  test("prefers the effort sent with the turn over the stored one", async ({
+    makeConversation,
+  }) => {
+    // The row is written by a separate request the send can overtake, so the
+    // depth the composer showed has to win for this turn.
+    const model = await makeGeminiModelRow("gemini-3.6-flash");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "low",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+        thinkingEffort: "high",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
+    });
+  });
+
+  test("falls back to the stored effort when the turn sends none", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-3.6-flash");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { thinkingLevel: "high", includeThoughts: true },
+    });
+  });
+
+  test("never sends a thinking level to a model that cannot honor one", async ({
+    makeConversation,
+  }) => {
+    // The 2.5 family takes a numeric budget; a level cannot be paired with it,
+    // so a stored effort must stay dormant rather than reach the provider.
+    const model = await makeGeminiModelRow("gemini-2.5-pro");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { includeThoughts: true },
+    });
+  });
+
+  test("asks Pro for the shallowest level it accepts, not the shallowest there is", async ({
+    makeConversation,
+  }) => {
+    // Pro rejects "minimal" outright, so "low" has to resolve to its own floor.
+    const model = await makeGeminiModelRow("gemini-3.1-pro-preview");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "low",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      // Reasoning happens at this level, so its summary is worth showing.
+      thinkingConfig: { thinkingLevel: "low", includeThoughts: true },
+    });
+  });
+
   test("keeps Gemini image-model providerOptions free of thinkingConfig", async ({
     makeConversation,
   }) => {

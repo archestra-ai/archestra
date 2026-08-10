@@ -1,1 +1,0 @@
-ALTER TABLE "models" ADD COLUMN "recommended_for_agents" boolean DEFAULT true;

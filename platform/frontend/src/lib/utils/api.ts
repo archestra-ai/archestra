@@ -79,8 +79,29 @@ export function toApiError(error: ApiSdkError): Error {
   return new Error(getApiErrorMessage(error));
 }
 
+/**
+ * API error types that describe the request, the caller's session, or their
+ * permissions — not a fault of ours. The backend already drops the matching
+ * 4xx from its own exception reporting (see classifyErrorForTracking); without
+ * the same rule here the client reported them a second time from the other
+ * side of the wire, so an expected "sign in first" on a page opened while
+ * logged out was filed as an application error.
+ *
+ * They are still toasted and logged: the user needs to see them, they just are
+ * not defects to triage.
+ */
+const NON_REPORTABLE_API_ERROR_TYPES = new Set([
+  "api_authentication_error",
+  "api_authorization_error",
+  "api_not_found_error",
+  "api_validation_error",
+  "api_conflict_error",
+  "api_payload_too_large_error",
+]);
+
 export function handleApiError(error: ApiSdkError) {
   const sentryError = toApiError(error);
+  const errorType = getApiErrorType(error);
 
   // Mandatory-2FA lockout: every API call fails with this code until the
   // member enrolls, so route them to the dedicated enrollment page instead of
@@ -103,11 +124,16 @@ export function handleApiError(error: ApiSdkError) {
     toast.error(message, { duration: 12000, id: message });
   }
 
-  void import("@sentry/nextjs")
-    .then(({ captureException }) => {
-      captureException(sentryError, { extra: { originalError: error } });
-    })
-    .catch(() => undefined);
+  if (
+    errorType === undefined ||
+    !NON_REPORTABLE_API_ERROR_TYPES.has(errorType)
+  ) {
+    void import("@sentry/nextjs")
+      .then(({ captureException }) => {
+        captureException(sentryError, { extra: { originalError: error } });
+      })
+      .catch(() => undefined);
+  }
   console.error(sentryError);
 }
 

@@ -329,9 +329,15 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "tool_assignment", label: "Tool Assignment" },
   { id: "knowledge_management", label: "Knowledge Management" },
   { id: "chat", label: "Chat" },
+  { id: "projects", label: "Projects" },
   { id: "meta", label: "Meta" },
   { id: "skills", label: "Skills" },
-  { id: "skill_sandbox", label: "Skill Sandbox" },
+  // `id` keeps the original spelling so the taxonomy keys stay stable; the
+  // label follows the feature's user-facing name (docs page "Code Sandbox").
+  { id: "skill_sandbox", label: "Code Sandbox" },
+  // The persistent file store, which the code runtime gates but never touches:
+  // these operate on saved files, not on a container.
+  { id: "files", label: "Files" },
   { id: "apps", label: "Apps" },
 ] as const;
 
@@ -431,10 +437,11 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   unassign_knowledge_connector_from_agent: "knowledge_management",
 
   todo_write: "chat",
-  create_project_from_conversation: "chat",
-  set_project_share: "chat",
-  list_projects: "chat",
-  get_project: "chat",
+
+  create_project_from_conversation: "projects",
+  set_project_share: "projects",
+  list_projects: "projects",
+  get_project: "projects",
 
   search_tools: "meta",
   run_tool: "meta",
@@ -448,13 +455,14 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   run_command: "skill_sandbox",
   download_file: "skill_sandbox",
   upload_file: "skill_sandbox",
-  search_files: "skill_sandbox",
-  read_file: "skill_sandbox",
-  save_file: "skill_sandbox",
-  edit_file: "skill_sandbox",
-  delete_file: "skill_sandbox",
-  copy_file: "skill_sandbox",
-  read_file_raw: "skill_sandbox",
+
+  search_files: "files",
+  read_file: "files",
+  save_file: "files",
+  edit_file: "files",
+  delete_file: "files",
+  copy_file: "files",
+  read_file_raw: "files",
 
   scaffold_app: "apps",
   refine_app: "apps",

@@ -243,6 +243,8 @@ const PromptInputContent = ({
   toolsUnavailable,
   notRecommendedForAgents,
   onResetModelOverride,
+  thinkingEffort,
+  onThinkingEffortChange,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
@@ -968,6 +970,8 @@ const PromptInputContent = ({
             toolsUnavailable={toolsUnavailable}
             notRecommendedForAgents={notRecommendedForAgents}
             onResetModelOverride={onResetModelOverride}
+            thinkingEffort={thinkingEffort}
+            onThinkingEffortChange={onThinkingEffortChange}
             agentRequiresPerUserConnect={agentRequiresPerUserConnect}
             subscriptionConnectRequired={subscriptionConnectRequired}
             subscriptionProvider={subscriptionProvider}
@@ -1068,6 +1072,8 @@ const ArchestraPromptInput = ({
   toolsUnavailable,
   notRecommendedForAgents,
   onResetModelOverride,
+  thinkingEffort,
+  onThinkingEffortChange,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
@@ -1177,6 +1183,8 @@ const ArchestraPromptInput = ({
           toolsUnavailable={toolsUnavailable}
           notRecommendedForAgents={notRecommendedForAgents}
           onResetModelOverride={onResetModelOverride}
+          thinkingEffort={thinkingEffort}
+          onThinkingEffortChange={onThinkingEffortChange}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}

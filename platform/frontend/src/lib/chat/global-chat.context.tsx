@@ -63,6 +63,7 @@ import {
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import { incognitoRequestHeaders } from "@/lib/chat/incognito";
+import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
@@ -595,6 +596,26 @@ function ChatSessionHook({
       headers: () => ({
         [EXTERNAL_AGENT_ID_HEADER]: getChatExternalAgentId(appName),
         ...incognitoRequestHeaders(conversationId),
+      }),
+      // Carry the reasoning depth the composer is showing. The server also
+      // stores it per conversation, but that write is a separate request the
+      // send can overtake — sending it with the turn makes the depth the user
+      // can see the depth that runs, without the send waiting on anything.
+      prepareSendMessagesRequest: ({
+        id,
+        messages,
+        trigger,
+        messageId,
+        body,
+      }) => ({
+        body: {
+          id,
+          messages,
+          trigger,
+          messageId,
+          ...body,
+          thinkingEffort: readThinkingEffort(queryClient, id),
+        },
       }),
       prepareReconnectToStreamRequest: ({ id, headers, credentials }) => {
         // Merge the incognito key explicitly: the reconnect GET touches the

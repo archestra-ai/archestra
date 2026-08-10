@@ -146,6 +146,27 @@ class StaleSessionError extends Error {
 }
 
 /**
+ * Whether a failure is the upstream rejecting our streamable-HTTP session id
+ * rather than failing the operation itself.
+ *
+ * The MCP SDK skips the `initialize` handshake when the transport already has
+ * a session id, so a session the upstream no longer knows about does not
+ * surface at connect time — it surfaces on the first real RPC. The same is
+ * true for a session established seconds earlier that the upstream then drops
+ * (a restart, a session TTL, or a request landing on a different replica).
+ *
+ * Safe to retry in both cases: the upstream rejects the POST at the transport
+ * layer, before the JSON-RPC message is dispatched, so nothing ran.
+ */
+function isStaleSessionError(error: unknown): boolean {
+  return (
+    error instanceof StaleSessionError ||
+    (error instanceof StreamableHTTPError &&
+      String(error.message).includes("Session not found"))
+  );
+}
+
+/**
  * Token authentication context for dynamic credential resolution
  */
 export type TokenAuthContext = {
@@ -933,10 +954,7 @@ class McpClient {
         // StreamableHTTPError "Session not found" during the first real
         // RPC call (listTools / callTool).  Detect this and retry with a
         // fresh session.
-        const isStaleSession =
-          error instanceof StaleSessionError ||
-          (error instanceof StreamableHTTPError &&
-            String(error.message).includes("Session not found"));
+        const isStaleSession = isStaleSessionError(error);
 
         if (isStaleSession && !isRetry) {
           // Check if another concurrent call is already recovering this
@@ -3610,52 +3628,72 @@ class McpClient {
       enterpriseTransportCredential,
     } = params;
 
-    const transport = await this.getTransport(
-      catalogItem,
-      mcpServerId,
-      secrets,
-      undefined,
-      undefined,
-      undefined,
-      enterpriseTransportCredential,
-    );
+    const runInspection = async (): Promise<unknown> => {
+      const transport = await this.getTransport(
+        catalogItem,
+        mcpServerId,
+        secrets,
+        undefined,
+        undefined,
+        undefined,
+        enterpriseTransportCredential,
+      );
 
-    const client = new Client(buildMcpClientInfo("archestra-inspector"), {
-      capabilities: {},
-    });
+      const client = new Client(buildMcpClientInfo("archestra-inspector"), {
+        capabilities: {},
+      });
+
+      try {
+        await this.raceWithTimeout(
+          client.connect(transport),
+          30000,
+          new McpServerConnectionTimeoutError(),
+        );
+
+        if (method === "tools/list") {
+          return await this.raceWithTimeout(
+            client.listTools(),
+            30000,
+            "List tools timeout",
+          );
+        }
+
+        if (!params.toolName) {
+          throw new Error("toolName is required for tools/call");
+        }
+        return await this.raceWithTimeout(
+          client.callTool(
+            {
+              name: params.toolName,
+              arguments: params.toolArguments ?? {},
+            },
+            undefined,
+            { timeout: config.mcpGateway.toolCallTimeoutMs },
+          ),
+          config.mcpGateway.toolCallTimeoutMs,
+          "Tool call timeout",
+        );
+      } finally {
+        await client.close().catch(() => {});
+      }
+    };
 
     try {
-      await this.raceWithTimeout(
-        client.connect(transport),
-        30000,
-        new McpServerConnectionTimeoutError(),
-      );
-
-      if (method === "tools/list") {
-        return await this.raceWithTimeout(
-          client.listTools(),
-          30000,
-          "List tools timeout",
-        );
+      return await runInspection();
+    } catch (error) {
+      // The upstream dropped the session between connecting and the call.
+      // Tool calls recover from this transparently (see executeToolCall);
+      // inspection used to surface it to the operator as a failed server,
+      // which reads as "this server is broken" for what a second attempt
+      // resolves. Build a fresh transport and try once more.
+      if (!isStaleSessionError(error)) {
+        throw error;
       }
-
-      if (!params.toolName) {
-        throw new Error("toolName is required for tools/call");
-      }
-      return await this.raceWithTimeout(
-        client.callTool(
-          {
-            name: params.toolName,
-            arguments: params.toolArguments ?? {},
-          },
-          undefined,
-          { timeout: config.mcpGateway.toolCallTimeoutMs },
-        ),
-        config.mcpGateway.toolCallTimeoutMs,
-        "Tool call timeout",
+      logger.info(
+        { mcpServerId, method },
+        "Stale session during MCP inspection, retrying with a fresh session",
       );
-    } finally {
-      await client.close().catch(() => {});
+      return await runInspection();
     }
   }
 

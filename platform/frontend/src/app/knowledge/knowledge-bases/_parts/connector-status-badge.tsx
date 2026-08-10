@@ -40,6 +40,14 @@ const STATUS_CONFIG: Record<ConnectorSyncStatus, StatusConfig> = {
     className: "bg-amber-500/10 text-amber-600 border border-amber-500/30",
     animated: false,
   },
+  // Ran cleanly and indexed nothing, with nothing indexed before either —
+  // nearly always a connector pointed somewhere it cannot see. Amber, not
+  // green: a tick here is how one goes unnoticed for weeks.
+  no_documents: {
+    label: "No documents",
+    className: "bg-amber-500/10 text-amber-600 border border-amber-500/30",
+    animated: false,
+  },
   partial: {
     label: "Partial",
     className: "bg-amber-500/10 text-amber-600 border border-amber-500/30",

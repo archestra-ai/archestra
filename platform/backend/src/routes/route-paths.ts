@@ -52,6 +52,22 @@ export const CONNECTION_HEALTH_PATH = "/v1/health";
 export const INCOMING_EMAIL_WEBHOOK_PREFIX = "/api/webhooks/incoming-email";
 
 /**
+ * Where Google returns the browser after an individual Google Drive
+ * authorization. Fixed, because Google matches the redirect URI exactly
+ * against the one registered on the OAuth client — which is why the connector
+ * being authorized travels in the signed `state` rather than in the path.
+ *
+ * NOT exempt from auth. The redirect is a top-level GET, which carries the
+ * SameSite=Lax session cookie, so the route requires a session like any other
+ * and takes `knowledgeSource: ["update"]`. The signed state is what binds the
+ * response to the session that started the flow — on its own it would only
+ * prove this deployment issued *some* flow, which would let one person's
+ * authorization be redeemed onto another person's connector.
+ */
+export const GOOGLE_DRIVE_OAUTH_CALLBACK_PATH =
+  "/api/connectors/gdrive/oauth/callback";
+
+/**
  * Reverse proxy to the public Archestra MCP catalog. Lets the browser fetch
  * catalog data via `/api/archestra-catalog/*` on its own origin (avoids CORS)
  * — this backend route is the fallback for deployments whose ingress sends

@@ -5,6 +5,7 @@ import {
   E2eTestId,
   providerDisplayNames,
   type SupportedProvider,
+  type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { memo, useCallback } from "react";
@@ -24,6 +25,7 @@ import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
+import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -117,6 +119,9 @@ export interface ChatPromptInputToolsProps {
   notRecommendedForAgents?: boolean;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
+  /** Reasoning depth for Gemini flash models; ignored by every other model. */
+  thinkingEffort?: ThinkingEffortSetting;
+  onThinkingEffortChange?: (effort: ThinkingEffortSetting) => void;
   /**
    * The selected agent pins a per-user-credential model (e.g. GitHub Copilot)
    * that the viewer hasn't connected. Keep the agent's model and subscription
@@ -179,6 +184,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   toolsUnavailable = false,
   notRecommendedForAgents = false,
   onResetModelOverride,
+  thinkingEffort = null,
+  onThinkingEffortChange,
   agentRequiresPerUserConnect = false,
   subscriptionConnectRequired = false,
   subscriptionProvider,
@@ -403,6 +410,19 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                           suppressAutoSelect={agentRequiresPerUserConnect}
                           fallbackModelName={agentModelDisplayName}
                         />
+                        {onThinkingEffortChange && (
+                          <ThinkingEffortSelector
+                            selectedModel={selectedModel}
+                            apiKeyId={
+                              conversationId
+                                ? currentConversationChatApiKeyId
+                                : initialApiKeyId
+                            }
+                            value={thinkingEffort}
+                            onChange={onThinkingEffortChange}
+                            className="mt-2 w-fit"
+                          />
+                        )}
                       </div>
                     )}
                   </>
@@ -632,6 +652,19 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   }
                   suppressAutoSelect={agentRequiresPerUserConnect}
                   fallbackModelName={agentModelDisplayName}
+                />
+              )}
+              {!subscriptionConnectRequired && onThinkingEffortChange && (
+                <ThinkingEffortSelector
+                  selectedModel={selectedModel}
+                  apiKeyId={
+                    conversationId
+                      ? currentConversationChatApiKeyId
+                      : initialApiKeyId
+                  }
+                  value={thinkingEffort}
+                  onChange={onThinkingEffortChange}
+                  className="mr-1"
                 />
               )}
               {modelSource && !subscriptionConnectRequired && (

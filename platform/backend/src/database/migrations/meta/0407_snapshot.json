@@ -1,5 +1,5 @@
 {
-  "id": "81480390-b51d-4d0c-b1be-ecbd0bd5bc15",
+  "id": "7ff263fc-6eef-45bb-b443-60e03fbd34d6",
   "prevId": "6318e72e-f4f3-440b-94a6-90187c1c0ca4",
   "version": "7",
   "dialect": "postgresql",
@@ -6067,6 +6067,12 @@
         "model_id": {
           "name": "model_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "thinking_effort": {
+          "name": "thinking_effort",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -12138,13 +12144,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "recommended_for_agents": {
-          "name": "recommended_for_agents",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": true
         },
         "default_parameters": {
           "name": "default_parameters",

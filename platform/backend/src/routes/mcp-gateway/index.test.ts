@@ -575,7 +575,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(names).toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 
-  test("Auto-tool mode exclusions: a disabled app's launch tool is withheld from tools/list until enabled, even for its own author", async ({
+  test("Auto-tool mode: a disabled app's launch tool is undiscoverable until enabled, even for its own author", async ({
     makeAgent,
     makeApp,
     makeMember,
@@ -601,10 +601,11 @@ describe("MCP Gateway (stateless mode)", () => {
     );
     const launchToolName = launchTool.name;
 
-    // "Agent auto mode": the gateway agent has accessAllTools on, so dynamic
-    // discovery — not just explicit assignment — feeds tools/list. This is the
-    // same code path "MCP Gateway auto mode" drives, so one round trip through
-    // the real /v1/mcp route proves both.
+    // "Agent auto mode": the gateway agent has accessAllTools on, so the tool
+    // is reached by dynamic discovery rather than explicit assignment. Auto mode
+    // deliberately advertises only search_tools/run_tool, so the disabled-app
+    // rule is observed where dynamic discovery actually happens — search_tools —
+    // over the real /v1/mcp route.
     const gatewayAgent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
@@ -612,7 +613,7 @@ describe("MCP Gateway (stateless mode)", () => {
     });
     const token = await UserTokenModel.create(author.id, org.id);
 
-    async function listToolNames(): Promise<string[]> {
+    async function searchToolNames(): Promise<string[]> {
       await initializeMcpSession({
         app,
         agentId: gatewayAgent.id,
@@ -622,20 +623,78 @@ describe("MCP Gateway (stateless mode)", () => {
         method: "POST",
         url: `/v1/mcp/${gatewayAgent.id}`,
         headers: makeMcpHeaders(token.value),
-        payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: TOOL_SEARCH_TOOLS_FULL_NAME,
+            arguments: { query: launchToolName, limit: 20 },
+          },
+          id: 2,
+        },
       });
       expect(response.statusCode).toBe(200);
-      return response
-        .json()
-        .result.tools.map((tool: { name: string }) => tool.name);
+      const body = response.json();
+      expect(body.result.isError).toBeFalsy();
+      return (body.result.structuredContent?.tools ?? []).map(
+        (tool: { toolName: string }) => tool.toolName,
+      );
     }
 
-    // Withheld while disabled — even for the app's own author.
-    expect(await listToolNames()).not.toContain(launchToolName);
+    // Undiscoverable while disabled — even for the app's own author.
+    expect(await searchToolNames()).not.toContain(launchToolName);
 
     // Enabling surfaces it, over the same real route, for the same caller.
     await AppModel.setEnabled(disabledApp.id, true);
-    expect(await listToolNames()).toContain(launchToolName);
+    expect(await searchToolNames()).toContain(launchToolName);
+  });
+
+  test("Auto-tool mode: tools/list advertises only the search/run pair even when an app is dynamically reachable", async ({
+    makeAgent,
+    makeApp,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    await makeMember(author.id, org.id, { role: "admin" });
+    // An enabled, org-scoped app: dynamically reachable by the caller, and its
+    // launch tool carries a ui:// resource — the class that used to be
+    // advertised top-level and blew the listing up on installs with many apps.
+    await makeApp({
+      organizationId: org.id,
+      authorId: author.id,
+      scope: "org",
+      enabled: true,
+    });
+    const gatewayAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+    const token = await UserTokenModel.create(author.id, org.id);
+
+    await initializeMcpSession({
+      app,
+      agentId: gatewayAgent.id,
+      token: token.value,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${gatewayAgent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const names = response
+      .json()
+      .result.tools.map((tool: { name: string }) => tool.name)
+      .sort();
+    expect(names).toEqual(
+      [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
+    );
   });
 
   test("returns 401 with WWW-Authenticate header for missing authorization header", async ({

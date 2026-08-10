@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -150,7 +150,7 @@ Those two tools are enabled implicitly and do not appear in the built-in tool pi
 
 Use this when the full tool list is too large or noisy to send to the model on every turn, but the gateway still needs the same underlying tool access.
 
-With **Auto** tool mode also enabled, a signed-in user's `search_tools` and `run_tool` reach every MCP catalog tool and knowledge source that user can access. Credentials resolve at call time per the MCP server's **Default credential** setting — on behalf of the user by default, or one shared account when the server is configured that way. Nothing is assigned to the gateway. Sessions authenticated with org or team tokens stay limited to assigned tools, and the org-wide **Dynamic Tool Access** security setting can disable the behavior entirely.
+With **Auto** tool mode also enabled, a signed-in user's `search_tools` and `run_tool` reach every MCP catalog tool and knowledge source that user can access. `tools/list` still returns only those two tools, however many the user can reach. Credentials resolve at call time per the MCP server's **Default credential** setting — on behalf of the user by default, or one shared account when the server is configured that way. Nothing is assigned to the gateway. Sessions authenticated with org or team tokens stay limited to assigned tools, and the org-wide **Dynamic Tool Access** security setting can disable the behavior entirely.
 
 Tool call policies still apply to the target tool. `run_tool` does not bypass input conditions, team conditions, untrusted-context rules, or approval-required rules.
 

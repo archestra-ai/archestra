@@ -858,7 +858,12 @@ async function makeConversation(
   overrides: Partial<
     Pick<
       InsertConversation,
-      "userId" | "organizationId" | "title" | "modelId" | "chatApiKeyId"
+      | "userId"
+      | "organizationId"
+      | "title"
+      | "modelId"
+      | "chatApiKeyId"
+      | "thinkingEffort"
     >
   > = {},
 ) {

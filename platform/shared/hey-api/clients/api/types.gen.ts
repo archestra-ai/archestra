@@ -27318,6 +27318,7 @@ export type StreamChatData = {
         messages: Array<unknown>;
         trigger?: 'submit-message' | 'regenerate-message';
         temperature?: number;
+        thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path?: never;
     query?: never;
@@ -27825,6 +27826,7 @@ export type GetChatConversationsResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -27908,6 +27910,7 @@ export type CreateChatConversationData = {
         chatApiKeyId?: string | null;
         projectId?: string | null;
         incognito?: boolean;
+        thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path?: never;
     query?: never;
@@ -27993,6 +27996,7 @@ export type CreateChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -28154,6 +28158,7 @@ export type GetDeletedChatConversationsResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -28402,6 +28407,7 @@ export type GetChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -28485,6 +28491,7 @@ export type UpdateChatConversationData = {
         agentId?: string;
         artifact?: string | null;
         pinnedAt?: string | null;
+        thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path: {
         id: string;
@@ -28572,6 +28579,7 @@ export type UpdateChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -29175,6 +29183,7 @@ export type ForkChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -29427,6 +29436,7 @@ export type RestoreChatConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -29690,6 +29700,7 @@ export type CompactChatConversationResponses = {
             selectedModel: string;
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
             modelId: string | null;
+            thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
             hooksDebugEnabled: boolean;
             todoList: string | number | boolean | null | {
@@ -30127,6 +30138,7 @@ export type GetSharedConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -30293,6 +30305,7 @@ export type ForkSharedConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -30461,6 +30474,7 @@ export type GenerateChatConversationTitleResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -30629,6 +30643,7 @@ export type UpdateChatMessageResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
@@ -75702,6 +75717,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         selectedModel: string;
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         modelId: string | null;
+        thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
         hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {

@@ -5,7 +5,6 @@ import {
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
   providerDisplayNames,
-  providerRequiresPerUserCredential,
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -30,6 +29,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 
@@ -343,19 +343,6 @@ function groupKeysByProvider(availableKeys: DropdownLlmProviderApiKey[]) {
   }
 
   return grouped;
-}
-
-function isPersonalSubscription(key: DropdownLlmProviderApiKey) {
-  return (
-    key.subscriptionKind != null ||
-    providerRequiresPerUserCredential(key.provider) ||
-    // Legacy fallback: ChatGPT keys whose secret is unreadable to the metadata
-    // endpoint carry no kind but are still recognized by the boolean flag or
-    // their default name.
-    (key.provider === "openai" &&
-      (key.isChatgptSubscription === true ||
-        key.name.trim().toLowerCase() === "chatgpt subscription"))
-  );
 }
 
 function ProviderGroupHeading({ provider }: { provider: SupportedProvider }) {

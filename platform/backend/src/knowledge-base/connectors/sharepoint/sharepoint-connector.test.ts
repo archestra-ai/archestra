@@ -544,6 +544,47 @@ describe("SharePointConnector", () => {
       expect(failures[0]?.itemId).toBe("item-2");
     });
 
+    it("reports a file with no extractable text as a categorized skip naming the file", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      // Standalone ArrayBuffer (not from the Node.js pool — see the image sync
+      // test) so the download yields exactly these whitespace bytes.
+      const blankBytes = Buffer.from("   \n  ");
+      const blankArrayBuffer: ArrayBuffer = blankBytes.buffer.slice(
+        blankBytes.byteOffset,
+        blankBytes.byteOffset + blankBytes.byteLength,
+      );
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [{ id: "drive-1" }] })
+        .mockResolvedValueOnce({ value: [] }) // listDirectSubfolders("root")
+        .mockResolvedValueOnce({
+          value: [makeDriveItem("item-1", "blank.txt")],
+        })
+        .mockResolvedValueOnce(blankArrayBuffer) // whitespace-only content
+        .mockResolvedValueOnce({ value: [] }); // sitePages
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped).toHaveLength(1);
+      const skip = batches[0].skipped?.[0];
+      expect(skip?.name).toBe("blank.txt");
+      expect(skip?.category).toBe("no_extractable_text");
+    });
+
     it("throws when drive items endpoint returns error", async () => {
       const connector = new SharePointConnector();
       const { mockGet } = setupMockClient(connector);
@@ -604,6 +645,39 @@ describe("SharePointConnector", () => {
       expect(pageBatch.documents[0].content).toContain("Hello world");
       expect(pageBatch.documents[0].content).toContain("More content");
       expect(pageBatch.documents[0].id).toBe("page-page-1");
+    });
+
+    it("reports a page with no extractable content as a categorized skip naming the page", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      mockGet
+        .mockResolvedValueOnce({ id: "site-123" })
+        .mockResolvedValueOnce({ value: [] }) // listDriveIds (empty)
+        .mockResolvedValueOnce({
+          value: [makeSitePage("page-1", "Empty Page")],
+        }) // sitePages
+        .mockResolvedValueOnce({ value: [] }); // webParts for page-1 — no content
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          tenantId: "test-tenant-id",
+          siteUrl: "https://tenant.sharepoint.com/sites/test",
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const pageBatch = batches[batches.length - 1];
+      expect(pageBatch.documents).toHaveLength(0);
+      expect(pageBatch.skipped).toHaveLength(1);
+      const skip = pageBatch.skipped?.[0];
+      expect(skip?.name).toBe("Empty Page");
+      expect(skip?.category).toBe("no_extractable_text");
+      expect(skip?.reason).toBe("Page has no extractable content");
     });
 
     it("sets checkpoint from last page lastModifiedDateTime", async () => {

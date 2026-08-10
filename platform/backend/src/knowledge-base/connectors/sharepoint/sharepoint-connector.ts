@@ -591,6 +591,7 @@ export class SharePointConnector extends BaseConnector {
       yield {
         documents,
         failures: this.flushFailures(),
+        skipped: this.flushSkipped(),
         checkpoint: buildCheckpoint({
           type: "sharepoint",
           itemUpdatedAt: checkpointAt ? new Date(checkpointAt) : undefined,
@@ -803,6 +804,7 @@ export class SharePointConnector extends BaseConnector {
       yield {
         documents,
         failures: this.flushFailures(),
+        skipped: this.flushSkipped(),
         checkpoint: buildCheckpoint({
           type: "sharepoint",
           itemUpdatedAt: checkpointAt ? new Date(checkpointAt) : undefined,

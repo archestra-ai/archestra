@@ -1,4 +1,5 @@
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
+import { onTestFinished, vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { Gemini } from "@/types";
 import {
@@ -1064,5 +1065,88 @@ describe("restToSdkGenerateContentParams tool-schema sanitization", () => {
     );
 
     expect(fd.parameters).toBeUndefined();
+  });
+});
+
+describe("GeminiRequestAdapter tool result updates", () => {
+  /**
+   * A `functionResponse` without an `id` is the common case — the AI SDK's
+   * Gemini provider never sends one. The id the guardrail reads and the id the
+   * replacement is written under must still agree.
+   */
+  function requestWithUnidentifiedToolResult(): GeminiRequestWithModel {
+    return createMockRequest([
+      { role: "user", parts: [{ text: "Read my mail" }] },
+      {
+        role: "model",
+        parts: [{ functionCall: { name: "read_email", args: {} } }],
+      },
+      {
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              name: "read_email",
+              response: { body: "SECRET" },
+            },
+          },
+        ],
+      },
+    ]);
+  }
+
+  test("replaces a tool result whose functionResponse carries no id", () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+
+    const adapter = geminiAdapterFactory.createRequestAdapter(
+      requestWithUnidentifiedToolResult(),
+    );
+
+    const [toolCall] = adapter
+      .getMessages()
+      .flatMap((message) => message.toolCalls ?? []);
+    expect(toolCall).toBeTruthy();
+
+    // Policy evaluation queries the database between reading the request and
+    // writing the replacement back, so the two passes never share a timestamp.
+    vi.advanceTimersByTime(5);
+    adapter.applyToolResultUpdates({ [toolCall.id]: "[REPLACED]" });
+
+    const contents = adapter.toProviderRequest().contents ?? [];
+    const responses = contents
+      .flatMap((content) => content.parts ?? [])
+      .flatMap((part) =>
+        "functionResponse" in part && part.functionResponse
+          ? [part.functionResponse.response]
+          : [],
+      );
+
+    expect(responses).toEqual([{ sanitizedContent: "[REPLACED]" }]);
+    expect(JSON.stringify(responses)).not.toContain("SECRET");
+  });
+
+  test("resolves the same id from getMessages and getToolResults", () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+
+    const adapter = geminiAdapterFactory.createRequestAdapter(
+      requestWithUnidentifiedToolResult(),
+    );
+
+    const fromMessages = adapter
+      .getMessages()
+      .flatMap((message) => message.toolCalls ?? [])
+      .map((toolCall) => toolCall.id);
+    vi.advanceTimersByTime(5);
+    const fromToolResults = adapter
+      .getToolResults()
+      .map((toolResult) => toolResult.id);
+
+    expect(fromToolResults).toEqual(fromMessages);
   });
 });

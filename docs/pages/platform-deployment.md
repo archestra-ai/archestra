@@ -1605,7 +1605,7 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - Verifiable citations. In the built-in chat, the model is asked to back each claim with a short verbatim quote tagged with its source chunk's ref; this checks each quote against the chunks `query_knowledge_sources` returned that turn and logs plus meters (`rag_quote_verification_total`) any quote that appears in no returned chunk — a fabrication caught programmatically.
   - Default: `true`
-  - Log-only: it never blocks or alters an answer, and only covers the internal chat (external MCP clients answer where Archestra cannot see the text). Set to `false` to disable the pass.
+  - Log-only: it never blocks or alters an answer, and only covers the internal chat (external MCP clients answer where Archestra cannot see the text). Set to `false` to disable the feature: the model is no longer asked to quote, and no check runs.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title prefix and metadata suffix.
   - Default: `512`. Clamped to `128`–`2048`.

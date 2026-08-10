@@ -18,6 +18,7 @@ import {
   TOOL_UPDATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import config from "@/config";
 import {
   buildUserAccessControlList,
   checkAutoSyncPermissionSyncSupported,
@@ -680,14 +681,17 @@ async function handleQueryKnowledgeSources(params: {
 
     // The quote-citation instruction rides on the result (not the always-on
     // tool description) so it reaches the model exactly when there are chunks to
-    // quote, and only when the answer surface can actually be verified. Omitted
-    // for an empty result — there is nothing to quote.
+    // quote, and only when the answer surface can actually be verified. Gated on
+    // the same flag as the verification pass — disabling the feature must also
+    // stop asking the model to quote, not just skip the check. Omitted for an
+    // empty result — there is nothing to quote.
     const output = {
       results,
       totalChunks: results.length,
-      ...(results.length > 0 && {
-        citationInstruction: QUOTE_CITATION_INSTRUCTION,
-      }),
+      ...(config.kb.quoteVerificationEnabled &&
+        results.length > 0 && {
+          citationInstruction: QUOTE_CITATION_INSTRUCTION,
+        }),
     };
     return structuredSuccessResult(output, JSON.stringify(output));
   } catch (error) {

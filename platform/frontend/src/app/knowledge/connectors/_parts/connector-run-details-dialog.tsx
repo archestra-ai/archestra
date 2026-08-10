@@ -256,11 +256,12 @@ export function ConnectorRunDetailsDialog({
 
               {!isPermissionRun && (run.documentsWithoutText ?? 0) > 0 && (
                 <p className="text-xs text-amber-600">
-                  {run.documentsWithoutText} document(s) contained no
-                  extractable text — scanned or image-only PDFs, unreadable
-                  files, or files that failed to download — so they are not
-                  searchable and will not appear in any knowledge base answer.
-                  The run log names each one.
+                  {run.documentsWithoutText} of the {run.itemsSkipped} skipped
+                  files contained no extractable text — scanned or image-only
+                  PDFs, files that could not be parsed or exported, or images
+                  too large to embed — so they are not searchable and will not
+                  appear in any knowledge base answer. The run log names each
+                  one.
                 </p>
               )}
 

@@ -264,6 +264,96 @@ describe("OneDriveConnector", () => {
       expect(batches[0].documents).toHaveLength(0);
     });
 
+    it("reports a file with no extractable text as a categorized skip naming the file", async () => {
+      const connector = new OneDriveConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      // Standalone ArrayBuffer (not from the Node.js pool) so the download
+      // yields exactly these whitespace bytes.
+      const blankBytes = Buffer.from("   \n  ");
+      const blankArrayBuffer: ArrayBuffer = blankBytes.buffer.slice(
+        blankBytes.byteOffset,
+        blankBytes.byteOffset + blankBytes.byteLength,
+      );
+
+      mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
+      mockGet.mockResolvedValueOnce({
+        value: [makeDriveItem("file-1", "blank.txt")],
+      }); // syncFilesInFolder("root")
+      mockGet.mockResolvedValueOnce(blankArrayBuffer); // whitespace-only content
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: baseConfig,
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped).toHaveLength(1);
+      const skip = batches[0].skipped?.[0];
+      expect(skip?.name).toBe("blank.txt");
+      expect(skip?.category).toBe("no_extractable_text");
+    });
+
+    it("records a fileTypes extension with no extractor as an unsupported-type skip, not a document without text", async () => {
+      const connector = new OneDriveConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
+      mockGet.mockResolvedValueOnce({
+        value: [makeDriveItem("file-1", "recording.mp4")],
+      }); // syncFilesInFolder("root") — .mp4 passes the fileTypes override
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...baseConfig, fileTypes: [".pdf", ".mp4"] },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped).toHaveLength(1);
+      const skip = batches[0].skipped?.[0];
+      expect(skip?.name).toBe("recording.mp4");
+      expect(skip?.reason).toBe("unsupported_file_type");
+      expect(skip?.category).toBeUndefined();
+    });
+
+    it("reports an oversized image as a categorized skip", async () => {
+      const connector = new OneDriveConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      const oversized = new ArrayBuffer(4 * 1024 * 1024 + 1);
+
+      mockGet.mockResolvedValueOnce({ value: [] }); // listDirectSubfolders("root")
+      mockGet.mockResolvedValueOnce({
+        value: [makeDriveItem("file-1", "poster.png")],
+      }); // syncFilesInFolder("root")
+      mockGet.mockResolvedValueOnce(oversized); // image content over the limit
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: baseConfig,
+        credentials,
+        checkpoint: null,
+        embeddingInputModalities: ["image"],
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped).toHaveLength(1);
+      const skip = batches[0].skipped?.[0];
+      expect(skip?.name).toBe("poster.png");
+      expect(skip?.category).toBe("no_extractable_text");
+      expect(skip?.reason).toContain("maximum size");
+    });
+
     it("handles pagination with @odata.nextLink", async () => {
       const connector = new OneDriveConnector();
       const { mockGet } = setupMockClient(connector);

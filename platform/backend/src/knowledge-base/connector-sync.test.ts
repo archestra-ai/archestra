@@ -916,7 +916,12 @@ describe("ConnectorSyncService", () => {
 
   describe("a run that indexes nothing", () => {
     function makeEmptyConnector(
-      skipped?: Array<{ itemId: string; name: string; reason: string }>,
+      skipped?: Array<{
+        itemId: string;
+        name: string;
+        reason: string;
+        category?: "no_extractable_text";
+      }>,
     ) {
       return {
         estimateTotalItems: vi.fn().mockResolvedValue(0),
@@ -992,6 +997,85 @@ describe("ConnectorSyncService", () => {
       const run = await ConnectorRunModel.findById(result.runId);
       expect(run?.status).toBe("no_documents");
       expect(run?.error).toContain("all 2 items found were skipped");
+      expect(run?.error).toContain("file-type filter");
+    });
+
+    test("names the no-text cause, not the file-type filter, when every skip was a document without text", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const secretId = await createSecret();
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+      setupSecret();
+      // A folder of only scanned PDFs: readable types, nothing to extract.
+      // Blaming the file-type filter here sends someone to the wrong setting.
+      mockGetConnector.mockReturnValue(
+        makeEmptyConnector([
+          {
+            itemId: "f-1",
+            name: "scan-a.pdf",
+            reason: "PDF has no text layer",
+            category: "no_extractable_text",
+          },
+          {
+            itemId: "f-2",
+            name: "scan-b.pdf",
+            reason: "PDF has no text layer",
+            category: "no_extractable_text",
+          },
+        ]),
+      );
+
+      const result = await connectorSyncService.executeSync(connector.id);
+
+      const run = await ConnectorRunModel.findById(result.runId);
+      expect(run?.status).toBe("no_documents");
+      expect(run?.error).toContain(
+        "all 2 items found contained no extractable text",
+      );
+      expect(run?.error).not.toContain("file-type filter");
+    });
+
+    test("names both causes when no-text documents account for only some of the skips", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const secretId = await createSecret();
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+      setupSecret();
+      mockGetConnector.mockReturnValue(
+        makeEmptyConnector([
+          {
+            itemId: "f-1",
+            name: "scan.pdf",
+            reason: "PDF has no text layer",
+            category: "no_extractable_text",
+          },
+          {
+            itemId: "f-2",
+            name: "archive.zip",
+            reason: "unsupported_file_type",
+          },
+        ]),
+      );
+
+      const result = await connectorSyncService.executeSync(connector.id);
+
+      const run = await ConnectorRunModel.findById(result.runId);
+      expect(run?.status).toBe("no_documents");
+      expect(run?.error).toContain("all 2 items found were skipped");
+      expect(run?.error).toContain("1 contained no extractable text");
+      expect(run?.error).toContain("unsupported types");
     });
 
     test("stays a plain success when an incremental run simply found no changes", async ({

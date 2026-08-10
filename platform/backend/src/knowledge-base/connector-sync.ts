@@ -529,6 +529,7 @@ class ConnectorSyncService {
               itemsSkipped,
               documentsProcessed,
               itemFetchFailures,
+              documentsWithoutText,
             })
           : null;
 
@@ -972,8 +973,14 @@ function describeEmptySync(params: {
   itemsSkipped: number;
   documentsProcessed: number;
   itemFetchFailures: number;
+  documentsWithoutText: number;
 }): string {
-  const { itemsSkipped, documentsProcessed, itemFetchFailures } = params;
+  const {
+    itemsSkipped,
+    documentsProcessed,
+    itemFetchFailures,
+    documentsWithoutText,
+  } = params;
 
   // Items were found and every one of them failed to come back. Pointing at
   // the sharing configuration here would send someone to the wrong console.
@@ -981,10 +988,22 @@ function describeEmptySync(params: {
     return `Indexed nothing: ${itemFetchFailures} item${itemFetchFailures === 1 ? "" : "s"} were found but could not be fetched. See the run logs for the individual failures — the credential can list this source but not read its contents.`;
   }
   if (itemsSkipped > 0 && itemsSkipped === documentsProcessed) {
+    // Blaming the file-type filter when the items were readable types with no
+    // text (a folder of scanned PDFs) would send someone to the wrong setting.
+    if (documentsWithoutText === itemsSkipped) {
+      return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found contained no extractable text (scanned or image-only PDFs, or files that could not be parsed). The run details name each one.`;
+    }
+    if (documentsWithoutText > 0) {
+      return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped — ${documentsWithoutText} contained no extractable text and the rest were unsupported types. The run details name each one.`;
+    }
     return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped as unsupported types. Widen or remove the file-type filter, or point the connector at content it can read.`;
   }
   if (itemsSkipped > 0) {
-    return `Indexed nothing, and skipped ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} as unsupported types. Check the file-type filter and that the content is shared with the identity this connector authenticates as.`;
+    const skippedAs =
+      documentsWithoutText > 0
+        ? `(${documentsWithoutText} with no extractable text)`
+        : "as unsupported types";
+    return `Indexed nothing, and skipped ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} ${skippedAs}. Check the file-type filter and that the content is shared with the identity this connector authenticates as.`;
   }
   return "Indexed nothing: the source returned no items at all. Check that the content is shared with the identity this connector authenticates as, that any folder or project scope points at something that identity can see, and that a file-type filter is not excluding everything. Test connection reports which of those it is.";
 }

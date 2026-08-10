@@ -372,6 +372,14 @@ export class OneDriveConnector extends BaseConnector {
               item.id,
               item.name,
             );
+            if (result.unsupportedType) {
+              this.trackSkipped({
+                itemId: item.id,
+                name: item.name,
+                reason: "unsupported_file_type",
+              });
+              return null;
+            }
             if (!result.text.trim() && !result.mediaContent) {
               this.trackSkipped({
                 itemId: item.id,
@@ -478,6 +486,11 @@ export class OneDriveConnector extends BaseConnector {
     mediaContent?: { mimeType: string; data: string };
     /** Why the text came back empty, for skip reporting on the run. */
     emptyReason?: string;
+    /**
+     * The extension has no extractor at all (a fileTypes entry outside the
+     * supported sets) — an unsupported-type skip, not a document without text.
+     */
+    unsupportedType?: true;
   }> {
     const ext = getFileExtension(fileName);
     const contentPath = `/users/${userId}/drive/items/${itemId}/content`;
@@ -533,7 +546,7 @@ export class OneDriveConnector extends BaseConnector {
       { fileName, ext },
       "OneDrive: skipping unsupported file type",
     );
-    return { text: "" };
+    return { text: "", unsupportedType: true };
   }
 
   private async countUserDriveItems(params: {

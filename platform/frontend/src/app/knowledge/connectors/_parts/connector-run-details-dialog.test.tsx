@@ -178,8 +178,11 @@ describe("ConnectorRunDetailsDialog", () => {
 
     expect(screen.getByText("No text extracted:")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
+    // The explanation states the count is a subset of the skipped total.
     expect(
-      screen.getByText(/contained no.*extractable text/),
+      screen.getByText(
+        /3 of the 4 skipped files contained no extractable text/,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText(/The run log names each one/)).toBeInTheDocument();
   });

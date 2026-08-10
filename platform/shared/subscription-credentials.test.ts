@@ -12,6 +12,7 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   subscriptionKindForProvider,
   subscriptionKindFromCredential,
+  subscriptionKindFromKeyMetadata,
 } from "./subscription-credentials";
 
 /** A stored secret shaped like a real credential-level subscription value. */
@@ -60,6 +61,88 @@ describe("registry coverage", () => {
       // forced to personal scope.
       expect(providerRequiresPerUserCredential(provider)).toBe(marker === null);
     }
+  });
+
+  it("gives every provider at most one subscription", () => {
+    // subscriptionKindForProvider and the connect surfaces .find() the first
+    // matching entry — a second subscription on the same provider would be
+    // silently unreachable.
+    const providers = SUBSCRIPTION_CREDENTIAL_KINDS.map(
+      (kind) => SUBSCRIPTION_CREDENTIALS[kind].provider,
+    );
+    expect(new Set(providers).size).toBe(providers.length);
+  });
+
+  it("keeps markers pairwise prefix-free", () => {
+    // subscriptionKindFromCredential returns the first marker the secret
+    // starts with — a marker that is a prefix of another would shadow it.
+    const markers = SUBSCRIPTION_CREDENTIAL_KINDS.map(
+      (kind) => SUBSCRIPTION_CREDENTIALS[kind].marker,
+    ).filter((marker): marker is string => marker !== null);
+    for (const a of markers) {
+      for (const b of markers) {
+        if (a !== b) {
+          expect(a.startsWith(b)).toBe(false);
+        }
+      }
+    }
+  });
+});
+
+describe("subscriptionKindFromKeyMetadata", () => {
+  it("prefers the server-derived kind when present", () => {
+    expect(
+      subscriptionKindFromKeyMetadata({
+        provider: "xai",
+        name: "renamed by the user",
+        subscriptionKind: "x-premium",
+      }),
+    ).toBe("x-premium");
+  });
+
+  it("keeps the legacy ChatGPT boolean working", () => {
+    expect(
+      subscriptionKindFromKeyMetadata({
+        provider: "openai",
+        name: "whatever",
+        isChatgptSubscription: true,
+      }),
+    ).toBe("chatgpt");
+  });
+
+  it("falls back to the connect-flow key name when the secret is unreadable", () => {
+    // Vault-backed deployments: the metadata endpoint cannot inspect the secret,
+    // so the kind rides on the name the connect flow assigned.
+    expect(
+      subscriptionKindFromKeyMetadata({
+        provider: "xai",
+        name: "X Premium (SuperGrok)",
+      }),
+    ).toBe("x-premium");
+    expect(
+      subscriptionKindFromKeyMetadata({
+        provider: "openai",
+        name: " chatgpt subscription ",
+      }),
+    ).toBe("chatgpt");
+  });
+
+  it("does not match the name fallback across providers", () => {
+    expect(
+      subscriptionKindFromKeyMetadata({
+        provider: "openai",
+        name: "X Premium (SuperGrok)",
+      }),
+    ).toBeNull();
+  });
+
+  it("treats a renamed key with no metadata as an ordinary key", () => {
+    expect(
+      subscriptionKindFromKeyMetadata({
+        provider: "xai",
+        name: "my grok key",
+      }),
+    ).toBeNull();
   });
 });
 

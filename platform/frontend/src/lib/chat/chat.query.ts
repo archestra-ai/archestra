@@ -366,6 +366,7 @@ export function useCreateConversation() {
       projectId,
       incognito,
       incognitoKey,
+      thinkingEffort,
     }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]> & {
       /**
        * Browser-generated conversation DEK (base64url of 32 random bytes).
@@ -384,6 +385,7 @@ export function useCreateConversation() {
               title,
               projectId: projectId ?? undefined,
               incognito: incognito || undefined,
+              thinkingEffort,
             },
             headers: incognitoKey
               ? { [INCOGNITO_KEY_HEADER]: incognitoKey }
@@ -420,6 +422,7 @@ export function useUpdateConversation() {
       chatApiKeyId,
       agentId,
       pinnedAt,
+      thinkingEffort,
     }: { id: string } & NonNullable<
       archestraApiTypes.UpdateChatConversationData["body"]
     >) =>
@@ -427,12 +430,23 @@ export function useUpdateConversation() {
         () =>
           updateChatConversation({
             path: { id },
-            body: { title, modelId, chatApiKeyId, agentId, pinnedAt },
+            body: {
+              title,
+              modelId,
+              chatApiKeyId,
+              agentId,
+              pinnedAt,
+              thinkingEffort,
+            },
           }),
         null,
       ),
     onSuccess: (data, variables) => {
       if (!data) return;
+      // `mergeUpdatedConversationIntoCache` deliberately has no branch for the
+      // reasoning depth: the composer owns what it displays, including the
+      // clicks its write queue coalesces away. Echoing a response back would
+      // flip the control to whichever request answered last.
       queryClient.setQueryData(
         ["conversation", variables.id],
         (old: typeof data | undefined) =>

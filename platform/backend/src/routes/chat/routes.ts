@@ -15,7 +15,6 @@ import {
   requiresOpenAiResponsesApi,
   requiresPerplexityAgentApi,
   type SupportedProvider,
-  supportsGeminiThoughtSummaries,
   TimeInMs,
   type TitleRejectionReason,
   type TokenUsage,
@@ -143,6 +142,7 @@ import {
   SelectConversationCompactionSchema,
   SelectConversationSchema,
   SelectConversationShareWithTargetsSchema,
+  ThinkingEffortSchema,
   type UpdateConversation,
   UpdateConversationSchema,
   UuidIdSchema,
@@ -179,6 +179,7 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { buildGeminiProviderOptions } from "./gemini-provider-options";
 import {
   INCOGNITO_STATIC_TITLE,
   requireIncognitoKey,
@@ -332,6 +333,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Optional sampling override; when omitted the provider/model default applies (unchanged
           // behavior). The benchmark harness sets this to pin runs against temperature variance.
           temperature: z.number().min(0).max(2).optional(),
+          // The depth the composer is showing for this turn. Sent with the
+          // message so the turn cannot run at a depth the user has replaced but
+          // whose PATCH has not landed yet; the stored column is the fallback
+          // for callers that don't send one.
+          thinkingEffort: ThinkingEffortSchema.optional(),
         }),
         // Streaming responses don't have a schema
         response: ErrorResponsesSchema,
@@ -339,7 +345,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const {
-        body: { id: conversationId, messages, trigger, temperature },
+        body: {
+          id: conversationId,
+          messages,
+          trigger,
+          temperature,
+          thinkingEffort: requestedThinkingEffort,
+        },
         user,
         organizationId,
       } = request;
@@ -1387,27 +1399,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   streamTextConfig.temperature = temperature;
                 }
 
-                if (isGeminiImageModel) {
-                  streamTextConfig.providerOptions = {
-                    google: {
-                      responseModalities: ["TEXT", "IMAGE"],
-                    },
-                  };
-                }
-
-                // Gemini thinking models bill thought tokens either way, but
-                // the API only streams thought summaries (surfaced in the UI
-                // as reasoning parts) when explicitly asked. Only for models
-                // with thinking on by default: includeThoughts on an inactive-
-                // thinking model is a 400.
-                if (
-                  provider === "gemini" &&
-                  !isGeminiImageModel &&
-                  supportsGeminiThoughtSummaries(selectedModel)
-                ) {
+                const googleProviderOptions = buildGeminiProviderOptions({
+                  provider,
+                  selectedModel,
+                  isGeminiImageModel,
+                  thinkingEffort:
+                    requestedThinkingEffort ?? conversation.thinkingEffort,
+                });
+                if (googleProviderOptions) {
                   streamTextConfig.providerOptions = {
                     ...streamTextConfig.providerOptions,
-                    google: { thinkingConfig: { includeThoughts: true } },
+                    google: googleProviderOptions,
                   };
                 }
 
@@ -2553,6 +2555,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatApiKeyId: true,
           projectId: true,
           incognito: true,
+          thinkingEffort: true,
         })
           .required({ agentId: true })
           .partial({
@@ -2561,13 +2564,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             chatApiKeyId: true,
             projectId: true,
             incognito: true,
+            thinkingEffort: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (request, reply) => {
       const {
-        body: { agentId, title, modelId, chatApiKeyId, projectId, incognito },
+        body: {
+          agentId,
+          title,
+          modelId,
+          chatApiKeyId,
+          projectId,
+          incognito,
+          thinkingEffort,
+        },
         user,
         organizationId,
       } = request;
@@ -2675,6 +2687,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
           projectId: projectId ?? null,
+          thinkingEffort,
         }),
       );
     },

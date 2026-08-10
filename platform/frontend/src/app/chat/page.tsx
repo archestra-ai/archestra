@@ -4,6 +4,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ChatMessageFeedback,
   type ChatSkillMetadata,
+  type ThinkingEffort,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -156,6 +157,7 @@ import {
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
+import { createLatestWriteQueue } from "@/lib/chat/latest-write-queue";
 import {
   generateIncognitoKey,
   isActionAvailableForConversation,
@@ -169,6 +171,10 @@ import {
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
+import {
+  foldConfirmedThinkingEffort,
+  writePendingThinkingEffort,
+} from "@/lib/chat/thinking-effort-cache";
 import {
   agentRequiresPerUserConnect,
   agentToolsUnavailableForModel,
@@ -452,6 +458,8 @@ export function ChatPageContent({
     provider: initialProvider,
     modelSource: initialModelSource,
     setApiKeyId: setInitialApiKeyId,
+    thinkingEffort: initialThinkingEffort,
+    setThinkingEffort: setInitialThinkingEffort,
     onAgentChange: handleInitialAgentChange,
     onModelChange: handleInitialModelChange,
     onProviderChange: handleInitialProviderChange,
@@ -1024,6 +1032,11 @@ export function ChatPageContent({
   const updateConversationMutation = useUpdateConversation();
   const updateConversationMutateRef = useRef(updateConversationMutation.mutate);
   updateConversationMutateRef.current = updateConversationMutation.mutate;
+  const updateConversationMutateAsyncRef = useRef(
+    updateConversationMutation.mutateAsync,
+  );
+  updateConversationMutateAsyncRef.current =
+    updateConversationMutation.mutateAsync;
 
   // Handle model change — use refs for chatModels and conversation to keep
   // callback reference stable. A new callback reference would re-trigger
@@ -1068,6 +1081,76 @@ export function ChatPageContent({
     },
     [persistMemberDefaultModel],
   );
+
+  // The composer's own state is the one source for the depth. Finishing a
+  // message invalidates the conversation query, so the row cannot hold an
+  // unconfirmed pick — the refetch would hand back the value the persist request
+  // has not reached yet and silently undo the click.
+  const [pendingThinkingEffort, setPendingThinkingEffortState] =
+    useState<ThinkingEffort | null>(null);
+  const settlePendingThinkingEffortRef = useRef((effort: ThinkingEffort) => {
+    // Leaves a newer pick alone — it owns the control now.
+    setPendingThinkingEffortState((current) =>
+      current === effort ? null : current,
+    );
+  });
+  const queryClientRef = useRef(queryClient);
+  queryClientRef.current = queryClient;
+
+  const thinkingEffortQueueRef = useRef(
+    createLatestWriteQueue<{
+      conversationId: string;
+      effort: ThinkingEffort;
+    }>(async ({ conversationId: id, effort }) => {
+      const updated = await updateConversationMutateAsyncRef.current({
+        id,
+        thinkingEffort: effort,
+      });
+      if (updated) {
+        foldConfirmedThinkingEffort(queryClientRef.current, id, effort);
+      }
+      // callApi reports a failure and resolves with null, so a rejected write
+      // arrives here too; dropping the pick falls the control back to the row.
+      settlePendingThinkingEffortRef.current(effort);
+    }),
+  );
+
+  // A different chat has its own depth; carrying this one's pick across would
+  // show the wrong value and send it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on conversation switch — conversationId is the trigger, not a read
+  useEffect(() => {
+    setPendingThinkingEffortState(null);
+  }, [conversationId]);
+
+  // Turns the composer does not send itself — a queued message draining, a
+  // regenerate — read the pick from here rather than from this component.
+  // Cleared on the way out too: a pick left behind for a chat the user has
+  // navigated away from would still be read by a turn draining for that chat,
+  // long after the composer forgot it.
+  useEffect(() => {
+    if (!conversationId) return;
+    writePendingThinkingEffort(
+      queryClient,
+      conversationId,
+      pendingThinkingEffort,
+    );
+    return () => {
+      writePendingThinkingEffort(queryClient, conversationId, null);
+    };
+  }, [conversationId, pendingThinkingEffort, queryClient]);
+
+  const displayedThinkingEffort =
+    pendingThinkingEffort ?? conversation?.thinkingEffort;
+
+  const handleThinkingEffortChange = useCallback((effort: ThinkingEffort) => {
+    const conv = conversationRef.current;
+    if (!conv) return;
+    setPendingThinkingEffortState(effort);
+    thinkingEffortQueueRef.current.set({
+      conversationId: conv.id,
+      effort,
+    });
+  }, []);
 
   // Handle API key change - preselect best model for the new key's provider.
   // Combines chatApiKeyId + model selection in a single mutation to avoid
@@ -1927,7 +2010,7 @@ export function ChatPageContent({
     }
   };
 
-  const handleSubmit: ArchestraPromptInputProps["onSubmit"] = (
+  const handleSubmit: ArchestraPromptInputProps["onSubmit"] = async (
     message,
     e,
     options,
@@ -2316,6 +2399,7 @@ export function ChatPageContent({
         chatApiKeyId: initialApiKeyId,
         title,
         projectId: searchParams.get("project"),
+        thinkingEffort: initialThinkingEffort,
       });
       if (!input) {
         return false;
@@ -2357,6 +2441,7 @@ export function ChatPageContent({
       initialModel,
       initialApiKeyId,
       isIncognitoDraft,
+      initialThinkingEffort,
       createConversationMutation,
       searchParams,
       appSessionRecorder.adoptConversation,
@@ -3252,6 +3337,10 @@ export function ChatPageContent({
                               onResetModelOverride={
                                 handleConversationResetModelOverride
                               }
+                              thinkingEffort={displayedThinkingEffort}
+                              onThinkingEffortChange={
+                                handleThinkingEffortChange
+                              }
                               agentRequiresPerUserConnect={
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending ||
@@ -3435,6 +3524,10 @@ export function ChatPageContent({
                                   modelSource={initialModelSource}
                                   onResetModelOverride={
                                     handleResetModelOverride
+                                  }
+                                  thinkingEffort={initialThinkingEffort}
+                                  onThinkingEffortChange={
+                                    setInitialThinkingEffort
                                   }
                                   agentRequiresPerUserConnect={
                                     isAgentSubscriptionMetadataPending ||

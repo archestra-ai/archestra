@@ -1,4 +1,4 @@
-import { SupportedProvidersSchema } from "@archestra/shared";
+import { SupportedProvidersSchema, THINKING_EFFORTS } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -61,17 +61,22 @@ export type ConversationContentKey = {
   conversationId: string;
 };
 
+/** How hard the model should reason before answering. */
+export const ThinkingEffortSchema = z.enum(THINKING_EFFORTS);
+
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
   selectedProvider: SupportedProvidersSchema.nullable(),
   origin: ConversationOriginSchema,
+  thinkingEffort: ThinkingEffortSchema,
 };
 
 // For insert/update schema, selectedProvider is optional
 const insertUpdateExtendedFields = {
   selectedProvider: SupportedProvidersSchema.optional(),
   origin: ConversationOriginSchema.optional(),
+  thinkingEffort: ThinkingEffortSchema.optional(),
 };
 
 export const SelectConversationSchema = createSelectSchema(
@@ -145,6 +150,7 @@ export const UpdateConversationSchema = createUpdateSchema(
     agentId: true,
     artifact: true,
     pinnedAt: true,
+    thinkingEffort: true,
   })
   .extend({
     // Override pinnedAt to accept ISO date strings from the frontend.

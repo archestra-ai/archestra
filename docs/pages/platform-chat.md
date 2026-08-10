@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-08-04
+lastUpdated: 2026-08-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,6 +15,14 @@ Archestra includes a built-in Chat interface for working with agents, MCP tools,
 ### Supported Providers
 
 Chat supports the LLM providers configured for your workspace. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the full list.
+
+### Reasoning Depth
+
+Reasoning models think before answering by default. A Low/Medium/High control sits next to the model picker so you can choose per chat. It shows the current level and opens to all three.
+
+Low asks for as little reasoning as the model allows — on a Flash model that means skipping it. Medium reasons briefly. High reasons as deeply as the model can — useful for a tricky refactor, for example. Whenever the model reasons, it shows that reasoning in the conversation. Low is the default, so a quick lookup doesn't pay for reasoning it doesn't need.
+
+The control appears only on models that take a reasoning level. Today that is Gemini 3 and newer, Flash and Pro alike.
 
 ### Available Commands
 

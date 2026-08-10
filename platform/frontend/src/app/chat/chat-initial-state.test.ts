@@ -330,6 +330,22 @@ describe("buildCreateConversationInput", () => {
       }),
     ).toBeNull();
   });
+
+  test("carries a thinking effort chosen before the conversation existed", () => {
+    expect(
+      buildCreateConversationInput({
+        agentId: "agent-1",
+        modelId: "uuid-gemini",
+        chatApiKeyId: "key-1",
+        thinkingEffort: "high",
+      }),
+    ).toEqual({
+      agentId: "agent-1",
+      modelId: "uuid-gemini",
+      chatApiKeyId: "key-1",
+      thinkingEffort: "high",
+    });
+  });
 });
 
 describe("shouldResetInitialChatState", () => {

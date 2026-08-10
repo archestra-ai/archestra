@@ -407,11 +407,13 @@ Sync files from Google Drive (My Drive and Shared Drives).
 
 **Authentication:** pick one of three modes. The mode decides which Google identity the connector acts as, and so what it can index.
 
-| Mode                    | Indexes                                                                      |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| Google Workspace domain | Every shared drive, plus every user's My Drive, across your Workspace domain |
-| One Google account      | Whatever the person who connects can already see in Drive                    |
-| Service account only    | Only what has been shared with the service account's own email address       |
+| Mode                        | What it indexes                                                    | Who signs in to Google    | The catch                                                              |
+| --------------------------- | ------------------------------------------------------------------ | ------------------------- | ---------------------------------------------------------------------- |
+| **Google Workspace domain** | Every shared drive, plus every user's My Drive, across your domain | Nobody                    | A super admin has to authorize delegation once, in the Admin console   |
+| **One Google account**      | Whatever that one person can already see in Drive                  | That person, once         | Everyone the Knowledge Base reaches sees whatever that person can see  |
+| **Service account only**    | Only what has been shared with the key's own address               | Nobody                    | Somebody has to share every folder with it, by hand, forever           |
+
+Use the Workspace domain mode if you have a Workspace tenant -- coverage keeps up with the organization on its own. Reach for one Google account when a single person's Drive is the corpus, or when nobody can change Admin console settings. Service account only suits a small, fixed set of folders somebody is willing to maintain.
 
 #### Google Workspace Domain
 

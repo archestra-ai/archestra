@@ -279,7 +279,7 @@ describe("getTransientDbErrorCode", () => {
     expect(
       getTransientDbErrorCode(
         new Error(
-          'duplicate key value violates unique constraint\nparams: role=EACCES',
+          "duplicate key value violates unique constraint\nparams: role=EACCES",
         ),
       ),
     ).toBeNull();

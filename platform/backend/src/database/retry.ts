@@ -120,9 +120,9 @@ const SYSCALL_ERRNO_PATTERN = new RegExp(
  * syscall code lives on `error.code` and the per-address errors in `errors`.
  */
 const TRANSIENT_NETWORK_CODES = new Set<string>([
-  ...TRANSIENT_ERROR_PATTERNS.filter(({ pattern, code }) => pattern === code).map(
-    ({ code }) => code,
-  ),
+  ...TRANSIENT_ERROR_PATTERNS.filter(
+    ({ pattern, code }) => pattern === code,
+  ).map(({ code }) => code),
   ...CONNECT_SYSCALL_ERRNOS,
 ]);
 

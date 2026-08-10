@@ -1804,6 +1804,8 @@ class AgentModel {
     /**
      * The calling agent's environment: delegation never crosses environment
      * boundaries (null is the Default environment), mirroring tool isolation.
+     * The advisor is the one exception — its org-wide (env-less) row is
+     * reachable from every environment.
      */
     environmentId: string | null;
   }): Promise<
@@ -1821,9 +1823,15 @@ class AgentModel {
         ),
       ),
       ne(schema.agentsTable.id, excludeAgentId),
-      environmentId === null
-        ? isNull(schema.agentsTable.environmentId)
-        : eq(schema.agentsTable.environmentId, environmentId),
+      or(
+        environmentId === null
+          ? isNull(schema.agentsTable.environmentId)
+          : eq(schema.agentsTable.environmentId, environmentId),
+        eq(
+          sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+          BUILT_IN_AGENT_IDS.ADVISOR,
+        ),
+      ),
       notDeleted(schema.agentsTable),
     ];
 

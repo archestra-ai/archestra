@@ -735,4 +735,230 @@ describe("Auto-mode subagent delegation", () => {
     );
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
+
+  test("Auto mode reaches the org-wide advisor from another environment (surface and dispatch)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "member" });
+    const env = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Staging",
+    });
+    const parent = await makeAgent({
+      name: "Staging Parent",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      environmentId: env.id,
+    });
+    await AgentModel.update(parent.id, { accessAllSubagents: true });
+    const advisor = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+
+    // The advisor's env-less row is the one target reachable across the fence.
+    const names = (
+      await getAgentTools({
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      })
+    ).map((t) => t.name);
+    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
+
+    mockExecuteA2AMessage.mockResolvedValue({ text: "advice" });
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`,
+      { message: "Which approach should I take?" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+    expect(result.isError).toBe(false);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: advisor.id }),
+    );
+  });
+
+  test("an exclusion still hides the advisor from a cross-environment caller", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "member" });
+    const env = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Staging",
+    });
+    const parent = await makeAgent({
+      name: "Staging Parent",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      environmentId: env.id,
+    });
+    await AgentModel.update(parent.id, { accessAllSubagents: true });
+    const advisor = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+    await AgentExcludedSubagentModel.replaceForAgent(parent.id, [advisor.id]);
+
+    const names = (
+      await getAgentTools({
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      })
+    ).map((t) => t.name);
+    expect(names).not.toContain(`${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`,
+      { message: "Which approach should I take?" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+
+  test("Custom mode reaches an explicitly granted advisor from another environment", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "member" });
+    const env = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Staging",
+    });
+    const parent = await makeAgent({
+      name: "Staging Parent",
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      environmentId: env.id,
+    });
+    const advisor = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+    const advisorTool = await ToolModel.findOrCreateDelegationTool(advisor.id);
+    await makeAgentTool(parent.id, advisorTool.id);
+
+    const names = (
+      await getAgentTools({
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      })
+    ).map((t) => t.name);
+    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
+
+    mockExecuteA2AMessage.mockResolvedValue({ text: "advice" });
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`,
+      { message: "Which approach should I take?" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+    expect(result.isError).toBe(false);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: advisor.id }),
+    );
+  });
+
+  test("the built-in advisor wins the agent__advisor slug over a user agent of the same name", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    // A user agent squatting on the advisor's name, in the caller's own
+    // environment — same slug, so only one of the two can be advertised.
+    const impostor = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+    });
+    const advisor = await makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: organization.id,
+      scope: "org",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+
+    const advisorToolName = `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`;
+    const names = (
+      await getAgentTools({
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      })
+    ).map((t) => t.name);
+    expect(names.filter((n) => n === advisorToolName)).toHaveLength(1);
+
+    mockExecuteA2AMessage.mockResolvedValue({ text: "advice" });
+    const result = await executeArchestraTool(
+      advisorToolName,
+      { message: "Which approach should I take?" },
+      {
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    );
+    expect(result.isError).toBe(false);
+    // Dispatch resolves the built-in, not the impostor — surface and dispatch
+    // share the same tie-break.
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: advisor.id }),
+    );
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: impostor.id }),
+    );
+  });
 });

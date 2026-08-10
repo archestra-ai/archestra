@@ -59,7 +59,8 @@ export async function getAgentTools(context: {
 
   // Delegation never crosses environment boundaries (null is the Default
   // environment), mirroring tool isolation: in both modes only same-environment
-  // targets are advertised.
+  // targets are advertised. The advisor is the one exception — its org-wide
+  // (env-less) row is reachable from every environment.
   const environmentId = await AgentModel.findEnvironmentId(agentId);
 
   // Auto mode only expands for a real authenticated user; system/token flows
@@ -77,10 +78,10 @@ export async function getAgentTools(context: {
   }
 
   // Custom mode: only explicitly-configured delegation targets, restricted to
-  // the calling agent's environment.
+  // the calling agent's environment (advisor excepted).
   const allToolsWithDetails = (
     await ToolModel.getDelegationToolsByAgent(agentId)
-  ).filter((t) => t.targetAgent.environmentId === environmentId);
+  ).filter((t) => isReachableDelegationTarget(t.targetAgent, environmentId));
 
   // Filter by user access if user ID is provided (skip for A2A/ChatOps flows)
   let accessibleTools = allToolsWithDetails;
@@ -151,7 +152,7 @@ export async function handleDelegation(
   const isRealUser = Boolean(userId) && userId !== "system";
 
   // Same environment restriction as the advertised surface: delegation never
-  // crosses environment boundaries.
+  // crosses environment boundaries, advisor excepted.
   const environmentId = await AgentModel.findEnvironmentId(agentId);
 
   // Resolve the delegation target, mirroring getAgentTools: Auto mode resolves
@@ -303,13 +304,14 @@ async function buildAutoDelegationTools(params: {
   const seenNames = new Set<string>();
   const tools: Tool[] = [];
 
-  for (const targetAgent of targets) {
+  for (const targetAgent of preferAdvisorOnSlugTies(targets)) {
     if (excluded.has(targetAgent.id)) {
       continue;
     }
     const name = `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`;
-    // Two agents can slugify to the same tool name; keep the first (targets are
-    // name-ordered) so the advertised name resolves deterministically.
+    // Two agents can slugify to the same tool name; keep the first (targets
+    // share preferAdvisorOnSlugTies's order with dispatch) so the advertised
+    // name resolves deterministically.
     if (seenNames.has(name)) {
       continue;
     }
@@ -371,7 +373,7 @@ async function resolveAutoDelegationTarget(params: {
   ]);
 
   const excluded = new Set(excludedIds);
-  const match = targets.find(
+  const match = preferAdvisorOnSlugTies(targets).find(
     (t) => !excluded.has(t.id) && slugify(t.name) === targetAgentSlug,
   );
 
@@ -399,7 +401,7 @@ async function resolveExplicitDelegationTarget(params: {
   const delegations = await ToolModel.getDelegationToolsByAgent(agentId);
   const delegation = delegations.find(
     (d) =>
-      d.targetAgent.environmentId === environmentId &&
+      isReachableDelegationTarget(d.targetAgent, environmentId) &&
       slugify(d.targetAgent.name) === targetAgentSlug,
   );
 
@@ -425,6 +427,45 @@ async function resolveExplicitDelegationTarget(params: {
   }
 
   return { id: delegation.targetAgent.id, name: delegation.targetAgent.name };
+}
+
+/**
+ * Delegation never crosses environment boundaries, with one exception: the
+ * advisor's org-wide (env-less) row is reachable from every environment.
+ */
+function isReachableDelegationTarget(
+  targetAgent: {
+    environmentId: string | null;
+    builtInAgentConfig: Agent["builtInAgentConfig"];
+  },
+  environmentId: string | null,
+): boolean {
+  return (
+    targetAgent.environmentId === environmentId ||
+    targetAgent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
+  );
+}
+
+/**
+ * Deterministic Auto-mode ordering shared by the surface builder and dispatch:
+ * slug order, with the built-in advisor winning any slug tie. Org-wide reach
+ * means a user agent named "Advisor" in another environment can now collide
+ * with the built-in on `agent__advisor`; the built-in wins, and both dedup
+ * (first-wins) and `.find()` dispatch read this order so they never disagree.
+ */
+function preferAdvisorOnSlugTies<
+  T extends Pick<Agent, "id" | "name" | "builtInAgentConfig">,
+>(targets: T[]): T[] {
+  return [...targets].sort((a, b) => {
+    const slugA = slugify(a.name);
+    const slugB = slugify(b.name);
+    if (slugA !== slugB) return slugA < slugB ? -1 : 1;
+    const advisorA = a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR;
+    const advisorB = b.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR;
+    if (advisorA !== advisorB) return advisorA ? -1 : 1;
+    if (a.name !== b.name) return a.name < b.name ? -1 : 1;
+    return a.id < b.id ? -1 : 1;
+  });
 }
 
 function noDelegationConfiguredError(targetAgentSlug: string): CallToolResult {

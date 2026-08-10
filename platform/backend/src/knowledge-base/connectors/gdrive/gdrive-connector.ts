@@ -1701,10 +1701,6 @@ function getFileExtension(name: string): string {
 }
 
 /**
- * Identifies the exact target list a progress count was recorded against, so
- * a count is never applied to a list whose membership has since changed.
- */
-/**
  * Record a file as ingested by this run, so no other identity that can see it
  * fetches it again. Stops recording past the cap rather than growing without
  * bound — re-ingesting is wasteful but harmless, since ingestion upserts by
@@ -1719,6 +1715,10 @@ function claimFile(
   dedupe.add(fileId);
 }
 
+/**
+ * Identifies the exact target list a progress count was recorded against, so
+ * a count is never applied to a list whose membership has since changed.
+ */
 function fingerprintDomainTargets(targets: DomainTarget[]): string {
   return createHash("sha256")
     .update(targets.map((target) => target.key).join("\n"))

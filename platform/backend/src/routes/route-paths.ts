@@ -57,9 +57,12 @@ export const INCOMING_EMAIL_WEBHOOK_PREFIX = "/api/webhooks/incoming-email";
  * against the one registered on the OAuth client — which is why the connector
  * being authorized travels in the signed `state` rather than in the path.
  *
- * Allowlisted in the auth middleware: the redirect arrives from Google's own
- * origin, which is not guaranteed to carry the session cookie, so the signed
- * state is what authorizes the call.
+ * NOT exempt from auth. The redirect is a top-level GET, which carries the
+ * SameSite=Lax session cookie, so the route requires a session like any other
+ * and takes `knowledgeSource: ["update"]`. The signed state is what binds the
+ * response to the session that started the flow — on its own it would only
+ * prove this deployment issued *some* flow, which would let one person's
+ * authorization be redeemed onto another person's connector.
  */
 export const GOOGLE_DRIVE_OAUTH_CALLBACK_PATH =
   "/api/connectors/gdrive/oauth/callback";

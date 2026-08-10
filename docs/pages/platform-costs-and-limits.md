@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-07-28
+lastUpdated: 2026-08-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -47,7 +47,7 @@ Each interaction records a billing mode. Metered traffic is billed per token, so
 
 The "Actual Cost" line and the per-team, per-agent, and per-model cost figures show billed spend. Subscription usage appears as a separate "Subscription (Not Billed)" line on the Costs chart and as a badge on the affected sessions.
 
-Archestra detects the billing mode from the credential itself. Anthropic subscription logins (Claude Code on a Max or Pro plan, for example) and ChatGPT subscription logins (Codex) use credentials with a distinct format, so no configuration is needed. Turn detection off with `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false` to treat all traffic as metered.
+Archestra detects the billing mode from the credential itself. Anthropic subscription logins (Claude Code on a Max or Pro plan, for example), ChatGPT subscription logins (Codex), and X Premium (SuperGrok) logins on xAI use credentials with a distinct format, so no configuration is needed. Turn detection off with `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false` to treat all traffic as metered.
 
 Detection applies to new interactions. Traffic recorded before detection existed stays metered.
 

@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-09
+lastUpdated: 2026-08-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -511,6 +511,8 @@ Reuse an X Premium (SuperGrok) subscription for chat instead of a metered API ke
 These keys are per-user and personal-only: each person connects their own X account. Requests are billed to the subscription. An agent set up with a subscription key always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
 
 The model list comes from xAI's own `/models` endpoint under your subscription, so it reflects what the account is actually entitled to.
+
+Subscription keys only talk to the configured xAI endpoint. A [per-key base URL override](/docs/platform-llm-proxy-authentication#custom-base-urls) is rejected.
 
 ### Popular Models
 

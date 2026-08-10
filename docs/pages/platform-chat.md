@@ -20,7 +20,7 @@ Chat supports the LLM providers configured for your workspace. See [Supported LL
 
 Reasoning models think before answering by default. A Low/Medium/High control sits next to the model picker so you can choose per chat. It shows the current level and opens to all three.
 
-Low asks for as little reasoning as the model allows — on a Flash model that means skipping it. Medium reasons briefly. High reasons as deeply as the model can — useful for a tricky refactor, for example. Whenever the model reasons, it shows that reasoning in the conversation. Low is the default, so a quick lookup doesn't pay for reasoning it doesn't need.
+Low asks for as little reasoning as the model allows — on a Flash model that means skipping it. Medium reasons briefly. High reasons as deeply as the model can — useful for a tricky refactor, for example. Whenever the model reasons, it shows that reasoning in the conversation. Medium is the default, matching what these models do on their own, so a chat only changes behaviour when you ask it to.
 
 The control appears only on models that take a reasoning level. Today that is Gemini 3 and newer, Flash and Pro alike.
 

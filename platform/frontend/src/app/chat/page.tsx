@@ -157,11 +157,11 @@ import {
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
-import { createLatestWriteQueue } from "@/lib/chat/latest-write-queue";
 import {
   generateIncognitoKey,
   isActionAvailableForConversation,
 } from "@/lib/chat/incognito";
+import { createLatestWriteQueue } from "@/lib/chat/latest-write-queue";
 import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,

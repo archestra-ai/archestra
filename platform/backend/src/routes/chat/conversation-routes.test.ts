@@ -177,7 +177,9 @@ describe("chat conversation and message routes", () => {
       agentId: agent.id,
     });
 
-    expect(conversation.thinkingEffort).toBe("low");
+    // Matches what these models do untouched, so shipping this changes nothing
+    // for anyone who never opens the control.
+    expect(conversation.thinkingEffort).toBe("medium");
 
     const updateResponse = await app.inject({
       method: "PATCH",

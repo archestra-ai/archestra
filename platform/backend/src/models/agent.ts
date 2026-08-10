@@ -60,10 +60,12 @@ import {
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import AgentExcludedSkillModel from "./agent-excluded-skill";
 import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
+import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
@@ -409,7 +411,14 @@ class AgentModel {
       connectorIds,
       suggestedPrompts,
       ...agent
-    }: InsertAgent & { isPersonalGateway?: boolean; slug?: string },
+    }: InsertAgent & {
+      isPersonalGateway?: boolean;
+      // Server-owned like isPersonalGateway: omitted from the request schemas
+      // (the skill-assignment routes are the only client-facing write path)
+      // but a real column create() honours for internal callers and fixtures.
+      accessAllSkills?: boolean;
+      slug?: string;
+    },
     authorId?: string,
     options?: {
       /**
@@ -1550,6 +1559,27 @@ class AgentModel {
       .limit(1);
 
     return result?.organizationId ?? null;
+  }
+
+  /**
+   * Toggle Auto skill mode for the gateway's `skill://` surface.
+   *
+   * Narrow on purpose: the general `update` carries side effects irrelevant to
+   * this flag (delegation-tool sync, exclusion pre-fill) and cannot join a
+   * caller's transaction, which this needs so the mode and the assignment set
+   * change together.
+   */
+  static async setAccessAllSkills(
+    id: string,
+    accessAllSkills: boolean,
+    tx?: Transaction,
+  ): Promise<void> {
+    await (tx ?? db)
+      .update(schema.agentsTable)
+      .set({ accessAllSkills })
+      .where(
+        and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
+      );
   }
 
   static async findEnvironmentId(id: string): Promise<string | null> {
@@ -3607,6 +3637,8 @@ class AgentModel {
       connectorIds,
       delegations,
       excludedSubagentIds,
+      skillIds,
+      excludedSkillIds,
       excludedToolIds,
       hookRows,
       suggestedPrompts,
@@ -3620,6 +3652,12 @@ class AgentModel {
       AgentConnectorAssignmentModel.getConnectorIds(id),
       AgentToolModel.getDelegationTargets(id),
       AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
+      // The skill-publication routes audit through this snapshot too, so the
+      // published set and its Auto-mode exclusions must diff like any other
+      // relational field — publishing a skill to a gateway's token holders is
+      // exactly the change the log exists to show.
+      AgentSkillModel.findSkillIdsByAgent(id),
+      AgentExcludedSkillModel.findSkillIdsByAgent(id),
       AgentExcludedToolModel.findToolIdsByAgent(id),
       // Hook IDENTITY only, never `content`: a hook edit must produce a
       // non-empty diff, but script bodies would ride along on every unrelated
@@ -3689,6 +3727,7 @@ class AgentModel {
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,
+      accessAllSkills: row.accessAllSkills,
       // passthrough_headers is a text[] of header NAMES (no values), so it is
       // safe to capture verbatim.
       passthroughHeaders: [...(row.passthroughHeaders ?? [])].sort(),
@@ -3705,6 +3744,8 @@ class AgentModel {
       labels: labels.sort(),
       delegationTargets,
       excludedSubagentIds: [...excludedSubagentIds].sort(),
+      skillIds: [...skillIds].sort(),
+      excludedSkillIds: [...excludedSkillIds].sort(),
       excludedToolIds: [...excludedToolIds].sort(),
       hooks: hookRows
         .map((h) => `${h.event}/${h.fileName}${h.enabled ? "" : " (disabled)"}`)

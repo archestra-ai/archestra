@@ -1,5 +1,5 @@
 {
-  "id": "3f8639b4-5101-454f-ab21-351f0d7a5c85",
+  "id": "9f249061-758f-42f0-8716-8187c2c0f2d2",
   "prevId": "aa97301f-1f4f-4405-8bd7-74eeb7310e36",
   "version": "7",
   "dialect": "postgresql",
@@ -5192,13 +5192,6 @@
           "notNull": false,
           "default": 0
         },
-        "documents_without_text": {
-          "name": "documents_without_text",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
         "error": {
           "name": "error",
           "type": "text",
@@ -10256,6 +10249,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "recommended_for_agents": {
+          "name": "recommended_for_agents",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

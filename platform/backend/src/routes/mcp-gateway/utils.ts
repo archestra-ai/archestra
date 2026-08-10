@@ -78,6 +78,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   agentToolExclusionsService,
   isToolRowExcluded,
@@ -94,6 +95,7 @@ import {
   findExternalIdentityProviderById,
 } from "@/services/identity-providers/oidc";
 import { jwksValidator } from "@/services/jwks-validator";
+import { isPlatformSkillUri } from "@/skills/skill-uri";
 import {
   type AgentAccessContext,
   type AgentType,
@@ -121,9 +123,11 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
+  RESOURCE_NOT_FOUND_ERROR_CODE,
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";
+import { serveSkillResource } from "./skills";
 import {
   clientDeclaredTasks,
   runToolCallMaybeTask,
@@ -590,11 +594,56 @@ export async function createAgentServer(params: {
   server.setRequestHandler(
     ReadResourceRequestSchema,
     async ({ params: { uri } }) => {
+      logger.info(
+        { agentId, uri },
+        "MCP gateway read resource request received",
+      );
+
+      // Skills (SEP-2640) are served from this platform's own database, never
+      // proxied upstream. This is the one part of the skills surface that is
+      // an ordinary SDK request — the extension's own methods are intercepted
+      // at the route in index.ts — so the branch lives here. The whole
+      // skill://archestra authority is reserved in every state: with the
+      // surface disabled (flag off, backfill pending), the skill unexposed,
+      // or the URI malformed, it answers not-found rather than falling
+      // through, so an upstream server can never serve its own bytes under
+      // the platform's prefix. Within the namespace an unexposed skill and a
+      // nonexistent one still answer identically.
+      if (isPlatformSkillUri(uri)) {
+        let skillResource: Awaited<ReturnType<typeof serveSkillResource>> =
+          null;
+        try {
+          if (skillsSurfaceEnabled()) {
+            skillResource = await serveSkillResource({ uri, agentId });
+          }
+        } catch (error) {
+          logger.error(
+            {
+              agentId,
+              uri,
+              error: error instanceof Error ? error.message : "Unknown error",
+            },
+            "Skill resource read failed",
+          );
+          throw { code: -32603, message: "Resource read failed" };
+        }
+        if (skillResource) {
+          return complete(withPrivateCacheHint(skillResource));
+        }
+        // The current revision's code for a missing resource: SEP-2164 retired
+        // the MCP-specific -32002 in favor of JSON-RPC's Invalid Params, and
+        // SEP-2640 pins unknown skill resources to the same code. Every reason
+        // for not-found — unexposed, deleted, never existed, malformed, surface
+        // disabled — still answers the same way, so the surface stays
+        // unprobeable.
+        throw {
+          code: RESOURCE_NOT_FOUND_ERROR_CODE,
+          message: `Resource not found: ${uri}`,
+          data: { uri },
+        };
+      }
+
       try {
-        logger.info(
-          { agentId, uri },
-          "MCP gateway read resource request received",
-        );
         const result = await mcpClient.readResource(uri, agentId, tokenAuth);
         logger.info(
           { agentId, uri, resultType: typeof result },

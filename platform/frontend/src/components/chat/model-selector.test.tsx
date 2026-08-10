@@ -337,4 +337,88 @@ describe("ModelSelector coverage matrix", () => {
     expect(screen.getByText("Pinned Model")).toBeInTheDocument();
     expect(onModelChange).not.toHaveBeenCalled();
   });
+
+  // Only Ollama rows get a verdict today, and they sync with an inferred "text"
+  // modality and no tool-calling verdict — so this marker is the only thing
+  // standing between such a row and an empty badge column.
+  const ollamaRow = (capabilities: Record<string, unknown>) =>
+    model({
+      dbId: "o1",
+      id: "qwen3:4b",
+      displayName: "qwen3:4b",
+      provider: "ollama",
+      isBest: false,
+      capabilities,
+    });
+
+  it("badges a flagged model in the picker list", () => {
+    setQuery({
+      modelsByProvider: {
+        ollama: [
+          ollamaRow({
+            inputModalities: ["text"],
+            recommendedForAgents: false,
+          }),
+        ],
+      },
+    });
+    renderSelector({ selectedModel: "o1", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(screen.getByText("Limited for complex tasks")).toBeInTheDocument();
+  });
+
+  // `true` is the column default, so it says nothing and must stay silent —
+  // there is no positive counterpart to this badge.
+  it("shows nothing for a recommended model", () => {
+    setQuery({
+      modelsByProvider: {
+        ollama: [
+          ollamaRow({
+            inputModalities: ["text"],
+            recommendedForAgents: true,
+          }),
+        ],
+      },
+    });
+    renderSelector({ selectedModel: "o1", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(
+      screen.queryByText("Limited for complex tasks"),
+    ).not.toBeInTheDocument();
+  });
+
+  // A null verdict means no sync evaluated the model; the row must make no
+  // claim rather than assume either way.
+  it("makes no claim when no verdict was recorded", () => {
+    setQuery({
+      modelsByProvider: {
+        openai: [model({ capabilities: { inputModalities: ["text"] } })],
+      },
+    });
+    renderSelector({ selectedModel: "m1", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(
+      screen.queryByText("Limited for complex tasks"),
+    ).not.toBeInTheDocument();
+  });
+
+  // The verdict is not capability data: a row carrying one and nothing else is
+  // still a row whose capabilities were never recorded.
+  it("still calls a verdict-only row's capabilities unknown", () => {
+    setQuery({
+      modelsByProvider: {
+        ollama: [ollamaRow({ recommendedForAgents: false })],
+      },
+    });
+    renderSelector({ selectedModel: "o1", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    expect(screen.getByText("capabilities unknown")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Limited for complex tasks"),
+    ).not.toBeInTheDocument();
+  });
 });

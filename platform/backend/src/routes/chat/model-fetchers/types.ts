@@ -50,6 +50,12 @@ export interface FetchedModelCapabilities {
   /** Provider-reported default generation parameters (Ollama `/api/show`). */
   defaultParameters?: ModelDefaultParameters | null;
   /**
+   * Total parameter count reported by the serving backend (Ollama `/api/show`).
+   * Null/undefined for every provider that does not report one — which is all of
+   * them except Ollama, vLLM included (its `ModelCard` carries no size field).
+   */
+  parameterCount?: number | null;
+  /**
    * Provider surfaces this model can be invoked through, when the provider
    * publishes that per model (GitHub Copilot's `supported_endpoints`). Needed
    * where a provider serves two wire formats off one catalog and the model id

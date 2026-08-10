@@ -40,6 +40,22 @@ export function isUniqueConstraintError(
 }
 
 /**
+ * Split rows destined for one multi-row statement into statement-sized batches.
+ *
+ * Postgres caps a statement at 65535 bind parameters, so a bulk
+ * `UPDATE … FROM (VALUES …)` cannot take an unbounded row list. 1000 rows
+ * stays well under the cap for any realistic column count (65 columns) while
+ * keeping the statement count low.
+ */
+export function chunkForBulkStatement<T>(rows: T[]): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < rows.length; i += BULK_STATEMENT_MAX_ROWS) {
+    chunks.push(rows.slice(i, i + BULK_STATEMENT_MAX_ROWS));
+  }
+  return chunks;
+}
+
+/**
  * Check if an error (or its cause) is a PostgreSQL foreign-key constraint
  * violation. Drizzle wraps database errors, so the cause chain is walked.
  */
@@ -67,3 +83,7 @@ export function isForeignKeyConstraintError(error: unknown): boolean {
 
   return false;
 }
+
+// ===== Internal =====
+
+const BULK_STATEMENT_MAX_ROWS = 1000;

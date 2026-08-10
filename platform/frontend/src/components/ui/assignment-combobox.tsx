@@ -5,7 +5,7 @@ import {
   getAssignmentComboboxOptionTestId,
   getAssignmentComboboxSearchInputTestId,
 } from "@archestra/shared";
-import { ExternalLink, Plus } from "lucide-react";
+import { ExternalLink, Loader2, Plus } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +37,23 @@ interface AssignmentComboboxProps {
   onToggle: (id: string) => void;
   /** Called when a previously-unselected item is toggled ON */
   onItemAdded?: (id: string) => void;
+  /**
+   * Notified of the current search query, including the reset to `""` when the
+   * dropdown opens or closes.
+   *
+   * For callers whose `items` are one page of a larger set: the local filter
+   * below only ever sees what was passed in, so without this a query matching
+   * an unloaded item reads as "no results" rather than "not loaded". Widening
+   * `items` in response is the caller's job; this does not replace the filter.
+   */
+  onSearchChange?: (query: string) => void;
+  /**
+   * Whether the caller is still widening `items` for the current query. Without
+   * it the empty message appears for the debounce plus the round trip, so a
+   * search for something real reads as "it does not exist" and the user stops
+   * looking.
+   */
+  isSearching?: boolean;
   placeholder?: string;
   emptyMessage?: string;
   createAction?: { label: string; href: string };
@@ -51,6 +68,8 @@ export function AssignmentCombobox({
   selectedIds,
   onToggle,
   onItemAdded,
+  onSearchChange,
+  isSearching = false,
   placeholder = "Search...",
   emptyMessage = "No items found.",
   createAction,
@@ -60,6 +79,14 @@ export function AssignmentCombobox({
   defaultOpen,
 }: AssignmentComboboxProps) {
   const [search, setSearch] = React.useState("");
+
+  const updateSearch = React.useCallback(
+    (query: string) => {
+      setSearch(query);
+      onSearchChange?.(query);
+    },
+    [onSearchChange],
+  );
 
   const selectedSet = React.useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -89,7 +116,10 @@ export function AssignmentCombobox({
   }, [items, search, selectedSet]);
 
   return (
-    <DropdownMenu defaultOpen={defaultOpen} onOpenChange={() => setSearch("")}>
+    <DropdownMenu
+      defaultOpen={defaultOpen}
+      onOpenChange={() => updateSearch("")}
+    >
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
@@ -114,7 +144,7 @@ export function AssignmentCombobox({
             aria-label={placeholder || "Search"}
             placeholder={placeholder}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => updateSearch(e.target.value)}
             className="h-8 text-sm"
             onKeyDown={(e) => e.stopPropagation()}
             data-testid={
@@ -127,8 +157,15 @@ export function AssignmentCombobox({
         <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
           <DropdownMenuGroup className="min-w-0">
             {filteredItems.length === 0 ? (
-              <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                {emptyMessage}
+              <div className="flex items-center justify-center gap-2 px-2 py-4 text-center text-sm text-muted-foreground">
+                {isSearching ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Searching…</span>
+                  </>
+                ) : (
+                  <span>{emptyMessage}</span>
+                )}
               </div>
             ) : (
               filteredItems.map((item) => {

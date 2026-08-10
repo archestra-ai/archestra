@@ -99,6 +99,7 @@ export function makeImportedSkill(
     name: catalogSkillSeed.name,
     description: catalogSkillSeed.description,
     content: githubPreviewSeed.content,
+    digest: null,
     latestVersion: 1,
     license: null,
     compatibility: null,

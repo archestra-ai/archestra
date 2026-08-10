@@ -256,4 +256,96 @@ describe("AssignmentCombobox", () => {
       expect(menuItems[1]).toHaveTextContent("GitHub");
     });
   });
+
+  describe("onSearchChange callback", () => {
+    it("reports the query so a caller can fetch beyond the loaded page", async () => {
+      // The local filter only ever sees `items`. A caller holding one page of a
+      // larger catalog needs the raw query to widen it, or a search for
+      // anything unloaded reads as "no results" rather than "not loaded".
+      const user = userEvent.setup();
+      const onSearchChange = vi.fn();
+
+      render(
+        <AssignmentCombobox
+          items={items}
+          selectedIds={[]}
+          onToggle={vi.fn()}
+          onSearchChange={onSearchChange}
+        />,
+      );
+
+      await openDropdown(user);
+      await user.type(screen.getByRole("textbox"), "alp");
+
+      expect(onSearchChange).toHaveBeenLastCalledWith("alp");
+    });
+
+    it("reports the reset when the dropdown closes", async () => {
+      // The internal query is cleared on close, so a caller that fetched for it
+      // must hear about that too — otherwise the widened set outlives the
+      // search that justified it.
+      const user = userEvent.setup();
+      const onSearchChange = vi.fn();
+
+      render(
+        <AssignmentCombobox
+          items={items}
+          selectedIds={[]}
+          onToggle={vi.fn()}
+          onSearchChange={onSearchChange}
+        />,
+      );
+
+      await openDropdown(user);
+      await user.type(screen.getByRole("textbox"), "alp");
+      await user.keyboard("{Escape}");
+
+      expect(onSearchChange).toHaveBeenLastCalledWith("");
+    });
+  });
+
+  describe("pending search", () => {
+    it("says it is searching rather than that nothing matched", async () => {
+      // A caller that answers `onSearchChange` with a debounced request holds
+      // only the previous page meanwhile. Calling that "No items found." is how
+      // a user concludes a record they can see elsewhere does not exist.
+      const user = userEvent.setup();
+
+      render(
+        <AssignmentCombobox
+          items={items}
+          selectedIds={[]}
+          onToggle={vi.fn()}
+          isSearching
+          emptyMessage="No skills found."
+        />,
+      );
+
+      await openDropdown(user);
+      await user.type(screen.getByRole("textbox"), "unloaded-skill");
+
+      expect(screen.getByText("Searching…")).toBeInTheDocument();
+      expect(screen.queryByText("No skills found.")).not.toBeInTheDocument();
+    });
+
+    it("reports no matches once the search has settled", async () => {
+      const user = userEvent.setup();
+
+      render(
+        <AssignmentCombobox
+          items={items}
+          selectedIds={[]}
+          onToggle={vi.fn()}
+          isSearching={false}
+          emptyMessage="No skills found."
+        />,
+      );
+
+      await openDropdown(user);
+      await user.type(screen.getByRole("textbox"), "unloaded-skill");
+
+      expect(screen.getByText("No skills found.")).toBeInTheDocument();
+      expect(screen.queryByText("Searching…")).not.toBeInTheDocument();
+    });
+  });
 });

@@ -342,16 +342,28 @@ class InteractionModel {
   static async create(
     data: InsertInteraction,
     auditContext?: IncognitoAuditContext | null,
+    opts?: {
+      /**
+       * Environment to stamp instead of the executing agent's own. The proxy
+       * supplies it for advisor consultations (loopback-verified), which bill
+       * to the delegating caller's environment because the advisor's row is
+       * org-wide and env-less.
+       */
+      environmentIdOverride?: string;
+    },
   ) {
     const audit = auditContext ?? null;
     // Snapshot the environment from the agent at creation time (single funnel
     // for all interaction writes) so per-environment cost-limit usage stays
     // stable under later agent reassignment. The agent is authoritative: when a
     // profile is present its current environment wins over any caller-supplied
-    // value. Only profile-less system interactions may set it explicitly.
-    const environmentId = data.profileId
-      ? await AgentModel.findEnvironmentId(data.profileId)
-      : (data.environmentId ?? null);
+    // value. Only profile-less system interactions may set it explicitly, and
+    // only the proxy's verified advisor-delegation path may override it.
+    const environmentId =
+      opts?.environmentIdOverride ??
+      (data.profileId
+        ? await AgentModel.findEnvironmentId(data.profileId)
+        : (data.environmentId ?? null));
 
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {

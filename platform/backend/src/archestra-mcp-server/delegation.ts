@@ -211,6 +211,9 @@ export async function handleDelegation(
       sessionId,
       // Pass the current delegation chain so the child can extend it
       parentDelegationChain,
+      // The advisor's row is env-less, so the executor needs the caller's
+      // environment to bill the consultation to it.
+      callerEnvironmentId: environmentId,
       // Propagate the real conversation id (absent in headless executions) and
       // the isolation scope separately: the child must never mistake an
       // execution key for a persisted conversation.

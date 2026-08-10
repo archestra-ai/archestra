@@ -8,7 +8,9 @@
 import {
   ArchestraInternalErrorCode,
   type BillingMode,
+  BUILT_IN_AGENT_IDS,
   CHAT_API_KEY_ID_HEADER,
+  DELEGATION_BILLING_ENVIRONMENT_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
@@ -43,6 +45,7 @@ import {
 import logger from "@/logging";
 import {
   AgentTeamModel,
+  EnvironmentModel,
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
@@ -152,6 +155,12 @@ export interface LLMProxyContext<TRequest> {
    * fallback. Resolved once per request so every write site agrees.
    */
   incognito: IncognitoAuditDisposition;
+  /**
+   * Caller environment an advisor consultation bills to, resolved from the
+   * loopback-gated delegation header and re-validated against the executing
+   * agent row. Undefined for every non-advisor request.
+   */
+  delegationBillingEnvironmentId?: string;
   externalAgentId?: string;
   authMethod?: InteractionAuthMethod;
   /** Whether this call incurs a per-token charge (`metered`) or is subscription-covered. */
@@ -684,6 +693,12 @@ export async function handleLLMProxy<
   // ends up encrypted or redacted.
   const suppressContent = incognito.kind !== "none";
 
+  // Advisor consultations bill to the delegating caller's environment (the
+  // advisor's own row is env-less). Resolved once so the limit check and every
+  // interaction write agree on it.
+  const delegationBillingEnvironmentId =
+    await resolveDelegationBillingEnvironment(request, resolvedAgent);
+
   // Check usage limits
   try {
     logger.debug(
@@ -696,6 +711,7 @@ export async function handleLLMProxy<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        environmentIdOverride: delegationBillingEnvironmentId,
       });
 
     if (limitViolation) {
@@ -1213,6 +1229,7 @@ export async function handleLLMProxy<
       unsafeContextBoundary,
       suppressContent,
       incognito,
+      delegationBillingEnvironmentId,
       externalAgentId,
       authMethod,
       billingMode,
@@ -1285,7 +1302,7 @@ export async function handleLLMProxy<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(record, incognito);
+      await persistProxyInteraction(record, incognito, delegationBillingEnvironmentId);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1337,6 +1354,7 @@ async function handleStreaming<
     unsafeContextBoundary,
     suppressContent,
     incognito,
+    delegationBillingEnvironmentId,
     externalAgentId,
     authMethod,
     billingMode,
@@ -1398,7 +1416,7 @@ async function handleStreaming<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(record, incognito);
+      await persistProxyInteraction(record, incognito, delegationBillingEnvironmentId);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -1810,7 +1828,7 @@ async function handleStreaming<
           dualLlmAnalyses,
           unsafeContextBoundary,
         });
-        await persistProxyInteraction(record, incognito);
+        await persistProxyInteraction(record, incognito, delegationBillingEnvironmentId);
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -1858,6 +1876,7 @@ async function handleNonStreaming<
     unsafeContextBoundary,
     suppressContent,
     incognito,
+    delegationBillingEnvironmentId,
     externalAgentId,
     authMethod,
     billingMode,
@@ -2129,7 +2148,7 @@ async function handleNonStreaming<
         dualLlmAnalyses,
         unsafeContextBoundary,
       });
-      await persistProxyInteraction(refusalRecord, incognito);
+      await persistProxyInteraction(refusalRecord, incognito, delegationBillingEnvironmentId);
 
       return reply.send(refusalResponse);
     }
@@ -2206,7 +2225,7 @@ async function handleNonStreaming<
       dualLlmAnalyses,
       unsafeContextBoundary,
     });
-    await persistProxyInteraction(record, incognito);
+    await persistProxyInteraction(record, incognito, delegationBillingEnvironmentId);
   } catch (interactionError) {
     logger.error(
       { err: interactionError, profileId: agent.id },
@@ -2349,11 +2368,62 @@ function extractDurationStatusCode(error: unknown): string {
 async function persistProxyInteraction(
   record: InsertInteraction,
   incognito: IncognitoAuditDisposition,
+  environmentIdOverride?: string,
 ): Promise<void> {
   await InteractionModel.create(
     incognito.kind === "redact" ? redactIncognitoInteraction(record) : record,
     incognito.kind === "encrypt" ? incognito.audit : null,
+    environmentIdOverride ? { environmentIdOverride } : undefined,
   );
+}
+
+/**
+ * Resolve the environment an advisor consultation bills to, from
+ * DELEGATION_BILLING_ENVIRONMENT_HEADER. Honored only when all three hold:
+ * the request arrived over the loopback socket (the in-process A2A executor's
+ * path — the raw socket peer, not request.ip, which trustProxy can rewrite
+ * from forwarded headers), the executing agent row is the advisor built-in,
+ * and the id names an environment of that agent's organization. Anything else
+ * ignores the header with a warning: the worst a spoofed value can do is
+ * misattribute advisor spend between one organization's environments.
+ */
+async function resolveDelegationBillingEnvironment(
+  request: FastifyRequest,
+  agent: GatewayAgent,
+): Promise<string | undefined> {
+  const raw =
+    request.headers[DELEGATION_BILLING_ENVIRONMENT_HEADER.toLowerCase()];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) {
+    return undefined;
+  }
+
+  if (!isLoopbackAddress(request.socket.remoteAddress)) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring delegation billing environment header from a non-loopback peer",
+    );
+    return undefined;
+  }
+  if (agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring delegation billing environment header on a non-advisor agent",
+    );
+    return undefined;
+  }
+  const environment = await EnvironmentModel.findByIdForOrganization(
+    value,
+    agent.organizationId,
+  );
+  if (!environment) {
+    logger.warn(
+      { agentId: agent.id, environmentId: value },
+      "Ignoring delegation billing environment header naming an unknown environment",
+    );
+    return undefined;
+  }
+  return environment.id;
 }
 
 /**

@@ -1,4 +1,3 @@
-import { DEFAULT_THINKING_EFFORT } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
   buildCreateConversationInput,
@@ -330,20 +329,6 @@ describe("buildCreateConversationInput", () => {
         chatApiKeyId: null,
       }),
     ).toBeNull();
-  });
-
-  test("a chat nobody has touched is created at the shared default", () => {
-    // The composer's starting effort and the column default were written out
-    // separately once and drifted, so new chats were created below the level
-    // the column would have given them.
-    expect(
-      buildCreateConversationInput({
-        agentId: "agent-1",
-        modelId: "uuid-gemini",
-        chatApiKeyId: "key-1",
-        thinkingEffort: DEFAULT_THINKING_EFFORT,
-      })?.thinkingEffort,
-    ).toBe("medium");
   });
 
   test("carries a thinking effort chosen before the conversation existed", () => {

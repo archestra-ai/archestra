@@ -51,6 +51,22 @@ describe("buildGeminiProviderOptions", () => {
     });
 
     test.each([
+      // Pro cannot be asked for less than "low" — minimal is a hard 400 — and
+      // it does reason there, so that reasoning is worth summarizing.
+      ["low", { thinkingLevel: "low", includeThoughts: true }],
+      ["medium", { thinkingLevel: "medium", includeThoughts: true }],
+      ["high", { thinkingLevel: "high", includeThoughts: true }],
+    ] as const)("Pro at %s asks for %o", (thinkingEffort, thinkingConfig) => {
+      expect(
+        buildGeminiProviderOptions({
+          ...base,
+          selectedModel: "gemini-3.1-pro-preview",
+          thinkingEffort,
+        }),
+      ).toEqual({ thinkingConfig });
+    });
+
+    test.each([
       "low",
       "medium",
       "high",

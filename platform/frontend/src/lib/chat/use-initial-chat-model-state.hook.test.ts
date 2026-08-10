@@ -1,3 +1,4 @@
+import { DEFAULT_THINKING_EFFORT } from "@archestra/shared";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LlmModel } from "@/lib/llm-models.query";
@@ -52,6 +53,16 @@ beforeEach(() => {
 });
 
 describe("useInitialChatModelState", () => {
+  it("starts a new chat at the shared reasoning default", () => {
+    // This and the conversations column were written out as separate literals
+    // once, and changing one left the other behind: new chats were created
+    // below the level the column would have given them and stopped reasoning.
+    const { result } = renderHook(() => useInitialChatModelState(baseParams));
+
+    expect(result.current.thinkingEffort).toBe(DEFAULT_THINKING_EFFORT);
+    expect(result.current.thinkingEffort).toBe("medium");
+  });
+
   it("resolves the first agent and its model/key when nothing else is set", async () => {
     const { result } = renderHook(() => useInitialChatModelState(baseParams));
 

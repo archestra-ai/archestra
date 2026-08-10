@@ -355,11 +355,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                         <NoToolsModelBadge />
                       </div>
                     )}
-                    {notRecommendedForAgents && (
-                      <div className="flex items-center gap-1.5">
-                        <NotRecommendedForAgentsNoticeBadge />
-                      </div>
-                    )}
                     {(conversationId || onApiKeyChange) && (
                       <div>
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
@@ -473,6 +468,15 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </PopoverContent>
           </Popover>
         ))}
+
+      {/* Rendered beside whichever control the collapsed toolbar picked (the
+          logo shortcut or the three-dots menu) and outside the RBAC gate: a
+          warning that only exists inside a popover — or only for users who can
+          see provider settings — is a warning most narrow-viewport users never
+          get. The wide toolbar renders its own copy below. */}
+      {isNarrow && notRecommendedForAgents && (
+        <NotRecommendedForAgentsNoticeBadge />
+      )}
 
       {/* File attachment button - always visible, except on incognito
           conversations where the affordance is hidden entirely (the backend

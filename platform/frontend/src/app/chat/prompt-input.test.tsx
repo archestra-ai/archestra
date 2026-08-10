@@ -14,6 +14,7 @@ const {
   mockFeatureState,
   mockProfileState,
   mockUploadPolicy,
+  mockToolbarState,
 } = vi.hoisted(() => ({
   mockUseChatPlaceholder: vi.fn(),
   mockUseSkillsPaginated: vi.fn(),
@@ -36,6 +37,13 @@ const {
     maxFileSize: undefined as number | undefined,
     validateFile: undefined as ((file: File) => string | null) | undefined,
   },
+  // Drives the toolbar's collapsed (narrow) layout, which jsdom's 0-width
+  // measurements would otherwise never trigger.
+  mockToolbarState: { isNarrow: false },
+}));
+
+vi.mock("@/lib/hooks/use-toolbar-collapse", () => ({
+  useToolbarCollapse: () => mockToolbarState.isNarrow,
 }));
 
 // Mock ResizeObserver (used by Radix UI components and the prompt input's
@@ -370,6 +378,7 @@ describe("ArchestraPromptInput", () => {
     mockControllerState.files = [];
     mockFeatureState.chatSecretScanEnabled = false;
     mockProfileState.agent = null;
+    mockToolbarState.isNarrow = false;
     localStorage.clear();
   });
 
@@ -397,6 +406,61 @@ describe("ArchestraPromptInput", () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(mockTextInputClear).not.toHaveBeenCalled();
+  });
+
+  describe("Limited-for-complex-tasks badge", () => {
+    const badgeName = /limited for complex tasks/i;
+
+    it("stays visible in the collapsed toolbar for an agent-inherited model", () => {
+      // The collapsed toolbar's logo-shortcut branch (agent-sourced model with
+      // a provider logo) once rendered only the logo, dropping the warning
+      // that the wide toolbar showed.
+      mockToolbarState.isNarrow = true;
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          notRecommendedForAgents
+          modelSource="agent"
+          currentProvider="ollama"
+        />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: badgeName }),
+      ).toBeInTheDocument();
+    });
+
+    it("stays visible in the collapsed toolbar without provider-settings permission", () => {
+      // beforeEach denies every permission — the restricted user must still
+      // see the warning, not just users who can open provider settings.
+      mockToolbarState.isNarrow = true;
+      render(
+        <ArchestraPromptInput {...defaultProps} notRecommendedForAgents />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: badgeName }),
+      ).toBeInTheDocument();
+    });
+
+    it("renders in the wide toolbar", () => {
+      render(
+        <ArchestraPromptInput {...defaultProps} notRecommendedForAgents />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: badgeName }),
+      ).toBeInTheDocument();
+    });
+
+    it("renders nothing when the model is not flagged", () => {
+      mockToolbarState.isNarrow = true;
+      render(<ArchestraPromptInput {...defaultProps} />);
+
+      expect(
+        screen.queryByRole("button", { name: badgeName }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("File Upload Button", () => {

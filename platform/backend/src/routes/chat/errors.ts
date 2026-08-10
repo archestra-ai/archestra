@@ -2,7 +2,6 @@ import {
   AnthropicErrorTypes,
   ArchestraInternalErrorCode,
   BedrockErrorTypes,
-  CHATGPT_SUBSCRIPTION_LABEL,
   ChatErrorCode,
   ChatErrorMessages,
   type ChatErrorResponse,
@@ -12,7 +11,9 @@ import {
   OpenAIErrorTypes,
   providerDisplayNames,
   RetryableErrorCodes,
+  SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
+  subscriptionKindForProvider,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -2031,18 +2032,19 @@ export function mapProviderError(
     // The upstream message names the exact remedy ("Reconnect your ChatGPT
     // account…"), so prefer it over the table's generic connect text, and
     // attach authAction so the UI renders the inline connect/reconnect card.
-    // On `openai` this code is only ever emitted for the ChatGPT-subscription
-    // credential mode — a plain API key never needs a per-user link — so the
-    // label must name the subscription, not the provider.
+    // On credential-level subscription providers (openai, xai) this code is
+    // only ever emitted for the subscription credential mode — a plain API key
+    // never needs a per-user link — so the label must name the subscription
+    // ("ChatGPT Subscription", "X Premium (SuperGrok)"), not the provider.
     if (errorMessage) {
       response.message = errorMessage;
     }
+    const subscriptionKind = subscriptionKindForProvider(provider);
     response.authAction = {
       provider,
-      providerLabel:
-        provider === "openai"
-          ? CHATGPT_SUBSCRIPTION_LABEL
-          : providerDisplayNames[provider],
+      providerLabel: subscriptionKind
+        ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].label
+        : providerDisplayNames[provider],
     };
   }
 

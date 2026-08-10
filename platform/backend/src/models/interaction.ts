@@ -8,6 +8,7 @@ import {
   DynamicInteraction,
   isClaudeSessionSource,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
+  TimeInMs,
 } from "@archestra/shared";
 import {
   and,
@@ -25,6 +26,7 @@ import {
   sql,
   sum,
 } from "drizzle-orm";
+import { LRUCacheManager } from "@/cache-manager";
 import {
   decryptInteractionContent,
   encryptInteractionContent,
@@ -58,6 +60,24 @@ import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import InteractionDeltaManager from "./interaction-delta-manager";
 import LimitModel from "./limit";
+
+/**
+ * How long a session total stays reusable across pages of the same filter set.
+ * Long enough to cover a client paging through the whole result, short enough
+ * that a total on screen is never meaningfully behind the table.
+ */
+const SESSION_TOTAL_CACHE_TTL_MS = 30 * TimeInMs.Second;
+
+/**
+ * Session totals keyed by filter set (see getSessions). Per-pod and in-process
+ * on purpose: the value is cheap to recompute on a miss, so it is not worth a
+ * round-trip to the distributed cache to share it between pods. Bounded well
+ * above the number of distinct filter combinations in flight at once.
+ */
+const sessionTotalCache = new LRUCacheManager<number>({
+  maxSize: 500,
+  defaultTtl: SESSION_TOTAL_CACHE_TTL_MS,
+});
 
 async function findChatErrorsForSessionId(sessionId: string | null) {
   if (!sessionId || !isUuid(sessionId)) {
@@ -1204,6 +1224,28 @@ class InteractionModel {
     // Cast id to text since session_id is VARCHAR and id is UUID
     const sessionGroupExpr = sql`COALESCE(${schema.interactionsTable.sessionId}, ${schema.interactionsTable.id}::text)`;
 
+    // The session total is the same for every page of one filter set, but the
+    // count it needs scans `interactions` — the largest, write-hot table — so
+    // paying it per page made a client walking the pages re-run a full scan on
+    // every request (the dominant cost of this endpoint, and enough on its own
+    // to push the query into statement timeout as the table grows). Compute it
+    // for the first page of a sweep and reuse it for the rest; a total that
+    // trails new rows by at most SESSION_TOTAL_CACHE_TTL_MS is the intended
+    // trade, since it only sizes the pager.
+    const sessionTotalCacheKey = JSON.stringify([
+      requestingUserId ?? null,
+      isAgentAdmin ?? false,
+      filters?.profileId ?? null,
+      filters?.userId ?? null,
+      filters?.source ?? null,
+      filters?.client ?? null,
+      filters?.externalAgentId ?? null,
+      filters?.sessionId ?? null,
+      filters?.startDate?.toISOString() ?? null,
+      filters?.endDate?.toISOString() ?? null,
+    ]);
+    const cachedTotal = sessionTotalCache.get(sessionTotalCacheKey);
+
     // PHASE 1: Get sessions with lightweight aggregations (no ARRAY_AGG on large JSON)
     // This is the fast path - simple aggregations on indexed columns
     const [sessionsData, [{ total }]] = await Promise.all([
@@ -1307,13 +1349,19 @@ class InteractionModel {
       // filters only touch interactions columns, and joining on the
       // conversations PK can't change the count, so on large tables it only
       // pushed this query into statement timeout.
-      db
-        .select({
-          total: sql<number>`COUNT(DISTINCT ${schema.interactionsTable.sessionId}) + COUNT(*) FILTER (WHERE ${schema.interactionsTable.sessionId} IS NULL)`,
-        })
-        .from(schema.interactionsTable)
-        .where(whereClause),
+      cachedTotal !== undefined
+        ? [{ total: cachedTotal }]
+        : db
+            .select({
+              total: sql<number>`COUNT(DISTINCT ${schema.interactionsTable.sessionId}) + COUNT(*) FILTER (WHERE ${schema.interactionsTable.sessionId} IS NULL)`,
+            })
+            .from(schema.interactionsTable)
+            .where(whereClause),
     ]);
+
+    if (cachedTotal === undefined) {
+      sessionTotalCache.set(sessionTotalCacheKey, Number(total));
+    }
 
     // PHASE 2: Batch fetch "last interaction" info for all sessions
     // This is much faster than ARRAY_AGG because:
@@ -1468,11 +1516,17 @@ class InteractionModel {
       // would be handed to the server-key decryptor.
       incognito_conversation_id: string | null;
     }>(sql`
+      -- id DESC tiebreak: turns within one session commonly land on the same
+      -- millisecond, and created_at alone leaves their order undefined — which
+      -- let an earlier turn be picked as the session's latest, showing a stale
+      -- preview. Ids are monotonic UUIDv7, so they settle the tie by true
+      -- insertion order (the same tiebreak the write path already uses to
+      -- resolve a delta parent).
       WITH ranked AS (
         SELECT
           id, session_id, thread_id, request, response, type, created_at,
           incognito_conversation_id,
-          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC) as rn
+          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC, id DESC) as rn
         FROM interactions
         WHERE ${whereClause}
       )
@@ -1480,7 +1534,7 @@ class InteractionModel {
              incognito_conversation_id
       FROM ranked
       WHERE rn <= ${INTERACTIONS_PER_SESSION}
-      ORDER BY session_id, created_at DESC
+      ORDER BY session_id, created_at DESC, id DESC
     `);
 
     // SPDX-SnippetBegin
@@ -1522,7 +1576,18 @@ class InteractionModel {
       groupedBySession.set(key, existing);
     }
 
-    // For each session, find the last "main" interaction and title
+    // For each session, find the last "main" interaction and title. Selection
+    // is pure, so it runs for every session first and the chosen tips are
+    // reconstructed in one batch below — reconstructing inside this loop issued
+    // a recursive ancestor query per session, i.e. one per row on the page.
+    const selectedPerSession = new Map<
+      string,
+      {
+        lastMainInteraction: (typeof interactions)[0] | null;
+        claudeCodeTitle: string | null | undefined;
+      }
+    >();
+
     for (const [sessionKey, sessionInteractions] of groupedBySession) {
       let lastMainInteraction: (typeof interactions)[0] | null = null;
       // undefined = not yet found, null = found but no text, string = found with text
@@ -1587,27 +1652,44 @@ class InteractionModel {
       }
 
       if (lastMainInteraction || claudeCodeTitle) {
-        // Reconstruct the chosen tip's full request from deltas (no-op for
-        // legacy/non-delta rows). Only one tip per session is reconstructed.
-        let tipRequest: unknown = lastMainInteraction?.request ?? null;
-        if (lastMainInteraction && lastMainInteraction.threadId !== null) {
-          const full = await InteractionDeltaManager.reconstructRow({
-            id: lastMainInteraction.id,
-            threadId: lastMainInteraction.threadId,
-            request: lastMainInteraction.request,
-            processedRequest: null,
-          });
-          tipRequest = full.request;
-        }
-
-        result.set(sessionKey, {
-          lastUserMessagePreview: lastMainInteraction
-            ? buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
-            : null,
-          lastInteractionType: lastMainInteraction?.type ?? null,
-          claudeCodeTitle: claudeCodeTitle ?? null,
+        selectedPerSession.set(sessionKey, {
+          lastMainInteraction,
+          claudeCodeTitle,
         });
       }
+    }
+
+    // Reconstruct every chosen tip's full request from deltas in one pass (a
+    // no-op for legacy/non-delta rows, which reconstructMany returns as-is).
+    // Still at most one tip per session, now in a single ancestor query.
+    const reconstructed = await InteractionDeltaManager.reconstructMany(
+      [...selectedPerSession.values()]
+        .map(({ lastMainInteraction }) => lastMainInteraction)
+        .filter((tip): tip is (typeof interactions)[0] => tip !== null)
+        .map((tip) => ({
+          id: tip.id,
+          threadId: tip.threadId,
+          request: tip.request,
+          processedRequest: null,
+        })),
+    );
+
+    for (const [
+      sessionKey,
+      { lastMainInteraction, claudeCodeTitle },
+    ] of selectedPerSession) {
+      const tipRequest = lastMainInteraction
+        ? (reconstructed.get(lastMainInteraction.id)?.request ??
+          lastMainInteraction.request)
+        : null;
+
+      result.set(sessionKey, {
+        lastUserMessagePreview: lastMainInteraction
+          ? buildLastUserMessagePreview(tipRequest, lastMainInteraction.type)
+          : null,
+        lastInteractionType: lastMainInteraction?.type ?? null,
+        claudeCodeTitle: claudeCodeTitle ?? null,
+      });
     }
 
     return result;

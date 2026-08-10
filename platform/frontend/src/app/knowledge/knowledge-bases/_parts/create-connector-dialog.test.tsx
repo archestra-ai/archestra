@@ -53,9 +53,15 @@ const mockMutateAsync = vi.fn();
 
 vi.mock("next/navigation");
 
+const mockStartGoogleDriveOAuth = vi.fn();
+
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useCreateConnector: () => ({
     mutateAsync: mockMutateAsync,
+    isPending: false,
+  }),
+  useStartGoogleDriveOAuth: () => ({
+    mutate: mockStartGoogleDriveOAuth,
     isPending: false,
   }),
 }));

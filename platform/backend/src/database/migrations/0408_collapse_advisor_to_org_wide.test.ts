@@ -7,7 +7,7 @@ import { describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0407_collapse_advisor_to_org_wide.sql"),
+  path.join(__dirname, "0408_collapse_advisor_to_org_wide.sql"),
   "utf-8",
 );
 

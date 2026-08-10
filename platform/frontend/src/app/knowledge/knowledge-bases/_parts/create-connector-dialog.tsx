@@ -41,7 +41,10 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
-import { useCreateConnector } from "@/lib/knowledge/connector.query";
+import {
+  useCreateConnector,
+  useStartGoogleDriveOAuth,
+} from "@/lib/knowledge/connector.query";
 import {
   AdminApiKeyDescription,
   CONNECTOR_OPTIONS,
@@ -95,6 +98,7 @@ export function CreateConnectorDialog({
 }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const createConnector = useCreateConnector();
+  const startGoogleDriveOAuth = useStartGoogleDriveOAuth();
   const [step, setStep] = useState<"select" | "configure">("select");
   const [selectedType, setSelectedType] = useState<ConnectorType | null>(null);
   const [visibility, setVisibility] = useState<ConnectorVisibility>("org-wide");
@@ -155,7 +159,13 @@ export function CreateConnectorDialog({
     const usesGithubApp =
       values.connectorType === "github" &&
       (values.config as { authMethod?: string }).authMethod === "github_app";
-    const requiresCredentials = values.connectorType !== "web_crawler";
+    // Individual Google Drive: the credential comes back from Google after the
+    // connector exists, so nothing is sent with the create.
+    const awaitsGoogleDriveOAuth =
+      values.connectorType === "gdrive" &&
+      (values.config as { authMode?: string }).authMode === "oauth";
+    const requiresCredentials =
+      values.connectorType !== "web_crawler" && !awaitsGoogleDriveOAuth;
     const result = await createConnector.mutateAsync({
       name: values.name,
       description: values.description || null,
@@ -187,6 +197,17 @@ export function CreateConnectorDialog({
       setVisibility("org-wide");
       setTeamIds([]);
       onOpenChange(false);
+
+      // Hand straight over to Google rather than leaving behind a connector
+      // that cannot sync until someone finds the Connect button on its page.
+      // Google returns to the connector itself, where the first sync is
+      // already running and the connected account is on screen.
+      if (awaitsGoogleDriveOAuth) {
+        startGoogleDriveOAuth.mutate({
+          connectorId: result.id,
+          returnTo: `${window.location.origin}/knowledge/connectors/${result.id}`,
+        });
+      }
     }
   };
 
@@ -203,6 +224,7 @@ export function CreateConnectorDialog({
 
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const authMethod = form.watch("config.authMethod") as string | undefined;
+  const authMode = form.watch("config.authMode") as string | undefined;
   // App-auth GitHub connectors inherit their host from the App config, so the
   // connector's own URL field is hidden to avoid a misleading second host
   const usesGithubApp =
@@ -224,6 +246,7 @@ export function CreateConnectorDialog({
     emailRequired,
     mode: "create",
     authMethod,
+    authMode,
   });
   const permissionSyncCredentialNote =
     getPermissionSyncCredentialNote(connectorType);

@@ -52,6 +52,14 @@ beforeEach(() => {
 });
 
 describe("useInitialChatModelState", () => {
+  it("starts a new chat on auto", () => {
+    // Auto is the only value that leaves every model reasoning as it would
+    // have; a new chat must not silently pick a depth on the user's behalf.
+    const { result } = renderHook(() => useInitialChatModelState(baseParams));
+
+    expect(result.current.thinkingEffort).toBeNull();
+  });
+
   it("resolves the first agent and its model/key when nothing else is set", async () => {
     const { result } = renderHook(() => useInitialChatModelState(baseParams));
 

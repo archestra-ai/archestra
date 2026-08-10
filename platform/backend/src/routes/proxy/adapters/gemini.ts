@@ -103,7 +103,7 @@ class GeminiRequestAdapter
     );
     const commonMessages: CommonMessage[] = [];
 
-    for (const content of contents) {
+    for (const [contentIndex, content] of contents.entries()) {
       const commonMessage: CommonMessage = {
         role: content.role as CommonMessage["role"],
         content: extractCommonMessageText(content),
@@ -113,7 +113,7 @@ class GeminiRequestAdapter
       if (content.parts) {
         const toolCalls: CommonToolResult[] = [];
 
-        for (const part of content.parts) {
+        for (const [partIndex, part] of content.parts.entries()) {
           // Check if this part has the functionResponse property
           if (
             "functionResponse" in part &&
@@ -127,7 +127,7 @@ class GeminiRequestAdapter
               "id" in functionResponse &&
               typeof functionResponse.id === "string"
                 ? functionResponse.id
-                : generateToolCallId(functionResponse.name as string);
+                : syntheticToolCallId(contentIndex, partIndex);
 
             toolCalls.push({
               id,
@@ -163,9 +163,11 @@ class GeminiRequestAdapter
   getToolResults(): CommonToolResult[] {
     const results: CommonToolResult[] = [];
 
-    for (const content of this.request.contents || []) {
+    for (const [contentIndex, content] of (
+      this.request.contents || []
+    ).entries()) {
       if (content.parts) {
-        for (const part of content.parts) {
+        for (const [partIndex, part] of content.parts.entries()) {
           if (
             "functionResponse" in part &&
             part.functionResponse &&
@@ -178,7 +180,7 @@ class GeminiRequestAdapter
               "id" in functionResponse &&
               typeof functionResponse.id === "string"
                 ? functionResponse.id
-                : generateToolCallId(functionResponse.name as string);
+                : syntheticToolCallId(contentIndex, partIndex);
 
             results.push({
               id,
@@ -353,10 +355,10 @@ class GeminiRequestAdapter
         "[adapters/gemini] toProviderRequest: applying updates",
       );
 
-      contents = contents.map((content) => {
+      contents = contents.map((content, contentIndex) => {
         // Only process user messages with parts
         if (content.role === "user" && content.parts) {
-          const updatedParts = content.parts.map((part) => {
+          const updatedParts = content.parts.map((part, partIndex) => {
             // Check if this part is a function response
             if (
               "functionResponse" in part &&
@@ -369,7 +371,7 @@ class GeminiRequestAdapter
                 "id" in functionResponse &&
                 typeof functionResponse.id === "string"
                   ? functionResponse.id
-                  : generateToolCallId(functionResponse.name as string);
+                  : syntheticToolCallId(contentIndex, partIndex);
 
               if (this.toolResultUpdates[id]) {
                 // Update the function response with sanitized content
@@ -1115,11 +1117,14 @@ export function getUsageTokens(usage: {
 // =============================================================================
 
 /**
- * Generate a consistent tool call ID for function responses that don't have one
- * This is needed because Gemini's function responses may not always have an ID
+ * Identifier for a `functionResponse` the client sent without one — optional in
+ * Gemini's API and omitted by the AI SDK, so most requests need it. Trusted-data
+ * policies are evaluated in one pass over the request and their replacements
+ * written back in another, so this has to be derived from something both passes
+ * observe: the response's position in the request.
  */
-function generateToolCallId(functionName: string): string {
-  return `gemini-tool-${functionName}-${Date.now()}`;
+function syntheticToolCallId(contentIndex: number, partIndex: number): string {
+  return `gemini-tool-${contentIndex}-${partIndex}`;
 }
 
 /**

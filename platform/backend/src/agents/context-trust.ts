@@ -1,5 +1,8 @@
 import type { ToolExecutionOptions } from "ai";
-import { evaluateIfContextIsTrusted } from "@/guardrails/trusted-data";
+import {
+  evaluateIfContextIsTrusted,
+  preexistingUntrustedBoundary,
+} from "@/guardrails/trusted-data";
 import { AgentTeamModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type { CommonMessage, UnsafeContextBoundary } from "@/types";
@@ -18,6 +21,17 @@ export async function evaluateToolExecutionContextTrust(params: {
   contextIsTrusted: boolean;
   unsafeContextBoundary?: UnsafeContextBoundary;
 }> {
+  // This caller discards the result-policy redactions the evaluator computes,
+  // so with the verdict and boundary already settled there is nothing left to
+  // learn — and evaluating would cost a team lookup plus a policy pass over the
+  // whole history on every tool execution.
+  if (params.considerContextUntrusted) {
+    return {
+      contextIsTrusted: false,
+      unsafeContextBoundary: preexistingUntrustedBoundary(),
+    };
+  }
+
   const commonMessages = toCommonMessages(params.messages);
   const teamIds = await AgentTeamModel.getTeamsForAgent(params.agentId);
   const evaluation = await evaluateIfContextIsTrusted({

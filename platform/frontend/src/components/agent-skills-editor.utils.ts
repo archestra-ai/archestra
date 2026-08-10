@@ -1,4 +1,10 @@
-import { isSpecCompliantSkillName } from "@archestra/shared";
+import {
+  isSpecCompliantSkillCompatibility,
+  isSpecCompliantSkillDescription,
+  isSpecCompliantSkillName,
+  MAX_SKILL_COMPATIBILITY_LENGTH,
+  MAX_SKILL_DESCRIPTION_LENGTH,
+} from "@archestra/shared";
 
 /**
  * Which skills a gateway can publish over `skill://`, decided in the UI.
@@ -22,6 +28,13 @@ export interface SkillLike {
   templated?: boolean | null;
   agentName?: string | null;
   authorId?: string | null;
+  description?: string | null;
+  /**
+   * Carried by catalog rows only — the assignment endpoints omit it, so the
+   * compatibility gate below fails open when it is absent, like the
+   * environment gate.
+   */
+  compatibility?: string | null;
   /**
    * The environments the skill is restricted to, empty meaning "every
    * environment". Carried by the paginated catalog rows the picker is built
@@ -83,6 +96,21 @@ export function getSkillPublishability(params: {
       publishable: false,
       reason:
         "Name breaks the Agent Skills naming rules (lowercase letters, digits, single hyphens) — rename to publish",
+    };
+  }
+  if (
+    skill.description != null &&
+    !isSpecCompliantSkillDescription(skill.description)
+  ) {
+    return {
+      publishable: false,
+      reason: `Description is outside the Agent Skills limit (1-${MAX_SKILL_DESCRIPTION_LENGTH} characters) — shorten to publish`,
+    };
+  }
+  if (!isSpecCompliantSkillCompatibility(skill.compatibility ?? null)) {
+    return {
+      publishable: false,
+      reason: `Compatibility is over the Agent Skills limit (${MAX_SKILL_COMPATIBILITY_LENGTH} characters) — shorten to publish`,
     };
   }
   return { publishable: true, reason: null };

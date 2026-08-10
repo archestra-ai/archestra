@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 
 export interface EditableSkill extends SkillLike {
   id: string;
-  description?: string | null;
 }
 
 interface AgentSkillsEditorProps {

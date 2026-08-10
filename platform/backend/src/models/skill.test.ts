@@ -1,4 +1,8 @@
-import { isSpecCompliantSkillName } from "@archestra/shared";
+import {
+  isSpecCompliantSkillCompatibility,
+  isSpecCompliantSkillDescription,
+  isSpecCompliantSkillName,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
@@ -1243,6 +1247,104 @@ describe("spec-compliant skill names: SQL and TypeScript agree", () => {
         listedIds.has(byName.get(name) ?? ""),
         `SQL and isSpecCompliantSkillName disagreed about ${JSON.stringify(name)}`,
       ).toBe(isSpecCompliantSkillName(name));
+    }
+  });
+});
+
+/**
+ * The frontmatter length gates, same shape as the name gate above: Agent
+ * Skills bounds `description` to 1-1024 characters and `compatibility` to 500,
+ * and a SEP-2640 host refuses an entry that exceeds them — so a value the SQL
+ * admits and the TypeScript rejects is a row fetched, withheld, and logged as
+ * drift.
+ *
+ * The astral rows are the ones that can actually drift: `char_length` counts
+ * code points, `String.prototype.length` counts UTF-16 units, and a
+ * surrogate-pair emoji weighs 1 against the first and 2 against the second.
+ * The TypeScript twins spread into code points precisely so both sides agree;
+ * these rows pin that.
+ */
+describe("spec-compliant skill field lengths: SQL and TypeScript agree", () => {
+  const DESCRIPTIONS = [
+    // Within bounds, including exactly at the limit — in code points, twice
+    // over the limit in UTF-16 units.
+    "does the thing",
+    "d".repeat(1024),
+    "🙂".repeat(1024),
+    // Out of bounds: empty (the field is required) and one over.
+    "",
+    "d".repeat(1025),
+    `${"🙂".repeat(1024)}!`,
+  ];
+  const COMPATIBILITIES = [
+    // Absent and empty publish identically: the serializer omits a falsy
+    // compatibility, so neither can make a manifest non-conformant.
+    null,
+    "",
+    "c".repeat(500),
+    "🙂".repeat(500),
+    // Out of bounds.
+    "c".repeat(501),
+  ];
+
+  test("over description and compatibility shapes", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const rows: Array<{
+      id: string;
+      exposable: boolean;
+      label: string;
+    }> = [];
+
+    for (const description of DESCRIPTIONS) {
+      const skill = await SkillModel.createWithFiles({
+        skill: skillInput({
+          organizationId: org.id,
+          name: `desc-${rows.length}`,
+          description,
+          scope: "org",
+        }),
+        files: [],
+      });
+      if (!skill) throw new Error("seed failed for a description shape");
+      rows.push({
+        id: skill.id,
+        exposable: isSpecCompliantSkillDescription(description),
+        label: `description of ${[...description].length} code points`,
+      });
+    }
+    for (const compatibility of COMPATIBILITIES) {
+      const skill = await SkillModel.createWithFiles({
+        skill: skillInput({
+          organizationId: org.id,
+          name: `compat-${rows.length}`,
+          compatibility,
+          scope: "org",
+        }),
+        files: [],
+      });
+      if (!skill) throw new Error("seed failed for a compatibility shape");
+      rows.push({
+        id: skill.id,
+        exposable: isSpecCompliantSkillCompatibility(compatibility),
+        label: `compatibility of ${[...(compatibility ?? "")].length} code points`,
+      });
+    }
+
+    const listed = await SkillModel.findOrgScopedInEnvironment({
+      organizationId: org.id,
+      environmentId: null,
+      excludedForAgentId: crypto.randomUUID(),
+      limit: rows.length + 1,
+    });
+    const listedIds = new Set(listed.map((skill) => skill.id));
+
+    for (const row of rows) {
+      expect(
+        listedIds.has(row.id),
+        `SQL and the TypeScript twin disagreed about a ${row.label}`,
+      ).toBe(row.exposable);
     }
   });
 });

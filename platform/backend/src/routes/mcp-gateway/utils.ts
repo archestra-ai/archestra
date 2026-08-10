@@ -123,6 +123,7 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
+  RESOURCE_NOT_FOUND_ERROR_CODE,
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";
@@ -629,14 +630,14 @@ export async function createAgentServer(params: {
         if (skillResource) {
           return complete(withPrivateCacheHint(skillResource));
         }
-        // MCP's own code for this case. `-32602` claims the client sent a bad
-        // parameter, which sends a conforming host looking for a bug in its
-        // own request; the URI is well-formed and reserved, there is simply
-        // nothing here to read. Every reason for that — unexposed, deleted,
-        // never existed, malformed, surface disabled — still answers the same
-        // way, so the surface stays unprobeable.
+        // The current revision's code for a missing resource: SEP-2164 retired
+        // the MCP-specific -32002 in favor of JSON-RPC's Invalid Params, and
+        // SEP-2640 pins unknown skill resources to the same code. Every reason
+        // for not-found — unexposed, deleted, never existed, malformed, surface
+        // disabled — still answers the same way, so the surface stays
+        // unprobeable.
         throw {
-          code: -32002,
+          code: RESOURCE_NOT_FOUND_ERROR_CODE,
           message: `Resource not found: ${uri}`,
           data: { uri },
         };

@@ -1,4 +1,8 @@
 import {
+  MAX_SKILL_COMPATIBILITY_LENGTH,
+  MAX_SKILL_DESCRIPTION_LENGTH,
+} from "@archestra/shared";
+import {
   and,
   asc,
   count,
@@ -100,9 +104,12 @@ export function skillUriKeyPredicate(params: {
  * Every publication gate that is a property of the skill row itself, as one
  * SQL predicate: not templated (per-user Handlebars rendering has no stable
  * bytes to digest), not agent-delegated (delegation has no MCP counterpart),
- * a spec-compliant name (SEP-2640 hosts refuse entries whose URI segment
- * breaks the Agent Skills naming rules), no unpublishable file path, and
- * publication artifacts present for the row and every file it publishes.
+ * spec-compliant frontmatter (SEP-2640 hosts refuse entries whose URI segment
+ * breaks the Agent Skills naming rules or whose fields exceed its length
+ * limits), a personal skill still holding its author (the author id is a URI
+ * segment, so without one no `skill://` URI can name the skill), no
+ * unpublishable file path, and publication artifacts present for the row and
+ * every file it publishes.
  *
  * SQL rather than TypeScript so the paging `LIMIT` bounds the work: a gate
  * settled after the window is cut forces the caller to re-read until the page
@@ -125,6 +132,16 @@ export function publishableSkillPredicate(): SQL | undefined {
     // the page. C collation is plain byte ordering, which is what the twin does.
     sql`char_length(${schema.skillsTable.name}) <= 64
       AND ${schema.skillsTable.name} COLLATE "C" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`,
+    // Twins of `isSpecCompliantSkillDescription` / `isSpecCompliantSkillCompatibility`
+    // (shared/agent-skills.ts). `char_length` counts code points, which is what
+    // the TypeScript twins count. An empty compatibility gates like NULL — the
+    // serializer omits it — so only its upper bound appears here.
+    sql`char_length(${schema.skillsTable.description}) BETWEEN 1 AND ${MAX_SKILL_DESCRIPTION_LENGTH}`,
+    sql`char_length(coalesce(${schema.skillsTable.compatibility}, '')) <= ${MAX_SKILL_COMPATIBILITY_LENGTH}`,
+    // A personal skill whose author row was deleted (`author_id` is ON DELETE
+    // SET NULL) has no author URI segment, so nothing can name it: withheld
+    // here rather than left to throw inside URI building at serve time.
+    sql`NOT (${schema.skillsTable.scope} = 'personal' AND ${schema.skillsTable.authorId} IS NULL)`,
     publishableFilePathsPredicate(),
     nonCollidingFilePathsPredicate(),
     // Twin of `storedArtifacts` (services/skill-publication.ts): both halves
@@ -1148,6 +1165,29 @@ class SkillModel {
       eq(schema.skillsTable.id, id),
     );
     return count > 0;
+  }
+
+  /**
+   * Soft-delete every personal skill a user authored, ahead of deleting the
+   * user. `skills.author_id` is `ON DELETE SET NULL`, so without this the
+   * skills would survive as active orphans — personal rows whose author id,
+   * being a `skill://` URI segment, no longer exists for any URI to carry.
+   * Soft rather than hard so no cascade FK can make it fail: a user who asked
+   * to be removed must still be removed, and an admin can purge the rows
+   * later.
+   */
+  static async deletePersonalSkillsForUser(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    return await softDelete(
+      tx ?? db,
+      schema.skillsTable,
+      and(
+        eq(schema.skillsTable.scope, "personal"),
+        eq(schema.skillsTable.authorId, userId),
+      ),
+    );
   }
 
   /**

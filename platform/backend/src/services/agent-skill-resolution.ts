@@ -1,4 +1,11 @@
-import { isSpecCompliantSkillName, TimeInMs } from "@archestra/shared";
+import {
+  isSpecCompliantSkillCompatibility,
+  isSpecCompliantSkillDescription,
+  isSpecCompliantSkillName,
+  MAX_SKILL_COMPATIBILITY_LENGTH,
+  MAX_SKILL_DESCRIPTION_LENGTH,
+  TimeInMs,
+} from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -216,6 +223,12 @@ export function explainAssignmentRejection(params: {
   if (!isSpecCompliantSkillName(params.skill.name)) {
     return `Skill "${params.skill.name}" has a name the Agent Skills specification does not allow (1-64 characters; lowercase letters, digits, and single hyphens), so MCP hosts would refuse it. Rename the skill to publish it.`;
   }
+  if (!isSpecCompliantSkillDescription(params.skill.description)) {
+    return `Skill "${params.skill.name}" has a description outside the Agent Skills limit (1-${MAX_SKILL_DESCRIPTION_LENGTH} characters), so MCP hosts would refuse it. Shorten the description to publish it.`;
+  }
+  if (!isSpecCompliantSkillCompatibility(params.skill.compatibility)) {
+    return `Skill "${params.skill.name}" has a compatibility field over the Agent Skills limit (${MAX_SKILL_COMPATIBILITY_LENGTH} characters), so MCP hosts would refuse it. Shorten it to publish it.`;
+  }
   return null;
 }
 
@@ -231,7 +244,13 @@ export function explainAssignmentRejection(params: {
  */
 function isExposable(skill: PublishableSkill): boolean {
   const exposable =
-    isPublishableType(skill) && isSpecCompliantSkillName(skill.name);
+    isPublishableType(skill) &&
+    isSpecCompliantSkillName(skill.name) &&
+    isSpecCompliantSkillDescription(skill.description) &&
+    isSpecCompliantSkillCompatibility(skill.compatibility) &&
+    // A personal skill with no author (the user row was deleted) has no author
+    // URI segment, so no `skill://` URI can name it.
+    !(skill.scope === "personal" && skill.authorId === null);
   if (!exposable && !driftWarnThrottle.get(skill.id)) {
     // Throttled: drift is a property of the row, not of the request, so an
     // unthrottled log repeats on every listing page the row lands in for as

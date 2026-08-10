@@ -469,6 +469,14 @@ test("assignment rejection explains each unpublishable case", async ({
     authorId: caller.id,
   });
   const badName = await makeSkill(org.id, { name: "Bad Name" });
+  const longDescription = await makeSkill(org.id, {
+    name: "long-description-skill",
+    description: "d".repeat(1025),
+  });
+  const longCompatibility = await makeSkill(org.id, {
+    name: "long-compatibility-skill",
+    compatibility: "c".repeat(501),
+  });
   const ordinary = await makeSkill(org.id, { name: "ordinary-skill" });
   const elsewhere = await EnvironmentModel.create({
     organizationId: org.id,
@@ -493,6 +501,8 @@ test("assignment rejection explains each unpublishable case", async ({
   expect(reject(someoneElsesPersonal)).toMatch(/personal/i);
   expect(reject(ownPersonal)).toBeNull();
   expect(reject(badName)).toMatch(/Agent Skills/);
+  expect(reject(longDescription)).toMatch(/description/i);
+  expect(reject(longCompatibility)).toMatch(/compatibility/i);
   expect(reject(otherEnvironment, [elsewhere.id])).toMatch(/environment/i);
   expect(reject(ordinary)).toBeNull();
 });

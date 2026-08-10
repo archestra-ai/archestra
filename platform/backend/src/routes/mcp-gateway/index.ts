@@ -30,6 +30,7 @@ import {
   STATELESS_MCP_PROTOCOL_REVISION,
   SUPPORTED_MCP_PROTOCOL_REVISIONS,
   validateRoutingHeaders,
+  withCompleteResultEnvelope,
 } from "./protocol";
 import { handleSkillMethod, isSkillMethod } from "./skills";
 import {
@@ -536,6 +537,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // was shown no capability is never given a half-open surface.
       // `resources/read` of a `skill://` URI is deliberately *not* here: it is
       // an ordinary SDK request, and its skill branch lives in utils.ts.
+      // Requests only: `isSkillMethod` refuses a body without an id, so a
+      // notification spelling of these methods falls through to the SDK
+      // transport, which answers 202 with no body — a notification must never
+      // get a JSON-RPC response.
       if (skillsSurfaceEnabled() && isSkillMethod(request.body)) {
         reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
         // Nothing downstream of here turns a throw into a JSON-RPC error: this
@@ -563,7 +568,14 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         return {
           jsonrpc: "2.0",
-          ...outcome,
+          ...("result" in outcome
+            ? {
+                result: withCompleteResultEnvelope(outcome.result, {
+                  name: `archestra-agent-${profileId}`,
+                  version: config.api.version,
+                }),
+              }
+            : outcome),
           id: (request.body as { id?: string | number })?.id ?? null,
         };
       }

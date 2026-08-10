@@ -39,13 +39,14 @@ Both sets are saved separately, so switching between modes keeps the other confi
 
 ## Skills That Cannot Be Published
 
-Six kinds of skill cannot be published. Assign one in Custom mode and you get an error naming the reason, rather than an assignment that quietly does nothing; Auto skips them without a message. The check runs when you add a skill — skills already saved never block a later save.
+Seven kinds of skill cannot be published. Assign one in Custom mode and you get an error naming the reason, rather than an assignment that quietly does nothing; Auto skips them without a message. The check runs when you add a skill — skills already saved never block a later save.
 
 - **Templated skills** render per user at activation, so they have no fixed content to digest.
 - **Agent-delegated skills** hand the task to a named agent, which has no counterpart over MCP.
 - **Someone else's personal skills**. A personal skill is published by its author only. Your own personal skills publish from any gateway you can edit.
 - **Skills outside the gateway's environment**. Both modes publish only skills the gateway's environment can see. A skill later moved to another environment drops off the gateway.
 - **Skills with non-conforming names**. The [Agent Skills specification](https://agentskills.io/specification) allows lowercase letters, digits, and single hyphens — `quarterly-close`, not `Quarterly Close`. A skill named otherwise keeps working everywhere else in Archestra; rename it to publish it over MCP.
+- **Skills with over-long fields**. The same specification caps the description at 1024 characters and compatibility at 500. Shorten the field to publish the skill.
 - **Skills with a file path no URI can name**, such as `docs//guide.md` with an empty segment. Only older skills have one. This is the one case with no error at assignment time — the skill is accepted and then withheld from clients. The only symptom is the skill never appearing in a client's list. Open the skill and rename the file to publish it.
 
 ## Use Case

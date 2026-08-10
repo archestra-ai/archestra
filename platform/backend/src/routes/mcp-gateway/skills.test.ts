@@ -339,21 +339,25 @@ test("skills/get addresses a skill by its manifest URI and nothing else", async 
   }
 });
 
-test("skills/list treats a tampered cursor as absent", async ({
+test("skills/list answers -32602 for a cursor it could never have issued", async ({
   makeOrganization,
   makeAgent,
 }) => {
   // A cursor is client-held, so its contents are client-editable. The decoded
   // id lands in `"skills"."id" > $1` against a uuid column, where anything but
   // a UUID makes Postgres raise from inside the listing query — an error this
-  // surface has no business answering with. Every unusable spelling restarts
-  // the listing instead.
+  // surface has no business answering with. MCP pagination's verdict for an
+  // invalid cursor is Invalid params — not the silent first page a client
+  // mid-listing would read as the catalog starting over.
   const org = await makeOrganization();
   const agent = await makeAgent({ organizationId: org.id });
   const skill = await makeSkill(org.id, { name: "only-skill" });
   await assignSkill({ agentId: agent.id, skillId: skill.id });
 
-  const cursors = [
+  const invalidCursors = [
+    // Not a string at all: `"cursor": null` is a present, unusable value —
+    // only an omitted cursor starts a listing.
+    null,
     // Not base64url, and base64url that is not JSON.
     "!!!not-base64!!!",
     Buffer.from("not json at all", "utf8").toString("base64url"),
@@ -362,16 +366,62 @@ test("skills/list treats a tampered cursor as absent", async ({
       JSON.stringify({ afterId: "'; DROP TABLE skills; --" }),
     ).toString("base64url"),
     Buffer.from(JSON.stringify({ afterId: 42 })).toString("base64url"),
-    // A cursor from before the payload changed shape: unknown fields ignored.
+    // JSON with no id in it — no cursor this surface issued ever lacked one.
     Buffer.from(JSON.stringify({ fingerprint: "stale" })).toString("base64url"),
   ];
 
-  for (const cursor of cursors) {
-    const result = expectResult(
+  for (const cursor of invalidCursors) {
+    expect(
       await call(agent.id, "skills/list", { cursor }),
-    );
-    expect(result.skills, cursor).toHaveLength(1);
+      JSON.stringify(cursor),
+    ).toEqual({
+      error: { code: -32602, message: "Invalid cursor" },
+    });
   }
+
+  // A cursor from before the payload changed shape still resumes: unknown
+  // fields ride along ignored as long as the id is readable. Resuming after
+  // the only skill yields the empty page past it — a restart would show one.
+  const legacyCursor = Buffer.from(
+    JSON.stringify({ afterId: skill.id, fingerprint: "stale" }),
+  ).toString("base64url");
+  const result = expectResult(
+    await call(agent.id, "skills/list", { cursor: legacyCursor }),
+  );
+  expect(result.skills).toEqual([]);
+});
+
+test("skills/list omits an orphaned personal skill instead of failing", async ({
+  makeOrganization,
+  makeAgent,
+  makeUser,
+}) => {
+  // `skills.author_id` is ON DELETE SET NULL, so a personal skill row can
+  // predate the cleanup that now soft-deletes them with their author. The
+  // author id is a URI segment, so no `skill://` URI can name such a row: it
+  // must be withheld — and one bad row must never turn the whole catalog
+  // listing into an internal error.
+  const org = await makeOrganization();
+  const agent = await makeAgent({ organizationId: org.id });
+  const author = await makeUser();
+  const survivor = await makeSkill(org.id, { name: "survivor" });
+  const personal = await makeSkill(org.id, {
+    name: "orphaned-notes",
+    scope: "personal",
+    authorId: author.id,
+  });
+  await assignSkill({ agentId: agent.id, skillId: survivor.id });
+  await assignSkill({ agentId: agent.id, skillId: personal.id });
+
+  // A raw delete, not UserModel.delete: the model now soft-deletes personal
+  // skills first, and this test is about the legacy rows written before it did.
+  await db.delete(schema.usersTable).where(eq(schema.usersTable.id, author.id));
+
+  const result = expectResult(await call(agent.id, "skills/list"));
+  const skills = result.skills as Array<Record<string, unknown>>;
+  expect(skills.map((entry) => entry.uri)).toEqual([
+    "skill://archestra/shared/survivor/SKILL.md",
+  ]);
 });
 
 test("resources/read serves a manifest matching the published digest", async ({

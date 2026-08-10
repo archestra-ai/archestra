@@ -46,6 +46,7 @@ import {
   test,
 } from "@/test";
 import mcpGatewayRoutes from "./index";
+import { MCP_SERVER_INFO_META_KEY } from "./protocol";
 
 /**
  * Helper to create MCP gateway request headers
@@ -230,9 +231,9 @@ describe("MCP Gateway (stateless mode)", () => {
 
       expect(response.statusCode, uri).toBe(200);
       const body = response.json();
-      // -32002 "Resource not found" is what the MCP spec specifies for a
-      // `resources/read` of an unknown URI; -32602 is "Invalid params".
-      expect(body.error.code, uri).toBe(-32002);
+      // SEP-2164 retired the MCP-specific -32002 for missing resources; the
+      // current revision (and SEP-2640 for skill URIs) answers -32602.
+      expect(body.error.code, uri).toBe(-32602);
       expect(body.error.message, uri).toContain("Resource not found");
     }
   });
@@ -274,6 +275,47 @@ describe("MCP Gateway (stateless mode)", () => {
       const on = (await listSkills()).json();
       expect(on.error).toBeUndefined();
       expect(on.result.skills).toEqual([]);
+      // The current revision's result envelope. The skill methods are
+      // dispatched ahead of the SDK, so nothing downstream stamps this for
+      // them — dropping the wrap here would ship results without the
+      // mandatory `resultType`.
+      expect(on.result.resultType).toBe("complete");
+      expect(on.result._meta[MCP_SERVER_INFO_META_KEY]).toMatchObject({
+        name: `archestra-agent-${agent.id}`,
+      });
+    } finally {
+      config.mcpGateway.skillsEnabled = original;
+    }
+  });
+
+  test("a skills notification gets 202 and no JSON-RPC response", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // A notification — same method, no id — must never be answered. The skill
+    // dispatch refuses bodies without an id, so the spelling falls through to
+    // the SDK transport, whose notification path acknowledges with 202 and an
+    // empty body — never a JSON-RPC response with `id: null`.
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const original = config.mcpGateway.skillsEnabled;
+    try {
+      config.mcpGateway.skillsEnabled = true;
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "skills/list", params: {} },
+      });
+      expect(response.statusCode).toBe(202);
+      expect(response.body).toBe("");
     } finally {
       config.mcpGateway.skillsEnabled = original;
     }
@@ -285,8 +327,8 @@ describe("MCP Gateway (stateless mode)", () => {
   }) => {
     // The read half of the reachability check above. `resources/read` is an
     // ordinary SDK request whose handler branches on the flag, so an inverted
-    // guard there ships every skill read as -32002 while listings work — and
-    // no other test reaches that branch with the flag on.
+    // guard there ships every skill read as not-found while listings work —
+    // and no other test reaches that branch with the flag on.
     const org = await makeOrganization();
     const agent = await makeAgent({
       organizationId: org.id,
@@ -327,7 +369,7 @@ describe("MCP Gateway (stateless mode)", () => {
     const original = config.mcpGateway.skillsEnabled;
     try {
       config.mcpGateway.skillsEnabled = false;
-      expect((await readManifest()).json().error.code).toBe(-32002);
+      expect((await readManifest()).json().error.code).toBe(-32602);
 
       config.mcpGateway.skillsEnabled = true;
       const on = (await readManifest()).json();

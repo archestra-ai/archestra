@@ -64,7 +64,11 @@ export function isSkillMethod(body: unknown): boolean {
   return (
     isRecord(body) &&
     typeof body.method === "string" &&
-    SKILL_METHODS.has(body.method)
+    SKILL_METHODS.has(body.method) &&
+    // Requests only. A notification (no id) must get no response, so it is
+    // not this surface's to answer: it falls through to the SDK transport,
+    // whose notification path replies 202 with no body.
+    "id" in body
   );
 }
 
@@ -175,6 +179,11 @@ async function handleList(params: {
   | { result: Record<string, unknown> }
   | { error: { code: number; message: string } }
 > {
+  const cursor = decodeCursor(params.bodyParams.cursor);
+  if (cursor.verdict === "invalid") {
+    return { error: { code: -32602, message: "Invalid cursor" } };
+  }
+
   // The page comes back already settled: everything a window could turn out to
   // be entirely made of — excluded skills, skills with unnameable file paths,
   // rows still missing their publication artifacts — is filtered inside the
@@ -183,7 +192,7 @@ async function handleList(params: {
   // empty-with-a-cursor, and plenty of clients stop on an empty page.
   const exposure = await resolveExposedSkills({
     agentId: params.agentId,
-    afterId: decodeCursor(params.bodyParams.cursor) ?? undefined,
+    afterId: cursor.verdict === "resume" ? cursor.afterId : undefined,
     limit: DEFAULT_PAGE_SIZE,
   });
   if (!exposure) {
@@ -380,14 +389,31 @@ async function loadArtifacts(
 }
 
 /**
- * Whether a skill is fit to serve: it still exists, and every stored file path
- * is expressible as a `skill://` URI that round-trips.
+ * Whether a skill is fit to serve: it still exists, its URI parts are
+ * expressible at all, and every stored file path is expressible as a
+ * `skill://` URI that round-trips.
  */
 function isServable(
   skill: PublishableSkill,
   artifacts: SkillPublicationArtifacts | undefined,
 ): artifacts is SkillPublicationArtifacts {
   if (!artifacts) return false;
+  // A personal skill with no author (the user row was deleted before the
+  // publication gates excluded orphans) cannot be named: the author id is a
+  // URI segment, and `buildSkillUri` throws without one. The resolution gates
+  // never fetch such a row; this guard exists so that if one ever slips
+  // through, it withholds a single skill instead of failing the whole
+  // response.
+  if (skill.scope === "personal" && !skill.authorId) {
+    if (!withheldWarnThrottle.get(skill.id)) {
+      withheldWarnThrottle.set(skill.id, true);
+      logger.warn(
+        { skillId: skill.id, skillName: skill.name },
+        "Skill withheld from MCP listing: a personal skill has no author, so no skill:// URI can name it",
+      );
+    }
+    return false;
+  }
   return hasPublishablePaths(
     skill,
     artifacts.files.map((file) => file.path),
@@ -465,19 +491,33 @@ function encodeCursor(afterId: string): string {
 }
 
 /**
+ * Absent, resumable, or invalid — three verdicts, not two, because MCP
+ * pagination distinguishes them: no cursor starts a listing, and a cursor
+ * this surface could never have issued answers `-32602` rather than silently
+ * restarting from page one, which a client mid-listing would read as the
+ * catalog beginning again.
+ *
  * Reads only `afterId`, ignoring any other field — so a cursor issued before
- * the fingerprint was dropped still resumes rather than restarting a listing
+ * the fingerprint was dropped still resumes rather than erroring a listing
  * mid-flight.
  *
  * The id must be a UUID, not merely a string: it lands in `"skills"."id" > $1`
  * against a `uuid` column, so any other spelling makes Postgres raise `invalid
  * input syntax for type uuid` from inside the listing query. A cursor is
- * client-held and therefore client-editable, so that is a reachable input, and
- * an error there is nothing this surface should be answering with — hence the
- * same "treated as absent" verdict the decode failures get.
+ * client-held and therefore client-editable, so that is a reachable input —
+ * and one no cursor this surface issued can contain, hence the same invalid
+ * verdict the decode failures get. A well-formed cursor whose skill has since
+ * vanished stays valid: keyset paging reads the id as a position in the
+ * ordering, not a row that must still exist.
  */
-function decodeCursor(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
+function decodeCursor(
+  raw: unknown,
+):
+  | { verdict: "absent" }
+  | { verdict: "resume"; afterId: string }
+  | { verdict: "invalid" } {
+  if (raw === undefined) return { verdict: "absent" };
+  if (typeof raw !== "string") return { verdict: "invalid" };
   try {
     const parsed: unknown = JSON.parse(
       Buffer.from(raw, "base64url").toString("utf8"),
@@ -487,13 +527,12 @@ function decodeCursor(raw: unknown): string | null {
       typeof parsed.afterId === "string" &&
       UUID_PATTERN.test(parsed.afterId)
     ) {
-      return parsed.afterId;
+      return { verdict: "resume", afterId: parsed.afterId };
     }
   } catch {
-    // A malformed cursor is treated as absent: restarting a listing is a far
-    // better failure than erroring out mid-pagination.
+    // Undecodable — falls through to the invalid verdict below.
   }
-  return null;
+  return { verdict: "invalid" };
 }
 
 const UUID_PATTERN =

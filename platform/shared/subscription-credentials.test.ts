@@ -77,7 +77,7 @@ describe("registry coverage", () => {
     // subscriptionKindFromCredential returns the first marker the secret
     // starts with — a marker that is a prefix of another would shadow it.
     const markers = SUBSCRIPTION_CREDENTIAL_KINDS.map(
-      (kind) => SUBSCRIPTION_CREDENTIALS[kind].marker,
+      (kind): string | null => SUBSCRIPTION_CREDENTIALS[kind].marker,
     ).filter((marker): marker is string => marker !== null);
     for (const a of markers) {
       for (const b of markers) {

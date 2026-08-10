@@ -4,6 +4,7 @@ import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import type { InteractionRequest, InteractionResponse } from "@/types";
 
 const migrationSql = fs.readFileSync(
   path.join(__dirname, "0407_collapse_advisor_to_org_wide.sql"),
@@ -310,8 +311,8 @@ describe("0407 collapse advisor to org-wide", () => {
     const [interaction] = await db
       .insert(schema.interactionsTable)
       .values({
-        request: {},
-        response: {},
+        request: { model: "m", messages: [] } as unknown as InteractionRequest,
+        response: { id: "r1" } as unknown as InteractionResponse,
         type: "anthropic:messages",
         profileId: envAdvisor.id,
         environmentId: env.id,

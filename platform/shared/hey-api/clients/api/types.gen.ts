@@ -58507,6 +58507,7 @@ export type GetConnectorRunsResponses = {
             completedBatches: number | null;
             itemErrors: number | null;
             itemsSkipped: number | null;
+            documentsWithoutText: number | null;
             error: string | null;
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
@@ -58641,6 +58642,7 @@ export type GetConnectorRunResponses = {
         completedBatches: number | null;
         itemErrors: number | null;
         itemsSkipped: number | null;
+        documentsWithoutText: number | null;
         error: string | null;
         logs: string | null;
         checkpoint: string | number | boolean | null | {

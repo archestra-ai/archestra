@@ -231162,6 +231162,12 @@
                             "minimum": -2147483648,
                             "maximum": 2147483647
                           },
+                          "documentsWithoutText": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "error": {
                             "nullable": true,
                             "type": "string"
@@ -231287,6 +231293,7 @@
                           "completedBatches",
                           "itemErrors",
                           "itemsSkipped",
+                          "documentsWithoutText",
                           "error",
                           "checkpoint",
                           "stats",
@@ -231716,6 +231723,12 @@
                       "minimum": -2147483648,
                       "maximum": 2147483647
                     },
+                    "documentsWithoutText": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "error": {
                       "nullable": true,
                       "type": "string"
@@ -231845,6 +231858,7 @@
                     "completedBatches",
                     "itemErrors",
                     "itemsSkipped",
+                    "documentsWithoutText",
                     "error",
                     "logs",
                     "checkpoint",

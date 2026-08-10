@@ -25,7 +25,7 @@ import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
-import { parsePdfBuffer } from "../pdf-utils";
+import { describePdfEmptyText, parsePdfBuffer } from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
@@ -524,7 +524,17 @@ export class SharePointConnector extends BaseConnector {
             );
             // Skip files with no extractable content or media to avoid indexing
             // title-only documents that provide no search value.
-            if (!result.text.trim() && !result.mediaContent) return null;
+            if (!result.text.trim() && !result.mediaContent) {
+              this.trackSkipped({
+                itemId: item.id,
+                name: item.name,
+                reason:
+                  result.emptyReason ??
+                  "Empty content — no text or media could be extracted",
+                category: "no_extractable_text",
+              });
+              return null;
+            }
             return driveItemToDocument(
               item,
               driveId,
@@ -631,6 +641,8 @@ export class SharePointConnector extends BaseConnector {
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
+    /** Why the text came back empty, for skip reporting on the run. */
+    emptyReason?: string;
   }> {
     const ext = getFileExtension(fileName);
     const contentPath = `/drives/${driveId}/items/${itemId}/content`;
@@ -654,8 +666,14 @@ export class SharePointConnector extends BaseConnector {
         .api(contentPath)
         .responseType(ResponseType.ARRAYBUFFER)
         .get()) as ArrayBuffer;
-      const text = await extractTextFromBinary(Buffer.from(arrayBuffer), ext);
-      return { text: text.slice(0, MAX_CONTENT_LENGTH) };
+      const extracted = await extractTextFromBinary(
+        Buffer.from(arrayBuffer),
+        ext,
+      );
+      return {
+        text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        emptyReason: extracted.emptyReason,
+      };
     }
 
     // Image files: download as base64 for multimodal embedding
@@ -669,7 +687,10 @@ export class SharePointConnector extends BaseConnector {
           { fileName, sizeBytes: arrayBuffer.byteLength },
           "SharePoint: skipping oversized image",
         );
-        return { text: "" };
+        return {
+          text: "",
+          emptyReason: "Image exceeds the maximum size supported for embedding",
+        };
       }
       const mimeType = IMAGE_MIME_TYPES[ext] ?? "application/octet-stream";
       const data = Buffer.from(arrayBuffer).toString("base64");
@@ -731,7 +752,15 @@ export class SharePointConnector extends BaseConnector {
             );
             // Skip pages with no extractable content to avoid indexing
             // title-only documents that provide no search value.
-            if (!content.trim()) return null;
+            if (!content.trim()) {
+              this.trackSkipped({
+                itemId: page.id,
+                name: page.title || page.name,
+                reason: "Page has no extractable content",
+                category: "no_extractable_text",
+              });
+              return null;
+            }
             return sitePageToDocument(page, siteId, content);
           },
           fallback: null,
@@ -1199,22 +1228,23 @@ function isModifiedSince(
 async function extractTextFromBinary(
   buffer: Buffer,
   ext: string,
-): Promise<string> {
+): Promise<{ text: string; emptyReason?: string }> {
   switch (ext) {
     case ".docx": {
-      return extractTextFromDocx(buffer);
+      return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
-      return parsePdfBuffer(buffer);
+      const result = await parsePdfBuffer(buffer);
+      return { text: result.text, emptyReason: describePdfEmptyText(result) };
     }
     case ".pptx": {
-      return extractTextFromPptx(buffer);
+      return { text: await extractTextFromPptx(buffer) };
     }
     case ".xlsx": {
-      return extractTextFromXlsx(buffer);
+      return { text: await extractTextFromXlsx(buffer) };
     }
     default:
-      return "";
+      return { text: "" };
   }
 }
 

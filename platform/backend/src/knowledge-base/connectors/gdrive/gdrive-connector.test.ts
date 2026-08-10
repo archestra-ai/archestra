@@ -3,6 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConnectorSyncBatch } from "@/types";
 import { GoogleDriveConnector } from "./gdrive-connector";
 
+// The bundled pdf.js build is non-deterministic on repeated in-process parses
+// (see pdf-utils.test.ts), so the scanned-PDF path stubs the parse result and
+// keeps the real describePdfEmptyText reason formatting.
+vi.mock("../pdf-utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../pdf-utils")>();
+  return {
+    ...actual,
+    parsePdfBuffer: vi.fn().mockResolvedValue({
+      text: "",
+      status: "no_text_layer",
+      pageCount: 12,
+    }),
+  };
+});
+
 // ===== Mock googleapis =====
 
 const mockFilesList = vi.fn();
@@ -761,8 +776,48 @@ describe("GoogleDriveConnector", () => {
         batches.push(batch);
       }
 
-      // Empty content file should be skipped
+      // Empty content file should be skipped — and reported as skipped with
+      // the no-text category rather than silently dropped.
       expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped).toHaveLength(1);
+      expect(batches[0].skipped?.[0].name).toBe("empty.txt");
+      expect(batches[0].skipped?.[0].category).toBe("no_extractable_text");
+    });
+
+    it("reports a scanned PDF with no text layer as a categorized skip naming the file", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("file-scan", "scanned-contract.pdf", {
+              mimeType: "application/pdf",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("%PDF-1.4 scanned bytes").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped).toHaveLength(1);
+      const skip = batches[0].skipped?.[0];
+      expect(skip?.name).toBe("scanned-contract.pdf");
+      expect(skip?.category).toBe("no_extractable_text");
+      expect(skip?.reason).toContain("no extractable text layer");
     });
   });
 

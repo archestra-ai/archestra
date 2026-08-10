@@ -178,6 +178,7 @@ class ConnectorSyncService {
     let documentsIngested = 0;
     let itemErrors = 0;
     let itemsSkipped = 0;
+    let documentsWithoutText = 0;
     let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
@@ -340,15 +341,27 @@ class ConnectorSyncService {
           );
         }
 
-        // Track skipped items from this batch
+        // Track skipped items from this batch. Items the connector found but
+        // could not extract any text from (scanned PDFs without a text layer,
+        // unparseable files) are counted separately and logged at warn with
+        // the document's name — otherwise they'd look successfully indexed
+        // while never being searchable (issue #7157).
         if (batch.skipped?.length) {
           itemsSkipped += batch.skipped.length;
           documentsProcessed += batch.skipped.length;
           for (const s of batch.skipped) {
-            runLog.debug(
-              { itemId: s.itemId, name: s.name, reason: s.reason },
-              "Item skipped",
-            );
+            if (s.category === "no_extractable_text") {
+              documentsWithoutText++;
+              runLog.warn(
+                { itemId: s.itemId, name: s.name, reason: s.reason },
+                "Document yielded no extractable text and was not indexed",
+              );
+            } else {
+              runLog.debug(
+                { itemId: s.itemId, name: s.name, reason: s.reason },
+                "Item skipped",
+              );
+            }
           }
         }
 
@@ -364,6 +377,7 @@ class ConnectorSyncService {
             documentsIngested,
             itemErrors,
             itemsSkipped,
+            documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
         });
@@ -427,6 +441,7 @@ class ConnectorSyncService {
             documentsIngested,
             itemErrors,
             itemsSkipped,
+            documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
         });
@@ -445,6 +460,7 @@ class ConnectorSyncService {
           durationSeconds,
           documentsProcessed,
           documentsIngested,
+          documentsWithoutText,
         });
 
         runLog.info(
@@ -470,6 +486,7 @@ class ConnectorSyncService {
             documentsIngested,
             itemErrors,
             itemsSkipped,
+            documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
         });
@@ -498,6 +515,7 @@ class ConnectorSyncService {
           data: {
             documentsProcessed,
             documentsIngested,
+            documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
         });
@@ -531,6 +549,7 @@ class ConnectorSyncService {
         durationSeconds: (Date.now() - startTime) / 1000,
         documentsProcessed,
         documentsIngested,
+        documentsWithoutText,
       });
 
       runLog.info(
@@ -558,6 +577,7 @@ class ConnectorSyncService {
           documentsIngested,
           itemErrors,
           itemsSkipped,
+          documentsWithoutText,
           error: errorMessage,
           logs: options?.getLogOutput?.() ?? null,
         },
@@ -578,6 +598,7 @@ class ConnectorSyncService {
         durationSeconds,
         documentsProcessed,
         documentsIngested,
+        documentsWithoutText,
       });
 
       runLog.error({ error: errorMessage }, "Sync failed");

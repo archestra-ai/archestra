@@ -19,7 +19,7 @@ import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
-import { parsePdfBuffer } from "../pdf-utils";
+import { describePdfEmptyText, parsePdfBuffer } from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
@@ -400,7 +400,17 @@ export class GoogleDriveConnector extends BaseConnector {
             );
             // Skip files with no extractable content or media to avoid indexing
             // title-only documents that provide no search value.
-            if (!result.text.trim() && !result.mediaContent) return null;
+            if (!result.text.trim() && !result.mediaContent) {
+              this.trackSkipped({
+                itemId: file.id ?? "unknown",
+                name: file.name ?? "unknown",
+                reason:
+                  result.emptyReason ??
+                  "Empty content — no text or media could be extracted",
+                category: "no_extractable_text",
+              });
+              return null;
+            }
             return fileToDocument(file, result.text, result.mediaContent);
           },
           fallback: null,
@@ -604,7 +614,17 @@ export class GoogleDriveConnector extends BaseConnector {
               file,
               supportsImages,
             );
-            if (!result.text.trim() && !result.mediaContent) return null;
+            if (!result.text.trim() && !result.mediaContent) {
+              this.trackSkipped({
+                itemId: file.id ?? "unknown",
+                name: file.name ?? "unknown",
+                reason:
+                  result.emptyReason ??
+                  "Empty content — no text or media could be extracted",
+                category: "no_extractable_text",
+              });
+              return null;
+            }
             return fileToDocument(file, result.text, result.mediaContent);
           },
           fallback: null,
@@ -694,6 +714,8 @@ export class GoogleDriveConnector extends BaseConnector {
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
+    /** Why the text came back empty, for skip reporting on the run. */
+    emptyReason?: string;
   }> {
     const fileName = file.name ?? "";
     const fileId = file.id;
@@ -714,11 +736,12 @@ export class GoogleDriveConnector extends BaseConnector {
             : "";
         return { text };
       } catch (error) {
+        const message = extractErrorMessage(error);
         this.log.debug(
-          { fileId, fileName, error: extractErrorMessage(error) },
+          { fileId, fileName, error: message },
           "Google Drive: failed to export Google Workspace file",
         );
-        return { text: "" };
+        return { text: "", emptyReason: `Failed to export file: ${message}` };
       }
     }
 
@@ -732,14 +755,18 @@ export class GoogleDriveConnector extends BaseConnector {
           { responseType: "arraybuffer" },
         );
         const buffer = Buffer.from(res.data as ArrayBuffer);
-        const text = await extractTextFromBinary(buffer, resolved.format);
-        return { text: text.slice(0, MAX_CONTENT_LENGTH) };
+        const extracted = await extractTextFromBinary(buffer, resolved.format);
+        return {
+          text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+          emptyReason: extracted.emptyReason,
+        };
       } catch (error) {
+        const message = extractErrorMessage(error);
         this.log.debug(
-          { fileId, fileName, error: extractErrorMessage(error) },
+          { fileId, fileName, error: message },
           "Google Drive: failed to export Google Workspace file as Office bytes",
         );
-        return { text: "" };
+        return { text: "", emptyReason: `Failed to export file: ${message}` };
       }
     }
 
@@ -754,8 +781,11 @@ export class GoogleDriveConnector extends BaseConnector {
     // Binary files (.docx, .pdf, .pptx, .xlsx): download and extract text
     if (resolved?.kind === "binary") {
       const buffer = await this.downloadFileBuffer(drive, fileId);
-      const text = await extractTextFromBinary(buffer, resolved.format);
-      return { text: text.slice(0, MAX_CONTENT_LENGTH) };
+      const extracted = await extractTextFromBinary(buffer, resolved.format);
+      return {
+        text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        emptyReason: extracted.emptyReason,
+      };
     }
 
     // Image files: download as base64 for multimodal embedding
@@ -766,7 +796,10 @@ export class GoogleDriveConnector extends BaseConnector {
           { fileName, sizeBytes: buffer.length },
           "Google Drive: skipping oversized image",
         );
-        return { text: "" };
+        return {
+          text: "",
+          emptyReason: "Image exceeds the maximum size supported for embedding",
+        };
       }
       const data = buffer.toString("base64");
       return { text: "", mediaContent: { mimeType: resolved.mimeType, data } };
@@ -970,19 +1003,20 @@ function fileToDocument(
 async function extractTextFromBinary(
   buffer: Buffer,
   format: BinaryFormat,
-): Promise<string> {
+): Promise<{ text: string; emptyReason?: string }> {
   switch (format) {
     case ".docx": {
-      return extractTextFromDocx(buffer);
+      return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
-      return parsePdfBuffer(buffer);
+      const result = await parsePdfBuffer(buffer);
+      return { text: result.text, emptyReason: describePdfEmptyText(result) };
     }
     case ".pptx": {
-      return extractTextFromPptx(buffer);
+      return { text: await extractTextFromPptx(buffer) };
     }
     case ".xlsx": {
-      return extractTextFromXlsx(buffer);
+      return { text: await extractTextFromXlsx(buffer) };
     }
   }
 }

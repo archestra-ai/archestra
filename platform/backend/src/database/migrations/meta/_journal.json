@@ -2850,6 +2850,13 @@
       "when": 1786212322560,
       "tag": "0406_model_supported_endpoints",
       "breakpoints": true
+    },
+    {
+      "idx": 407,
+      "version": "7",
+      "when": 1786355256405,
+      "tag": "0407_lumpy_johnny_blaze",
+      "breakpoints": true
     }
   ]
 }

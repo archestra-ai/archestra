@@ -171,6 +171,61 @@ describe("ConnectorSyncService", () => {
     expect(run?.documentsIngested).toBe(1);
   });
 
+  test("skipped items with no extractable text are counted separately on the run", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    // One digital document that ingests fine, one scanned PDF the connector
+    // skipped for having no text layer, and one unrelated skip (unsupported
+    // type). Only the no-text skip must land in documentsWithoutText.
+    const mockImpl = {
+      estimateTotalItems: vi.fn().mockResolvedValue(3),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [
+              { id: "ext-1", title: "Digital", content: "Readable text" },
+            ],
+            skipped: [
+              {
+                itemId: "scan-1",
+                name: "scanned-contract.pdf",
+                reason:
+                  "PDF has 12 page(s) but no extractable text layer (likely scanned or image-only)",
+                category: "no_extractable_text",
+              },
+              {
+                itemId: "old-1",
+                name: "notes.xyz",
+                reason: "unsupported_file_type",
+              },
+            ],
+            checkpoint: { page: 1 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    };
+    mockGetConnector.mockReturnValue(mockImpl);
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("success");
+    const run = await ConnectorRunModel.findById(result.runId);
+    expect(run?.itemsSkipped).toBe(2);
+    expect(run?.documentsWithoutText).toBe(1);
+    // Skipped items still count as processed
+    expect(run?.documentsProcessed).toBe(3);
+  });
+
   test("deleting the connector mid-run stops the sync before the next batch", async ({
     makeOrganization,
     makeKnowledgeBase,

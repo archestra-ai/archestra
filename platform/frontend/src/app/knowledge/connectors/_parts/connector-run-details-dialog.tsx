@@ -200,6 +200,16 @@ export function ConnectorRunDetailsDialog({
                     </span>
                   </div>
                 )}
+                {!isPermissionRun && (run.documentsWithoutText ?? 0) > 0 && (
+                  <div>
+                    <span className="text-muted-foreground">
+                      No text extracted:
+                    </span>{" "}
+                    <span className="text-amber-600">
+                      {run.documentsWithoutText}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {isPermissionRun &&
@@ -241,6 +251,15 @@ export function ConnectorRunDetailsDialog({
                   (e.g. videos, audio, archives, or other binary formats), or
                   they had no extractable text (empty or password-protected
                   documents).
+                </p>
+              )}
+
+              {!isPermissionRun && (run.documentsWithoutText ?? 0) > 0 && (
+                <p className="text-xs text-amber-600">
+                  {run.documentsWithoutText} document(s) contained no
+                  extractable text — typically scanned or image-only PDFs — so
+                  they are not searchable and will not appear in any knowledge
+                  base answer. The run log names each one.
                 </p>
               )}
 

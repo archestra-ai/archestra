@@ -232,6 +232,7 @@ export const UpdateConnectorRunSchema = createUpdateSchema(
   completedBatches: true,
   itemErrors: true,
   itemsSkipped: true,
+  documentsWithoutText: true,
 });
 
 export type ConnectorRun = z.infer<typeof SelectConnectorRunSchema>;

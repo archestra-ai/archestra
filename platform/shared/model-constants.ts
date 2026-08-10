@@ -281,6 +281,11 @@ export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
   "vllm",
   "xai",
   "zhipuai",
+  // OpenAI-wire on chat completions, plus a native Responses surface that the
+  // router hands Responses-only models to directly (see
+  // `providerHasMultipleSurfaces`). Its credential is per-user, so it is
+  // routable only through the owner's own personal virtual key.
+  "github-copilot",
   // Translated by the router
   "anthropic",
   "bedrock",

@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-08-09
+lastUpdated: 2026-08-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,7 +23,15 @@ The model router exposes one OpenAI-compatible interface for models across confi
 - **Models API** (`/models`) for provider-qualified chat and embedding model IDs
 - **Embeddings API** (`/embeddings`) for embedding models across supported providers
 
-Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, and Cohere have no compatible embeddings API and return `501 Not Implemented`.
+Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, Cohere, and GitHub Copilot have no compatible embeddings API and return `501 Not Implemented`.
+
+### GitHub Copilot Through the Model Router
+
+GitHub Copilot is routable, with one difference from every other provider: it serves each model over a single API. The router reads which one from the model and sends the request there. Codex and GPT-5.x models go to the Responses API; the rest go to Chat Completions.
+
+Requesting a Responses-only model on `/chat/completions` returns `400 Bad Request` naming the endpoint to use instead.
+
+A Copilot key is tied to one GitHub account, so it is routable only through your own personal virtual key — never a shared or multi-provider one. See [GitHub Copilot](#github-copilot).
 
 ### Model Router Connection Details
 
@@ -607,6 +615,8 @@ The Models API tells you which one to use. Each entry lists its API in `supporte
 
 - **Base URL**: `http://localhost:9000/v1/github-copilot/{profile-id}`
 - **Authentication**: Pass your **GitHub OAuth token** (the credential below) in the `Authorization` header as `Bearer <token>`
+
+Copilot models are also reachable through the model router as `github-copilot:<model-id>`. See [GitHub Copilot Through the Model Router](#github-copilot-through-the-model-router).
 
 ### Authentication
 

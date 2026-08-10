@@ -920,7 +920,7 @@ describe("ChatProvider retries", () => {
     const { DefaultChatTransport } = await import("ai");
     mocks.getQueryData.mockImplementation((key: unknown) => {
       if (!Array.isArray(key) || key[0] !== "conversation") return undefined;
-      return key.length === 2 ? { thinkingEffort: "low" } : "high";
+      return key.length === 2 ? { thinkingEffort: "low" } : { effort: "high" };
     });
 
     render(
@@ -945,6 +945,39 @@ describe("ChatProvider retries", () => {
     } as never);
 
     expect(prepared?.body).toMatchObject({ thinkingEffort: "high" });
+  });
+
+  it("sends a pending switch back to auto instead of the stored depth", async () => {
+    // Auto is null, so an unboxed pending value would read as "nothing
+    // pending" and the turn would keep sending the depth the user just left.
+    const { DefaultChatTransport } = await import("ai");
+    mocks.getQueryData.mockImplementation((key: unknown) => {
+      if (!Array.isArray(key) || key[0] !== "conversation") return undefined;
+      return key.length === 2 ? { thinkingEffort: "high" } : { effort: null };
+    });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    const transportOptions = vi.mocked(DefaultChatTransport).mock.calls[0]?.[0];
+    const prepared = await transportOptions?.prepareSendMessagesRequest?.({
+      id: "conversation-1",
+      messages: [],
+      trigger: "submit-message",
+      messageId: undefined,
+      api: "/api/chat",
+      body: undefined,
+      credentials: "include",
+      headers: {},
+      requestMetadata: undefined,
+    } as never);
+
+    expect(prepared?.body).toMatchObject({ thinkingEffort: null });
   });
 
   it("shows a toast for duplicate active-run submits", async () => {

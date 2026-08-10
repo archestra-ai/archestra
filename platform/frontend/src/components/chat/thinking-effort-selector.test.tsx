@@ -1,3 +1,4 @@
+import type { ThinkingEffortSetting } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -33,7 +34,7 @@ function renderSelector(overrides: Record<string, unknown> = {}) {
 
 /** Mirrors the real call site, which feeds the picked value straight back in. */
 function ControlledSelector() {
-  const [value, setValue] = useState<"low" | "medium" | "high">("low");
+  const [value, setValue] = useState<ThinkingEffortSetting>("low");
   return (
     <ThinkingEffortSelector
       selectedModel="row-1"
@@ -59,7 +60,7 @@ describe("ThinkingEffortSelector", () => {
 
     await user.click(trigger());
 
-    expect(screen.getAllByRole("menuitemradio")).toHaveLength(3);
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(4);
     expect(option("Medium")).toBeChecked();
   });
 
@@ -99,7 +100,8 @@ describe("ThinkingEffortSelector", () => {
     expect(trigger()).toHaveFocus();
 
     await user.keyboard("{Enter}");
-    await user.keyboard("{ArrowDown}{ArrowDown}");
+    // The menu opens on its first item, Auto.
+    await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
     await user.keyboard("{Enter}");
 
     expect(trigger()).toHaveTextContent("High");
@@ -142,7 +144,37 @@ describe("ThinkingEffortSelector", () => {
     renderSelector();
     await user.click(trigger());
 
-    expect(screen.getAllByRole("menuitemradio")).toHaveLength(3);
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(4);
+  });
+
+  it("shows Auto when no depth has been chosen", async () => {
+    // Every untouched chat is here, so this is the label most users see first.
+    const user = userEvent.setup();
+    setModels([GEMINI_FLASH]);
+
+    renderSelector({ value: null });
+    expect(trigger()).toHaveTextContent("Auto");
+
+    await user.click(trigger());
+
+    expect(option("Auto")).toBeChecked();
+    expect(option("Auto")).toHaveTextContent(
+      "Let the model reason as it normally would",
+    );
+  });
+
+  it("reports auto as null, not as a level", async () => {
+    // Auto has to reach the row as null; any string would be stored as a depth
+    // and start overriding what the model does on its own.
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    setModels([GEMINI_FLASH]);
+
+    renderSelector({ value: "high", onChange });
+    await user.click(trigger());
+    await user.click(option("Auto"));
+
+    expect(onChange).toHaveBeenCalledWith(null);
   });
 
   it.each([

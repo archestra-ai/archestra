@@ -1,4 +1,4 @@
-import type { ThinkingEffort } from "@archestra/shared";
+import type { ThinkingEffortSetting } from "@archestra/shared";
 import {
   resolveInitialModel,
   resolveModelForAgent,
@@ -47,7 +47,7 @@ export type CreateConversationInput = {
   title?: string;
   /** Project the chat is started in (carried from /chat?project=...). */
   projectId?: string;
-  thinkingEffort?: ThinkingEffort;
+  thinkingEffort?: ThinkingEffortSetting;
 };
 
 /**
@@ -212,7 +212,7 @@ export function buildCreateConversationInput(params: {
   chatApiKeyId: string | null;
   title?: string;
   projectId?: string | null;
-  thinkingEffort?: ThinkingEffort;
+  thinkingEffort?: ThinkingEffortSetting;
 }): CreateConversationInput | null {
   if (!params.agentId) {
     return null;

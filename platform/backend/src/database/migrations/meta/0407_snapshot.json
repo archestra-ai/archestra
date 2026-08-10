@@ -6074,8 +6074,7 @@
           "name": "thinking_effort",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'medium'"
+          "notNull": false
         },
         "has_custom_tool_selection": {
           "name": "has_custom_tool_selection",

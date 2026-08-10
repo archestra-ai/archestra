@@ -3,6 +3,8 @@ import {
   type archestraApiTypes,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
+  type ThinkingEffort,
+  type ThinkingEffortSetting,
 } from "@archestra/shared";
 import {
   keepPreviousData,
@@ -100,8 +102,8 @@ export function mergeUpdatedConversationIntoCache(
     | archestraApiTypes.GetChatConversationResponses["200"]
     | undefined,
   updatedConversation: archestraApiTypes.UpdateChatConversationResponses["200"],
-  variables: { id: string } & NonNullable<
-    archestraApiTypes.UpdateChatConversationData["body"]
+  variables: { id: string } & WithThinkingEffortSetting<
+    NonNullable<archestraApiTypes.UpdateChatConversationData["body"]>
   >,
 ) {
   if (!oldConversation) {
@@ -354,6 +356,18 @@ export function useConversationUpdatedCacheSync(enabled = true) {
   }, [enabled, queryClient]);
 }
 
+/**
+ * Restores `null` (auto) to a generated request body.
+ *
+ * The client generator drops `nullable: true` from enum schemas, so every
+ * nullable enum in the API reads as non-null here — `selectedProvider` has the
+ * same gap. Without this the narrower generated type would reject a depth the
+ * API accepts.
+ */
+type WithThinkingEffortSetting<TBody> = Omit<TBody, "thinkingEffort"> & {
+  thinkingEffort?: ThinkingEffortSetting;
+};
+
 export function useCreateConversation() {
   const queryClient = useQueryClient();
 
@@ -367,7 +381,9 @@ export function useCreateConversation() {
       incognito,
       incognitoKey,
       thinkingEffort,
-    }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]> & {
+    }: WithThinkingEffortSetting<
+      NonNullable<archestraApiTypes.CreateChatConversationData["body"]>
+    > & {
       /**
        * Browser-generated conversation DEK (base64url of 32 random bytes).
        * Required when `incognito` is set: the server fingerprints and
@@ -385,7 +401,9 @@ export function useCreateConversation() {
               title,
               projectId: projectId ?? undefined,
               incognito: incognito || undefined,
-              thinkingEffort,
+              // The generated body type drops `nullable: true` from enum
+              // schemas, so null (auto) has to be re-asserted here.
+              thinkingEffort: thinkingEffort as ThinkingEffort | undefined,
             },
             headers: incognitoKey
               ? { [INCOGNITO_KEY_HEADER]: incognitoKey }
@@ -423,8 +441,8 @@ export function useUpdateConversation() {
       agentId,
       pinnedAt,
       thinkingEffort,
-    }: { id: string } & NonNullable<
-      archestraApiTypes.UpdateChatConversationData["body"]
+    }: { id: string } & WithThinkingEffortSetting<
+      NonNullable<archestraApiTypes.UpdateChatConversationData["body"]>
     >) =>
       callApi(
         () =>
@@ -436,7 +454,9 @@ export function useUpdateConversation() {
               chatApiKeyId,
               agentId,
               pinnedAt,
-              thinkingEffort,
+              // The generated body type drops `nullable: true` from enum
+              // schemas, so null (auto) has to be re-asserted here.
+              thinkingEffort: thinkingEffort as ThinkingEffort | undefined,
             },
           }),
         null,

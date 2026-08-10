@@ -1,7 +1,4 @@
-import {
-  DEFAULT_THINKING_EFFORT,
-  type ThinkingEffort,
-} from "@archestra/shared";
+import type { ThinkingEffortSetting } from "@archestra/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveChatModelState,
@@ -81,8 +78,8 @@ export type InitialChatModelState = {
   provider: SupportedProvider | undefined;
   modelSource: ModelSource | null;
   setApiKeyId: (apiKeyId: string | null) => void;
-  thinkingEffort: ThinkingEffort;
-  setThinkingEffort: (effort: ThinkingEffort) => void;
+  thinkingEffort: ThinkingEffortSetting;
+  setThinkingEffort: (effort: ThinkingEffortSetting) => void;
   onAgentChange: (agentId: string) => void;
   onModelChange: (modelId: string) => void;
   onProviderChange: (provider: SupportedProvider, apiKeyId: string) => void;
@@ -123,9 +120,8 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   const [apiKeyId, setApiKeyId] = useState<string | null>(null);
   // Carried into the create request on first submit, so a choice made before
   // the conversation exists survives into the row.
-  const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort>(
-    DEFAULT_THINKING_EFFORT,
-  );
+  const [thinkingEffort, setThinkingEffort] =
+    useState<ThinkingEffortSetting>(null);
 
   // Stores the resolved agent in a ref so the model init effect can read it
   // synchronously.

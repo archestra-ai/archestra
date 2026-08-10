@@ -61,22 +61,28 @@ export type ConversationContentKey = {
   conversationId: string;
 };
 
-/** How hard the model should reason before answering. */
+/**
+ * How hard the model should reason before answering. Null is "auto" — no depth
+ * chosen, so the request carries no reasoning field.
+ */
 export const ThinkingEffortSchema = z.enum(THINKING_EFFORTS);
+const ThinkingEffortSettingSchema = ThinkingEffortSchema.nullable();
 
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
   selectedProvider: SupportedProvidersSchema.nullable(),
   origin: ConversationOriginSchema,
-  thinkingEffort: ThinkingEffortSchema,
+  thinkingEffort: ThinkingEffortSettingSchema,
 };
 
 // For insert/update schema, selectedProvider is optional
 const insertUpdateExtendedFields = {
   selectedProvider: SupportedProvidersSchema.optional(),
   origin: ConversationOriginSchema.optional(),
-  thinkingEffort: ThinkingEffortSchema.optional(),
+  // Nullable as well as optional: null is the caller choosing auto, which is a
+  // different instruction from omitting the field.
+  thinkingEffort: ThinkingEffortSettingSchema.optional(),
 };
 
 export const SelectConversationSchema = createSelectSchema(

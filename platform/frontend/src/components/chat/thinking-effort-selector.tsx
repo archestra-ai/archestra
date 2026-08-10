@@ -2,8 +2,11 @@
 
 import {
   E2eTestId,
+  fromThinkingEffortOption,
   supportsThinkingEffort,
-  type ThinkingEffort,
+  type ThinkingEffortOption,
+  type ThinkingEffortSetting,
+  toThinkingEffortOption,
 } from "@archestra/shared";
 import { ChevronDownIcon } from "lucide-react";
 import { memo, useMemo } from "react";
@@ -17,24 +20,35 @@ import {
 import { useLlmModels } from "@/lib/llm-models.query";
 import { cn } from "@/lib/utils";
 
-const OPTIONS: { value: ThinkingEffort; label: string; hint: string }[] = [
-  {
-    value: "low",
-    label: "Low",
-    // Deliberately not "no reasoning": on a model that cannot stop reasoning
-    // this is simply the least it will do, and those tokens are still billed.
-    hint: "As little reasoning as the model allows",
-  },
-  { value: "medium", label: "Medium", hint: "Some reasoning before answering" },
-  { value: "high", label: "High", hint: "Reason as deeply as the model can" },
-];
+const OPTIONS: { value: ThinkingEffortOption; label: string; hint: string }[] =
+  [
+    {
+      value: "auto",
+      label: "Auto",
+      hint: "Let the model reason as it normally would",
+    },
+    {
+      value: "low",
+      label: "Low",
+      // Deliberately not "no reasoning": on a model that cannot stop reasoning
+      // this is simply the least it will do, and those tokens are still billed.
+      hint: "As little reasoning as the model allows",
+    },
+    {
+      value: "medium",
+      label: "Medium",
+      hint: "Some reasoning before answering",
+    },
+    { value: "high", label: "High", hint: "Reason as deeply as the model can" },
+  ];
 
 interface ThinkingEffortSelectorProps {
   /** The conversation's model as a `models` row id, not a provider model name. */
   selectedModel: string;
   apiKeyId?: string | null;
-  value: ThinkingEffort;
-  onChange: (effort: ThinkingEffort) => void;
+  /** Null is auto — the model's own depth, which is what an untouched chat has. */
+  value: ThinkingEffortSetting;
+  onChange: (effort: ThinkingEffortSetting) => void;
   disabled?: boolean;
   className?: string;
 }
@@ -61,7 +75,8 @@ export const ThinkingEffortSelector = memo(function ThinkingEffortSelector({
     return model?.provider === "gemini" && supportsThinkingEffort(model.id);
   }, [models, selectedModel]);
 
-  const selected = OPTIONS.find((option) => option.value === value);
+  const current = toThinkingEffortOption(value);
+  const selected = OPTIONS.find((option) => option.value === current);
 
   if (!supported) {
     return null;
@@ -83,13 +98,15 @@ export const ThinkingEffortSelector = memo(function ThinkingEffortSelector({
           className,
         )}
       >
-        {selected?.label ?? value}
+        {selected?.label ?? current}
         <ChevronDownIcon className="size-3 shrink-0 opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuRadioGroup
-          value={value}
-          onValueChange={(next) => onChange(next as ThinkingEffort)}
+          value={current}
+          onValueChange={(next) =>
+            onChange(fromThinkingEffortOption(next as ThinkingEffortOption))
+          }
         >
           {OPTIONS.map((option) => (
             <DropdownMenuRadioItem key={option.value} value={option.value}>

@@ -4,7 +4,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ChatMessageFeedback,
   type ChatSkillMetadata,
-  type ThinkingEffort,
+  type ThinkingEffortSetting,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1086,21 +1086,26 @@ export function ChatPageContent({
   // message invalidates the conversation query, so the row cannot hold an
   // unconfirmed pick — the refetch would hand back the value the persist request
   // has not reached yet and silently undo the click.
-  const [pendingThinkingEffort, setPendingThinkingEffortState] =
-    useState<ThinkingEffort | null>(null);
-  const settlePendingThinkingEffortRef = useRef((effort: ThinkingEffort) => {
-    // Leaves a newer pick alone — it owns the control now.
-    setPendingThinkingEffortState((current) =>
-      current === effort ? null : current,
-    );
-  });
+  // Boxed so that picking auto — which is itself null — is distinguishable from
+  // having nothing pending.
+  const [pendingThinkingEffort, setPendingThinkingEffortState] = useState<{
+    effort: ThinkingEffortSetting;
+  } | null>(null);
+  const settlePendingThinkingEffortRef = useRef(
+    (effort: ThinkingEffortSetting) => {
+      // Leaves a newer pick alone — it owns the control now.
+      setPendingThinkingEffortState((current) =>
+        current?.effort === effort ? null : current,
+      );
+    },
+  );
   const queryClientRef = useRef(queryClient);
   queryClientRef.current = queryClient;
 
   const thinkingEffortQueueRef = useRef(
     createLatestWriteQueue<{
       conversationId: string;
-      effort: ThinkingEffort;
+      effort: ThinkingEffortSetting;
     }>(async ({ conversationId: id, effort }) => {
       const updated = await updateConversationMutateAsyncRef.current({
         id,
@@ -1139,18 +1144,22 @@ export function ChatPageContent({
     };
   }, [conversationId, pendingThinkingEffort, queryClient]);
 
-  const displayedThinkingEffort =
-    pendingThinkingEffort ?? conversation?.thinkingEffort;
+  const displayedThinkingEffort = pendingThinkingEffort
+    ? pendingThinkingEffort.effort
+    : conversation?.thinkingEffort;
 
-  const handleThinkingEffortChange = useCallback((effort: ThinkingEffort) => {
-    const conv = conversationRef.current;
-    if (!conv) return;
-    setPendingThinkingEffortState(effort);
-    thinkingEffortQueueRef.current.set({
-      conversationId: conv.id,
-      effort,
-    });
-  }, []);
+  const handleThinkingEffortChange = useCallback(
+    (effort: ThinkingEffortSetting) => {
+      const conv = conversationRef.current;
+      if (!conv) return;
+      setPendingThinkingEffortState({ effort });
+      thinkingEffortQueueRef.current.set({
+        conversationId: conv.id,
+        effort,
+      });
+    },
+    [],
+  );
 
   // Handle API key change - preselect best model for the new key's provider.
   // Combines chatApiKeyId + model selection in a single mutation to avoid

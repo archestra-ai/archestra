@@ -2,11 +2,10 @@
 
 import {
   type ContextWindowBreakdown,
-  DEFAULT_THINKING_EFFORT,
   E2eTestId,
   providerDisplayNames,
   type SupportedProvider,
-  type ThinkingEffort,
+  type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { memo, useCallback } from "react";
@@ -114,8 +113,8 @@ export interface ChatPromptInputToolsProps {
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
   /** Reasoning depth for Gemini flash models; ignored by every other model. */
-  thinkingEffort?: ThinkingEffort;
-  onThinkingEffortChange?: (effort: ThinkingEffort) => void;
+  thinkingEffort?: ThinkingEffortSetting;
+  onThinkingEffortChange?: (effort: ThinkingEffortSetting) => void;
   /**
    * The selected agent pins a per-user-credential model (e.g. GitHub Copilot)
    * that the viewer hasn't connected. Keep the agent's model and subscription
@@ -177,7 +176,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   modelSource,
   toolsUnavailable = false,
   onResetModelOverride,
-  thinkingEffort = DEFAULT_THINKING_EFFORT,
+  thinkingEffort = null,
   onThinkingEffortChange,
   agentRequiresPerUserConnect = false,
   subscriptionConnectRequired = false,

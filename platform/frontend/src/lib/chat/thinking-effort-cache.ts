@@ -11,7 +11,10 @@
 // one effect. Nothing here decides anything, so the control and the turn cannot
 // drift apart the way two independently-updated copies did.
 
-import type { archestraApiTypes, ThinkingEffort } from "@archestra/shared";
+import type {
+  archestraApiTypes,
+  ThinkingEffortSetting,
+} from "@archestra/shared";
 
 /** The minimum surface of a TanStack query client this module needs. */
 type EffortCache = {
@@ -27,16 +30,29 @@ const conversationKey = (conversationId: string) =>
 const pendingKey = (conversationId: string) =>
   ["conversation", conversationId, "pending-thinking-effort"] as const;
 
+/**
+ * A pick waiting on the server, boxed.
+ *
+ * The box is what separates "the user picked auto" from "nothing is pending",
+ * now that auto is itself `null`. Left unboxed, choosing auto would read as an
+ * empty slot and every turn would keep sending the depth the user just moved
+ * away from.
+ */
+type PendingThinkingEffort = { effort: ThinkingEffortSetting };
+
 /** The depth a turn should carry: the unconfirmed pick, else the stored row. */
 export function readThinkingEffort(
   cache: EffortCache,
   conversationId: string,
-): ThinkingEffort | undefined {
-  return (
-    cache.getQueryData<ThinkingEffort | null>(pendingKey(conversationId)) ??
-    cache.getQueryData<CachedConversation>(conversationKey(conversationId))
-      ?.thinkingEffort
+): ThinkingEffortSetting | undefined {
+  const pending = cache.getQueryData<PendingThinkingEffort | null>(
+    pendingKey(conversationId),
   );
+  if (pending) {
+    return pending.effort;
+  }
+  return cache.getQueryData<CachedConversation>(conversationKey(conversationId))
+    ?.thinkingEffort;
 }
 
 /**
@@ -50,16 +66,16 @@ export function readThinkingEffort(
 export function writePendingThinkingEffort(
   cache: EffortCache,
   conversationId: string,
-  effort: ThinkingEffort | null,
+  pending: PendingThinkingEffort | null,
 ): void {
-  cache.setQueryData(pendingKey(conversationId), effort);
+  cache.setQueryData(pendingKey(conversationId), pending);
 }
 
 /** Record a confirmed write on the conversation the rest of the app reads. */
 export function foldConfirmedThinkingEffort(
   cache: EffortCache,
   conversationId: string,
-  effort: ThinkingEffort,
+  effort: ThinkingEffortSetting,
 ): void {
   const conversation = cache.getQueryData<CachedConversation>(
     conversationKey(conversationId),

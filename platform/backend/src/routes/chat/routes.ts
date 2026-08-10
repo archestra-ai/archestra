@@ -337,7 +337,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // message so the turn cannot run at a depth the user has replaced but
           // whose PATCH has not landed yet; the stored column is the fallback
           // for callers that don't send one.
-          thinkingEffort: ThinkingEffortSchema.optional(),
+          thinkingEffort: ThinkingEffortSchema.nullable().optional(),
         }),
         // Streaming responses don't have a schema
         response: ErrorResponsesSchema,
@@ -1403,8 +1403,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   provider,
                   selectedModel,
                   isGeminiImageModel,
+                  // Not `??`: null is a turn asking for auto, and coalescing
+                  // would send it back to the column instead.
                   thinkingEffort:
-                    requestedThinkingEffort ?? conversation.thinkingEffort,
+                    requestedThinkingEffort !== undefined
+                      ? requestedThinkingEffort
+                      : conversation.thinkingEffort,
                 });
                 if (googleProviderOptions) {
                   streamTextConfig.providerOptions = {

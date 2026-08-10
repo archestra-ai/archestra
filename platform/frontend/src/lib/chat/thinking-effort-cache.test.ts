@@ -29,7 +29,7 @@ describe("thinking effort cache", () => {
 
   it("prefers a pick the server has not confirmed", () => {
     const queryClient = seededClient("low");
-    writePendingThinkingEffort(queryClient, "c1", "high");
+    writePendingThinkingEffort(queryClient, "c1", { effort: "high" });
 
     expect(readThinkingEffort(queryClient, "c1")).toBe("high");
   });
@@ -38,7 +38,7 @@ describe("thinking effort cache", () => {
     // Finishing a message invalidates the conversation query, and the refetch
     // returns the row the persist request has not reached yet.
     const queryClient = seededClient("low");
-    writePendingThinkingEffort(queryClient, "c1", "high");
+    writePendingThinkingEffort(queryClient, "c1", { effort: "high" });
 
     queryClient.setQueryData(["conversation", "c1"], {
       id: "c1",
@@ -52,7 +52,7 @@ describe("thinking effort cache", () => {
     // Clearing with `undefined` is a no-op in TanStack, which left every later
     // turn reading a depth the composer had already abandoned.
     const queryClient = seededClient("low");
-    writePendingThinkingEffort(queryClient, "c1", "high");
+    writePendingThinkingEffort(queryClient, "c1", { effort: "high" });
 
     writePendingThinkingEffort(queryClient, "c1", null);
 
@@ -61,7 +61,7 @@ describe("thinking effort cache", () => {
 
   it("reports a confirmed write as the conversation's own value", () => {
     const queryClient = seededClient("low");
-    writePendingThinkingEffort(queryClient, "c1", "high");
+    writePendingThinkingEffort(queryClient, "c1", { effort: "high" });
 
     foldConfirmedThinkingEffort(queryClient, "c1", "high");
     writePendingThinkingEffort(queryClient, "c1", null);

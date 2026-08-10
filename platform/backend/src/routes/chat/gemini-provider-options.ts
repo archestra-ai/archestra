@@ -15,7 +15,7 @@ import {
   type GeminiThinkingLevel,
   geminiThinkingConfigForEffort,
   supportsGeminiThoughtSummaries,
-  type ThinkingEffort,
+  type ThinkingEffortSetting,
 } from "@archestra/shared";
 
 type GoogleThinkingConfig = {
@@ -36,7 +36,7 @@ export function buildGeminiProviderOptions(params: {
   provider: string;
   selectedModel: string;
   isGeminiImageModel: boolean;
-  thinkingEffort: ThinkingEffort;
+  thinkingEffort: ThinkingEffortSetting;
 }): GoogleProviderOptions | undefined {
   const { provider, selectedModel, isGeminiImageModel, thinkingEffort } =
     params;
@@ -59,12 +59,17 @@ export function buildGeminiProviderOptions(params: {
 
 function buildThinkingConfig(
   selectedModel: string,
-  effort: ThinkingEffort,
+  effort: ThinkingEffortSetting,
 ): GoogleThinkingConfig | undefined {
-  const level = geminiThinkingConfigForEffort(selectedModel, effort);
+  // Auto lands in the same branch as a model with no selectable level: both
+  // mean "send no level and let the model reason as it would have".
+  const level =
+    effort === null
+      ? null
+      : geminiThinkingConfigForEffort(selectedModel, effort);
 
   if (level === null) {
-    // No selectable level, so the model reasons at its own default. Ask for
+    // No level to send, so the model reasons at its own default. Ask for
     // summaries on the models that reason by default; on the rest, thinking is
     // inactive and requesting summaries of it is a 400.
     return supportsGeminiThoughtSummaries(selectedModel)

@@ -119,6 +119,44 @@ describe("buildGeminiProviderOptions", () => {
     });
   });
 
+  describe("auto", () => {
+    test("sends no thinking level, only the summaries the model already got", () => {
+      // Auto has to leave the request exactly as it was before the control
+      // existed: flash reasons at its own default, flash-lite at its lower one,
+      // and neither is nudged either way.
+      expect(
+        buildGeminiProviderOptions({
+          ...base,
+          selectedModel: "gemini-3.6-flash",
+          thinkingEffort: null,
+        }),
+      ).toEqual({ thinkingConfig: { includeThoughts: true } });
+    });
+
+    test("sends nothing at all where summaries would be a 400", () => {
+      expect(
+        buildGeminiProviderOptions({
+          ...base,
+          selectedModel: "gemma-4-31b-it",
+          thinkingEffort: null,
+        }),
+      ).toBeUndefined();
+    });
+
+    test("leaves flash-lite on its own lower default", () => {
+      // The case that motivated auto: flash-lite defaults to `minimal`, so any
+      // level we picked for it — `medium` included — would deepen reasoning on
+      // chats nobody touched, and bill for it.
+      expect(
+        buildGeminiProviderOptions({
+          ...base,
+          selectedModel: "gemini-3.5-flash-lite",
+          thinkingEffort: null,
+        }),
+      ).toBeUndefined();
+    });
+  });
+
   describe("image models", () => {
     test.each([
       "low",

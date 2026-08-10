@@ -59412,6 +59412,7 @@ export type GetLlmModelsResponses = {
             inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
             outputModalities: Array<'text' | 'image' | 'audio'> | null;
             supportsToolCalling: boolean | null;
+            recommendedForAgents: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
             isCustomPrice: boolean;

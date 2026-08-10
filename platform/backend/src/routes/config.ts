@@ -10,6 +10,10 @@ import config from "@/config";
 import { isIncognitoChatEnabled } from "@/content-encryption/incognito";
 import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import {
+  getGoogleDriveOAuthRedirectUri,
+  isGoogleDriveOAuthConfigured,
+} from "@/knowledge-base/connectors/gdrive/gdrive-oauth";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
@@ -102,6 +106,17 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               chatopsTelegramEnabled: z.boolean(),
               /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
               kbAutoSyncPermissionsEnabled: z.boolean(),
+              /**
+               * Individual ("connect my own Drive") auth for the Google Drive
+               * knowledge connector. `redirectUri` is the exact string that
+               * has to be registered on the Google OAuth client, so the setup
+               * UI can state it instead of leaving an admin to work out how
+               * this deployment composes its own URL.
+               */
+              kbGoogleDriveOAuth: z.object({
+                configured: z.boolean(),
+                redirectUri: z.string(),
+              }),
               /** App session recording (record/replay/download app demos). */
               hackathonRecorderEnabled: z.boolean(),
               /**
@@ -180,6 +195,10 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
+          kbGoogleDriveOAuth: {
+            configured: isGoogleDriveOAuthConfigured(),
+            redirectUri: getGoogleDriveOAuthRedirectUri(),
+          },
           hackathonRecorderEnabled: config.hackathonRecorder.enabled,
           hackathonVideoDownloadEnabled:
             config.hackathonRecorder.videoDownloadEnabled,

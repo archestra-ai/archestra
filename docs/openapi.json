@@ -119640,6 +119640,22 @@
                         "kbAutoSyncPermissionsEnabled": {
                           "type": "boolean"
                         },
+                        "kbGoogleDriveOAuth": {
+                          "type": "object",
+                          "properties": {
+                            "configured": {
+                              "type": "boolean"
+                            },
+                            "redirectUri": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "configured",
+                            "redirectUri"
+                          ],
+                          "additionalProperties": false
+                        },
                         "hackathonRecorderEnabled": {
                           "type": "boolean"
                         },
@@ -119696,6 +119712,7 @@
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
+                        "kbGoogleDriveOAuth",
                         "hackathonRecorderEnabled",
                         "hackathonVideoDownloadEnabled",
                         "hackathonMaxFinalCutMs",
@@ -219348,6 +219365,20 @@
                                           "gdrive"
                                         ]
                                       },
+                                      "authMode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "service_account",
+                                          "service_account_delegated",
+                                          "oauth"
+                                        ]
+                                      },
+                                      "delegatedAdminEmail": {
+                                        "type": "string"
+                                      },
+                                      "connectedAccountEmail": {
+                                        "type": "string"
+                                      },
                                       "driveId": {
                                         "type": "string"
                                       },
@@ -219758,6 +219789,7 @@
                               "running",
                               "success",
                               "completed_with_errors",
+                              "no_documents",
                               "failed",
                               "partial",
                               "superseded"
@@ -219780,6 +219812,7 @@
                               "running",
                               "success",
                               "completed_with_errors",
+                              "no_documents",
                               "failed",
                               "partial",
                               "superseded"
@@ -220655,6 +220688,20 @@
                               "gdrive"
                             ]
                           },
+                          "authMode": {
+                            "type": "string",
+                            "enum": [
+                              "service_account",
+                              "service_account_delegated",
+                              "oauth"
+                            ]
+                          },
+                          "delegatedAdminEmail": {
+                            "type": "string"
+                          },
+                          "connectedAccountEmail": {
+                            "type": "string"
+                          },
                           "driveId": {
                             "type": "string"
                           },
@@ -221046,6 +221093,24 @@
                           "githubUrl",
                           "appId",
                           "installationId"
+                        ]
+                      },
+                      "googleOAuth": {
+                        "type": "object",
+                        "properties": {
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "clientSecret": {
+                            "type": "string"
+                          },
+                          "refreshToken": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "clientId",
+                          "clientSecret"
                         ]
                       }
                     },
@@ -221569,6 +221634,20 @@
                                 "gdrive"
                               ]
                             },
+                            "authMode": {
+                              "type": "string",
+                              "enum": [
+                                "service_account",
+                                "service_account_delegated",
+                                "oauth"
+                              ]
+                            },
+                            "delegatedAdminEmail": {
+                              "type": "string"
+                            },
+                            "connectedAccountEmail": {
+                              "type": "string"
+                            },
                             "driveId": {
                               "type": "string"
                             },
@@ -221973,6 +222052,7 @@
                         "running",
                         "success",
                         "completed_with_errors",
+                        "no_documents",
                         "failed",
                         "partial",
                         "superseded"
@@ -221995,6 +222075,7 @@
                         "running",
                         "success",
                         "completed_with_errors",
+                        "no_documents",
                         "failed",
                         "partial",
                         "superseded"
@@ -222815,6 +222896,20 @@
                                 "gdrive"
                               ]
                             },
+                            "authMode": {
+                              "type": "string",
+                              "enum": [
+                                "service_account",
+                                "service_account_delegated",
+                                "oauth"
+                              ]
+                            },
+                            "delegatedAdminEmail": {
+                              "type": "string"
+                            },
+                            "connectedAccountEmail": {
+                              "type": "string"
+                            },
                             "driveId": {
                               "type": "string"
                             },
@@ -223219,6 +223314,7 @@
                         "running",
                         "success",
                         "completed_with_errors",
+                        "no_documents",
                         "failed",
                         "partial",
                         "superseded"
@@ -223241,6 +223337,7 @@
                         "running",
                         "success",
                         "completed_with_errors",
+                        "no_documents",
                         "failed",
                         "partial",
                         "superseded"
@@ -223948,6 +224045,20 @@
                               "gdrive"
                             ]
                           },
+                          "authMode": {
+                            "type": "string",
+                            "enum": [
+                              "service_account",
+                              "service_account_delegated",
+                              "oauth"
+                            ]
+                          },
+                          "delegatedAdminEmail": {
+                            "type": "string"
+                          },
+                          "connectedAccountEmail": {
+                            "type": "string"
+                          },
                           "driveId": {
                             "type": "string"
                           },
@@ -224339,6 +224450,24 @@
                           "githubUrl",
                           "appId",
                           "installationId"
+                        ]
+                      },
+                      "googleOAuth": {
+                        "type": "object",
+                        "properties": {
+                          "clientId": {
+                            "type": "string"
+                          },
+                          "clientSecret": {
+                            "type": "string"
+                          },
+                          "refreshToken": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "clientId",
+                          "clientSecret"
                         ]
                       }
                     }
@@ -224860,6 +224989,20 @@
                                 "gdrive"
                               ]
                             },
+                            "authMode": {
+                              "type": "string",
+                              "enum": [
+                                "service_account",
+                                "service_account_delegated",
+                                "oauth"
+                              ]
+                            },
+                            "delegatedAdminEmail": {
+                              "type": "string"
+                            },
+                            "connectedAccountEmail": {
+                              "type": "string"
+                            },
                             "driveId": {
                               "type": "string"
                             },
@@ -225264,6 +225407,7 @@
                         "running",
                         "success",
                         "completed_with_errors",
+                        "no_documents",
                         "failed",
                         "partial",
                         "superseded"
@@ -225286,6 +225430,7 @@
                         "running",
                         "success",
                         "completed_with_errors",
+                        "no_documents",
                         "failed",
                         "partial",
                         "superseded"
@@ -230081,6 +230226,343 @@
         }
       }
     },
+    "/api/connectors/{id}/gdrive/oauth/start": {
+      "post": {
+        "operationId": "startGoogleDriveConnectorOAuth",
+        "tags": [
+          "Connectors"
+        ],
+        "description": "Begin the Google authorization-code flow for a Google Drive connector in individual mode. Returns the URL to send the browser to; the connector being authorized travels in a signed state parameter, because Google matches the redirect URI exactly.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "returnTo": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorizationUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "authorizationUrl"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSource:update"
+          ]
+        }
+      }
+    },
+    "/api/connectors/gdrive/oauth/callback": {
+      "get": {
+        "operationId": "completeGoogleDriveConnectorOAuth",
+        "tags": [
+          "Connectors"
+        ],
+        "description": "Where Google returns the browser after an individual Google Drive authorization. Requires the session of the person who started the flow: the signed state proves only that this deployment issued a flow, so on its own it would let one person's authorization be redeemed onto another person's connector.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "code",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "state",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "error",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "knowledgeSource:update"
+          ]
+        }
+      }
+    },
     "/api/connectors/{id}/knowledge-bases": {
       "post": {
         "operationId": "assignConnectorToKnowledgeBases",
@@ -231036,6 +231518,7 @@
                 "running",
                 "success",
                 "completed_with_errors",
+                "no_documents",
                 "failed",
                 "partial",
                 "superseded"
@@ -231099,6 +231582,7 @@
                               "running",
                               "success",
                               "completed_with_errors",
+                              "no_documents",
                               "failed",
                               "partial",
                               "superseded"
@@ -231653,6 +232137,7 @@
                         "running",
                         "success",
                         "completed_with_errors",
+                        "no_documents",
                         "failed",
                         "partial",
                         "superseded"

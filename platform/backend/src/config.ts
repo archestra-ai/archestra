@@ -2805,6 +2805,30 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS,
       15 * 60,
     ),
+    /**
+     * Google OAuth client backing the Google Drive connector's individual
+     * ("connect my own Drive") auth mode. Deployment-level rather than
+     * per-connector because the redirect URI has to be registered against one
+     * client in the Google Cloud Console anyway — so every Drive connector on
+     * this deployment authorizes through the same client, and whoever connects
+     * only has to click a button.
+     *
+     * Either one unset ⇒ the mode is unavailable, and the UI names the
+     * variables to set rather than failing at connect time. The
+     * service-account modes do not use this and are unaffected.
+     *
+     * Only the client id is stored per connector (next to the refresh token,
+     * so a client swap is detectable); the secret is read from here on every
+     * refresh, so rotating just the secret needs no reconnect.
+     */
+    googleDriveOAuth: {
+      clientId:
+        process.env.ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID?.trim() ||
+        undefined,
+      clientSecret:
+        process.env.ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET?.trim() ||
+        undefined,
+    },
   },
   secretsManager: {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",

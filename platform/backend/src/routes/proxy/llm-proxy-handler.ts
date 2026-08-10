@@ -89,6 +89,7 @@ import {
   type UnsafeContextBoundary,
 } from "@/types";
 import { isLoopbackAddress } from "@/utils/network";
+import { isUuid } from "@/utils/uuid";
 import {
   assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
@@ -1302,7 +1303,11 @@ export async function handleLLMProxy<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(record, incognito, delegationBillingEnvironmentId);
+      await persistProxyInteraction(
+        record,
+        incognito,
+        delegationBillingEnvironmentId,
+      );
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1416,7 +1421,11 @@ async function handleStreaming<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(record, incognito, delegationBillingEnvironmentId);
+      await persistProxyInteraction(
+        record,
+        incognito,
+        delegationBillingEnvironmentId,
+      );
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -1828,7 +1837,11 @@ async function handleStreaming<
           dualLlmAnalyses,
           unsafeContextBoundary,
         });
-        await persistProxyInteraction(record, incognito, delegationBillingEnvironmentId);
+        await persistProxyInteraction(
+          record,
+          incognito,
+          delegationBillingEnvironmentId,
+        );
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -2148,7 +2161,11 @@ async function handleNonStreaming<
         dualLlmAnalyses,
         unsafeContextBoundary,
       });
-      await persistProxyInteraction(refusalRecord, incognito, delegationBillingEnvironmentId);
+      await persistProxyInteraction(
+        refusalRecord,
+        incognito,
+        delegationBillingEnvironmentId,
+      );
 
       return reply.send(refusalResponse);
     }
@@ -2225,7 +2242,11 @@ async function handleNonStreaming<
       dualLlmAnalyses,
       unsafeContextBoundary,
     });
-    await persistProxyInteraction(record, incognito, delegationBillingEnvironmentId);
+    await persistProxyInteraction(
+      record,
+      incognito,
+      delegationBillingEnvironmentId,
+    );
   } catch (interactionError) {
     logger.error(
       { err: interactionError, profileId: agent.id },
@@ -2409,6 +2430,16 @@ async function resolveDelegationBillingEnvironment(
     logger.warn(
       { agentId: agent.id },
       "Ignoring delegation billing environment header on a non-advisor agent",
+    );
+    return undefined;
+  }
+  // The env-id column is a uuid; a non-uuid value would make the lookup's cast
+  // throw and 500 the LLM call (leaking the query), so reject it here — an
+  // unusable header must be ignored, not fatal.
+  if (!isUuid(value)) {
+    logger.warn(
+      { agentId: agent.id },
+      "Ignoring malformed delegation billing environment header",
     );
     return undefined;
   }

@@ -74,12 +74,6 @@ import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
-/** The columns a boot-time sync reconciles against a shipped built-in definition. */
-type BuiltInAgentSyncRow = Pick<
-  typeof schema.agentsTable.$inferSelect,
-  "id" | "name" | "description" | "systemPrompt" | "builtInAgentConfig"
->;
-
 class AgentModel {
   /**
    * Process-local cache for {@link AgentModel.resolveIdFromIdOrSlug}. The

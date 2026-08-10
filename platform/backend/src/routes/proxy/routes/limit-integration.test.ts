@@ -30,6 +30,7 @@ import AgentModel from "@/models/agent";
 import LimitModel from "@/models/limit";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { Agent, InsertAgent } from "@/types";
 import { openaiAdapterFactory } from "../adapters/openai";
 import * as proxyUtils from "../utils";
 import openAiProxyRoutes from "./openai";
@@ -1164,7 +1165,12 @@ describe("LLM proxy limit enforcement (integration)", () => {
   // The advisor is one org-wide env-less row; consultations carry the
   // delegating caller's environment in a loopback-gated header so environment
   // budgets keep seeing advisor spend.
-  async function makeAdvisorAgent(makeAgent: any, organizationId: string) {
+  async function makeAdvisorAgent(
+    makeAgent: (
+      overrides: Partial<InsertAgent> & { authorId?: string },
+    ) => Promise<Agent>,
+    organizationId: string,
+  ) {
     return makeAgent({
       organizationId,
       name: BUILT_IN_AGENT_NAMES.ADVISOR,
@@ -1311,6 +1317,36 @@ describe("LLM proxy limit enforcement (integration)", () => {
     });
 
     expect(response.statusCode).toBe(200);
+  });
+
+  test("a malformed delegation environment header is ignored, not fatal", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const advisor = await makeAdvisorAgent(makeAgent, org.id);
+
+    await setupRoute();
+
+    // A non-uuid value (e.g. an environment name passed by mistake) must not
+    // reach the uuid-typed lookup and 500 the call.
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(advisor.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        [DELEGATION_BILLING_ENVIRONMENT_HEADER]: "not-a-uuid",
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [interaction] = await db
+      .select({ environmentId: schema.interactionsTable.environmentId })
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, advisor.id));
+    // Falls back to the advisor row's own (null) environment.
+    expect(interaction.environmentId).toBeNull();
   });
 
   test("a successful advisor consultation records the caller's environment on the interaction", async ({

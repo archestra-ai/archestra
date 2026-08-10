@@ -121,9 +121,8 @@ describe("buildGeminiProviderOptions", () => {
 
   describe("auto", () => {
     test("sends no thinking level, only the summaries the model already got", () => {
-      // Auto has to leave the request exactly as it was before the control
-      // existed: flash reasons at its own default, flash-lite at its lower one,
-      // and neither is nudged either way.
+      // Under auto flash reasons at its own default and flash-lite at its lower
+      // one, neither nudged either way.
       expect(
         buildGeminiProviderOptions({
           ...base,

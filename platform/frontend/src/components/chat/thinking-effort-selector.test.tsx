@@ -148,7 +148,6 @@ describe("ThinkingEffortSelector", () => {
   });
 
   it("shows Auto when no depth has been chosen", async () => {
-    // Every untouched chat is here, so this is the label most users see first.
     const user = userEvent.setup();
     setModels([GEMINI_FLASH]);
 

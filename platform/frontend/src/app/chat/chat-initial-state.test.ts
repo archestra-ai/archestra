@@ -349,8 +349,7 @@ describe("buildCreateConversationInput", () => {
 
   test("carries auto through as null rather than dropping it", () => {
     // A new chat left on auto has to reach the row as auto. Dropping the field
-    // would rely on the column's own default agreeing, which is the coupling
-    // that made new chats and existing ones diverge before.
+    // would instead rely on the column's own default agreeing.
     expect(
       buildCreateConversationInput({
         agentId: "agent-1",

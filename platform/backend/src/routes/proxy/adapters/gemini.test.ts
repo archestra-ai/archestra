@@ -1147,6 +1147,10 @@ describe("GeminiRequestAdapter tool result updates", () => {
       .getToolResults()
       .map((toolResult) => toolResult.id);
 
+    // Anchored to the derived value, not just to each other: if the
+    // functionResponse guard stopped matching id-less responses both passes
+    // would return nothing and agree vacuously.
+    expect(fromMessages).toEqual(["gemini-tool-2-0"]);
     expect(fromToolResults).toEqual(fromMessages);
   });
 });

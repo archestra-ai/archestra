@@ -4,10 +4,17 @@
  * The chat model is asked — via the `query_knowledge_sources` tool result — to
  * back each claim with a short verbatim quote tagged with the source chunk's
  * `ref`. This module does the other half: pull those quote/ref pairs out of the
- * model's answer and check each quote actually appears in the cited chunk. A
- * quote that appears in no returned chunk is a fabrication caught
+ * model's answer and check each quote actually appears in the chunk its ref
+ * names. A quote that appears in no returned chunk is a fabrication caught
  * programmatically rather than by a reader, so it doubles as a hallucination
- * check.
+ * check; a quote whose ref names no returned chunk but whose text exists in
+ * another one is a mis-citation, reported separately.
+ *
+ * The chunks are captured at tool-execution time (chat-tool-builder pushes them
+ * into a per-turn collector, covering both direct calls and `run_tool`
+ * dispatches, before hook feedback can touch the serialized result), and the
+ * answer text is the turn's full user-visible assistant text — not just the
+ * final step's.
  *
  * Verification is log-only (issue decision "b"): a miss is logged and metered,
  * the answer is never altered or blocked. It only covers the internal chat
@@ -36,12 +43,23 @@ export interface CitedQuote {
 
 /** @public — return shape of verifyQuotes; asserted directly in unit tests. */
 export interface QuoteVerificationResult {
-  /** Quotes long enough to be worth checking (below the length floor are skipped). */
+  /** Extracted (deduped) quote/ref pairs; each lands in exactly one bucket below. */
   checked: number;
-  /** Of those checked, how many were found in the cited (or any returned) chunk. */
+  /** Quotes found in the chunk their ref names. */
   matched: number;
-  /** Checked quotes found in no returned chunk — the fabrications. */
+  /**
+   * Quotes whose ref names no returned chunk but whose text exists in another
+   * returned chunk — mis-citations: real evidence behind a bad pointer.
+   */
+  wrongRef: CitedQuote[];
+  /** Quotes found nowhere they should be — the fabrications. */
   failed: CitedQuote[];
+  /**
+   * Quotes whose ref names no returned chunk and which are too short to search
+   * for across all chunks (a tiny fragment appears almost anywhere, so finding
+   * it would prove nothing).
+   */
+  unverifiable: CitedQuote[];
   /** Chunks were returned but the answer carried no parseable quote/ref pair. */
   unparseable: boolean;
 }
@@ -84,13 +102,13 @@ export function extractCitedQuotes(answerText: string): CitedQuote[] {
 }
 
 /**
- * Verifies each cited quote against the chunk it names, falling back to every
- * returned chunk when the ref does not resolve (a mangled ref still can't hide a
- * fabrication — the quote must appear in *some* returned chunk). Matching is on
- * normalized text so incidental whitespace, smart-quote, and case differences do
- * not fail a legitimate quote; a minimum length keeps trivially short fragments
- * from matching by accident. Callers should only invoke this when chunks were
- * actually returned.
+ * Verifies each cited quote against the chunk its ref names. An unresolved ref
+ * is never silently forgiven: the quote is classified as a mis-citation when
+ * its text exists in another returned chunk, a fabrication when it exists
+ * nowhere, or unverifiable when it is too short for that cross-chunk search to
+ * mean anything. Matching is on normalized text so incidental whitespace,
+ * smart-quote, and case differences do not fail a legitimate quote. Callers
+ * should only invoke this when chunks were actually returned.
  */
 export function verifyQuotes(params: {
   answerText: string;
@@ -108,45 +126,80 @@ export function verifyQuotes(params: {
 
   const extracted = extractCitedQuotes(answerText);
   if (extracted.length === 0) {
-    return { checked: 0, matched: 0, failed: [], unparseable: true };
+    return {
+      checked: 0,
+      matched: 0,
+      wrongRef: [],
+      failed: [],
+      unverifiable: [],
+      unparseable: true,
+    };
   }
 
-  let checked = 0;
   let matched = 0;
+  const wrongRef: CitedQuote[] = [];
   const failed: CitedQuote[] = [];
+  const unverifiable: CitedQuote[] = [];
 
   for (const cited of extracted) {
     const normalizedQuote = normalizeForMatch(cited.quote);
-    if (normalizedQuote.length < MIN_QUOTE_CHARS) continue;
-    checked++;
 
     const scoped = normalizedByRef.get(cited.ref.toLowerCase());
-    const haystacks = scoped !== undefined ? [scoped] : allNormalized;
-    if (haystacks.some((content) => content.includes(normalizedQuote))) {
-      matched++;
+    if (scoped !== undefined) {
+      // The cited chunk resolved: even a short quote is meaningful evidence
+      // here, because the claim is scoped to this one chunk ("90 days" either
+      // is in the cited chunk or it is not).
+      if (scoped.includes(normalizedQuote)) {
+        matched++;
+      } else {
+        failed.push(cited);
+      }
+      continue;
+    }
+
+    // The ref names no returned chunk, so the citation as written is wrong
+    // either way. A long-enough quote is searched across all returned chunks
+    // to tell a mis-citation from a fabrication; a short one is not — it would
+    // match almost anything — so it stays unverifiable rather than falsely
+    // resolved in either direction.
+    if (normalizedQuote.length < MIN_BROAD_SEARCH_QUOTE_CHARS) {
+      unverifiable.push(cited);
+    } else if (
+      allNormalized.some((content) => content.includes(normalizedQuote))
+    ) {
+      wrongRef.push(cited);
     } else {
       failed.push(cited);
     }
   }
 
-  return { checked, matched, failed, unparseable: false };
+  return {
+    checked: extracted.length,
+    matched,
+    wrongRef,
+    failed,
+    unverifiable,
+    unparseable: false,
+  };
 }
 
 /**
- * Reads the `{ ref, content }` chunks out of one `query_knowledge_sources` tool
- * result as it appears on an AI SDK step (`step.toolResults[].output`). The chat
- * tool layer collapses the MCP result to `{ content: <JSON string>, _meta }`
- * before it reaches the step (see `buildArchestraToolOutput`), so the chunks
- * arrive as JSON in the string `content` — parsed here. The
- * `structuredContent.results` and content-parts shapes are kept as defensive
- * fallbacks for any path that preserves them.
+ * Reads the `{ ref, content }` chunks out of a `query_knowledge_sources`
+ * CallToolResult as the tool produced it — before the chat tool layer collapses
+ * it to a display string (and before hook feedback can be appended to that
+ * string). The tool emits `structuredContent` (see structuredSuccessResult in
+ * knowledge-management.ts) and `run_tool` passes it through, so that is the
+ * primary shape; the first text content part is kept as a defensive fallback.
+ * Typed structurally so this module stays dependency-free.
  *
- * @public — called from the chat route's onFinish; asserted directly in tests.
+ * @public — called from chat-tool-builder's per-turn chunk capture; asserted
+ * directly in tests.
  */
-export function readKbChunksFromToolOutput(
-  output: unknown,
-): KbChunkForQuoteCheck[] {
-  const results = extractKbResultsArray(output);
+export function readKbChunksFromToolResult(result: {
+  structuredContent?: unknown;
+  content?: unknown;
+}): KbChunkForQuoteCheck[] {
+  const results = extractKbResultsArray(result);
   if (!results) return [];
 
   const chunks: KbChunkForQuoteCheck[] = [];
@@ -167,21 +220,25 @@ export function readKbChunksFromToolOutput(
 // --- Internal helpers ---
 
 /**
- * Quotes shorter than this (after normalization) are ignored: a handful of
- * characters appears in almost any chunk, so matching them proves nothing.
+ * A quote below this length (after normalization) whose ref did not resolve is
+ * reported unverifiable instead of being searched across all returned chunks:
+ * a handful of characters appears in almost any chunk, so finding it there
+ * would prove nothing. Quotes whose ref resolves are always checked, whatever
+ * their length — the single cited chunk keeps a short match meaningful.
  */
-const MIN_QUOTE_CHARS = 12;
+const MIN_BROAD_SEARCH_QUOTE_CHARS = 12;
 
 /**
- * `"quote" — ref` where ref is a `documentId#chunkIndex` anchor. Only the
- * double-quote delimiters (straight and curly) bound the quote — the convention
- * mandates them — so apostrophes and single quotes inside it (contractions,
- * possessives) are preserved rather than ending the quote early. The body still
- * excludes newlines and the double-quote delimiters so a stray closing quote
- * ends it; the ref is a uuid-shaped token followed by `#<index>`.
+ * `"quote" — ref` where ref is a `documentId#chunkIndex` anchor. The quote body
+ * may itself contain double quotes (source text routinely does): the lazy body
+ * grows until a closing double quote immediately followed by the dash and a
+ * ref-shaped token, so only the delimiter that actually precedes the citation
+ * anchor terminates it — an embedded quote cannot end the match early and
+ * truncate what gets verified. The body still excludes newlines; the ref is a
+ * uuid-shaped token followed by `#<index>`.
  */
 const CITATION_PATTERN =
-  /["“”]([^"“”\n]{1,400})["“”]\s*[—–-]{1,2}\s*[`[(]?\s*([0-9a-fA-F][0-9a-fA-F-]{7,}#\d+)/g;
+  /["“”]([^\n]{1,400}?)["“”]\s*[—–-]{1,2}\s*[`[(]?\s*([0-9a-fA-F][0-9a-fA-F-]{7,}#\d+)/g;
 
 /**
  * Chunks are stored as `TITLE: <title>\n\n<body>` (see chunker.ts). The title is
@@ -210,15 +267,15 @@ function normalizeForMatch(text: string): string {
 }
 
 /**
- * Pulls the `results` array out of a `query_knowledge_sources` tool output,
- * whatever shape it arrives in. The real chat path is a JSON string in
- * `content`; the other two branches are defensive fallbacks.
+ * Pulls the `results` array out of a `query_knowledge_sources` CallToolResult:
+ * `structuredContent.results` on the real path, or the first text content part
+ * parsed as JSON as a defensive fallback.
  */
-function extractKbResultsArray(output: unknown): unknown[] | null {
-  if (output === null || typeof output !== "object") return null;
-
-  const structured = (output as { structuredContent?: unknown })
-    .structuredContent;
+function extractKbResultsArray(result: {
+  structuredContent?: unknown;
+  content?: unknown;
+}): unknown[] | null {
+  const structured = result.structuredContent;
   if (
     structured !== null &&
     typeof structured === "object" &&
@@ -227,17 +284,8 @@ function extractKbResultsArray(output: unknown): unknown[] | null {
     return (structured as { results: unknown[] }).results;
   }
 
-  const content = (output as { content?: unknown }).content;
-
-  // The real chat shape: buildArchestraToolOutput collapses the result to
-  // `{ content: <JSON string>, _meta }`, so parse it and read `.results`.
-  if (typeof content === "string") {
-    return parseResultsFromJson(content);
-  }
-
-  // Defensive fallback: a raw MCP result whose `content` is an array of parts.
-  if (Array.isArray(content)) {
-    const firstText = content.find(
+  if (Array.isArray(result.content)) {
+    const firstText = result.content.find(
       (part): part is { type: "text"; text: string } =>
         part !== null &&
         typeof part === "object" &&

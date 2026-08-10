@@ -18,7 +18,6 @@ import {
   supportsGeminiThoughtSummaries,
   TimeInMs,
   type TitleRejectionReason,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   type TokenUsage,
   toConversationTitle,
   toPlaceholderTitle,
@@ -94,7 +93,6 @@ import {
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import {
   type KbChunkForQuoteCheck,
-  readKbChunksFromToolOutput,
   verifyQuotes,
 } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
@@ -478,6 +476,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the top, Pre/PostToolUse around their tool calls, Stop at the end) and
       // spliced into the assistant message in onFinish.
       const hookRunCollector: CollectedHookRun[] = [];
+      // Verifiable citations (issue #7161): the chunks query_knowledge_sources
+      // returns this turn, captured at tool-execution time (run_tool dispatches
+      // included) and checked against the answer's cited quotes in the UI
+      // stream's onFinish. Absent when the feature is off — the tool layer then
+      // neither asks the model to quote nor captures anything.
+      const kbChunksCollector: KbChunkForQuoteCheck[] | undefined = config.kb
+        .quoteVerificationEnabled
+        ? []
+        : undefined;
       // Surfaces a delegated child agent's tool calls on this conversation: it
       // streams each one live (once a writer is attached) and collects them for
       // splicing into the assistant message in onFinish. One instance is shared
@@ -880,6 +887,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               openedApp,
               projectFileNames,
               hookRunCollector,
+              kbChunksCollector,
               elicitation: chatMcpElicitation,
               subagentToolStream,
               taskBridge: chatTaskBridge,
@@ -1366,7 +1374,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       }
                     }
                   },
-                  onFinish: async ({ usage, finishReason, steps, text }) => {
+                  onFinish: async ({ usage, finishReason }) => {
                     // abort listeners are removed in the toUIMessageStream
                     // onFinish, which fires only for the final merged result —
                     // not for discarded empty-response retry attempts, whose
@@ -1379,27 +1387,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       },
                       "Chat stream finished",
                     );
-
-                    // Verifiable citations (issue #7161): check the verbatim
-                    // quotes the model tagged with a chunk ref against the
-                    // chunks query_knowledge_sources returned this turn. Log-only
-                    // and best-effort — a failure here must never disturb the
-                    // finished answer.
-                    if (config.kb.quoteVerificationEnabled) {
-                      try {
-                        verifyChatCitedQuotes({
-                          steps,
-                          answerText: text,
-                          conversationId,
-                          agentId,
-                        });
-                      } catch (error) {
-                        logger.warn(
-                          { error, conversationId },
-                          "KB quote verification failed",
-                        );
-                      }
-                    }
                   },
                 };
 
@@ -1794,6 +1781,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         logger.error(
                           { error, conversationId },
                           "Failed to persist messages during onFinish",
+                        );
+                      }
+                    }
+
+                    // Verifiable citations (issue #7161): check the turn's
+                    // cited quotes against the chunks query_knowledge_sources
+                    // returned (captured at execution time, run_tool dispatches
+                    // included). Runs here — on the final merged result — so
+                    // every step's user-visible text is covered; streamText's
+                    // own onFinish sees only the final step's text. Log-only
+                    // and best-effort: a failure must never disturb the
+                    // finished answer.
+                    if (kbChunksCollector) {
+                      try {
+                        verifyChatCitedQuotes({
+                          chunks: kbChunksCollector,
+                          answerText: extractTurnAnswerText(
+                            finalMessages as unknown as ChatMessage[],
+                          ),
+                          conversationId,
+                          agentId,
+                        });
+                      } catch (error) {
+                        logger.warn(
+                          { error, conversationId },
+                          "KB quote verification failed",
                         );
                       }
                     }
@@ -4212,31 +4225,54 @@ function storedMessageIds(row: { id: string; content: unknown }): string[] {
 }
 
 /**
- * Verifiable citations (issue #7161), the internal-chat half. Collects the
- * chunks `query_knowledge_sources` returned across the turn's steps, then checks
- * the verbatim quotes the model tagged with a chunk ref against them. Log-only:
- * a quote found in no returned chunk is a fabrication surfaced to logs and a
- * metric, never blocked or spliced into the answer. Only this surface can do
- * this — external MCP clients answer where Archestra cannot see the text.
+ * The turn's user-visible answer text: every text part of the assistant
+ * message(s) after the last user message in the finalized thread. Built from
+ * the persisted UI messages rather than streamText's `text`, which is only the
+ * final step's text — a cited paragraph the model emitted before a later tool
+ * step would otherwise never be checked.
+ */
+function extractTurnAnswerText(finalMessages: ChatMessage[]): string {
+  const lastUserIndex = finalMessages.findLastIndex(
+    (message) => message?.role === "user",
+  );
+  return finalMessages
+    .slice(lastUserIndex + 1)
+    .filter((message) => message?.role === "assistant")
+    .flatMap((message) =>
+      (message.parts ?? [])
+        .filter(
+          (part): part is { type: "text"; text: string } =>
+            part?.type === "text" && typeof part.text === "string",
+        )
+        .map((part) => part.text),
+    )
+    .join("\n");
+}
+
+/**
+ * Verifiable citations (issue #7161), the internal-chat half. Checks the
+ * verbatim quotes the model tagged with a chunk ref against the chunks
+ * `query_knowledge_sources` returned this turn (captured at tool-execution
+ * time by chat-tool-builder — direct calls and `run_tool` dispatches alike).
+ * Log-only: a quote found in no returned chunk is a fabrication surfaced to
+ * logs and a metric, a quote behind an unresolvable ref is a mis-citation,
+ * and neither is ever blocked or spliced into the answer. Only this surface
+ * can do this — external MCP clients answer where Archestra cannot see the
+ * text.
  */
 function verifyChatCitedQuotes(params: {
-  steps: Array<{ toolResults?: Array<{ toolName: string; output: unknown }> }>;
+  chunks: KbChunkForQuoteCheck[];
   answerText: string;
   conversationId: string;
   agentId: string;
 }): void {
-  const { steps, answerText, conversationId, agentId } = params;
+  const { chunks, answerText, conversationId, agentId } = params;
 
+  // The model may query more than once per turn; overlapping results collapse
+  // to one chunk per ref.
   const chunksByRef = new Map<string, KbChunkForQuoteCheck>();
-  for (const step of steps) {
-    for (const toolResult of step.toolResults ?? []) {
-      if (toolResult.toolName !== TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME) {
-        continue;
-      }
-      for (const chunk of readKbChunksFromToolOutput(toolResult.output)) {
-        chunksByRef.set(chunk.ref, chunk);
-      }
-    }
+  for (const chunk of chunks) {
+    chunksByRef.set(chunk.ref, chunk);
   }
 
   // No knowledge was pulled this turn, so there is nothing to verify.
@@ -4249,11 +4285,13 @@ function verifyChatCitedQuotes(params: {
 
   reportQuoteVerification({
     matched: result.matched,
+    wrongRef: result.wrongRef.length,
     failed: result.failed.length,
+    unverifiable: result.unverifiable.length,
     unparseable: result.unparseable ? 1 : 0,
   });
 
-  if (result.failed.length > 0) {
+  if (result.failed.length > 0 || result.wrongRef.length > 0) {
     logger.warn(
       {
         conversationId,
@@ -4261,8 +4299,10 @@ function verifyChatCitedQuotes(params: {
         checked: result.checked,
         failedCount: result.failed.length,
         failedRefs: result.failed.map((quote) => quote.ref),
+        wrongRefCount: result.wrongRef.length,
+        wrongRefs: result.wrongRef.map((quote) => quote.ref),
       },
-      "KB quote verification: cited quote(s) not found in the cited chunk",
+      "KB quote verification: cited quote(s) not backed by the cited chunk",
     );
   }
 }

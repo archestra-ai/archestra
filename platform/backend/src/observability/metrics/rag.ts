@@ -115,7 +115,7 @@ export function initializeRagMetrics(): void {
 
   ragQuoteVerificationTotal = new client.Counter({
     name: "rag_quote_verification_total",
-    help: "Chat-answer quotes checked against their cited knowledge chunk (issue #7161). result=matched|failed|unparseable; `unparseable` (once per turn) means chunks were returned but the answer carried no parseable quote, i.e. thin citation coverage",
+    help: "Chat-answer quotes checked against their cited knowledge chunk (issue #7161). result=matched|wrong_ref|failed|unverifiable|unparseable; `failed` = the quote appears where it should not (fabrication), `wrong_ref` = the cited ref names no returned chunk but the quote exists in another one (mis-citation), `unverifiable` = unresolvable ref and the quote is too short to search for broadly, `unparseable` (once per turn) = chunks were returned but the answer carried no parseable quote, i.e. thin citation coverage",
     labelNames: ["result"],
   });
 
@@ -380,28 +380,32 @@ export function reportKnowledgeQueryUnresolvedIdentity(): void {
 
 /**
  * Reports the outcome of verifying a chat answer's cited quotes against the
- * knowledge chunks that were returned (issue #7161). `matched`/`failed` count
- * individual quotes; `unparseable` is 0 or 1 for the whole turn (chunks returned
- * but no quote parsed) — a rising `unparseable` rate means models are largely
- * ignoring the quote convention, so real coverage is thin.
+ * knowledge chunks that were returned (issue #7161). `matched`, `wrongRef`
+ * (mis-citations: real quote, unresolvable ref), `failed` (fabrications), and
+ * `unverifiable` (unresolvable ref and too short to search for) count
+ * individual quotes; `unparseable` is 0 or 1 for the whole turn (chunks
+ * returned but no quote parsed) — a rising `unparseable` rate means models are
+ * largely ignoring the quote convention, so real coverage is thin.
  */
 export function reportQuoteVerification(params: {
   matched: number;
+  wrongRef: number;
   failed: number;
+  unverifiable: number;
   unparseable: number;
 }): void {
   if (!ragQuoteVerificationTotal) return;
-  if (params.matched > 0) {
-    ragQuoteVerificationTotal.inc({ result: "matched" }, params.matched);
-  }
-  if (params.failed > 0) {
-    ragQuoteVerificationTotal.inc({ result: "failed" }, params.failed);
-  }
-  if (params.unparseable > 0) {
-    ragQuoteVerificationTotal.inc(
-      { result: "unparseable" },
-      params.unparseable,
-    );
+  const outcomes: Array<[result: string, count: number]> = [
+    ["matched", params.matched],
+    ["wrong_ref", params.wrongRef],
+    ["failed", params.failed],
+    ["unverifiable", params.unverifiable],
+    ["unparseable", params.unparseable],
+  ];
+  for (const [result, count] of outcomes) {
+    if (count > 0) {
+      ragQuoteVerificationTotal.inc({ result }, count);
+    }
   }
 }
 

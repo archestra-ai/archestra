@@ -1603,7 +1603,7 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - Verifiable citations. In the built-in chat, the model is asked to back each claim with a short verbatim quote tagged with its source chunk's ref; this checks each quote against the chunks `query_knowledge_sources` returned that turn and logs plus meters (`rag_quote_verification_total`) any quote that appears in no returned chunk — a fabrication caught programmatically.
+- **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - Verifiable citations. In the built-in chat, the model is asked to back each claim with a short verbatim quote tagged with its source chunk's ref; this checks each quote against the chunk its ref names and logs plus meters (`rag_quote_verification_total`) every miss — a quote found in no returned chunk is a likely fabrication, a quote whose ref names no returned chunk but whose text exists in another one is a mis-citation.
   - Default: `true`
   - Log-only: it never blocks or alters an answer, and only covers the internal chat (external MCP clients answer where Archestra cannot see the text). Set to `false` to disable the feature: the model is no longer asked to quote, and no check runs.
 

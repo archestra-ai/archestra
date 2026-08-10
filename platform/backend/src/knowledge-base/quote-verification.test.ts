@@ -42,6 +42,17 @@ describe("extractCitedQuotes", () => {
     ]);
   });
 
+  it("keeps apostrophes and single quotes inside a double-quoted quote", () => {
+    // Contractions and possessives must not truncate the quote — only the
+    // double-quote delimiters bound it.
+    const quotes = extractCitedQuotes(
+      answerWith("the customer's data isn't deleted", REF_A),
+    );
+    expect(quotes).toEqual<CitedQuote[]>([
+      { quote: "the customer's data isn't deleted", ref: REF_A },
+    ]);
+  });
+
   it("collapses duplicate quote/ref pairs", () => {
     const answer = `${answerWith("retention period is 90 days", REF_A)}\n${answerWith(
       "retention period is 90 days",
@@ -175,6 +186,42 @@ describe("verifyQuotes", () => {
     const result = verifyQuotes({
       answerText: answerWith("Unrelated content about billing cycles", REF_A),
       chunks,
+    });
+    expect(result.matched).toBe(0);
+    expect(result.failed).toHaveLength(1);
+  });
+
+  const apostropheChunks = [
+    {
+      ref: REF_A,
+      content:
+        "TITLE: Data Policy\n\nThe retention window is 90 days for every customer's stored records.",
+    },
+  ];
+
+  it("matches a verbatim quote that contains an apostrophe", () => {
+    const result = verifyQuotes({
+      answerText: answerWith(
+        "the retention window is 90 days for every customer's stored records",
+        REF_A,
+      ),
+      chunks: apostropheChunks,
+    });
+    expect(result.matched).toBe(1);
+    expect(result.failed).toEqual([]);
+  });
+
+  it("catches a fabrication that precedes an apostrophe in the quote", () => {
+    // The wrong number sits before the possessive apostrophe. The full quote
+    // must be checked, not just the substring after the apostrophe — that tail
+    // ("s stored records") is a genuine substring of the chunk and would let
+    // the fabrication pass.
+    const result = verifyQuotes({
+      answerText: answerWith(
+        "the retention window is 30 days for every customer's stored records",
+        REF_A,
+      ),
+      chunks: apostropheChunks,
     });
     expect(result.matched).toBe(0);
     expect(result.failed).toHaveLength(1);

@@ -173,12 +173,15 @@ export function readKbChunksFromToolOutput(
 const MIN_QUOTE_CHARS = 12;
 
 /**
- * `"quote" — ref` where ref is a `documentId#chunkIndex` anchor. The quote body
- * excludes quote characters and newlines so a stray closing quote ends it; the
- * ref is a uuid-shaped token followed by `#<index>`.
+ * `"quote" — ref` where ref is a `documentId#chunkIndex` anchor. Only the
+ * double-quote delimiters (straight and curly) bound the quote — the convention
+ * mandates them — so apostrophes and single quotes inside it (contractions,
+ * possessives) are preserved rather than ending the quote early. The body still
+ * excludes newlines and the double-quote delimiters so a stray closing quote
+ * ends it; the ref is a uuid-shaped token followed by `#<index>`.
  */
 const CITATION_PATTERN =
-  /["‘’“”']([^"‘’“”'\n]{1,400})["‘’“”']\s*[—–-]{1,2}\s*[`[(]?\s*([0-9a-fA-F][0-9a-fA-F-]{7,}#\d+)/g;
+  /["“”]([^"“”\n]{1,400})["“”]\s*[—–-]{1,2}\s*[`[(]?\s*([0-9a-fA-F][0-9a-fA-F-]{7,}#\d+)/g;
 
 /**
  * Chunks are stored as `TITLE: <title>\n\n<body>` (see chunker.ts). The title is

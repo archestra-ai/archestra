@@ -1504,11 +1504,17 @@ class InteractionModel {
       // would be handed to the server-key decryptor.
       incognito_conversation_id: string | null;
     }>(sql`
+      -- id DESC tiebreak: turns within one session commonly land on the same
+      -- millisecond, and created_at alone leaves their order undefined — which
+      -- let an earlier turn be picked as the session's latest, showing a stale
+      -- preview. Ids are monotonic UUIDv7, so they settle the tie by true
+      -- insertion order (the same tiebreak the write path already uses to
+      -- resolve a delta parent).
       WITH ranked AS (
         SELECT
           id, session_id, thread_id, request, response, type, created_at,
           incognito_conversation_id,
-          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC) as rn
+          ROW_NUMBER() OVER (PARTITION BY COALESCE(session_id, id::text) ORDER BY created_at DESC, id DESC) as rn
         FROM interactions
         WHERE ${whereClause}
       )
@@ -1516,7 +1522,7 @@ class InteractionModel {
              incognito_conversation_id
       FROM ranked
       WHERE rn <= ${INTERACTIONS_PER_SESSION}
-      ORDER BY session_id, created_at DESC
+      ORDER BY session_id, created_at DESC, id DESC
     `);
 
     // SPDX-SnippetBegin

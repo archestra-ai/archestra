@@ -8,6 +8,8 @@ import {
   CODEX_CLIENT_FILTER,
   CODEX_CLIENT_ID,
 } from "@archestra/shared";
+import { inArray } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertInteraction } from "@/types";
 import { SelectInteractionSchema } from "@/types";
@@ -1373,10 +1375,10 @@ describe("InteractionModel", () => {
             },
             response: {
               id: `r-${i}-${turn}`,
-              type: "message",
-              role: "assistant",
+              object: "chat.completion",
+              created: Date.now(),
               model: "claude-3-5-sonnet",
-              content: [],
+              choices: [],
             },
           });
           if (turn === 2) tipIds.push(created.id);
@@ -1386,15 +1388,26 @@ describe("InteractionModel", () => {
       // Guard the premise: each session's tip must actually be delta-stored,
       // otherwise the previews below would be correct without reconstruction
       // and this test would pass while the batch path stayed unexercised.
-      for (const tipId of tipIds) {
-        const tip = await InteractionModel.findById(tipId);
-        expect(tip?.threadId).not.toBeNull();
+      const storedTips = await db
+        .select({
+          id: schema.interactionsTable.id,
+          threadId: schema.interactionsTable.threadId,
+        })
+        .from(schema.interactionsTable)
+        .where(inArray(schema.interactionsTable.id, tipIds));
+      expect(storedTips).toHaveLength(sessionCount);
+      for (const tip of storedTips) {
+        expect(tip.threadId).not.toBeNull();
       }
 
+      // Scoped to this test's agent: an agent admin's session list is not
+      // otherwise narrowed, so an unfiltered call would also see rows written
+      // by whichever tests ran before this one.
       const sessions = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
         true,
+        { profileId: agent.id },
       );
 
       expect(sessions.data).toHaveLength(sessionCount);
@@ -1422,7 +1435,10 @@ describe("InteractionModel", () => {
         await InteractionModel.create({
           profileId: agent.id,
           sessionId,
-          request: { model: "gpt-4", messages: [{ role: "user", content: "x" }] },
+          request: {
+            model: "gpt-4",
+            messages: [{ role: "user", content: "x" }],
+          },
           response: {
             id: sessionId,
             object: "chat.completion",
@@ -1434,10 +1450,12 @@ describe("InteractionModel", () => {
         });
       }
 
+      // Scoped to this test's agent so the totals are this test's rows only.
       const all = await InteractionModel.getSessions(
         { limit: 100, offset: 0 },
         admin.id,
         true,
+        { profileId: agent.id },
       );
       expect(all.pagination.total).toBe(3);
 
@@ -1445,15 +1463,17 @@ describe("InteractionModel", () => {
         { limit: 100, offset: 0 },
         admin.id,
         true,
-        { sessionId: "total-a" },
+        { profileId: agent.id, sessionId: "total-a" },
       );
       expect(filtered.pagination.total).toBe(1);
 
-      // Back to the unfiltered sweep: still its own total.
+      // Back to the broader sweep, on a later page: still its own total, not
+      // the narrower one just computed.
       const allAgain = await InteractionModel.getSessions(
         { limit: 100, offset: 1 },
         admin.id,
         true,
+        { profileId: agent.id },
       );
       expect(allAgain.pagination.total).toBe(3);
     });

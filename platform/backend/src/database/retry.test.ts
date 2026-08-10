@@ -232,6 +232,58 @@ describe("getTransientDbErrorCode", () => {
     const aggregate = new AggregateError([new Error("duplicate key")], "");
     expect(getTransientDbErrorCode(aggregate)).toBeNull();
   });
+
+  // Egress to the database rejected or black-holed at the syscall while a
+  // managed cluster reprograms network policy: PostgreSQL is never reached, so
+  // the failure carries an errno and no SQLSTATE.
+  test("detects connection syscall failures that never reach PostgreSQL", () => {
+    expect(
+      getTransientDbErrorCode(
+        new Error("connect EPERM 172.20.81.106:5432 - Local (0.0.0.0:0)"),
+      ),
+    ).toBe("EPERM");
+    expect(
+      getTransientDbErrorCode(new Error("connect EHOSTUNREACH 10.0.0.1:5432")),
+    ).toBe("EHOSTUNREACH");
+    expect(
+      getTransientDbErrorCode(new Error("connect EADDRNOTAVAIL 10.0.0.1:5432")),
+    ).toBe("EADDRNOTAVAIL");
+  });
+
+  test("detects a connection syscall failure reported only on `code`", () => {
+    const error = Object.assign(new AggregateError([], ""), { code: "EPERM" });
+    expect(getTransientDbErrorCode(error)).toBe("EPERM");
+    expect(isTransientDbError(error)).toBe(true);
+  });
+
+  test("unwraps a connection syscall failure the ORM wrapped", () => {
+    const drizzleError = new Error(
+      'Failed query: select "id" from "agents" where "slug" = $1',
+      { cause: new Error("connect EPERM 172.20.81.106:5432") },
+    );
+    expect(getTransientDbErrorCode(drizzleError)).toBe("EPERM");
+    expect(isTransientDbError(drizzleError)).toBe(true);
+  });
+
+  // The ORM interpolates the failing statement's parameters into its message,
+  // so a bare substring match would let user-supplied data mark a permanent
+  // failure (here, a constraint violation) as retryable.
+  test("does not treat an errno inside query parameters as a connection failure", () => {
+    expect(
+      getTransientDbErrorCode(
+        new Error(
+          'Failed query: insert into "agents" ("name") values ($1)\nparams: EPERM_REVIEW_BOT',
+        ),
+      ),
+    ).toBeNull();
+    expect(
+      getTransientDbErrorCode(
+        new Error(
+          'duplicate key value violates unique constraint\nparams: role=EACCES',
+        ),
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("isDbStatementTimeoutError", () => {

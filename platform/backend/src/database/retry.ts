@@ -77,17 +77,54 @@ const TRANSIENT_ERROR_PATTERNS: ReadonlyArray<{
 ];
 
 /**
+ * Errnos for the connection to the database failing at the syscall, before
+ * PostgreSQL is ever reached (so there is no SQLSTATE to key off).
+ *
+ * In a managed cluster the CNI, a network policy, or a security group can
+ * reject or black-hole egress while nodes, ENIs, or policy rules are being
+ * reprogrammed, and a busy node can momentarily run out of ephemeral source
+ * ports. Each window is short and the next attempt succeeds, which makes these
+ * transient in exactly the way a refused connection is.
+ *
+ * Kept separate from {@link TRANSIENT_ERROR_PATTERNS} because these tokens are
+ * short enough to appear inside unrelated text: the ORM embeds the failing
+ * statement's parameters in the message, so a bare `message.includes("EPERM")`
+ * would let user-supplied data mark a permanent failure as retryable. They are
+ * matched on `error.code`, or on the `<syscall> <ERRNO> <address>` shape Node
+ * uses to render them (see {@link SYSCALL_ERRNO_PATTERN}).
+ */
+const CONNECT_SYSCALL_ERRNOS = [
+  "EPERM",
+  "EACCES",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENETDOWN",
+  "EADDRNOTAVAIL",
+  "EADDRINUSE",
+] as const;
+
+/**
+ * Node renders a failed connection syscall as `connect EPERM 10.0.0.1:5432`.
+ * Anchoring on that shape keeps the errno from matching parameter values the
+ * ORM interpolated into the same message.
+ */
+const SYSCALL_ERRNO_PATTERN = new RegExp(
+  `\\b(?:connect|getaddrinfo|read|write)\\s+(${CONNECT_SYSCALL_ERRNOS.join("|")})\\b`,
+);
+
+/**
  * Transient network syscall codes, matched against `error.code` directly.
  * Message matching alone misses Node's multi-address connection failure: when
  * a database host resolves to several addresses (e.g. IPv6 + IPv4) and all
  * fail, net.connect throws an AggregateError whose message is EMPTY — the
  * syscall code lives on `error.code` and the per-address errors in `errors`.
  */
-const TRANSIENT_NETWORK_CODES = new Set(
-  TRANSIENT_ERROR_PATTERNS.filter(({ pattern, code }) => pattern === code).map(
+const TRANSIENT_NETWORK_CODES = new Set<string>([
+  ...TRANSIENT_ERROR_PATTERNS.filter(({ pattern, code }) => pattern === code).map(
     ({ code }) => code,
   ),
-);
+  ...CONNECT_SYSCALL_ERRNOS,
+]);
 
 /** Maximum depth for cause-chain traversal to guard against circular references */
 const MAX_CAUSE_DEPTH = 5;
@@ -172,6 +209,12 @@ export function getTransientDbErrorCode(
     message.includes(pattern),
   );
   if (matched) return matched.code;
+
+  // Connection syscall failures that reached us wrapped (the ORM restates the
+  // cause in its own message), matched on the syscall shape rather than a bare
+  // token so interpolated query parameters cannot trigger them.
+  const syscallErrno = SYSCALL_ERRNO_PATTERN.exec(message)?.[1];
+  if (syscallErrno) return syscallErrno;
 
   // A multi-address connection failure is an AggregateError holding one error
   // per attempted address in `errors` (not `cause`) — check each of them.

@@ -4,6 +4,7 @@ import {
   CLAUDE_CLIENT_FILTER,
   CLAUDE_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_METADATA_SESSION_SOURCE,
   CODEX_CLIENT_FILTER,
   CODEX_CLIENT_ID,
 } from "@archestra/shared";
@@ -1330,6 +1331,131 @@ describe("InteractionModel", () => {
       const session = sessions.data[0];
       expect(session.lastUserMessagePreview).toBe(longMessage.slice(0, 200));
       expect(session).not.toHaveProperty("lastInteractionRequest");
+    });
+  });
+
+  describe("getSessions delta-encoded previews across many sessions", () => {
+    // The chosen tip of every session on a page is reconstructed in one batch.
+    // Each session must still get its own reconstructed request back: a batch
+    // that mixed rows up would show one session's message under another.
+    test("reconstructs each session's own last message", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Delta Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      const sessionCount = 5;
+      const tipIds: string[] = [];
+      for (let i = 0; i < sessionCount; i++) {
+        // Two turns per session, both delta-eligible: the second stores only
+        // the delta, so its preview is only correct after reconstruction.
+        for (const turn of [1, 2]) {
+          const created = await InteractionModel.create({
+            profileId: agent.id,
+            sessionId: `delta-session-${i}`,
+            sessionSource: CLAUDE_METADATA_SESSION_SOURCE,
+            type: "anthropic:messages",
+            request: {
+              model: "claude-3-5-sonnet",
+              messages: [
+                { role: "user", content: `session ${i} turn 1` },
+                ...(turn === 2
+                  ? [
+                      { role: "assistant", content: "ack" },
+                      { role: "user", content: `session ${i} turn 2` },
+                    ]
+                  : []),
+              ],
+            },
+            response: {
+              id: `r-${i}-${turn}`,
+              type: "message",
+              role: "assistant",
+              model: "claude-3-5-sonnet",
+              content: [],
+            },
+          });
+          if (turn === 2) tipIds.push(created.id);
+        }
+      }
+
+      // Guard the premise: each session's tip must actually be delta-stored,
+      // otherwise the previews below would be correct without reconstruction
+      // and this test would pass while the batch path stayed unexercised.
+      for (const tipId of tipIds) {
+        const tip = await InteractionModel.findById(tipId);
+        expect(tip?.threadId).not.toBeNull();
+      }
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+      );
+
+      expect(sessions.data).toHaveLength(sessionCount);
+      for (const session of sessions.data) {
+        const index = session.sessionId?.replace("delta-session-", "");
+        expect(session.lastUserMessagePreview).toBe(`session ${index} turn 2`);
+      }
+    });
+  });
+
+  describe("getSessions total", () => {
+    // The total is reused across the pages of one sweep, so it must be keyed by
+    // the filter set — otherwise a filtered page reports the unfiltered count.
+    test("reports a total per filter set, not the first one computed", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Total Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      for (const sessionId of ["total-a", "total-b", "total-c"]) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId,
+          request: { model: "gpt-4", messages: [{ role: "user", content: "x" }] },
+          response: {
+            id: sessionId,
+            object: "chat.completion",
+            created: Date.now(),
+            model: "gpt-4",
+            choices: [],
+          },
+          type: "openai:chatCompletions",
+        });
+      }
+
+      const all = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+      );
+      expect(all.pagination.total).toBe(3);
+
+      const filtered = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "total-a" },
+      );
+      expect(filtered.pagination.total).toBe(1);
+
+      // Back to the unfiltered sweep: still its own total.
+      const allAgain = await InteractionModel.getSessions(
+        { limit: 100, offset: 1 },
+        admin.id,
+        true,
+      );
+      expect(allAgain.pagination.total).toBe(3);
     });
   });
 

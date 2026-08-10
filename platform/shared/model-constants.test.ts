@@ -66,9 +66,9 @@ describe("anthropicEffortForThinkingEffort", () => {
     "low",
     "medium",
     "high",
-  ] as const)("%s maps to itself, because auto carries 'unchanged' instead", (effort) => {
+  ] as const)("%s maps to itself, because the null default carries 'unchanged' instead", (effort) => {
     // Anthropic's own default is `high`, but a conversation nobody has
-    // touched is on auto and never reaches here — so the levels can mean what
+    // touched has no depth and never reaches here — so the levels mean what
     // they say rather than being shifted to keep one standing in for it.
     expect(anthropicEffortForThinkingEffort("claude-opus-5", effort)).toBe(
       effort,

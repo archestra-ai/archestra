@@ -31,7 +31,7 @@ describe("buildAnthropicProviderOptions", () => {
     ).toEqual({ effort: thinkingEffort });
   });
 
-  test("auto sends no effort, leaving Anthropic's own default in place", () => {
+  test("no chosen depth sends no effort, leaving Anthropic's own in place", () => {
     // Anthropic defaults to `high`, so any level here — `medium` included —
     // would change what an untouched Claude chat does, and what it costs.
     expect(

@@ -62,8 +62,8 @@ export type ConversationContentKey = {
 };
 
 /**
- * How hard the model should reason before answering. Null is "auto" — no depth
- * chosen, so the request carries no reasoning field.
+ * How hard the model should reason before answering. Null is the model's own
+ * default — no depth chosen, so the request carries no reasoning field.
  */
 export const ThinkingEffortSchema = z.enum(THINKING_EFFORTS);
 const ThinkingEffortSettingSchema = ThinkingEffortSchema.nullable();
@@ -80,8 +80,8 @@ const selectExtendedFields = {
 const insertUpdateExtendedFields = {
   selectedProvider: SupportedProvidersSchema.optional(),
   origin: ConversationOriginSchema.optional(),
-  // Nullable as well as optional: null is the caller choosing auto, which is a
-  // different instruction from omitting the field.
+  // Nullable as well as optional: null is the caller choosing the model's own
+  // default, which is a different instruction from omitting the field.
   thinkingEffort: ThinkingEffortSettingSchema.optional(),
 };
 

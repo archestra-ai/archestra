@@ -61,8 +61,8 @@ function buildThinkingConfig(
   selectedModel: string,
   effort: ThinkingEffortSetting,
 ): GoogleThinkingConfig | undefined {
-  // Auto lands in the same branch as a model with no selectable level: both
-  // mean "send no level and let the model reason as it would have".
+  // The model's own default lands in the same branch as a model with no
+  // selectable level: both mean "send no level and let it reason as it would".
   const level =
     effort === null
       ? null

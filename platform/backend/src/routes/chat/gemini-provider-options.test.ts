@@ -119,9 +119,9 @@ describe("buildGeminiProviderOptions", () => {
     });
   });
 
-  describe("auto", () => {
+  describe("no chosen depth", () => {
     test("sends no thinking level, only the summaries the model already got", () => {
-      // Under auto flash reasons at its own default and flash-lite at its lower
+      // With no level sent, flash reasons at its own default and flash-lite at
       // one, neither nudged either way.
       expect(
         buildGeminiProviderOptions({
@@ -143,7 +143,7 @@ describe("buildGeminiProviderOptions", () => {
     });
 
     test("leaves flash-lite on its own lower default", () => {
-      // The case that motivated auto: flash-lite defaults to `minimal`, so any
+      // The case that motivated the null default: flash-lite is `minimal`, so
       // level we picked for it — `medium` included — would deepen reasoning on
       // chats nobody touched, and bill for it.
       expect(

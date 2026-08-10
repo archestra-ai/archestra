@@ -23,8 +23,8 @@ import { cn } from "@/lib/utils";
 const OPTIONS: { value: ThinkingEffortOption; label: string; hint: string }[] =
   [
     {
-      value: "auto",
-      label: "Auto",
+      value: "default",
+      label: "Default",
       hint: "Let the model reason as it normally would",
     },
     {
@@ -46,7 +46,7 @@ interface ThinkingEffortSelectorProps {
   /** The conversation's model as a `models` row id, not a provider model name. */
   selectedModel: string;
   apiKeyId?: string | null;
-  /** Null is auto — the model's own depth, which is what an untouched chat has. */
+  /** Null is the model's own depth, which is what an untouched chat has. */
   value: ThinkingEffortSetting;
   onChange: (effort: ThinkingEffortSetting) => void;
   disabled?: boolean;

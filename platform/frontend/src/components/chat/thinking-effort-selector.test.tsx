@@ -100,7 +100,7 @@ describe("ThinkingEffortSelector", () => {
     expect(trigger()).toHaveFocus();
 
     await user.keyboard("{Enter}");
-    // The menu opens on its first item, Auto.
+    // The menu opens on its first item, Default.
     await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
     await user.keyboard("{Enter}");
 
@@ -147,23 +147,23 @@ describe("ThinkingEffortSelector", () => {
     expect(screen.getAllByRole("menuitemradio")).toHaveLength(4);
   });
 
-  it("shows Auto when no depth has been chosen", async () => {
+  it("shows Default when no depth has been chosen", async () => {
     const user = userEvent.setup();
     setModels([GEMINI_FLASH]);
 
     renderSelector({ value: null });
-    expect(trigger()).toHaveTextContent("Auto");
+    expect(trigger()).toHaveTextContent("Default");
 
     await user.click(trigger());
 
-    expect(option("Auto")).toBeChecked();
-    expect(option("Auto")).toHaveTextContent(
+    expect(option("Default")).toBeChecked();
+    expect(option("Default")).toHaveTextContent(
       "Let the model reason as it normally would",
     );
   });
 
-  it("reports auto as null, not as a level", async () => {
-    // Auto has to reach the row as null; any string would be stored as a depth
+  it("reports the default as null, not as a level", async () => {
+    // The default has to reach the row as null; any string would be stored
     // and start overriding what the model does on its own.
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -171,7 +171,7 @@ describe("ThinkingEffortSelector", () => {
 
     renderSelector({ value: "high", onChange });
     await user.click(trigger());
-    await user.click(option("Auto"));
+    await user.click(option("Default"));
 
     expect(onChange).toHaveBeenCalledWith(null);
   });
@@ -200,7 +200,7 @@ describe("ThinkingEffortSelector", () => {
   it.each([
     ["an OpenAI reasoning model", "openai", "gpt-5.2"],
     ["an Anthropic model that already reasons", "anthropic", "claude-opus-5"],
-  ] as const)("offers auto and all three depths on %s", async (_label, provider, id) => {
+  ] as const)("offers the default and all three depths on %s", async (_label, provider, id) => {
     const user = userEvent.setup();
     setModels([{ ...GEMINI_FLASH, provider, id }]);
 
@@ -208,7 +208,7 @@ describe("ThinkingEffortSelector", () => {
     await user.click(trigger());
 
     expect(screen.getAllByRole("menuitemradio")).toHaveLength(4);
-    expect(option("Auto")).toBeInTheDocument();
+    expect(option("Default")).toBeInTheDocument();
   });
 
   it.each([

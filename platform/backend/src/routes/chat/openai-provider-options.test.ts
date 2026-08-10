@@ -35,7 +35,7 @@ describe("buildOpenAiThinkingProviderOptions", () => {
     ).toEqual({ reasoningEffort: thinkingEffort });
   });
 
-  test("auto sends no effort, leaving the model's own default in place", () => {
+  test("no chosen depth sends no effort, leaving the model's own in place", () => {
     // gpt-5.1 through 5.4 default to `none`, so a level here would switch
     // reasoning on for chats nobody touched, and bill it.
     expect(

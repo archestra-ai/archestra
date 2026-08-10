@@ -32,7 +32,7 @@ export function buildAnthropicProviderOptions(params: {
 }): AnthropicProviderOptions | undefined {
   const { provider, selectedModel, thinkingEffort } = params;
 
-  // Auto sends no field at all, so the model reasons as it would have.
+  // No chosen depth sends no field at all, so the model reasons as it would.
   if (provider !== "anthropic" || thinkingEffort === null) {
     return undefined;
   }

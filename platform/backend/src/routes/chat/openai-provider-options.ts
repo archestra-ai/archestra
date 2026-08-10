@@ -31,7 +31,7 @@ export function buildOpenAiThinkingProviderOptions(params: {
 }): OpenAiThinkingProviderOptions | undefined {
   const { provider, selectedModel, thinkingEffort } = params;
 
-  // Auto sends no field at all, so the model reasons as it would have.
+  // No chosen depth sends no field at all, so the model reasons as it would.
   if (provider !== "openai" || thinkingEffort === null) {
     return undefined;
   }

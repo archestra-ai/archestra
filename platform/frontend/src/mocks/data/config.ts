@@ -60,6 +60,7 @@ export function makeConfig(
         redirectUri:
           "http://localhost:3000/api/connectors/gdrive/oauth/callback",
       },
+      mcpGatewaySkillsEnabled: false,
       hackathonRecorderEnabled: true,
       // Off by default, exactly as a real deployment has it.
       hackathonVideoDownloadEnabled: false,

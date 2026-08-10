@@ -8,10 +8,12 @@ export { default as A2ATaskApprovalRequestModel } from "./a2a/task-approval-requ
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
+export { default as AgentExcludedSkillModel } from "./agent-excluded-skill";
 export { default as AgentExcludedSubagentModel } from "./agent-excluded-subagent";
 export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
+export { default as AgentSkillModel } from "./agent-skill";
 export { default as AgentTeamModel } from "./agent-team";
 export { default as AgentToolModel } from "./agent-tool";
 export { default as AgentVersionModel } from "./agent-version";

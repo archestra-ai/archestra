@@ -1,9 +1,15 @@
 import {
+  MAX_SKILL_COMPATIBILITY_LENGTH,
+  MAX_SKILL_DESCRIPTION_LENGTH,
+} from "@archestra/shared";
+import {
   and,
   asc,
   count,
   desc,
   eq,
+  getTableColumns,
+  gt,
   ilike,
   inArray,
   isNotNull,
@@ -21,10 +27,17 @@ import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
+import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
+import {
+  buildSkillPublicationArtifacts,
+  computeFileDigest,
+} from "@/skills/skill-manifest-serializer";
 import type {
   InsertSkill,
   InsertSkillFile,
+  PublishableSkill,
   Skill,
+  SkillManifestSource,
   SortDirection,
   UpdateSkill,
 } from "@/types";
@@ -37,7 +50,187 @@ import type {
 } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { trackBackgroundWork } from "@/utils/background-work";
+import { chunkForBulkStatement } from "@/utils/db";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
+
+/**
+ * Every `skills` column except `content` — the projection the MCP publication
+ * queries select.
+ *
+ * Shared with `AgentSkillModel.findSkillsByAgent`, which resolves the same
+ * surface for Custom mode, so the two modes can never disagree about which
+ * columns a published skill carries.
+ */
+export function publishableSkillColumns() {
+  const { content: _body, ...columns } = getTableColumns(schema.skillsTable);
+  return columns;
+}
+
+/**
+ * Match the one skill a `skill://` URI names.
+ *
+ * A name is unique only within its visibility, which is why the URI carries a
+ * scope segment: `authorId` null means the URI named a shared skill (team or
+ * org), and a set `authorId` means it named that user's personal one. Passing
+ * the parsed URI's `authorId` straight through therefore reproduces the scope
+ * discriminator without the caller restating it.
+ *
+ * Selects at most one live row: `skills_org_shared_name_idx` and
+ * `skills_org_personal_name_idx` make a name unique within exactly the
+ * visibility this predicate pins, so there is never a second candidate. The
+ * publication gates (`publishableSkillPredicate`) are composed alongside this
+ * predicate by each query, not folded in here.
+ *
+ * Shared by both publication modes so a URI resolves to the same row whether
+ * the gateway is in Auto or Custom mode.
+ */
+export function skillUriKeyPredicate(params: {
+  name: string;
+  authorId: string | null;
+}): SQL | undefined {
+  return params.authorId === null
+    ? and(
+        eq(schema.skillsTable.name, params.name),
+        ne(schema.skillsTable.scope, "personal"),
+      )
+    : and(
+        eq(schema.skillsTable.name, params.name),
+        eq(schema.skillsTable.scope, "personal"),
+        eq(schema.skillsTable.authorId, params.authorId),
+      );
+}
+
+/**
+ * Every publication gate that is a property of the skill row itself, as one
+ * SQL predicate: not templated (per-user Handlebars rendering has no stable
+ * bytes to digest), not agent-delegated (delegation has no MCP counterpart),
+ * spec-compliant frontmatter (SEP-2640 hosts refuse entries whose URI segment
+ * breaks the Agent Skills naming rules or whose fields exceed its length
+ * limits), a personal skill still holding its author (the author id is a URI
+ * segment, so without one no `skill://` URI can name the skill), no
+ * unpublishable file path, and publication artifacts present for the row and
+ * every file it publishes.
+ *
+ * SQL rather than TypeScript so the paging `LIMIT` bounds the work: a gate
+ * settled after the window is cut forces the caller to re-read until the page
+ * fills, which on a catalog dense in unpublishable skills degrades to a full
+ * scan per page. The TS twins in `services/agent-skill-resolution.ts` remain
+ * only as assertions; `skill.test.ts` pins the name and path gates against
+ * their TypeScript counterparts so the two cannot drift.
+ */
+export function publishableSkillPredicate(): SQL | undefined {
+  return and(
+    eq(schema.skillsTable.templated, false),
+    isNull(schema.skillsTable.agentName),
+    // Twin of `isSpecCompliantSkillName` (shared/agent-skills.ts): 1-64 chars,
+    // lowercase ASCII runs with single hyphens between them.
+    //
+    // `COLLATE "C"` because `[a-z]` is a collation-dependent range in Postgres:
+    // under the glibc UTF-8 locales most deployments run, accented letters sort
+    // inside it, so `café` would pass here and be rejected by the TypeScript
+    // twin — which withholds the row, logs an invariant violation, and shortens
+    // the page. C collation is plain byte ordering, which is what the twin does.
+    sql`char_length(${schema.skillsTable.name}) <= 64
+      AND ${schema.skillsTable.name} COLLATE "C" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`,
+    // Twins of `isSpecCompliantSkillDescription` / `isSpecCompliantSkillCompatibility`
+    // (shared/agent-skills.ts). `char_length` counts code points, which is what
+    // the TypeScript twins count. An empty compatibility gates like NULL — the
+    // serializer omits it — so only its upper bound appears here.
+    sql`char_length(${schema.skillsTable.description}) BETWEEN 1 AND ${MAX_SKILL_DESCRIPTION_LENGTH}`,
+    sql`char_length(coalesce(${schema.skillsTable.compatibility}, '')) <= ${MAX_SKILL_COMPATIBILITY_LENGTH}`,
+    // A personal skill whose author row was deleted (`author_id` is ON DELETE
+    // SET NULL) has no author URI segment, so nothing can name it: withheld
+    // here rather than left to throw inside URI building at serve time.
+    sql`NOT (${schema.skillsTable.scope} = 'personal' AND ${schema.skillsTable.authorId} IS NULL)`,
+    publishableFilePathsPredicate(),
+    nonCollidingFilePathsPredicate(),
+    // Twin of `storedArtifacts` (services/skill-publication.ts): both halves
+    // are written together, so either being null means the row predates
+    // migration 0407 or an invalidating write reset it.
+    isNotNull(schema.skillsTable.frontmatterBlob),
+    isNotNull(schema.skillsTable.digest),
+    digestedFilesPredicate(),
+  );
+}
+
+/**
+ * Excludes skills holding a resource-file path no `skill://` URI can name.
+ *
+ * The SQL twin of `isPublishableSkillFilePath`. The verdict turns on
+ * `skill_files.path`, a different table from the one paging keys off, so
+ * settling it in application code means reading every candidate's files before
+ * a window can be cut. In SQL it is a semi-join the paging `LIMIT` sits behind.
+ *
+ * Mirrors `hasRoundTrippableSegments`: at least one segment, no empty segment
+ * (a leading, trailing or doubled `/`), and no `.` or `..` segment.
+ */
+function publishableFilePathsPredicate(): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1
+    FROM ${schema.skillFilesTable}
+    WHERE ${schema.skillFilesTable.skillId} = ${schema.skillsTable.id}
+      AND (
+        ${schema.skillFilesTable.path} !~ '^[^/]+(/[^/]+)*$'
+        OR ${schema.skillFilesTable.path} ~ '(^|/)[.]{1,2}(/|$)'
+      )
+  )`;
+}
+
+/**
+ * Excludes skills where one stored path is a parent directory of another.
+ *
+ * The SQL twin of `hasPublishableFilePathSet`. `left(...)` rather than `LIKE`
+ * because a path is user-supplied text: `_` and `%` in it are LIKE wildcards,
+ * which would withhold skills whose paths merely resemble one another.
+ */
+function nonCollidingFilePathsPredicate(): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1
+    FROM ${schema.skillFilesTable} AS parent_file
+    JOIN ${schema.skillFilesTable} AS child_file
+      ON child_file.skill_id = parent_file.skill_id
+    WHERE parent_file.skill_id = ${schema.skillsTable.id}
+      AND left(child_file.path, char_length(parent_file.path) + 1)
+          = parent_file.path || '/'
+  )`;
+}
+
+/**
+ * Excludes skills holding a resource file that carries no digest.
+ *
+ * The SQL twin of the file loop in `resolveSkillPublicationArtifacts`, which
+ * withholds the whole skill rather than the file: a resource list missing one
+ * of a skill's readable files is, to a conforming host, a verification
+ * failure. A stored top-level `SKILL.md` is exempt in both places — the served
+ * manifest is composed from the skill row, so whatever a legacy row holds
+ * under that path is shadowed and never published.
+ *
+ * Settled in SQL for the same reason as the path gate: the verdict lives in
+ * `skill_files`, so in application code it would be a read of every
+ * candidate's files before a window could be cut — and a page cut before the
+ * verdict can come back empty with a cursor, which plenty of clients read as
+ * "this gateway publishes nothing".
+ */
+function digestedFilesPredicate(): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1
+    FROM ${schema.skillFilesTable}
+    WHERE ${schema.skillFilesTable.skillId} = ${schema.skillsTable.id}
+      AND ${schema.skillFilesTable.digest} IS NULL
+      AND ${schema.skillFilesTable.path} <> ${SKILL_MANIFEST_FILENAME}
+  )`;
+}
+
+/**
+ * The keyset page window: rows strictly after `afterId` in id order.
+ *
+ * Keyset rather than OFFSET because the exposed set changes under a client that
+ * pages it — an offset would silently skip a skill whenever one ahead of the
+ * window is deleted, where resuming after an id cannot.
+ */
+export function afterIdPredicate(afterId: string | undefined): SQL | undefined {
+  return afterId ? gt(schema.skillsTable.id, afterId) : undefined;
+}
 
 class SkillModel {
   static async findByOrganization(params: {
@@ -172,6 +365,253 @@ class SkillModel {
   }
 
   /**
+   * Environment assignments for a batch of skills, keyed by skill id. Every
+   * requested id is present — an unassigned skill maps to an empty array — so
+   * the result feeds `skillVisibleInEnvironment` without a missing-key case.
+   */
+  static async findEnvironmentIdsBySkillIds(
+    ids: string[],
+  ): Promise<Map<string, string[]>> {
+    const result = new Map<string, string[]>(ids.map((id) => [id, []]));
+    if (ids.length === 0) return result;
+
+    const rows = await db
+      .select({
+        skillId: schema.skillEnvironmentsTable.skillId,
+        environmentId: schema.skillEnvironmentsTable.environmentId,
+      })
+      .from(schema.skillEnvironmentsTable)
+      .where(inArray(schema.skillEnvironmentsTable.skillId, ids));
+
+    for (const row of rows) {
+      result.get(row.skillId)?.push(row.environmentId);
+    }
+    return result;
+  }
+
+  /**
+   * One keyset page of the org-scoped skills visible in an environment, in id
+   * order, already stripped of this agent's exclusions and of anything whose
+   * file paths cannot be published.
+   *
+   * Backs Auto mode for the gateway's `skill://` surface, which is deliberately
+   * org-scope only: team and personal skills reach a gateway only by explicit
+   * assignment.
+   *
+   * Bounded on purpose. This read used to return the whole org and let the
+   * route settle publishability afterwards, which made a single `skills/list`
+   * page cost a full catalog scan plus a full `skill_files` scan — and cost it
+   * again on the next page. Every filter that can be a predicate is one, so
+   * `limit` bounds the work rather than merely trimming its result.
+   *
+   * Projects `content` away: a body is needed only for the single skill a
+   * manifest read renders (see {@link SkillModel.findManifestSourceById}).
+   */
+  static async findOrgScopedInEnvironment(params: {
+    organizationId: string;
+    environmentId: string | null;
+    /** Drop the skills this agent has excluded from its Auto-mode surface. */
+    excludedForAgentId: string;
+    /** Resume after this id; omit to start at the first page. */
+    afterId?: string;
+    limit: number;
+  }): Promise<PublishableSkill[]> {
+    return await db
+      .select(publishableSkillColumns())
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, params.organizationId),
+          eq(schema.skillsTable.scope, "org"),
+          skillInEnvironmentPredicate(params.environmentId),
+          notDeleted(schema.skillsTable),
+          notExcludedByAgentPredicate(params.excludedForAgentId),
+          publishableSkillPredicate(),
+          afterIdPredicate(params.afterId),
+        ),
+      )
+      .orderBy(asc(schema.skillsTable.id))
+      .limit(params.limit);
+  }
+
+  /**
+   * The single org-scoped skill a `skill://` URI names, or null.
+   *
+   * The by-key twin of {@link SkillModel.findOrgScopedInEnvironment}: serving
+   * one skill's manifest or one of its files does not need the org's catalog,
+   * only the row the URI addresses. Same predicates, so a skill reachable
+   * through the listing is reachable through its own URI and no other.
+   */
+  static async findOrgScopedByUriKey(params: {
+    organizationId: string;
+    environmentId: string | null;
+    name: string;
+    authorId: string | null;
+  }): Promise<PublishableSkill | null> {
+    const [skill] = await db
+      .select(publishableSkillColumns())
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, params.organizationId),
+          eq(schema.skillsTable.scope, "org"),
+          skillUriKeyPredicate(params),
+          skillInEnvironmentPredicate(params.environmentId),
+          notDeleted(schema.skillsTable),
+          publishableSkillPredicate(),
+        ),
+      )
+      .limit(1);
+
+    return skill ?? null;
+  }
+
+  /**
+   * Everything one skill's `SKILL.md` is composed from, in a single row read.
+   *
+   * Single-row on purpose, and the only read a manifest may be served from. The
+   * published blob and the body it wraps are written together and kept together
+   * by migration 0407's invalidation trigger, but that is a guarantee about the
+   * row, not about a reader: composing the blob from a snapshot taken when the
+   * skill was resolved and the body from a second read moments later produces
+   * bytes that were never committed — matching neither the digest advertised
+   * before the intervening write nor the one advertised after. One read cannot
+   * straddle a write, so it cannot tear.
+   *
+   * Null when the row was deleted since it was resolved — soft deletion
+   * included, since that is the only kind this surface sees. Without the
+   * filter, a read already in flight when someone deletes a skill would serve
+   * its manifest one last time.
+   */
+  static async findManifestSourceById(
+    id: string,
+  ): Promise<SkillManifestSource | null> {
+    const [row] = await db
+      .select({
+        name: schema.skillsTable.name,
+        description: schema.skillsTable.description,
+        license: schema.skillsTable.license,
+        compatibility: schema.skillsTable.compatibility,
+        allowedTools: schema.skillsTable.allowedTools,
+        metadata: schema.skillsTable.metadata,
+        content: schema.skillsTable.content,
+        frontmatterBlob: schema.skillsTable.frontmatterBlob,
+        digest: schema.skillsTable.digest,
+      })
+      .from(schema.skillsTable)
+      .where(and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)))
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  /**
+   * One keyset page of skills whose publication artifacts are missing — rows
+   * written before migration 0407, or reset by a write outside the model
+   * layer. Read only by the periodic backfill
+   * (services/skill-publication-backfill.ts); every model write path stores
+   * the artifacts together with the bytes they cover, and the gateway
+   * withholds a row in this state rather than serving it undigested.
+   *
+   * Soft-deleted rows are included on purpose: digesting them is idempotent
+   * and makes a later restore servable immediately.
+   */
+  static async findRowSizesMissingPublicationArtifacts(params: {
+    /** Resume after this id; omit to start at the first page. */
+    afterId?: string;
+    limit: number;
+  }): Promise<Array<{ id: string; chars: number }>> {
+    return await db
+      .select({
+        id: schema.skillsTable.id,
+        chars: sql<number>`char_length(${schema.skillsTable.content})`,
+      })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          or(
+            isNull(schema.skillsTable.frontmatterBlob),
+            isNull(schema.skillsTable.digest),
+          ),
+          afterIdPredicate(params.afterId),
+        ),
+      )
+      .orderBy(asc(schema.skillsTable.id))
+      .limit(params.limit);
+  }
+
+  /**
+   * The manifest fields of specific still-undigested skills — the second half
+   * of the backfill's read, sized by
+   * {@link SkillModel.findRowSizesMissingPublicationArtifacts}.
+   *
+   * The artifact-missing filter is re-applied because a model-layer write may
+   * have digested a row since its size was read; such a row needs nothing and
+   * is simply absent from the result.
+   */
+  static async findManifestSourcesMissingArtifacts(
+    ids: string[],
+  ): Promise<
+    Array<
+      Pick<
+        Skill,
+        | "id"
+        | "name"
+        | "description"
+        | "license"
+        | "compatibility"
+        | "allowedTools"
+        | "metadata"
+        | "content"
+      >
+    >
+  > {
+    if (ids.length === 0) return [];
+
+    return await db
+      .select({
+        id: schema.skillsTable.id,
+        name: schema.skillsTable.name,
+        description: schema.skillsTable.description,
+        license: schema.skillsTable.license,
+        compatibility: schema.skillsTable.compatibility,
+        allowedTools: schema.skillsTable.allowedTools,
+        metadata: schema.skillsTable.metadata,
+        content: schema.skillsTable.content,
+      })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          inArray(schema.skillsTable.id, ids),
+          or(
+            isNull(schema.skillsTable.frontmatterBlob),
+            isNull(schema.skillsTable.digest),
+          ),
+        ),
+      );
+  }
+
+  /**
+   * How many skills still lack publication artifacts.
+   *
+   * Read by the backfill to report what remains after a failed pass: the
+   * listing query filters these rows out, so without this number a withheld
+   * catalog looks exactly like an empty one.
+   */
+  static async countRowsMissingPublicationArtifacts(): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(schema.skillsTable)
+      .where(
+        or(
+          isNull(schema.skillsTable.frontmatterBlob),
+          isNull(schema.skillsTable.digest),
+        ),
+      );
+    return row?.value ?? 0;
+  }
+
+  /**
    * Locate a shipped built-in skill by its stable `source_ref` within an org.
    *
    * Deliberately includes soft-deleted rows: the startup seeder uses this to
@@ -290,16 +730,31 @@ class SkillModel {
     const run = async (tx: Transaction) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
-        .values({ ...params.skill, latestVersion: 1 })
+        .values({
+          ...params.skill,
+          latestVersion: 1,
+          // Publication artifacts are derived from the columns written in this
+          // same statement, so a skill is publishable from the moment it exists.
+          ...buildSkillPublicationArtifacts(params.skill),
+        })
         .onConflictDoNothing()
         .returning();
 
       if (!skill) return null;
 
       if (params.files.length > 0) {
-        await tx
-          .insert(schema.skillFilesTable)
-          .values(params.files.map((file) => ({ ...file, skillId: skill.id })));
+        // Digest written with the bytes it covers; the application is the
+        // single digest producer (see `computeFileDigest`).
+        await tx.insert(schema.skillFilesTable).values(
+          params.files.map((file) => ({
+            ...file,
+            skillId: skill.id,
+            digest: computeFileDigest({
+              content: file.content,
+              encoding: file.encoding ?? "utf8",
+            }),
+          })),
+        );
       }
 
       if (params.teamIds && params.teamIds.length > 0) {
@@ -415,11 +870,17 @@ class SkillModel {
           .where(eq(schema.skillFilesTable.skillId, params.id));
 
         if (params.files.length > 0) {
-          await tx
-            .insert(schema.skillFilesTable)
-            .values(
-              params.files.map((file) => ({ ...file, skillId: params.id })),
-            );
+          // Digest written with the bytes, as on insert above.
+          await tx.insert(schema.skillFilesTable).values(
+            params.files.map((file) => ({
+              ...file,
+              skillId: params.id,
+              digest: computeFileDigest({
+                content: file.content,
+                encoding: file.encoding ?? "utf8",
+              }),
+            })),
+          );
         }
       }
 
@@ -454,7 +915,7 @@ class SkillModel {
 
       // fork an immutable version iff the canonical payload changed. The hash is
       // computed over the resulting file set (read back here so an omitted
-      // `files` reuses the untouched rows), so a metadata-only edit is a no-op.
+      // `files` reuses the untouched rows).
       const currentFiles = await tx
         .select()
         .from(schema.skillFilesTable)
@@ -470,6 +931,17 @@ class SkillModel {
         skill.latestVersion,
         tx,
       );
+
+      // Refresh what the gateway publishes from the row this update produced.
+      // Frontmatter lives on the skill, not on the version, so this covers a
+      // frontmatter-only edit that forks nothing — and fills in a legacy row
+      // whose artifacts were never computed. Folded into the version bump when
+      // there is one, so the common path still writes the row once.
+      const artifacts = buildSkillPublicationArtifacts(skill);
+      const artifactsChanged =
+        skill.frontmatterBlob !== artifacts.frontmatterBlob ||
+        skill.digest !== artifacts.digest;
+
       if (!latest || latest.contentHash !== contentHash) {
         const nextVersion = skill.latestVersion + 1;
         await SkillVersionModel.insertVersion(tx, {
@@ -482,14 +954,54 @@ class SkillModel {
         });
         const [bumped] = await tx
           .update(schema.skillsTable)
-          .set({ latestVersion: nextVersion })
+          .set({ latestVersion: nextVersion, ...artifacts })
           .where(eq(schema.skillsTable.id, params.id))
           .returning();
         return bumped ?? skill;
       }
 
+      if (artifactsChanged) {
+        const [refreshed] = await tx
+          .update(schema.skillsTable)
+          .set(artifacts)
+          .where(eq(schema.skillsTable.id, params.id))
+          .returning();
+        return refreshed ?? skill;
+      }
+
       return skill;
     });
+  }
+
+  /**
+   * Persist publication artifacts computed by the startup backfill for rows
+   * that predate migration 0407 (its twin reader is
+   * {@link SkillModel.findRowSizesMissingPublicationArtifacts}).
+   *
+   * The `IS NULL` guard keeps the write from clobbering an edit that landed
+   * between the backfill's read and its write, and `updatedAt` is untouched
+   * because filling a derived column is not an edit (raw SQL never fires the
+   * `$onUpdate` stamp the query builder would).
+   */
+  static async fillPublicationArtifacts(
+    rows: Array<{ id: string; frontmatterBlob: string; digest: string }>,
+  ): Promise<void> {
+    for (const chunk of chunkForBulkStatement(rows)) {
+      const values = sql.join(
+        chunk.map(
+          (row) =>
+            sql`(${row.id}::uuid, ${row.frontmatterBlob}::text, ${row.digest}::text)`,
+        ),
+        sql`, `,
+      );
+      await db.execute(sql`
+        UPDATE skills AS s
+        SET frontmatter_blob = v.frontmatter_blob, digest = v.digest
+        FROM (VALUES ${values}) AS v(id, frontmatter_blob, digest)
+        WHERE s.id = v.id
+          AND (s.digest IS NULL OR s.frontmatter_blob IS NULL)
+      `);
+    }
   }
 
   /**
@@ -653,6 +1165,29 @@ class SkillModel {
       eq(schema.skillsTable.id, id),
     );
     return count > 0;
+  }
+
+  /**
+   * Soft-delete every personal skill a user authored, ahead of deleting the
+   * user. `skills.author_id` is `ON DELETE SET NULL`, so without this the
+   * skills would survive as active orphans — personal rows whose author id,
+   * being a `skill://` URI segment, no longer exists for any URI to carry.
+   * Soft rather than hard so no cascade FK can make it fail: a user who asked
+   * to be removed must still be removed, and an admin can purge the rows
+   * later.
+   */
+  static async deletePersonalSkillsForUser(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    return await softDelete(
+      tx ?? db,
+      schema.skillsTable,
+      and(
+        eq(schema.skillsTable.scope, "personal"),
+        eq(schema.skillsTable.authorId, userId),
+      ),
+    );
   }
 
   /**
@@ -856,6 +1391,23 @@ class SkillModel {
       environmentIds: environmentIds.map((r) => r.environmentId).sort(),
     };
   }
+}
+
+/**
+ * Excludes the skills an agent has taken off its Auto-mode surface.
+ *
+ * A semi-join rather than the id list the by-key path probes with, for the same
+ * reason the file-path gate is one: it has to compose with the paging `LIMIT`,
+ * and an exclusion set an admin can grow without bound must not be materialized
+ * to cut a fifty-row window.
+ */
+function notExcludedByAgentPredicate(agentId: string): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1
+    FROM ${schema.agentExcludedSkillsTable}
+    WHERE ${schema.agentExcludedSkillsTable.skillId} = ${schema.skillsTable.id}
+      AND ${schema.agentExcludedSkillsTable.agentId} = ${agentId}
+  )`;
 }
 
 /** Normalize a resource file set into the shape a version snapshot stores. */

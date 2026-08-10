@@ -5,7 +5,9 @@ import { z } from "zod";
 
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
+import logger from "@/logging";
 import { AgentModel, McpToolCallModel } from "@/models";
+import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import { UuidOrSlugSchema } from "@/types";
 import { getPublicRequestOrigin } from "../request-origin";
 import {
@@ -28,7 +30,9 @@ import {
   STATELESS_MCP_PROTOCOL_REVISION,
   SUPPORTED_MCP_PROTOCOL_REVISIONS,
   validateRoutingHeaders,
+  withCompleteResultEnvelope,
 } from "./protocol";
+import { handleSkillMethod, isSkillMethod } from "./skills";
 import {
   isSubscriptionsListenRequest,
   parseSubscriptionFilter,
@@ -522,6 +526,56 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return {
           jsonrpc: "2.0",
           ...outcome,
+          id: (request.body as { id?: string | number })?.id ?? null,
+        };
+      }
+
+      // Skills extension methods (SEP-2640). Handled at the route because the
+      // SDK has no handler slot for extension methods. Gated on the same
+      // predicate as the capability declaration, so when the surface is off
+      // these fall through to the SDK and get method-not-found — a client that
+      // was shown no capability is never given a half-open surface.
+      // `resources/read` of a `skill://` URI is deliberately *not* here: it is
+      // an ordinary SDK request, and its skill branch lives in utils.ts.
+      // Requests only: `isSkillMethod` refuses a body without an id, so a
+      // notification spelling of these methods falls through to the SDK
+      // transport, which answers 202 with no body — a notification must never
+      // get a JSON-RPC response.
+      if (skillsSurfaceEnabled() && isSkillMethod(request.body)) {
+        reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
+        // Nothing downstream of here turns a throw into a JSON-RPC error: this
+        // surface is dispatched ahead of the SDK, so an unexpected failure
+        // would reach Fastify's error handler and answer HTTP 500 with a body
+        // that is not JSON-RPC at all — a client mid-listing cannot even read
+        // which request failed. The message is logged, never returned:
+        // internal failure text is not the caller's to read.
+        let outcome: Awaited<ReturnType<typeof handleSkillMethod>>;
+        try {
+          outcome = await handleSkillMethod({
+            body: request.body,
+            agentId: profileId,
+          });
+        } catch (error) {
+          logger.error(
+            {
+              agentId: profileId,
+              method: (request.body as { method?: string })?.method,
+              err: error,
+            },
+            "Skills gateway method failed",
+          );
+          outcome = { error: { code: -32603, message: "Internal error" } };
+        }
+        return {
+          jsonrpc: "2.0",
+          ...("result" in outcome
+            ? {
+                result: withCompleteResultEnvelope(outcome.result, {
+                  name: `archestra-agent-${profileId}`,
+                  version: config.api.version,
+                }),
+              }
+            : outcome),
           id: (request.body as { id?: string | number })?.id ?? null,
         };
       }

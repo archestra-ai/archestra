@@ -54,17 +54,35 @@ export function parseManifestFields(raw: string): {
   hasName: boolean;
   hasDescription: boolean;
   templated: boolean;
+  /** The frontmatter `name` value, unquoted — null when absent. */
+  name: string | null;
 } {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   const frontmatter = match?.[1] ?? "";
+  const nameMatch = frontmatter.match(/^name:\s*(\S.*?)\s*$/m);
   return {
     hasName: /^name:\s*\S/m.test(frontmatter),
     hasDescription: /^description:\s*\S/m.test(frontmatter),
     // the backend parser also accepts a quoted "true"; keep the hint in sync
     templated: /^templated:\s*['"]?true['"]?\s*$/m.test(frontmatter),
+    name: nameMatch ? unquoteScalar(nameMatch[1]) : null,
   };
 }
 
 function yamlScalar(value: string): string {
   return JSON.stringify(value);
+}
+
+function unquoteScalar(value: string): string {
+  if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) {
+    return value.slice(1, -1);
+  }
+  return value;
 }

@@ -67,7 +67,7 @@ export function GoogleDriveAuthFields({
               onValueChange={field.onChange}
             >
               <FormControl>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Set by the credential (choose to change)" />
                 </SelectTrigger>
               </FormControl>

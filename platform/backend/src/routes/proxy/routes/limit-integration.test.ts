@@ -6,6 +6,11 @@
  * Only the upstream LLM client is mocked via createHarness.
  */
 
+import {
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
+  DELEGATION_BILLING_ENVIRONMENT_HEADER,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -1154,5 +1159,192 @@ describe("LLM proxy limit enforcement (integration)", () => {
         },
       },
     });
+  });
+
+  // The advisor is one org-wide env-less row; consultations carry the
+  // delegating caller's environment in a loopback-gated header so environment
+  // budgets keep seeing advisor spend.
+  async function makeAdvisorAgent(makeAgent: any, organizationId: string) {
+    return makeAgent({
+      organizationId,
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+  }
+
+  async function makeExceededEnvironmentLimit(environmentId: string) {
+    await LimitModel.create({
+      entityType: "environment",
+      entityId: environmentId,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["gpt-4o"],
+      lastCleanup: new Date(),
+    });
+    await LimitModel.updateTokenLimitUsage(
+      "environment",
+      environmentId,
+      "gpt-4o",
+      1000000,
+      1000000,
+    );
+  }
+
+  test("advisor consultation with the delegation header is blocked by the caller environment's limit", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const environment = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    const advisor = await makeAdvisorAgent(makeAgent, org.id);
+    await makeExceededEnvironmentLimit(environment.id);
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(advisor.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        [DELEGATION_BILLING_ENVIRONMENT_HEADER]: environment.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(402);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "environment",
+          limit_type: "token_cost",
+        },
+      },
+    });
+  });
+
+  test("the delegation header is ignored on a non-advisor agent", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const environment = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Ordinary Agent",
+    });
+    await makeExceededEnvironmentLimit(environment.id);
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        [DELEGATION_BILLING_ENVIRONMENT_HEADER]: environment.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("the delegation header is ignored for another organization's environment", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+    const foreignEnvironment = await EnvironmentModel.create({
+      organizationId: orgB.id,
+      name: "production",
+    });
+    const advisor = await makeAdvisorAgent(makeAgent, orgA.id);
+    await makeExceededEnvironmentLimit(foreignEnvironment.id);
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(advisor.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        [DELEGATION_BILLING_ENVIRONMENT_HEADER]: foreignEnvironment.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("the delegation header is ignored from a non-loopback peer", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const environment = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    const advisor = await makeAdvisorAgent(makeAgent, org.id);
+    await makeExceededEnvironmentLimit(environment.id);
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(advisor.id),
+      remoteAddress: "203.0.113.7",
+      headers: {
+        ...OPENAI_HEADERS(),
+        [DELEGATION_BILLING_ENVIRONMENT_HEADER]: environment.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("a successful advisor consultation records the caller's environment on the interaction", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const environment = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: "production",
+    });
+    const advisor = await makeAdvisorAgent(makeAgent, org.id);
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(advisor.id),
+      headers: {
+        ...OPENAI_HEADERS(),
+        [DELEGATION_BILLING_ENVIRONMENT_HEADER]: environment.id,
+      },
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    // Post-interaction environment accumulation reads the row's snapshot, so
+    // the caller's environment on the row is what keeps env budgets counting.
+    const [interaction] = await db
+      .select({
+        environmentId: schema.interactionsTable.environmentId,
+      })
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, advisor.id));
+    expect(interaction.environmentId).toBe(environment.id);
   });
 });

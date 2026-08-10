@@ -128,6 +128,41 @@ describe("InteractionModel", () => {
       expect(refetchedFirst?.environmentId).toBe(envA.id);
     });
 
+    test("environmentIdOverride wins over the agent's own environment", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const callerEnv = await EnvironmentModel.create({
+        organizationId: org.id,
+        name: "caller-env",
+      });
+      // An env-less agent row, like the org-wide advisor.
+      const agent = await makeAgent({ organizationId: org.id });
+
+      const interaction = await InteractionModel.create(
+        {
+          profileId: agent.id,
+          request: {
+            model: "gpt-4o",
+            messages: [{ role: "user" as const, content: "Hello" }],
+          },
+          response: {
+            id: "r",
+            object: "chat.completion",
+            created: 1,
+            model: "gpt-4o",
+            choices: [],
+          },
+          type: "openai:chatCompletions" as const,
+        },
+        null,
+        { environmentIdOverride: callerEnv.id },
+      );
+
+      expect(interaction.environmentId).toBe(callerEnv.id);
+    });
+
     test("returns chat errors for chat conversation sessions", async ({
       makeUser,
       makeOrganization,

@@ -18,7 +18,7 @@ The Advisor is a stronger model an agent consults at the decisions that shape a 
 
 Turn it on per agent or MCP gateway with **Enable Advisor**, under **Subagents**. It works the same in Auto and Custom mode. Pick the Advisor's model in its own settings — a stronger model than the callers use is the point.
 
-Enabling the Advisor also instructs the agent to consult it before delivering a final answer, and to share the raw evidence behind the answer — samples of skipped input, for example — so the advice reviews the work, not a summary of it. MCP Gateways advertise the Advisor tool without this instruction; the calling model's own prompt decides when to consult.
+Enabling the Advisor also instructs the agent to consult it before delivering a final answer, sharing the raw evidence behind the answer — samples of skipped input, for example — so the advice reviews the work, not a summary of it. When the Advisor's recommendation differs from the agent's own answer, the agent follows the Advisor. MCP Gateways advertise the Advisor tool without this instruction; the calling model's own prompt decides when to consult.
 
 The Advisor cannot see the conversation, the files, or the tools. It reads only the message the calling model writes, then returns advice. It changes nothing.
 

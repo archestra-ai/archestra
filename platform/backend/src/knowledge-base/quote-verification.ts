@@ -132,6 +132,38 @@ export function verifyQuotes(params: {
   return { checked, matched, failed, unparseable: false };
 }
 
+/**
+ * Reads the `{ ref, content }` chunks out of one `query_knowledge_sources` tool
+ * result as it appears on an AI SDK step (`step.toolResults[].output`). The chat
+ * tool layer collapses the MCP result to `{ content: <JSON string>, _meta }`
+ * before it reaches the step (see `buildArchestraToolOutput`), so the chunks
+ * arrive as JSON in the string `content` — parsed here. The
+ * `structuredContent.results` and content-parts shapes are kept as defensive
+ * fallbacks for any path that preserves them.
+ *
+ * @public — called from the chat route's onFinish; asserted directly in tests.
+ */
+export function readKbChunksFromToolOutput(
+  output: unknown,
+): KbChunkForQuoteCheck[] {
+  const results = extractKbResultsArray(output);
+  if (!results) return [];
+
+  const chunks: KbChunkForQuoteCheck[] = [];
+  for (const item of results) {
+    if (
+      item !== null &&
+      typeof item === "object" &&
+      typeof (item as { ref?: unknown }).ref === "string" &&
+      typeof (item as { content?: unknown }).content === "string"
+    ) {
+      const { ref, content } = item as { ref: string; content: string };
+      chunks.push({ ref, content });
+    }
+  }
+  return chunks;
+}
+
 // --- Internal helpers ---
 
 /**
@@ -172,4 +204,62 @@ function normalizeForMatch(text: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+/**
+ * Pulls the `results` array out of a `query_knowledge_sources` tool output,
+ * whatever shape it arrives in. The real chat path is a JSON string in
+ * `content`; the other two branches are defensive fallbacks.
+ */
+function extractKbResultsArray(output: unknown): unknown[] | null {
+  if (output === null || typeof output !== "object") return null;
+
+  const structured = (output as { structuredContent?: unknown })
+    .structuredContent;
+  if (
+    structured !== null &&
+    typeof structured === "object" &&
+    Array.isArray((structured as { results?: unknown }).results)
+  ) {
+    return (structured as { results: unknown[] }).results;
+  }
+
+  const content = (output as { content?: unknown }).content;
+
+  // The real chat shape: buildArchestraToolOutput collapses the result to
+  // `{ content: <JSON string>, _meta }`, so parse it and read `.results`.
+  if (typeof content === "string") {
+    return parseResultsFromJson(content);
+  }
+
+  // Defensive fallback: a raw MCP result whose `content` is an array of parts.
+  if (Array.isArray(content)) {
+    const firstText = content.find(
+      (part): part is { type: "text"; text: string } =>
+        part !== null &&
+        typeof part === "object" &&
+        (part as { type?: unknown }).type === "text" &&
+        typeof (part as { text?: unknown }).text === "string",
+    );
+    if (firstText) return parseResultsFromJson(firstText.text);
+  }
+
+  return null;
+}
+
+/** Parses a JSON string and returns its `results` array, or null. */
+function parseResultsFromJson(text: string): unknown[] | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      Array.isArray((parsed as { results?: unknown }).results)
+    ) {
+      return (parsed as { results: unknown[] }).results;
+    }
+  } catch {
+    // Not JSON we can read; nothing to verify from this result.
+  }
+  return null;
 }

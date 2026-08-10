@@ -3,6 +3,8 @@ import {
   buildChunkRef,
   type CitedQuote,
   extractCitedQuotes,
+  type KbChunkForQuoteCheck,
+  readKbChunksFromToolOutput,
   verifyQuotes,
 } from "./quote-verification";
 
@@ -50,6 +52,45 @@ describe("extractCitedQuotes", () => {
 
   it("returns nothing when the answer carries no cited quote", () => {
     expect(extractCitedQuotes("The retention period is 90 days.")).toEqual([]);
+  });
+});
+
+describe("readKbChunksFromToolOutput", () => {
+  const CHUNK: KbChunkForQuoteCheck = {
+    ref: REF_A,
+    content: "TITLE: Data Policy\n\nThe retention period is 90 days.",
+  };
+
+  it("reads chunks from the real tool output (JSON string content)", () => {
+    // The shape query_knowledge_sources actually reaches the AI SDK step as:
+    // buildArchestraToolOutput collapses the result to a JSON string `content`.
+    const output = {
+      content: JSON.stringify({ results: [CHUNK], totalChunks: 1 }),
+      _meta: {},
+    };
+    expect(readKbChunksFromToolOutput(output)).toEqual([CHUNK]);
+  });
+
+  it("reads chunks from the structuredContent fallback", () => {
+    const output = { structuredContent: { results: [CHUNK] } };
+    expect(readKbChunksFromToolOutput(output)).toEqual([CHUNK]);
+  });
+
+  it("skips result items missing a string ref or content", () => {
+    const output = {
+      content: JSON.stringify({
+        results: [CHUNK, { ref: REF_B }, { content: "no ref" }, null, 3],
+      }),
+    };
+    expect(readKbChunksFromToolOutput(output)).toEqual([CHUNK]);
+  });
+
+  it("returns [] for output that carries no readable results", () => {
+    expect(readKbChunksFromToolOutput({ content: "not json" })).toEqual([]);
+    expect(readKbChunksFromToolOutput({ content: '{"foo":1}' })).toEqual([]);
+    expect(readKbChunksFromToolOutput({})).toEqual([]);
+    expect(readKbChunksFromToolOutput(null)).toEqual([]);
+    expect(readKbChunksFromToolOutput("string")).toEqual([]);
   });
 });
 

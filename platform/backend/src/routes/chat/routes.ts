@@ -94,6 +94,7 @@ import {
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import {
   type KbChunkForQuoteCheck,
+  readKbChunksFromToolOutput,
   verifyQuotes,
 } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
@@ -4264,72 +4265,6 @@ function verifyChatCitedQuotes(params: {
       "KB quote verification: cited quote(s) not found in the cited chunk",
     );
   }
-}
-
-/**
- * Reads the `{ ref, content }` chunks out of one `query_knowledge_sources` tool
- * result. The AI SDK stores the raw execute return (the MCP CallToolResult), so
- * the chunks live under `structuredContent.results`; the plain-text `content`
- * carries the same JSON as a fallback for any path that drops structured output.
- */
-function readKbChunksFromToolOutput(output: unknown): KbChunkForQuoteCheck[] {
-  const results = extractKbResultsArray(output);
-  if (!results) return [];
-
-  const chunks: KbChunkForQuoteCheck[] = [];
-  for (const item of results) {
-    if (
-      item !== null &&
-      typeof item === "object" &&
-      typeof (item as { ref?: unknown }).ref === "string" &&
-      typeof (item as { content?: unknown }).content === "string"
-    ) {
-      const { ref, content } = item as { ref: string; content: string };
-      chunks.push({ ref, content });
-    }
-  }
-  return chunks;
-}
-
-function extractKbResultsArray(output: unknown): unknown[] | null {
-  if (output === null || typeof output !== "object") return null;
-
-  const structured = (output as { structuredContent?: unknown })
-    .structuredContent;
-  if (
-    structured !== null &&
-    typeof structured === "object" &&
-    Array.isArray((structured as { results?: unknown }).results)
-  ) {
-    return (structured as { results: unknown[] }).results;
-  }
-
-  const content = (output as { content?: unknown }).content;
-  if (Array.isArray(content)) {
-    const firstText = content.find(
-      (part): part is { type: "text"; text: string } =>
-        part !== null &&
-        typeof part === "object" &&
-        (part as { type?: unknown }).type === "text" &&
-        typeof (part as { text?: unknown }).text === "string",
-    );
-    if (firstText) {
-      try {
-        const parsed: unknown = JSON.parse(firstText.text);
-        if (
-          parsed !== null &&
-          typeof parsed === "object" &&
-          Array.isArray((parsed as { results?: unknown }).results)
-        ) {
-          return (parsed as { results: unknown[] }).results;
-        }
-      } catch {
-        // Not JSON we can read; nothing to verify from this result.
-      }
-    }
-  }
-
-  return null;
 }
 
 /**

@@ -2225,4 +2225,162 @@ describe("GoogleDriveConnector", () => {
       expect(impersonatedSubjects).toEqual(["admin@example.com"]);
     });
   });
+  describe("permission sync", () => {
+    const permConfig = {
+      authMode: "oauth",
+      connectedAccountEmail: "owner@example.com",
+    };
+    const oauthCreds = {
+      apiToken: "",
+      googleOAuth: {
+        clientId: "c",
+        clientSecret: "s",
+        refreshToken: "r",
+      },
+    };
+
+    async function snapshot(files: unknown[], config = permConfig) {
+      resetMocks();
+      mockFilesList.mockResolvedValueOnce({ data: { files } });
+      const connector = new GoogleDriveConnector();
+      const out = [];
+      for await (const y of connector.syncPermissionSnapshot({
+        config,
+        credentials: oauthCreds,
+        cursor: null,
+        readIngestedDocuments: (async function* () {})() as never,
+      } as never)) {
+        out.push(y);
+      }
+      return out;
+    }
+
+    it("reads each file's audience from the listing, without extra requests", async () => {
+      const out = await snapshot([
+        {
+          id: "f1",
+          name: "plan.md",
+          permissions: [
+            { type: "user", role: "owner", emailAddress: "Owner@example.com" },
+            {
+              type: "user",
+              role: "reader",
+              emailAddress: "reader@example.com",
+            },
+          ],
+        },
+      ]);
+
+      expect(out).toEqual([
+        {
+          kind: "container",
+          containerKey: "file:f1",
+          permissions: { users: ["owner@example.com", "reader@example.com"] },
+          cursor: "file:f1",
+        },
+        {
+          kind: "document",
+          sourceId: "f1",
+          containerKey: "file:f1",
+          cursor: "file:f1",
+        },
+      ]);
+      // The audience rode along with the listing — no per-file lookup.
+      expect(mockFilesGet).not.toHaveBeenCalled();
+      expect(mockPermissionsList).not.toHaveBeenCalled();
+      expect(mockFilesList).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps group grants as groups, for the group pass to expand", async () => {
+      const out = await snapshot([
+        {
+          id: "f2",
+          permissions: [
+            { type: "group", role: "reader", emailAddress: "eng@example.com" },
+          ],
+        },
+      ]);
+      expect(out[0]).toMatchObject({
+        permissions: { groups: ["eng@example.com"] },
+      });
+    });
+
+    it("treats a public link as everyone", async () => {
+      const out = await snapshot([
+        { id: "f3", permissions: [{ type: "anyone", role: "reader" }] },
+      ]);
+      expect(out[0]).toMatchObject({ permissions: { isPublic: true } });
+    });
+
+    it("treats a grant to our own domain as everyone here", async () => {
+      const out = await snapshot([
+        {
+          id: "f4",
+          permissions: [
+            { type: "domain", role: "reader", domain: "Example.com" },
+          ],
+        },
+      ]);
+      expect(out[0]).toMatchObject({ permissions: { isPublic: true } });
+    });
+
+    it("does not widen a partner domain's grant into everyone here", async () => {
+      // A share with another company names people this deployment cannot
+      // enumerate. Widening it to org:* would hand them to our own users.
+      const out = await snapshot([
+        {
+          id: "f5",
+          permissions: [
+            { type: "domain", role: "reader", domain: "partner.example.net" },
+          ],
+        },
+      ]);
+      expect(out[0]).toMatchObject({ permissions: {} });
+      expect(out[0]).not.toMatchObject({ permissions: { isPublic: true } });
+    });
+
+    it("ignores a revoked permission", async () => {
+      const out = await snapshot([
+        {
+          id: "f6",
+          permissions: [
+            { type: "user", emailAddress: "gone@example.com", deleted: true },
+            { type: "user", emailAddress: "here@example.com" },
+          ],
+        },
+      ]);
+      expect(out[0]).toMatchObject({
+        permissions: { users: ["here@example.com"] },
+      });
+    });
+
+    it("flags an unreadable access list instead of calling it empty", async () => {
+      // Drive omits `permissions` when the caller may read the file but not
+      // its sharing. Empty and unknown must not look the same downstream.
+      const out = await snapshot([{ id: "f7", name: "opaque.md" }]);
+      expect(out[0]).toMatchObject({
+        containerKey: "file:f7",
+        permissions: {},
+        audienceResolutionFailed: true,
+      });
+    });
+
+    it("does not expand groups for an individually connected Drive", async () => {
+      // Reading the directory needs delegation; guessing membership would
+      // grant people this connector never confirmed.
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      const out = [];
+      for await (const g of connector.syncGroups({
+        config: permConfig,
+        credentials: oauthCreds,
+        cursor: null,
+        readIngestedDocuments: (async function* () {})() as never,
+      } as never)) {
+        out.push(g);
+      }
+      expect(out).toEqual([]);
+      expect(mockDirectoryUsersList).not.toHaveBeenCalled();
+    });
+  });
 });

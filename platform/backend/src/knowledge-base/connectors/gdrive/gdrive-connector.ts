@@ -5,8 +5,12 @@ import type {
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
+  DocumentPermissions,
   GoogleDriveCheckpoint,
   GoogleDriveConfig,
+  GroupMembershipYield,
+  PermissionSnapshotYield,
+  PermissionSyncParams,
 } from "@/types";
 import { GoogleDriveConfigSchema } from "@/types";
 import {
@@ -165,6 +169,12 @@ interface FileListResponse {
 export class GoogleDriveConnector extends BaseConnector {
   type = "gdrive" as const;
 
+  /**
+   * Drive returns each file's access list inline with the pages the corpus
+   * scan already fetches, so an audience costs no request of its own.
+   */
+  supportsPermissionSync = true;
+
   async validateConfig(
     config: Record<string, unknown>,
   ): Promise<{ valid: boolean; error?: string }> {
@@ -276,6 +286,151 @@ export class GoogleDriveConnector extends BaseConnector {
 
     this.log.debug({ identity }, "Google Drive connection test successful");
     return { success: true };
+  }
+
+  /**
+   * Permission snapshot for the corpus.
+   *
+   * Drive has no container that owns access the way a repo or a space does:
+   * every file carries its own access list, and a shared drive's membership
+   * arrives on its files as inherited entries. So each file is its own
+   * container. That would normally mean one request per document, which the
+   * pass forbids — except Drive returns `permissions` inline on the very pages
+   * the corpus scan already fetches, so the whole snapshot costs
+   * O(corpus pages) and not one request more.
+   *
+   * A file whose access list cannot be read is yielded as an explicitly failed
+   * audience rather than an empty one, so "nobody may see this" stays
+   * distinguishable from "we could not find out who may".
+   */
+  async *syncPermissionSnapshot(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<PermissionSnapshotYield> {
+    const config = parseGDriveConfig(params.config);
+    if (!config) {
+      throw new Error("Invalid Google Drive configuration for permission sync");
+    }
+
+    const auth = resolveGoogleDriveAuth({
+      config,
+      credentials: params.credentials,
+    });
+    const drive = buildDriveClient(auth);
+    const domain = domainOfIdentity(config, auth);
+    const scope = params.scope ? new Set(params.scope.containerKeys) : null;
+
+    const useSharedDriveApi = hasSharedDriveTarget(config);
+    const query = buildFileQuery(config, undefined);
+    let pageToken: string | undefined;
+
+    do {
+      await this.rateLimit();
+      const res = await drive.files.list({
+        q: query,
+        pageSize: 100,
+        pageToken,
+        // `permissions` is what makes this O(pages): the access list rides
+        // along with the listing instead of costing a call per file.
+        fields:
+          "nextPageToken,files(id,name,permissions(type,role,emailAddress,domain,deleted))",
+        includeItemsFromAllDrives: useSharedDriveApi,
+        supportsAllDrives: useSharedDriveApi,
+        ...(config.driveId
+          ? { driveId: config.driveId, corpora: "drive" as const }
+          : {}),
+      });
+
+      for (const file of res.data.files ?? []) {
+        if (!file.id) continue;
+        const containerKey = `file:${file.id}`;
+        if (scope && !scope.has(containerKey)) continue;
+
+        // Drive omits `permissions` entirely when the caller may read the file
+        // but not its sharing — an unreadable audience, not an empty one.
+        const unreadable = file.permissions === undefined;
+        yield {
+          kind: "container",
+          containerKey,
+          permissions: unreadable
+            ? {}
+            : driveAudience(file.permissions ?? [], domain),
+          ...(unreadable ? { audienceResolutionFailed: true } : {}),
+          cursor: containerKey,
+        };
+        yield {
+          kind: "document",
+          sourceId: file.id,
+          containerKey,
+          cursor: containerKey,
+        };
+      }
+
+      pageToken = res.data.nextPageToken ?? undefined;
+    } while (pageToken);
+  }
+
+  /**
+   * Expand the Google Groups a document may be shared with to their members.
+   *
+   * Only a delegated service account can read the directory, so an
+   * individually-connected Drive yields nothing here: its group grants stay
+   * unexpanded, which leaves those documents fail-closed rather than shared
+   * with people this connector could not confirm.
+   */
+  async *syncGroups(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<GroupMembershipYield> {
+    const config = parseGDriveConfig(params.config);
+    if (!config || config.authMode !== "service_account_delegated") return;
+
+    const auth = resolveGoogleDriveAuth({
+      config,
+      credentials: params.credentials,
+    });
+    const directory = buildAdminDirectoryClient(auth);
+
+    let groupPageToken: string | undefined;
+    do {
+      await this.rateLimit();
+      const groups = await directory.groups.list({
+        customer: "my_customer",
+        maxResults: 200,
+        pageToken: groupPageToken,
+        fields: "nextPageToken,groups(email)",
+      });
+
+      for (const group of groups.data.groups ?? []) {
+        const groupId = group.email;
+        if (!groupId) continue;
+
+        const members: GroupMembershipYield["members"] = [];
+        let memberPageToken: string | undefined;
+        do {
+          await this.rateLimit();
+          const page = await directory.members.list({
+            groupKey: groupId,
+            maxResults: 200,
+            pageToken: memberPageToken,
+            fields: "nextPageToken,members(id,email,type)",
+          });
+          for (const member of page.data.members ?? []) {
+            // Nested groups are expanded by the pass through their own entry,
+            // so only individual accounts are reported here.
+            if (member.type && member.type !== "USER") continue;
+            members.push({
+              accountId: member.id ?? member.email ?? "",
+              displayName: null,
+              email: member.email ?? null,
+            });
+          }
+          memberPageToken = page.data.nextPageToken ?? undefined;
+        } while (memberPageToken);
+
+        yield { groupId, members, cursor: groupId };
+      }
+
+      groupPageToken = groups.data.nextPageToken ?? undefined;
+    } while (groupPageToken);
   }
 
   async estimateTotalItems(params: {
@@ -1569,6 +1724,73 @@ function fingerprintDomainTargets(targets: DomainTarget[]): string {
     .update(targets.map((target) => target.key).join("\n"))
     .digest("base64url")
     .slice(0, 22);
+}
+
+/** The Workspace domain this connector acts inside, when it can be known. */
+function domainOfIdentity(
+  config: GoogleDriveConfig,
+  auth: GoogleDriveAuth,
+): string | null {
+  const identity =
+    (auth.kind === "service_account" ? auth.subject : undefined) ??
+    config.delegatedAdminEmail ??
+    config.connectedAccountEmail;
+  const domain = identity?.split("@")[1];
+  return domain ? domain.toLowerCase() : null;
+}
+
+/**
+ * Turn a Drive file's access list into an audience.
+ *
+ * `domain` grants everyone in a Workspace domain, which is only the whole
+ * organization when it is OUR domain — a share with a partner's domain names
+ * people this deployment has no way to enumerate, so it is left out rather
+ * than widened into "everyone here". `anyone` is a public link and genuinely
+ * is everyone.
+ */
+function driveAudience(
+  permissions: Array<{
+    type?: string | null;
+    emailAddress?: string | null;
+    domain?: string | null;
+    deleted?: boolean | null;
+  }>,
+  domain: string | null,
+): DocumentPermissions {
+  const users: string[] = [];
+  const groups: string[] = [];
+  let isPublic = false;
+
+  for (const permission of permissions) {
+    if (permission.deleted) continue;
+    const email = permission.emailAddress?.toLowerCase();
+    switch (permission.type) {
+      case "user":
+        if (email) users.push(email);
+        break;
+      case "group":
+        if (email) groups.push(email);
+        break;
+      case "domain":
+        if (
+          domain &&
+          permission.domain &&
+          permission.domain.toLowerCase() === domain
+        ) {
+          isPublic = true;
+        }
+        break;
+      case "anyone":
+        isPublic = true;
+        break;
+    }
+  }
+
+  return {
+    ...(users.length > 0 ? { users } : {}),
+    ...(groups.length > 0 ? { groups } : {}),
+    ...(isPublic ? { isPublic } : {}),
+  };
 }
 
 function hasSharedDriveTarget(config: GoogleDriveConfig): boolean {

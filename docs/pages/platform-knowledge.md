@@ -173,7 +173,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 | Confluence   | Supported             |
 | GitHub       | Supported             |
 | Jira         | Supported             |
-| Google Drive | Planned               |
+| Google Drive | Supported             |
 | Salesforce   | Planned               |
 | SharePoint   | Planned               |
 | Asana        | Not supported         |

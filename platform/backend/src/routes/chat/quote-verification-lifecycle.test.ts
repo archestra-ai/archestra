@@ -110,6 +110,7 @@ describe("POST /api/chat quote verification lifecycle (search_and_run_only)", ()
     | ((args: { messages: unknown[] }) => Promise<void> | void)
     | undefined;
   let executionPromise: Promise<void> | undefined;
+  const originalQuoteVerificationEnabled = config.kb.quoteVerificationEnabled;
 
   beforeEach(
     async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
@@ -224,6 +225,9 @@ describe("POST /api/chat quote verification lifecycle (search_and_run_only)", ()
   );
 
   afterEach(async () => {
+    // The disabled-feature test flips this flag, and vitest shuffles test
+    // order — without a restore the other tests see the feature off.
+    config.kb.quoteVerificationEnabled = originalQuoteVerificationEnabled;
     archestraMcpBranding.syncFromOrganization(null);
     await app.close();
   });

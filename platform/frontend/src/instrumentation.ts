@@ -1,8 +1,19 @@
+import { shouldEnableFrontendTelemetry } from "../sentry.shared";
+
 const MSW_ENABLED =
   process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
   process.env.NODE_ENV !== "production";
 const ERROR_REPORTING_DSN =
   process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN || "";
+
+function errorReportingEnabled(): boolean {
+  return shouldEnableFrontendTelemetry({
+    dsn: process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_FRONTEND_DSN || "",
+    environment:
+      process.env.NEXT_PUBLIC_ARCHESTRA_SENTRY_ENVIRONMENT?.toLowerCase() ||
+      process.env.NODE_ENV?.toLowerCase(),
+  });
+}
 
 /**
  * Request errors that are benign client disconnects rather than server faults,
@@ -44,7 +55,7 @@ export async function register() {
 
 export const onRequestError: typeof import("@sentry/nextjs").captureRequestError =
   async (...args) => {
-    if (!ERROR_REPORTING_DSN) return;
+    if (!errorReportingEnabled()) return;
     if (isIgnorableRequestError(args[0])) return;
 
     const { captureRequestError } = await import("@sentry/nextjs");

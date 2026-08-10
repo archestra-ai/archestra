@@ -443,6 +443,66 @@ describe("McpClient", () => {
     expect(headers.get("authorization")).toBeNull();
   });
 
+  // Regression: tool calls recover from a session the upstream dropped, but
+  // inspection surfaced it to the operator as a failed server — reading as
+  // "this server is broken" for what a second attempt resolves.
+  test("inspectServer retries once when the upstream dropped the session", async () => {
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    const { StreamableHTTPError } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+
+    // Both attempts close their client, so this must outlive the first one.
+    mockClose.mockResolvedValue(undefined);
+    mockListTools
+      .mockRejectedValueOnce(
+        new StreamableHTTPError(
+          404,
+          "Error POSTing to endpoint: Session not found",
+        ),
+      )
+      .mockResolvedValueOnce({ tools: [{ name: "list_repos" }] });
+
+    const result = await mcpClient.inspectServer({
+      catalogItem: {
+        ...catalogItem,
+        serverType: "remote",
+        serverUrl: "https://internal.example.com/mcp",
+      },
+      mcpServerId,
+      secrets: {},
+      method: "tools/list",
+    });
+
+    expect(result).toEqual({ tools: [{ name: "list_repos" }] });
+    expect(mockListTools).toHaveBeenCalledTimes(2);
+  });
+
+  test("inspectServer does not retry a genuine inspection failure", async () => {
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    mockClose.mockResolvedValue(undefined);
+    mockListTools.mockRejectedValue(new Error("upstream exploded"));
+
+    await expect(
+      mcpClient.inspectServer({
+        catalogItem: {
+          ...catalogItem,
+          serverType: "remote",
+          serverUrl: "https://internal.example.com/mcp",
+        },
+        mcpServerId,
+        secrets: {},
+        method: "tools/list",
+      }),
+    ).rejects.toThrow("upstream exploded");
+
+    expect(mockListTools).toHaveBeenCalledTimes(1);
+  });
+
   test("connectAndGetTools synthesizes read-resource tools when upstream has no tools/list", async () => {
     mockListTools.mockRejectedValueOnce(new Error("Method not found"));
     mockListResources.mockResolvedValueOnce({

@@ -638,6 +638,8 @@ export const RouteId = {
   DeleteConnectorMemberOverride: "deleteConnectorMemberOverride",
   ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
+  StartGoogleDriveConnectorOAuth: "startGoogleDriveConnectorOAuth",
+  CompleteGoogleDriveConnectorOAuth: "completeGoogleDriveConnectorOAuth",
 
   // Connector Knowledge Base Assignment Routes
   AssignConnectorToKnowledgeBases: "assignConnectorToKnowledgeBases",

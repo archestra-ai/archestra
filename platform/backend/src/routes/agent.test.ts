@@ -326,6 +326,26 @@ describe("agent routes", () => {
       expect(agent.name).toBe(updatedName);
     });
 
+    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot be promoted to the advisor", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Ordinary ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: { builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR } },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().builtInAgentConfig).toBeNull();
+    });
+
     test("rejects clearing all teams on a team-scoped agent", async ({
       makeAgent,
       makeTeam,
@@ -707,6 +727,24 @@ describe("agent routes", () => {
       expect(response.statusCode).toBe(200);
       const created = response.json();
       expect(created.isPersonalGateway).toBe(false);
+    });
+
+    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot self-declare as the advisor", async () => {
+      // builtInAgentConfig is a trust attribute — the advisor discriminator
+      // drives the cross-environment delegation exception — so only the seeder
+      // may set it.
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents",
+        payload: {
+          name: `Impostor ${crypto.randomUUID().slice(0, 8)}`,
+          scope: "personal",
+          teams: [],
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().builtInAgentConfig).toBeNull();
     });
   });
 

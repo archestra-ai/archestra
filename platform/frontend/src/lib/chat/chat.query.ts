@@ -3,6 +3,8 @@ import {
   type archestraApiTypes,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
+  type ThinkingEffort,
+  type ThinkingEffortSetting,
 } from "@archestra/shared";
 import {
   keepPreviousData,
@@ -100,8 +102,8 @@ export function mergeUpdatedConversationIntoCache(
     | archestraApiTypes.GetChatConversationResponses["200"]
     | undefined,
   updatedConversation: archestraApiTypes.UpdateChatConversationResponses["200"],
-  variables: { id: string } & NonNullable<
-    archestraApiTypes.UpdateChatConversationData["body"]
+  variables: { id: string } & WithThinkingEffortSetting<
+    NonNullable<archestraApiTypes.UpdateChatConversationData["body"]>
   >,
 ) {
   if (!oldConversation) {
@@ -354,6 +356,18 @@ export function useConversationUpdatedCacheSync(enabled = true) {
   }, [enabled, queryClient]);
 }
 
+/**
+ * Restores `null` (auto) to a generated request body.
+ *
+ * The client generator drops `nullable: true` from enum schemas, so every
+ * nullable enum in the API reads as non-null here — `selectedProvider` has the
+ * same gap. Without this the narrower generated type would reject a depth the
+ * API accepts.
+ */
+type WithThinkingEffortSetting<TBody> = Omit<TBody, "thinkingEffort"> & {
+  thinkingEffort?: ThinkingEffortSetting;
+};
+
 export function useCreateConversation() {
   const queryClient = useQueryClient();
 
@@ -366,7 +380,10 @@ export function useCreateConversation() {
       projectId,
       incognito,
       incognitoKey,
-    }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]> & {
+      thinkingEffort,
+    }: WithThinkingEffortSetting<
+      NonNullable<archestraApiTypes.CreateChatConversationData["body"]>
+    > & {
       /**
        * Browser-generated conversation DEK (base64url of 32 random bytes).
        * Required when `incognito` is set: the server fingerprints and
@@ -384,6 +401,9 @@ export function useCreateConversation() {
               title,
               projectId: projectId ?? undefined,
               incognito: incognito || undefined,
+              // The generated body type drops `nullable: true` from enum
+              // schemas, so null (auto) has to be re-asserted here.
+              thinkingEffort: thinkingEffort as ThinkingEffort | undefined,
             },
             headers: incognitoKey
               ? { [INCOGNITO_KEY_HEADER]: incognitoKey }
@@ -420,19 +440,33 @@ export function useUpdateConversation() {
       chatApiKeyId,
       agentId,
       pinnedAt,
-    }: { id: string } & NonNullable<
-      archestraApiTypes.UpdateChatConversationData["body"]
+      thinkingEffort,
+    }: { id: string } & WithThinkingEffortSetting<
+      NonNullable<archestraApiTypes.UpdateChatConversationData["body"]>
     >) =>
       callApi(
         () =>
           updateChatConversation({
             path: { id },
-            body: { title, modelId, chatApiKeyId, agentId, pinnedAt },
+            body: {
+              title,
+              modelId,
+              chatApiKeyId,
+              agentId,
+              pinnedAt,
+              // The generated body type drops `nullable: true` from enum
+              // schemas, so null (auto) has to be re-asserted here.
+              thinkingEffort: thinkingEffort as ThinkingEffort | undefined,
+            },
           }),
         null,
       ),
     onSuccess: (data, variables) => {
       if (!data) return;
+      // `mergeUpdatedConversationIntoCache` deliberately has no branch for the
+      // reasoning depth: the composer owns what it displays, including the
+      // clicks its write queue coalesces away. Echoing a response back would
+      // flip the control to whichever request answered last.
       queryClient.setQueryData(
         ["conversation", variables.id],
         (old: typeof data | undefined) =>

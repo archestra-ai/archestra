@@ -163,6 +163,109 @@ describe("chat conversation and message routes", () => {
     expect(unpinResponse.json().pinnedAt).toBeNull();
   });
 
+  test("persists a thinking effort and rejects an unknown one", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+
+    // Auto, so shipping this changes nothing for anyone who never opens the
+    // control. No level could stand in for it — model defaults disagree, and
+    // some of them are not reasoning levels at all.
+    expect(conversation.thinkingEffort).toBeNull();
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { thinkingEffort: "high" },
+    });
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(updateResponse.json().thinkingEffort).toBe("high");
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+
+    expect(getResponse.statusCode).toBe(200);
+    expect(getResponse.json().thinkingEffort).toBe("high");
+
+    // The retired two-option name must not be accepted either.
+    const invalidResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { thinkingEffort: "flash" },
+    });
+
+    expect(invalidResponse.statusCode).toBe(400);
+
+    // A rejected payload must not have moved the stored value.
+    const afterInvalid = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(afterInvalid.json().thinkingEffort).toBe("high");
+  });
+
+  test("returns a conversation to auto", async ({ makeAgent }) => {
+    // Null has to survive as a value rather than being read as "field omitted",
+    // or a user could set a depth and never get back to the model's own.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      thinkingEffort: "high",
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { thinkingEffort: null },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().thinkingEffort).toBeNull();
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(getResponse.json().thinkingEffort).toBeNull();
+  });
+
+  test("a new conversation keeps the thinking effort chosen before it existed", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: { agentId: agent.id, thinkingEffort: "high" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().thinkingEffort).toBe("high");
+  });
+
   test("marking a conversation read clears its unread flag in the list", async ({
     makeAgent,
   }) => {

@@ -14,6 +14,10 @@ import SessionDetailPage from "./page.client";
 
 vi.mock("next/navigation");
 
+// The unattributed-user badge interpolates the white-label app name, and the
+// real hook reads it through TanStack Query — which this suite renders without.
+vi.mock("@/lib/hooks/use-app-name");
+
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteractions: vi.fn(),
   useInteractionSessions: vi.fn(),

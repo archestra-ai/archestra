@@ -1,7 +1,8 @@
 import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { INCOGNITO_DRAFT_SHORTCUT_EVENT } from "@/consts";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
@@ -942,6 +943,72 @@ describe("ArchestraPromptInput", () => {
             tooltip.textContent?.trim().startsWith("Incognito chat"),
           ),
       ).toBe(true);
+    });
+
+    it("claims the Alt+I handshake event and toggles the draft off and back on", () => {
+      mockFeatureState.chatIncognitoEnabled = true;
+      const onIncognitoChange = vi.fn();
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+
+      // Armed draft + shortcut: claimed (no navigation) and toggled off.
+      const disarm = new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, {
+        cancelable: true,
+      });
+      let unclaimed: boolean | undefined;
+      act(() => {
+        unclaimed = window.dispatchEvent(disarm);
+      });
+      expect(unclaimed).toBe(false);
+      expect(onIncognitoChange).toHaveBeenLastCalledWith(false);
+
+      // Shortcut again on the disarmed composer: toggled back on.
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito={false}
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+      act(() => {
+        window.dispatchEvent(
+          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+        );
+      });
+      expect(onIncognitoChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it("leaves the handshake event unclaimed while chatting in a conversation", () => {
+      mockFeatureState.chatIncognitoEnabled = true;
+      const onIncognitoChange = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          allowFileUploads={true}
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+
+      let unclaimed: boolean | undefined;
+      act(() => {
+        unclaimed = window.dispatchEvent(
+          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+        );
+      });
+
+      // Unclaimed → the global handler proceeds to navigate to a fresh draft.
+      expect(unclaimed).toBe(true);
+      expect(onIncognitoChange).not.toHaveBeenCalled();
     });
   });
 

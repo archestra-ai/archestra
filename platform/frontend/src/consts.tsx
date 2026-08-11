@@ -28,6 +28,14 @@ export const SHORTCUT_NEW_INCOGNITO_CHAT = {
  */
 export const NEW_INCOGNITO_CHAT_HREF = "/chat?incognito=1";
 
+/**
+ * Cancelable window event the Alt+I handler dispatches before navigating to
+ * {@link NEW_INCOGNITO_CHAT_HREF}: the new-chat composer, while mounted,
+ * claims it (preventDefault) and toggles its incognito draft in place, so the
+ * shortcut arms AND disarms instead of re-pushing an identical URL.
+ */
+export const INCOGNITO_DRAFT_SHORTCUT_EVENT = "incognito-draft-shortcut";
+
 // Alt-qualified (matching SHORTCUT_NEW_CHAT) so the palette has no bare
 // character-key shortcuts (WCAG 2.1.4) and the keys still work while a search
 // query is being typed. `code` dodges macOS Option dead-key characters.

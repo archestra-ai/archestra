@@ -10,7 +10,7 @@ import {
   type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useEffect } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInputButton,
@@ -40,7 +40,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { SHORTCUT_NEW_INCOGNITO_CHAT } from "@/consts";
+import {
+  INCOGNITO_DRAFT_SHORTCUT_EVENT,
+  SHORTCUT_NEW_INCOGNITO_CHAT,
+} from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
@@ -253,6 +256,34 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const { altKey } = usePlatform();
   const showIncognitoToggle =
     incognitoEnabled && !conversationId && !!onIncognitoChange;
+
+  const toggleIncognito = useCallback(() => {
+    // Files staged before the toggle would ride the first message of a chat
+    // that rejects attachments — drop them now (the attach button greys out
+    // while the toggle is on).
+    if (!incognito) {
+      attachments.clear();
+    }
+    onIncognitoChange?.(!incognito);
+  }, [incognito, onIncognitoChange, attachments]);
+
+  // While the toggle is on screen, Alt+I toggles the draft in place: the
+  // global shortcut dispatches this cancelable event before navigating and
+  // claiming it (preventDefault) suppresses the navigation — see
+  // useConversationSearch.
+  useEffect(() => {
+    if (!showIncognitoToggle) return;
+    const handleShortcut = (event: Event) => {
+      event.preventDefault();
+      toggleIncognito();
+    };
+    window.addEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, handleShortcut);
+    return () =>
+      window.removeEventListener(
+        INCOGNITO_DRAFT_SHORTCUT_EVENT,
+        handleShortcut,
+      );
+  }, [showIncognitoToggle, toggleIncognito]);
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
@@ -578,15 +609,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 incognito &&
                   "bg-accent text-accent-foreground hover:bg-accent/80",
               )}
-              onClick={() => {
-                // Files staged before the toggle would ride the first message
-                // of a chat that rejects attachments — drop them now (the
-                // attach button greys out while the toggle is on).
-                if (!incognito) {
-                  attachments.clear();
-                }
-                onIncognitoChange?.(!incognito);
-              }}
+              onClick={toggleIncognito}
             >
               <IncognitoIcon className="size-4" />
             </Button>

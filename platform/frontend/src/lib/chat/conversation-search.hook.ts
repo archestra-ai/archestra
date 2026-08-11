@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  INCOGNITO_DRAFT_SHORTCUT_EVENT,
   NEW_INCOGNITO_CHAT_HREF,
   SHORTCUT_NEW_CHAT,
   SHORTCUT_NEW_INCOGNITO_CHAT,
@@ -64,7 +65,16 @@ export function useConversationSearch() {
         event.preventDefault();
         event.stopPropagation();
         setIsOpen(false);
-        router.push(NEW_INCOGNITO_CHAT_HREF);
+        // Handshake with the new-chat composer: when it's on screen it
+        // claims the shortcut (preventDefault on this cancelable event) and
+        // toggles its draft in place; dispatchEvent returns false in that
+        // case. Anywhere else, navigate to a fresh incognito draft.
+        const unclaimed = window.dispatchEvent(
+          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+        );
+        if (unclaimed) {
+          router.push(NEW_INCOGNITO_CHAT_HREF);
+        }
       }
     };
 

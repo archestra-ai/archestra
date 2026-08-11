@@ -246,22 +246,23 @@ export function ConnectorRunDetailsDialog({
 
               {!isPermissionRun && (run.itemsSkipped ?? 0) > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  {run.itemsSkipped} file(s) were skipped and not indexed —
-                  their file type isn&apos;t supported for the knowledge base
-                  (e.g. videos, audio, archives, or other binary formats), or
-                  they had no extractable text (empty or password-protected
-                  documents).
+                  {run.itemsSkipped} item(s) were skipped and not indexed —
+                  their type isn&apos;t supported for the knowledge base (e.g.
+                  videos, audio, archives, or other binary formats), or they had
+                  no extractable text (empty or password-protected documents or
+                  pages), or another item-specific reason applied. See the run
+                  log for the exact reason.
                 </p>
               )}
 
               {!isPermissionRun && (run.documentsWithoutText ?? 0) > 0 && (
                 <p className="text-xs text-amber-600">
                   {run.documentsWithoutText} of the {run.itemsSkipped} skipped
-                  files contained no extractable text — scanned or image-only
-                  PDFs, files that could not be parsed or exported, or images
-                  too large to embed — so they are not searchable and will not
-                  appear in any knowledge base answer. The run log names each
-                  one.
+                  items contained no extractable text — scanned or image-only
+                  PDFs, files that could not be parsed or exported, images too
+                  large to embed, or empty pages — so they are not searchable
+                  and will not appear in any knowledge base answer. The run log
+                  names each one.
                 </p>
               )}
 

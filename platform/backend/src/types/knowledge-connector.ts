@@ -708,13 +708,20 @@ export interface ConnectorItemFailure {
  * Machine-readable classification of a skipped item. `no_extractable_text`
  * marks documents that were found but yielded nothing indexable (scanned PDF
  * with no text layer, unparseable or empty file, failed export, oversized
- * image) — counted separately on the run so silent data loss is visible
- * (issue #7157).
+ * image); `unsupported_type` distinguishes file-filter guidance from unrelated
+ * uncategorized skips. The no-text subset is counted separately on the run so
+ * silent data loss is visible (issue #7157).
  */
-export type ConnectorSkipCategory = "no_extractable_text";
+export type ConnectorSkipCategory = "no_extractable_text" | "unsupported_type";
 
 export interface ConnectorItemSkipped {
   itemId: string | number;
+  /**
+   * Identity used by kb_documents.source_id. Defaults to String(itemId).
+   * Connectors whose document IDs add a prefix (for example SharePoint site
+   * pages) must provide it so a definitive skip can retire stale indexed text.
+   */
+  sourceId?: string;
   name: string;
   reason: string;
   category?: ConnectorSkipCategory;

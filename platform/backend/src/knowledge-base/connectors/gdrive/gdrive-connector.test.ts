@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectorSyncBatch } from "@/types";
+import { parsePdfBuffer } from "../pdf-utils";
 import { GoogleDriveConnector } from "./gdrive-connector";
 
 // The bundled pdf.js build is non-deterministic on repeated in-process parses
@@ -879,6 +880,53 @@ describe("GoogleDriveConnector", () => {
       expect(skip?.name).toBe("scanned-contract.pdf");
       expect(skip?.category).toBe("no_extractable_text");
       expect(skip?.reason).toContain("no extractable text layer");
+    });
+
+    it("warns while indexing the readable pages of a partially extractable PDF", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      const warn = vi.fn();
+      connector.setLogger({ warn, debug: vi.fn() } as never);
+      vi.mocked(parsePdfBuffer).mockResolvedValueOnce({
+        text: "Readable first page",
+        status: "partial",
+        pageCount: 2,
+        imageOnlyPageCount: 1,
+      });
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("file-mixed", "mixed-contract.pdf", {
+              mimeType: "application/pdf",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("%PDF-1.4 mixed bytes").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].content).toContain("Readable first page");
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileId: "file-mixed",
+          fileName: "mixed-contract.pdf",
+          reason: expect.stringContaining("1 image-only page"),
+        }),
+        "Google Drive: PDF text extraction was incomplete",
+      );
     });
   });
 

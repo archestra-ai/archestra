@@ -387,6 +387,29 @@ class KbDocumentModel {
     return result.length > 0;
   }
 
+  static async deleteByConnectorAndSourceIds(params: {
+    connectorId: string;
+    sourceIds: string[];
+  }): Promise<Set<string>> {
+    if (params.sourceIds.length === 0) return new Set();
+
+    const result = await db
+      .delete(schema.kbDocumentsTable)
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+          inArray(schema.kbDocumentsTable.sourceId, params.sourceIds),
+        ),
+      )
+      .returning({ sourceId: schema.kbDocumentsTable.sourceId });
+
+    return new Set(
+      result
+        .map((row) => row.sourceId)
+        .filter((sourceId): sourceId is string => sourceId !== null),
+    );
+  }
+
   static async deleteByOrganization(organizationId: string): Promise<number> {
     const result = await db
       .delete(schema.kbDocumentsTable)

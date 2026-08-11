@@ -226,6 +226,67 @@ describe("ConnectorSyncService", () => {
     expect(run?.documentsProcessed).toBe(3);
   });
 
+  test("a definitive no-text skip retires stale indexed text for the same source", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    const staleDocument = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      sourceId: "page-contract-1",
+      title: "Draft contract",
+      content: "The obsolete draft terms remain searchable",
+      contentHash: "stale-hash",
+    });
+    await KbChunkModel.insertMany([
+      {
+        documentId: staleDocument.id,
+        content: "The obsolete draft terms remain searchable",
+        chunkIndex: 0,
+      },
+    ]);
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(1),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [],
+            skipped: [
+              {
+                itemId: "contract-1",
+                sourceId: "page-contract-1",
+                name: "signed-contract.pdf",
+                reason: "PDF has no text layer",
+                category: "no_extractable_text" as const,
+              },
+            ],
+            checkpoint: { page: 1 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    await connectorSyncService.executeSync(connector.id);
+
+    expect(
+      await KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "page-contract-1",
+      }),
+    ).toBeNull();
+    expect(await KbChunkModel.findByDocument(staleDocument.id)).toEqual([]);
+  });
+
   test("deleting the connector mid-run stops the sync before the next batch", async ({
     makeOrganization,
     makeKnowledgeBase,
@@ -918,10 +979,12 @@ describe("ConnectorSyncService", () => {
     function makeEmptyConnector(
       skipped?: Array<{
         itemId: string;
+        sourceId?: string;
         name: string;
         reason: string;
-        category?: "no_extractable_text";
+        category?: "no_extractable_text" | "unsupported_type";
       }>,
+      failures?: Array<{ itemId: string; resource: string; error: string }>,
     ) {
       return {
         estimateTotalItems: vi.fn().mockResolvedValue(0),
@@ -930,6 +993,7 @@ describe("ConnectorSyncService", () => {
             yield {
               documents: [],
               ...(skipped ? { skipped } : {}),
+              ...(failures ? { failures } : {}),
               checkpoint: { page: 1 },
               hasMore: false,
             };
@@ -983,11 +1047,13 @@ describe("ConnectorSyncService", () => {
             itemId: "f-1",
             name: "diagram.psd",
             reason: "unsupported_file_type",
+            category: "unsupported_type",
           },
           {
             itemId: "f-2",
             name: "archive.zip",
             reason: "unsupported_file_type",
+            category: "unsupported_type",
           },
         ]),
       );
@@ -1065,6 +1131,7 @@ describe("ConnectorSyncService", () => {
             itemId: "f-2",
             name: "archive.zip",
             reason: "unsupported_file_type",
+            category: "unsupported_type",
           },
         ]),
       );
@@ -1076,6 +1143,72 @@ describe("ConnectorSyncService", () => {
       expect(run?.error).toContain("all 2 items found were skipped");
       expect(run?.error).toContain("1 contained no extractable text");
       expect(run?.error).toContain("unsupported types");
+    });
+
+    test("reports fetch failures alongside simultaneous no-text skips", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const secretId = await createSecret();
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+      setupSecret();
+      mockGetConnector.mockReturnValue(
+        makeEmptyConnector(
+          [
+            {
+              itemId: "scan-1",
+              name: "scan.pdf",
+              reason: "PDF has no text layer",
+              category: "no_extractable_text",
+            },
+          ],
+          [{ itemId: "locked-1", resource: "content", error: "HTTP 403" }],
+        ),
+      );
+
+      const result = await connectorSyncService.executeSync(connector.id);
+      const run = await ConnectorRunModel.findById(result.runId);
+      expect(run?.error).toContain("1 item could not be fetched");
+      expect(run?.error).toContain("1 contained no extractable text");
+    });
+
+    test("does not call an uncategorized skip an unsupported type", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const secretId = await createSecret();
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+      setupSecret();
+      mockGetConnector.mockReturnValue(
+        makeEmptyConnector([
+          {
+            itemId: "scan-1",
+            name: "scan.pdf",
+            reason: "PDF has no text layer",
+            category: "no_extractable_text",
+          },
+          {
+            itemId: "drive-1",
+            name: "Shared drive drive-1",
+            reason: "unreachable_target",
+          },
+        ]),
+      );
+
+      const result = await connectorSyncService.executeSync(connector.id);
+      const run = await ConnectorRunModel.findById(result.runId);
+      expect(run?.error).toContain("1 was skipped for other reasons");
+      expect(run?.error).not.toContain("unsupported types");
     });
 
     test("stays a plain success when an incremental run simply found no changes", async ({

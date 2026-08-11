@@ -23,7 +23,11 @@ import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
-import { describePdfEmptyText, parsePdfBuffer } from "../pdf-utils";
+import {
+  describePdfEmptyText,
+  describePdfExtractionWarning,
+  parsePdfBuffer,
+} from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
 import {
@@ -1465,6 +1469,7 @@ export class GoogleDriveConnector extends BaseConnector {
           itemId: file.id ?? "unknown",
           name: file.name ?? "unknown",
           reason: "unsupported_file_type",
+          category: "unsupported_type",
         });
       }
     }
@@ -1521,6 +1526,12 @@ export class GoogleDriveConnector extends BaseConnector {
         );
         const buffer = Buffer.from(res.data as ArrayBuffer);
         const extracted = await extractTextFromBinary(buffer, resolved.format);
+        if (extracted.warning) {
+          this.log.warn(
+            { fileId, fileName, reason: extracted.warning },
+            "Google Drive: PDF text extraction was incomplete",
+          );
+        }
         return {
           text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
           emptyReason: extracted.emptyReason,
@@ -1547,6 +1558,12 @@ export class GoogleDriveConnector extends BaseConnector {
     if (resolved?.kind === "binary") {
       const buffer = await this.downloadFileBuffer(drive, fileId);
       const extracted = await extractTextFromBinary(buffer, resolved.format);
+      if (extracted.warning) {
+        this.log.warn(
+          { fileId, fileName, reason: extracted.warning },
+          "Google Drive: PDF text extraction was incomplete",
+        );
+      }
       return {
         text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
         emptyReason: extracted.emptyReason,
@@ -1884,14 +1901,18 @@ function fileToDocument(
 async function extractTextFromBinary(
   buffer: Buffer,
   format: BinaryFormat,
-): Promise<{ text: string; emptyReason?: string }> {
+): Promise<{ text: string; emptyReason?: string; warning?: string }> {
   switch (format) {
     case ".docx": {
       return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
       const result = await parsePdfBuffer(buffer);
-      return { text: result.text, emptyReason: describePdfEmptyText(result) };
+      return {
+        text: result.text,
+        emptyReason: describePdfEmptyText(result),
+        warning: describePdfExtractionWarning(result),
+      };
     }
     case ".pptx": {
       return { text: await extractTextFromPptx(buffer) };

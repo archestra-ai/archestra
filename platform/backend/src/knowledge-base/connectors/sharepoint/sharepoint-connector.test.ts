@@ -676,6 +676,7 @@ describe("SharePointConnector", () => {
       expect(pageBatch.skipped).toHaveLength(1);
       const skip = pageBatch.skipped?.[0];
       expect(skip?.name).toBe("Empty Page");
+      expect(skip?.sourceId).toBe("page-page-1");
       expect(skip?.category).toBe("no_extractable_text");
       expect(skip?.reason).toBe("Page has no extractable content");
     });

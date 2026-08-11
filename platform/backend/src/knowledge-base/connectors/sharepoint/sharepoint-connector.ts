@@ -25,7 +25,11 @@ import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
-import { describePdfEmptyText, parsePdfBuffer } from "../pdf-utils";
+import {
+  describePdfEmptyText,
+  describePdfExtractionWarning,
+  parsePdfBuffer,
+} from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
@@ -671,6 +675,12 @@ export class SharePointConnector extends BaseConnector {
         Buffer.from(arrayBuffer),
         ext,
       );
+      if (extracted.warning) {
+        this.log.warn(
+          { itemId, fileName, reason: extracted.warning },
+          "SharePoint: PDF text extraction was incomplete",
+        );
+      }
       return {
         text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
         emptyReason: extracted.emptyReason,
@@ -756,6 +766,7 @@ export class SharePointConnector extends BaseConnector {
             if (!content.trim()) {
               this.trackSkipped({
                 itemId: page.id,
+                sourceId: `page-${page.id}`,
                 name: page.title || page.name,
                 reason: "Page has no extractable content",
                 category: "no_extractable_text",
@@ -1230,14 +1241,18 @@ function isModifiedSince(
 async function extractTextFromBinary(
   buffer: Buffer,
   ext: string,
-): Promise<{ text: string; emptyReason?: string }> {
+): Promise<{ text: string; emptyReason?: string; warning?: string }> {
   switch (ext) {
     case ".docx": {
       return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
       const result = await parsePdfBuffer(buffer);
-      return { text: result.text, emptyReason: describePdfEmptyText(result) };
+      return {
+        text: result.text,
+        emptyReason: describePdfEmptyText(result),
+        warning: describePdfExtractionWarning(result),
+      };
     }
     case ".pptx": {
       return { text: await extractTextFromPptx(buffer) };

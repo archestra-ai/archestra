@@ -321,7 +321,7 @@ describe("OneDriveConnector", () => {
       const skip = batches[0].skipped?.[0];
       expect(skip?.name).toBe("recording.mp4");
       expect(skip?.reason).toBe("unsupported_file_type");
-      expect(skip?.category).toBeUndefined();
+      expect(skip?.category).toBe("unsupported_type");
     });
 
     it("reports an oversized image as a categorized skip", async () => {

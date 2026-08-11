@@ -327,6 +327,7 @@ export class PerforceConnector extends BaseConnector {
           itemId: depotFile,
           name: depotFile,
           reason: `unsupported Perforce filetype "${fileType}"`,
+          category: "unsupported_type",
         });
       }
     }

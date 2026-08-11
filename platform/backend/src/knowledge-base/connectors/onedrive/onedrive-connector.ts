@@ -21,7 +21,11 @@ import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
-import { describePdfEmptyText, parsePdfBuffer } from "../pdf-utils";
+import {
+  describePdfEmptyText,
+  describePdfExtractionWarning,
+  parsePdfBuffer,
+} from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
@@ -377,6 +381,7 @@ export class OneDriveConnector extends BaseConnector {
                 itemId: item.id,
                 name: item.name,
                 reason: "unsupported_file_type",
+                category: "unsupported_type",
               });
               return null;
             }
@@ -516,6 +521,12 @@ export class OneDriveConnector extends BaseConnector {
         Buffer.from(arrayBuffer),
         ext,
       );
+      if (extracted.warning) {
+        this.log.warn(
+          { itemId, fileName, reason: extracted.warning },
+          "OneDrive: PDF text extraction was incomplete",
+        );
+      }
       return {
         text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
         emptyReason: extracted.emptyReason,
@@ -733,14 +744,18 @@ function isModifiedSince(
 async function extractTextFromBinary(
   buffer: Buffer,
   ext: string,
-): Promise<{ text: string; emptyReason?: string }> {
+): Promise<{ text: string; emptyReason?: string; warning?: string }> {
   switch (ext) {
     case ".docx": {
       return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
       const result = await parsePdfBuffer(buffer);
-      return { text: result.text, emptyReason: describePdfEmptyText(result) };
+      return {
+        text: result.text,
+        emptyReason: describePdfEmptyText(result),
+        warning: describePdfExtractionWarning(result),
+      };
     }
     case ".pptx": {
       return { text: await extractTextFromPptx(buffer) };

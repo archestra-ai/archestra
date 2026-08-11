@@ -208,6 +208,7 @@ class ConnectorSyncService {
     let itemErrors = 0;
     let itemsSkipped = 0;
     let documentsWithoutText = 0;
+    let unsupportedItemsSkipped = 0;
     // Per-item fetch fallbacks. These stay warnings (the run is not "completed
     // with errors" for them), but a run that ingested nothing needs to know
     // they happened before blaming the sharing configuration.
@@ -383,12 +384,37 @@ class ConnectorSyncService {
         if (batch.skipped?.length) {
           itemsSkipped += batch.skipped.length;
           documentsProcessed += batch.skipped.length;
+          const noTextSourceIds = batch.skipped
+            .filter((item) => item.category === "no_extractable_text")
+            .map((item) => item.sourceId ?? String(item.itemId));
+          const removedStaleSourceIds =
+            await KbDocumentModel.deleteByConnectorAndSourceIds({
+              connectorId,
+              sourceIds: noTextSourceIds,
+            });
           for (const s of batch.skipped) {
             if (s.category === "no_extractable_text") {
               documentsWithoutText++;
+              // A source can change from a readable document to a scanned,
+              // empty, or unparseable version without changing its external
+              // ID. Retire the last indexed copy so stale text and chunks do
+              // not remain searchable after this definitive skip.
+              const sourceId = s.sourceId ?? String(s.itemId);
               runLog.warn(
-                { itemId: s.itemId, name: s.name, reason: s.reason },
+                {
+                  itemId: s.itemId,
+                  sourceId,
+                  name: s.name,
+                  reason: s.reason,
+                  removedStaleDocument: removedStaleSourceIds.has(sourceId),
+                },
                 "Document yielded no extractable text and was not indexed",
+              );
+            } else if (s.category === "unsupported_type") {
+              unsupportedItemsSkipped++;
+              runLog.debug(
+                { itemId: s.itemId, name: s.name, reason: s.reason },
+                "Unsupported item type skipped",
               );
             } else {
               runLog.debug(
@@ -530,6 +556,7 @@ class ConnectorSyncService {
               documentsProcessed,
               itemFetchFailures,
               documentsWithoutText,
+              unsupportedItemsSkipped,
             })
           : null;
 
@@ -974,36 +1001,59 @@ function describeEmptySync(params: {
   documentsProcessed: number;
   itemFetchFailures: number;
   documentsWithoutText: number;
+  unsupportedItemsSkipped: number;
 }): string {
   const {
     itemsSkipped,
     documentsProcessed,
     itemFetchFailures,
     documentsWithoutText,
+    unsupportedItemsSkipped,
   } = params;
 
   // Items were found and every one of them failed to come back. Pointing at
   // the sharing configuration here would send someone to the wrong console.
-  if (itemFetchFailures > 0) {
+  if (itemFetchFailures > 0 && itemsSkipped === 0) {
     return `Indexed nothing: ${itemFetchFailures} item${itemFetchFailures === 1 ? "" : "s"} were found but could not be fetched. See the run logs for the individual failures — the credential can list this source but not read its contents.`;
   }
   if (itemsSkipped > 0 && itemsSkipped === documentsProcessed) {
     // Blaming the file-type filter when the items were readable types with no
     // text (a folder of scanned PDFs) would send someone to the wrong setting.
-    if (documentsWithoutText === itemsSkipped) {
+    if (documentsWithoutText === itemsSkipped && itemFetchFailures === 0) {
       return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found contained no extractable text (scanned or image-only PDFs, or files that could not be parsed). The run details name each one.`;
     }
-    if (documentsWithoutText > 0) {
-      return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped — ${documentsWithoutText} contained no extractable text and the rest were unsupported types. The run details name each one.`;
+    if (unsupportedItemsSkipped === itemsSkipped && itemFetchFailures === 0) {
+      return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped as unsupported types. Widen or remove the file-type filter, or point the connector at content it can read.`;
     }
-    return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped as unsupported types. Widen or remove the file-type filter, or point the connector at content it can read.`;
   }
+
   if (itemsSkipped > 0) {
-    const skippedAs =
-      documentsWithoutText > 0
-        ? `(${documentsWithoutText} with no extractable text)`
-        : "as unsupported types";
-    return `Indexed nothing, and skipped ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} ${skippedAs}. Check the file-type filter and that the content is shared with the identity this connector authenticates as.`;
+    const otherItemsSkipped = Math.max(
+      0,
+      itemsSkipped - documentsWithoutText - unsupportedItemsSkipped,
+    );
+    const causes: string[] = [];
+    if (itemFetchFailures > 0) {
+      causes.push(
+        `${itemFetchFailures} item${itemFetchFailures === 1 ? "" : "s"} could not be fetched`,
+      );
+    }
+    if (documentsWithoutText > 0) {
+      causes.push(`${documentsWithoutText} contained no extractable text`);
+    }
+    if (unsupportedItemsSkipped > 0) {
+      causes.push(`${unsupportedItemsSkipped} had unsupported types`);
+    }
+    if (otherItemsSkipped > 0) {
+      causes.push(
+        `${otherItemsSkipped} ${otherItemsSkipped === 1 ? "was" : "were"} skipped for other reasons`,
+      );
+    }
+    const prefix =
+      itemFetchFailures === 0 && itemsSkipped === documentsProcessed
+        ? `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped — `
+        : "Indexed nothing: ";
+    return `${prefix}${causes.join("; ")}. See the run logs and run details for each affected item.`;
   }
   return "Indexed nothing: the source returned no items at all. Check that the content is shared with the identity this connector authenticates as, that any folder or project scope points at something that identity can see, and that a file-type filter is not excluding everything. Test connection reports which of those it is.";
 }

@@ -7,9 +7,9 @@ import { describePdfEmptyText, parsePdfBuffer } from "./pdf-utils";
 // page, valid structure, no text layer. Generated on macOS from a 1×1 PNG with
 // `sips -s format pdf px.png --out scanned-no-text-layer.pdf`.
 //
-// pdf-utils.test.ts mocks pdf-parse to pin the status mapping; this file keeps
-// the library real so the no_text_layer classification is proven against an
-// actual scan-like PDF. The bundled 2018 pdf.js build is only reliable for a
+// pdf-utils.test.ts mocks the bundled pdf.js boundary to pin page outcomes;
+// this file keeps it real so the no_text_layer classification is proven
+// against an actual scan-like PDF. The bundled 2018 pdf.js build is only reliable for a
 // single in-process parse of a given buffer, so this file performs exactly one
 // parse — don't add more PDF cases here.
 
@@ -25,6 +25,7 @@ describe("parsePdfBuffer with a real scanned PDF", () => {
       text: "",
       status: "no_text_layer",
       pageCount: 1,
+      imageOnlyPageCount: 1,
     });
     expect(describePdfEmptyText(result)).toContain("no extractable text layer");
   });

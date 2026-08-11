@@ -181,7 +181,7 @@ describe("ConnectorRunDetailsDialog", () => {
     // The explanation states the count is a subset of the skipped total.
     expect(
       screen.getByText(
-        /3 of the 4 skipped files contained no extractable text/,
+        /3 of the 4 skipped items contained no extractable text/,
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/The run log names each one/)).toBeInTheDocument();

@@ -1131,7 +1131,7 @@ export function LlmProviderApiKeyForm({
                         Secrets
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Archestra has read-only access to your external Vault,
+                        {appName} has read-only access to your external Vault,
                         so it cannot save or rotate OAuth credentials there.
                         {requiresExactSubscriptionCredential
                           ? " This agent requires the same personal subscription, so a provider API key from Vault will not work. Ask an administrator to use managed secret storage, or choose a different agent or model."

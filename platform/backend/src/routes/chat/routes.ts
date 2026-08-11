@@ -161,6 +161,7 @@ import {
 import { estimateMessagesSize } from "@/utils/message-size";
 import { broadcastConversationUpdated } from "@/websocket";
 import { createAbortiveTurnTracker } from "./abortive-turn";
+import { buildAnthropicProviderOptions } from "./anthropic-provider-options";
 import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
@@ -205,6 +206,7 @@ import {
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
 import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
+import { buildOpenAiThinkingProviderOptions } from "./openai-provider-options";
 import { buildModelMessages } from "./prepare-model-messages";
 import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
@@ -1414,16 +1416,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   streamTextConfig.temperature = temperature;
                 }
 
+                // A turn may carry its own depth so a pick made mid-conversation
+                // applies to the message it was made for, rather than to
+                // whatever the row says once the write lands.
+                //
+                // Not `??`: null is a turn asking for auto, and coalescing would
+                // send it back to the column instead.
+                const thinkingEffort =
+                  requestedThinkingEffort !== undefined
+                    ? requestedThinkingEffort
+                    : conversation.thinkingEffort;
+
                 const googleProviderOptions = buildGeminiProviderOptions({
                   provider,
                   selectedModel,
                   isGeminiImageModel,
-                  // Not `??`: null is a turn asking for auto, and coalescing
-                  // would send it back to the column instead.
-                  thinkingEffort:
-                    requestedThinkingEffort !== undefined
-                      ? requestedThinkingEffort
-                      : conversation.thinkingEffort,
+                  thinkingEffort,
                 });
                 if (googleProviderOptions) {
                   streamTextConfig.providerOptions = {
@@ -1431,6 +1439,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     google: googleProviderOptions,
                   };
                 }
+
+                // Nothing else writes the `anthropic` key, so this may assign
+                // it outright.
+                const anthropicProviderOptions = buildAnthropicProviderOptions({
+                  provider,
+                  selectedModel,
+                  thinkingEffort,
+                });
+                if (anthropicProviderOptions) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    anthropic: anthropicProviderOptions,
+                  };
+                }
+
+                // Spread into whichever `openai` block below applies rather
+                // than assigned here: both build a fresh object, so a third
+                // assignment would drop what they set.
+                const openAiThinkingProviderOptions =
+                  buildOpenAiThinkingProviderOptions({
+                    provider,
+                    selectedModel,
+                    thinkingEffort,
+                  });
 
                 // Responses-routed OpenAI models run with store:false so the
                 // SDK resends the full conversation (with encrypted reasoning)
@@ -1467,6 +1499,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       ...(summariesUnsupported
                         ? {}
                         : { reasoningSummary: "auto" }),
+                      ...openAiThinkingProviderOptions,
                     },
                   };
                 }
@@ -1538,7 +1571,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // newer models reject max_tokens outright.
                   streamTextConfig.providerOptions = {
                     ...streamTextConfig.providerOptions,
-                    openai: { maxCompletionTokens: maxOutputTokens },
+                    openai: {
+                      maxCompletionTokens: maxOutputTokens,
+                      ...openAiThinkingProviderOptions,
+                    },
                   };
                 } else {
                   streamTextConfig.maxOutputTokens = maxOutputTokens;

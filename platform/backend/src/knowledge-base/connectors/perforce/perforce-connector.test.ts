@@ -287,6 +287,7 @@ describe("PerforceConnector", () => {
           itemId: "//depot/docs/blob.md",
           name: "//depot/docs/blob.md",
           reason: 'unsupported Perforce filetype "binary"',
+          category: "unsupported_type",
         },
       ]);
       expect(batch.checkpoint).toEqual({

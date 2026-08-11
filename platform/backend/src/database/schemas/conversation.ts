@@ -52,7 +52,7 @@ const conversationsTable = softDeletablePgTable(
      * control ignores it — so the value survives a switch to one of those and
      * applies again on the way back.
      *
-     * Null is "auto": no depth was chosen, so the request carries no reasoning
+     * Null is the model's own default: no depth was chosen, so no reasoning
      * field and the model reasons as it would have anyway. Nullable rather than
      * defaulted because model defaults disagree with each other, so no level of
      * ours could stand in for "unchanged" — see ThinkingEffortSetting.

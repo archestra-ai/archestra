@@ -258,6 +258,10 @@ export abstract class BaseConnector implements Connector {
     fallback: T;
     itemId: string | number;
     resource: string;
+    /** The fallback omits the top-level document, not an optional subresource. */
+    itemUnavailable?: boolean;
+    /** A later document with this source id resolves the provisional failure. */
+    recoverySourceId?: string;
   }): Promise<T> {
     try {
       return await params.fetch();
@@ -270,12 +274,18 @@ export abstract class BaseConnector implements Connector {
           resource: params.resource,
           error: message,
         },
-        "Failed to fetch sub-resource for item, using fallback",
+        params.itemUnavailable
+          ? "Failed to fetch item; preserving any last-known-good indexed copy"
+          : "Failed to fetch sub-resource for item, using fallback",
       );
       this.itemFailures.push({
         itemId: params.itemId,
         resource: params.resource,
         error: message,
+        ...(params.itemUnavailable ? { itemUnavailable: true } : {}),
+        ...(params.recoverySourceId
+          ? { recoverySourceId: params.recoverySourceId }
+          : {}),
       });
       return params.fallback;
     }

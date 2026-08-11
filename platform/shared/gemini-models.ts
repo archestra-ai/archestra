@@ -152,7 +152,7 @@ export function geminiMinimalThinkingConfig(
  * The 2.5 family is excluded — it takes a numeric `thinkingBudget`, and the two
  * cannot be sent together.
  */
-export function supportsThinkingEffort(modelId: string): boolean {
+export function supportsGeminiThinkingEffort(modelId: string): boolean {
   const id = modelId.toLowerCase();
 
   if (!id.startsWith("gemini-")) {
@@ -173,7 +173,7 @@ export type GeminiThinkingLevel = "minimal" | "low" | "medium" | "high";
 
 /**
  * The `thinkingConfig.thinkingLevel` a chosen effort maps to, or null when the
- * model is outside {@link supportsThinkingEffort} and should be sent no
+ * model is outside {@link supportsGeminiThinkingEffort} and should be sent no
  * thinking level at all.
  *
  * `low` resolves per model rather than to a fixed level: flash models accept
@@ -184,7 +184,7 @@ export function geminiThinkingConfigForEffort(
   modelId: string,
   effort: ThinkingEffort,
 ): { thinkingLevel: GeminiThinkingLevel } | null {
-  if (!supportsThinkingEffort(modelId)) {
+  if (!supportsGeminiThinkingEffort(modelId)) {
     return null;
   }
   if (effort !== "low") {

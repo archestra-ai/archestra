@@ -6,7 +6,7 @@ import { ModelModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0411_migrate_gemini_embedding_2.sql"),
+  path.join(__dirname, "0412_migrate_gemini_embedding_2.sql"),
   "utf-8",
 );
 

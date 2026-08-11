@@ -24,7 +24,11 @@ import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
-import { parsePdfBuffer } from "../pdf-utils";
+import {
+  describePdfEmptyText,
+  describePdfExtractionWarning,
+  parsePdfBuffer,
+} from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
 import {
@@ -1124,6 +1128,7 @@ export class GoogleDriveConnector extends BaseConnector {
       });
 
       const documents: ConnectorDocument[] = [];
+      const recoveredSourceIds: string[] = [];
 
       for (const file of files) {
         const doc = await this.safeItemFetch({
@@ -1133,18 +1138,39 @@ export class GoogleDriveConnector extends BaseConnector {
               file,
               imageMimeTypes,
             );
+            // Once the bounded dedupe set is full, later identities can see a
+            // source that already succeeded. Preserve that success outcome so
+            // a subsequent failed attempt cannot manufacture an item error.
+            if (dedupe && dedupe.size >= MAX_TRACKED_FILE_IDS && file.id) {
+              recoveredSourceIds.push(file.id);
+            }
             // Claimed only once the download has actually succeeded. Claiming
             // at listing time would let a file that failed here be written off
             // for every other identity that can see it too.
             claimFile(dedupe, file.id);
             // Skip files with no extractable content or media to avoid indexing
             // title-only documents that provide no search value.
-            if (!result.text.trim() && !result.mediaContent) return null;
+            if (!result.text.trim() && !result.mediaContent) {
+              this.trackSkipped({
+                itemId: file.id ?? "unknown",
+                name: file.name ?? "unknown",
+                reason:
+                  result.emptyReason ??
+                  "Empty content — no text or media could be extracted",
+                category: "no_extractable_text",
+              });
+              return null;
+            }
             return fileToDocument(file, result.text, result.mediaContent);
           },
           fallback: null,
           itemId: file.id ?? "unknown",
           resource: "driveFile",
+          itemUnavailable: true,
+          // Domain mode can see the same globally unique Drive file through
+          // another identity. Treat this failure as provisional until the run
+          // knows whether a later viewer successfully produced the document.
+          recoverySourceId: dedupe && file.id ? file.id : undefined,
         });
         if (doc) documents.push(doc);
       }
@@ -1179,6 +1205,7 @@ export class GoogleDriveConnector extends BaseConnector {
         documents,
         failures: this.flushFailures(),
         skipped: this.flushSkipped(),
+        ...(recoveredSourceIds.length > 0 ? { recoveredSourceIds } : {}),
         checkpoint: buildCheckpoint({
           type: "gdrive",
           itemUpdatedAt: progress.maxLastModified
@@ -1328,6 +1355,7 @@ export class GoogleDriveConnector extends BaseConnector {
       });
 
       const documents: ConnectorDocument[] = [];
+      const recoveredSourceIds: string[] = [];
 
       for (const file of files) {
         const doc = await this.safeItemFetch({
@@ -1337,14 +1365,29 @@ export class GoogleDriveConnector extends BaseConnector {
               file,
               imageMimeTypes,
             );
+            if (dedupe && dedupe.size >= MAX_TRACKED_FILE_IDS && file.id) {
+              recoveredSourceIds.push(file.id);
+            }
             // See syncDriveFiles: claimed on success, never on failure.
             claimFile(dedupe, file.id);
-            if (!result.text.trim() && !result.mediaContent) return null;
+            if (!result.text.trim() && !result.mediaContent) {
+              this.trackSkipped({
+                itemId: file.id ?? "unknown",
+                name: file.name ?? "unknown",
+                reason:
+                  result.emptyReason ??
+                  "Empty content — no text or media could be extracted",
+                category: "no_extractable_text",
+              });
+              return null;
+            }
             return fileToDocument(file, result.text, result.mediaContent);
           },
           fallback: null,
           itemId: file.id ?? "unknown",
           resource: "driveFile",
+          itemUnavailable: true,
+          recoverySourceId: dedupe && file.id ? file.id : undefined,
         });
         if (doc) documents.push(doc);
       }
@@ -1378,6 +1421,7 @@ export class GoogleDriveConnector extends BaseConnector {
         documents,
         failures: this.flushFailures(),
         skipped: this.flushSkipped(),
+        ...(recoveredSourceIds.length > 0 ? { recoveredSourceIds } : {}),
         checkpoint: buildCheckpoint({
           type: "gdrive",
           itemUpdatedAt: progress.maxLastModified
@@ -1450,6 +1494,7 @@ export class GoogleDriveConnector extends BaseConnector {
           itemId: file.id ?? "unknown",
           name: file.name ?? "unknown",
           reason: "unsupported_file_type",
+          category: "unsupported_type",
         });
       }
     }
@@ -1464,6 +1509,8 @@ export class GoogleDriveConnector extends BaseConnector {
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
+    /** Why the text came back empty, for skip reporting on the run. */
+    emptyReason?: string;
   }> {
     const fileName = file.name ?? "";
     const fileId = file.id;
@@ -1484,11 +1531,16 @@ export class GoogleDriveConnector extends BaseConnector {
             : "";
         return { text };
       } catch (error) {
+        const message = extractErrorMessage(error);
         this.log.debug(
-          { fileId, fileName, error: extractErrorMessage(error) },
+          { fileId, fileName, error: message },
           "Google Drive: failed to export Google Workspace file",
         );
-        return { text: "" };
+        // Export failures include transient 429/5xx/network errors. Let
+        // safeItemFetch report a fetch failure so the run exposes the outage
+        // and the last indexed copy is preserved. Only a successful export
+        // that definitively yields no text is a no-text skip.
+        throw error;
       }
     }
 
@@ -1502,14 +1554,24 @@ export class GoogleDriveConnector extends BaseConnector {
           { responseType: "arraybuffer" },
         );
         const buffer = Buffer.from(res.data as ArrayBuffer);
-        const text = await extractTextFromBinary(buffer, resolved.format);
-        return { text: text.slice(0, MAX_CONTENT_LENGTH) };
+        const extracted = await extractTextFromBinary(buffer, resolved.format);
+        if (extracted.warning) {
+          this.log.warn(
+            { fileId, fileName, reason: extracted.warning },
+            "Google Drive: PDF page extraction warning",
+          );
+        }
+        return {
+          text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+          emptyReason: extracted.emptyReason,
+        };
       } catch (error) {
+        const message = extractErrorMessage(error);
         this.log.debug(
-          { fileId, fileName, error: extractErrorMessage(error) },
+          { fileId, fileName, error: message },
           "Google Drive: failed to export Google Workspace file as Office bytes",
         );
-        return { text: "" };
+        throw error;
       }
     }
 
@@ -1524,8 +1586,17 @@ export class GoogleDriveConnector extends BaseConnector {
     // Binary files (.docx, .pdf, .pptx, .xlsx): download and extract text
     if (resolved?.kind === "binary") {
       const buffer = await this.downloadFileBuffer(drive, fileId);
-      const text = await extractTextFromBinary(buffer, resolved.format);
-      return { text: text.slice(0, MAX_CONTENT_LENGTH) };
+      const extracted = await extractTextFromBinary(buffer, resolved.format);
+      if (extracted.warning) {
+        this.log.warn(
+          { fileId, fileName, reason: extracted.warning },
+          "Google Drive: PDF page extraction warning",
+        );
+      }
+      return {
+        text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        emptyReason: extracted.emptyReason,
+      };
     }
 
     // Image files: download as base64 for multimodal embedding
@@ -1536,7 +1607,10 @@ export class GoogleDriveConnector extends BaseConnector {
           { fileName, sizeBytes: buffer.length },
           "Google Drive: skipping oversized image",
         );
-        return { text: "" };
+        return {
+          text: "",
+          emptyReason: "Image exceeds the maximum size supported for embedding",
+        };
       }
       const data = buffer.toString("base64");
       return { text: "", mediaContent: { mimeType: resolved.mimeType, data } };
@@ -1859,19 +1933,24 @@ function fileToDocument(
 async function extractTextFromBinary(
   buffer: Buffer,
   format: BinaryFormat,
-): Promise<string> {
+): Promise<{ text: string; emptyReason?: string; warning?: string }> {
   switch (format) {
     case ".docx": {
-      return extractTextFromDocx(buffer);
+      return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
-      return parsePdfBuffer(buffer);
+      const result = await parsePdfBuffer(buffer);
+      return {
+        text: result.text,
+        emptyReason: describePdfEmptyText(result),
+        warning: describePdfExtractionWarning(result),
+      };
     }
     case ".pptx": {
-      return extractTextFromPptx(buffer);
+      return { text: await extractTextFromPptx(buffer) };
     }
     case ".xlsx": {
-      return extractTextFromXlsx(buffer);
+      return { text: await extractTextFromXlsx(buffer) };
     }
   }
 }

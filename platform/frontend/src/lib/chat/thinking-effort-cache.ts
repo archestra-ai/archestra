@@ -33,10 +33,10 @@ const pendingKey = (conversationId: string) =>
 /**
  * A pick waiting on the server, boxed.
  *
- * The box is what separates "the user picked auto" from "nothing is pending",
- * now that auto is itself `null`. Left unboxed, choosing auto would read as an
- * empty slot and every turn would keep sending the depth the user just moved
- * away from.
+ * The box is what separates "the user picked the model's default" from
+ * "nothing is pending", now that the default is itself `null`. Left unboxed,
+ * choosing it would read as an empty slot and every turn would keep sending the
+ * depth the user just moved away from.
  */
 type PendingThinkingEffort = { effort: ThinkingEffortSetting };
 

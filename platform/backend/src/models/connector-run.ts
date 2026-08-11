@@ -36,6 +36,7 @@ class ConnectorRunModel {
         completedBatches: t.completedBatches,
         itemErrors: t.itemErrors,
         itemsSkipped: t.itemsSkipped,
+        documentsWithoutText: t.documentsWithoutText,
         error: t.error,
         checkpoint: t.checkpoint,
         stats: t.stats,

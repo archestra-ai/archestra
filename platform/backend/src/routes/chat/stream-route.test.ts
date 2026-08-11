@@ -1526,6 +1526,246 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     });
   });
 
+  test("adds a chosen depth to the Responses options without displacing them", async ({
+    makeConversation,
+  }) => {
+    // The two OpenAI blocks each build a fresh `openai` object, so a depth
+    // written as a third assignment would drop store/reasoningSummary instead
+    // of joining them.
+    const model = await makeOpenAiModelRow("gpt-5.6");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+      reasoningSummary: "auto",
+      reasoningEffort: "high",
+    });
+  });
+
+  test("leaves a non-reasoning OpenAI model without a depth", async ({
+    makeConversation,
+  }) => {
+    // gpt-4o rejects reasoning_effort outright, and the chat transport emits
+    // whatever it is handed — so the field must never be built for it.
+    const model = await makeOpenAiModelRow("gpt-4o");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.openai,
+    ).not.toHaveProperty("reasoningEffort");
+  });
+
+  test("lets a turn's own depth outrank the conversation's stored one", async ({
+    makeConversation,
+  }) => {
+    // A pick made mid-conversation rides with the message it was made for,
+    // rather than racing the row write.
+    const model = await makeOpenAiModelRow("gpt-5-mini");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "low",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        thinkingEffort: "high",
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.openai,
+    ).toMatchObject({ reasoningEffort: "high" });
+  });
+
+  // Seeds a synced Anthropic model row.
+  const makeAnthropicModelRow = (anthropicModelId: string) =>
+    ModelModel.create({
+      externalId: `anthropic/${anthropicModelId}`,
+      provider: "anthropic",
+      modelId: anthropicModelId,
+      description: anthropicModelId,
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+  test("sends each chosen depth to Anthropic unchanged", async ({
+    makeConversation,
+  }) => {
+    const model = await makeAnthropicModelRow("claude-opus-5");
+    const cases = ["low", "medium", "high"] as const;
+
+    for (const thinkingEffort of cases) {
+      const conversation = await makeConversation(agentId, {
+        userId: user.id,
+        organizationId,
+        modelId: model.id,
+        thinkingEffort,
+      });
+      mockStreamText.mockClear();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat",
+        payload: {
+          id: conversation.id,
+          messages: [
+            {
+              id: "msg-1",
+              role: "user",
+              parts: [{ type: "text", text: "hi" }],
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      await executionPromise;
+
+      expect(
+        mockStreamText.mock.calls[0]?.[0].providerOptions?.anthropic,
+      ).toEqual({ effort: thinkingEffort });
+    }
+  });
+
+  test("never writes `thinking`, which the display wrapper would then skip", async ({
+    makeConversation,
+  }) => {
+    // Visible reasoning comes from the fetch wrapper in clients/llm-client.ts
+    // adding `display: "summarized"`, and that wrapper bails on a body that
+    // already declares `thinking`.
+    const model = await makeAnthropicModelRow("claude-sonnet-5");
+    const conversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+      thinkingEffort: "high",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.anthropic,
+    ).not.toHaveProperty("thinking");
+  });
+
+  test("leaves Anthropic models without a selectable depth untouched", async ({
+    makeConversation,
+  }) => {
+    const anthropicModelIds = [
+      // Accepts output_config.effort but keeps thinking off, so a depth would
+      // move token spend without producing any reasoning.
+      "claude-opus-4-8",
+      // Rejects the field outright.
+      "claude-haiku-4-5",
+    ];
+
+    for (const anthropicModelId of anthropicModelIds) {
+      const model = await makeAnthropicModelRow(anthropicModelId);
+      const conversation = await makeConversation(agentId, {
+        userId: user.id,
+        organizationId,
+        modelId: model.id,
+        thinkingEffort: "high",
+      });
+      mockStreamText.mockClear();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat",
+        payload: {
+          id: conversation.id,
+          messages: [
+            {
+              id: "msg-1",
+              role: "user",
+              parts: [{ type: "text", text: "hi" }],
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      await executionPromise;
+
+      expect(
+        mockStreamText.mock.calls[0]?.[0].providerOptions?.anthropic,
+      ).toBeUndefined();
+    }
+  });
+
   // Seeds a synced Perplexity model row; the provider serves two transports
   // discriminated by the model id's vendor prefix.
   const makePerplexityModelRow = (perplexityModelId: string) =>

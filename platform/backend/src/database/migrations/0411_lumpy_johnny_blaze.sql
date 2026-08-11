@@ -1,0 +1,1 @@
+ALTER TABLE "connector_runs" ADD COLUMN "documents_without_text" integer DEFAULT 0;

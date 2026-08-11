@@ -185,6 +185,7 @@ describe("ConnectorRunDetailsDialog", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/The run log names each one/)).toBeInTheDocument();
+    expect(screen.queryByText(/could not be exported/)).not.toBeInTheDocument();
   });
 
   it("hides the no-text row when every document extracted text", () => {

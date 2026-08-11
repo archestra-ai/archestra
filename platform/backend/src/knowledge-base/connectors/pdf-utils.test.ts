@@ -1,21 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetDocument, IMAGE_OPERATION, GRAPHICS_OPERATION } = vi.hoisted(
-  () => ({
-    mockGetDocument: vi.fn(),
-    IMAGE_OPERATION: 85,
-    GRAPHICS_OPERATION: 20,
-  }),
-);
+const { mockGetDocument } = vi.hoisted(() => ({
+  mockGetDocument: vi.fn(),
+}));
 
 vi.mock("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js", () => ({
   default: {
     disableWorker: false,
     getDocument: mockGetDocument,
-    OPS: {
-      paintImageXObject: IMAGE_OPERATION,
-      stroke: GRAPHICS_OPERATION,
-    },
   },
 }));
 
@@ -25,13 +17,7 @@ import {
   parsePdfBuffer,
 } from "./pdf-utils";
 
-function makePage(params?: {
-  text?: string;
-  image?: boolean;
-  graphics?: boolean;
-  textError?: Error;
-  operatorError?: Error;
-}) {
+function makePage(params?: { text?: string; textError?: Error }) {
   return {
     getTextContent: params?.textError
       ? vi.fn().mockRejectedValue(params.textError)
@@ -39,15 +25,6 @@ function makePage(params?: {
           items: params?.text
             ? [{ str: params.text, transform: [1, 0, 0, 1, 0, 10] }]
             : [],
-        }),
-    getOperatorList: params?.operatorError
-      ? vi.fn().mockRejectedValue(params.operatorError)
-      : vi.fn().mockResolvedValue({
-          fnArray: params?.image
-            ? [IMAGE_OPERATION]
-            : params?.graphics
-              ? [GRAPHICS_OPERATION]
-              : [],
         }),
     cleanup: vi.fn(),
   };
@@ -101,15 +78,14 @@ describe("parsePdfBuffer", () => {
     expect(destroy).toHaveBeenCalledOnce();
   });
 
-  it("distinguishes image-only pages from blank pages", async () => {
-    mockDocument([makePage({ image: true }), makePage()]);
+  it("classifies textless pages without requesting render operator lists", async () => {
+    mockDocument([makePage(), makePage()]);
 
     await expect(parsePdfBuffer(Buffer.from("%PDF"))).resolves.toEqual({
       text: "",
       status: "no_text_layer",
       pageCount: 2,
-      imageOnlyPageCount: 1,
-      blankPageCount: 1,
+      textlessPageCount: 2,
     });
   });
 
@@ -137,7 +113,7 @@ describe("parsePdfBuffer", () => {
   it("returns parse_failed when every page fails extraction", async () => {
     const pages = [
       makePage({ textError: new Error("page worker failed") }),
-      makePage({ operatorError: new Error("operator list failed") }),
+      makePage({ textError: new Error("font decoder failed") }),
     ];
     mockDocument(pages);
 
@@ -149,7 +125,7 @@ describe("parsePdfBuffer", () => {
       failedPageCount: 2,
     });
     expect(result.error).toContain("page 1: page worker failed");
-    expect(result.error).toContain("page 2: operator list failed");
+    expect(result.error).toContain("page 2: font decoder failed");
     expect(pages[0].cleanup).toHaveBeenCalledOnce();
     expect(pages[1].cleanup).toHaveBeenCalledOnce();
   });
@@ -173,52 +149,33 @@ describe("parsePdfBuffer", () => {
   });
 
   it("warns for a mixed digital and scanned PDF", async () => {
-    mockDocument([
-      makePage({ text: "Digitally generated page" }),
-      makePage({ image: true }),
-    ]);
+    mockDocument([makePage({ text: "Digitally generated page" }), makePage()]);
 
     const result = await parsePdfBuffer(Buffer.from("%PDF"));
     expect(result).toEqual({
       text: "Digitally generated page",
       status: "partial",
       pageCount: 2,
-      imageOnlyPageCount: 1,
+      textlessPageCount: 1,
     });
     expect(describePdfExtractionWarning(result)).toContain(
-      "1 image-only page had no text layer",
+      "1 page had no extractable text",
     );
   });
 
-  it("warns for a mixed digital and graphics-only PDF", async () => {
-    mockDocument([
-      makePage({ text: "Digitally generated page" }),
-      makePage({ graphics: true }),
-    ]);
-
-    const result = await parsePdfBuffer(Buffer.from("%PDF"));
-    expect(result).toEqual({
-      text: "Digitally generated page",
-      status: "partial",
-      pageCount: 2,
-      graphicsOnlyPageCount: 1,
-    });
-    expect(describePdfExtractionWarning(result)).toContain(
-      "1 graphics-only page had no text layer",
-    );
-  });
-
-  it("does not warn for a digital PDF with a genuinely blank page", async () => {
+  it("conservatively warns for a mixed digital and textless PDF", async () => {
     mockDocument([makePage({ text: "Readable page" }), makePage()]);
 
     const result = await parsePdfBuffer(Buffer.from("%PDF"));
     expect(result).toEqual({
       text: "Readable page",
-      status: "ok",
+      status: "partial",
       pageCount: 2,
-      blankPageCount: 1,
+      textlessPageCount: 1,
     });
-    expect(describePdfExtractionWarning(result)).toBeUndefined();
+    expect(describePdfExtractionWarning(result)).toContain(
+      "1 page had no extractable text",
+    );
   });
 
   it("stringifies non-Error throwables", async () => {
@@ -236,18 +193,14 @@ describe("PDF extraction descriptions", () => {
     ).toBeUndefined();
   });
 
-  it("names image-only, graphics-only, and blank page counts", () => {
+  it("names the textless page count", () => {
     const reason = describePdfEmptyText({
       text: "",
       status: "no_text_layer",
       pageCount: 12,
-      imageOnlyPageCount: 8,
-      graphicsOnlyPageCount: 2,
-      blankPageCount: 2,
+      textlessPageCount: 12,
     });
-    expect(reason).toContain("8 image-only");
-    expect(reason).toContain("2 graphics-only");
-    expect(reason).toContain("2 blank");
+    expect(reason).toContain("12 textless");
   });
 
   it("includes the parse error", () => {

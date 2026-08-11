@@ -414,6 +414,7 @@ describe("GoogleDriveConnector", () => {
           itemId: "gdoc-1",
           resource: "driveFile",
           error: expect.stringContaining("HTTP 503"),
+          itemUnavailable: true,
         }),
       ]);
     });
@@ -927,7 +928,7 @@ describe("GoogleDriveConnector", () => {
         text: "Readable first page",
         status: "partial",
         pageCount: 2,
-        imageOnlyPageCount: 1,
+        textlessPageCount: 1,
       });
 
       mockFilesList.mockResolvedValueOnce({
@@ -959,7 +960,7 @@ describe("GoogleDriveConnector", () => {
         expect.objectContaining({
           fileId: "file-mixed",
           fileName: "mixed-contract.pdf",
-          reason: expect.stringContaining("1 image-only page"),
+          reason: expect.stringContaining("1 page had no extractable text"),
         }),
         "Google Drive: PDF text extraction was incomplete",
       );

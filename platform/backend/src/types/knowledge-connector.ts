@@ -702,6 +702,13 @@ export interface ConnectorItemFailure {
   itemId: string | number;
   resource: string;
   error: string;
+  /**
+   * True when the fallback omitted the top-level document rather than merely
+   * degrading an optional sub-resource such as comments. These failures must
+   * make the run visible as completed-with-errors while preserving any
+   * last-known-good indexed copy.
+   */
+  itemUnavailable?: boolean;
 }
 
 /**

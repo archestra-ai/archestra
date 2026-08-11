@@ -259,10 +259,10 @@ export function ConnectorRunDetailsDialog({
                 <p className="text-xs text-amber-600">
                   {run.documentsWithoutText} of the {run.itemsSkipped} skipped
                   items contained no extractable text — scanned or image-only
-                  PDFs, files that could not be parsed or exported, images too
-                  large to embed, or empty pages — so they are not searchable
-                  and will not appear in any knowledge base answer. The run log
-                  names each one.
+                  PDFs, files that could not be parsed, images too large to
+                  embed, or empty pages — so they are not searchable and will
+                  not appear in any knowledge base answer. The run log names
+                  each one.
                 </p>
               )}
 

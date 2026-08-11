@@ -209,9 +209,9 @@ class ConnectorSyncService {
     let itemsSkipped = 0;
     let documentsWithoutText = 0;
     let unsupportedItemsSkipped = 0;
-    // Per-item fetch fallbacks. These stay warnings (the run is not "completed
-    // with errors" for them), but a run that ingested nothing needs to know
-    // they happened before blaming the sharing configuration.
+    // Per-item fetch fallbacks. Optional sub-resource failures stay warnings;
+    // a fallback that omits the top-level document increments itemErrors so a
+    // modified source that was not refreshed cannot leave a green run.
     let itemFetchFailures = 0;
     let batchCount = 0;
     const startTime = Date.now();
@@ -363,16 +363,22 @@ class ConnectorSyncService {
           });
         }
 
-        // Sub-resource fallbacks (safeItemFetch): the item itself was still
-        // produced and ingested, possibly degraded — a warning in the run
-        // logs (each is logged at fetch time), NOT an error that flips the
-        // run to completed_with_errors. Only documents that actually failed
-        // to ingest leave data missing and deserve that status.
+        // safeItemFetch can represent either a degraded optional sub-resource
+        // or a top-level item that could not be produced. Only the latter is
+        // an item error; both remain in the failure total used by empty-run
+        // diagnosis and retain the last-known-good indexed document.
         if (batch.failures?.length) {
           itemFetchFailures += batch.failures.length;
+          const unavailableItems = batch.failures.filter(
+            (failure) => failure.itemUnavailable,
+          ).length;
+          itemErrors += unavailableItems;
+          documentsProcessed += unavailableItems;
           runLog.warn(
-            { failures: batch.failures.length },
-            "Batch completed with sub-resource fallbacks (see item warnings above)",
+            { failures: batch.failures.length, unavailableItems },
+            unavailableItems > 0
+              ? "Batch completed with unavailable items (see item warnings above)"
+              : "Batch completed with sub-resource fallbacks (see item warnings above)",
           );
         }
 

@@ -74,7 +74,7 @@ export function initializeRagMetrics(): void {
 
   ragDocumentsWithoutTextTotal = new client.Counter({
     name: "rag_documents_without_text_total",
-    help: "Documents a content sync found but could not index (scanned PDF with no text layer, unparseable file, failed export, oversized image) — skipped, so invisible to search",
+    help: "Documents a content sync found but could not index (scanned PDF with no text layer, unparseable or empty file, oversized image) — skipped, so invisible to search",
     labelNames: ["connector_type"],
   });
 

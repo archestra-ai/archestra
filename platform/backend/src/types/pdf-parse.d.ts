@@ -24,7 +24,6 @@ declare module "pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js" {
       normalizeWhitespace: boolean;
       disableCombineTextItems: boolean;
     }): Promise<{ items: PdfJsTextItem[] }>;
-    getOperatorList(): Promise<{ fnArray: number[] }>;
     cleanup(): void;
   }
 
@@ -41,7 +40,6 @@ declare module "pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js" {
 
   interface PdfJsApi {
     disableWorker: boolean;
-    OPS: Record<string, number | undefined>;
     getDocument(params: {
       data: Buffer | Uint8Array;
       stopAtErrors?: boolean;

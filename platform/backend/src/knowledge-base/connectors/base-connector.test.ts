@@ -32,6 +32,7 @@ class TestableConnector extends BaseConnector {
     fallback: T;
     itemId: string | number;
     resource: string;
+    itemUnavailable?: boolean;
   }): Promise<T> {
     return this.safeItemFetch(params);
   }

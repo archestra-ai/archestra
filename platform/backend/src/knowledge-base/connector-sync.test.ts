@@ -326,6 +326,7 @@ describe("ConnectorSyncService", () => {
                 itemId: "gdoc-1",
                 resource: "driveFile",
                 error: "HTTP 503",
+                itemUnavailable: true,
               },
             ],
             checkpoint: { page: 1 },
@@ -335,7 +336,12 @@ describe("ConnectorSyncService", () => {
       ),
     });
 
-    await connectorSyncService.executeSync(connector.id);
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    const run = await ConnectorRunModel.findById(result.runId);
+    expect(run?.status).toBe("completed_with_errors");
+    expect(run?.itemErrors).toBe(1);
+    expect(run?.documentsProcessed).toBe(1);
 
     expect(
       await KbDocumentModel.findBySourceId({

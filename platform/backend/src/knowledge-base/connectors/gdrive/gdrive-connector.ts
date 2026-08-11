@@ -1154,6 +1154,7 @@ export class GoogleDriveConnector extends BaseConnector {
           fallback: null,
           itemId: file.id ?? "unknown",
           resource: "driveFile",
+          itemUnavailable: true,
         });
         if (doc) documents.push(doc);
       }
@@ -1364,6 +1365,7 @@ export class GoogleDriveConnector extends BaseConnector {
           fallback: null,
           itemId: file.id ?? "unknown",
           resource: "driveFile",
+          itemUnavailable: true,
         });
         if (doc) documents.push(doc);
       }

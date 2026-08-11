@@ -1893,13 +1893,15 @@ describe("createAgentServer tools/list", () => {
   });
 
   // The realistic auto-mode matrix, both surfaces, for a DYNAMICALLY-reached
-  // (unassigned, accessAllTools) UI tool in search_and_run_only: the gateway
-  // advertises it (its client renders from the definition), the chat does not.
+  // (unassigned, accessAllTools) UI tool in search_and_run_only: NEITHER
+  // surface advertises it. The reachable set in Auto mode is the caller's whole
+  // accessible corpus, so no tool class may widen the list — the model finds
+  // the tool with search_tools and dispatches it with run_tool.
   for (const surface of [
     { agentType: "agent" as const, advertised: false },
-    { agentType: "mcp_gateway" as const, advertised: true },
+    { agentType: "mcp_gateway" as const, advertised: false },
   ]) {
-    test(`${surface.agentType} ${surface.advertised ? "advertises" : "does NOT advertise"} a dynamically-reached UI tool in search_and_run_only`, async ({
+    test(`${surface.agentType} does NOT advertise a dynamically-reached UI tool in search_and_run_only`, async ({
       makeAgent,
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -1962,8 +1964,9 @@ describe("createAgentServer tools/list", () => {
     });
   }
 
-  test("derives an unassigned, dynamically-reached app launch tool's description from the catalog name, not the raw stored value", async ({
+  test("derives an assigned app launch tool's description from the catalog name, not the raw stored value", async ({
     makeAgent,
+    makeAgentTool,
     makeInternalMcpCatalog,
     makeMcpServer,
     makeOrganization,
@@ -1974,9 +1977,10 @@ describe("createAgentServer tools/list", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
+    // Custom tool mode (accessAllTools off): the agent advertises the tools it
+    // assigns, which is where a launch tool's label is model-visible at all.
     const agent = await makeAgent({
       organizationId: org.id,
-      accessAllTools: true,
       agentType: "mcp_gateway",
     });
     const catalog = await makeInternalMcpCatalog({
@@ -1986,12 +1990,10 @@ describe("createAgentServer tools/list", () => {
       scope: "org",
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
-    // Unassigned launch tool with a raw (pre-sanitization) stored description,
-    // reached only via the dynamic UI-tool path — the surface where the launch
-    // title/description used to resolve from a catalog map built off assigned
-    // tools only, so a dynamically-reached app tool fell through to its raw
-    // stored metadata.
-    await makeTool({
+    // A raw (pre-sanitization) stored description must never reach the model:
+    // both the title and the description resolve from the backing catalog name,
+    // sanitized, rather than from the stored value.
+    const launchTool = await makeTool({
       catalogId: catalog.id,
       name: "pizzatracker__open",
       description: "INJECTED_SENTINEL ![x](http://evil/a.png)",
@@ -2000,6 +2002,7 @@ describe("createAgentServer tools/list", () => {
         _meta: { ui: { resourceUri: "ui://archestra-app/pizzatracker" } },
       },
     });
+    await makeAgentTool(agent.id, launchTool.id);
 
     const { server } = await createAgentServer({
       agentId: agent.id,
@@ -2034,8 +2037,15 @@ describe("createAgentServer tools/list", () => {
     expect(launch?.description).not.toContain("INJECTED_SENTINEL");
   });
 
-  test("Auto-tool mode: an excluded unassigned UI tool is not advertised in tools/list", async ({
+  // The contract Auto tool mode advertises to the user: "tools are discovered on
+  // demand — the catalog never burns context tokens". A gateway in Auto mode
+  // therefore lists exactly the two Auto tools, no matter how many tools, of
+  // whatever class, the caller can reach. Seeds one of every class that
+  // contributes to the candidate pool, so a new tool source that skips the
+  // exposure filter fails here rather than shipping a hundred-tool listing.
+  test("Auto mode advertises exactly the two Auto tools, whatever classes are reachable", async ({
     makeAgent,
+    makeAgentTool,
     makeInternalMcpCatalog,
     makeMcpServer,
     makeOrganization,
@@ -2046,32 +2056,73 @@ describe("createAgentServer tools/list", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    // A gateway (external) surface: accessAllTools reaches unassigned UI tools
-    // dynamically, and owned-app launch tools stay advertised there — unlike
-    // the internal chat, which opens owned apps via render_app.
     const agent = await makeAgent({
       organizationId: org.id,
       accessAllTools: true,
       agentType: "mcp_gateway",
     });
-    const catalog = await makeInternalMcpCatalog({
+
+    // Class 1: an Archestra App's UI-providing launch tool.
+    const appCatalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       name: "bug-tracker",
       serverType: "app",
       scope: "org",
     });
-    // An org-scoped install makes the catalog accessible to the user, so its
-    // unassigned UI tools reach the dynamic UI-tool path.
-    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
-    // Neither tool is assigned; both are reachable via the dynamic UI-tool path.
+    await makeMcpServer({ catalogId: appCatalog.id, scope: "org" });
     await makeTool({
-      catalogId: catalog.id,
-      name: "bug_tracker__open_shown",
+      catalogId: appCatalog.id,
+      name: "bug_tracker__open",
       parameters: { type: "object", properties: {} },
-      meta: { _meta: { ui: { resourceUri: "ui://archestra-app/shown" } } },
+      meta: {
+        _meta: { ui: { resourceUri: "ui://archestra-app/bug-tracker" } },
+      },
     });
+
+    // Class 2: a remote third-party server's UI-providing tool, plus a non-UI
+    // sibling — neither assigned, both reachable through Auto mode.
+    const remoteCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "maps",
+      serverType: "remote",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: remoteCatalog.id, scope: "org" });
+    await makeTool({
+      catalogId: remoteCatalog.id,
+      name: "maps__show",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: "ui://maps/show" } } },
+    });
+    await makeTool({
+      catalogId: remoteCatalog.id,
+      name: "maps__geocode",
+      parameters: { type: "object", properties: {} },
+    });
+
+    // Class 3: a plain catalog tool that IS assigned to the agent — a leftover
+    // assignment must not re-open the listing an Auto-mode agent promises to
+    // keep empty.
+    const assignedCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "weather",
+      serverType: "remote",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: assignedCatalog.id, scope: "org" });
+    const assignedUiTool = await makeTool({
+      catalogId: assignedCatalog.id,
+      name: "weather__open",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: "ui://weather/open" } } },
+    });
+    await makeAgentTool(agent.id, assignedUiTool.id);
+
+    // Class 4: a reachable UI tool the operator explicitly disabled for this
+    // gateway. Exclusion enforcement itself is covered by the exclusions suite;
+    // here it must simply never appear.
     const excludedTool = await makeTool({
-      catalogId: catalog.id,
+      catalogId: appCatalog.id,
       name: "bug_tracker__open_excluded",
       parameters: { type: "object", properties: {} },
       meta: { _meta: { ui: { resourceUri: "ui://archestra-app/excluded" } } },
@@ -2109,11 +2160,12 @@ describe("createAgentServer tools/list", () => {
       method: "tools/list",
       params: {},
     });
-    const names = new Set(response.tools.map((tool) => tool.name));
-    // The dynamic UI-tool path surfaces the non-excluded one...
-    expect(names.has("bug_tracker__open_shown")).toBe(true);
-    // ...but the excluded one must not be advertised.
-    expect(names.has("bug_tracker__open_excluded")).toBe(false);
+    // Exactly the discovery/dispatch pair — asserted as the whole list, so any
+    // extra tool of any class fails regardless of which path contributed it.
+    expect(response.tools.map((tool) => tool.name).sort()).toEqual([
+      "archestra__run_tool",
+      "archestra__search_tools",
+    ]);
   });
 
   test("chat agent does not advertise an owned-app launch tool reached via dynamic access", async ({
@@ -2181,6 +2233,7 @@ describe("createAgentServer tools/list", () => {
 
   test("external UI-providing tool is dropped in chat but kept on the gateway", async ({
     makeAgent,
+    makeAgentTool,
     makeInternalMcpCatalog,
     makeMcpServer,
     makeOrganization,
@@ -2191,8 +2244,9 @@ describe("createAgentServer tools/list", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    // An external (serverType remote) UI-providing tool, reachable only via
-    // dynamic access — not assigned to any agent.
+    // An external (serverType remote) UI-providing tool, ASSIGNED to the agent:
+    // the surface split applies to the bounded set an operator configured, not
+    // to whatever Auto mode can reach.
     const extCatalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       name: "maps",
@@ -2200,7 +2254,7 @@ describe("createAgentServer tools/list", () => {
       scope: "org",
     });
     await makeMcpServer({ catalogId: extCatalog.id, scope: "org" });
-    await makeTool({
+    const uiTool = await makeTool({
       catalogId: extCatalog.id,
       name: "maps__show",
       parameters: { type: "object", properties: {} },
@@ -2210,9 +2264,10 @@ describe("createAgentServer tools/list", () => {
     const listNames = async (agentType: "agent" | "mcp_gateway") => {
       const agent = await makeAgent({
         organizationId: org.id,
-        accessAllTools: true,
+        toolExposureMode: "search_and_run_only",
         agentType,
       });
+      await makeAgentTool(agent.id, uiTool.id);
       const { server } = await createAgentServer({
         agentId: agent.id,
         tokenAuth: {
@@ -2236,10 +2291,10 @@ describe("createAgentServer tools/list", () => {
     };
 
     // Chat resolves any UI tool's ui:// resource from its own catalog when the
-    // model invokes it (run_tool), so it need not advertise the dynamic UI tool.
+    // model invokes it (run_tool), so it need not advertise the UI tool.
     expect((await listNames("agent")).has("maps__show")).toBe(false);
     // An external MCP client on the gateway discovers UI-providing tools only
-    // from tools/list, so the gateway must keep advertising it.
+    // from tools/list, so the gateway must keep advertising the assigned one.
     expect((await listNames("mcp_gateway")).has("maps__show")).toBe(true);
   });
 
@@ -2430,147 +2485,10 @@ describe("createAgentServer tools/list", () => {
     ).toBe(uiResourceUri);
   });
 
-  test("lists a UI-providing tool top-level for an all-tools agent even when unassigned", async ({
-    makeAgent,
-    makeInternalMcpCatalog,
-    makeMcpServer,
-    makeOrganization,
-    makeTool,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    // accessAllTools implies search_and_run_only (AgentModel invariant); the
-    // tool below is never assigned via agent_tools — it must be reachable
-    // purely through all-tools dynamic access, the same as search_tools/run_tool.
-    const agent = await makeAgent({
-      organizationId: org.id,
-      accessAllTools: true,
-    });
-    const catalog = await makeInternalMcpCatalog({
-      organizationId: org.id,
-      name: "bug-tracker",
-    });
-    const uiResourceUri = "ui://archestra-app/bug-tracker";
-    await makeTool({
-      catalogId: catalog.id,
-      name: "bug_tracker__open",
-      parameters: { type: "object", properties: {} },
-      meta: { _meta: { ui: { resourceUri: uiResourceUri } } },
-    });
-    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
-
-    const { server } = await createAgentServer({
-      agentId: agent.id,
-      tokenAuth: {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: user.id,
-      },
-    });
-    const listToolsHandler = (
-      server.server as unknown as {
-        _requestHandlers: Map<string, TestListToolsHandler>;
-      }
-    )._requestHandlers.get("tools/list");
-    if (!listToolsHandler) {
-      throw new Error("Expected tools/list handler to be registered");
-    }
-
-    const response = await listToolsHandler({
-      method: "tools/list",
-      params: {},
-    });
-    const openTool = response.tools.find(
-      (tool) => tool.name === "bug_tracker__open",
-    );
-    expect(openTool).toBeDefined();
-    expect(
-      (openTool?._meta as { ui?: { resourceUri?: string } } | undefined)?.ui
-        ?.resourceUri,
-    ).toBe(uiResourceUri);
-  });
-
-  // The widening is a narrow carve-out for UI-providing tools, not a floodgate:
-  // without the requireUiResource filter an all-tools agent's tools/list would
-  // balloon to the user's entire accessible corpus, defeating the
-  // context-window purpose of search_and_run_only. The positive test above
-  // cannot catch that regression (it seeds only a UI tool), so this one seeds a
-  // non-UI sibling in the same catalog and asserts it stays behind search/run.
-  test("widens tools/list with UI-providing tools only — an unassigned non-UI tool stays hidden", async ({
-    makeAgent,
-    makeInternalMcpCatalog,
-    makeMcpServer,
-    makeOrganization,
-    makeTool,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      accessAllTools: true,
-    });
-    const catalog = await makeInternalMcpCatalog({
-      organizationId: org.id,
-      name: "bug-tracker",
-    });
-    await makeTool({
-      catalogId: catalog.id,
-      name: "bug_tracker__open",
-      parameters: { type: "object", properties: {} },
-      meta: {
-        _meta: { ui: { resourceUri: "ui://archestra-app/bug-tracker" } },
-      },
-    });
-    await makeTool({
-      catalogId: catalog.id,
-      name: "bug_tracker__list",
-      parameters: { type: "object", properties: {} },
-    });
-    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
-
-    const { server } = await createAgentServer({
-      agentId: agent.id,
-      tokenAuth: {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: user.id,
-      },
-    });
-    const listToolsHandler = (
-      server.server as unknown as {
-        _requestHandlers: Map<string, TestListToolsHandler>;
-      }
-    )._requestHandlers.get("tools/list");
-    if (!listToolsHandler) {
-      throw new Error("Expected tools/list handler to be registered");
-    }
-
-    const response = await listToolsHandler({
-      method: "tools/list",
-      params: {},
-    });
-    const names = new Set(response.tools.map((tool) => tool.name));
-    expect(names.has("bug_tracker__open")).toBe(true);
-    expect(names.has("bug_tracker__list")).toBe(false);
-  });
-
-  test("lists a legacy flat ui/resourceUri tool top-level, assigned and via dynamic access", async ({
+  test("lists an assigned legacy flat ui/resourceUri tool top-level", async ({
     makeAgent,
     makeAgentTool,
     makeInternalMcpCatalog,
-    makeMcpServer,
     makeOrganization,
     makeTool,
     makeUser,
@@ -2581,12 +2499,12 @@ describe("createAgentServer tools/list", () => {
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({
       organizationId: org.id,
-      accessAllTools: true,
+      toolExposureMode: "search_and_run_only",
     });
-    // Assigned legacy-key tool exercises the in-memory providesUiResource
-    // gate; the unassigned one exercises the SQL predicate
-    // (toolUiResourceUriSql) through the dynamic widening. Listing BOTH proves
-    // the two implementations of the legacy fallback haven't drifted.
+    // Exercises the in-memory providesUiResource gate's legacy fallback. Its
+    // SQL counterpart (toolUiResourceUriSql) is covered where that predicate is
+    // still used — resolving tools by resource URI, see models/tool.test.ts and
+    // models/mcp-server.test.ts.
     const assignedCatalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       name: "legacy-assigned",
@@ -2598,18 +2516,6 @@ describe("createAgentServer tools/list", () => {
       meta: { _meta: { "ui/resourceUri": "ui://legacy/assigned.html" } },
     });
     await makeAgentTool(agent.id, assignedTool.id);
-
-    const dynamicCatalog = await makeInternalMcpCatalog({
-      organizationId: org.id,
-      name: "legacy-dynamic",
-    });
-    await makeTool({
-      catalogId: dynamicCatalog.id,
-      name: "legacy_dynamic__open",
-      parameters: { type: "object", properties: {} },
-      meta: { _meta: { "ui/resourceUri": "ui://legacy/dynamic.html" } },
-    });
-    await makeMcpServer({ catalogId: dynamicCatalog.id, scope: "org" });
 
     const { server } = await createAgentServer({
       agentId: agent.id,
@@ -2637,7 +2543,6 @@ describe("createAgentServer tools/list", () => {
     });
     const names = new Set(response.tools.map((tool) => tool.name));
     expect(names.has("legacy_assigned__open")).toBe(true);
-    expect(names.has("legacy_dynamic__open")).toBe(true);
   });
 
   test("does not expose a tool whose resourceUri is not ui://, unless a valid legacy key backs it", async ({
@@ -2749,75 +2654,11 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
-  test("lists a tool exactly once when it is both assigned and dynamically accessible", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeMcpServer,
-    makeOrganization,
-    makeTool,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      accessAllTools: true,
-    });
-    const catalog = await makeInternalMcpCatalog({
-      organizationId: org.id,
-      name: "bug-tracker",
-    });
-    const uiTool = await makeTool({
-      catalogId: catalog.id,
-      name: "bug_tracker__open",
-      parameters: { type: "object", properties: {} },
-      meta: {
-        _meta: { ui: { resourceUri: "ui://archestra-app/bug-tracker" } },
-      },
-    });
-    await makeAgentTool(agent.id, uiTool.id);
-    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
-
-    const { server } = await createAgentServer({
-      agentId: agent.id,
-      tokenAuth: {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: user.id,
-      },
-    });
-    const listToolsHandler = (
-      server.server as unknown as {
-        _requestHandlers: Map<string, TestListToolsHandler>;
-      }
-    )._requestHandlers.get("tools/list");
-    if (!listToolsHandler) {
-      throw new Error("Expected tools/list handler to be registered");
-    }
-
-    const response = await listToolsHandler({
-      method: "tools/list",
-      params: {},
-    });
-    // The tool reaches the candidate pool through both the assignment and the
-    // dynamic widening; a dedupe regression would emit it twice — invalid per
-    // the MCP spec (tool names must be unique in a listing).
-    expect(
-      response.tools.filter((tool) => tool.name === "bug_tracker__open"),
-    ).toHaveLength(1);
-  });
-
-  // Pins the security boundary the all-tools dynamic-access widening above must
-  // not cross: search_and_run_only is also used, independent of accessAllTools,
-  // to hide an agent's own assigned tools behind search/run for context-window
-  // management. Such an agent must NOT gain reach to unassigned tools org-wide —
-  // the widening is keyed strictly on accessAllTools, not toolExposureMode.
+  // Pins the security boundary the exposure mode must not cross:
+  // search_and_run_only is used, independent of accessAllTools, to hide an
+  // agent's own assigned tools behind search/run for context-window management.
+  // Such an agent must NOT gain reach to unassigned tools org-wide — dynamic
+  // reach is keyed strictly on accessAllTools, not toolExposureMode.
   test("does not widen tools/list for a search_and_run_only agent without accessAllTools", async ({
     makeAgent,
     makeInternalMcpCatalog,

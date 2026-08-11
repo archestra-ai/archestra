@@ -48,8 +48,8 @@ export function isOpenAiCodexCredential(value: string | undefined): boolean {
 
 /**
  * True when a specific credential must be governed as **per-user** — personal
- * scope only, owner-matched, never shared through team/org or multi-provider
- * (model-router) virtual keys. Two cases collapse here: the provider is
+ * scope only and owner-matched, so it is never shared through a team/org
+ * virtual key. Two cases collapse here: the provider is
  * inherently per-user (GitHub / Microsoft Copilot), or the secret is a
  * ChatGPT-subscription (Codex) credential, which is one person's ChatGPT account
  * and must get the identical treatment on the `openai` provider.

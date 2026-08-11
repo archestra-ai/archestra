@@ -11,6 +11,7 @@ export const MCP_ENTERPRISE_AUTH_EXTENSION_ID =
   "io.modelcontextprotocol/enterprise-managed-authorization";
 export const MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID =
   "io.modelcontextprotocol/oauth-client-credentials";
+export const MCP_SKILLS_EXTENSION_ID = "io.modelcontextprotocol/skills";
 
 export const MCP_APPS_CLIENT_EXTENSION_CAPABILITIES = {
   [MCP_APPS_EXTENSION_ID]: {
@@ -28,4 +29,14 @@ export const MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES = {
 
 export const MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES = {
   [MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID]: {},
+} as const;
+
+/**
+ * Declaring the skills extension commits the server to `skills/list` and
+ * `skills/get`. `directoryRead` is the extension's one optional setting: it
+ * additionally promises `resources/directory/read` on the skill namespace,
+ * which the gateway synthesizes from each version's stored file paths.
+ */
+export const MCP_SKILLS_SERVER_EXTENSION_CAPABILITIES = {
+  [MCP_SKILLS_EXTENSION_ID]: { directoryRead: true },
 } as const;

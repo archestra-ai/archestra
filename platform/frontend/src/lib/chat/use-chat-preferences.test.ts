@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+  agentNotRecommendedForModel,
   agentRequiresPerUserConnect,
   agentToolsUnavailableForModel,
   CHAT_STORAGE_KEYS,
@@ -474,5 +475,119 @@ describe("deriveModelSource", () => {
         orgModelId: null,
       }),
     ).toBeNull();
+  });
+});
+
+describe("agentNotRecommendedForModel", () => {
+  const flaggedModel = {
+    dbId: "uuid-qwen-4b",
+    capabilities: { recommendedForAgents: false, supportsToolCalling: true },
+  };
+  const recommendedModel = {
+    dbId: "uuid-llama-70b",
+    capabilities: { recommendedForAgents: true, supportsToolCalling: true },
+  };
+  // Nothing evaluated this model, so the sync left the verdict null.
+  const unjudgedModel = {
+    dbId: "uuid-anthropic",
+    capabilities: { supportsToolCalling: true },
+  };
+  const flaggedAndToolless = {
+    dbId: "uuid-tiny-no-tools",
+    capabilities: { recommendedForAgents: false, supportsToolCalling: false },
+  };
+  const models = [
+    flaggedModel,
+    recommendedModel,
+    unjudgedModel,
+    flaggedAndToolless,
+  ];
+
+  test("true for a tooled agent on a flagged model", () => {
+    expect(
+      agentNotRecommendedForModel({
+        agent: { accessAllTools: false, tools: [{}] },
+        selectedModelId: "uuid-qwen-4b",
+        models,
+      }),
+    ).toBe(true);
+  });
+
+  test("true for an Auto-mode agent (no assignments) on a flagged model", () => {
+    expect(
+      agentNotRecommendedForModel({
+        agent: { accessAllTools: true, tools: [] },
+        selectedModelId: "uuid-qwen-4b",
+        models,
+      }),
+    ).toBe(true);
+  });
+
+  // A flagged model doing plain chat is fine; the verdict only matters for
+  // agentic use.
+  test("false for a tool-less Custom agent on a flagged model", () => {
+    expect(
+      agentNotRecommendedForModel({
+        agent: { accessAllTools: false, tools: [] },
+        selectedModelId: "uuid-qwen-4b",
+        models,
+      }),
+    ).toBe(false);
+  });
+
+  test("false for a recommended model", () => {
+    expect(
+      agentNotRecommendedForModel({
+        agent: { accessAllTools: true, tools: [{}] },
+        selectedModelId: "uuid-llama-70b",
+        models,
+      }),
+    ).toBe(false);
+  });
+
+  test("false when no verdict was recorded", () => {
+    expect(
+      agentNotRecommendedForModel({
+        agent: { accessAllTools: true, tools: [{}] },
+        selectedModelId: "uuid-anthropic",
+        models,
+      }),
+    ).toBe(false);
+  });
+
+  // "No tools" is the stronger, more actionable statement, and two chips side
+  // by side in the composer is noise.
+  test("defers to the no-tools notice when the flagged model takes no tools", () => {
+    expect(
+      agentNotRecommendedForModel({
+        agent: { accessAllTools: true, tools: [{}] },
+        selectedModelId: "uuid-tiny-no-tools",
+        models,
+      }),
+    ).toBe(false);
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: true, tools: [{}] },
+        selectedModelId: "uuid-tiny-no-tools",
+        models,
+      }),
+    ).toBe(true);
+  });
+
+  test("false without an agent or a selection", () => {
+    expect(
+      agentNotRecommendedForModel({
+        agent: undefined,
+        selectedModelId: "uuid-qwen-4b",
+        models,
+      }),
+    ).toBe(false);
+    expect(
+      agentNotRecommendedForModel({
+        agent: { accessAllTools: true, tools: [] },
+        selectedModelId: null,
+        models,
+      }),
+    ).toBe(false);
   });
 });

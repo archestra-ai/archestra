@@ -13,6 +13,7 @@ import AgentModel from "./agent";
 import McpServerModel from "./mcp-server";
 import MemberModel from "./member";
 import OrganizationRoleModel from "./organization-role";
+import SkillModel from "./skill";
 
 class UserModel {
   static async createOrGetExistingDefaultAdminUser({
@@ -254,6 +255,7 @@ class UserModel {
       await McpServerModel.purgePersonalServersForUserInTransaction(userId, tx);
       await AgentModel.deletePersonalMcpGatewaysForUser(userId, tx);
       await AgentModel.deletePersonalLlmProxiesForUser(userId, tx);
+      await SkillModel.deletePersonalSkillsForUser(userId, tx);
       const result = await tx
         .delete(schema.usersTable)
         .where(eq(schema.usersTable.id, userId))
@@ -296,6 +298,19 @@ class UserModel {
       logger.error(
         { err: error, userId },
         "UserModel.delete: failed to delete personal LLM proxies",
+      );
+    }
+
+    // Personal skills would otherwise survive as active orphans:
+    // `skills.author_id` is `set null`, and a personal row without an author
+    // has no author URI segment, so no `skill://` URI can name it and no one
+    // can see or edit it. Soft-deleted, so nothing here can fail on a FK.
+    try {
+      await SkillModel.deletePersonalSkillsForUser(userId);
+    } catch (error) {
+      logger.error(
+        { err: error, userId },
+        "UserModel.delete: failed to delete personal skills",
       );
     }
 

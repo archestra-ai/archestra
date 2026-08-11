@@ -26,6 +26,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import config from "@/config";
 import {
   AgentExcludedSubagentModel,
   AgentModel,
@@ -45,6 +46,7 @@ import {
   test,
 } from "@/test";
 import mcpGatewayRoutes from "./index";
+import { MCP_SERVER_INFO_META_KEY } from "./protocol";
 
 /**
  * Helper to create MCP gateway request headers
@@ -151,22 +153,32 @@ describe("MCP Gateway (stateless mode)", () => {
       isOrganizationToken: true,
     });
 
-    // Send initialize request
-    const initResponse = await app.inject({
-      method: "POST",
-      url: `/v1/mcp/${agent.id}`,
-      headers: makeMcpHeaders(token.value),
-      payload: {
-        jsonrpc: "2.0",
-        method: "initialize",
-        params: {
-          protocolVersion: "2024-11-05",
-          capabilities: {},
-          clientInfo: { name: "test-client", version: "1.0.0" },
+    // Pin the skills flag rather than inherit it from the developer's .env:
+    // this test asserts the flag-off extension set, and the flag-on
+    // declaration is protocol.test.ts's business.
+    const original = config.mcpGateway.skillsEnabled;
+    let initResponse: Awaited<ReturnType<typeof app.inject>>;
+    try {
+      config.mcpGateway.skillsEnabled = false;
+      // Send initialize request
+      initResponse = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test-client", version: "1.0.0" },
+          },
+          id: 1,
         },
-        id: 1,
-      },
-    });
+      });
+    } finally {
+      config.mcpGateway.skillsEnabled = original;
+    }
 
     expect(initResponse.statusCode).toBe(200);
 
@@ -179,6 +191,197 @@ describe("MCP Gateway (stateless mode)", () => {
       [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
       [MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID]: {},
     });
+  });
+
+  test("reserves the skill://archestra namespace while the skills surface is off", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // The skills surface is off here (the deployment flag is off), which is
+    // exactly the window where falling through would let an upstream server
+    // answer for the platform's own prefix. A parseable skill URI must come
+    // back not-found — never be proxied upstream.
+    const agent = await makeAgent();
+    const org = await makeOrganization();
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    // A well-formed URI, an unknown scope, and malformed percent-encoding all
+    // stay inside the reserved authority.
+    for (const uri of [
+      "skill://archestra/shared/refunds/SKILL.md",
+      "skill://archestra/unknown-scope/evil.md",
+      "skill://archestra/shared/%zz/SKILL.md",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "resources/read",
+          params: { uri },
+          id: 2,
+        },
+      });
+
+      expect(response.statusCode, uri).toBe(200);
+      const body = response.json();
+      // SEP-2164 retired the MCP-specific -32002 for missing resources; the
+      // current revision (and SEP-2640 for skill URIs) answers -32602.
+      expect(body.error.code, uri).toBe(-32602);
+      expect(body.error.message, uri).toContain("Resource not found");
+    }
+  });
+
+  test("dispatches skills/list only while the skills surface is enabled", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // Everything else about the skills surface is tested by calling its
+    // handlers directly. This is the one test that proves the handlers are
+    // REACHABLE: an inverted guard, a wrong config key, or a dropped
+    // `isSkillMethod` check would ship the whole feature dead — the method
+    // falling through to the SDK, which answers -32601 — with the rest of the
+    // suite still green.
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const listSkills = async () =>
+      await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "skills/list", params: {}, id: 3 },
+      });
+
+    const original = config.mcpGateway.skillsEnabled;
+    try {
+      config.mcpGateway.skillsEnabled = false;
+      const off = (await listSkills()).json();
+      expect(off.error.code).toBe(-32601);
+
+      config.mcpGateway.skillsEnabled = true;
+      const on = (await listSkills()).json();
+      expect(on.error).toBeUndefined();
+      expect(on.result.skills).toEqual([]);
+      // The current revision's result envelope. The skill methods are
+      // dispatched ahead of the SDK, so nothing downstream stamps this for
+      // them — dropping the wrap here would ship results without the
+      // mandatory `resultType`.
+      expect(on.result.resultType).toBe("complete");
+      expect(on.result._meta[MCP_SERVER_INFO_META_KEY]).toMatchObject({
+        name: `archestra-agent-${agent.id}`,
+      });
+    } finally {
+      config.mcpGateway.skillsEnabled = original;
+    }
+  });
+
+  test("a skills notification gets 202 and no JSON-RPC response", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // A notification — same method, no id — must never be answered. The skill
+    // dispatch refuses bodies without an id, so the spelling falls through to
+    // the SDK transport, whose notification path acknowledges with 202 and an
+    // empty body — never a JSON-RPC response with `id: null`.
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const original = config.mcpGateway.skillsEnabled;
+    try {
+      config.mcpGateway.skillsEnabled = true;
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "skills/list", params: {} },
+      });
+      expect(response.statusCode).toBe(202);
+      expect(response.body).toBe("");
+    } finally {
+      config.mcpGateway.skillsEnabled = original;
+    }
+  });
+
+  test("serves a skill:// read only while the skills surface is enabled", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // The read half of the reachability check above. `resources/read` is an
+    // ordinary SDK request whose handler branches on the flag, so an inverted
+    // guard there ships every skill read as not-found while listings work —
+    // and no other test reaches that branch with the flag on.
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllSkills: true,
+    });
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: "reachable-skill",
+        description: "Served over the gateway",
+        content: "# Instructions",
+        scope: "org",
+      },
+      files: [],
+    });
+
+    const readManifest = async () =>
+      await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "resources/read",
+          params: {
+            uri: "skill://archestra/shared/reachable-skill/SKILL.md",
+          },
+          id: 4,
+        },
+      });
+
+    const original = config.mcpGateway.skillsEnabled;
+    try {
+      config.mcpGateway.skillsEnabled = false;
+      expect((await readManifest()).json().error.code).toBe(-32602);
+
+      config.mcpGateway.skillsEnabled = true;
+      const on = (await readManifest()).json();
+      expect(on.error).toBeUndefined();
+      expect(on.result.contents[0]).toMatchObject({
+        uri: "skill://archestra/shared/reachable-skill/SKILL.md",
+        mimeType: "text/markdown",
+      });
+      expect(on.result.contents[0].text).toContain("name: reachable-skill");
+    } finally {
+      config.mcpGateway.skillsEnabled = original;
+    }
   });
 
   test("handles tools/list request successfully (stateless)", async ({

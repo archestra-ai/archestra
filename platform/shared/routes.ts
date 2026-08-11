@@ -20,6 +20,10 @@ export const RouteId = {
   UpdateAgentToolExclusions: "updateAgentToolExclusions",
   GetAgentSubagentExclusions: "getAgentSubagentExclusions",
   UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",
+  GetAgentSkills: "getAgentSkills",
+  UpdateAgentSkills: "updateAgentSkills",
+  GetAgentSkillExclusions: "getAgentSkillExclusions",
+  UpdateAgentSkillExclusions: "updateAgentSkillExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 

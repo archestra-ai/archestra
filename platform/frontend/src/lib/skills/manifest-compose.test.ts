@@ -79,7 +79,25 @@ describe("parseManifestFields", () => {
       hasName: true,
       hasDescription: true,
       templated: true,
+      name: "x",
     });
+  });
+
+  it("unquotes the name value it extracts", () => {
+    for (const [line, expected] of [
+      ['name: "My Skill"', "My Skill"],
+      ["name: 'quoted'", "quoted"],
+      ["name: bare-name", "bare-name"],
+    ] as const) {
+      const fields = parseManifestFields(
+        ["---", line, "description: y", "---"].join("\n"),
+      );
+      expect(fields.name).toBe(expected);
+    }
+  });
+
+  it("returns a null name when the frontmatter has none", () => {
+    expect(parseManifestFields("---\ndescription: y\n---").name).toBeNull();
   });
 
   it("accepts a quoted templated value, matching the backend parser", () => {

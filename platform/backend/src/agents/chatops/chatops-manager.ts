@@ -769,25 +769,40 @@ export class ChatOpsManager {
     // Build the full message with context — use cleanedMessageText so
     // the "AgentName >" prefix is stripped from what the LLM sees
     const providerLabel = CHATOPS_PROVIDER_LABELS[provider.providerId];
-    const threadIdForPrefix = message.threadId ?? message.messageId;
-    let systemPrefix = `(${providerLabel} conversation, thread id: ${threadIdForPrefix})`;
+    const threadRootTs = message.threadId ?? message.messageId;
+    let systemPrefix = `(${providerLabel} conversation, thread id: ${threadRootTs})`;
     if (provider.providerId === "slack") {
+      // Link to the message that actually triggered this run rather than the
+      // thread root: Slack builds a reply's permalink with ?thread_ts=<root>,
+      // so one lookup carries both, while the root's permalink loses the reply.
+      const permalinkTs = message.messageId || threadRootTs;
       const permalink = provider.getMessagePermalink
         ? await provider.getMessagePermalink({
             channelId: message.channelId,
-            messageId: threadIdForPrefix,
+            messageId: permalinkTs,
           })
         : null;
+      // Surface BOTH timestamps, each labelled. Only the thread root used to be
+      // here, so a run triggered by a thread reply gave the model no way to name
+      // the message it was actually answering — tools handed a channel+ts pair
+      // then anchored to the thread opener instead of the triggering message.
       const contextLines = [
         `Slack conversation context:`,
         `- Channel ID: ${message.channelId}`,
-        `- Thread message ts: ${threadIdForPrefix}`,
       ];
+      if (message.messageId) {
+        contextLines.push(
+          `- Message ts: ${message.messageId} (the message that triggered this run — use this one to refer to "this message")`,
+        );
+      }
+      contextLines.push(
+        `- Thread message ts: ${threadRootTs} (the first message of the thread)`,
+      );
       if (message.workspaceId) {
         contextLines.push(`- Workspace ID: ${message.workspaceId}`);
       }
       if (permalink) {
-        contextLines.push(`- Thread permalink: ${permalink}`);
+        contextLines.push(`- Message permalink: ${permalink}`);
       }
       systemPrefix = contextLines.join("\n");
     }

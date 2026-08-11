@@ -12143,6 +12143,7 @@ export type GetAgentsResponses = {
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             accessAllTools: boolean;
+            accessAllSkills: boolean;
             accessAllSubagents: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
@@ -12400,6 +12401,7 @@ export type CreateAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSkills: boolean;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -12622,6 +12624,7 @@ export type GetAllAgentsResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSkills: boolean;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -12815,6 +12818,7 @@ export type GetDefaultMcpGatewayResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSkills: boolean;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -13008,6 +13012,7 @@ export type GetDefaultLlmProxyResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSkills: boolean;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -13280,6 +13285,7 @@ export type ImportAgentResponses = {
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
             accessAllTools: boolean;
+            accessAllSkills: boolean;
             accessAllSubagents: boolean;
             builtInAgentConfig: {
                 name: 'policy-configuration-subagent';
@@ -13566,6 +13572,7 @@ export type GetAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSkills: boolean;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -13816,6 +13823,7 @@ export type UpdateAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSkills: boolean;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -14266,6 +14274,7 @@ export type RestoreAgentVersionResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSkills: boolean;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -14470,6 +14479,7 @@ export type CloneAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSkills: boolean;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -15084,6 +15094,428 @@ export type UpdateAgentSubagentExclusionsResponses = {
 
 export type UpdateAgentSubagentExclusionsResponse = UpdateAgentSubagentExclusionsResponses[keyof UpdateAgentSubagentExclusionsResponses];
 
+export type GetAgentSkillsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/skills';
+};
+
+export type GetAgentSkillsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentSkillsError = GetAgentSkillsErrors[keyof GetAgentSkillsErrors];
+
+export type GetAgentSkillsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Auto mode: expose every org-scoped skill visible in the agent's environment
+         */
+        accessAllSkills: boolean;
+        /**
+         * Skills explicitly assigned to the agent (Custom mode)
+         */
+        skillIds: Array<string>;
+        /**
+         * The assigned skills themselves, in `skillIds` order
+         */
+        skills: Array<{
+            id: string;
+            name: string;
+            description: string;
+            scope: 'personal' | 'team' | 'org';
+            templated: boolean;
+            agentName: string | null;
+            authorId: string | null;
+        }>;
+    };
+};
+
+export type GetAgentSkillsResponse = GetAgentSkillsResponses[keyof GetAgentSkillsResponses];
+
+export type UpdateAgentSkillsData = {
+    body: {
+        /**
+         * Auto mode: expose every org-scoped skill visible in the agent's environment
+         */
+        accessAllSkills: boolean;
+        /**
+         * Skills explicitly assigned to the agent (Custom mode)
+         */
+        skillIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/skills';
+};
+
+export type UpdateAgentSkillsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAgentSkillsError = UpdateAgentSkillsErrors[keyof UpdateAgentSkillsErrors];
+
+export type UpdateAgentSkillsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Auto mode: expose every org-scoped skill visible in the agent's environment
+         */
+        accessAllSkills: boolean;
+        /**
+         * Skills explicitly assigned to the agent (Custom mode)
+         */
+        skillIds: Array<string>;
+        /**
+         * The assigned skills themselves, in `skillIds` order
+         */
+        skills: Array<{
+            id: string;
+            name: string;
+            description: string;
+            scope: 'personal' | 'team' | 'org';
+            templated: boolean;
+            agentName: string | null;
+            authorId: string | null;
+        }>;
+    };
+};
+
+export type UpdateAgentSkillsResponse = UpdateAgentSkillsResponses[keyof UpdateAgentSkillsResponses];
+
+export type GetAgentSkillExclusionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/skill-exclusions';
+};
+
+export type GetAgentSkillExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentSkillExclusionsError = GetAgentSkillExclusionsErrors[keyof GetAgentSkillExclusionsErrors];
+
+export type GetAgentSkillExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Individual skill IDs excluded from the agent's skill surface
+         */
+        excludedSkillIds: Array<string>;
+        /**
+         * The excluded skills themselves, in `excludedSkillIds` order
+         */
+        skills: Array<{
+            id: string;
+            name: string;
+            description: string;
+            scope: 'personal' | 'team' | 'org';
+            templated: boolean;
+            agentName: string | null;
+            authorId: string | null;
+        }>;
+    };
+};
+
+export type GetAgentSkillExclusionsResponse = GetAgentSkillExclusionsResponses[keyof GetAgentSkillExclusionsResponses];
+
+export type UpdateAgentSkillExclusionsData = {
+    body: {
+        /**
+         * Individual skill IDs excluded from the agent's skill surface
+         */
+        excludedSkillIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/skill-exclusions';
+};
+
+export type UpdateAgentSkillExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAgentSkillExclusionsError = UpdateAgentSkillExclusionsErrors[keyof UpdateAgentSkillExclusionsErrors];
+
+export type UpdateAgentSkillExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Individual skill IDs excluded from the agent's skill surface
+         */
+        excludedSkillIds: Array<string>;
+        /**
+         * The excluded skills themselves, in `excludedSkillIds` order
+         */
+        skills: Array<{
+            id: string;
+            name: string;
+            description: string;
+            scope: 'personal' | 'team' | 'org';
+            templated: boolean;
+            agentName: string | null;
+            authorId: string | null;
+        }>;
+    };
+};
+
+export type UpdateAgentSkillExclusionsResponse = UpdateAgentSkillExclusionsResponses[keyof UpdateAgentSkillExclusionsResponses];
+
 export type RestoreAgentData = {
     body?: never;
     path: {
@@ -15188,6 +15620,7 @@ export type RestoreAgentResponses = {
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
         accessAllTools: boolean;
+        accessAllSkills: boolean;
         accessAllSubagents: boolean;
         builtInAgentConfig: {
             name: 'policy-configuration-subagent';
@@ -32909,6 +33342,7 @@ export type GetConfigResponses = {
                 configured: boolean;
                 redirectUri: string;
             };
+            mcpGatewaySkillsEnabled: boolean;
             hackathonRecorderEnabled: boolean;
             hackathonVideoDownloadEnabled: boolean;
             hackathonMaxFinalCutMs: number;
@@ -59412,6 +59846,7 @@ export type GetLlmModelsResponses = {
             inputModalities: Array<'text' | 'image' | 'audio' | 'video' | 'pdf'> | null;
             outputModalities: Array<'text' | 'image' | 'audio'> | null;
             supportsToolCalling: boolean | null;
+            recommendedForAgents: boolean | null;
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
             isCustomPrice: boolean;
@@ -77377,6 +77812,7 @@ export type GetSkillsResponses = {
             name: string;
             description: string;
             content: string;
+            digest: string | null;
             latestVersion: number;
             license: string | null;
             compatibility: string | null;
@@ -77541,6 +77977,7 @@ export type CreateSkillResponses = {
         name: string;
         description: string;
         content: string;
+        digest: string | null;
         latestVersion: number;
         license: string | null;
         compatibility: string | null;
@@ -77570,6 +78007,7 @@ export type CreateSkillResponses = {
             path: string;
             content: string;
             encoding: 'utf8' | 'base64';
+            digest: string | null;
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
@@ -77681,6 +78119,7 @@ export type ConvertAgentToSkillResponses = {
             name: string;
             description: string;
             content: string;
+            digest: string | null;
             latestVersion: number;
             license: string | null;
             compatibility: string | null;
@@ -77710,6 +78149,7 @@ export type ConvertAgentToSkillResponses = {
                 path: string;
                 content: string;
                 encoding: 'utf8' | 'base64';
+                digest: string | null;
                 kind: 'reference' | 'script' | 'asset';
                 createdAt: string;
             }>;
@@ -77999,6 +78439,7 @@ export type GetSkillResponses = {
         name: string;
         description: string;
         content: string;
+        digest: string | null;
         latestVersion: number;
         license: string | null;
         compatibility: string | null;
@@ -78028,6 +78469,7 @@ export type GetSkillResponses = {
             path: string;
             content: string;
             encoding: 'utf8' | 'base64';
+            digest: string | null;
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
@@ -78166,6 +78608,7 @@ export type UpdateSkillResponses = {
         name: string;
         description: string;
         content: string;
+        digest: string | null;
         latestVersion: number;
         license: string | null;
         compatibility: string | null;
@@ -78195,6 +78638,7 @@ export type UpdateSkillResponses = {
             path: string;
             content: string;
             encoding: 'utf8' | 'base64';
+            digest: string | null;
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
@@ -78684,6 +79128,7 @@ export type RestoreSkillResponses = {
         name: string;
         description: string;
         content: string;
+        digest: string | null;
         latestVersion: number;
         license: string | null;
         compatibility: string | null;
@@ -78713,6 +79158,7 @@ export type RestoreSkillResponses = {
             path: string;
             content: string;
             encoding: 'utf8' | 'base64';
+            digest: string | null;
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
@@ -78905,6 +79351,7 @@ export type ResetSkillResponses = {
         name: string;
         description: string;
         content: string;
+        digest: string | null;
         latestVersion: number;
         license: string | null;
         compatibility: string | null;
@@ -78934,6 +79381,7 @@ export type ResetSkillResponses = {
             path: string;
             content: string;
             encoding: 'utf8' | 'base64';
+            digest: string | null;
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
@@ -79054,6 +79502,7 @@ export type UpdateSkillGithubSyncResponses = {
         name: string;
         description: string;
         content: string;
+        digest: string | null;
         latestVersion: number;
         license: string | null;
         compatibility: string | null;
@@ -79083,6 +79532,7 @@ export type UpdateSkillGithubSyncResponses = {
             path: string;
             content: string;
             encoding: 'utf8' | 'base64';
+            digest: string | null;
             kind: 'reference' | 'script' | 'asset';
             createdAt: string;
         }>;
@@ -79595,6 +80045,7 @@ export type ImportGithubSkillsResponses = {
             name: string;
             description: string;
             content: string;
+            digest: string | null;
             latestVersion: number;
             license: string | null;
             compatibility: string | null;

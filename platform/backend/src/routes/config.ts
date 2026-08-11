@@ -117,6 +117,11 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 configured: z.boolean(),
                 redirectUri: z.string(),
               }),
+              /**
+               * BETA: gateways publish this deployment's skills over MCP as
+               * `skill://` resources. Gates the per-gateway skill selection UI.
+               */
+              mcpGatewaySkillsEnabled: z.boolean(),
               /** App session recording (record/replay/download app demos). */
               hackathonRecorderEnabled: z.boolean(),
               /**
@@ -199,6 +204,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             configured: isGoogleDriveOAuthConfigured(),
             redirectUri: getGoogleDriveOAuthRedirectUri(),
           },
+          mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
           hackathonRecorderEnabled: config.hackathonRecorder.enabled,
           hackathonVideoDownloadEnabled:
             config.hackathonRecorder.videoDownloadEnabled,

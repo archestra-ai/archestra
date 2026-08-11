@@ -129,6 +129,10 @@ The gateway decides per call: anything that finishes within the threshold (10 se
 
 One limit to know: a tool that asks for interactive input after its call became a task fails with an explanatory error, since no one is connected to answer. Re-run the call without task mode to answer interactively.
 
+## Published Skills
+
+A gateway can also publish your organization's skills to connecting clients as `skill://` resources. The client reads them alongside its own. See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills).
+
 ## Access Control
 
 Gateway access depends on both the caller and the gateway configuration. A user must be allowed to see the MCP Gateway, usually through organization visibility or team membership, and the gateway must have the specific tool assigned to it.

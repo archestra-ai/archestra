@@ -42,6 +42,7 @@ import {
   FreeModelBadge,
   LatestModelBadge,
   NoToolsBadge,
+  NotRecommendedForAgentsBadge,
   OldModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
@@ -247,6 +248,15 @@ function ModelCapabilityBadges({
   // known to take no tools, which gets its own marker below.
   const lacksToolCalling = capabilities?.supportsToolCalling === false;
 
+  // Derived by the sync, independently of the capability fields, so it is
+  // usually the only marker an Ollama row carries: those models sync with an
+  // inferred "text" modality and no tool-calling verdict (models.dev lists no
+  // Ollama entry to supply one), which without this would render nothing.
+  // Strictly `=== false` — `true` is the column default and says nothing. The
+  // verdict is not itself capability data, so a row carrying only one still
+  // falls to the unknown badge below.
+  const notRecommended = capabilities?.recommendedForAgents === false;
+
   const hasAnyCapability =
     hasVision || hasAudio || hasVideo || hasPdf || hasToolCalling;
 
@@ -261,7 +271,7 @@ function ModelCapabilityBadges({
   if (!hasCapabilityData) {
     return <UnknownCapabilitiesBadge />;
   }
-  if (!hasAnyCapability && !lacksToolCalling) {
+  if (!hasAnyCapability && !lacksToolCalling && !notRecommended) {
     return null;
   }
 
@@ -278,6 +288,7 @@ function ModelCapabilityBadges({
         {hasPdf && (
           <CapabilityIcon icon={FileText} label="Supports PDF input" />
         )}
+        {notRecommended && <NotRecommendedForAgentsBadge />}
         {lacksToolCalling && <NoToolsBadge />}
         {hasToolCalling && (
           <CapabilityIcon icon={Settings2} label="Supports tool calling" />

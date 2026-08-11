@@ -33,6 +33,25 @@ const skillFilesTable = pgTable(
       .$type<SkillFileEncoding>()
       .notNull()
       .default("utf8"),
+    /**
+     * `sha256:<hex>` over the file's *raw* bytes (base64 `content` decoded
+     * first), served as the per-file integrity digest when the skill is
+     * published over MCP (SEP-2640).
+     *
+     * APPLICATION-OWNED: `computeFileDigest` is the single producer, written
+     * by the model layer alongside the bytes it covers. The database only
+     * guards staleness — the `skill_files_invalidate_digest` BEFORE UPDATE
+     * trigger (migration 0407) nulls the digest when a write moves
+     * `content`/`encoding` without refreshing it. A null digest means the row
+     * predates migration 0407 or was written outside the model layer; such a
+     * file is withheld from publication until the startup backfill
+     * (services/skill-publication-backfill.ts) or the next model write
+     * restores it.
+     *
+     * Triggers are invisible in a Drizzle schema; see the migration before
+     * assuming this column is inert.
+     */
+    digest: text("digest"),
     /** Coarse classification derived from the path. */
     kind: text("kind").$type<SkillFileKind>().notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

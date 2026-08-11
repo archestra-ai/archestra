@@ -86,8 +86,6 @@ vi.mock("@/components/environment-variables-form-field", () => ({
   EnvironmentVariablesFormField: () => (
     <div data-testid="environment-variables-form-field" />
   ),
-  EnvFromSection: () => <div data-testid="env-from-section" />,
-  SecretFilesSection: () => <div data-testid="secret-files-section" />,
 }));
 
 vi.mock("@/components/visibility-selector", () => ({

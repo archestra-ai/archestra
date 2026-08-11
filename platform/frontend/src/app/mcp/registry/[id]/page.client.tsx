@@ -65,7 +65,6 @@ import { cn, formatDate } from "@/lib/utils";
 import { useCanModifyCatalogItem } from "../_parts/catalog-edit-access";
 import { resolveCatalogEnvironmentLabel } from "../_parts/catalog-environment-label";
 import { shouldShowMcpCardChatButton } from "../_parts/chat-button-visibility";
-import { ConfigurationTab } from "../_parts/configuration-tab";
 import { DeleteCatalogDialog } from "../_parts/delete-catalog-dialog";
 import {
   computeDeploymentStatusSummary,
@@ -84,7 +83,6 @@ import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 
 type DetailTab =
   | "overview"
-  | "configuration"
   | "usage"
   | "credentials"
   | "logs"
@@ -281,7 +279,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   // present: "nothing uses this yet" is itself an answer, and it keeps the
   // ?tab=usage deep link from the registry card's hover card always resolvable.
   const tabIds: DetailTab[] = [
-    "configuration",
     "usage",
     ...(showConnectionsTab ? (["credentials"] as DetailTab[]) : []),
     ...diagnosticTabs.map((panel) => panel.id),
@@ -316,7 +313,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
 
   const tabs: { label: React.ReactNode; href: string; testId?: string }[] = [
     { label: "Overview", href: tabHref("overview") },
-    { label: "Configuration", href: tabHref("configuration") },
     {
       label: <TabLabel title="Usage" count={agentUsageCount} />,
       href: tabHref("usage"),
@@ -382,10 +378,10 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     variant === "local"
       ? deploymentSummary
         ? `${deploymentSummary.running}/${deploymentSummary.total} ${getDeploymentLabel(deploymentSummary.overallState).toLowerCase()}`
-        : "Not connected"
+        : "Not installed"
       : connectionsCount > 0
         ? "Connected"
-        : "Not connected";
+        : "Not installed";
 
   const endpoint =
     variant === "remote"
@@ -420,7 +416,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
           {!hasPersonalConnection && variant !== "builtin" && (
             <Button variant="outline" onClick={openInstall}>
               <PlugZap className="h-4 w-4" />
-              Connect
+              Install
             </Button>
           )}
           {showChatButton && (
@@ -499,10 +495,6 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
       <div className="space-y-4">
         {effectiveTab === "usage" && (
           <McpServerUsageTab serversForCatalog={allServersForCatalog} />
-        )}
-
-        {effectiveTab === "configuration" && (
-          <ConfigurationTab item={item} canModify={canModify} />
         )}
 
         {effectiveTab === "overview" && (

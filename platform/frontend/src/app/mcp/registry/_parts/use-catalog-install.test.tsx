@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -27,6 +27,15 @@ vi.mock("@/lib/mcp/enterprise-managed-install-auth", () => ({
 vi.mock("@/lib/websocket/websocket", () => ({ default: { send: vi.fn() } }));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+// Feature flags the hook reads. byosEnabled keeps the OAuth confirmation
+// dialog alive (it carries the credential-storage warning), so tests flip it.
+const features = vi.hoisted(
+  () => ({ byosEnabled: false }) as Record<string, boolean>,
+);
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: (key: string) => features[key] ?? false,
 }));
 
 // The install dialogs are stubbed to a single testid so the test asserts the
@@ -295,5 +304,121 @@ describe("useCatalogInstall — local install completion", () => {
     expect(toast.success).toHaveBeenCalledWith(
       "Successfully installed Playwright Browser",
     );
+  });
+});
+
+// A local OAuth server whose env vars are prompted at install time: the
+// local-install dialog collects them (plus the install target), after which
+// OAuth starts.
+const localOAuthItem = {
+  id: "cat-local-oauth-1",
+  name: "local-oauth-server",
+  serverType: "local",
+  oauthConfig: { name: "local-oauth-server" },
+  localConfig: {
+    command: "serve",
+    environment: [{ key: "API_HOST", promptOnInstallation: true }],
+  },
+  userConfig: {},
+} as unknown as CatalogItem;
+
+function AddPersonalConnectionHarness({ item }: { item: CatalogItem }) {
+  const install = useCatalogInstall();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fire once on mount, like the "Connect my account" click
+  useEffect(() => {
+    install.addPersonalConnection(item);
+  }, []);
+  return <>{install.dialogs}</>;
+}
+
+// "Connect my account" (and the other fixed-target entry points) pre-select
+// the install scope, so the OAuth confirmation dialog would render an empty
+// body with nothing to choose — the flow must start immediately instead.
+describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog", () => {
+  const originalLocation = window.location;
+  const AUTHORIZATION_URL = "https://provider.example/oauth/authorize";
+  let initiateOAuth: ReturnType<typeof vi.fn>;
+
+  function renderAddPersonal(item: CatalogItem) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <AddPersonalConnectionHarness item={item} />
+      </QueryClientProvider>,
+    );
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    nav.search = new URLSearchParams();
+    features.byosEnabled = false;
+    Object.defineProperty(window, "location", {
+      value: { href: "http://localhost/mcp/registry" },
+      writable: true,
+    });
+    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      data: [oauthItem, localOAuthItem],
+    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    vi.mocked(useMcpServers).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useMcpServers>);
+    vi.mocked(useInstallMcpServer).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useInstallMcpServer>);
+    initiateOAuth = vi.fn().mockResolvedValue({
+      authorizationUrl: AUTHORIZATION_URL,
+      state: "oauth-state-1",
+    });
+    vi.mocked(useInitiateOAuth).mockReturnValue({
+      mutateAsync: initiateOAuth,
+    } as unknown as ReturnType<typeof useInitiateOAuth>);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "location", {
+      value: originalLocation,
+      writable: true,
+    });
+    vi.clearAllMocks();
+  });
+
+  it("starts OAuth immediately for a remote server (no empty dialog)", async () => {
+    renderAddPersonal(oauthItem);
+
+    await waitFor(() => {
+      expect(initiateOAuth).toHaveBeenCalledWith({ catalogId: CATALOG_ID });
+      expect(window.location.href).toBe(AUTHORIZATION_URL);
+    });
+    expect(screen.queryByTestId("install-dialog")).not.toBeInTheDocument();
+  });
+
+  it("starts OAuth right after the local-install dialog collected env vars", async () => {
+    const user = userEvent.setup();
+    renderAddPersonal(localOAuthItem);
+
+    // The env-var dialog still shows (it has real content to collect)…
+    await user.click(await screen.findByTestId("install-dialog-confirm"));
+
+    // …but the follow-up OAuth confirmation is skipped.
+    await waitFor(() => {
+      expect(initiateOAuth).toHaveBeenCalledWith({
+        catalogId: localOAuthItem.id,
+      });
+      expect(window.location.href).toBe(AUTHORIZATION_URL);
+    });
+    expect(screen.queryByTestId("install-dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the dialog when BYOS is enabled (storage warning has content)", async () => {
+    features.byosEnabled = true;
+
+    renderAddPersonal(oauthItem);
+
+    expect(await screen.findByTestId("install-dialog")).toBeInTheDocument();
+    expect(initiateOAuth).not.toHaveBeenCalled();
+    expect(window.location.href).toBe("http://localhost/mcp/registry");
   });
 });

@@ -36,6 +36,7 @@ import {
   setOAuthTeamId,
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
+import { useFeature } from "@/lib/config/config.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import {
   clearPendingEnterpriseManagedInstall,
@@ -123,6 +124,7 @@ export function useCatalogInstall(opts?: {
   const installMutation = useInstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();
   const queryClient = useQueryClient();
+  const byosEnabled = useFeature("byosEnabled");
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
     "remote-install" | "local-install" | "oauth" | "no-auth"
@@ -338,6 +340,11 @@ export function useCatalogInstall(opts?: {
 
     // Check if this server requires OAuth authentication if there is no user config
     if (!hasUserConfig && catalogItem.oauthConfig) {
+      const directTarget = resolveDirectOAuthTarget(scope, teamId);
+      if (directTarget) {
+        await startOAuthFlow(catalogItem, directTarget);
+        return;
+      }
       setSelectedCatalogItem(catalogItem);
       openDialog("oauth");
       return;
@@ -404,6 +411,11 @@ export function useCatalogInstall(opts?: {
         // No env vars needed - go straight to OAuth flow
         // Store server type so OAuth callback knows this is a local server
         setOAuthServerType("local");
+        const directTarget = resolveDirectOAuthTarget(scope, teamId);
+        if (directTarget) {
+          await startOAuthFlow(catalogItem, directTarget);
+          return;
+        }
         setSelectedCatalogItem(catalogItem);
         openDialog("oauth");
       }
@@ -776,9 +788,19 @@ export function useCatalogInstall(opts?: {
         });
       }
       closeDialog("local-install");
-      // Now initiate OAuth flow
-      setSelectedCatalogItem(localServerCatalogItem);
+      // The local-install dialog already collected the install target, so the
+      // OAuth confirmation has nothing further to ask — start the flow
+      // directly (unless BYOS keeps the dialog for its storage warning).
+      const directTarget = resolveDirectOAuthTarget(
+        installResult.scope,
+        installResult.scope === "team" ? installResult.teamId : undefined,
+      );
       setLocalServerCatalogItem(null);
+      if (directTarget) {
+        await startOAuthFlow(localServerCatalogItem, directTarget);
+        return;
+      }
+      setSelectedCatalogItem(localServerCatalogItem);
       openDialog("oauth");
       return;
     }
@@ -843,25 +865,30 @@ export function useCatalogInstall(opts?: {
     onInstalled?.();
   };
 
-  const handleOAuthConfirm = async (result: OAuthInstallResult) => {
-    if (!selectedCatalogItem) return;
-
+  // Initiate the OAuth flow for a catalog item and redirect to the provider.
+  // Shared by the OAuth dialog's confirm and the direct (no-dialog) path used
+  // when the install target is already fixed.
+  const startOAuthFlow = async (
+    catalogItem: CatalogItem,
+    target: { scope: McpServerInstallScope; teamId?: string | null },
+  ) => {
+    setInstallingItemId(catalogItem.id);
     try {
       // Call backend to initiate OAuth flow
       const { authorizationUrl, state } =
         await initiateOAuthMutation.mutateAsync({
-          catalogId: selectedCatalogItem.id,
+          catalogId: catalogItem.id,
         });
 
       // Store state in session storage for the callback
       setOAuthState(state);
-      setOAuthCatalogId(selectedCatalogItem.id);
-      setOAuthTeamId(result.scope === "team" ? (result.teamId ?? null) : null);
-      setOAuthScope(result.scope);
+      setOAuthCatalogId(catalogItem.id);
+      setOAuthTeamId(target.scope === "team" ? (target.teamId ?? null) : null);
+      setOAuthScope(target.scope);
 
       // Store if this is a first installation (for auto-opening assignments dialog)
       const isFirstInstallation = !installedServers?.some(
-        (s) => s.catalogId === selectedCatalogItem.id,
+        (s) => s.catalogId === catalogItem.id,
       );
       setOAuthIsFirstInstallation(isFirstInstallation);
 
@@ -871,7 +898,7 @@ export function useCatalogInstall(opts?: {
       // The user has committed to authorizing; the deep-link intent is now
       // being fulfilled through the OAuth flow (which has its own return
       // handling), so drop the pending-install intent to avoid the registry
-      // re-opening this dialog when the OAuth callback returns.
+      // re-opening the install dialog when the OAuth callback returns.
       clearPendingInstall();
 
       // Redirect to OAuth provider
@@ -882,7 +909,30 @@ export function useCatalogInstall(opts?: {
           ? error.message
           : "Failed to initiate OAuth flow",
       );
+    } finally {
+      setInstallingItemId(null);
     }
+  };
+
+  // With a fully-determined install target (personal, org, or team with the
+  // team already chosen), the OAuth confirmation dialog has no choices left to
+  // offer and renders an empty body — so the flow should start immediately
+  // instead of showing it. Returns null when the dialog is still needed:
+  // either the scope is not fixed yet, or BYOS is enabled (the dialog then
+  // carries the OAuth-credentials-stored-in-database warning).
+  const resolveDirectOAuthTarget = (
+    scope: McpServerInstallScope | undefined,
+    teamId: string | null | undefined,
+  ): { scope: McpServerInstallScope; teamId?: string | null } | null => {
+    if (byosEnabled) return null;
+    if (!scope) return null;
+    if (scope === "team") return teamId ? { scope, teamId } : null;
+    return { scope };
+  };
+
+  const handleOAuthConfirm = async (result: OAuthInstallResult) => {
+    if (!selectedCatalogItem) return;
+    await startOAuthFlow(selectedCatalogItem, result);
   };
 
   const cancelInstallation = (serverId: string) => {

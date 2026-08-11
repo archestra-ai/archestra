@@ -213,6 +213,10 @@ class ConnectorSyncService {
     // a fallback that omits the top-level document increments itemErrors so a
     // modified source that was not refreshed cannot leave a green run.
     let itemFetchFailures = 0;
+    // A domain-wide connector can fail to fetch a source through one identity
+    // and then recover it through another. Defer those unavailable-item counts
+    // until the generator closes, removing ids that later produce a document.
+    const provisionalUnavailableSourceIds = new Set<string>();
     let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
@@ -369,17 +373,32 @@ class ConnectorSyncService {
         // diagnosis and retain the last-known-good indexed document.
         if (batch.failures?.length) {
           itemFetchFailures += batch.failures.length;
-          const unavailableItems = batch.failures.filter(
-            (failure) => failure.itemUnavailable,
-          ).length;
+          let unavailableItems = 0;
+          let provisionalUnavailableItems = 0;
+          for (const failure of batch.failures) {
+            if (!failure.itemUnavailable) continue;
+            if (failure.recoverySourceId) {
+              provisionalUnavailableSourceIds.add(failure.recoverySourceId);
+              provisionalUnavailableItems++;
+            } else {
+              unavailableItems++;
+            }
+          }
           itemErrors += unavailableItems;
           documentsProcessed += unavailableItems;
           runLog.warn(
-            { failures: batch.failures.length, unavailableItems },
-            unavailableItems > 0
+            {
+              failures: batch.failures.length,
+              unavailableItems,
+              provisionalUnavailableItems,
+            },
+            unavailableItems > 0 || provisionalUnavailableItems > 0
               ? "Batch completed with unavailable items (see item warnings above)"
               : "Batch completed with sub-resource fallbacks (see item warnings above)",
           );
+        }
+        for (const doc of batch.documents) {
+          provisionalUnavailableSourceIds.delete(doc.id);
         }
 
         // Track skipped items from this batch. Items the connector found but
@@ -494,12 +513,23 @@ class ConnectorSyncService {
         }
       }
 
+      // Count only provisional failures that no later identity recovered.
+      // Set semantics also ensure repeated failed attempts for one source are
+      // reported as one unavailable item, not one error per viewer.
+      const unresolvedUnavailableItems = provisionalUnavailableSourceIds.size;
+      itemErrors += unresolvedUnavailableItems;
+      documentsProcessed += unresolvedUnavailableItems;
+
       // Set totalBatches so batch_embedding handlers can coordinate (fenced).
       if (batchCount > 0) {
         await ConnectorRunModel.updateIfOwned({
           runId: run.id,
           epoch,
-          data: { totalBatches: batchCount },
+          data: {
+            totalBatches: batchCount,
+            documentsProcessed,
+            itemErrors,
+          },
         });
       }
 
@@ -620,6 +650,7 @@ class ConnectorSyncService {
           data: {
             documentsProcessed,
             documentsIngested,
+            itemErrors,
             documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },

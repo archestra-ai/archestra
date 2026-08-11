@@ -1155,6 +1155,10 @@ export class GoogleDriveConnector extends BaseConnector {
           itemId: file.id ?? "unknown",
           resource: "driveFile",
           itemUnavailable: true,
+          // Domain mode can see the same globally unique Drive file through
+          // another identity. Treat this failure as provisional until the run
+          // knows whether a later viewer successfully produced the document.
+          recoverySourceId: dedupe && file.id ? file.id : undefined,
         });
         if (doc) documents.push(doc);
       }
@@ -1366,6 +1370,7 @@ export class GoogleDriveConnector extends BaseConnector {
           itemId: file.id ?? "unknown",
           resource: "driveFile",
           itemUnavailable: true,
+          recoverySourceId: dedupe && file.id ? file.id : undefined,
         });
         if (doc) documents.push(doc);
       }
@@ -1535,7 +1540,7 @@ export class GoogleDriveConnector extends BaseConnector {
         if (extracted.warning) {
           this.log.warn(
             { fileId, fileName, reason: extracted.warning },
-            "Google Drive: PDF text extraction was incomplete",
+            "Google Drive: PDF page extraction warning",
           );
         }
         return {
@@ -1567,7 +1572,7 @@ export class GoogleDriveConnector extends BaseConnector {
       if (extracted.warning) {
         this.log.warn(
           { fileId, fileName, reason: extracted.warning },
-          "Google Drive: PDF text extraction was incomplete",
+          "Google Drive: PDF page extraction warning",
         );
       }
       return {

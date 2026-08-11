@@ -670,6 +670,10 @@ describe("OneDriveConnector", () => {
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].title).toBe("good.txt");
       expect(batches[0].failures).toHaveLength(1);
+      expect(batches[0].failures?.[0]).toMatchObject({
+        itemId: "file-2",
+        itemUnavailable: true,
+      });
     });
 
     it("emits checkpoint that advances monotonically", async () => {

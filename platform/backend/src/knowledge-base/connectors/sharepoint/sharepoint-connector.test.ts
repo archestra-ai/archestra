@@ -542,6 +542,7 @@ describe("SharePointConnector", () => {
       const failures = batches[0].failures ?? [];
       expect(failures).toHaveLength(1);
       expect(failures[0]?.itemId).toBe("item-2");
+      expect(failures[0]?.itemUnavailable).toBe(true);
     });
 
     it("reports a file with no extractable text as a categorized skip naming the file", async () => {

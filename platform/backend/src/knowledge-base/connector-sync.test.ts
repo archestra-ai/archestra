@@ -354,6 +354,104 @@ describe("ConnectorSyncService", () => {
     );
   });
 
+  test("a later document resolves a provisional cross-identity fetch failure", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(1),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [],
+            failures: [
+              {
+                itemId: "shared-file-1",
+                resource: "driveFile",
+                error: "first viewer could not download",
+                itemUnavailable: true,
+                recoverySourceId: "shared-file-1",
+              },
+            ],
+            checkpoint: { page: 1 },
+            hasMore: true,
+          };
+          yield {
+            documents: [
+              {
+                id: "shared-file-1",
+                title: "Recovered through another viewer",
+                content: "The ultimately available content",
+              },
+            ],
+            checkpoint: { page: 2 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    const result = await connectorSyncService.executeSync(connector.id);
+    const run = await ConnectorRunModel.findById(result.runId);
+
+    expect(result.status).toBe("success");
+    expect(run?.itemErrors).toBe(0);
+    expect(run?.documentsProcessed).toBe(1);
+    expect(run?.totalBatches).toBe(1);
+  });
+
+  test("deduplicates unresolved provisional failures by source", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(1),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          for (const page of [1, 2]) {
+            yield {
+              documents: [],
+              failures: [
+                {
+                  itemId: "shared-file-1",
+                  resource: "driveFile",
+                  error: `viewer ${page} could not download`,
+                  itemUnavailable: true,
+                  recoverySourceId: "shared-file-1",
+                },
+              ],
+              checkpoint: { page },
+              hasMore: page === 1,
+            };
+          }
+        })(),
+      ),
+    });
+
+    const result = await connectorSyncService.executeSync(connector.id);
+    const run = await ConnectorRunModel.findById(result.runId);
+
+    expect(run?.status).toBe("completed_with_errors");
+    expect(run?.itemErrors).toBe(1);
+    expect(run?.documentsProcessed).toBe(1);
+  });
+
   test("a drive-scoped no-text skip retires only the matching drive's document", async ({
     makeOrganization,
     makeKnowledgeBase,

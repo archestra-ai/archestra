@@ -550,6 +550,7 @@ export class SharePointConnector extends BaseConnector {
           fallback: null,
           itemId: item.id,
           resource: "driveItem",
+          itemUnavailable: true,
         });
         if (doc) documents.push(doc);
       }
@@ -679,7 +680,7 @@ export class SharePointConnector extends BaseConnector {
       if (extracted.warning) {
         this.log.warn(
           { itemId, fileName, reason: extracted.warning },
-          "SharePoint: PDF text extraction was incomplete",
+          "SharePoint: PDF page extraction warning",
         );
       }
       return {
@@ -779,6 +780,7 @@ export class SharePointConnector extends BaseConnector {
           fallback: null,
           itemId: page.id,
           resource: "sitePage",
+          itemUnavailable: true,
         });
         if (doc) documents.push(doc);
       }

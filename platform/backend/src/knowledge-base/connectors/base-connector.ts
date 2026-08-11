@@ -227,6 +227,8 @@ export abstract class BaseConnector implements Connector {
     resource: string;
     /** The fallback omits the top-level document, not an optional subresource. */
     itemUnavailable?: boolean;
+    /** A later document with this source id resolves the provisional failure. */
+    recoverySourceId?: string;
   }): Promise<T> {
     try {
       return await params.fetch();
@@ -248,6 +250,9 @@ export abstract class BaseConnector implements Connector {
         resource: params.resource,
         error: message,
         ...(params.itemUnavailable ? { itemUnavailable: true } : {}),
+        ...(params.recoverySourceId
+          ? { recoverySourceId: params.recoverySourceId }
+          : {}),
       });
       return params.fallback;
     }

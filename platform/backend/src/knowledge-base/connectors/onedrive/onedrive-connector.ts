@@ -407,6 +407,7 @@ export class OneDriveConnector extends BaseConnector {
           fallback: null,
           itemId: item.id,
           resource: "driveItem",
+          itemUnavailable: true,
         });
         if (doc) documents.push(doc);
       }
@@ -525,7 +526,7 @@ export class OneDriveConnector extends BaseConnector {
       if (extracted.warning) {
         this.log.warn(
           { itemId, fileName, reason: extracted.warning },
-          "OneDrive: PDF text extraction was incomplete",
+          "OneDrive: PDF page extraction warning",
         );
       }
       return {

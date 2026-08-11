@@ -2,8 +2,9 @@ import pdfJs from "pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js";
 
 /**
  * Outcome of PDF text extraction. `partial` means usable text was recovered,
- * but at least one page failed extraction or yielded no text, so callers must
- * warn that the indexed representation may be incomplete.
+ * but at least one page failed extraction or yielded no text. A failed page
+ * proves the representation is incomplete; a textless page is intentionally
+ * ambiguous because it may be blank, image-only, or graphics-only.
  */
 type PdfExtractionStatus =
   | "ok"
@@ -53,18 +54,19 @@ export function describePdfExtractionWarning(
 ): string | undefined {
   if (result.status !== "partial") return undefined;
 
-  const causes: string[] = [];
   if (result.failedPageCount) {
-    causes.push(
+    const causes = [
       `${result.failedPageCount} page${result.failedPageCount === 1 ? "" : "s"} failed extraction`,
-    );
+    ];
+    if (result.textlessPageCount) {
+      causes.push(describeTextlessPages(result.textlessPageCount));
+    }
+    return `PDF text extraction was incomplete: ${causes.join("; ")}. Text from the remaining pages was indexed.`;
   }
   if (result.textlessPageCount) {
-    causes.push(
-      `${result.textlessPageCount} page${result.textlessPageCount === 1 ? "" : "s"} had no extractable text`,
-    );
+    return `PDF ${describeTextlessPages(result.textlessPageCount)}. Text from the other pages was indexed.`;
   }
-  return `PDF text extraction was incomplete: ${causes.join("; ")}. Text from the remaining pages was indexed.`;
+  return undefined;
 }
 
 /**
@@ -119,10 +121,10 @@ export async function parsePdfBuffer(
             pageTexts.push(pageText);
             continue;
           }
-          // Conservatively call every successfully parsed textless page
-          // incomplete. Distinguishing a true blank from a scan/vector page
-          // requires the render operator list, which decodes image resources
-          // and is unsafe for large or adversarial PDFs.
+          // Conservatively record every successfully parsed textless page.
+          // Distinguishing a true blank from a scan/vector page requires the
+          // render operator list, which decodes image resources and is unsafe
+          // for large or adversarial PDFs. The warning keeps that ambiguity.
           textlessPageCount++;
         } finally {
           // Release per-page text/font resources before moving on so large
@@ -194,6 +196,12 @@ export async function parsePdfBuffer(
       // it with a thrown connector error.
     }
   }
+}
+
+function describeTextlessPages(count: number): string {
+  const pages = `${count} page${count === 1 ? "" : "s"} yielded no text`;
+  const subject = count === 1 ? "it may" : "they may";
+  return `${pages} (${subject} be blank, image-only, or graphics-only)`;
 }
 
 function renderPageText(

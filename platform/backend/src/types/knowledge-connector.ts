@@ -709,6 +709,13 @@ export interface ConnectorItemFailure {
    * last-known-good indexed copy.
    */
   itemUnavailable?: boolean;
+  /**
+   * Source id that can resolve this provisional failure later in the same
+   * run. Domain-wide connectors may see the same source through another
+   * identity; a later document with this id cancels the unavailable-item
+   * error instead of double-counting a source that was ultimately ingested.
+   */
+  recoverySourceId?: string;
 }
 
 /**

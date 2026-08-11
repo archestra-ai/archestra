@@ -33,6 +33,7 @@ class TestableConnector extends BaseConnector {
     itemId: string | number;
     resource: string;
     itemUnavailable?: boolean;
+    recoverySourceId?: string;
   }): Promise<T> {
     return this.safeItemFetch(params);
   }
@@ -155,6 +156,29 @@ describe("BaseConnector", () => {
         resource: "comments",
         error: "502 Bad Gateway",
       });
+    });
+
+    test("records a provisional top-level item failure", async () => {
+      await connector.testSafeItemFetch({
+        fetch: async () => {
+          throw new Error("viewer cannot download");
+        },
+        fallback: null,
+        itemId: "file-1",
+        resource: "driveFile",
+        itemUnavailable: true,
+        recoverySourceId: "file-1",
+      });
+
+      expect(connector.testFlushFailures()).toEqual([
+        {
+          itemId: "file-1",
+          resource: "driveFile",
+          error: "viewer cannot download",
+          itemUnavailable: true,
+          recoverySourceId: "file-1",
+        },
+      ]);
     });
 
     test("collects multiple failures", async () => {

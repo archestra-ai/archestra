@@ -960,9 +960,9 @@ describe("GoogleDriveConnector", () => {
         expect.objectContaining({
           fileId: "file-mixed",
           fileName: "mixed-contract.pdf",
-          reason: expect.stringContaining("1 page had no extractable text"),
+          reason: expect.stringContaining("1 page yielded no text"),
         }),
-        "Google Drive: PDF text extraction was incomplete",
+        "Google Drive: PDF page extraction warning",
       );
     });
   });
@@ -2140,6 +2140,13 @@ describe("GoogleDriveConnector", () => {
       const batches = await drainDomainSync();
 
       expect(batches.flatMap((b) => b.documents)).toHaveLength(1);
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([
+        expect.objectContaining({
+          itemId: "f-shared",
+          itemUnavailable: true,
+          recoverySourceId: "f-shared",
+        }),
+      ]);
       expect(mockFilesGet).toHaveBeenCalledTimes(2);
     });
 

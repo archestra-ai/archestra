@@ -158,9 +158,10 @@ describe("parsePdfBuffer", () => {
       pageCount: 2,
       textlessPageCount: 1,
     });
-    expect(describePdfExtractionWarning(result)).toContain(
-      "1 page had no extractable text",
-    );
+    const warning = describePdfExtractionWarning(result);
+    expect(warning).toContain("1 page yielded no text");
+    expect(warning).toContain("may be blank, image-only, or graphics-only");
+    expect(warning).not.toContain("incomplete");
   });
 
   it("conservatively warns for a mixed digital and textless PDF", async () => {
@@ -173,9 +174,10 @@ describe("parsePdfBuffer", () => {
       pageCount: 2,
       textlessPageCount: 1,
     });
-    expect(describePdfExtractionWarning(result)).toContain(
-      "1 page had no extractable text",
-    );
+    const warning = describePdfExtractionWarning(result);
+    expect(warning).toContain("1 page yielded no text");
+    expect(warning).toContain("may be blank, image-only, or graphics-only");
+    expect(warning).not.toContain("incomplete");
   });
 
   it("stringifies non-Error throwables", async () => {

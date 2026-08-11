@@ -408,6 +408,63 @@ describe("ConnectorSyncService", () => {
     expect(run?.totalBatches).toBe(1);
   });
 
+  test("a later definitive skip resolves a provisional cross-identity fetch failure", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(1),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [],
+            failures: [
+              {
+                itemId: "shared-scan-1",
+                resource: "driveFile",
+                error: "first viewer could not download",
+                itemUnavailable: true,
+                recoverySourceId: "shared-scan-1",
+              },
+            ],
+            checkpoint: { page: 1 },
+            hasMore: true,
+          };
+          yield {
+            documents: [],
+            skipped: [
+              {
+                itemId: "shared-scan-1",
+                name: "signed-contract.pdf",
+                reason: "PDF has no extractable text layer",
+                category: "no_extractable_text" as const,
+              },
+            ],
+            checkpoint: { page: 2 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    const result = await connectorSyncService.executeSync(connector.id);
+    const run = await ConnectorRunModel.findById(result.runId);
+
+    expect(run?.status).toBe("no_documents");
+    expect(run?.itemErrors).toBe(0);
+    expect(run?.documentsProcessed).toBe(1);
+    expect(run?.itemsSkipped).toBe(1);
+    expect(run?.documentsWithoutText).toBe(1);
+  });
+
   test("deduplicates unresolved provisional failures by source", async ({
     makeOrganization,
     makeKnowledgeBase,

@@ -400,6 +400,11 @@ class ConnectorSyncService {
         for (const doc of batch.documents) {
           provisionalUnavailableSourceIds.delete(doc.id);
         }
+        for (const skipped of batch.skipped ?? []) {
+          provisionalUnavailableSourceIds.delete(
+            skipped.sourceId ?? String(skipped.itemId),
+          );
+        }
 
         // Track skipped items from this batch. Items the connector found but
         // could not extract any text from (scanned PDFs without a text layer,

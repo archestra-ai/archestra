@@ -890,6 +890,73 @@ describe("ConnectorRunModel", () => {
   });
 
   describe("completeBatch", () => {
+    test("records a queue task outcome exactly once across retries", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 2,
+        completedBatches: 0,
+      });
+      const task = await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: { connectorRunId: run.id, documentIds: ["doc-1"] },
+      });
+
+      await ConnectorRunModel.completeBatch(
+        run.id,
+        { failedItems: 1, skippedItems: 2, error: "bad input" },
+        task.id,
+      );
+      const retried = await ConnectorRunModel.completeBatch(
+        run.id,
+        { failedItems: 1, skippedItems: 2, error: "bad input" },
+        task.id,
+      );
+
+      expect(retried?.completedBatches).toBe(1);
+      expect(retried?.itemErrors).toBe(1);
+      expect(retried?.itemsSkipped).toBe(2);
+    });
+
+    test("records late outcomes on a partial run without changing its status", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const completedAt = new Date("2026-08-11T10:00:00.000Z");
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "partial",
+        startedAt: new Date("2026-08-11T09:00:00.000Z"),
+        completedAt,
+        totalBatches: 1,
+        completedBatches: 0,
+      });
+
+      const result = await ConnectorRunModel.completeBatch(run.id, {
+        failedItems: 1,
+        skippedItems: 2,
+        error: "late failure",
+      });
+
+      expect(result?.status).toBe("partial");
+      expect(result?.completedBatches).toBe(1);
+      expect(result?.itemErrors).toBe(1);
+      expect(result?.itemsSkipped).toBe(2);
+      expect(result?.completedAt).toEqual(completedAt);
+    });
+
     test("is a no-op for a superseded run (does not touch status or counters)", async ({
       makeOrganization,
       makeKnowledgeBase,

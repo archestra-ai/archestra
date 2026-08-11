@@ -26,6 +26,7 @@ const GEMINI_FAMILY_MIN_VERSION: GeminiVersion = [2, 5];
 const GEMINI_FAMILY_LEGACY_MAX_VERSION: GeminiVersion = [3, 0];
 
 const GEMINI_EMBEDDING_PREFIX = "gemini-embedding-";
+const RETIRED_GEMINI_EMBEDDING_MODELS = new Set(["gemini-embedding-2-preview"]);
 
 /**
  * Lowest generation whose chat models think by default. Deliberately its own
@@ -50,6 +51,9 @@ const GEMINI_THINKING_LEVEL_MIN_VERSION: GeminiVersion = [3, 0];
 export function isUsableGeminiCatalogModel(modelId: string): boolean {
   const id = modelId.toLowerCase();
 
+  if (RETIRED_GEMINI_EMBEDDING_MODELS.has(id)) {
+    return false;
+  }
   if (id.startsWith(GEMINI_EMBEDDING_PREFIX)) {
     return true;
   }

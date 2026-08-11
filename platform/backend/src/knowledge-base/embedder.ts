@@ -2,6 +2,7 @@ import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@archestra/shared";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import {
+  BedrockPartialEmbeddingError,
   callEmbedding,
   type EmbeddingApiResponse,
   type EmbeddingInput,
@@ -334,8 +335,23 @@ class EmbeddingService {
           },
           "[Embedder] Batch embedding API call failed",
         );
-        for (const chunk of batch) {
-          failedChunkIds.add(chunk.chunkId);
+        if (error instanceof BedrockPartialEmbeddingError) {
+          for (const success of error.successes) {
+            const chunk = batch[success.index];
+            if (chunk) {
+              embeddingResults.set(chunk.chunkId, success.embedding);
+            }
+          }
+          for (const failure of error.failures) {
+            const chunk = batch[failure.index];
+            if (chunk) {
+              failedChunkIds.add(chunk.chunkId);
+            }
+          }
+        } else {
+          for (const chunk of batch) {
+            failedChunkIds.add(chunk.chunkId);
+          }
         }
       }
     }
@@ -401,42 +417,133 @@ class EmbeddingService {
     connectorId: string | null;
   }): Promise<EmbeddingApiResponse> {
     const { ctx, inputs, connectorId } = params;
+    let pending = inputs.map((input, index) => ({ input, index }));
+    const successes = new Map<number, number[]>();
+    const terminalFailures: Array<{ index: number; reason: unknown }> = [];
+    let promptTokens = 0;
+
+    const callObserved = (attemptInputs: EmbeddingInput[]) =>
+      withKbObservability({
+        operationName: "embedding",
+        provider: ctx.provider,
+        model: ctx.model,
+        source: "knowledge:embedding",
+        connectorId,
+        type: getEmbeddingDiscriminator(ctx.provider),
+        callback: () =>
+          callEmbedding({
+            inputs: attemptInputs,
+            model: ctx.model,
+            apiKey: ctx.apiKey,
+            baseUrl: ctx.baseUrl,
+            dimensions: ctx.dimensions,
+            provider: ctx.provider,
+          }),
+        buildInteraction: (resp) =>
+          buildEmbeddingInteraction({
+            model: ctx.model,
+            input: attemptInputs.map(embeddingInputLogValue),
+            dimensions: ctx.dimensions,
+            response: resp,
+          }),
+        buildInteractionOnError: (error) => {
+          if (
+            !(error instanceof BedrockPartialEmbeddingError) ||
+            error.successes.length === 0
+          ) {
+            return null;
+          }
+          return buildEmbeddingInteraction({
+            model: ctx.model,
+            input: error.successes
+              .map((success) => attemptInputs[success.index])
+              .filter((input): input is EmbeddingInput => input !== undefined)
+              .map(embeddingInputLogValue),
+            dimensions: ctx.dimensions,
+            response: {
+              object: "list",
+              data: error.successes.map((success, index) => ({
+                object: "embedding",
+                embedding: success.embedding,
+                index,
+              })),
+              model: ctx.model,
+              usage: {
+                prompt_tokens: error.tokens,
+                total_tokens: error.tokens,
+              },
+            },
+          });
+        },
+      });
+
     for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+      let response: EmbeddingApiResponse;
       try {
-        return await withKbObservability({
-          operationName: "embedding",
-          provider: ctx.provider,
-          model: ctx.model,
-          source: "knowledge:embedding",
-          connectorId,
-          type: getEmbeddingDiscriminator(ctx.provider),
-          callback: () =>
-            callEmbedding({
-              inputs,
-              model: ctx.model,
-              apiKey: ctx.apiKey,
-              baseUrl: ctx.baseUrl,
-              dimensions: ctx.dimensions,
-              provider: ctx.provider,
-            }),
-          buildInteraction: (resp) =>
-            buildEmbeddingInteraction({
-              model: ctx.model,
-              input: inputs.map((i) =>
-                typeof i === "string" ? i : `[image:${i.mimeType}]`,
-              ),
-              dimensions: ctx.dimensions,
-              response: resp,
-            }),
-        });
+        response = await callObserved(pending.map(({ input }) => input));
       } catch (error) {
+        let retryReason: unknown = error;
+        if (error instanceof BedrockPartialEmbeddingError) {
+          promptTokens += error.tokens;
+          for (const success of error.successes) {
+            const original = pending[success.index];
+            if (original) {
+              successes.set(original.index, success.embedding);
+            }
+          }
+
+          const retryable: typeof pending = [];
+          for (const failure of error.failures) {
+            const original = pending[failure.index];
+            if (!original) continue;
+            if (isRetryableEmbeddingError(failure.reason)) {
+              retryable.push(original);
+              retryReason = failure.reason;
+            } else {
+              terminalFailures.push({
+                index: original.index,
+                reason: failure.reason,
+              });
+            }
+          }
+          pending = retryable;
+        }
+
         const isLastAttempt = attempt === RETRY_MAX_ATTEMPTS;
-        if (isLastAttempt || !isRetryableEmbeddingError(error)) {
+        const canRetry =
+          !isLastAttempt &&
+          (error instanceof BedrockPartialEmbeddingError
+            ? pending.length > 0
+            : isRetryableEmbeddingError(error));
+        if (!canRetry) {
+          if (
+            error instanceof BedrockPartialEmbeddingError ||
+            successes.size > 0 ||
+            terminalFailures.length > 0
+          ) {
+            if (!(error instanceof BedrockPartialEmbeddingError)) {
+              terminalFailures.push(
+                ...pending.map(({ index }) => ({ index, reason: error })),
+              );
+            } else {
+              terminalFailures.push(
+                ...pending.map(({ index }) => ({
+                  index,
+                  reason: retryReason,
+                })),
+              );
+            }
+            throw aggregateBedrockPartialError({
+              successes,
+              failures: terminalFailures,
+              tokens: promptTokens,
+            });
+          }
           throw error;
         }
 
         const delayMs = getEmbeddingRetryDelayMs(
-          error,
+          retryReason,
           RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
         );
         logger.warn(
@@ -448,7 +555,40 @@ class EmbeddingService {
           "[Embedder] Retryable embedding error, backing off",
         );
         await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
       }
+
+      promptTokens += response.usage.prompt_tokens;
+      for (const result of response.data) {
+        const original = pending[result.index];
+        if (original) {
+          successes.set(original.index, result.embedding);
+        }
+      }
+      pending = [];
+
+      if (terminalFailures.length > 0) {
+        throw aggregateBedrockPartialError({
+          successes,
+          failures: terminalFailures,
+          tokens: promptTokens,
+        });
+      }
+
+      return {
+        ...response,
+        data: [...successes.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([index, embedding]) => ({
+            object: "embedding" as const,
+            embedding,
+            index,
+          })),
+        usage: {
+          prompt_tokens: promptTokens,
+          total_tokens: promptTokens,
+        },
+      };
     }
 
     // Unreachable, but satisfies TypeScript
@@ -459,6 +599,25 @@ class EmbeddingService {
 export const embeddingService = new EmbeddingService();
 
 // ===== Internal helpers =====
+
+function embeddingInputLogValue(input: EmbeddingInput): string {
+  return typeof input === "string" ? input : `[image:${input.mimeType}]`;
+}
+
+function aggregateBedrockPartialError(params: {
+  successes: Map<number, number[]>;
+  failures: Array<{ index: number; reason: unknown }>;
+  tokens: number;
+}): BedrockPartialEmbeddingError {
+  return new BedrockPartialEmbeddingError(
+    [...params.successes.entries()].map(([index, embedding]) => ({
+      index,
+      embedding,
+    })),
+    params.failures,
+    params.tokens,
+  );
+}
 
 /**
  * A cause-specific, user-facing message for an embedding failure. When the

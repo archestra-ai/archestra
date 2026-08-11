@@ -17,6 +17,8 @@ const embeddingRequests: Array<{
   dimensions?: number;
 }> = [];
 const responseQueue: EmbeddingResponseSpec[] = [];
+const bedrockEmbeddingRequests: string[] = [];
+const bedrockTransientFailures = new Map<string, number>();
 
 // openai@6 requests base64 embeddings by default and decodes them client-side,
 // so the wire payload must carry Float32Array bytes, not a JSON number array.
@@ -65,6 +67,33 @@ const embeddingHandler = http.post(
   },
 );
 
+const bedrockEmbeddingHandler = http.post(
+  "https://bedrock-runtime.us-east-1.amazonaws.com/model/:modelId/invoke",
+  async ({ request }) => {
+    const body = (await request.json()) as { inputText?: string };
+    const input = body.inputText ?? "";
+    bedrockEmbeddingRequests.push(input);
+    const transientFailuresRemaining = bedrockTransientFailures.get(input) ?? 0;
+    if (transientFailuresRemaining > 0) {
+      bedrockTransientFailures.set(input, transientFailuresRemaining - 1);
+      return HttpResponse.json(
+        { message: "temporary outage" },
+        { status: 503 },
+      );
+    }
+    if (input.includes("bad chunk")) {
+      return HttpResponse.json(
+        { message: "deterministic bad input" },
+        { status: 400 },
+      );
+    }
+    return HttpResponse.json({
+      embedding: Array.from({ length: 1024 }, () => 0.1),
+      inputTextTokenCount: 2,
+    });
+  },
+);
+
 const mockGetDefaultOrgEmbeddingConfig = vi.hoisted(() => vi.fn());
 vi.mock("./kb-llm-client", () => ({
   getDefaultOrgEmbeddingConfig: mockGetDefaultOrgEmbeddingConfig,
@@ -108,11 +137,124 @@ function makeEmbeddingContext() {
 }
 
 describe("EmbeddingService", () => {
-  useMswServer(embeddingHandler);
+  useMswServer(embeddingHandler, bedrockEmbeddingHandler);
 
   beforeEach(() => {
     embeddingRequests.length = 0;
+    bedrockEmbeddingRequests.length = 0;
+    bedrockTransientFailures.clear();
     responseQueue.length = 0;
+  });
+
+  test("persists successful Bedrock fan-out results and fails only the affected document", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: {
+        apiKey: "test-key",
+        baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        model: "amazon.titan-embed-image-v1",
+        dimensions: 1024,
+        provider: "bedrock",
+        inputModalities: ["text", "image"],
+        acceptedImageMimeTypes: ["image/png", "image/jpeg"],
+      },
+    });
+
+    const good = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Good",
+      content: "good",
+      contentHash: "partial-bedrock-good",
+      embeddingStatus: "pending",
+    });
+    const bad = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Bad",
+      content: "bad",
+      contentHash: "partial-bedrock-bad",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: good.id, content: "good chunk", chunkIndex: 0 },
+      { documentId: bad.id, content: "bad chunk", chunkIndex: 0 },
+    ]);
+
+    const outcome = await embeddingService.processDocuments([good.id, bad.id]);
+
+    expect(outcome.failedDocumentCount).toBe(1);
+    expect((await KbDocumentModel.findById(good.id))?.embeddingStatus).toBe(
+      "completed",
+    );
+    expect((await KbDocumentModel.findById(bad.id))?.embeddingStatus).toBe(
+      "failed",
+    );
+    expect(bedrockEmbeddingRequests).toHaveLength(2);
+  });
+
+  test("retries only transiently failed Bedrock inputs without replaying successes", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: {
+        apiKey: "test-key",
+        baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        model: "amazon.titan-embed-image-v1",
+        dimensions: 1024,
+        provider: "bedrock",
+        inputModalities: ["text", "image"],
+        acceptedImageMimeTypes: ["image/png", "image/jpeg"],
+      },
+    });
+
+    const good = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Good",
+      content: "good",
+      contentHash: "retry-bedrock-good",
+      embeddingStatus: "pending",
+    });
+    const flaky = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Flaky",
+      content: "flaky",
+      contentHash: "retry-bedrock-flaky",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: good.id, content: "good retry chunk", chunkIndex: 0 },
+      { documentId: flaky.id, content: "flaky retry chunk", chunkIndex: 0 },
+    ]);
+    bedrockTransientFailures.set("flaky retry chunk", 1);
+
+    const outcome = await embeddingService.processDocuments([
+      good.id,
+      flaky.id,
+    ]);
+
+    expect(outcome.failedDocumentCount).toBe(0);
+    expect(
+      bedrockEmbeddingRequests.filter((input) => input === "good retry chunk"),
+    ).toHaveLength(1);
+    expect(
+      bedrockEmbeddingRequests.filter((input) => input === "flaky retry chunk"),
+    ).toHaveLength(2);
   });
 
   test("processes pending document — chunks get embeddings, status completed", async ({

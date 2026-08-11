@@ -466,7 +466,7 @@ function inferEmbeddingDimensions(
   if (provider === "gemini" && id === "gemini-embedding-001") {
     return 3072;
   }
-  if (provider === "gemini" && id === "gemini-embedding-2-preview") {
+  if (provider === "gemini" && id === "gemini-embedding-2") {
     return 3072;
   }
   if (id === "nomic-embed-text" || id.endsWith("/nomic-embed-text")) {
@@ -897,10 +897,7 @@ function normalizeKnownModelCapabilities(params: {
   const { provider, modelId, underlyingModelName, capabilities } = params;
   const normalizedModelId = modelId.toLowerCase();
 
-  if (
-    provider === "gemini" &&
-    normalizedModelId === "gemini-embedding-2-preview"
-  ) {
+  if (provider === "gemini" && normalizedModelId === "gemini-embedding-2") {
     return {
       ...capabilities,
       inputModalities: ["text", "image"],

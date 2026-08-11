@@ -20,7 +20,8 @@ describe("isUsableGeminiCatalogModel", () => {
     ["gemini-3.5-flash", true],
     // First-class Gemini embeddings are kept regardless of version.
     ["gemini-embedding-001", true],
-    ["gemini-embedding-2-preview", true],
+    ["gemini-embedding-2", true],
+    ["gemini-embedding-2-preview", false],
     // Recent gemma is kept; older gemma falls below the min version.
     ["gemma-3-27b-it", true],
     ["gemma-3n-e4b-it", true],

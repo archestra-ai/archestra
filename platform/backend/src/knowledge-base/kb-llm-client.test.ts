@@ -314,12 +314,12 @@ describe("resolveEmbeddingConfig", () => {
     });
     await OrganizationModel.patch(org.id, {
       embeddingChatApiKeyId: chatApiKey.id,
-      embeddingModel: "gemini-embedding-2-preview",
+      embeddingModel: "gemini-embedding-2",
     });
     await ModelModel.create({
-      externalId: "google/gemini-embedding-2-preview",
+      externalId: "google/gemini-embedding-2",
       provider: "gemini",
-      modelId: "gemini-embedding-2-preview",
+      modelId: "gemini-embedding-2",
       inputModalities: ["text", "image"],
       outputModalities: [],
       embeddingDimensions: 1536,
@@ -331,13 +331,7 @@ describe("resolveEmbeddingConfig", () => {
     expect(result?.inputModalities).toEqual(["text", "image"]);
     // Gemini's inline-image API takes a documented format list — a GIF
     // reaching it fails the embed call, so the gate rides along here too.
-    expect(result?.acceptedImageMimeTypes).toEqual([
-      "image/png",
-      "image/jpeg",
-      "image/webp",
-      "image/heic",
-      "image/heif",
-    ]);
+    expect(result?.acceptedImageMimeTypes).toEqual(["image/png", "image/jpeg"]);
   });
 
   test("clamps image off a text-only Gemini embedding model marked image-capable", async ({

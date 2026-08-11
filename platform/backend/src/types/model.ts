@@ -226,6 +226,10 @@ export const PatchModelBodySchema = createUpdateSchema(
     inputModalities: z
       .array(ModelInputModalitySchema)
       .min(1, "At least one input modality is required")
+      .refine(
+        (modalities) => new Set(modalities).size === modalities.length,
+        "Input modalities must be unique",
+      )
       .nullable()
       .optional(),
     outputModalities: z.array(ModelOutputModalitySchema).nullable().optional(),

@@ -523,6 +523,16 @@ describe("chat model routes", () => {
       "embedding_validation_failed",
     );
 
+    const clearModalitiesResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${embeddingModel.id}`,
+      payload: { inputModalities: null },
+    });
+    expect(clearModalitiesResponse.statusCode).toBe(400);
+    expect(clearModalitiesResponse.json().error.internal_code).toBe(
+      "embedding_validation_failed",
+    );
+
     const unchanged = await ModelModel.findById(embeddingModel.id);
     expect(unchanged?.embeddingDimensions).toBe(3072);
 
@@ -531,7 +541,11 @@ describe("chat model routes", () => {
     const benignResponse = await app.inject({
       method: "PATCH",
       url: `/api/llm-models/${embeddingModel.id}`,
-      payload: { ignored: true, embeddingDimensions: 3072 },
+      payload: {
+        ignored: true,
+        embeddingDimensions: 3072,
+        inputModalities: ["text"],
+      },
     });
     expect(benignResponse.statusCode).toBe(200);
     expect(benignResponse.json().ignored).toBe(true);

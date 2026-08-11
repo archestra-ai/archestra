@@ -678,13 +678,17 @@ function isSupportedFile(
   fileTypes?: string[],
 ): boolean {
   const ext = getFileExtension(name);
-  if (fileTypes && fileTypes.length > 0) {
-    return fileTypes.includes(ext);
-  }
-  return (
+  const supportedByConnectorAndEmbeddingModel =
     SUPPORTED_TEXT_EXTENSIONS.has(ext) ||
     SUPPORTED_BINARY_EXTENSIONS.has(ext) ||
-    imageMimeTypes.has(IMAGE_MIME_TYPES[ext] ?? "")
+    imageMimeTypes.has(IMAGE_MIME_TYPES[ext] ?? "");
+
+  // fileTypes is an additional user filter, not a capability override. In
+  // particular, listing ".png" must not make a text-only embedding model ingest
+  // images that its client will reject.
+  return (
+    supportedByConnectorAndEmbeddingModel &&
+    (!fileTypes?.length || fileTypes.includes(ext))
   );
 }
 

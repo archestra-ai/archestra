@@ -1149,9 +1149,9 @@ const MATRIX: MatrixRow[] = [
     },
   },
   {
-    name: "gemini/gemini-embedding-2-preview — normalized to multimodal input with no output",
+    name: "gemini/gemini-embedding-2 — normalized to multimodal input with no output",
     provider: "gemini",
-    modelId: "gemini-embedding-2-preview",
+    modelId: "gemini-embedding-2",
     expected: {
       contextLength: null,
       outputLength: null,

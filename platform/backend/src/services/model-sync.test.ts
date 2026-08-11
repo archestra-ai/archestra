@@ -457,10 +457,10 @@ describe("ModelSyncService", () => {
     expect(flashAfterResync?.outputModalities).toEqual(["text", "image"]);
   });
 
-  test("normalizes gemini-embedding-2-preview as multimodal during sync", () => {
+  test("normalizes gemini-embedding-2 as multimodal during sync", () => {
     const capabilities = resolveModelCapabilities({
       provider: "gemini",
-      modelId: "gemini-embedding-2-preview",
+      modelId: "gemini-embedding-2",
       capabilities: {
         description: "Gemini Embedding 2 Preview",
         contextLength: null,

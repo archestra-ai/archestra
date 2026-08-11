@@ -339,7 +339,9 @@ export class TaskQueueService {
     const startTime = Date.now();
 
     try {
-      await handler(task.payload as Record<string, unknown>);
+      await handler(task.payload as Record<string, unknown>, {
+        taskId: task.id,
+      });
       await TaskModel.complete(task.id);
       const durationSeconds = (Date.now() - startTime) / 1000;
       metrics.taskQueue.reportTaskCompleted(task.taskType, durationSeconds);
@@ -357,6 +359,54 @@ export class TaskQueueService {
         "[TaskQueue] Task failed",
       );
 
+      // A terminal embedding failure must advance its connector run exactly
+      // once. Record the outcome before marking the task dead; completeBatch
+      // stamps the task payload and updates the run in one transaction, so a
+      // crash on either side is safe to retry without double-counting.
+      if (
+        task.taskType === "batch_embedding" &&
+        task.attempt >= task.maxAttempts
+      ) {
+        const payload = task.payload as Record<string, unknown>;
+        const connectorRunId = payload.connectorRunId as string | undefined;
+        if (connectorRunId) {
+          try {
+            const { ConnectorRunModel } = await import("@/models");
+            const documentIds =
+              (payload.documentIds as string[] | undefined) ?? [];
+            const updatedRun = await ConnectorRunModel.completeBatch(
+              connectorRunId,
+              {
+                failedItems: documentIds.length,
+                error:
+                  errorMessage ||
+                  "Embedding task failed after exhausting retries.",
+              },
+              task.id,
+            );
+            const { finalizeConnectorAfterEmbeddingDrain } = await import(
+              "@/task-queue/handlers/batch-embedding-finalizer"
+            );
+            await finalizeConnectorAfterEmbeddingDrain(updatedRun);
+          } catch (batchError) {
+            // Leave the task processing. The stuck-task sweep will retry it;
+            // marking it dead here would strand the connector run forever.
+            logger.error(
+              {
+                taskId: task.id,
+                connectorRunId,
+                error:
+                  batchError instanceof Error
+                    ? batchError.message
+                    : String(batchError),
+              },
+              "[TaskQueue] Failed to atomically complete dead embedding batch",
+            );
+            return;
+          }
+        }
+      }
+
       const result = await TaskModel.fail({
         id: task.id,
         error: errorMessage,
@@ -368,41 +418,6 @@ export class TaskQueueService {
         metrics.taskQueue.reportTaskDead(task.taskType);
         // Reschedule periodic tasks that are dead
         await this.rescheduleIfPeriodic(task.taskType);
-
-        // If the task is dead and it's a batch_embedding task, complete the batch
-        // so connector run coordination isn't stuck
-        if (task.taskType === "batch_embedding") {
-          const payload = task.payload as Record<string, unknown>;
-          const connectorRunId = payload.connectorRunId as string | undefined;
-          if (connectorRunId) {
-            try {
-              const { ConnectorRunModel } = await import("@/models");
-              // Record the failure on the run, not just advance the batch —
-              // otherwise a dead-lettered batch finalizes the run as "success"
-              // and hides incomplete ingestion.
-              const documentIds =
-                (payload.documentIds as string[] | undefined) ?? [];
-              await ConnectorRunModel.completeBatch(connectorRunId, {
-                failedItems: documentIds.length,
-                error:
-                  errorMessage ||
-                  "Embedding task failed after exhausting retries.",
-              });
-            } catch (batchError) {
-              logger.error(
-                {
-                  taskId: task.id,
-                  connectorRunId,
-                  error:
-                    batchError instanceof Error
-                      ? batchError.message
-                      : String(batchError),
-                },
-                "[TaskQueue] Failed to complete batch for dead-lettered task",
-              );
-            }
-          }
-        }
       }
     } finally {
       metrics.taskQueue.reportActiveTaskChange(task.taskType, -1);

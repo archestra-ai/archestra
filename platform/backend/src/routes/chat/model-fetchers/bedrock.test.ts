@@ -309,15 +309,72 @@ describe("fetchBedrockModels", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  test("throws error on API failure", async () => {
+  test("keeps static embedding models when inference-profile discovery is denied", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: () =>
+        Promise.resolve(
+          '{"__type":"AccessDeniedException","message":"denied"}',
+        ),
+    });
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 403,
       text: () => Promise.resolve("Forbidden"),
     });
 
+    const models = await fetchBedrockModels("invoke-only-key");
+
+    expect(models.map((model) => model.id)).toEqual(
+      expect.arrayContaining([
+        "amazon.titan-embed-image-v1",
+        "cohere.embed-english-v3",
+      ]),
+    );
+  });
+
+  test("propagates invalid credentials instead of returning static models", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: () =>
+        Promise.resolve(
+          '{"__type":"UnrecognizedClientException","message":"bad key"}',
+        ),
+    });
+
     await expect(fetchBedrockModels("bad-key")).rejects.toThrow(
       "Failed to fetch Bedrock inference profiles: 403",
+    );
+  });
+
+  test("propagates transient inference-profile failures", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve('{"message":"temporary outage"}'),
+    });
+
+    await expect(fetchBedrockModels("test-key")).rejects.toThrow(
+      "Failed to fetch Bedrock inference profiles: 500",
+    );
+  });
+
+  test("propagates a later inference-profile pagination failure", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({ inferenceProfileSummaries: [], nextToken: "page-2" }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      text: () => Promise.resolve('{"message":"page failed"}'),
+    });
+
+    await expect(fetchBedrockModels("test-key")).rejects.toThrow(
+      "Failed to fetch Bedrock inference profiles: 503",
     );
   });
 

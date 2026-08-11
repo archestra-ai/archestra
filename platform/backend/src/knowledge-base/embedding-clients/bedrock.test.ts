@@ -2,7 +2,11 @@ import { HttpResponse, http } from "msw";
 import { describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { countTokens, getEncoding } from "../tokenizer";
-import { BedrockEmbeddingError, callBedrockEmbedding } from "./bedrock";
+import {
+  BedrockEmbeddingError,
+  BedrockPartialEmbeddingError,
+  callBedrockEmbedding,
+} from "./bedrock";
 
 const BEDROCK_HOST = "https://bedrock-runtime.us-east-1.amazonaws.com";
 
@@ -180,6 +184,38 @@ describe("callBedrockEmbedding", () => {
       expect(result.data).toHaveLength(2);
       expect(result.data[0].index).toBe(0);
       expect(result.data[1].index).toBe(1);
+    });
+
+    test("preserves successful per-input vectors when one request fails", async () => {
+      server.use(
+        http.post(
+          `${BEDROCK_HOST}/model/:modelId/invoke`,
+          async ({ request }) => {
+            const body = (await request.json()) as { inputText?: string };
+            if (body.inputText === "bad") {
+              return HttpResponse.json({ message: "bad input" });
+            }
+            return HttpResponse.json({
+              embedding: [body.inputText === "first" ? 1 : 3],
+            });
+          },
+        ),
+      );
+
+      const error = await callBedrockEmbedding({
+        inputs: ["first", "bad", "third"],
+        model: "amazon.titan-embed-image-v1",
+        apiKey: "test-key",
+        baseUrl: BEDROCK_HOST,
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(BedrockPartialEmbeddingError);
+      expect((error as BedrockPartialEmbeddingError).successes).toEqual([
+        { index: 0, embedding: [1] },
+        { index: 2, embedding: [3] },
+      ]);
+      expect((error as BedrockPartialEmbeddingError).failures).toHaveLength(1);
+      expect((error as BedrockPartialEmbeddingError).failures[0].index).toBe(1);
     });
 
     test("forwards a supported on-request dimension via embeddingConfig", async () => {

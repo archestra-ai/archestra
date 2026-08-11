@@ -442,9 +442,22 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // into a chat model — while an organization's embedding config points
       // here would silently corrupt the existing index. Mirror the
       // knowledge-settings lock: force changes through the drop-embedding flow.
+      const existingInputModalities = new Set(existing.inputModalities ?? []);
+      const requestedInputModalities = new Set(body.inputModalities ?? []);
+      const inputModalitiesChanged =
+        body.inputModalities !== undefined &&
+        ((body.inputModalities === null) !==
+          (existing.inputModalities === null) ||
+          requestedInputModalities.size !== existingInputModalities.size ||
+          [...requestedInputModalities].some(
+            (modality) => !existingInputModalities.has(modality),
+          ));
+      const embeddingConfigurationChanged =
+        (body.embeddingDimensions !== undefined &&
+          body.embeddingDimensions !== existing.embeddingDimensions) ||
+        inputModalitiesChanged;
       if (
-        body.embeddingDimensions !== undefined &&
-        body.embeddingDimensions !== existing.embeddingDimensions &&
+        embeddingConfigurationChanged &&
         (await OrganizationModel.isKnowledgeEmbeddingModel({
           provider: existing.provider,
           modelId: existing.modelId,
@@ -452,7 +465,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         throw new ApiError(
           400,
-          "This model is used as the knowledge base embedding model, so its embedding configuration cannot be changed. Drop the embedding configuration in Knowledge settings first — all documents will need to be re-embedded.",
+          "This model is used as the knowledge base embedding model, so its dimensions and input modalities cannot be changed. Drop the embedding configuration in Knowledge settings first — all documents will need to be re-embedded.",
           "embedding_validation_failed",
         );
       }

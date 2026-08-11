@@ -11,7 +11,7 @@ export interface EmbeddingApiResponse {
 
 /**
  * A single embedding input — either a text string or an inline image.
- * Image inputs are only supported by multimodal embedding models (e.g. gemini-embedding-2-preview).
+ * Image inputs are only supported by multimodal embedding models (e.g. gemini-embedding-2).
  */
 export type EmbeddingInput = string | { mimeType: string; data: string };
 

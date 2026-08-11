@@ -328,33 +328,69 @@ class ConnectorRunModel {
      * this single UPDATE.
      */
     outcome?: { failedItems?: number; error?: string; skippedItems?: number },
+    /**
+     * Queue task whose outcome is being recorded. When supplied, the task is
+     * stamped in the same transaction as the run update, making retries after
+     * a worker crash idempotent. Kept optional for non-queue callers and tests.
+     */
+    taskId?: string,
   ): Promise<ConnectorRun | null> {
     const t = schema.connectorRunsTable;
-    const failedItems = outcome?.failedItems ?? 0;
-    const skippedItems = outcome?.skippedItems ?? 0;
-    const [result] = await db
-      .update(t)
-      .set({
-        completedBatches: sql`${t.completedBatches} + 1`,
-        itemErrors: sql`${t.itemErrors} + ${failedItems}`,
-        itemsSkipped: sql`COALESCE(${t.itemsSkipped}, 0) + ${skippedItems}`,
-        ...(outcome?.error
-          ? { error: sql`COALESCE(${t.error}, ${outcome.error})` }
-          : {}),
-        // Include this batch's failures in the terminal-status decision — SET
-        // expressions all see the pre-update row, so add `failedItems` explicitly.
-        status: sql`CASE
-          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} + ${failedItems} > 0 THEN 'completed_with_errors'
-          WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success'
-          ELSE ${t.status}
-        END`,
-        completedAt: sql`CASE WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN NOW() ELSE ${t.completedAt} END`,
-      })
-      // Only advance a still-running run. Orphaned embedding batches belonging
-      // to a superseded/failed run must not bump its counters or resurrect it.
-      .where(and(eq(t.id, runId), eq(t.status, "running")))
-      .returning();
-    return result ?? null;
+    return db.transaction(async (tx) => {
+      if (taskId) {
+        const tasks = schema.tasksTable;
+        const [claimed] = await tx
+          .update(tasks)
+          .set({
+            payload: sql`${tasks.payload} || jsonb_build_object('connectorRunOutcomeRecorded', true)`,
+          })
+          .where(
+            and(
+              eq(tasks.id, taskId),
+              sql`COALESCE((${tasks.payload}->>'connectorRunOutcomeRecorded')::boolean, false) = false`,
+            ),
+          )
+          .returning({ id: tasks.id });
+
+        if (!claimed) {
+          const [existing] = await tx.select().from(t).where(eq(t.id, runId));
+          return existing ?? null;
+        }
+      }
+
+      const failedItems = outcome?.failedItems ?? 0;
+      const skippedItems = outcome?.skippedItems ?? 0;
+      const [result] = await tx
+        .update(t)
+        .set({
+          completedBatches: sql`${t.completedBatches} + 1`,
+          itemErrors: sql`${t.itemErrors} + ${failedItems}`,
+          itemsSkipped: sql`COALESCE(${t.itemsSkipped}, 0) + ${skippedItems}`,
+          ...(outcome?.error
+            ? { error: sql`COALESCE(${t.error}, ${outcome.error})` }
+            : {}),
+          // A time-budgeted run is already terminal `partial`, but its queued
+          // embedding tasks still own their counters. Preserve that status
+          // while draining; only an actively-running full run can finalize.
+          status: sql`CASE
+            WHEN ${t.status} = 'partial' THEN ${t.status}
+            WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} AND ${t.itemErrors} + ${failedItems} > 0 THEN 'completed_with_errors'
+            WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN 'success'
+            ELSE ${t.status}
+          END`,
+          completedAt: sql`CASE
+            WHEN ${t.status} = 'partial' THEN ${t.completedAt}
+            WHEN ${t.totalBatches} > 0 AND ${t.completedBatches} + 1 >= ${t.totalBatches} THEN NOW()
+            ELSE ${t.completedAt}
+          END`,
+        })
+        // Partial runs continue accepting their already-enqueued batch outcomes.
+        // Other terminal states are fenced out so orphaned work cannot mutate or
+        // resurrect a superseded/failed run.
+        .where(and(eq(t.id, runId), inArray(t.status, ["running", "partial"])))
+        .returning();
+      return result ?? null;
+    });
   }
 
   /**

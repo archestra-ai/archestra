@@ -457,23 +457,18 @@ class ConnectorSyncService {
         }
       }
 
-      // Set totalBatches so batch_embedding handlers can coordinate (fenced).
-      if (batchCount > 0) {
-        await ConnectorRunModel.updateIfOwned({
-          runId: run.id,
-          epoch,
-          data: { totalBatches: batchCount },
-        });
-      }
-
       if (stoppedEarly) {
-        // Partial completion — will be continued by a follow-up run.
+        // Publish the terminal partial status and the batch fence atomically.
+        // Otherwise the last embedding task can finalize the run as success in
+        // between those writes, losing progress and starting the continuation
+        // from the wrong terminal state.
         const updated = await ConnectorRunModel.updateIfOwned({
           runId: run.id,
           epoch,
           data: {
             status: "partial",
             completedAt: new Date(),
+            totalBatches: batchCount,
             documentsProcessed,
             documentsIngested,
             logs: options?.getLogOutput?.() ?? null,
@@ -484,12 +479,13 @@ class ConnectorSyncService {
           },
         });
 
-        if (updated) {
-          await KnowledgeBaseConnectorModel.update(connectorId, {
-            lastSyncStatus: "partial",
-            lastSyncError: null,
-          });
+        if (!updated) {
+          return { runId: run.id, status: "superseded" };
         }
+        await KnowledgeBaseConnectorModel.update(connectorId, {
+          lastSyncStatus: "partial",
+          lastSyncError: null,
+        });
 
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.rag.reportConnectorSync({
@@ -541,6 +537,7 @@ class ConnectorSyncService {
           data: {
             status: finalStatus,
             completedAt: now,
+            totalBatches: 0,
             documentsProcessed,
             documentsIngested,
             error: diagnosis,
@@ -574,19 +571,25 @@ class ConnectorSyncService {
           });
         }
       } else {
-        // Batches were enqueued — update progress but leave status as "running";
-        // the last batch_embedding task finalizes the run.
-        await ConnectorRunModel.updateIfOwned({
+        // Publish progress and totalBatches in one fenced write. Once visible,
+        // the last batch may finalize safely without racing a later progress
+        // update that would be rejected by the terminal-state fence.
+        const progress = await ConnectorRunModel.updateIfOwned({
           runId: run.id,
           epoch,
           data: {
+            totalBatches: batchCount,
             documentsProcessed,
             documentsIngested,
             logs: options?.getLogOutput?.() ?? null,
           },
         });
+        if (!progress) {
+          return { runId: run.id, status: "superseded" };
+        }
 
-        // Handle edge case: all batches may have completed before totalBatches was set.
+        // Handle the edge case where all batches completed before the atomic
+        // progress/totalBatches publication above.
         // finalizeBatchesIfComplete atomically checks and transitions if ready.
         const finalizedRun = await ConnectorRunModel.finalizeBatchesIfComplete(
           run.id,

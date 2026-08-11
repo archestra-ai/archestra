@@ -693,6 +693,29 @@ describe("OneDriveConnector", () => {
       expect(docs).toHaveLength(1);
       expect(docs[0].title).toBe("notes.txt");
     });
+
+    it("does not let fileTypes opt images into a text-only embedding model", async () => {
+      const connector = new OneDriveConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      mockGet.mockResolvedValueOnce({ value: [] });
+      mockGet.mockResolvedValueOnce({
+        value: [makeDriveItem("image-1", "diagram.png")],
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: { ...baseConfig, fileTypes: [".png"] },
+        credentials,
+        checkpoint: null,
+        embeddingInputModalities: ["text"],
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches.flatMap((batch) => batch.documents)).toHaveLength(0);
+      expect(mockGet).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("estimateTotalItems — fileTypes filter", () => {

@@ -10,7 +10,7 @@ import {
   UnusableEmbeddingResponseError,
 } from "../errors";
 import { AzureEmbeddingError } from "./azure";
-import { BedrockEmbeddingError } from "./bedrock";
+import { BedrockEmbeddingError, BedrockPartialEmbeddingError } from "./bedrock";
 import { findBedrockEmbeddingModel } from "./bedrock-models";
 import { GeminiEmbeddingError } from "./gemini";
 import { OpenAIEmbeddingError } from "./openai";
@@ -26,6 +26,7 @@ export type { EmbeddingApiResponse, EmbeddingInput };
 export {
   AzureEmbeddingError,
   BedrockEmbeddingError,
+  BedrockPartialEmbeddingError,
   GeminiEmbeddingError,
   OpenAIEmbeddingError,
 };
@@ -37,7 +38,7 @@ export {
  * rather than sent to the OpenAI-compatible client (spec item 2).
  * Accepts both text strings and inline image inputs (multimodal). Image inputs are
  * only meaningful for providers/models that support multimodal embedding (e.g.
- * Gemini gemini-embedding-2-preview); text-only clients throw on non-text inputs.
+ * Gemini gemini-embedding-2); text-only clients throw on non-text inputs.
  */
 export async function callEmbedding(params: {
   inputs: EmbeddingInput[];
@@ -144,9 +145,9 @@ export function getEmbeddingClientInputModalities(
 /**
  * Image MIME types the embedding client for `provider` can send to `model`, or
  * `null` for no per-format restriction. Only meaningful when the resolved
- * input modalities include "image": Bedrock's multimodal models take JPEG/PNG
- * only and Gemini's inline-image API takes PNG/JPEG/WebP/HEIC/HEIF (anything
- * else — a GIF, say — is a provider error that fails the document). Connectors
+ * input modalities include "image": Bedrock's multimodal models and Gemini's
+ * embedding API take JPEG/PNG only (anything else — a GIF, say — is a provider
+ * error that fails the document). Connectors
  * skip other formats at ingestion and the embedder skips them at embed time.
  */
 export function getEmbeddingClientAcceptedImageMimeTypes(
@@ -188,6 +189,18 @@ export function isRetryableEmbeddingError(error: unknown): boolean {
   if (error instanceof KnowledgeBaseError) {
     return false;
   }
+  // A total fan-out outage is safe to retry. Mixed results require the
+  // embedder's targeted retry path so successful InvokeModel calls are never
+  // repeated.
+  if (error instanceof BedrockPartialEmbeddingError) {
+    return (
+      error.successes.length === 0 &&
+      error.failures.length > 0 &&
+      error.failures.every((failure) =>
+        isRetryableEmbeddingError(failure.reason),
+      )
+    );
+  }
   if (
     error instanceof AzureEmbeddingError ||
     error instanceof BedrockEmbeddingError ||
@@ -227,9 +240,7 @@ export function getEmbeddingRetryDelayMs(
  * embedding model needs an entry here before connectors will ingest images for
  * it — safe-by-default, same as Bedrock's unknown-model→text degradation.
  */
-const GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS = new Set([
-  "gemini-embedding-2-preview",
-]);
+const GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS = new Set(["gemini-embedding-2"]);
 
 /**
  * Gemini's documented inline-image formats. The SDK forwards any payload
@@ -239,7 +250,4 @@ const GEMINI_IMAGE_CAPABLE_EMBEDDING_MODELS = new Set([
 const GEMINI_ACCEPTED_IMAGE_MIME_TYPES: readonly string[] = [
   "image/png",
   "image/jpeg",
-  "image/webp",
-  "image/heic",
-  "image/heif",
 ];

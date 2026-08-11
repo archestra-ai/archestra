@@ -25,6 +25,44 @@ export class BedrockEmbeddingError extends Error {
 }
 
 /**
+ * A fan-out where some independent InvokeModel calls succeeded and others
+ * failed. Successful vectors are carried back to the embedder so it can persist
+ * them and fail only the affected chunks instead of discarding and rebilling the
+ * entire slice on retry.
+ */
+export class BedrockPartialEmbeddingError extends BedrockEmbeddingError {
+  public readonly successes: Array<{
+    index: number;
+    embedding: number[];
+  }>;
+  public readonly failures: Array<{ index: number; reason: unknown }>;
+  public readonly tokens: number;
+
+  constructor(
+    successes: Array<{
+      index: number;
+      embedding: number[];
+    }>,
+    failures: Array<{ index: number; reason: unknown }>,
+    tokens: number,
+  ) {
+    const orderedFailures = failures
+      .map((failure) => ({
+        ...failure,
+        reason: toBedrockEmbeddingError(failure.reason),
+      }))
+      .sort((a, b) => a.index - b.index);
+    const first =
+      orderedFailures[0]?.reason ?? toBedrockEmbeddingError(undefined);
+    super(first.status, first.message);
+    this.name = "BedrockPartialEmbeddingError";
+    this.successes = [...successes].sort((a, b) => a.index - b.index);
+    this.failures = orderedFailures;
+    this.tokens = tokens;
+  }
+}
+
+/**
  * Embed text and images using AWS Bedrock, reusing the same credential
  * resolution (IAM/IRSA, static SigV4, or bearer key) as Bedrock chat.
  *
@@ -160,7 +198,7 @@ async function embedWithTitanMultimodal(params: {
   const prepared = truncateTextInputs({ inputs, model, maxInputTextTokens });
 
   let tokens = 0;
-  const embeddings = await mapAllOrThrow(
+  const settled = await mapWithConcurrency(
     prepared,
     BEDROCK_EMBEDDING_MAX_PARALLEL,
     async (input) => {
@@ -189,6 +227,16 @@ async function embedWithTitanMultimodal(params: {
       return response.embedding;
     },
   );
+
+  const partial = collectPartialEmbeddingResults(settled);
+  if (partial.failures.length > 0) {
+    throw new BedrockPartialEmbeddingError(
+      partial.successes,
+      partial.failures,
+      tokens,
+    );
+  }
+  const embeddings = partial.successes.map((result) => result.embedding);
 
   return { embeddings, tokens };
 }
@@ -249,37 +297,62 @@ async function embedWithCohere(params: {
   }
 
   let tokens = 0;
-  const calls: Array<() => Promise<void>> = [
-    ...textBatches.map((batch) => async () => {
-      const { body: response, inputTokenCount } =
-        await client.invokeJsonWithHeaders<CohereEmbeddingResponse>(model, {
-          texts: batch.map((entry) => entry.text),
-          input_type: purpose ?? "search_document",
-          // Texts are already clamped to the request schema's character cap
-          // above; "END" remains as the token-level backstop (Cohere embeds at
-          // most 512 tokens per text) so a cap-fitting chunk that still
-          // exceeds the token limit degrades to a truncated vector instead of
-          // failing the whole document.
-          truncate: "END",
+  const calls: Array<{ indices: number[]; run: () => Promise<void> }> = [
+    ...textBatches.map((batch) => ({
+      indices: batch.map((entry) => entry.index),
+      run: async () => {
+        const { body: response, inputTokenCount } =
+          await client.invokeJsonWithHeaders<CohereEmbeddingResponse>(model, {
+            texts: batch.map((entry) => entry.text),
+            input_type: purpose ?? "search_document",
+            // Texts are already clamped to the request schema's character cap
+            // above; "END" remains as the token-level backstop (Cohere embeds at
+            // most 512 tokens per text) so a cap-fitting chunk that still
+            // exceeds the token limit degrades to a truncated vector instead of
+            // failing the whole document.
+            truncate: "END",
+          });
+        const vectors = cohereVectors(response, model, batch.length);
+        batch.forEach((entry, i) => {
+          embeddings[entry.index] = vectors[i];
         });
-      const vectors = cohereVectors(response, model, batch.length);
-      batch.forEach((entry, i) => {
-        embeddings[entry.index] = vectors[i];
-      });
-      tokens += inputTokenCount ?? 0;
-    }),
-    ...imageEntries.map((entry) => async () => {
-      const { body: response, inputTokenCount } =
-        await client.invokeJsonWithHeaders<CohereEmbeddingResponse>(model, {
-          images: [entry.dataUri],
-          input_type: "image",
-        });
-      embeddings[entry.index] = cohereVectors(response, model, 1)[0];
-      tokens += inputTokenCount ?? 0;
-    }),
+        tokens += inputTokenCount ?? 0;
+      },
+    })),
+    ...imageEntries.map((entry) => ({
+      indices: [entry.index],
+      run: async () => {
+        const { body: response, inputTokenCount } =
+          await client.invokeJsonWithHeaders<CohereEmbeddingResponse>(model, {
+            images: [entry.dataUri],
+            input_type: "image",
+          });
+        embeddings[entry.index] = cohereVectors(response, model, 1)[0];
+        tokens += inputTokenCount ?? 0;
+      },
+    })),
   ];
 
-  await mapAllOrThrow(calls, BEDROCK_EMBEDDING_MAX_PARALLEL, (call) => call());
+  const settled = await mapWithConcurrency(
+    calls,
+    BEDROCK_EMBEDDING_MAX_PARALLEL,
+    (call) => call.run(),
+  );
+  const failures = settled.flatMap((result, callIndex) =>
+    result.status === "rejected"
+      ? calls[callIndex].indices.map((index) => ({
+          index,
+          reason: result.reason,
+        }))
+      : [],
+  );
+  if (failures.length > 0) {
+    const failedIndices = new Set(failures.map((failure) => failure.index));
+    const successes = embeddings.flatMap((embedding, index) =>
+      embedding && !failedIndices.has(index) ? [{ index, embedding }] : [],
+    );
+    throw new BedrockPartialEmbeddingError(successes, failures, tokens);
+  }
 
   return { embeddings, tokens };
 }
@@ -419,23 +492,22 @@ function toBedrockEmbeddingError(err: unknown): BedrockEmbeddingError {
   return new BedrockEmbeddingError(status, message);
 }
 
-/**
- * Run `fn` over `items` with bounded concurrency, preserving input order.
- * Every item runs to completion (no InvokeModel calls left detached
- * mid-flight), then the first failure in input order is rethrown.
- */
-async function mapAllOrThrow<T, R>(
-  items: readonly T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const settled = await mapWithConcurrency(items, limit, fn);
-  return settled.map((result) => {
-    if (result.status === "rejected") {
-      throw result.reason;
+function collectPartialEmbeddingResults(
+  settled: PromiseSettledResult<number[]>[],
+): {
+  successes: Array<{ index: number; embedding: number[] }>;
+  failures: Array<{ index: number; reason: unknown }>;
+} {
+  const successes: Array<{ index: number; embedding: number[] }> = [];
+  const failures: Array<{ index: number; reason: unknown }> = [];
+  settled.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      successes.push({ index, embedding: result.value });
+    } else {
+      failures.push({ index, reason: result.reason });
     }
-    return result.value;
   });
+  return { successes, failures };
 }
 
 // ===== Internal constants =====

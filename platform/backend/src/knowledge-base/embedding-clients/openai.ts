@@ -35,7 +35,7 @@ export async function callOpenAIEmbedding(params: {
     throw new OpenAIEmbeddingError(
       400,
       "OpenAI-compatible embedding APIs do not support image inputs. " +
-        "Configure a multimodal embedding model (e.g. gemini-embedding-2-preview) to embed images.",
+        "Configure a multimodal embedding model (e.g. gemini-embedding-2) to embed images.",
     );
   });
 

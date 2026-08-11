@@ -53,6 +53,8 @@ interface KbObservabilityParams<T> {
   callback: () => Promise<T>;
   /** Extract interaction data from a successful callback result. */
   buildInteraction: (result: T) => KbInteractionData;
+  /** Record billable successful work carried by an otherwise failed call. */
+  buildInteractionOnError?: (error: unknown) => KbInteractionData | null;
 }
 
 /**
@@ -60,7 +62,7 @@ interface KbObservabilityParams<T> {
  *
  * - Creates an OTEL span covering the callback execution (captures latency)
  * - Records an interaction via InteractionModel.create on success (fire-and-forget)
- * - On callback error: span is set to ERROR, no interaction recorded, error re-thrown
+ * - Can record billable partial work carried by an error before re-throwing it
  */
 export async function withKbObservability<T>(
   params: KbObservabilityParams<T>,
@@ -74,57 +76,67 @@ export async function withKbObservability<T>(
       span.setAttribute(ATTR_ARCHESTRA_TRIGGER_SOURCE, params.source);
 
       const startTime = Date.now();
-      const result = await params.callback();
-      const durationSeconds = (Date.now() - startTime) / 1000;
-      const interaction = params.buildInteraction(result);
-
-      span.setAttribute(ATTR_GENAI_RESPONSE_MODEL, interaction.model);
-      span.setAttribute(ATTR_GENAI_USAGE_INPUT_TOKENS, interaction.inputTokens);
-      span.setAttribute(
-        ATTR_GENAI_USAGE_OUTPUT_TOKENS,
-        interaction.outputTokens,
-      );
-
-      const cost = await calculateKbCost({
-        model: interaction.model,
-        provider: params.provider,
-        inputTokens: interaction.inputTokens,
-        outputTokens: interaction.outputTokens,
-      });
-
-      if (cost !== undefined) {
-        span.setAttribute(ATTR_ARCHESTRA_COST, cost);
-      }
-
-      metrics.llm.reportKbLlmCall({
-        provider: params.provider,
-        model: interaction.model,
-        inputTokens: interaction.inputTokens,
-        outputTokens: interaction.outputTokens,
-        durationSeconds,
-        cost,
-        source: params.source,
-      });
-
-      InteractionModel.create({
-        profileId: null,
-        connectorId: params.connectorId ?? null,
-        source: params.source,
-        type: params.type,
-        request: interaction.request as InteractionRequest,
-        response: interaction.response as InteractionResponse,
-        model: interaction.model,
-        inputTokens: interaction.inputTokens,
-        outputTokens: interaction.outputTokens,
-        cost: cost?.toFixed(10) ?? null,
-      }).catch((error) => {
-        logger.warn(
-          { error: error instanceof Error ? error.message : String(error) },
-          `[KB] Failed to record ${params.source} interaction`,
+      const recordInteraction = async (interaction: KbInteractionData) => {
+        const durationSeconds = (Date.now() - startTime) / 1000;
+        span.setAttribute(ATTR_GENAI_RESPONSE_MODEL, interaction.model);
+        span.setAttribute(
+          ATTR_GENAI_USAGE_INPUT_TOKENS,
+          interaction.inputTokens,
         );
-      });
+        span.setAttribute(
+          ATTR_GENAI_USAGE_OUTPUT_TOKENS,
+          interaction.outputTokens,
+        );
 
-      return result;
+        const cost = await calculateKbCost({
+          model: interaction.model,
+          provider: params.provider,
+          inputTokens: interaction.inputTokens,
+          outputTokens: interaction.outputTokens,
+        });
+        if (cost !== undefined) {
+          span.setAttribute(ATTR_ARCHESTRA_COST, cost);
+        }
+
+        metrics.llm.reportKbLlmCall({
+          provider: params.provider,
+          model: interaction.model,
+          inputTokens: interaction.inputTokens,
+          outputTokens: interaction.outputTokens,
+          durationSeconds,
+          cost,
+          source: params.source,
+        });
+        InteractionModel.create({
+          profileId: null,
+          connectorId: params.connectorId ?? null,
+          source: params.source,
+          type: params.type,
+          request: interaction.request as InteractionRequest,
+          response: interaction.response as InteractionResponse,
+          model: interaction.model,
+          inputTokens: interaction.inputTokens,
+          outputTokens: interaction.outputTokens,
+          cost: cost?.toFixed(10) ?? null,
+        }).catch((error) => {
+          logger.warn(
+            { error: error instanceof Error ? error.message : String(error) },
+            `[KB] Failed to record ${params.source} interaction`,
+          );
+        });
+      };
+
+      try {
+        const result = await params.callback();
+        await recordInteraction(params.buildInteraction(result));
+        return result;
+      } catch (error) {
+        const partialInteraction = params.buildInteractionOnError?.(error);
+        if (partialInteraction) {
+          await recordInteraction(partialInteraction);
+        }
+        throw error;
+      }
     },
   });
 }

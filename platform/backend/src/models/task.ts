@@ -158,18 +158,35 @@ class TaskModel {
       WHERE status = 'processing'
         AND COALESCE(heartbeat_at, started_at) < NOW() - make_interval(secs => ${timeoutSeconds})
         AND attempt >= max_attempts
+        AND NOT (
+          task_type = 'batch_embedding'
+          AND payload->>'connectorRunId' IS NOT NULL
+        )
       RETURNING task_type AS "taskType", periodic, status
     `);
 
-    // Exponential backoff computed in SQL: 30s * 2^(attempt-1)
+    // Exponential backoff for normal retries. Exhausted coordinated embedding
+    // tasks use a fixed 30s recovery delay so a finalization outage cannot grow
+    // the delay without bound while the attempt counter keeps advancing.
     const { rows: retried } = await db.execute<StuckTaskTransition>(sql`
       UPDATE tasks
       SET status = 'pending',
           last_error = ${timeoutError},
-          scheduled_for = NOW() + (30000 * power(2, attempt - 1)) * INTERVAL '1 millisecond'
+          scheduled_for = NOW() + (
+            CASE
+              WHEN attempt >= max_attempts THEN 30000
+              ELSE 30000 * power(2, attempt - 1)
+            END
+          ) * INTERVAL '1 millisecond'
       WHERE status = 'processing'
         AND COALESCE(heartbeat_at, started_at) < NOW() - make_interval(secs => ${timeoutSeconds})
-        AND attempt < max_attempts
+        AND (
+          attempt < max_attempts
+          OR (
+            task_type = 'batch_embedding'
+            AND payload->>'connectorRunId' IS NOT NULL
+          )
+        )
       RETURNING task_type AS "taskType", periodic, status
     `);
 

@@ -112,8 +112,8 @@ const SCRIPT_HELPERS = `$ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $ArchUseColor = [string]::IsNullOrEmpty($env:NO_COLOR)
 # Header-mark capability. Windows Terminal and PowerShell 7 render the Unicode
-# block mark (the exact macOS/Linux/guard logo); the legacy console (Windows
-# PowerShell 5.1 in conhost) mojibakes block glyphs on its OEM codepage, so it
+# braille mark (the exact macOS/Linux/guard logo); the legacy console (Windows
+# PowerShell 5.1 in conhost) mojibakes braille glyphs on its OEM codepage, so it
 # falls back to the ASCII mark. Switching this session to UTF-8 is best-effort
 # and harmless if it fails — it only affects how the banner below is drawn.
 $ArchUtf8 = $false
@@ -155,7 +155,7 @@ Say ${psq(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
  * details block, emitted through single-quoted here-strings so nothing in them
  * is ever expanded by PowerShell. The mark is the exact canonical logo (shared
  * with the macOS/Linux banner and every startup guard) when the host can render
- * UTF-8 block glyphs, and the portable ASCII rendition of the same composition
+ * UTF-8 braille glyphs, and the portable ASCII rendition of the same composition
  * otherwise — chosen at runtime by $ArchUtf8 (set in SCRIPT_HELPERS) so a legacy
  * `irm | iex` console never mojibakes.
  */

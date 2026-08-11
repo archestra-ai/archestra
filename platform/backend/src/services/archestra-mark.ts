@@ -3,30 +3,30 @@
  * the setup-script banner AND the startup-guard pre-loader ("startup screen") —
  * on macOS/Linux and Windows, so all of them render the identical logo.
  *
- * `unicode` is the block-glyph art used everywhere a UTF-8-capable terminal is
+ * `unicode` is the braille art used everywhere a UTF-8-capable terminal is
  * guaranteed: bash (`curl | bash`), the startup guards (the bash guard, and the
  * PowerShell guard which is written to disk as UTF-8-with-BOM so PowerShell
  * decodes it correctly), and the Windows connect banner when the host is
  * capable (Windows Terminal / PowerShell 7). `ascii` is the portable fallback
  * for the legacy Windows console, where the connect banner is streamed inline
- * via `irm | iex` with no BOM and block glyphs would mojibake on the OEM
+ * via `irm | iex` with no BOM and braille glyphs would mojibake on the OEM
  * codepage.
  *
- * Both variants are 9 lines with the same layout: the product name is overlaid
- * to the right of {@link ARCHESTRA_MARK_NAME_ROW} and the tagline to the right
- * of {@link ARCHESTRA_MARK_TAGLINE_ROW}.
+ * Within each variant every row has the same width — the unicode rows are
+ * padded to 14 columns with U+2800 braille blanks (visually empty, immune to
+ * trailing-whitespace trimming) — because the product name is overlaid to the
+ * right of {@link ARCHESTRA_MARK_NAME_ROW} and the tagline to the right of
+ * {@link ARCHESTRA_MARK_TAGLINE_ROW}, and both must start at the same column.
  */
 export const ARCHESTRA_MARK = {
   unicode: [
-    "   ╭──────────────────╮",
-    "   │                  │",
-    "   │        ▟██▙      │",
-    "   │        ████      │",
-    "   │       ████       │",
-    "   │       ████ ▟▙    │",
-    "   │      ▜██▛  ▜▛    │",
-    "   │                  │",
-    "   ╰──────────────────╯",
+    "⠀⠀⠀⢀⣤⣶⣶⣦⡀⠀⠀⠀⠀⠀",
+    "⠀⠀⠀⣾⣿⣿⣿⣿⣷⠀⠀⠀⠀⠀",
+    "⠀⠀⣸⣿⣿⣿⣿⣿⠇⠀⠀⠀⠀⠀",
+    "⠀⢠⣿⣿⣿⣿⣿⡟⠀⠀⠀⠀⠀⠀",
+    "⢀⣿⣿⣿⣿⣿⡟⠀⢀⣴⣶⣶⣦⡀",
+    "⢸⣿⣿⣿⣿⣿⠁⠀⢿⣿⣿⣿⣿⡇",
+    "⠀⠛⠿⠿⠟⠃⠀⠀⠈⠻⠿⠿⠛⠁",
   ],
   ascii: [
     "   .------------------.",

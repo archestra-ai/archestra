@@ -886,9 +886,9 @@ function guardHeader(ctx: StartupGuardContext): string {
 Write-Host ''`;
   }
   // The exact canonical mark (identical art to the bash guard and the connect
-  // banner): box lines in White, product name (Cyan) and tagline (DarkGray)
+  // banner): braille lines in White, product name (Cyan) and tagline (DarkGray)
   // overlaid on their rows. The .ps1 is written UTF-8-with-BOM, so PowerShell
-  // decodes these block glyphs correctly.
+  // decodes the braille glyphs correctly.
   const lines = ARCHESTRA_MARK.unicode;
   const out = lines.map((line, i) => {
     if (i === ARCHESTRA_MARK_NAME_ROW) {

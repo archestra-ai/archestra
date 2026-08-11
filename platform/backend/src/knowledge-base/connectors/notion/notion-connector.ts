@@ -180,6 +180,7 @@ export class NotionConnector extends BaseConnector {
           fallback: null,
           itemId: pageId,
           resource: "page",
+          itemUnavailable: true,
         });
         if (result) documents.push(result);
       }
@@ -301,6 +302,7 @@ export class NotionConnector extends BaseConnector {
             fallback: null,
             itemId: pageId,
             resource: "page",
+            itemUnavailable: true,
           });
           if (doc) documents.push(doc);
         }
@@ -414,6 +416,7 @@ export class NotionConnector extends BaseConnector {
             fallback: null,
             itemId: pageId,
             resource: "page",
+            itemUnavailable: true,
           });
           if (doc) documents.push(doc);
         }

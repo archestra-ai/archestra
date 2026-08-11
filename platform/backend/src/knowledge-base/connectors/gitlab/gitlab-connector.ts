@@ -475,6 +475,7 @@ export class GitlabConnector extends BaseConnector {
           fallback: null,
           itemId: filePath,
           resource: "file_content",
+          itemUnavailable: true,
         });
 
         if (content !== null) {

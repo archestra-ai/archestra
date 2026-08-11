@@ -1,4 +1,14 @@
-import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   AclEntry,
@@ -385,6 +395,76 @@ class KbDocumentModel {
       )
       .returning({ id: schema.kbDocumentsTable.id });
     return result.length > 0;
+  }
+
+  static async deleteByConnectorAndSources(params: {
+    connectorId: string;
+    targets: Array<{
+      sourceId: string;
+      sourceScope?: {
+        metadataField: "userId" | "driveId";
+        value: string;
+      };
+    }>;
+  }): Promise<number> {
+    if (params.targets.length === 0) return 0;
+
+    const targetConditions: SQL[] = [];
+    const unscopedSourceIds = params.targets
+      .filter((target) => !target.sourceScope)
+      .map((target) => target.sourceId);
+    if (unscopedSourceIds.length > 0) {
+      targetConditions.push(
+        inArray(schema.kbDocumentsTable.sourceId, unscopedSourceIds),
+      );
+    }
+
+    // Group scoped IDs so a batch remains a small number of DELETE clauses
+    // instead of issuing a query per skipped item. Graph drive-item IDs are
+    // drive-local, so the metadata scope is part of their external identity.
+    const scopedSourceIds = new Map<
+      string,
+      {
+        metadataField: "userId" | "driveId";
+        value: string;
+        sourceIds: string[];
+      }
+    >();
+    for (const target of params.targets) {
+      if (!target.sourceScope) continue;
+      const key = `${target.sourceScope.metadataField}\0${target.sourceScope.value}`;
+      const group = scopedSourceIds.get(key);
+      if (group) {
+        group.sourceIds.push(target.sourceId);
+      } else {
+        scopedSourceIds.set(key, {
+          ...target.sourceScope,
+          sourceIds: [target.sourceId],
+        });
+      }
+    }
+    for (const scope of scopedSourceIds.values()) {
+      const condition = and(
+        inArray(schema.kbDocumentsTable.sourceId, scope.sourceIds),
+        sql`${schema.kbDocumentsTable.metadata} ->> ${scope.metadataField} = ${scope.value}`,
+      );
+      if (condition) targetConditions.push(condition);
+    }
+
+    const sourceCondition = or(...targetConditions);
+    if (!sourceCondition) return 0;
+
+    const result = await db
+      .delete(schema.kbDocumentsTable)
+      .where(
+        and(
+          eq(schema.kbDocumentsTable.connectorId, params.connectorId),
+          sourceCondition,
+        ),
+      )
+      .returning({ id: schema.kbDocumentsTable.id });
+
+    return result.length;
   }
 
   static async deleteByOrganization(organizationId: string): Promise<number> {

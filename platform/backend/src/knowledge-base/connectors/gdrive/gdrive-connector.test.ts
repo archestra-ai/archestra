@@ -1,7 +1,23 @@
 import JSZip from "jszip";
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectorSyncBatch } from "@/types";
+import { parsePdfBuffer } from "../pdf-utils";
 import { GoogleDriveConnector } from "./gdrive-connector";
+
+// The bundled pdf.js build is non-deterministic on repeated in-process parses
+// (see pdf-utils.test.ts), so the scanned-PDF path stubs the parse result and
+// keeps the real describePdfEmptyText reason formatting.
+vi.mock("../pdf-utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../pdf-utils")>();
+  return {
+    ...actual,
+    parsePdfBuffer: vi.fn().mockResolvedValue({
+      text: "",
+      status: "no_text_layer",
+      pageCount: 12,
+    }),
+  };
+});
 
 // ===== Mock googleapis =====
 
@@ -364,6 +380,43 @@ describe("GoogleDriveConnector", () => {
       expect(batches[0].documents[0].content).toContain(
         "This is the document content",
       );
+    });
+
+    it("reports a transient Google Docs export error as a fetch failure", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("gdoc-1", "My Document", {
+              mimeType: "application/vnd.google-apps.document",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+      mockFilesExport.mockRejectedValueOnce(new Error("HTTP 503"));
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped ?? []).toHaveLength(0);
+      expect(batches[0].failures).toEqual([
+        expect.objectContaining({
+          itemId: "gdoc-1",
+          resource: "driveFile",
+          error: expect.stringContaining("HTTP 503"),
+          itemUnavailable: true,
+        }),
+      ]);
     });
 
     it("skips unsupported file types", async () => {
@@ -822,8 +875,95 @@ describe("GoogleDriveConnector", () => {
         batches.push(batch);
       }
 
-      // Empty content file should be skipped
+      // Empty content file should be skipped — and reported as skipped with
+      // the no-text category rather than silently dropped.
       expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped).toHaveLength(1);
+      expect(batches[0].skipped?.[0].name).toBe("empty.txt");
+      expect(batches[0].skipped?.[0].category).toBe("no_extractable_text");
+    });
+
+    it("reports a scanned PDF with no text layer as a categorized skip naming the file", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("file-scan", "scanned-contract.pdf", {
+              mimeType: "application/pdf",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("%PDF-1.4 scanned bytes").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped).toHaveLength(1);
+      const skip = batches[0].skipped?.[0];
+      expect(skip?.name).toBe("scanned-contract.pdf");
+      expect(skip?.category).toBe("no_extractable_text");
+      expect(skip?.reason).toContain("no extractable text layer");
+    });
+
+    it("warns while indexing the readable pages of a partially extractable PDF", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+      const warn = vi.fn();
+      connector.setLogger({ warn, debug: vi.fn() } as never);
+      vi.mocked(parsePdfBuffer).mockResolvedValueOnce({
+        text: "Readable first page",
+        status: "partial",
+        pageCount: 2,
+        textlessPageCount: 1,
+      });
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("file-mixed", "mixed-contract.pdf", {
+              mimeType: "application/pdf",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+      mockFilesGet.mockResolvedValueOnce({
+        data: Buffer.from("%PDF-1.4 mixed bytes").buffer,
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].content).toContain("Readable first page");
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileId: "file-mixed",
+          fileName: "mixed-contract.pdf",
+          reason: expect.stringContaining("1 page yielded no text"),
+        }),
+        "Google Drive: PDF page extraction warning",
+      );
     });
   });
 
@@ -2000,6 +2140,13 @@ describe("GoogleDriveConnector", () => {
       const batches = await drainDomainSync();
 
       expect(batches.flatMap((b) => b.documents)).toHaveLength(1);
+      expect(batches.flatMap((b) => b.failures ?? [])).toEqual([
+        expect.objectContaining({
+          itemId: "f-shared",
+          itemUnavailable: true,
+          recoverySourceId: "f-shared",
+        }),
+      ]);
       expect(mockFilesGet).toHaveBeenCalledTimes(2);
     });
 

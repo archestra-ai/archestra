@@ -718,18 +718,26 @@ function isSupportedFile(
   fileTypes?: string[],
 ): boolean {
   const ext = getFileExtension(name);
-  const supportedByConnectorAndEmbeddingModel =
-    SUPPORTED_TEXT_EXTENSIONS.has(ext) ||
-    SUPPORTED_BINARY_EXTENSIONS.has(ext) ||
-    imageMimeTypes.has(IMAGE_MIME_TYPES[ext] ?? "");
+  const explicitlyAllowed = fileTypes?.includes(ext) ?? false;
 
-  // fileTypes is an additional user filter, not a capability override. In
-  // particular, listing ".png" must not make a text-only embedding model ingest
-  // images that its client will reject.
-  return (
-    supportedByConnectorAndEmbeddingModel &&
-    (!fileTypes?.length || fileTypes.includes(ext))
-  );
+  if (fileTypes?.length && !explicitlyAllowed) return false;
+
+  if (
+    SUPPORTED_TEXT_EXTENSIONS.has(ext) ||
+    SUPPORTED_BINARY_EXTENSIONS.has(ext)
+  ) {
+    return true;
+  }
+
+  // fileTypes is an additional user filter, not an image-capability override.
+  // Known images must still be accepted by the embedding model, while an
+  // explicitly configured unknown extension must reach downloadFileData so it
+  // can be reported as an unsupported-type skip instead of disappearing.
+  if (SUPPORTED_IMAGE_EXTENSIONS.has(ext)) {
+    return imageMimeTypes.has(IMAGE_MIME_TYPES[ext] ?? "");
+  }
+
+  return explicitlyAllowed;
 }
 
 function getFileExtension(name: string): string {

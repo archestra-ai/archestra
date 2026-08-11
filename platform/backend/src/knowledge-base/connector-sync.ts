@@ -384,14 +384,23 @@ class ConnectorSyncService {
         if (batch.skipped?.length) {
           itemsSkipped += batch.skipped.length;
           documentsProcessed += batch.skipped.length;
-          const noTextSourceIds = batch.skipped
+          const noTextRetirementTargets = batch.skipped
             .filter((item) => item.category === "no_extractable_text")
-            .map((item) => item.sourceId ?? String(item.itemId));
-          const removedStaleSourceIds =
-            await KbDocumentModel.deleteByConnectorAndSourceIds({
+            .map((item) => ({
+              sourceId: item.sourceId ?? String(item.itemId),
+              sourceScope: item.sourceScope,
+            }));
+          const removedStaleDocuments =
+            await KbDocumentModel.deleteByConnectorAndSources({
               connectorId,
-              sourceIds: noTextSourceIds,
+              targets: noTextRetirementTargets,
             });
+          if (removedStaleDocuments > 0) {
+            runLog.info(
+              { removedStaleDocuments },
+              "Retired stale indexed documents for definitive no-text skips",
+            );
+          }
           for (const s of batch.skipped) {
             if (s.category === "no_extractable_text") {
               documentsWithoutText++;
@@ -406,7 +415,6 @@ class ConnectorSyncService {
                   sourceId,
                   name: s.name,
                   reason: s.reason,
-                  removedStaleDocument: removedStaleSourceIds.has(sourceId),
                 },
                 "Document yielded no extractable text and was not indexed",
               );

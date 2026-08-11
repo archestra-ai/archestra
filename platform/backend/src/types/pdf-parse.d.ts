@@ -25,6 +25,7 @@ declare module "pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js" {
       disableCombineTextItems: boolean;
     }): Promise<{ items: PdfJsTextItem[] }>;
     getOperatorList(): Promise<{ fnArray: number[] }>;
+    cleanup(): void;
   }
 
   interface PdfJsDocument {
@@ -33,10 +34,18 @@ declare module "pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js" {
     destroy(): void | Promise<void>;
   }
 
+  interface PdfJsLoadingTask extends PromiseLike<PdfJsDocument> {
+    promise: Promise<PdfJsDocument>;
+    destroy(): void | Promise<void>;
+  }
+
   interface PdfJsApi {
     disableWorker: boolean;
     OPS: Record<string, number | undefined>;
-    getDocument(data: Buffer | Uint8Array): Promise<PdfJsDocument>;
+    getDocument(params: {
+      data: Buffer | Uint8Array;
+      stopAtErrors?: boolean;
+    }): PdfJsLoadingTask;
   }
 
   const pdfJs: PdfJsApi;

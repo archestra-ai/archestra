@@ -382,6 +382,42 @@ describe("GoogleDriveConnector", () => {
       );
     });
 
+    it("reports a transient Google Docs export error as a fetch failure", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("gdoc-1", "My Document", {
+              mimeType: "application/vnd.google-apps.document",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+      mockFilesExport.mockRejectedValueOnce(new Error("HTTP 503"));
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(0);
+      expect(batches[0].skipped ?? []).toHaveLength(0);
+      expect(batches[0].failures).toEqual([
+        expect.objectContaining({
+          itemId: "gdoc-1",
+          resource: "driveFile",
+          error: expect.stringContaining("HTTP 503"),
+        }),
+      ]);
+    });
+
     it("skips unsupported file types", async () => {
       resetMocks();
       const connector = new GoogleDriveConnector();

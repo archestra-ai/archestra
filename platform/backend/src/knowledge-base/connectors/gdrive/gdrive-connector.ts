@@ -1511,7 +1511,11 @@ export class GoogleDriveConnector extends BaseConnector {
           { fileId, fileName, error: message },
           "Google Drive: failed to export Google Workspace file",
         );
-        return { text: "", emptyReason: `Failed to export file: ${message}` };
+        // Export failures include transient 429/5xx/network errors. Let
+        // safeItemFetch report a fetch failure so the run exposes the outage
+        // and the last indexed copy is preserved. Only a successful export
+        // that definitively yields no text is a no-text skip.
+        throw error;
       }
     }
 
@@ -1542,7 +1546,7 @@ export class GoogleDriveConnector extends BaseConnector {
           { fileId, fileName, error: message },
           "Google Drive: failed to export Google Workspace file as Office bytes",
         );
-        return { text: "", emptyReason: `Failed to export file: ${message}` };
+        throw error;
       }
     }
 

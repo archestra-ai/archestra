@@ -536,6 +536,7 @@ export class SharePointConnector extends BaseConnector {
                   result.emptyReason ??
                   "Empty content — no text or media could be extracted",
                 category: "no_extractable_text",
+                sourceScope: { metadataField: "driveId", value: driveId },
               });
               return null;
             }

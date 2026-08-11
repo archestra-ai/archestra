@@ -707,10 +707,11 @@ export interface ConnectorItemFailure {
 /**
  * Machine-readable classification of a skipped item. `no_extractable_text`
  * marks documents that were found but yielded nothing indexable (scanned PDF
- * with no text layer, unparseable or empty file, failed export, oversized
- * image); `unsupported_type` distinguishes file-filter guidance from unrelated
- * uncategorized skips. The no-text subset is counted separately on the run so
- * silent data loss is visible (issue #7157).
+ * with no text layer, unparseable or empty file, oversized image);
+ * `unsupported_type` distinguishes file-filter guidance from unrelated
+ * uncategorized skips. Transient fetch/export failures must use `failures`, not
+ * this definitive category. The no-text subset is counted separately on the
+ * run so silent data loss is visible (issue #7157).
  */
 export type ConnectorSkipCategory = "no_extractable_text" | "unsupported_type";
 
@@ -722,6 +723,15 @@ export interface ConnectorItemSkipped {
    * pages) must provide it so a definitive skip can retire stale indexed text.
    */
   sourceId?: string;
+  /**
+   * Optional metadata scope that the existing kb_document must match before
+   * retirement. Microsoft Graph drive-item IDs are only unique within a
+   * user/drive, so raw IDs must never delete a sibling drive's row.
+   */
+  sourceScope?: {
+    metadataField: "userId" | "driveId";
+    value: string;
+  };
   name: string;
   reason: string;
   category?: ConnectorSkipCategory;

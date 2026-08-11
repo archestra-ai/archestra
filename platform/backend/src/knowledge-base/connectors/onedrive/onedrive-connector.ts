@@ -393,6 +393,7 @@ export class OneDriveConnector extends BaseConnector {
                   result.emptyReason ??
                   "Empty content — no text or media could be extracted",
                 category: "no_extractable_text",
+                sourceScope: { metadataField: "userId", value: userId },
               });
               return null;
             }

@@ -296,6 +296,10 @@ describe("OneDriveConnector", () => {
       const skip = batches[0].skipped?.[0];
       expect(skip?.name).toBe("blank.txt");
       expect(skip?.category).toBe("no_extractable_text");
+      expect(skip?.sourceScope).toEqual({
+        metadataField: "userId",
+        value: "user-1",
+      });
     });
 
     it("records a fileTypes extension with no extractor as an unsupported-type skip, not a document without text", async () => {
@@ -351,6 +355,10 @@ describe("OneDriveConnector", () => {
       const skip = batches[0].skipped?.[0];
       expect(skip?.name).toBe("poster.png");
       expect(skip?.category).toBe("no_extractable_text");
+      expect(skip?.sourceScope).toEqual({
+        metadataField: "userId",
+        value: "user-1",
+      });
       expect(skip?.reason).toContain("maximum size");
     });
 

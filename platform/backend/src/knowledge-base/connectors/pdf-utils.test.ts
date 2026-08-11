@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetDocument, IMAGE_OPERATION } = vi.hoisted(() => ({
-  mockGetDocument: vi.fn(),
-  IMAGE_OPERATION: 85,
-}));
+const { mockGetDocument, IMAGE_OPERATION, GRAPHICS_OPERATION } = vi.hoisted(
+  () => ({
+    mockGetDocument: vi.fn(),
+    IMAGE_OPERATION: 85,
+    GRAPHICS_OPERATION: 20,
+  }),
+);
 
 vi.mock("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js", () => ({
   default: {
@@ -11,6 +14,7 @@ vi.mock("pdf-parse/lib/pdf.js/v1.10.100/build/pdf.js", () => ({
     getDocument: mockGetDocument,
     OPS: {
       paintImageXObject: IMAGE_OPERATION,
+      stroke: GRAPHICS_OPERATION,
     },
   },
 }));
@@ -24,6 +28,7 @@ import {
 function makePage(params?: {
   text?: string;
   image?: boolean;
+  graphics?: boolean;
   textError?: Error;
   operatorError?: Error;
 }) {
@@ -38,18 +43,37 @@ function makePage(params?: {
     getOperatorList: params?.operatorError
       ? vi.fn().mockRejectedValue(params.operatorError)
       : vi.fn().mockResolvedValue({
-          fnArray: params?.image ? [IMAGE_OPERATION] : [],
+          fnArray: params?.image
+            ? [IMAGE_OPERATION]
+            : params?.graphics
+              ? [GRAPHICS_OPERATION]
+              : [],
         }),
+    cleanup: vi.fn(),
   };
 }
 
 function mockDocument(pages: ReturnType<typeof makePage>[]) {
   const destroy = vi.fn();
-  mockGetDocument.mockResolvedValue({
+  const loadingTaskDestroy = vi.fn();
+  const document = {
     numPages: pages.length,
     getPage: vi.fn((pageNumber: number) =>
       Promise.resolve(pages[pageNumber - 1]),
     ),
+    destroy,
+  };
+  mockGetDocument.mockReturnValue({
+    promise: Promise.resolve(document),
+    destroy: loadingTaskDestroy,
+  });
+  return { destroy, loadingTaskDestroy };
+}
+
+function mockRejectedLoadingTask(error: unknown) {
+  const destroy = vi.fn();
+  mockGetDocument.mockReturnValue({
+    promise: Promise.reject(error),
     destroy,
   });
   return { destroy };
@@ -61,13 +85,19 @@ describe("parsePdfBuffer", () => {
   });
 
   it("returns ok with text and a page count for a digital PDF", async () => {
-    const { destroy } = mockDocument([makePage({ text: "Hello contract" })]);
+    const page = makePage({ text: "Hello contract" });
+    const { destroy } = mockDocument([page]);
 
     await expect(parsePdfBuffer(Buffer.from("%PDF"))).resolves.toEqual({
       text: "Hello contract",
       status: "ok",
       pageCount: 1,
     });
+    expect(mockGetDocument).toHaveBeenCalledWith({
+      data: expect.any(Buffer),
+      stopAtErrors: true,
+    });
+    expect(page.cleanup).toHaveBeenCalledOnce();
     expect(destroy).toHaveBeenCalledOnce();
   });
 
@@ -94,20 +124,22 @@ describe("parsePdfBuffer", () => {
   });
 
   it("returns parse_failed when the document cannot be opened", async () => {
-    mockGetDocument.mockRejectedValue(new Error("bad XRef entry"));
+    const { destroy } = mockRejectedLoadingTask(new Error("bad XRef entry"));
 
     await expect(parsePdfBuffer(Buffer.from("not a pdf"))).resolves.toEqual({
       text: "",
       status: "parse_failed",
       error: "bad XRef entry",
     });
+    expect(destroy).toHaveBeenCalledOnce();
   });
 
   it("returns parse_failed when every page fails extraction", async () => {
-    mockDocument([
+    const pages = [
       makePage({ textError: new Error("page worker failed") }),
       makePage({ operatorError: new Error("operator list failed") }),
-    ]);
+    ];
+    mockDocument(pages);
 
     const result = await parsePdfBuffer(Buffer.from("%PDF"));
     expect(result).toMatchObject({
@@ -118,6 +150,8 @@ describe("parsePdfBuffer", () => {
     });
     expect(result.error).toContain("page 1: page worker failed");
     expect(result.error).toContain("page 2: operator list failed");
+    expect(pages[0].cleanup).toHaveBeenCalledOnce();
+    expect(pages[1].cleanup).toHaveBeenCalledOnce();
   });
 
   it("warns when one page extracts and another page fails", async () => {
@@ -156,6 +190,24 @@ describe("parsePdfBuffer", () => {
     );
   });
 
+  it("warns for a mixed digital and graphics-only PDF", async () => {
+    mockDocument([
+      makePage({ text: "Digitally generated page" }),
+      makePage({ graphics: true }),
+    ]);
+
+    const result = await parsePdfBuffer(Buffer.from("%PDF"));
+    expect(result).toEqual({
+      text: "Digitally generated page",
+      status: "partial",
+      pageCount: 2,
+      graphicsOnlyPageCount: 1,
+    });
+    expect(describePdfExtractionWarning(result)).toContain(
+      "1 graphics-only page had no text layer",
+    );
+  });
+
   it("does not warn for a digital PDF with a genuinely blank page", async () => {
     mockDocument([makePage({ text: "Readable page" }), makePage()]);
 
@@ -170,7 +222,7 @@ describe("parsePdfBuffer", () => {
   });
 
   it("stringifies non-Error throwables", async () => {
-    mockGetDocument.mockRejectedValue("string failure");
+    mockRejectedLoadingTask("string failure");
     const result = await parsePdfBuffer(Buffer.from("not a pdf"));
     expect(result.status).toBe("parse_failed");
     expect(result.error).toBe("string failure");
@@ -184,15 +236,17 @@ describe("PDF extraction descriptions", () => {
     ).toBeUndefined();
   });
 
-  it("names image-only and blank page counts", () => {
+  it("names image-only, graphics-only, and blank page counts", () => {
     const reason = describePdfEmptyText({
       text: "",
       status: "no_text_layer",
       pageCount: 12,
-      imageOnlyPageCount: 10,
+      imageOnlyPageCount: 8,
+      graphicsOnlyPageCount: 2,
       blankPageCount: 2,
     });
-    expect(reason).toContain("10 image-only");
+    expect(reason).toContain("8 image-only");
+    expect(reason).toContain("2 graphics-only");
     expect(reason).toContain("2 blank");
   });
 

@@ -287,6 +287,169 @@ describe("ConnectorSyncService", () => {
     expect(await KbChunkModel.findByDocument(staleDocument.id)).toEqual([]);
   });
 
+  test("a transient fetch failure preserves the last indexed document", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    const lastGoodDocument = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      sourceId: "gdoc-1",
+      title: "Last good export",
+      content: "Previously indexed text",
+      contentHash: "last-good-hash",
+    });
+    await KbChunkModel.insertMany([
+      {
+        documentId: lastGoodDocument.id,
+        content: "Previously indexed text",
+        chunkIndex: 0,
+      },
+    ]);
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(1),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [],
+            failures: [
+              {
+                itemId: "gdoc-1",
+                resource: "driveFile",
+                error: "HTTP 503",
+              },
+            ],
+            checkpoint: { page: 1 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    await connectorSyncService.executeSync(connector.id);
+
+    expect(
+      await KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "gdoc-1",
+      }),
+    ).toMatchObject({ id: lastGoodDocument.id });
+    expect(await KbChunkModel.findByDocument(lastGoodDocument.id)).toHaveLength(
+      1,
+    );
+  });
+
+  test("a drive-scoped no-text skip retires only the matching drive's document", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    const siblingDocument = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      sourceId: "drive-local-id",
+      title: "User A contract",
+      content: "User A's indexed content",
+      contentHash: "user-a-hash",
+      metadata: { userId: "user-a" },
+    });
+    await KbChunkModel.insertMany([
+      {
+        documentId: siblingDocument.id,
+        content: "User A's indexed content",
+        chunkIndex: 0,
+      },
+    ]);
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(1),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [],
+            skipped: [
+              {
+                itemId: "drive-local-id",
+                name: "User B scan.pdf",
+                reason: "PDF has no text layer",
+                category: "no_extractable_text" as const,
+                sourceScope: {
+                  metadataField: "userId" as const,
+                  value: "user-b",
+                },
+              },
+            ],
+            checkpoint: { page: 1 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    await connectorSyncService.executeSync(connector.id);
+
+    expect(
+      await KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "drive-local-id",
+      }),
+    ).toMatchObject({ id: siblingDocument.id });
+    expect(await KbChunkModel.findByDocument(siblingDocument.id)).toHaveLength(
+      1,
+    );
+
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(1),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [],
+            skipped: [
+              {
+                itemId: "drive-local-id",
+                name: "User A scan.pdf",
+                reason: "PDF has no text layer",
+                category: "no_extractable_text" as const,
+                sourceScope: {
+                  metadataField: "userId" as const,
+                  value: "user-a",
+                },
+              },
+            ],
+            checkpoint: { page: 2 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    await connectorSyncService.executeSync(connector.id);
+
+    expect(
+      await KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "drive-local-id",
+      }),
+    ).toBeNull();
+    expect(await KbChunkModel.findByDocument(siblingDocument.id)).toEqual([]);
+  });
+
   test("deleting the connector mid-run stops the sync before the next batch", async ({
     makeOrganization,
     makeKnowledgeBase,

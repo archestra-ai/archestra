@@ -583,6 +583,10 @@ describe("SharePointConnector", () => {
       const skip = batches[0].skipped?.[0];
       expect(skip?.name).toBe("blank.txt");
       expect(skip?.category).toBe("no_extractable_text");
+      expect(skip?.sourceScope).toEqual({
+        metadataField: "driveId",
+        value: "drive-1",
+      });
     });
 
     it("throws when drive items endpoint returns error", async () => {

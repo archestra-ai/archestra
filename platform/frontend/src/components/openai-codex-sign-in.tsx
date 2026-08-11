@@ -89,6 +89,9 @@ export function OpenaiCodexSignIn({
           await onCredentialRef.current(result.credential);
           if (!cancelled) setCompleted(true);
         } catch {
+          // Persistence failed after OAuth completed. The mutation already
+          // surfaced the error; reset to a retryable sign-in instead of
+          // claiming the account is linked when nothing was saved.
           if (!cancelled) setFlow(null);
         }
         return;

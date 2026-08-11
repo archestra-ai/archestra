@@ -412,6 +412,7 @@ export const RouteId = {
   CreateLlmProviderApiKey: "createLlmProviderApiKey",
   GetLlmProviderApiKey: "getLlmProviderApiKey",
   UpdateLlmProviderApiKey: "updateLlmProviderApiKey",
+  ReconnectLlmProviderApiKey: "reconnectLlmProviderApiKey",
   DeleteLlmProviderApiKey: "deleteLlmProviderApiKey",
 
   // User API Key Routes

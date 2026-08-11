@@ -22,6 +22,12 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     isPending: false,
     mutateAsync: vi.fn().mockResolvedValue({ id: "key-1" }),
   }),
+  useReconnectLlmProviderApiKey: () => ({
+    isPending: false,
+    mutateAsync: vi.fn().mockResolvedValue({ id: "key-1" }),
+  }),
+  // No existing personal subscription key → the card takes the create path.
+  useAvailableLlmProviderApiKeys: () => ({ data: [] }),
 }));
 
 // Invoke onToken on click so we can exercise the connect → auto-resend flow.

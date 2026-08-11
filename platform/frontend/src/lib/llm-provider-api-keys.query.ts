@@ -50,6 +50,7 @@ const {
   getAvailableLlmProviderApiKeys,
   getLlmProviderApiKey,
   getLlmProviderApiKeys,
+  reconnectLlmProviderApiKey,
   updateLlmProviderApiKey,
 } = archestraApiSdk;
 
@@ -175,6 +176,42 @@ export function useCreateLlmProviderApiKey() {
         return;
       }
       toast.success("API key created successfully");
+      queryClient.invalidateQueries({ queryKey: ["llm-provider-api-keys"] });
+      queryClient.invalidateQueries({
+        queryKey: ["available-llm-provider-api-keys"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["llm-models"] });
+      queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
+    },
+  });
+}
+
+/**
+ * Re-authenticates the caller's own personal subscription key in place via the
+ * self-service reconnect endpoint. Unlike the update mutation this needs no
+ * llmProviderApiKey:update permission, so default members can refresh an
+ * expired ChatGPT/Copilot/X Premium sign-in.
+ */
+export function useReconnectLlmProviderApiKey() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, apiKey }: { id: string; apiKey: string }) => {
+      const { data: responseData, error } = await reconnectLlmProviderApiKey({
+        path: { id },
+        body: { apiKey },
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return responseData;
+    },
+    onSuccess: (data) => {
+      if (!data) {
+        return;
+      }
+      toast.success("Subscription reconnected");
       queryClient.invalidateQueries({ queryKey: ["llm-provider-api-keys"] });
       queryClient.invalidateQueries({
         queryKey: ["available-llm-provider-api-keys"],

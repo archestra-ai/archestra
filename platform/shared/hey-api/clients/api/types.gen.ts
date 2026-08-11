@@ -45196,6 +45196,8 @@ export type GetInteractionSessionsResponses = {
             authMethods: Array<'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown'>;
             authenticatedAppNames: Array<string>;
             userNames: Array<string>;
+            userIds: Array<string>;
+            unattributedReason: 'shared_virtual_key' | 'provider_key' | 'client_credentials' | 'internal' | 'unknown' | null;
             /**
              * Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.
              */

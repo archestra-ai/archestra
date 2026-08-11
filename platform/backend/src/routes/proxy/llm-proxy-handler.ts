@@ -675,6 +675,33 @@ export async function handleLLMProxy<
         : "provider_key";
   }
 
+  // Opt-in: refuse traffic that cannot be tied to a person. Org-scoped virtual
+  // keys and raw provider keys identify nobody, so their usage lands in the
+  // logs with a blank user and stays invisible to per-developer reporting.
+  // Orgs that depend on that attribution would rather a misconfigured client
+  // fail loudly here than quietly accumulate unattributable spend. Internal
+  // traffic (embeddings, title generation) has no acting user by design.
+  if (
+    config.llmProxy.requireUserAttribution &&
+    !userId &&
+    authMethod !== "internal"
+  ) {
+    logger.info(
+      { authMethod, requestIp: request.ip },
+      "[llmProxy] rejecting unattributable request (requireUserAttribution)",
+    );
+    return reply.status(401).send({
+      error: {
+        message:
+          "This Archestra instance requires every request to be attributable to a user, and " +
+          "this one is not. Connect your own account to get a personal key instead of using a " +
+          `shared or raw provider key: ${config.frontendBaseUrl}/settings`,
+        type: "api_authentication_error",
+        internal_code: ArchestraInternalErrorCode.ProviderAuthRequired,
+      },
+    });
+  }
+
   // Incognito chat sessions: interaction rows keep all usage/cost/session
   // metadata, but their content-bearing fields are encrypted under the
   // conversation's browser-held key (or redacted if that cannot be done

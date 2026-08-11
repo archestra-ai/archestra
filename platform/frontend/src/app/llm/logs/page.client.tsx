@@ -32,6 +32,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import {
   ClientFilterSelect,
   UserFilterSelect,
@@ -505,6 +506,7 @@ function SessionsTable({
                   <span className="min-w-0 truncate">{userName}</span>
                 </Badge>
               ))}
+              <UnattributedUserBadge reason={row.original.unattributedReason} />
             </div>
           );
         },

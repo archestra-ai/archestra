@@ -54,6 +54,33 @@ export const InteractionAuthMethodSchema = z.enum([
 ]);
 
 /**
+ * Why a session has no user attached. A blank user in the logs is otherwise
+ * indistinguishable from a bug, when in practice it almost always means the
+ * traffic arrived on a credential that identifies no one.
+ *
+ * - `shared_virtual_key` — an org-scoped virtual key. Only *personal* virtual
+ *   keys carry an owner, so a key shared across a team attributes to nobody.
+ *   Devs connecting individually is the fix.
+ * - `provider_key` — the client sent its own upstream provider credential, so
+ *   Archestra never saw an identity to record.
+ * - `client_credentials` — an OAuth client-credentials grant: a machine, not
+ *   a person.
+ * - `internal` — Archestra's own traffic (embeddings, title generation).
+ * - `unknown` — none of the above matched.
+ */
+export const SessionUnattributedReasonSchema = z.enum([
+  "shared_virtual_key",
+  "provider_key",
+  "client_credentials",
+  "internal",
+  "unknown",
+]);
+
+export type SessionUnattributedReason = z.infer<
+  typeof SessionUnattributedReasonSchema
+>;
+
+/**
  * A failed upstream call is persisted with the provider `type` but this shape
  * in place of a provider response (the proxy error path in llm-proxy-handler).
  * The insert union and every read arm accept it so the row round-trips instead
@@ -684,6 +711,21 @@ export const SessionSummarySchema = z.object({
   authMethods: z.array(InteractionAuthMethodSchema),
   authenticatedAppNames: z.array(z.string()),
   userNames: z.array(z.string()),
+  /**
+   * Ids of the users the session's interactions are attributed to. Prefer
+   * these over `userNames` for correlation: display names are not unique, so
+   * two members sharing one collapse into a single `userNames` entry.
+   *
+   * Empty when no interaction in the session carried a user identity — which
+   * is the normal case for org-scoped virtual keys and raw provider keys,
+   * neither of which identifies a user. `unattributedReason` says which.
+   */
+  userIds: z.array(z.string()),
+  /**
+   * Why `userIds` is empty, or null when the session is attributed. Lets the
+   * UI distinguish "this key identifies nobody" from "something is broken".
+   */
+  unattributedReason: z.union([SessionUnattributedReasonSchema, z.null()]),
   /**
    * Short preview of the session's last user message, computed server-side
    * from the reconstructed request. The raw request body is intentionally

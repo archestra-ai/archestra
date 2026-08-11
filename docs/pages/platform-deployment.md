@@ -1147,6 +1147,13 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `10`
   - See: [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)
 
+- **`ARCHESTRA_LLM_PROXY_REQUIRE_USER_ATTRIBUTION`** - Reject external proxy requests that cannot be attributed to a user.
+  - Default: `false`
+  - Only credentials that identify a person attribute a user: a personal virtual key, an identity-provider JWT, an OAuth user token, or an explicit `X-Archestra-User-Id` header. An org-scoped (shared) virtual key and a raw provider key identify nobody, so their requests are recorded with no user — they show a blank user in the LLM Proxy logs and are invisible to per-user cost reporting.
+  - Set to `true` when every request must be tied to a person, for example per-developer cost reporting or audit requirements. Unattributable requests are then rejected with `401`, pointing the caller at connecting their own account.
+  - Internal (loopback) traffic — embeddings, reranking, chat title generation — has no acting user by design and is always exempt.
+  - **This rejects traffic that works today.** Before enabling, check the LLM Proxy logs for sessions with no user badge; each one is a client that will start failing.
+
 - **`ARCHESTRA_LLM_PROXY_VIRTUAL_KEYS_DEFAULT_EXPIRATION_SECONDS`** - Default expiration time for newly created virtual API keys, in seconds.
   - Default: `2592000` (30 days)
   - Set to `0` to create virtual keys that never expire by default

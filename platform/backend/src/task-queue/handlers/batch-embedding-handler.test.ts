@@ -153,10 +153,11 @@ describe("handleBatchEmbedding", () => {
     });
     await ConnectorRunModel.create({
       connectorId: connector.id,
-      status: "running",
+      status: "success",
       startedAt: newerDate,
+      completedAt: newerDate,
       totalBatches: 1,
-      completedBatches: 0,
+      completedBatches: 1,
     });
 
     await handleBatchEmbedding({

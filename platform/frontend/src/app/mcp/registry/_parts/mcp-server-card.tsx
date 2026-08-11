@@ -519,7 +519,10 @@ export function McpServerCard({
     </Button>
   );
 
-  const MAX_AVATARS = 4;
+  // 3 keeps the compact info row on one line at grid card width; a 4th
+  // connection folds into the +N count instead of pushing the circle stack
+  // past the card edge.
+  const MAX_AVATARS = 3;
   const connectionAvatars: Array<{
     type: "team" | "user";
     label: string;
@@ -590,7 +593,7 @@ export function McpServerCard({
   const hasCompactInfoContent = showScopeBadge || hasCompactInfoAfterScopeBadge;
 
   const compactInfoRow = hasCompactInfoContent ? (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+    <div className="flex items-center gap-3 text-sm text-muted-foreground">
       {showScopeBadge && (
         <>
           <ResourceVisibilityBadge

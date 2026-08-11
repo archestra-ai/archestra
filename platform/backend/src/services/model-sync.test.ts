@@ -1046,6 +1046,144 @@ describe("ModelSyncService", () => {
     expect(minilm.embeddingDimensions).toBe(384);
   });
 
+  test("enriches GitHub Copilot models from the models.dev github-copilot catalog", () => {
+    // Copilot's /models endpoint reports neither modalities nor prices, and
+    // MODELS_DEV_PROVIDER_MAP excludes github-copilot from direct models.dev
+    // row creation (availability is subscription-dependent) — so without the
+    // enrichment map these fields all stored null.
+    const [model] = buildModelsToUpsert({
+      provider: "github-copilot",
+      models: [
+        {
+          id: "claude-sonnet-4.6",
+          capabilities: {
+            contextLength: 144000,
+            supportsToolCalling: true,
+            supportedEndpoints: ["/chat/completions"],
+          },
+        },
+      ],
+      modelsDevData: {
+        "github-copilot": {
+          id: "github-copilot",
+          name: "GitHub Copilot",
+          models: {
+            "claude-sonnet-4.6": {
+              id: "claude-sonnet-4.6",
+              name: "Claude Sonnet 4.6",
+              tool_call: true,
+              modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+              cost: {
+                input: 3,
+                output: 15,
+                cache_read: 0.3,
+                cache_write: 3.75,
+              },
+              limit: { context: 200000, output: 32000 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model).toEqual(
+      expect.objectContaining({
+        provider: "github-copilot",
+        modelId: "claude-sonnet-4.6",
+        description: "Claude Sonnet 4.6",
+        // The fetcher's per-subscription context window wins over the registry.
+        contextLength: 144000,
+        outputLength: 32000,
+        inputModalities: ["text", "image", "pdf"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        supportedEndpoints: ["/chat/completions"],
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000015",
+        cacheReadPricePerToken: "3e-7",
+        cacheWritePricePerToken: "0.00000375",
+      }),
+    );
+  });
+
+  test("floors an uncovered GitHub Copilot model to text modalities so the edit dialog stays valid", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "github-copilot",
+      models: [{ id: "copilot-experimental-model" }],
+      modelsDevData: {},
+    });
+
+    expect(model.inputModalities).toEqual(["text"]);
+    expect(model.outputModalities).toEqual(["text"]);
+    expect(model.promptPricePerToken).toBeNull();
+  });
+
+  test("enriches an Azure deployment from the models.dev azure catalog when the deployment name matches", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "azure",
+      models: [{ id: "gpt-4o" }],
+      modelsDevData: {
+        azure: {
+          id: "azure",
+          name: "Azure",
+          models: {
+            "gpt-4o": {
+              id: "gpt-4o",
+              name: "GPT-4o",
+              tool_call: true,
+              modalities: { input: ["text", "image"], output: ["text"] },
+              cost: { input: 2.5, output: 10 },
+              limit: { context: 128000, output: 16384 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model).toEqual(
+      expect.objectContaining({
+        provider: "azure",
+        modelId: "gpt-4o",
+        inputModalities: ["text", "image"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.0000025",
+        completionPricePerToken: "0.00001",
+      }),
+    );
+  });
+
+  test("keeps an Azure embedding deployment classified as embedding despite the registry's text output", () => {
+    // models.dev records embeddings with a "text" output modality, which would
+    // make the deployment look generative — the post-pass normalization must
+    // outrank the registry tier.
+    const [model] = buildModelsToUpsert({
+      provider: "azure",
+      models: [{ id: "text-embedding-3-small" }],
+      modelsDevData: {
+        azure: {
+          id: "azure",
+          name: "Azure",
+          models: {
+            "text-embedding-3-small": {
+              id: "text-embedding-3-small",
+              name: "Text Embedding 3 Small",
+              tool_call: false,
+              modalities: { input: ["text"], output: ["text"] },
+              cost: { input: 0.02, output: 0 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model.inputModalities).toEqual(["text"]);
+    expect(model.outputModalities).toEqual([]);
+    expect(model.supportsToolCalling).toBe(false);
+    expect(model.embeddingDimensions).toBe(1536);
+    expect(model.promptPricePerToken).toBe("2e-8");
+  });
+
   test("persists fetched default parameters", () => {
     const [model] = buildModelsToUpsert({
       provider: "ollama",

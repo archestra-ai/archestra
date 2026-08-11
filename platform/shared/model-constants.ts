@@ -911,6 +911,25 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
   };
 
 /**
+ * models.dev providers whose model *list* cannot come from models.dev — which
+ * models a credential can reach is decided by the subscription or deployment
+ * behind it — but whose models.dev catalog is still the best source of
+ * per-model metadata (modalities, prices, limits) for the models the
+ * provider's own endpoint reports.
+ *
+ * Consulted only when enriching provider-fetched models during model sync;
+ * never used to create model rows directly from models.dev (that stays
+ * governed by MODELS_DEV_PROVIDER_MAP, where these providers map to null).
+ */
+export const MODELS_DEV_ENRICHMENT_PROVIDER_MAP: Record<
+  string,
+  SupportedProvider
+> = {
+  "github-copilot": "github-copilot",
+  azure: "azure",
+};
+
+/**
  * Absolute ceiling for a configured Ollama `num_ctx`, sitting comfortably above
  * the largest advertised context window in circulation. This is only a guard
  * against a runaway typo; the meaningful limit is the model's own

@@ -48,7 +48,12 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -761,6 +766,13 @@ function EditModelDialog({
   const imageInputUnavailable =
     !!selectedEmbeddingDimensions &&
     model.embeddingClientImageCapable === false;
+  // Rows synced without modality metadata (providers whose catalog reports
+  // none) carry null modality lists. Requiring modalities on those rows would
+  // block unrelated edits — a price-only save must not force the admin to
+  // invent modality data first. Once modalities are recorded, clearing a
+  // required list entirely stays invalid.
+  const hadInputModalities = (model.inputModalities ?? []).length > 0;
+  const hadOutputModalities = (model.outputModalities ?? []).length > 0;
   const inputModalityOptions = imageInputUnavailable
     ? INPUT_MODALITY_OPTIONS.map((option) =>
         option.value === "image"
@@ -810,8 +822,18 @@ function EditModelDialog({
       teamIds: values.accessScope === "team" ? values.teamIds : [],
       userIds: values.accessScope === "user" ? values.userIds : [],
       embeddingDimensions,
-      inputModalities: values.inputModalities as ModelInputModality[],
-      outputModalities: values.outputModalities as ModelOutputModality[],
+      // Sent only when actually changed: a row synced without modality
+      // metadata stores null, and a price-only save must not coerce that null
+      // into an empty list (null reads as "unknown" downstream, [] as
+      // "known: none").
+      ...(sameModalities(values.inputModalities, model.inputModalities ?? [])
+        ? {}
+        : { inputModalities: values.inputModalities as ModelInputModality[] }),
+      ...(sameModalities(values.outputModalities, model.outputModalities ?? [])
+        ? {}
+        : {
+            outputModalities: values.outputModalities as ModelOutputModality[],
+          }),
       // Configured parameters are only applied by the native Ollama provider;
       // for other providers leave the field untouched. Sent only when actually
       // edited: the update replaces the object wholesale, so including it on an
@@ -1118,36 +1140,45 @@ function EditModelDialog({
                 what it can produce as output.
               </p>
             </div>
-            <Alert variant="info">
-              <AlertCircle />
-              <AlertTitle>How {appName} chat support is determined</AlertTitle>
-              <AlertDescription>
-                <ul className="list-disc space-y-1 pl-5">
-                  <li>
-                    Text input means the model can accept normal chat prompts.
-                    In {appName} chat, it also enables text-based uploads such
-                    as <code>.txt</code> and <code>.csv</code>, which are passed
-                    to the model as text content. Text output means the model
-                    can return standard chat responses.
-                  </li>
-                  <li>
-                    In {appName} chat, a model appears as a standard chat model
-                    when it supports both text input and text output and is not
-                    hidden.
-                  </li>
-                  <li>
-                    Image, audio, video, and PDF input modalities control
-                    whether chat file upload is enabled for the model and which
-                    uploaded file types are accepted.
-                  </li>
-                  <li>
-                    Output modalities describe the response formats the model
-                    can generate, but they do not enable file uploads by
-                    themselves.
-                  </li>
-                </ul>
-              </AlertDescription>
-            </Alert>
+            <Accordion type="single" collapsible>
+              <AccordionItem
+                value="chat-support"
+                className="rounded-lg border border-border bg-card border-b-0 last:border-b"
+              >
+                <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <AlertCircle className="size-4 shrink-0 text-muted-foreground" />
+                    <span>How {appName} chat support is determined</span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-4">
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                    <li>
+                      Text input means the model can accept normal chat prompts.
+                      In {appName} chat, it also enables text-based uploads such
+                      as <code>.txt</code> and <code>.csv</code>, which are
+                      passed to the model as text content. Text output means the
+                      model can return standard chat responses.
+                    </li>
+                    <li>
+                      In {appName} chat, a model appears as a standard chat
+                      model when it supports both text input and text output and
+                      is not hidden.
+                    </li>
+                    <li>
+                      Image, audio, video, and PDF input modalities control
+                      whether chat file upload is enabled for the model and
+                      which uploaded file types are accepted.
+                    </li>
+                    <li>
+                      Output modalities describe the response formats the model
+                      can generate, but they do not enable file uploads by
+                      themselves.
+                    </li>
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
             <div className="grid items-start gap-3 md:grid-cols-2">
               <FormField
@@ -1155,7 +1186,7 @@ function EditModelDialog({
                 name="inputModalities"
                 rules={{
                   validate: (v) => {
-                    if (v.length === 0) {
+                    if (v.length === 0 && hadInputModalities) {
                       return "At least one input modality is required";
                     }
                     if (imageInputUnavailable && v.includes("image")) {
@@ -1187,7 +1218,9 @@ function EditModelDialog({
                 name="outputModalities"
                 rules={{
                   validate: (v) =>
-                    shouldRequireOutputModalities(selectedEmbeddingDimensions)
+                    shouldRequireOutputModalities(
+                      selectedEmbeddingDimensions,
+                    ) && hadOutputModalities
                       ? v.length > 0 ||
                         "At least one output modality is required"
                       : true,
@@ -1225,31 +1258,40 @@ function EditModelDialog({
               </p>
             </div>
 
-            <Alert variant="info">
-              <AlertCircle />
-              <AlertTitle>How embedding input modalities are used</AlertTitle>
-              <AlertDescription>
-                <ul className="list-disc space-y-1 pl-5">
-                  <li>
-                    Input modalities control which source content types can be
-                    sent to this model when {appName} generates embeddings for
-                    knowledge connectors and uploaded files.
-                  </li>
-                  <li>
-                    Text input enables text-based content such as documents,
-                    pages, and extracted file text.
-                  </li>
-                  <li>
-                    Image input enables image files to be considered for
-                    embedding when the connector and model both support it.
-                  </li>
-                  <li>
-                    Output modalities are not required for embedding-only
-                    models.
-                  </li>
-                </ul>
-              </AlertDescription>
-            </Alert>
+            <Accordion type="single" collapsible>
+              <AccordionItem
+                value="embedding-modalities"
+                className="rounded-lg border border-border bg-card border-b-0 last:border-b"
+              >
+                <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <AlertCircle className="size-4 shrink-0 text-muted-foreground" />
+                    <span>How embedding input modalities are used</span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-4">
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                    <li>
+                      Input modalities control which source content types can be
+                      sent to this model when {appName} generates embeddings for
+                      knowledge connectors and uploaded files.
+                    </li>
+                    <li>
+                      Text input enables text-based content such as documents,
+                      pages, and extracted file text.
+                    </li>
+                    <li>
+                      Image input enables image files to be considered for
+                      embedding when the connector and model both support it.
+                    </li>
+                    <li>
+                      Output modalities are not required for embedding-only
+                      models.
+                    </li>
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
             <FormField
               control={form.control}
@@ -1629,6 +1671,10 @@ function getFallbackPricing(model: ModelWithApiKeys): {
     cacheRead: model.pricePerMillionCacheRead ?? "",
     cacheWrite: model.pricePerMillionCacheWrite ?? "",
   };
+}
+
+function sameModalities(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((modality) => b.includes(modality));
 }
 
 function getDefaults(model: ModelWithApiKeys): EditModelFormValues {

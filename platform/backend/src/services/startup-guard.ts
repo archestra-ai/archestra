@@ -1057,10 +1057,10 @@ function guardHeader(ctx: StartupGuardContext): string {
   if (!isDefaultBrandedAppName(ctx.appName)) {
     return `printf '%s%s%s\\n\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"`;
   }
-  // The exact canonical mark, colored per line: the box art in C_LOGO with the
-  // product name (C_TITLE) and tagline (C_DIM) overlaid on their rows. The box
-  // lines carry no `%`, so they are safe inside the printf format string; the
-  // app name is always passed as an argument, never interpolated into it.
+  // The exact canonical mark, colored per line: the braille art in C_LOGO with
+  // the product name (C_TITLE) and tagline (C_DIM) overlaid on their rows. The
+  // art lines carry no `%`, so they are safe inside the printf format string;
+  // the app name is always passed as an argument, never interpolated into it.
   const lines = ARCHESTRA_MARK.unicode;
   return lines
     .map((line, i) => {

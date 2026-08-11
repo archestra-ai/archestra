@@ -200,7 +200,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
 
   test("renders the Archestra mark for the default brand and its own variants, plain title when genuinely white-labeled", () => {
     const branded = renderStartupGuardPowerShell(CTX, CLAUDE_CODE_GUARD_CLIENT);
-    expect(branded).toContain("▟██▙");
+    expect(branded).toContain("⣾⣿⣿⣿⣿⣷");
     expect(branded).toContain("Secure access to your AI tools");
 
     // an org named "Archestra Staging" is still Archestra's own brand — the
@@ -212,7 +212,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
       },
       CLAUDE_CODE_GUARD_CLIENT,
     );
-    expect(variant).toContain("▟██▙");
+    expect(variant).toContain("⣾⣿⣿⣿⣿⣷");
     expect(variant).toContain("'Archestra Staging'");
 
     const whiteLabel = renderStartupGuardPowerShell(
@@ -222,7 +222,7 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
       },
       CLAUDE_CODE_GUARD_CLIENT,
     );
-    expect(whiteLabel).not.toContain("▟██▙");
+    expect(whiteLabel).not.toContain("⣾⣿⣿⣿⣿⣷");
     expect(whiteLabel).toContain("'Acme AI'");
   });
 

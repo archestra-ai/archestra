@@ -41,10 +41,10 @@ function setupCtx(
   };
 }
 
-// One distinctive interior line and the top border of the canonical mark — if
-// these appear verbatim, the surface is drawing the exact shared logo.
-const MARK_GLYPH_ROW = ARCHESTRA_MARK.unicode[2]; // "   │        ▟██▙      │"
-const MARK_TOP_BORDER = ARCHESTRA_MARK.unicode[0]; // "   ╭──────────────────╮"
+// Two distinctive rows of the canonical braille mark — if these appear
+// verbatim, the surface is drawing the exact shared logo.
+const MARK_GLYPH_ROW = ARCHESTRA_MARK.unicode[2]; // "⠀⠀⣸⣿⣿⣿⣿⣿⠇…"
+const MARK_TOP_BORDER = ARCHESTRA_MARK.unicode[0]; // "⠀⠀⠀⢀⣤⣶⣶⣦⡀…"
 
 describe("archestraMarkWithText", () => {
   test("overlays the product name and tagline on their rows, leaving the art intact", () => {
@@ -56,14 +56,14 @@ describe("archestraMarkWithText", () => {
     );
   });
 
-  test("ASCII variant preserves the same 9-line layout for the legacy console", () => {
+  test("ASCII variant keeps its 9-line box layout for the legacy console", () => {
     const ascii = archestraMarkWithText({
       appName: "Archestra",
       variant: "ascii",
     });
     expect(ascii).toHaveLength(9);
     expect(ascii[3]).toContain("Archestra");
-    expect(ascii.join("\n")).not.toContain("▟"); // no block glyphs in the fallback
+    expect(ascii.join("\n")).not.toContain("⣿"); // no braille glyphs in the fallback
   });
 });
 

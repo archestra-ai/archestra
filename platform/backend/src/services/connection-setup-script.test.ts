@@ -1244,8 +1244,8 @@ describe("banner", () => {
     await expectValidBash(branded);
     expect(branded).toContain("cat <<'ARCHESTRA_BANNER'");
     expect(branded).toContain("Secure access to your AI tools");
-    // the Archestra block-mark is printed under the default brand
-    expect(branded).toContain("▟██▙");
+    // the Archestra braille mark is printed under the default brand
+    expect(branded).toContain("⣾⣿⣿⣿⣿⣷");
     expect(branded).toContain("Client:     Claude Code");
     expect(branded).toContain("Configures:");
     expect(branded).toContain("one-time setup");
@@ -1257,7 +1257,7 @@ describe("banner", () => {
       appName: "Archestra Staging",
     });
     await expectValidBash(variant);
-    expect(variant).toContain("▟██▙");
+    expect(variant).toContain("⣾⣿⣿⣿⣿⣷");
     expect(variant).toContain("Archestra Staging");
 
     const whiteLabel = renderSetupScript({
@@ -1266,8 +1266,8 @@ describe("banner", () => {
     });
     await expectValidBash(whiteLabel);
     expect(whiteLabel).toContain("Acme AI");
-    // the Archestra block-mark is not printed under a custom brand
-    expect(whiteLabel).not.toContain("▟██▙");
+    // the Archestra braille mark is not printed under a custom brand
+    expect(whiteLabel).not.toContain("⣾⣿⣿⣿⣿⣷");
   });
 });
 

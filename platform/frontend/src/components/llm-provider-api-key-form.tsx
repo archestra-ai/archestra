@@ -408,7 +408,7 @@ interface LlmProviderApiKeyFormProps {
   /** Hide optional API-key fields behind an Advanced settings disclosure. */
   progressive?: boolean;
   /** Called when a subscription sign-in returns a credential. */
-  onSubscriptionCredential?: (credential: string) => void;
+  onSubscriptionCredential?: (credential: string) => void | Promise<void>;
 }
 
 export function LlmProviderApiKeyForm({
@@ -1162,7 +1162,7 @@ export function LlmProviderApiKeyForm({
                           form.setValue("apiKey", secret, {
                             shouldDirty: true,
                           });
-                          onSubscriptionCredential?.(secret);
+                          return onSubscriptionCredential?.(secret);
                         }}
                       />
                     </>

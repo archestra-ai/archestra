@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 vi.mock("sonner");
@@ -42,6 +43,7 @@ describe("InlineChatError", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockReturnValue(false);
   });
 
   it("shows only the support message and correlation IDs in slim mode", () => {
@@ -377,6 +379,29 @@ describe("InlineChatError", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Sign in with/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not suggest an ordinary Vault key for an exact subscription gate", () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+
+    render(
+      <ProviderAuthRequiredCard
+        provider="xai"
+        providerLabel="X Premium (SuperGrok)"
+        agentName="Research Agent"
+        variant="preflight"
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /managed secret storage, or choose an agent\/model/i,
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      /provider API key from Vault/i,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Sign in with X" }),
     ).not.toBeInTheDocument();
   });
 

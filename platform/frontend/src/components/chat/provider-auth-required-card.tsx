@@ -77,10 +77,8 @@ export function ProviderAuthRequiredCard({
             >
               Subscription sign-in is unavailable because this deployment uses a
               read-only external Vault. Ask an administrator to use managed
-              secret storage
-              {SUBSCRIPTION_CREDENTIALS[subscriptionKind].marker !== null
-                ? ", or connect a provider API key from Vault instead."
-                : "."}
+              secret storage, or choose an agent/model that does not require
+              this exact personal subscription.
             </div>
           ) : subscriptionKind ? (
             <SubscriptionSignIn
@@ -88,25 +86,23 @@ export function ProviderAuthRequiredCard({
               disabled={createKey.isPending}
               onSecret={async (secret) => {
                 const { label } = SUBSCRIPTION_CREDENTIALS[subscriptionKind];
-                try {
-                  await createKey.mutateAsync({
-                    name: label,
-                    provider,
-                    apiKey: secret,
-                    scope: "personal",
-                  });
-                  toast.success(
-                    isPreflight
-                      ? `${label} connected`
-                      : `${label} connected — retrying…`,
-                  );
-                  // Re-run the original prompt now that the key exists; the
-                  // create mutation already invalidated the model/key caches.
-                  onConnected?.();
-                } catch {
-                  // handleApiError already surfaced the failure (e.g. no seat,
-                  // no license, no active subscription)
-                }
+                // The mutation hook surfaces provider/validation failures. Let
+                // its rejected promise reach the device-flow component so it
+                // resets to a retryable state instead of claiming success.
+                await createKey.mutateAsync({
+                  name: label,
+                  provider,
+                  apiKey: secret,
+                  scope: "personal",
+                });
+                toast.success(
+                  isPreflight
+                    ? `${label} connected`
+                    : `${label} connected — retrying…`,
+                );
+                // Re-run the original prompt now that the key exists; the
+                // create mutation already invalidated the model/key caches.
+                onConnected?.();
               }}
             />
           ) : (

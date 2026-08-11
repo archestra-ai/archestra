@@ -17,8 +17,17 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/components/page-layout", () => ({
-  PageLayout: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  PageLayout: ({
+    actionButton,
+    children,
+  }: {
+    actionButton?: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <div>
+      {actionButton}
+      {children}
+    </div>
   ),
 }));
 
@@ -282,6 +291,20 @@ describe("ApiKeysPage", () => {
       provider: undefined,
       search: undefined,
     });
+  });
+
+  it("lets a default member open personal API-key creation", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+
+    render(<ApiKeysPage />);
+    fireEvent.click(screen.getByTestId("add-chat-api-key-button"));
+
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent(
+      "Add API Key",
+    );
   });
 
   it("always shows the personal subscription credentials from the registry", () => {

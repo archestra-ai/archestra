@@ -52,6 +52,24 @@ describe("createClient", () => {
     );
   });
 
+  test.each([
+    "bearer",
+    "bEaReR",
+  ])("routes a subscription credential with a %s scheme through the session proxy", (scheme) => {
+    const credential = encodeXaiSubscriptionCredential({
+      refreshToken: "rt_secret",
+      userId: "x-user-123",
+    });
+    const client = xaiAdapterFactory.createClient(`${scheme} ${credential}`, {
+      baseUrl: config.llm.xai.baseUrl,
+      source: "chat",
+    });
+
+    expect((client as { baseURL: string }).baseURL).toBe(
+      config.llm.xai.subscription.baseUrl,
+    );
+  });
+
   test("rejects another provider's subscription marker", () => {
     expect(() =>
       xaiAdapterFactory.createClient("chatgpt-oauth:encoded-refresh-token", {

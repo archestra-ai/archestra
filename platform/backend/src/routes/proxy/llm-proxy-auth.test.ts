@@ -5,6 +5,7 @@ import {
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { AgentLabelModel, AgentModel, VirtualApiKeyModel } from "@/models";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import {
@@ -174,6 +175,33 @@ describe("validateVirtualApiKey", () => {
     await expect(validateVirtualApiKey(value, "anthropic")).rejects.toThrow(
       'Virtual API key is not mapped to provider "anthropic".',
     );
+  });
+
+  test("rejects a foreign subscription marker immediately after virtual-key resolution", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "rt-never-forward",
+          userId: "x-user",
+        }),
+      },
+    });
+    const openaiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: openaiKey.id }],
+      name: "out-of-band-swapped-marker",
+    });
+
+    await expect(validateVirtualApiKey(value, "openai")).rejects.toMatchObject({
+      statusCode: 401,
+    });
   });
 
   test("returns resolved API key and baseUrl on success", async ({

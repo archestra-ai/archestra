@@ -15,12 +15,12 @@ interface SubscriptionSignInProps {
    * credential-level ones. Either way the caller stores it verbatim through the
    * standard CreateLlmProviderApiKey path.
    */
-  onSecret: (secret: string) => void;
+  onSecret: (secret: string) => void | Promise<void>;
   disabled?: boolean;
 }
 
 interface SignInFlowProps {
-  onSecret: (secret: string) => void;
+  onSecret: (secret: string) => void | Promise<void>;
   disabled?: boolean;
 }
 

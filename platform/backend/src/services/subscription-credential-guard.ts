@@ -20,7 +20,7 @@ export function assertSubscriptionCredentialForProvider(params: {
   provider: SupportedProvider;
 }): void {
   const { provider } = params;
-  const credential = params.apiKey?.replace(/^Bearer[:\s]+/i, "");
+  const credential = stripBearerTransportPrefix(params.apiKey);
   const kind = subscriptionKindFromCredential(credential);
   if (!kind) {
     return;
@@ -44,4 +44,11 @@ export function assertSubscriptionCredentialForProvider(params: {
       : `The selected ${providerDisplayNames[provider]} key contains a ${definition.label} credential for another provider. Reconnect the correct credential.`,
     ArchestraInternalErrorCode.ProviderAuthRequired,
   );
+}
+
+/** Remove an HTTP/internal Bearer transport wrapper before marker inspection. */
+export function stripBearerTransportPrefix(
+  apiKey: string | undefined,
+): string | undefined {
+  return apiKey?.replace(/^Bearer[:\s]+/i, "");
 }

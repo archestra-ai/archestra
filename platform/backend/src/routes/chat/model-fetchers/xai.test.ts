@@ -18,7 +18,7 @@ const MODELS_RESPONSE = {
     { id: "responses-only", model: "grok-response", apiBackend: "responses" },
     { model: "different-proxy", baseUrl: "https://other.grok.test/v1" },
     { model: "grok-hidden", hidden: true },
-    { model: "grok-unsupported", supportedInApi: false },
+    { model: "grok-oauth-only", supportedInApi: false },
     { name: "missing an identifier" },
   ],
 };
@@ -70,6 +70,7 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
       "grok-4-fast",
       "grok-4-mini",
       "grok-4-meta",
+      "grok-oauth-only",
     ]);
     expect(models[1].displayName).toBe("Grok 4 Fast");
     expect(models.every((model) => model.provider === "xai")).toBe(true);

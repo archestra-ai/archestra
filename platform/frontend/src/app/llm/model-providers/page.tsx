@@ -53,7 +53,6 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { InlineTag } from "@/components/ui/inline-tag";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -352,14 +351,13 @@ export default function ApiKeysPage() {
   const isEditValid = isEditApiKeyFormValid(editFormValues);
 
   const addApiKeyButton = (
-    <PermissionButton
-      permissions={{ llmProviderApiKey: ["create"] }}
+    <Button
       onClick={() => setIsCreateDialogOpen(true)}
       data-testid={E2eTestId.AddChatApiKeyButton}
     >
       <Plus className="h-4 w-4" />
       Add API Key
-    </PermissionButton>
+    </Button>
   );
 
   const apiKeys = queriedApiKeys;

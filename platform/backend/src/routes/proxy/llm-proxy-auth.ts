@@ -31,6 +31,7 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
   type GatewayAgent,
@@ -162,6 +163,17 @@ export async function validateVirtualApiKey(
         "Virtual key's parent chat API key secret could not be resolved (may be orphaned)",
       );
     }
+  }
+
+  // Some provider routes (for example Gemini query-key rewriting and Bedrock
+  // model listing) consume this result directly instead of entering the
+  // unified proxy handler. Guard here so no virtual-key sink can forward a
+  // marker-owned refresh credential to the wrong provider or custom URL.
+  if (isSupportedProvider(expectedProvider)) {
+    assertSubscriptionCredentialForProvider({
+      apiKey,
+      provider: expectedProvider,
+    });
   }
 
   // Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription

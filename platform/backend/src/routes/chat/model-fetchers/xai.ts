@@ -42,6 +42,7 @@ type XaiRawModel =
 function mapXaiModel(
   model: XaiRawModel,
   provider: SupportedProvider,
+  isSubscription: boolean,
 ): ModelInfo | null {
   // The subscription proxy separates its catalog id from the model slug sent
   // on the wire. It also publishes models for multiple protocols, while
@@ -66,7 +67,9 @@ function mapXaiModel(
       : undefined;
   if (
     hidden ||
-    supportedInApi === false ||
+    // xAI defines supportedInApi=false as OAuth-only: session users should see
+    // it, while public API-key users should not.
+    (supportedInApi === false && !isSubscription) ||
     (typeof apiBackend === "string" && apiBackend !== "chat_completions") ||
     (typeof modelBaseUrl === "string" &&
       modelBaseUrl.replace(/\/+$/, "") !==
@@ -171,7 +174,7 @@ export async function fetchXaiModels(
   });
 
   return data.data.flatMap((model) => {
-    const mapped = mapXaiModel(model, "xai");
+    const mapped = mapXaiModel(model, "xai", subscriptionCredential !== null);
     return mapped ? [mapped] : [];
   });
 }

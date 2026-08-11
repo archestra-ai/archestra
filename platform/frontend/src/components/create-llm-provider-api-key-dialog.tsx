@@ -146,32 +146,31 @@ export function CreateLlmProviderApiKeyDialog({
       });
       onOpenChange(false);
       onSuccess?.();
+      return true;
     } catch {
       // Error handled by mutation
+      return false;
     }
   };
   const handleCreate = form.handleSubmit(createCredential);
-  const handleSubscriptionCredential = (credential: string) => {
+  const handleSubscriptionCredential = async (credential: string) => {
     if (reconnectKeyId) {
       // Re-authentication: rotate the existing key's secret in place — a
       // second create would leave a duplicate credential row behind, with the
       // stale one still selected in conversations.
-      void (async () => {
-        try {
-          await updateMutation.mutateAsync({
-            id: reconnectKeyId,
-            data: { apiKey: credential },
-          });
-          onOpenChange(false);
-          onSuccess?.();
-        } catch {
-          // Error handled by mutation
-        }
-      })();
+      await updateMutation.mutateAsync({
+        id: reconnectKeyId,
+        data: { apiKey: credential },
+      });
+      onOpenChange(false);
+      onSuccess?.();
       return;
     }
     const values = { ...form.getValues(), apiKey: credential };
-    void createCredential(values);
+    const created = await createCredential(values);
+    if (!created) {
+      throw new Error("Subscription credential was not saved");
+    }
   };
 
   return (

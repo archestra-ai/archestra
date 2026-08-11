@@ -19,6 +19,7 @@ import type {
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
 import { metrics } from "@/observability";
+import { stripBearerTransportPrefix } from "@/services/subscription-credential-guard";
 import {
   decodeXaiSubscriptionCredential,
   isXaiSubscriptionCredential,
@@ -184,16 +185,6 @@ class XaiStreamAdapter
 // ADAPTER FACTORY
 // =============================================================================
 
-/**
- * `extractApiKey` returns the authorization header verbatim, so a credential can
- * reach the adapter with a `Bearer ` transport prefix. Both the billing-mode
- * classification and the client construction read through this, so a credential
- * can never be billed as a subscription while being sent as a raw bearer.
- */
-function stripBearerPrefix(apiKey: string | undefined): string | undefined {
-  return apiKey?.startsWith("Bearer ") ? apiKey.slice(7) : apiKey;
-}
-
 export const xaiAdapterFactory: LLMProvider<
   XaiRequest,
   XaiResponse,
@@ -231,7 +222,7 @@ export const xaiAdapterFactory: LLMProvider<
     // by a flat-rate plan, so they must classify as subscription — the same rule
     // as ChatGPT/Codex credentials on the openai adapter. Plain console API keys
     // stay metered.
-    return isXaiSubscriptionCredential(stripBearerPrefix(apiKey));
+    return isXaiSubscriptionCredential(stripBearerTransportPrefix(apiKey));
   },
 
   getBaseUrl(): string | undefined {
@@ -256,7 +247,7 @@ export const xaiAdapterFactory: LLMProvider<
     // an encoded xAI OAuth credential, not a console key. Session traffic uses
     // xAI's dedicated CLI chat proxy and swaps the bearer in a fetch wrapper
     // because createClient is synchronous.
-    const strippedApiKey = stripBearerPrefix(apiKey);
+    const strippedApiKey = stripBearerTransportPrefix(apiKey);
     const subscriptionKind = subscriptionKindFromCredential(strippedApiKey);
     if (
       subscriptionKind &&

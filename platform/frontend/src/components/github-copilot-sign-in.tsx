@@ -12,7 +12,7 @@ import {
 
 interface GithubCopilotSignInProps {
   /** Receives the user's GitHub OAuth token once the device flow completes. */
-  onToken: (token: string) => void;
+  onToken: (token: string) => void | Promise<void>;
   disabled?: boolean;
 }
 
@@ -70,8 +70,12 @@ export function GithubCopilotSignIn({
         return;
       }
       if (result.status === "complete") {
-        setCompleted(true);
-        onTokenRef.current(result.accessToken);
+        try {
+          await onTokenRef.current(result.accessToken);
+          if (!cancelled) setCompleted(true);
+        } catch {
+          if (!cancelled) setFlow(null);
+        }
         return;
       }
       if (result.status === "slow_down") {

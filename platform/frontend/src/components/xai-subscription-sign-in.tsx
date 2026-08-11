@@ -15,7 +15,7 @@ interface XaiSubscriptionSignInProps {
    * Receives the encoded X Premium credential once the device flow completes;
    * the form stores it as the xAI provider key.
    */
-  onCredential: (credential: string) => void;
+  onCredential: (credential: string) => void | Promise<void>;
   disabled?: boolean;
 }
 
@@ -79,8 +79,15 @@ export function XaiSubscriptionSignIn({
         return;
       }
       if (result.status === "complete") {
-        setCompleted(true);
-        onCredentialRef.current(result.credential);
+        try {
+          await onCredentialRef.current(result.credential);
+          if (!cancelled) setCompleted(true);
+        } catch {
+          // Persistence failed after OAuth completed. The mutation already
+          // surfaced the error; reset to a retryable sign-in instead of
+          // claiming a key exists when no Save control is available.
+          if (!cancelled) setFlow(null);
+        }
         return;
       }
       if (result.status === "slow_down") {

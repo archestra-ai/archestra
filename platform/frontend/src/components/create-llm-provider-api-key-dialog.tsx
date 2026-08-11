@@ -28,7 +28,7 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   useCreateLlmProviderApiKey,
   useLlmProviderApiKeys,
-  useUpdateLlmProviderApiKey,
+  useReconnectLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 
 export type CreateLlmProviderApiKeyDialogProps = {
@@ -68,7 +68,7 @@ export function CreateLlmProviderApiKeyDialog({
   reconnectKeyId,
 }: CreateLlmProviderApiKeyDialogProps) {
   const createMutation = useCreateLlmProviderApiKey();
-  const updateMutation = useUpdateLlmProviderApiKey();
+  const reconnectMutation = useReconnectLlmProviderApiKey();
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
@@ -113,6 +113,12 @@ export function CreateLlmProviderApiKeyDialog({
       values.authMethod === "subscription"
         ? subscriptionKindForProvider(values.provider)
         : null;
+    // Subscription credentials are per-user, so the key is always personal.
+    // Resolved here rather than via the form's scope coercion: that coercion is
+    // deferred until a sign-in completes (so switching tabs can't silently
+    // privatize anything), and the sign-in callback reads form values in the
+    // same tick the credential lands — before any effect has run.
+    const scope = subscriptionKind ? "personal" : values.scope;
     try {
       await createMutation.mutateAsync({
         name:
@@ -125,9 +131,8 @@ export function CreateLlmProviderApiKeyDialog({
         baseUrl: values.baseUrl || undefined,
         inferenceBaseUrl: values.inferenceBaseUrl || undefined,
         extraHeaders: serializeExtraHeaders(values.extraHeaders) ?? undefined,
-        scope: values.scope,
-        teamId:
-          values.scope === "team" && values.teamId ? values.teamId : undefined,
+        scope,
+        teamId: scope === "team" && values.teamId ? values.teamId : undefined,
         isPrimary: values.isPrimary,
         vaultSecretPath:
           !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
@@ -160,10 +165,12 @@ export function CreateLlmProviderApiKeyDialog({
     if (reconnectKeyId) {
       // Re-authentication: rotate the existing key's secret in place — a
       // second create would leave a duplicate credential row behind, with the
-      // stale one still selected in conversations.
-      await updateMutation.mutateAsync({
+      // stale one still selected in conversations. Uses the self-service
+      // reconnect endpoint rather than the permission-gated PATCH, so default
+      // members can refresh their own expired sign-in.
+      await reconnectMutation.mutateAsync({
         id: reconnectKeyId,
-        data: { apiKey: credential },
+        apiKey: credential,
       });
       onOpenChange(false);
       onSuccess?.();

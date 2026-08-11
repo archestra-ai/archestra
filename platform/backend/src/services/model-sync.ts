@@ -96,8 +96,11 @@ class ModelSyncService {
         apiKey: apiKeyValue,
         provider,
       });
-      // 1. Fetch models from provider API
-      const providerModels = await fetcher(apiKeyValue, baseUrl, extraHeaders);
+      // 1. Fetch models from provider API. The row id lets subscription
+      // fetchers persist a rotated refresh token back to this key.
+      const providerModels = await fetcher(apiKeyValue, baseUrl, extraHeaders, {
+        providerApiKeyId: apiKeyId,
+      });
 
       if (providerModels.length === 0) {
         logger.info({ provider, apiKeyId }, "No models returned from provider");

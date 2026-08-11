@@ -83,7 +83,10 @@ import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
-import { isEditApiKeyFormValid } from "./edit-key-form.utils";
+import {
+  isEditApiKeyFormValid,
+  subscriptionSignInRequired,
+} from "./edit-key-form.utils";
 
 type SubscriptionProvider =
   (typeof SUBSCRIPTION_CREDENTIALS)[SubscriptionCredentialKind]["provider"];
@@ -260,6 +263,11 @@ export default function ApiKeysPage() {
 
   const handleEdit = editForm.handleSubmit(async (values) => {
     if (!editingApiKey) return;
+    // Defense in depth behind the disabled Save button: a subscription tab on a
+    // key that doesn't hold that subscription must not submit without a
+    // completed sign-in — the update would privatize a shared key while
+    // keeping its old shared secret.
+    if (subscriptionSignInRequired(values, editingApiKey)) return;
 
     const apiKeyChanged =
       values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
@@ -348,7 +356,10 @@ export default function ApiKeysPage() {
 
   // Validation for edit form
   const editFormValues = editForm.watch();
-  const isEditValid = isEditApiKeyFormValid(editFormValues);
+  const isEditValid = isEditApiKeyFormValid(
+    editFormValues,
+    editingApiKey ?? undefined,
+  );
 
   const addApiKeyButton = (
     <Button

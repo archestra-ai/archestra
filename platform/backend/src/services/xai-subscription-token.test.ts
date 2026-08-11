@@ -567,3 +567,134 @@ describe("createXaiSubscriptionFetch", () => {
     expect(innerFetch).toHaveBeenCalledTimes(1);
   });
 });
+
+// =============================================================================
+// Rotation lifecycle (issue #7206) — mirrors the Codex manager's suite for the
+// shared fixes: ID-less validation stash, in-flight lineage isolation, and
+// compare-and-swap persistence.
+// =============================================================================
+
+describe("ID-less validation rotation stash", () => {
+  test("follows an observed rotation instead of redeeming the dead predecessor", async () => {
+    const rtA = `rt-a-${crypto.randomUUID()}`;
+    const rtB = `rt-b-${crypto.randomUUID()}`;
+    const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+      expires_in: 3600,
+      ...(index === 0 ? { refresh_token: rtB } : {}),
+    }));
+
+    await xaiSubscriptionTokenManager.getAccessToken({ refreshToken: rtA });
+    expect(xaiSubscriptionTokenManager.latestKnownRefreshToken(rtA)).toBe(rtB);
+
+    // Validating the same credential again must redeem the live successor —
+    // redeeming rtA again would be invalid_grant (single-use tokens).
+    await xaiSubscriptionTokenManager.getAccessToken({ refreshToken: rtA });
+    expect(redeemedRefreshTokens).toEqual([rtA, rtB]);
+  });
+});
+
+describe("in-flight redemption lineage isolation", () => {
+  test("does not serve an in-flight redemption to a caller holding a different credential", async () => {
+    const rowId = crypto.randomUUID();
+    const rtOld = `rt-old-${crypto.randomUUID()}`;
+    const rtNew = `rt-new-${crypto.randomUUID()}`;
+    const issuer = config.llm.xai.subscription.issuer;
+    const resolvers: Array<(response: Response) => void> = [];
+    const presentedTokens: Array<string | null> = [];
+    const fetchMock = vi.fn((url: string | URL, init?: RequestInit) => {
+      if (String(url).includes("/.well-known/openid-configuration")) {
+        return Promise.resolve(
+          Response.json({
+            device_authorization_endpoint: `${issuer}/oauth2/device/code`,
+            token_endpoint: `${issuer}/oauth2/token`,
+          }),
+        );
+      }
+      return new Promise<Response>((resolve) => {
+        presentedTokens.push(
+          new URLSearchParams(String(init?.body)).get("refresh_token"),
+        );
+        resolvers.push(resolve);
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Caller 1: the row's old credential (e.g. read before a reconnect).
+    const first = xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: rtOld,
+      providerApiKeyId: rowId,
+    });
+    // Caller 2 arrives mid-flight holding the NEW credential after a
+    // reconnect. Joining caller 1's flight would hand it the old account's
+    // bearer.
+    const second = xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: rtNew,
+      providerApiKeyId: rowId,
+    });
+
+    await vi.waitFor(() => expect(resolvers).toHaveLength(2));
+    resolvers[0](Response.json({ access_token: "at_old", expires_in: 3600 }));
+    resolvers[1](Response.json({ access_token: "at_new", expires_in: 3600 }));
+
+    expect(await first).toBe("at_old");
+    expect(await second).toBe("at_new");
+    expect(presentedTokens).toEqual([rtOld, rtNew]);
+  });
+});
+
+describe("rotation persistence compare-and-swap", () => {
+  test("skips the write when the stored credential is a different token family", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { LlmProviderApiKeyModel } = await import("@/models");
+    const { getSecretValueForLlmProviderApiKey, secretManager } = await import(
+      "@/secrets-manager"
+    );
+    const { decodeXaiSubscriptionCredential, encodeXaiSubscriptionCredential } =
+      await import("./xai-subscription-credentials");
+
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    // The row already holds a FRESH credential (a completed reconnect)…
+    const rtFresh = `rt-fresh-${crypto.randomUUID()}`;
+    const freshStored = encodeXaiSubscriptionCredential({
+      refreshToken: rtFresh,
+      userId: "x-user-1",
+    });
+    const secret = await secretManager().createSecret(
+      { apiKey: freshStored },
+      `xai-test-${crypto.randomUUID()}`,
+    );
+    const key = await LlmProviderApiKeyModel.create({
+      organizationId: organization.id,
+      name: "X Premium (SuperGrok)",
+      provider: "xai",
+      secretId: secret.id,
+      scope: "personal",
+      userId: user.id,
+    });
+    // …while a caller still holding the PREVIOUS credential redeems it and
+    // observes a rotation. Persisting that rotation would clobber the fresh
+    // sign-in with a dead family.
+    const rtOld = `rt-old-${crypto.randomUUID()}`;
+    const rtOldRotated = `rt-old2-${crypto.randomUUID()}`;
+    stubRedemptionFetch(({ index }) => ({
+      access_token: `at_${index}`,
+      expires_in: 3600,
+      ...(index === 0 ? { refresh_token: rtOldRotated } : {}),
+    }));
+
+    await xaiSubscriptionTokenManager.getAccessToken({
+      refreshToken: rtOld,
+      providerApiKeyId: key.id,
+    });
+    await xaiSubscriptionTokenManager.waitForPersistFlush(key.id);
+
+    const value = await getSecretValueForLlmProviderApiKey(secret.id);
+    expect(decodeXaiSubscriptionCredential(value)).toMatchObject({
+      refreshToken: rtFresh,
+    });
+  });
+});

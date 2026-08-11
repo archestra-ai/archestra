@@ -1,7 +1,8 @@
 import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { INCOGNITO_DRAFT_SHORTCUT_EVENT } from "@/consts";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
@@ -15,6 +16,7 @@ const {
   mockProfileState,
   mockUploadPolicy,
   mockToolbarState,
+  mockConversationState,
 } = vi.hoisted(() => ({
   mockUseChatPlaceholder: vi.fn(),
   mockUseSkillsPaginated: vi.fn(),
@@ -23,12 +25,18 @@ const {
   mockControllerState: { value: "", files: [] as { url: string }[] },
   mockFeatureState: {
     chatSecretScanEnabled: false,
+    chatIncognitoEnabled: false,
     chatAttachmentStorageBytesLimit: undefined as number | undefined,
     apiBodyLimitBytes: undefined as number | undefined,
     sandboxArtifactBytesLimit: undefined as number | undefined,
   },
   mockProfileState: {
     agent: null as { sandboxAvailable: boolean } | null,
+  },
+  // What useConversation resolves to — lets tests exercise an existing
+  // incognito conversation (vs the new-chat toggle).
+  mockConversationState: {
+    conversation: null as { incognito?: boolean } | null,
   },
   // The upload policy the composer hands to the file picker: the byte cap it
   // enforces and the per-file check it runs. Captured so tests can exercise
@@ -232,6 +240,7 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   }),
   usePromptInputAttachments: () => ({
     openFileDialog: vi.fn(),
+    clear: vi.fn(),
   }),
 }));
 
@@ -294,7 +303,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
     isLoading: false,
     error: null,
   }),
-  useConversation: () => ({ data: null }),
+  useConversation: () => ({ data: mockConversationState.conversation }),
   useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
@@ -350,6 +359,9 @@ describe("ArchestraPromptInput", () => {
       if (flag === "chatSecretScanEnabled") {
         return mockFeatureState.chatSecretScanEnabled;
       }
+      if (flag === "chatIncognitoEnabled") {
+        return mockFeatureState.chatIncognitoEnabled;
+      }
       if (flag === "chatAttachmentStorageBytesLimit") {
         return mockFeatureState.chatAttachmentStorageBytesLimit;
       }
@@ -377,8 +389,10 @@ describe("ArchestraPromptInput", () => {
     mockControllerState.value = "";
     mockControllerState.files = [];
     mockFeatureState.chatSecretScanEnabled = false;
+    mockFeatureState.chatIncognitoEnabled = false;
     mockProfileState.agent = null;
     mockToolbarState.isNarrow = false;
+    mockConversationState.conversation = null;
     localStorage.clear();
   });
 
@@ -825,6 +839,176 @@ describe("ArchestraPromptInput", () => {
 
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(mockTextInputClear).toHaveBeenCalled();
+    });
+  });
+
+  describe("incognito composer", () => {
+    it("greys out (not hides) the attach button and shows the explainer drawer while the new-chat toggle is on", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito
+          onIncognitoChange={vi.fn()}
+        />,
+      );
+
+      // The drawer carries the copy that used to live in the toggle tooltip.
+      const notice = screen.getByTestId(E2eTestId.ChatIncognitoNotice);
+      expect(notice).toHaveTextContent(
+        /Incognito chat — encrypted with a key that stays in this browser/,
+      );
+
+      // Attach affordance stays visible but disabled, with the reason on hover.
+      const disabledUpload = screen.getByTestId(
+        E2eTestId.ChatDisabledFileUploadButton,
+      );
+      expect(disabledUpload.querySelector("button")).toBeDisabled();
+      expect(
+        screen.queryByTestId(E2eTestId.ChatFileUploadButton),
+      ).not.toBeInTheDocument();
+      expect(
+        screen
+          .getAllByTestId("tooltip-content")
+          .some((tooltip) =>
+            tooltip.textContent?.includes(
+              "Attachments are stored unencrypted, so incognito chats can't use them",
+            ),
+          ),
+      ).toBe(true);
+    });
+
+    it("renders no drawer and a normal attach button when incognito is off", () => {
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito={false}
+          onIncognitoChange={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId(E2eTestId.ChatIncognitoNotice),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId(E2eTestId.ChatFileUploadButton),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the drawer and greyed-out attach button on an existing incognito conversation", () => {
+      mockConversationState.conversation = { incognito: true };
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          allowFileUploads={true}
+        />,
+      );
+
+      expect(
+        screen.getByTestId(E2eTestId.ChatIncognitoNotice),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(E2eTestId.ChatDisabledFileUploadButton),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId(E2eTestId.ChatFileUploadButton),
+      ).not.toBeInTheDocument();
+    });
+
+    it("toggles incognito from the composer button, whose tooltip is just the name", () => {
+      mockFeatureState.chatIncognitoEnabled = true;
+      const onIncognitoChange = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito={false}
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Incognito chat" }));
+      expect(onIncognitoChange).toHaveBeenCalledWith(true);
+
+      // The long explanation moved to the drawer; the hover stays succinct —
+      // just the name plus the global shortcut.
+      expect(
+        screen
+          .getAllByTestId("tooltip-content")
+          .some((tooltip) =>
+            tooltip.textContent?.trim().startsWith("Incognito chat"),
+          ),
+      ).toBe(true);
+    });
+
+    it("claims the Alt+I handshake event and toggles the draft off and back on", () => {
+      mockFeatureState.chatIncognitoEnabled = true;
+      const onIncognitoChange = vi.fn();
+
+      const { rerender } = render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+
+      // Armed draft + shortcut: claimed (no navigation) and toggled off.
+      const disarm = new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, {
+        cancelable: true,
+      });
+      let unclaimed: boolean | undefined;
+      act(() => {
+        unclaimed = window.dispatchEvent(disarm);
+      });
+      expect(unclaimed).toBe(false);
+      expect(onIncognitoChange).toHaveBeenLastCalledWith(false);
+
+      // Shortcut again on the disarmed composer: toggled back on.
+      rerender(
+        <ArchestraPromptInput
+          {...defaultProps}
+          allowFileUploads={true}
+          incognito={false}
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+      act(() => {
+        window.dispatchEvent(
+          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+        );
+      });
+      expect(onIncognitoChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it("leaves the handshake event unclaimed while chatting in a conversation", () => {
+      mockFeatureState.chatIncognitoEnabled = true;
+      const onIncognitoChange = vi.fn();
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          allowFileUploads={true}
+          onIncognitoChange={onIncognitoChange}
+        />,
+      );
+
+      let unclaimed: boolean | undefined;
+      act(() => {
+        unclaimed = window.dispatchEvent(
+          new Event(INCOGNITO_DRAFT_SHORTCUT_EVENT, { cancelable: true }),
+        );
+      });
+
+      // Unclaimed → the global handler proceeds to navigate to a fresh draft.
+      expect(unclaimed).toBe(true);
+      expect(onIncognitoChange).not.toHaveBeenCalled();
     });
   });
 

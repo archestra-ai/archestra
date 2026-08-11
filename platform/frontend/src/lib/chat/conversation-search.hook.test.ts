@@ -3,6 +3,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { INCOGNITO_DRAFT_SHORTCUT_EVENT } from "@/consts";
 import { useConversationSearch } from "@/lib/chat/conversation-search.hook";
 import { useFeature } from "@/lib/config/config.query";
 
@@ -210,6 +211,57 @@ describe("useConversationSearch", () => {
     });
 
     expect(mockRouterPush).toHaveBeenCalledWith("/chat?incognito=1");
+  });
+
+  it("blurs the focused editable while handling Alt+I, then restores focus", async () => {
+    // macOS Option+I is a dead key whose composition Chromium starts even on
+    // a preventDefault'ed keydown — the handler blurs the editable so the
+    // "ˆ" has no target, and the composer must be refocused afterwards.
+    mockPlatform("MacIntel");
+    renderHook(() => useConversationSearch());
+
+    const textarea = document.createElement("textarea");
+    document.body.appendChild(textarea);
+    textarea.focus();
+
+    let activeDuringDispatch: Element | null = null;
+    const observe = () => {
+      activeDuringDispatch = document.activeElement;
+    };
+    window.addEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, observe);
+    try {
+      act(() => {
+        dispatchKeydown({ key: "Dead", code: "KeyI", altKey: true });
+      });
+    } finally {
+      window.removeEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, observe);
+    }
+
+    expect(activeDuringDispatch).not.toBe(textarea);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(document.activeElement).toBe(textarea);
+    textarea.remove();
+  });
+
+  it("does not navigate on Alt+I when the new-chat composer claims the shortcut", () => {
+    mockPlatform("MacIntel");
+    renderHook(() => useConversationSearch());
+
+    // Stand in for the mounted new-chat composer: claim the cancelable
+    // handshake event so the shortcut toggles in place instead of navigating.
+    const claim = (event: Event) => event.preventDefault();
+    window.addEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, claim);
+    try {
+      act(() => {
+        dispatchKeydown({ key: "Dead", code: "KeyI", altKey: true });
+      });
+    } finally {
+      window.removeEventListener(INCOGNITO_DRAFT_SHORTCUT_EVENT, claim);
+    }
+
+    expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
   it("ignores Alt+I when incognito chats are disabled", () => {

@@ -933,11 +933,14 @@ describe("ArchestraPromptInput", () => {
       fireEvent.click(screen.getByRole("button", { name: "Incognito chat" }));
       expect(onIncognitoChange).toHaveBeenCalledWith(true);
 
-      // The long explanation moved to the drawer; the hover stays succinct.
+      // The long explanation moved to the drawer; the hover stays succinct —
+      // just the name plus the global shortcut.
       expect(
         screen
           .getAllByTestId("tooltip-content")
-          .some((tooltip) => tooltip.textContent?.trim() === "Incognito chat"),
+          .some((tooltip) =>
+            tooltip.textContent?.trim().startsWith("Incognito chat"),
+          ),
       ).toBe(true);
     });
   });

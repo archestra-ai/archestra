@@ -913,7 +913,7 @@ const PromptInputContent = ({
       {incognitoActive && (
         <div
           data-testid={E2eTestId.ChatIncognitoNotice}
-          className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/40 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
+          className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
         >
           <IncognitoIcon className="size-3.5" />
           <span>
@@ -931,7 +931,7 @@ const PromptInputContent = ({
         onError={handleFileError}
         className={cn(
           incognitoActive &&
-            "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/40",
+            "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/60",
         )}
       >
         {/* File attachments display - shown inline above textarea */}

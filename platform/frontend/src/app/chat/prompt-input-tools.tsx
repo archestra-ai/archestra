@@ -29,6 +29,7 @@ import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
 import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import {
   Popover,
   PopoverContent,
@@ -39,10 +40,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { SHORTCUT_NEW_INCOGNITO_CHAT } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
+import { usePlatform } from "@/lib/hooks/use-platform";
 import { providerToLogoProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
 
@@ -247,6 +250,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // the same gate InitialAgentSelector uses via its callback prop) and only
   // when the instance has incognito chats enabled.
   const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
+  const { altKey } = usePlatform();
   const showIncognitoToggle =
     incognitoEnabled && !conversationId && !!onIncognitoChange;
 
@@ -588,7 +592,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4}>
-            Incognito chat
+            <span className="flex items-center gap-1.5">
+              Incognito chat <Kbd>{altKey}</Kbd>
+              <Kbd>{SHORTCUT_NEW_INCOGNITO_CHAT.label}</Kbd>
+            </span>
           </TooltipContent>
         </Tooltip>
       )}

@@ -1073,7 +1073,12 @@ describe("ModelSyncService", () => {
               name: "Claude Sonnet 4.6",
               tool_call: true,
               modalities: { input: ["text", "image", "pdf"], output: ["text"] },
-              cost: { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+              cost: {
+                input: 3,
+                output: 15,
+                cache_read: 0.3,
+                cache_write: 3.75,
+              },
               limit: { context: 200000, output: 32000 },
             },
           },

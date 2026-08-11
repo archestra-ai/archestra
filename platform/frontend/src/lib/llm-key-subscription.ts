@@ -14,7 +14,6 @@ interface SubscriptionCheckableLlmKey {
   provider: SupportedProvider;
   name: string;
   subscriptionKind?: SubscriptionCredentialKind | null;
-  isChatgptSubscription?: boolean;
 }
 
 /**

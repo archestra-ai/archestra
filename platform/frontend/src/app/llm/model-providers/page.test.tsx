@@ -333,7 +333,6 @@ describe("ApiKeysPage", () => {
       provider: "openai",
       scope: "personal",
       subscriptionKind: "chatgpt",
-      isChatgptSubscription: true,
     };
     mockUseLlmProviderApiKeys.mockReturnValue({
       data: [chatGptCredential],
@@ -395,7 +394,6 @@ describe("ApiKeysPage", () => {
         scope: "personal",
         secretId: "secret-1",
         subscriptionKind: "x-premium",
-        isChatgptSubscription: false,
         baseUrl: null,
         inferenceBaseUrl: null,
         extraHeaders: null,

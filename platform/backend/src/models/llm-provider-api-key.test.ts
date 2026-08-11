@@ -687,8 +687,8 @@ describe("LlmProviderApiKeyModel", () => {
 
       const codexKey = visible.find((k) => k.name === "ChatGPT Subscription");
       const plainKey = visible.find((k) => k.name === "Plain OpenAI Key");
-      expect(codexKey?.isChatgptSubscription).toBe(true);
-      expect(plainKey?.isChatgptSubscription).toBe(false);
+      expect(codexKey?.subscriptionKind).toBe("chatgpt");
+      expect(plainKey?.subscriptionKind).toBeNull();
     });
 
     test("still lists a key whose stored secret cannot be decrypted", async ({
@@ -729,7 +729,7 @@ describe("LlmProviderApiKeyModel", () => {
         expect(visible).toHaveLength(1);
         expect(visible[0].name).toBe("Key From Before Rotation");
         // Metadata derived from the secret value degrades to its defaults.
-        expect(visible[0].isChatgptSubscription).toBe(false);
+        expect(visible[0].subscriptionKind).toBeNull();
         expect(visible[0].vaultSecretPath).toBeNull();
       } finally {
         config.secretsManager.encryptionSecret = original;

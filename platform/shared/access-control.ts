@@ -1205,6 +1205,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateLlmProviderApiKey]: {
     llmProviderApiKey: ["update"],
   },
+  // Self-service like the create route and the device flows: reconnecting your
+  // OWN personal subscription key after its sign-in expires must not require
+  // llmProviderApiKey:update, or default members complete the device flow and
+  // then can't save the refreshed credential. The handler restricts it to the
+  // caller's own personal key holding subscription material.
+  [RouteId.ReconnectLlmProviderApiKey]: {},
   [RouteId.DeleteLlmProviderApiKey]: {
     llmProviderApiKey: ["delete"],
   },

@@ -13,6 +13,7 @@ import { handleLLMProxy } from "../llm-proxy-handler";
 import {
   AnthropicModelsHeadersSchema,
   AnthropicModelsListResponseSchema,
+  appendClaudeContextVariants,
   extractAnthropicToken,
   resolveProxyModelsApiKey,
   toAnthropicModelsList,
@@ -150,7 +151,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     });
     logger.debug({ agentId }, "[UnifiedProxy] Listing Anthropic models");
     return toAnthropicModelsList(
-      await fetchAnthropicModels(apiKey, baseUrl, extraHeaders),
+      await appendClaudeContextVariants(
+        await fetchAnthropicModels(apiKey, baseUrl, extraHeaders),
+      ),
     );
   }
 

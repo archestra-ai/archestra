@@ -710,13 +710,20 @@ export function LlmProviderApiKeyForm({
   }, [form, isEditMode, defaultKeyName, existingKeys, provider]);
 
   // Force personal scope when the credential is per-user (Copilot providers or
-  // the OpenAI ChatGPT-subscription auth mode).
+  // the OpenAI ChatGPT-subscription auth mode). For a credential-level
+  // subscription the coercion waits for a credential to actually exist —
+  // merely opening the subscription tab while editing a shared key must not
+  // silently privatize the row (submitting in that state is blocked too; see
+  // subscriptionSignInRequired).
+  const perUserScopeEffective =
+    isPerUserProvider ||
+    (isCredentialSubscriptionMode && perUserCredentialConnected);
   useEffect(() => {
-    if (isPerUserCredential && scope !== "personal") {
+    if (perUserScopeEffective && scope !== "personal") {
       form.setValue("scope", "personal");
       form.setValue("teamId", null);
     }
-  }, [form, isPerUserCredential, scope]);
+  }, [form, perUserScopeEffective, scope]);
 
   useEffect(() => {
     if (allowedProviderSet.has(provider)) {

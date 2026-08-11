@@ -126,7 +126,7 @@ const CATALOG_ID = "cat-oauth-1";
 
 // A remote server with an OAuth config and no user config — installRemote takes
 // the OAuth-dialog branch, so the deep link opens a dialog we can observe.
-const oauthItem = {
+const remoteConnectItem = {
   id: CATALOG_ID,
   name: "deeplink-server",
   serverType: "remote",
@@ -178,7 +178,7 @@ describe("useCatalogInstall — deep-link install", () => {
     sessionStorage.clear();
     nav.search = new URLSearchParams();
     vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [oauthItem],
+      data: [remoteConnectItem],
     } as unknown as ReturnType<typeof useInternalMcpCatalog>);
     vi.mocked(useMcpServers).mockReturnValue({
       data: [],
@@ -310,7 +310,7 @@ describe("useCatalogInstall — local install completion", () => {
 // A local OAuth server whose env vars are prompted at install time: the
 // local-install dialog collects them (plus the install target), after which
 // OAuth starts.
-const localOAuthItem = {
+const localItemWithPromptedEnv = {
   id: "cat-local-oauth-1",
   name: "local-oauth-server",
   serverType: "local",
@@ -359,7 +359,7 @@ describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog
       writable: true,
     });
     vi.mocked(useInternalMcpCatalog).mockReturnValue({
-      data: [oauthItem, localOAuthItem],
+      data: [remoteConnectItem, localItemWithPromptedEnv],
     } as unknown as ReturnType<typeof useInternalMcpCatalog>);
     vi.mocked(useMcpServers).mockReturnValue({
       data: [],
@@ -386,7 +386,7 @@ describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog
   });
 
   it("starts OAuth immediately for a remote server (no empty dialog)", async () => {
-    renderAddPersonal(oauthItem);
+    renderAddPersonal(remoteConnectItem);
 
     await waitFor(() => {
       expect(initiateOAuth).toHaveBeenCalledWith({ catalogId: CATALOG_ID });
@@ -397,7 +397,7 @@ describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog
 
   it("starts OAuth right after the local-install dialog collected env vars", async () => {
     const user = userEvent.setup();
-    renderAddPersonal(localOAuthItem);
+    renderAddPersonal(localItemWithPromptedEnv);
 
     // The env-var dialog still shows (it has real content to collect)…
     await user.click(await screen.findByTestId("install-dialog-confirm"));
@@ -405,7 +405,7 @@ describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog
     // …but the follow-up OAuth confirmation is skipped.
     await waitFor(() => {
       expect(initiateOAuth).toHaveBeenCalledWith({
-        catalogId: localOAuthItem.id,
+        catalogId: localItemWithPromptedEnv.id,
       });
       expect(window.location.href).toBe(AUTHORIZATION_URL);
     });
@@ -415,7 +415,7 @@ describe("useCatalogInstall — fixed-target OAuth skips the confirmation dialog
   it("keeps the dialog when BYOS is enabled (storage warning has content)", async () => {
     features.byosEnabled = true;
 
-    renderAddPersonal(oauthItem);
+    renderAddPersonal(remoteConnectItem);
 
     expect(await screen.findByTestId("install-dialog")).toBeInTheDocument();
     expect(initiateOAuth).not.toHaveBeenCalled();

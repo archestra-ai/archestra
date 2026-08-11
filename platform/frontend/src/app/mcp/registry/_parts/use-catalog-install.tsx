@@ -340,7 +340,7 @@ export function useCatalogInstall(opts?: {
 
     // Check if this server requires OAuth authentication if there is no user config
     if (!hasUserConfig && catalogItem.oauthConfig) {
-      const directTarget = resolveDirectOAuthTarget(scope, teamId);
+      const directTarget = resolveFixedInstallTarget(scope, teamId);
       if (directTarget) {
         await startOAuthFlow(catalogItem, directTarget);
         return;
@@ -411,7 +411,7 @@ export function useCatalogInstall(opts?: {
         // No env vars needed - go straight to OAuth flow
         // Store server type so OAuth callback knows this is a local server
         setOAuthServerType("local");
-        const directTarget = resolveDirectOAuthTarget(scope, teamId);
+        const directTarget = resolveFixedInstallTarget(scope, teamId);
         if (directTarget) {
           await startOAuthFlow(catalogItem, directTarget);
           return;
@@ -791,7 +791,7 @@ export function useCatalogInstall(opts?: {
       // The local-install dialog already collected the install target, so the
       // OAuth confirmation has nothing further to ask — start the flow
       // directly (unless BYOS keeps the dialog for its storage warning).
-      const directTarget = resolveDirectOAuthTarget(
+      const directTarget = resolveFixedInstallTarget(
         installResult.scope,
         installResult.scope === "team" ? installResult.teamId : undefined,
       );
@@ -920,7 +920,7 @@ export function useCatalogInstall(opts?: {
   // instead of showing it. Returns null when the dialog is still needed:
   // either the scope is not fixed yet, or BYOS is enabled (the dialog then
   // carries the OAuth-credentials-stored-in-database warning).
-  const resolveDirectOAuthTarget = (
+  const resolveFixedInstallTarget = (
     scope: McpServerInstallScope | undefined,
     teamId: string | null | undefined,
   ): { scope: McpServerInstallScope; teamId?: string | null } | null => {

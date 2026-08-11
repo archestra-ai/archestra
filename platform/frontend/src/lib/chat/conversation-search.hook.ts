@@ -51,6 +51,7 @@ export function useConversationSearch() {
       if (event.altKey && event.code === SHORTCUT_NEW_CHAT.code) {
         event.preventDefault();
         event.stopPropagation();
+        suppressDeadKeyComposition();
         setIsOpen(false);
         router.push("/chat");
       }
@@ -64,6 +65,7 @@ export function useConversationSearch() {
       ) {
         event.preventDefault();
         event.stopPropagation();
+        suppressDeadKeyComposition();
         setIsOpen(false);
         // Handshake with the new-chat composer: when it's on screen it
         // claims the shortcut (preventDefault on this cancelable event) and
@@ -92,4 +94,22 @@ export function useConversationSearch() {
     setIsOpen,
     recentChatsView,
   };
+}
+
+/**
+ * On macOS, Option+N / Option+I are dead keys and Chromium starts their
+ * composition even when the keydown is preventDefault'ed — so a "˜" or "ˆ"
+ * would still land in whichever editable has focus (e.g. the chat textarea).
+ * Blur it for the duration of the event so the composition has no target,
+ * then restore focus.
+ */
+function suppressDeadKeyComposition() {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement) {
+    active.blur();
+    setTimeout(() => {
+      // No-op if navigation replaced the view and detached the element.
+      active.focus();
+    }, 0);
+  }
 }

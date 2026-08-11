@@ -49,10 +49,21 @@ function mapXaiModel(
   // on the wire. It also publishes models for multiple protocols, while
   // Archestra's xAI adapter currently implements chat completions only. Mirror
   // xAI's first-party precedence and fail closed on entries we cannot invoke.
+  //
+  // The subscription CLI proxy (cli-chat-proxy.grok.com) serves its models over
+  // the OpenAI-compatible /chat/completions endpoint our adapter uses even when
+  // a model advertises a different native backend — e.g. grok-4.5 reports
+  // `api_backend: "responses"` yet answers chat completions. So on the
+  // subscription path `responses` is invocable; the metered API is still held to
+  // chat_completions only, since that translation is unverified there.
   const apiBackend =
     "apiBackend" in model || "api_backend" in model
       ? (model.apiBackend ?? model.api_backend)
       : undefined;
+  const backendIsInvocable =
+    typeof apiBackend !== "string" ||
+    apiBackend === "chat_completions" ||
+    (isSubscription && apiBackend === "responses");
   const modelBaseUrl =
     "baseUrl" in model || "base_url" in model
       ? (model.baseUrl ?? model.base_url)
@@ -71,7 +82,7 @@ function mapXaiModel(
     // xAI defines supportedInApi=false as OAuth-only: session users should see
     // it, while public API-key users should not.
     (supportedInApi === false && !isSubscription) ||
-    (typeof apiBackend === "string" && apiBackend !== "chat_completions") ||
+    !backendIsInvocable ||
     (typeof modelBaseUrl === "string" &&
       modelBaseUrl.replace(/\/+$/, "") !== inferenceBaseUrl.replace(/\/+$/, ""))
   ) {

@@ -71,6 +71,9 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
       "grok-4-fast",
       "grok-4-mini",
       "grok-4-meta",
+      // The subscription CLI proxy serves `responses`-backed models over chat
+      // completions, so they list under a subscription credential.
+      "grok-response",
       "grok-oauth-only",
     ]);
     expect(models[1].displayName).toBe("Grok 4 Fast");
@@ -104,6 +107,54 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
       }),
     );
     expect(init?.redirect).toBe("manual");
+  });
+
+  it("lists a lone responses-backed model like the live SuperGrok catalog", async () => {
+    // Regression: xAI's subscription proxy now returns only grok-4.5 with
+    // snake_case `api_backend: "responses"` and no baseUrl. The old
+    // chat_completions-only filter dropped it, so key creation failed with
+    // "Models list is empty".
+    const issuer = config.llm.xai.subscription.issuer;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const href = String(url);
+        if (href.includes(DISCOVERY_PATH)) {
+          return Response.json({
+            device_authorization_endpoint: `${issuer}/oauth2/device/code`,
+            token_endpoint: `${issuer}/oauth2/token`,
+          });
+        }
+        if (href.startsWith(`${issuer}/oauth2/token`)) {
+          return Response.json({ access_token: "at_1", expires_in: 3600 });
+        }
+        return Response.json({
+          object: "list",
+          data: [
+            {
+              id: "grok-4.5",
+              object: "model",
+              model: "grok-4.5",
+              name: "Grok 4.5",
+              api_backend: "responses",
+            },
+          ],
+        });
+      }),
+    );
+
+    const models = await fetchXaiModels(
+      encodeXaiSubscriptionCredential({
+        refreshToken: "rt_secret",
+        userId: "x-user-123",
+      }),
+    );
+
+    expect(models.map((model) => model.id)).toEqual(["grok-4.5"]);
+    expect(models[0].displayName).toBe("Grok 4.5");
+    expect(
+      models[0].capabilities?.supportedEndpoints?.includes("/chat/completions"),
+    ).toBe(true);
   });
 
   it("refuses to send the redeemed bearer to a per-key base URL override", async () => {

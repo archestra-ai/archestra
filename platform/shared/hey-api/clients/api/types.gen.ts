@@ -60094,6 +60094,7 @@ export type GetModelsWithApiKeysResponses = {
         cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
         isFree: boolean;
         effectiveContextLength: number | null;
+        embeddingClientImageCapable: boolean | null;
     }>;
 };
 

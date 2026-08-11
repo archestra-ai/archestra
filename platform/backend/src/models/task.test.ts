@@ -186,6 +186,68 @@ describe("TaskModel", () => {
       expect(updated.completedAt).toBeInstanceOf(Date);
     });
 
+    test("retries an exhausted embedding task until its connector outcome is recorded", async () => {
+      const task = await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: {
+          connectorRunId: "00000000-0000-0000-0000-000000000001",
+          documentIds: ["doc-1"],
+        },
+        maxAttempts: 3,
+      });
+      await wedgeIntoProcessing(task.id, 3);
+
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([
+        { taskType: "batch_embedding", periodic: false, status: "pending" },
+      ]);
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.status).toBe("pending");
+    });
+
+    test("still retries after outcome accounting so connector finalization can finish", async () => {
+      const task = await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: {
+          connectorRunId: "00000000-0000-0000-0000-000000000001",
+          connectorRunOutcomeRecorded: true,
+          documentIds: ["doc-1"],
+        },
+        maxAttempts: 3,
+      });
+      await wedgeIntoProcessing(task.id, 3);
+
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([
+        { taskType: "batch_embedding", periodic: false, status: "pending" },
+      ]);
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.status).toBe("pending");
+    });
+
+    test("dead-letters an exhausted standalone embedding task with a null run id", async () => {
+      const task = await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: { connectorRunId: null, documentIds: ["doc-1"] },
+        maxAttempts: 3,
+      });
+      await wedgeIntoProcessing(task.id, 3);
+
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([
+        { taskType: "batch_embedding", periodic: false, status: "dead" },
+      ]);
+    });
+
     test("reports the periodic flag on dead transitions", async () => {
       const task = await TaskModel.create({
         taskType: "check_due_connectors",

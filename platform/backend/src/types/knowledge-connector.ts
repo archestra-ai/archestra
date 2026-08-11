@@ -1025,6 +1025,7 @@ export interface Connector {
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
     embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): Promise<number | null>;
 
   sync(params: {
@@ -1039,6 +1040,12 @@ export interface Connector {
      * (e.g. images) only when the embedding model can handle it.
      */
     embeddingInputModalities?: ModelInputModality[];
+    /**
+     * Image MIME types the embedding client accepts for the configured model
+     * (undefined = no per-format restriction). Connectors ingest only image
+     * formats in this list; the embedder skips other formats at embed time.
+     */
+    embeddingAcceptedImageMimeTypes?: string[];
   }): AsyncGenerator<ConnectorSyncBatch>;
 
   // ===== Permission sync (optional; default-off, see BaseConnector) =====

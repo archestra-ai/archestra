@@ -83,7 +83,6 @@ describe("handleBatchEmbedding", () => {
       totalBatches: 3,
       completedBatches: 2,
     });
-
     await handleBatchEmbedding({
       documentIds: ["doc-1"],
       connectorRunId: run.id,
@@ -151,6 +150,14 @@ describe("handleBatchEmbedding", () => {
       startedAt: RUN_STARTED_AT,
       totalBatches: 3,
       completedBatches: 2,
+    });
+    await ConnectorRunModel.create({
+      connectorId: connector.id,
+      status: "success",
+      startedAt: newerDate,
+      completedAt: newerDate,
+      totalBatches: 1,
+      completedBatches: 1,
     });
 
     await handleBatchEmbedding({

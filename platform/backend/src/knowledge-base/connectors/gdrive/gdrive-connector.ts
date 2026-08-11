@@ -17,6 +17,7 @@ import {
   BaseConnector,
   buildCheckpoint,
   extractErrorMessage,
+  resolveIngestibleImageMimeTypes,
 } from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
@@ -517,6 +518,7 @@ export class GoogleDriveConnector extends BaseConnector {
     startTime?: Date;
     endTime?: Date;
     embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): AsyncGenerator<ConnectorSyncBatch> {
     const parsed = parseGDriveConfig(params.config);
     if (!parsed) {
@@ -528,8 +530,11 @@ export class GoogleDriveConnector extends BaseConnector {
     };
 
     const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
-    const supportsImages =
-      params.embeddingInputModalities?.includes("image") ?? false;
+    const imageMimeTypes = resolveIngestibleImageMimeTypes({
+      connectorImageMimeTypes: SUPPORTED_IMAGE_MIME_TYPES,
+      embeddingInputModalities: params.embeddingInputModalities,
+      embeddingAcceptedImageMimeTypes: params.embeddingAcceptedImageMimeTypes,
+    });
 
     // Domain-wide delegation with nothing narrowing it down: coverage follows
     // the organization, so the pass walks every shared drive and impersonates
@@ -540,7 +545,7 @@ export class GoogleDriveConnector extends BaseConnector {
         credentials: params.credentials,
         checkpoint,
         batchSize,
-        supportsImages,
+        imageMimeTypes,
       });
       return;
     }
@@ -571,7 +576,7 @@ export class GoogleDriveConnector extends BaseConnector {
         useSharedDriveApi: hasSharedDriveTarget(parsed),
         recursive: parsed.recursive,
         syncFrom,
-        supportsImages,
+        imageMimeTypes: [...imageMimeTypes],
       },
       "Starting Google Drive sync",
     );
@@ -582,7 +587,7 @@ export class GoogleDriveConnector extends BaseConnector {
       progress,
       syncFrom: safetyBufferedSyncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
     });
   }
 
@@ -598,7 +603,7 @@ export class GoogleDriveConnector extends BaseConnector {
     progress: { maxLastModified: string | undefined };
     syncFrom: string | undefined;
     batchSize: number;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
     dedupe?: Set<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const { config } = params;
@@ -658,9 +663,9 @@ export class GoogleDriveConnector extends BaseConnector {
     credentials: ConnectorCredentials;
     checkpoint: GoogleDriveCheckpoint;
     batchSize: number;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
-    const { config, credentials, checkpoint, batchSize, supportsImages } =
+    const { config, credentials, checkpoint, batchSize, imageMimeTypes } =
       params;
 
     const adminAuth = asDelegatedAuth(
@@ -769,7 +774,7 @@ export class GoogleDriveConnector extends BaseConnector {
         // changed since a cursor it was never covered by.
         syncFrom: needsFullCrawl.has(target.key) ? undefined : incrementalFrom,
         batchSize,
-        supportsImages,
+        imageMimeTypes,
         dedupe: seenFileIds,
       });
 
@@ -1072,7 +1077,7 @@ export class GoogleDriveConnector extends BaseConnector {
     progress: { maxLastModified: string | undefined };
     syncFrom: string | undefined;
     batchSize: number;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
     dedupe?: Set<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
@@ -1081,7 +1086,7 @@ export class GoogleDriveConnector extends BaseConnector {
       progress,
       syncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
       dedupe,
     } = params;
     const useSharedDriveApi = hasSharedDriveTarget(config);
@@ -1118,7 +1123,7 @@ export class GoogleDriveConnector extends BaseConnector {
       const allFiles = res.data.files ?? [];
       const files = this.selectIngestableFiles({
         files: allFiles,
-        supportsImages,
+        imageMimeTypes,
         dedupe,
       });
 
@@ -1131,7 +1136,7 @@ export class GoogleDriveConnector extends BaseConnector {
             const result = await this.downloadFileContent(
               drive,
               file,
-              supportsImages,
+              imageMimeTypes,
             );
             // Once the bounded dedupe set is full, later identities can see a
             // source that already succeeded. Preserve that success outcome so
@@ -1228,7 +1233,7 @@ export class GoogleDriveConnector extends BaseConnector {
     progress: { maxLastModified: string | undefined };
     syncFrom: string | undefined;
     batchSize: number;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
     recursive: boolean;
     maxDepth: number;
     dedupe?: Set<string>;
@@ -1240,7 +1245,7 @@ export class GoogleDriveConnector extends BaseConnector {
       progress,
       syncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
       recursive,
       maxDepth,
       dedupe,
@@ -1271,7 +1276,7 @@ export class GoogleDriveConnector extends BaseConnector {
         progress,
         syncFrom,
         batchSize,
-        supportsImages,
+        imageMimeTypes,
         dedupe,
         hasMoreFolders,
       });
@@ -1288,7 +1293,7 @@ export class GoogleDriveConnector extends BaseConnector {
     progress: { maxLastModified: string | undefined };
     syncFrom: string | undefined;
     batchSize: number;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
     dedupe?: Set<string>;
     hasMoreFolders: boolean;
   }): AsyncGenerator<ConnectorSyncBatch> {
@@ -1299,7 +1304,7 @@ export class GoogleDriveConnector extends BaseConnector {
       progress,
       syncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
       dedupe,
       hasMoreFolders,
     } = params;
@@ -1345,7 +1350,7 @@ export class GoogleDriveConnector extends BaseConnector {
       const allFiles = res.data.files ?? [];
       const files = this.selectIngestableFiles({
         files: allFiles,
-        supportsImages,
+        imageMimeTypes,
         dedupe,
       });
 
@@ -1358,7 +1363,7 @@ export class GoogleDriveConnector extends BaseConnector {
             const result = await this.downloadFileContent(
               drive,
               file,
-              supportsImages,
+              imageMimeTypes,
             );
             if (dedupe && dedupe.size >= MAX_TRACKED_FILE_IDS && file.id) {
               recoveredSourceIds.push(file.id);
@@ -1473,16 +1478,16 @@ export class GoogleDriveConnector extends BaseConnector {
    */
   private selectIngestableFiles(params: {
     files: DriveFile[];
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
     dedupe?: Set<string>;
   }): DriveFile[] {
-    const { files, supportsImages, dedupe } = params;
+    const { files, imageMimeTypes, dedupe } = params;
     const selected: DriveFile[] = [];
 
     for (const file of files) {
       if (dedupe && file.id && dedupe.has(file.id)) continue;
 
-      if (isSupportedFile(file, supportsImages)) {
+      if (isSupportedFile(file, imageMimeTypes)) {
         selected.push(file);
       } else {
         this.trackSkipped({
@@ -1500,7 +1505,7 @@ export class GoogleDriveConnector extends BaseConnector {
   private async downloadFileContent(
     drive: drive_v3.Drive,
     file: DriveFile,
-    supportsImages: boolean,
+    imageMimeTypes: ReadonlySet<string>,
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
@@ -1511,7 +1516,7 @@ export class GoogleDriveConnector extends BaseConnector {
     const fileId = file.id;
     if (!fileId) return { text: "" };
 
-    const resolved = resolveDriveFile(file, supportsImages);
+    const resolved = resolveDriveFile(file, imageMimeTypes);
 
     // Google Workspace documents: export as text
     if (resolved?.kind === "google") {
@@ -1714,7 +1719,7 @@ type ResolvedDriveFile =
  */
 function resolveDriveFile(
   file: DriveFile,
-  supportsImages: boolean,
+  imageMimeTypes: ReadonlySet<string>,
 ): ResolvedDriveFile {
   const mimeType = file.mimeType ?? "";
   const ext = getFileExtension(file.name ?? "");
@@ -1737,14 +1742,14 @@ function resolveDriveFile(
   const format = binaryFormatFor(mimeType, ext);
   if (format) return { kind: "binary", format };
 
-  // Images for multimodal embedding, only when the model accepts them.
-  if (supportsImages) {
-    const imageMimeType = SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)
-      ? mimeType
-      : SUPPORTED_IMAGE_EXTENSIONS.has(ext)
-        ? IMAGE_MIME_TYPES[ext]
-        : undefined;
-    if (imageMimeType) return { kind: "image", mimeType: imageMimeType };
+  // Images for multimodal embedding, only formats the embedding model accepts.
+  const imageMimeType = SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)
+    ? mimeType
+    : SUPPORTED_IMAGE_EXTENSIONS.has(ext)
+      ? IMAGE_MIME_TYPES[ext]
+      : undefined;
+  if (imageMimeType && imageMimeTypes.has(imageMimeType)) {
+    return { kind: "image", mimeType: imageMimeType };
   }
 
   // Plain-text files: any text/* mimeType, or a known text extension.
@@ -1755,8 +1760,11 @@ function resolveDriveFile(
   return null;
 }
 
-function isSupportedFile(file: DriveFile, supportsImages: boolean): boolean {
-  return resolveDriveFile(file, supportsImages) !== null;
+function isSupportedFile(
+  file: DriveFile,
+  imageMimeTypes: ReadonlySet<string>,
+): boolean {
+  return resolveDriveFile(file, imageMimeTypes) !== null;
 }
 
 function binaryFormatFor(mimeType: string, ext: string): BinaryFormat | null {

@@ -309,15 +309,72 @@ describe("fetchBedrockModels", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  test("throws error on API failure", async () => {
+  test("keeps static embedding models when inference-profile discovery is denied", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: () =>
+        Promise.resolve(
+          '{"__type":"AccessDeniedException","message":"denied"}',
+        ),
+    });
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 403,
       text: () => Promise.resolve("Forbidden"),
     });
 
+    const models = await fetchBedrockModels("invoke-only-key");
+
+    expect(models.map((model) => model.id)).toEqual(
+      expect.arrayContaining([
+        "amazon.titan-embed-image-v1",
+        "cohere.embed-english-v3",
+      ]),
+    );
+  });
+
+  test("propagates invalid credentials instead of returning static models", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: () =>
+        Promise.resolve(
+          '{"__type":"UnrecognizedClientException","message":"bad key"}',
+        ),
+    });
+
     await expect(fetchBedrockModels("bad-key")).rejects.toThrow(
       "Failed to fetch Bedrock inference profiles: 403",
+    );
+  });
+
+  test("propagates transient inference-profile failures", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve('{"message":"temporary outage"}'),
+    });
+
+    await expect(fetchBedrockModels("test-key")).rejects.toThrow(
+      "Failed to fetch Bedrock inference profiles: 500",
+    );
+  });
+
+  test("propagates a later inference-profile pagination failure", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({ inferenceProfileSummaries: [], nextToken: "page-2" }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      text: () => Promise.resolve('{"message":"page failed"}'),
+    });
+
+    await expect(fetchBedrockModels("test-key")).rejects.toThrow(
+      "Failed to fetch Bedrock inference profiles: 503",
     );
   });
 
@@ -344,9 +401,68 @@ describe("fetchBedrockModels", () => {
     expect(titanV2?.capabilities?.embeddingDimensions).toBe(1024);
     const titanV1 = models.find((m) => m.id === "amazon.titan-embed-text-v1");
     expect(titanV1?.capabilities?.embeddingDimensions).toBe(1536);
+    const titanImage = models.find(
+      (m) => m.id === "amazon.titan-embed-image-v1",
+    );
+    expect(titanImage?.capabilities?.embeddingDimensions).toBe(1024);
   });
 
-  test("does not inject Titan when amazon is not in the allowed providers", async () => {
+  test("injects the Cohere Embed v3 models by their bare on-demand ids", async () => {
+    // AWS publishes NO inference profiles for embedding models (each model
+    // card lists Geo/Global inference IDs as "Not supported"), so Cohere never
+    // appears in the profile listing — it is statically injected like Titan.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ inferenceProfileSummaries: [] }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    const english = models.find((m) => m.id === "cohere.embed-english-v3");
+    expect(english?.capabilities?.embeddingDimensions).toBe(1024);
+    const multilingual = models.find(
+      (m) => m.id === "cohere.embed-multilingual-v3",
+    );
+    expect(multilingual?.capabilities?.embeddingDimensions).toBe(1024);
+  });
+
+  test("drops an application inference profile wrapping an embedding model", async () => {
+    // The embedding client dispatches on the configured model id, and an app
+    // profile's opaque ARN misses the catalog (only geo prefixes normalize
+    // away) — selected, it would take the text path and send the wrong
+    // request body. The bare on-demand id stays selectable via static
+    // injection, so nothing is lost by dropping the profile.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId:
+                "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123",
+              inferenceProfileName: "Team Cohere Embeddings",
+              status: "ACTIVE",
+              models: [
+                {
+                  modelArn:
+                    "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-english-v3",
+                },
+              ],
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    expect(
+      models.some((m) => m.id.includes("application-inference-profile")),
+    ).toBe(false);
+    const bare = models.find((m) => m.id === "cohere.embed-english-v3");
+    expect(bare?.capabilities?.embeddingDimensions).toBe(1024);
+  });
+
+  test("does not inject embedding models whose vendor is not in the allowed providers", async () => {
     const originalAllowedProviders = config.llm.bedrock.allowedProviders;
     config.llm.bedrock.allowedProviders = ["anthropic"];
 
@@ -370,6 +486,7 @@ describe("fetchBedrockModels", () => {
       expect(models.some((m) => m.id.startsWith("amazon.titan-embed"))).toBe(
         false,
       );
+      expect(models.some((m) => m.id.startsWith("cohere.embed"))).toBe(false);
     } finally {
       config.llm.bedrock.allowedProviders = originalAllowedProviders;
     }

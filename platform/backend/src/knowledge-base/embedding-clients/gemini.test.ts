@@ -57,12 +57,12 @@ describe("callGeminiEmbedding", () => {
 
     await callGeminiEmbedding({
       inputs: ["first"],
-      model: "models/gemini-embedding-2-preview",
+      model: "models/gemini-embedding-2",
       apiKey: "test-key",
     });
 
     expect(embedContent).toHaveBeenCalledWith({
-      model: "gemini-embedding-2-preview",
+      model: "gemini-embedding-2",
       contents: ["first"],
       config: undefined,
     });

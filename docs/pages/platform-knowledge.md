@@ -114,7 +114,21 @@ Pick the API key and embedding model. The embedding model vectorizes ingested do
 - **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072. Keys connected through a subscription sign-in (an X Premium login, for example) do not appear — Knowledge needs an API key.
 - **Model** — any embedding-capable model exposed by the selected key.
 
-To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions cannot be edited until the configuration is dropped.
+To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions and input modalities cannot be edited until the configuration is dropped.
+
+### Image Embedding
+
+Connectors index image files only when the configured embedding model accepts image input. These models do:
+
+| Provider    | Model                                                                 | Image formats                |
+| ----------- | --------------------------------------------------------------------- | ---------------------------- |
+| Gemini      | `gemini-embedding-2`                                                  | PNG, JPEG                    |
+| AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) | JPEG, PNG                    |
+| AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           | JPEG, PNG                    |
+
+Archestra currently treats embedding models not listed above as text-only, even when their providers may offer multimodal variants that are not yet supported by the knowledge-base client. They cannot be marked as accepting image input in **LLM Providers > Models**. Connectors skip image formats the model does not accept — a GIF, for example. Images ingested under an earlier configuration are skipped at embedding time. The document completes without them, and the run shows the skipped count.
+
+Titan Multimodal G1 accepts 256 text tokens per input. Cohere Embed v3 accepts 2048 characters — roughly 500 tokens. Longer text chunks are truncated before embedding — only the start of the chunk lands in the vector. Use a text embedding model when your corpus is mostly documents.
 
 ### Reranking Configuration
 
@@ -373,7 +387,7 @@ Where to find each value:
 
 ### OneDrive
 
-Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (e.g., `gemini-embedding-2-preview`), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
+Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (see [Image Embedding](#image-embedding)), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
 
 | Field         | Description                                                                                                          |
 | ------------- | -------------------------------------------------------------------------------------------------------------------- |

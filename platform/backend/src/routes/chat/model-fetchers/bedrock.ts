@@ -69,11 +69,25 @@ async function discoverBedrockModels(
   // Sequential, not Promise.all: the profile listing paginates, so racing a
   // second endpoint against it interleaves requests for no real gain on what is
   // a background model sync.
-  const profiles = await fetchAllBedrockInferenceProfiles(
-    controlPlaneUrl,
-    headers,
-    iamParams,
-  );
+  let profiles: BedrockInferenceProfile[] = [];
+  try {
+    profiles = await fetchAllBedrockInferenceProfiles(
+      controlPlaneUrl,
+      headers,
+      iamParams,
+    );
+  } catch (error) {
+    // Listing profiles is optional for credentials scoped to bare InvokeModel,
+    // but invalid credentials and transient/pagination failures must still fail
+    // model sync instead of reconciling against a misleading static-only list.
+    if (!isBedrockPermissionDenied(error, "inference profiles")) {
+      throw error;
+    }
+    logger.warn(
+      { error },
+      "[fetchBedrockModels] could not list inference profiles; profile-backed models will not be offered",
+    );
+  }
   const foundationModels = await fetchBedrockFoundationModels(
     controlPlaneUrl,
     headers,
@@ -286,11 +300,13 @@ function mapInferenceProfilesToModels(
 
       // Classify supported embedding models instead of dropping them: tag with
       // their dimension so they flow to the embedding picker (and out of chat via
-      // supportsTextChat). This surfaces profile-backed embedding models (Cohere)
-      // region-accurately from the call we already make.
-      const embedding =
-        findBedrockEmbeddingModel(underlyingModelName ?? base.id) ??
-        findBedrockEmbeddingModel(base.id);
+      // supportsTextChat). Classification is by profile id ONLY (geo prefixes
+      // normalize away): an application inference profile wrapping an embedding
+      // model has an opaque ARN id the embedding client cannot dispatch on — it
+      // would take the text-model path and send the wrong request body — so
+      // those fall through untagged and are dropped by the non-chat filter
+      // below. The bare on-demand ids stay selectable via static injection.
+      const embedding = findBedrockEmbeddingModel(base.id);
       if (embedding) {
         return {
           ...base,
@@ -440,8 +456,48 @@ async function bedrockControlPlaneGet(params: {
       { status: response.status, error: errorText },
       `Failed to fetch Bedrock ${resource} via ${authType}`,
     );
-    throw modelFetchError(`Bedrock ${resource}`, response.status);
+    const error = modelFetchError(`Bedrock ${resource}`, response.status);
+    Object.assign(error, {
+      bedrockStatus: response.status,
+      bedrockResource: resource,
+      bedrockErrorCode: bedrockErrorCode(errorText),
+    } satisfies Partial<BedrockControlPlaneFailure>);
+    throw error;
   }
 
   return response.json();
+}
+
+interface BedrockControlPlaneFailure extends Error {
+  bedrockStatus: number;
+  bedrockResource: string;
+  bedrockErrorCode: string | null;
+}
+
+function isBedrockPermissionDenied(
+  error: unknown,
+  resource: string,
+): error is BedrockControlPlaneFailure {
+  const failure = error as Partial<BedrockControlPlaneFailure>;
+  return (
+    failure.bedrockStatus === 403 &&
+    failure.bedrockResource === resource &&
+    failure.bedrockErrorCode === "AccessDeniedException"
+  );
+}
+
+function bedrockErrorCode(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as {
+      code?: string;
+      __type?: string;
+      type?: string;
+    };
+    const raw = parsed.code ?? parsed.__type ?? parsed.type;
+    return raw?.split("#").pop() ?? null;
+  } catch {
+    return body.includes("AccessDeniedException")
+      ? "AccessDeniedException"
+      : null;
+  }
 }

@@ -1,13 +1,12 @@
-import {
-  embeddingService,
-  enqueuePermissionSyncAfterContentSync,
-} from "@/knowledge-base";
-import logger from "@/logging";
-import { ConnectorRunModel, KnowledgeBaseConnectorModel } from "@/models";
+import { embeddingService } from "@/knowledge-base";
+import { ConnectorRunModel } from "@/models";
 import * as metrics from "@/observability/metrics";
+import type { TaskHandlerContext } from "@/types";
+import { finalizeConnectorAfterEmbeddingDrain } from "./batch-embedding-finalizer";
 
 export async function handleBatchEmbedding(
   payload: Record<string, unknown>,
+  context?: TaskHandlerContext,
 ): Promise<void> {
   const documentIds = payload.documentIds as string[];
   const connectorRunId = (payload.connectorRunId as string | null) ?? null;
@@ -47,67 +46,26 @@ export async function handleBatchEmbedding(
     return;
   }
 
-  // Record any embedding failures on the connector run atomically with the batch
-  // completion, so the failure's cause is visible in the run (not just the logs).
+  // Record any embedding failures — and skipped image chunks — on the connector
+  // run atomically with the batch completion, so the cause is visible in the run
+  // (not just the logs).
+  const hasFailure = outcome.failedDocumentCount > 0;
+  const hasSkips = outcome.skippedImageChunkCount > 0;
   const updatedRun = await ConnectorRunModel.completeBatch(
     connectorRunId,
-    outcome.failedDocumentCount > 0
+    hasFailure || hasSkips
       ? {
-          failedItems: outcome.failedDocumentCount,
-          error: outcome.errorMessage ?? "Embedding failed",
+          ...(hasFailure
+            ? {
+                failedItems: outcome.failedDocumentCount,
+                error: outcome.errorMessage ?? "Embedding failed",
+              }
+            : {}),
+          ...(hasSkips ? { skippedItems: outcome.skippedImageChunkCount } : {}),
         }
       : undefined,
+    context?.taskId,
   );
 
-  // If all batches are done, update the connector's sync status.
-  // Skip if run was superseded/failed — a newer run owns the connector status.
-  // Also guard against a newer run having claimed the connector since this run
-  // started: if connector.lastSyncAt > run.startedAt, a newer run has
-  // optimistically written its own startedAt and we must not overwrite it.
-  if (
-    updatedRun &&
-    updatedRun.completedBatches !== null &&
-    updatedRun.totalBatches !== null &&
-    updatedRun.completedBatches >= updatedRun.totalBatches &&
-    (updatedRun.status === "success" ||
-      updatedRun.status === "completed_with_errors")
-  ) {
-    const connector = await KnowledgeBaseConnectorModel.findById(
-      updatedRun.connectorId,
-    );
-    const newerRunStarted =
-      connector?.lastSyncAt != null &&
-      connector.lastSyncAt > updatedRun.startedAt;
-
-    if (!newerRunStarted) {
-      const now = new Date();
-      await KnowledgeBaseConnectorModel.update(updatedRun.connectorId, {
-        lastSyncStatus: updatedRun.status,
-        lastSyncAt: now,
-      });
-      logger.info(
-        { runId: connectorRunId, connectorId: updatedRun.connectorId },
-        "[BatchEmbeddingHandler] All batches complete, connector run finalized",
-      );
-      // Content trigger: a completed documents sync of an auto-sync
-      // connector enqueues a (de-duped) permission pass so new documents are
-      // tagged promptly instead of waiting for the next scheduled tick.
-      if (connector) {
-        await enqueuePermissionSyncAfterContentSync({
-          connector,
-          documentsIngested: updatedRun.documentsIngested ?? 0,
-        });
-      }
-    } else {
-      logger.info(
-        {
-          runId: connectorRunId,
-          connectorId: updatedRun.connectorId,
-          runStartedAt: updatedRun.startedAt,
-          connectorLastSyncAt: connector?.lastSyncAt,
-        },
-        "[BatchEmbeddingHandler] Skipping connector update — newer run has started",
-      );
-    }
-  }
+  await finalizeConnectorAfterEmbeddingDrain(updatedRun);
 }

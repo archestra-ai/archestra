@@ -4,9 +4,11 @@ import {
 } from "@ai-sdk/amazon-bedrock";
 import {
   bedrockRegionFromBaseUrl,
+  bedrockRuntimeBaseUrl,
   DEFAULT_BEDROCK_REGION,
 } from "@archestra/shared";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
+import { BedrockClient } from "@/clients/bedrock-client";
 import config from "@/config";
 
 export function isBedrockIamAuthEnabled(): boolean {
@@ -128,5 +130,49 @@ export function buildBedrockProvider(params: {
     baseURL,
     headers,
     fetch,
+  });
+}
+
+/**
+ * Build a fetch-based `BedrockClient` (raw InvokeModel access) from the same
+ * single `apiKey` string, with the same auth precedence as
+ * `buildBedrockProvider`: IAM/IRSA when keyless, decoded SigV4 marker, then
+ * bearer. For call sites whose request bodies the AI SDK cannot produce
+ * (multimodal embeddings). Unlike the AI SDK, `BedrockClient` requires a
+ * concrete base URL, so an unconfigured one resolves to the region's default
+ * runtime endpoint — the same default the AI SDK applies internally.
+ */
+export function buildBedrockClient(params: {
+  apiKey?: string | null;
+  baseUrl?: string | null;
+}): BedrockClient {
+  const { apiKey, baseUrl } = params;
+  const region = getBedrockRegion(baseUrl ?? undefined);
+  const resolvedBaseUrl =
+    baseUrl || config.llm.bedrock.baseUrl || bedrockRuntimeBaseUrl(region);
+
+  if (!apiKey && isBedrockIamAuthEnabled()) {
+    return new BedrockClient({
+      baseUrl: resolvedBaseUrl,
+      region,
+      credentialProvider: getBedrockCredentialProvider(),
+    });
+  }
+
+  const sigV4 = decodeBedrockSigV4Marker(apiKey ?? undefined);
+  if (sigV4) {
+    return new BedrockClient({
+      baseUrl: resolvedBaseUrl,
+      region,
+      accessKeyId: sigV4.accessKeyId,
+      secretAccessKey: sigV4.secretAccessKey,
+      sessionToken: sigV4.sessionToken,
+    });
+  }
+
+  return new BedrockClient({
+    baseUrl: resolvedBaseUrl,
+    region,
+    apiKey: apiKey ?? undefined,
   });
 }

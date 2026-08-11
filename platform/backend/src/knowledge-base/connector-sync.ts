@@ -250,6 +250,12 @@ class ConnectorSyncService {
     let itemsSkipped = 0;
     let documentsWithoutText = 0;
     let unsupportedItemsSkipped = 0;
+    // Item counters are written as deltas (`increments`), never absolute:
+    // batch-embedding handlers add their own failures/skips to the same run
+    // columns concurrently via `completeBatch`, and an absolute SET here would
+    // erase those. These markers track what this loop has already flushed.
+    let flushedItemErrors = 0;
+    let flushedItemsSkipped = 0;
     // Per-item fetch fallbacks. Optional sub-resource failures stay warnings;
     // a fallback that omits the top-level document increments itemErrors so a
     // modified source that was not refreshed cannot leave a green run.
@@ -266,15 +272,18 @@ class ConnectorSyncService {
     const startTime = Date.now();
     let stoppedEarly = false;
 
-    // Resolve the embedding model's supported input modalities so connectors
-    // can conditionally ingest non-text content (e.g. images).
+    // Resolve the embedding model's supported input modalities (and accepted
+    // image formats) so connectors can conditionally ingest non-text content.
     // Must happen before estimateTotalItems so the estimate matches sync behavior.
     let embeddingInputModalities: ModelInputModality[] | undefined;
+    let embeddingAcceptedImageMimeTypes: string[] | undefined;
     try {
       const embeddingConfig = await resolveEmbeddingConfig(
         connector.organizationId,
       );
       embeddingInputModalities = embeddingConfig?.inputModalities ?? undefined;
+      embeddingAcceptedImageMimeTypes =
+        embeddingConfig?.acceptedImageMimeTypes ?? undefined;
     } catch {
       // Non-fatal: proceed without modality info
     }
@@ -286,6 +295,7 @@ class ConnectorSyncService {
         credentials,
         checkpoint: connector.checkpoint as Record<string, unknown> | null,
         embeddingInputModalities,
+        embeddingAcceptedImageMimeTypes,
       });
 
       if (totalItems !== null && totalItems > 0) {
@@ -311,6 +321,7 @@ class ConnectorSyncService {
         credentials,
         checkpoint: connector.checkpoint as Record<string, unknown> | null,
         embeddingInputModalities,
+        embeddingAcceptedImageMimeTypes,
       });
 
       for await (const batch of syncGenerator) {
@@ -528,12 +539,18 @@ class ConnectorSyncService {
           data: {
             documentsProcessed,
             documentsIngested,
-            itemErrors,
-            itemsSkipped,
             documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
+          increments: {
+            itemErrors: itemErrors - flushedItemErrors,
+            itemsSkipped: itemsSkipped - flushedItemsSkipped,
+          },
         });
+        if (stillOwned) {
+          flushedItemErrors = itemErrors;
+          flushedItemsSkipped = itemsSkipped;
+        }
 
         if (!stillOwned) {
           runLog.info(
@@ -580,43 +597,36 @@ class ConnectorSyncService {
       itemErrors += unresolvedUnavailableItems;
       documentsProcessed += unresolvedUnavailableItems;
       itemFetchFailures += unresolvedUnavailableItems;
-
-      // Set totalBatches so batch_embedding handlers can coordinate (fenced).
-      if (batchCount > 0) {
-        await ConnectorRunModel.updateIfOwned({
-          runId: run.id,
-          epoch,
-          data: {
-            totalBatches: batchCount,
-            documentsProcessed,
-            itemErrors,
-          },
-        });
-      }
-
       if (stoppedEarly) {
-        // Partial completion — will be continued by a follow-up run.
+        // Publish the terminal partial status and the batch fence atomically.
+        // Otherwise the last embedding task can finalize the run as success in
+        // between those writes, losing progress and starting the continuation
+        // from the wrong terminal state.
         const updated = await ConnectorRunModel.updateIfOwned({
           runId: run.id,
           epoch,
           data: {
             status: "partial",
             completedAt: new Date(),
+            totalBatches: batchCount,
             documentsProcessed,
             documentsIngested,
-            itemErrors,
-            itemsSkipped,
             documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
+          increments: {
+            itemErrors: itemErrors - flushedItemErrors,
+            itemsSkipped: itemsSkipped - flushedItemsSkipped,
+          },
         });
 
-        if (updated) {
-          await KnowledgeBaseConnectorModel.update(connectorId, {
-            lastSyncStatus: "partial",
-            lastSyncError: null,
-          });
+        if (!updated) {
+          return { runId: run.id, status: "superseded" };
         }
+        await KnowledgeBaseConnectorModel.update(connectorId, {
+          lastSyncStatus: "partial",
+          lastSyncError: null,
+        });
 
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.rag.reportConnectorSync({
@@ -671,13 +681,16 @@ class ConnectorSyncService {
           data: {
             status: finalStatus,
             completedAt: now,
+            totalBatches: 0,
             documentsProcessed,
             documentsIngested,
-            itemErrors,
-            itemsSkipped,
             documentsWithoutText,
             error: diagnosis,
             logs: options?.getLogOutput?.() ?? null,
+          },
+          increments: {
+            itemErrors: itemErrors - flushedItemErrors,
+            itemsSkipped: itemsSkipped - flushedItemsSkipped,
           },
         });
 
@@ -703,21 +716,30 @@ class ConnectorSyncService {
           });
         }
       } else {
-        // Batches were enqueued — update progress but leave status as "running";
-        // the last batch_embedding task finalizes the run.
-        await ConnectorRunModel.updateIfOwned({
+        // Publish progress and totalBatches in one fenced write. Once visible,
+        // the last batch may finalize safely without racing a later progress
+        // update that would be rejected by the terminal-state fence.
+        const progress = await ConnectorRunModel.updateIfOwned({
           runId: run.id,
           epoch,
           data: {
+            totalBatches: batchCount,
             documentsProcessed,
             documentsIngested,
-            itemErrors,
             documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
+          increments: {
+            itemErrors: itemErrors - flushedItemErrors,
+            itemsSkipped: itemsSkipped - flushedItemsSkipped,
+          },
         });
+        if (!progress) {
+          return { runId: run.id, status: "superseded" };
+        }
 
-        // Handle edge case: all batches may have completed before totalBatches was set.
+        // Handle the edge case where all batches completed before the atomic
+        // progress/totalBatches publication above.
         // finalizeBatchesIfComplete atomically checks and transitions if ready.
         const finalizedRun = await ConnectorRunModel.finalizeBatchesIfComplete(
           run.id,
@@ -772,11 +794,13 @@ class ConnectorSyncService {
           completedAt: new Date(),
           documentsProcessed,
           documentsIngested,
-          itemErrors,
-          itemsSkipped,
           documentsWithoutText,
           error: errorMessage,
           logs: options?.getLogOutput?.() ?? null,
+        },
+        increments: {
+          itemErrors: itemErrors - flushedItemErrors,
+          itemsSkipped: itemsSkipped - flushedItemsSkipped,
         },
       });
 

@@ -237228,6 +237228,10 @@
                       "effectiveContextLength": {
                         "nullable": true,
                         "type": "number"
+                      },
+                      "embeddingClientImageCapable": {
+                        "nullable": true,
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -237270,7 +237274,8 @@
                       "pricePerMillionCacheWrite",
                       "cachePriceSource",
                       "isFree",
-                      "effectiveContextLength"
+                      "effectiveContextLength",
+                      "embeddingClientImageCapable"
                     ],
                     "additionalProperties": false
                   }

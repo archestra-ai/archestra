@@ -269,6 +269,7 @@ class QueryService {
             baseUrl: embeddingConfig.baseUrl,
             dimensions: embeddingConfig.dimensions,
             provider: embeddingConfig.provider,
+            purpose: "search_query",
           }),
         buildInteraction: (
           response: Parameters<typeof buildEmbeddingInteraction>[0]["response"],

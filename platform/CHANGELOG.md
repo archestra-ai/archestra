@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.3.31](https://github.com/archestra-ai/archestra/compare/platform-v1.3.30...platform-v1.3.31) (2026-08-11)
+
+
+### Features
+
+* **advisor:** collapse the Advisor to a single org-wide agent ([#7203](https://github.com/archestra-ai/archestra/issues/7203)) ([197ac5d](https://github.com/archestra-ai/archestra/commit/197ac5d137750e51975053a2780cb8da9a67b240))
+* **advisor:** mandate consultations, defer to the advice ([#7191](https://github.com/archestra-ai/archestra/issues/7191)) ([d281879](https://github.com/archestra-ai/archestra/commit/d281879fa25140d4eec88d793196abc5c3d4791f))
+* **advisor:** mark the Advisor beta in the agent dialog and docs ([#7193](https://github.com/archestra-ai/archestra/issues/7193)) ([a1dfada](https://github.com/archestra-ai/archestra/commit/a1dfada50db75a91465ad155f54ef7bd05ca043c))
+* **chat:** choose how hard a model reasons, per conversation ([#7152](https://github.com/archestra-ai/archestra/issues/7152)) ([90c39ef](https://github.com/archestra-ai/archestra/commit/90c39ef99bd5c591dc63438f668cadd3f83547ec))
+* **chat:** offer the reasoning-depth control on OpenAI and Anthropic models ([#7202](https://github.com/archestra-ai/archestra/issues/7202)) ([1bfee9a](https://github.com/archestra-ai/archestra/commit/1bfee9a21eb2a42d223babe7f5c24f5b7662c722))
+* **knowledge-base:** verifiable citations via quote verification ([#7199](https://github.com/archestra-ai/archestra/issues/7199)) ([2543225](https://github.com/archestra-ai/archestra/commit/254322552fe97fb93f188c93afdf30d17cd7dff0))
+* **knowledge:** Google Workspace auth and permission sync for the Google Drive connector ([#7187](https://github.com/archestra-ai/archestra/issues/7187)) ([1dc6c7c](https://github.com/archestra-ai/archestra/commit/1dc6c7c655edf3bf3d4d865b3c85c6e4e55bad33))
+* **knowledge:** surface documents with no extractable text on connector runs ([#7198](https://github.com/archestra-ai/archestra/issues/7198)) ([2f4ef5d](https://github.com/archestra-ai/archestra/commit/2f4ef5df933fe88101d1936ac65676814905c5a0))
+* **llm-proxy:** support GitHub Copilot in the model router ([#7204](https://github.com/archestra-ai/archestra/issues/7204)) ([574b0fc](https://github.com/archestra-ai/archestra/commit/574b0fc8ec5357636af3055b2d74cfa4f734c581))
+* **mcp:** Skills over MCP support ([#7063](https://github.com/archestra-ai/archestra/issues/7063)) ([a3431ae](https://github.com/archestra-ai/archestra/commit/a3431aec99b5e86583d01b3ca94fd3eb6a68d6b9))
+* **models:** warn when a small Ollama model is used for agentic work ([#7166](https://github.com/archestra-ai/archestra/issues/7166)) ([aa00432](https://github.com/archestra-ai/archestra/commit/aa00432abbdf8173e0fcfccfcaf17c63f772637c))
+
+
+### Bug Fixes
+
+* address the five highest-volume production errors ([#7195](https://github.com/archestra-ai/archestra/issues/7195)) ([d2710fd](https://github.com/archestra-ai/archestra/commit/d2710fda630ef6e5811417a3124e8860c2fc5179))
+* **chatops:** give the model the Slack message ts that triggered the run ([#7207](https://github.com/archestra-ai/archestra/issues/7207)) ([a324c6a](https://github.com/archestra-ai/archestra/commit/a324c6ae0f938f50997299189d41c1cf0c15cf41))
+* **gemini:** key tool-result replacements on position, not the clock ([#7197](https://github.com/archestra-ai/archestra/issues/7197)) ([d53b2fb](https://github.com/archestra-ai/archestra/commit/d53b2fbcaa0ade781508a28e37e8ab13d787e003))
+* **guardrails:** enforce blocked and sanitized tool results in sensitive context ([#7194](https://github.com/archestra-ai/archestra/issues/7194)) ([0d433e7](https://github.com/archestra-ai/archestra/commit/0d433e7da6014fe9a329d5a2a18d852882b7f3d5))
+* **mcp-gateway:** stop Auto tool mode from advertising the whole reachable catalog ([#7208](https://github.com/archestra-ai/archestra/issues/7208)) ([0c51875](https://github.com/archestra-ai/archestra/commit/0c51875bd5191e138ee8bb8a0470aef680902903))
+
+
+### Documentation
+
+* **mcp:** give Projects and Files their own tool-reference sections ([#7190](https://github.com/archestra-ai/archestra/issues/7190)) ([fe766da](https://github.com/archestra-ai/archestra/commit/fe766da934dee169c0eb0aeaba1b3c7c6ff34020))
+* **mcp:** label the built-in tool group Code Sandbox ([#7168](https://github.com/archestra-ai/archestra/issues/7168)) ([9f13f27](https://github.com/archestra-ai/archestra/commit/9f13f275e054238fc76c03ad93e8ea875d249325))
+
 ## [1.3.30](https://github.com/archestra-ai/archestra/compare/platform-v1.3.29...platform-v1.3.30) (2026-08-09)
 
 

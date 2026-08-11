@@ -6,7 +6,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
-import { VirtualApiKeyModel } from "@/models";
+import { ModelModel, VirtualApiKeyModel } from "@/models";
 import type { ModelInfo } from "@/routes/chat/model-fetchers/types";
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
@@ -251,6 +251,115 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
       undefined,
       null,
     );
+  });
+
+  // Claude Code's gateway model discovery keeps only the ids this endpoint
+  // returns, so without the synthesized `[1m]` siblings a client configured
+  // with a long-context variant silently drops to the base id on first
+  // connect.
+  test("anthropic: appends a [1m] sibling for Claude models the catalog records a 1M window for", async () => {
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-opus-5",
+      provider: "anthropic",
+      modelId: "claude-opus-5",
+      inputModalities: null,
+      outputModalities: null,
+      contextLength: 1_000_000,
+      lastSyncedAt: new Date(),
+    });
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-haiku-4-5",
+      provider: "anthropic",
+      modelId: "claude-haiku-4-5",
+      inputModalities: null,
+      outputModalities: null,
+      contextLength: 200_000,
+      lastSyncedAt: new Date(),
+    });
+    vi.mocked(fetchAnthropicModels).mockResolvedValue([
+      {
+        id: "claude-opus-5",
+        displayName: "Claude Opus 5",
+        provider: "anthropic",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "claude-haiku-4-5",
+        displayName: "Claude Haiku 4.5",
+        provider: "anthropic",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        // No catalog row at all: no window is known, so no sibling.
+        id: "claude-uncatalogued",
+        displayName: "Claude Uncatalogued",
+        provider: "anthropic",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    const app = await buildApp(anthropicProxyRoutes);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/anthropic/${randomUUID()}/v1/models`,
+      headers: { "x-api-key": "sk-ant-raw" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      data: Array<{ id: string; display_name: string }>;
+    };
+    // The sibling sits directly after its base id; sub-1M and uncatalogued
+    // models get none.
+    expect(body.data.map((model) => model.id)).toEqual([
+      "claude-opus-5",
+      "claude-opus-5[1m]",
+      "claude-haiku-4-5",
+      "claude-uncatalogued",
+    ]);
+    expect(
+      body.data.find((model) => model.id === "claude-opus-5[1m]")?.display_name,
+    ).toBe("Claude Opus 5 (1M context)");
+  });
+
+  test("anthropic: does not duplicate a variant id the upstream already lists", async () => {
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-opus-5",
+      provider: "anthropic",
+      modelId: "claude-opus-5",
+      inputModalities: null,
+      outputModalities: null,
+      contextLength: 1_000_000,
+      lastSyncedAt: new Date(),
+    });
+    vi.mocked(fetchAnthropicModels).mockResolvedValue([
+      {
+        id: "claude-opus-5",
+        displayName: "Claude Opus 5",
+        provider: "anthropic",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "claude-opus-5[1m]",
+        displayName: "Claude Opus 5 (1M context)",
+        provider: "anthropic",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    const app = await buildApp(anthropicProxyRoutes);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/anthropic/${randomUUID()}/v1/models`,
+      headers: { "x-api-key": "sk-ant-raw" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { data: Array<{ id: string }> };
+    expect(body.data.map((model) => model.id)).toEqual([
+      "claude-opus-5",
+      "claude-opus-5[1m]",
+    ]);
   });
 
   test("openai: resolves a Bearer virtual key and returns the native OpenAI models shape", async ({

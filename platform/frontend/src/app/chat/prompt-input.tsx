@@ -931,7 +931,12 @@ const PromptInputContent = ({
         onError={handleFileError}
         className={cn(
           incognitoActive &&
-            "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/60",
+            // The dashed border replaces the composer's ring outright (both
+            // at once read as two competing outlines). !important because the
+            // ring and focus border are has-[]-variant classes on the
+            // InputGroup that otherwise win on specificity; focus feedback
+            // comes from brightening the dashes instead.
+            "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/60 [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-muted-foreground",
         )}
       >
         {/* File attachments display - shown inline above textarea */}

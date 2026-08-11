@@ -4268,19 +4268,12 @@ function verifyChatCitedQuotes(params: {
 }): void {
   const { chunks, answerText, conversationId, agentId } = params;
 
-  // The model may query more than once per turn; overlapping results collapse
-  // to one chunk per ref.
-  const chunksByRef = new Map<string, KbChunkForQuoteCheck>();
-  for (const chunk of chunks) {
-    chunksByRef.set(chunk.ref, chunk);
-  }
-
   // No knowledge was pulled this turn, so there is nothing to verify.
-  if (chunksByRef.size === 0) return;
+  if (chunks.length === 0) return;
 
   const result = verifyQuotes({
     answerText,
-    chunks: [...chunksByRef.values()],
+    chunks,
   });
 
   reportQuoteVerification({

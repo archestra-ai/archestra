@@ -178,6 +178,31 @@ describe("verifyQuotes", () => {
     expect(result.unparseable).toBe(false);
   });
 
+  it("keeps every passage returned for the same ref across multiple queries", () => {
+    // Context expansion depends on the other ranked hits in a query: one call
+    // can stitch a neighbour onto this anchor while a later call returns the
+    // same ref without that neighbour. A quote copied from either result must
+    // remain verifiable for the whole turn.
+    const result = verifyQuotes({
+      answerText: answerWith("retention period is 47 days", REF_A),
+      chunks: [
+        {
+          ref: REF_A,
+          content:
+            "TITLE: Data Policy\n\nThe retention period is 47 days for all accounts.",
+        },
+        {
+          ref: REF_A,
+          content:
+            "TITLE: Data Policy\n\nBilling reviews happen every Tuesday.",
+        },
+      ],
+    });
+
+    expect(result.matched).toBe(1);
+    expect(result.failed).toEqual([]);
+  });
+
   it("matches through whitespace, smart-quote, and case differences", () => {
     const result = verifyQuotes({
       answerText: answerWith("The  Retention   Period  is  90  Days", REF_A),

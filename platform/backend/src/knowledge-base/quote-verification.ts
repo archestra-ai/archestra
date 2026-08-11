@@ -118,11 +118,18 @@ export function verifyQuotes(params: {
 }): QuoteVerificationResult {
   const { answerText, chunks } = params;
 
-  const normalizedByRef = new Map<string, string>();
+  // The same anchor can be returned more than once in a turn with different
+  // stitched context. Context expansion claims neighbours against the other
+  // hits in each query, so collapsing by ref alone can discard the only
+  // passage that backs a quote copied from an earlier tool result.
+  const normalizedByRef = new Map<string, string[]>();
   const allNormalized: string[] = [];
   for (const chunk of chunks) {
     const normalized = normalizeForMatch(stripTitlePrefix(chunk.content));
-    normalizedByRef.set(chunk.ref.toLowerCase(), normalized);
+    const ref = chunk.ref.toLowerCase();
+    const contents = normalizedByRef.get(ref) ?? [];
+    if (!contents.includes(normalized)) contents.push(normalized);
+    normalizedByRef.set(ref, contents);
     allNormalized.push(normalized);
   }
 
@@ -151,7 +158,7 @@ export function verifyQuotes(params: {
       // The cited chunk resolved: even a short quote is meaningful evidence
       // here, because the claim is scoped to this one chunk ("90 days" either
       // is in the cited chunk or it is not).
-      if (scoped.includes(normalizedQuote)) {
+      if (scoped.some((content) => content.includes(normalizedQuote))) {
         matched++;
       } else {
         failed.push(cited);

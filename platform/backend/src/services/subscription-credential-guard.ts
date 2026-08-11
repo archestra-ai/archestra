@@ -3,6 +3,7 @@ import {
   providerDisplayNames,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
+  stripBearerTransportPrefix,
   subscriptionKindFromCredential,
 } from "@archestra/shared";
 import { ApiError } from "@/types";
@@ -46,9 +47,4 @@ export function assertSubscriptionCredentialForProvider(params: {
   );
 }
 
-/** Remove an HTTP/internal Bearer transport wrapper before marker inspection. */
-export function stripBearerTransportPrefix(
-  apiKey: string | undefined,
-): string | undefined {
-  return apiKey?.replace(/^Bearer[:\s]+/i, "");
-}
+export { stripBearerTransportPrefix } from "@archestra/shared";

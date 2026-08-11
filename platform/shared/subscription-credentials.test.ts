@@ -10,6 +10,7 @@ import {
   perUserCredentialLabel,
   SUBSCRIPTION_CREDENTIAL_KINDS,
   SUBSCRIPTION_CREDENTIALS,
+  stripBearerTransportPrefix,
   subscriptionKindForProvider,
   subscriptionKindFromCredential,
   subscriptionKindFromKeyMetadata,
@@ -24,6 +25,16 @@ describe("subscriptionKindFromCredential", () => {
   it("identifies a credential-level subscription by its marker", () => {
     expect(subscriptionKindFromCredential(chatgptCredential)).toBe("chatgpt");
     expect(isSubscriptionCredential(chatgptCredential)).toBe(true);
+  });
+
+  it("normalizes case-insensitive Bearer transport wrappers before classification", () => {
+    expect(subscriptionKindFromCredential(`bearer ${chatgptCredential}`)).toBe(
+      "chatgpt",
+    );
+    expect(isSubscriptionCredential(`BeArEr: ${chatgptCredential}`)).toBe(true);
+    expect(stripBearerTransportPrefix(`BEARER ${chatgptCredential}`)).toBe(
+      chatgptCredential,
+    );
   });
 
   it("treats plain API keys and absent secrets as non-subscription", () => {
@@ -152,6 +163,12 @@ describe("credentialRequiresPerUserScope", () => {
         apiKey: chatgptCredential,
       }),
     ).toBe(true);
+    expect(
+      credentialRequiresPerUserScope({
+        provider: "openai",
+        apiKey: `bearer ${chatgptCredential}`,
+      }),
+    ).toBe(true);
   });
 
   it("treats a plain openai API key as NOT per-user", () => {
@@ -185,6 +202,12 @@ describe("perUserCredentialLabel", () => {
       perUserCredentialLabel({
         provider: "openai",
         apiKey: chatgptCredential,
+      }),
+    ).toBe("ChatGPT Subscription");
+    expect(
+      perUserCredentialLabel({
+        provider: "openai",
+        apiKey: `Bearer: ${chatgptCredential}`,
       }),
     ).toBe("ChatGPT Subscription");
   });

@@ -249,10 +249,10 @@ describe("llmOauthClientsRoutes", () => {
     });
     const secret = await makeSecret({
       secret: {
-        apiKey: encodeXaiSubscriptionCredential({
+        apiKey: `bearer ${encodeXaiSubscriptionCredential({
           refreshToken: "rt-personal",
           userId: "x-user",
-        }),
+        })}`,
       },
     });
     const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {

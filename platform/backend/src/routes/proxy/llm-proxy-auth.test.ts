@@ -204,6 +204,40 @@ describe("validateVirtualApiKey", () => {
     });
   });
 
+  test("rejects a Bearer-wrapped subscription in a legacy shared virtual key", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: {
+        apiKey: `bEaReR ${encodeXaiSubscriptionCredential({
+          refreshToken: "rt-never-share",
+          userId: "x-user",
+        })}`,
+      },
+    });
+    const xaiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      providerApiKeys: [{ provider: "xai", providerApiKeyId: xaiKey.id }],
+      name: "legacy-shared-x-premium",
+      scope: "org",
+      authorId: owner.id,
+    });
+
+    await expect(validateVirtualApiKey(value, "xai")).rejects.toMatchObject({
+      statusCode: 403,
+    });
+  });
+
   test("returns resolved API key and baseUrl on success", async ({
     makeOrganization,
     makeSecret,

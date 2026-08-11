@@ -196,16 +196,26 @@ export function isCredentialLevelSubscriptionProvider(
 export function subscriptionKindFromCredential(
   value: string | null | undefined,
 ): SubscriptionCredentialKind | null {
-  if (typeof value !== "string") {
+  const credential = stripBearerTransportPrefix(value);
+  if (typeof credential !== "string") {
     return null;
   }
   for (const kind of SUBSCRIPTION_CREDENTIAL_KINDS) {
     const { marker } = SUBSCRIPTION_CREDENTIALS[kind];
-    if (marker !== null && value.startsWith(marker)) {
+    if (marker !== null && credential.startsWith(marker)) {
       return kind;
     }
   }
   return null;
+}
+
+/** Remove an HTTP/internal Bearer transport wrapper before marker inspection. */
+export function stripBearerTransportPrefix<T extends string | null | undefined>(
+  value: T,
+): T extends string ? string : T {
+  return (
+    typeof value === "string" ? value.replace(/^Bearer[:\s]+/i, "") : value
+  ) as T extends string ? string : T;
 }
 
 /**

@@ -8,7 +8,6 @@ import {
   RouteId,
   requiresResponsesApi,
   type SupportedProvider,
-  subscriptionKindFromCredential,
 } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -992,22 +991,15 @@ async function applyModelRouterAuthOverride(params: {
       apiKey,
     })
   ) {
-    const isCredentialLevelSubscription =
-      subscriptionKindFromCredential(apiKey) !== null;
     const isOwnedPersonalCredential =
-      // Provider-level Copilot virtual-key behavior predates credential-level
-      // subscriptions. Preserve that path here; its own ownership contract is
-      // enforced by virtual-key creation and the provider resolver.
-      (params.auth.authMethod === "virtual_key" &&
-        !isCredentialLevelSubscription) ||
-      (mappedApiKey.scope === "personal" &&
-        mappedApiKey.userId !== null &&
-        (params.auth.authMethod === "oauth_user"
-          ? mappedApiKey.userId === params.auth.userId
-          : params.auth.authMethod === "virtual_key" &&
-            params.auth.virtualKeyScope === "personal" &&
-            params.auth.virtualKeyAuthorId !== null &&
-            mappedApiKey.userId === params.auth.virtualKeyAuthorId));
+      mappedApiKey.scope === "personal" &&
+      mappedApiKey.userId !== null &&
+      (params.auth.authMethod === "oauth_user"
+        ? mappedApiKey.userId === params.auth.userId
+        : params.auth.authMethod === "virtual_key" &&
+          params.auth.virtualKeyScope === "personal" &&
+          params.auth.virtualKeyAuthorId !== null &&
+          mappedApiKey.userId === params.auth.virtualKeyAuthorId);
     if (!isOwnedPersonalCredential) {
       throw new ApiError(
         403,

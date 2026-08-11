@@ -126,7 +126,7 @@ describe("LlmProviderApiKeyDropdown", () => {
           name: "ChatGPT Subscription",
           provider: "openai",
           scope: "personal",
-          isChatgptSubscription: true,
+          subscriptionKind: "chatgpt",
         },
         {
           id: "github-copilot",
@@ -146,7 +146,7 @@ describe("LlmProviderApiKeyDropdown", () => {
           name: "OpenAI production",
           provider: "openai",
           scope: "org",
-          isChatgptSubscription: false,
+          subscriptionKind: null,
         },
         {
           id: "xai-key",

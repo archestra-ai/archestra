@@ -240552,9 +240552,6 @@
                           "microsoft-365-copilot",
                           "x-premium"
                         ]
-                      },
-                      "isChatgptSubscription": {
-                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -241472,9 +241469,6 @@
                           "microsoft-365-copilot",
                           "x-premium"
                         ]
-                      },
-                      "isChatgptSubscription": {
-                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -241894,9 +241888,6 @@
                         "microsoft-365-copilot",
                         "x-premium"
                       ]
-                    },
-                    "isChatgptSubscription": {
-                      "type": "boolean"
                     }
                   },
                   "required": [

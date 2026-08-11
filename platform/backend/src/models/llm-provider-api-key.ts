@@ -85,8 +85,8 @@ class LlmProviderApiKeyModel {
   }
 
   /**
-   * Find a key by ID with its subscription metadata (`subscriptionKind`,
-   * `isChatgptSubscription`) derived from the stored secret. Serves the
+   * Find a key by ID with its subscription metadata (`subscriptionKind`)
+   * derived from the stored secret. Serves the
    * agent-pinned key a viewer can't otherwise list (`includeKeyId`): the
    * chat/agent preflight needs to know that the pinned credential is somebody's
    * personal subscription — and which one — to gate sending behind "connect
@@ -97,7 +97,6 @@ class LlmProviderApiKeyModel {
   static async findByIdWithSubscriptionInfo(id: string): Promise<
     | (LlmProviderApiKey & {
         subscriptionKind: SubscriptionCredentialKind | null;
-        isChatgptSubscription: boolean;
       })
     | null
   > {
@@ -130,7 +129,6 @@ class LlmProviderApiKeyModel {
     return {
       ...row.apiKey,
       subscriptionKind,
-      isChatgptSubscription: subscriptionKind === "chatgpt",
     };
   }
 
@@ -968,7 +966,6 @@ async function toApiKeyWithScopeInfo<
     vaultSecretKey: string | null;
     secretStorageType: SecretStorageType;
     subscriptionKind: SubscriptionCredentialKind | null;
-    isChatgptSubscription: boolean;
   }
 > {
   const storedApiKeyValue =
@@ -996,9 +993,6 @@ async function toApiKeyWithScopeInfo<
       secretIsByosVault,
     ),
     subscriptionKind,
-    // Retained alongside `subscriptionKind` for the surfaces that still branch
-    // on ChatGPT specifically; both derive from the same marker read.
-    isChatgptSubscription: subscriptionKind === "chatgpt",
   };
 }
 

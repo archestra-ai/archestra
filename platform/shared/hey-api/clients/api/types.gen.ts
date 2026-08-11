@@ -60886,7 +60886,6 @@ export type GetLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
-        isChatgptSubscription?: boolean;
     }>;
 };
 
@@ -61113,7 +61112,6 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
-        isChatgptSubscription?: boolean;
     }>;
 };
 
@@ -61308,7 +61306,6 @@ export type GetLlmProviderApiKeyResponses = {
         bestModelId?: string | null;
         isAgentKey?: boolean;
         subscriptionKind?: 'chatgpt' | 'github-copilot' | 'microsoft-365-copilot' | 'x-premium';
-        isChatgptSubscription?: boolean;
     };
 };
 

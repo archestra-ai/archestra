@@ -13,7 +13,7 @@ import {
 import { ApiError, type OpenAi } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
-import type { ModelInfo } from "./types";
+import type { ModelFetchOptions, ModelInfo } from "./types";
 
 type XaiRawModel =
   | OpenAi.Types.Model
@@ -131,6 +131,7 @@ export async function fetchXaiModels(
   apiKey: string,
   baseUrlOverride?: string | null,
   extraHeaders?: Record<string, string> | null,
+  opts?: ModelFetchOptions,
 ): Promise<ModelInfo[]> {
   let baseUrl = baseUrlOverride || config.llm.xai.baseUrl;
   let bearer = apiKey;
@@ -167,8 +168,12 @@ export async function fetchXaiModels(
     baseUrl = config.llm.xai.subscription.baseUrl;
     // Throws (401) when the refresh token is rejected, so key creation surfaces
     // a real "reconnect your X account" error instead of an empty list.
+    // The row id (when the key already exists) lets the manager persist a
+    // rotated refresh token instead of discarding it — the issuer invalidates
+    // the predecessor, so a discarded rotation leaves the stored token dead.
     bearer = await xaiSubscriptionTokenManager.getAccessToken({
       refreshToken: subscriptionCredential.refreshToken,
+      providerApiKeyId: opts?.providerApiKeyId,
     });
     requestHeaders = {
       ...(extraHeaders ?? {}),

@@ -1,7 +1,9 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
   credentialRequiresPerUserScope,
+  isCredentialLevelSubscriptionProvider,
   isProviderApiKeyOptional,
+  isSubscriptionCredential,
   perUserCredentialLabel,
   providerDisplayNames,
   RouteId,
@@ -30,6 +32,7 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
+import SecretModel from "@/models/secret";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import {
   assertByosEnabled,
@@ -38,6 +41,7 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
+import { withLatestRotatedRefreshToken } from "@/services/subscription-credential-rotation";
 import {
   ApiError,
   constructResponseSchema,
@@ -54,14 +58,23 @@ import {
   isConnectionFailureMessage,
 } from "@/utils/docker-localhost-hint";
 
-async function testApiKeyOrThrow(
-  provider: SupportedProvider,
-  apiKey: string,
-  baseUrl?: string | null,
-  extraHeaders?: Record<string, string> | null,
-): Promise<void> {
+async function testApiKeyOrThrow(params: {
+  provider: SupportedProvider;
+  apiKey: string;
+  baseUrl?: string | null;
+  extraHeaders?: Record<string, string> | null;
+  /** Existing key row the credential belongs to, when re-testing a stored key. */
+  providerApiKeyId?: string;
+}): Promise<void> {
+  const { provider, apiKey, baseUrl, extraHeaders, providerApiKeyId } = params;
   try {
-    await testProviderApiKey(provider, apiKey, baseUrl, extraHeaders);
+    await testProviderApiKey({
+      provider,
+      apiKey,
+      baseUrl,
+      extraHeaders,
+      providerApiKeyId,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Name the URL actually tested: a base-URL override (user- or
@@ -129,7 +142,7 @@ async function testKeylessConnectivityOrThrow(
   extraHeaders?: Record<string, string> | null,
 ): Promise<void> {
   try {
-    await testProviderApiKey(provider, "", baseUrl, extraHeaders);
+    await testProviderApiKey({ provider, apiKey: "", baseUrl, extraHeaders });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes("Models list is empty")) return;
@@ -164,7 +177,12 @@ async function testKeylessAzureEntraOrThrow(
   extraHeaders?: Record<string, string> | null,
 ): Promise<void> {
   try {
-    await testProviderApiKey("azure", "", baseUrl, extraHeaders);
+    await testProviderApiKey({
+      provider: "azure",
+      apiKey: "",
+      baseUrl,
+      extraHeaders,
+    });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const contextMessage =
@@ -426,12 +444,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sessionToken: body.awsSessionToken,
         };
         actualApiKeyValue = encodeBedrockSigV4Marker(sigV4);
-        await testApiKeyOrThrow(
-          body.provider,
-          actualApiKeyValue,
-          runtimeTestBaseUrl,
-          body.extraHeaders,
-        );
+        await testApiKeyOrThrow({
+          provider: body.provider,
+          apiKey: actualApiKeyValue,
+          baseUrl: runtimeTestBaseUrl,
+          extraHeaders: body.extraHeaders,
+        });
         secret = await secretManager().createSecret(
           {
             accessKeyId: sigV4.accessKeyId,
@@ -461,12 +479,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
         // then test the API key
-        await testApiKeyOrThrow(
-          body.provider,
-          actualApiKeyValue,
-          runtimeTestBaseUrl,
-          body.extraHeaders,
-        );
+        await testApiKeyOrThrow({
+          provider: body.provider,
+          apiKey: actualApiKeyValue,
+          baseUrl: runtimeTestBaseUrl,
+          extraHeaders: body.extraHeaders,
+        });
         // then create the secret
         secret = await secretManager().createSecret(
           { apiKey: vaultReference },
@@ -480,12 +498,18 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // When readonly_vault is disabled
         actualApiKeyValue = body.apiKey;
         // Test the API key before saving
-        await testApiKeyOrThrow(
-          body.provider,
-          actualApiKeyValue,
-          runtimeTestBaseUrl,
-          body.extraHeaders,
-        );
+        await testApiKeyOrThrow({
+          provider: body.provider,
+          apiKey: actualApiKeyValue,
+          baseUrl: runtimeTestBaseUrl,
+          extraHeaders: body.extraHeaders,
+        });
+
+        // Validating a subscription credential redeems its refresh token, and
+        // the issuer may rotate it — invalidating the submitted one. Persist
+        // the newest token or the stored credential is dead on arrival and the
+        // first chat request demands a reconnect.
+        actualApiKeyValue = withLatestRotatedRefreshToken(actualApiKeyValue);
 
         secret = await secretManager().createSecret(
           { apiKey: actualApiKeyValue },
@@ -521,12 +545,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         // Keyless Anthropic key backed by Workload Identity Federation —
         // exercises the token exchange and model listing end to end.
-        await testApiKeyOrThrow(
-          body.provider,
-          "",
-          runtimeTestBaseUrl,
-          body.extraHeaders,
-        );
+        await testApiKeyOrThrow({
+          provider: body.provider,
+          apiKey: "",
+          baseUrl: runtimeTestBaseUrl,
+          extraHeaders: body.extraHeaders,
+        });
       } else if (
         !actualApiKeyValue &&
         isProviderApiKeyOptional({
@@ -903,12 +927,23 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           body.extraHeaders !== undefined
             ? body.extraHeaders
             : apiKeyFromDB.extraHeaders;
-        await testApiKeyOrThrow(
-          apiKeyFromDB.provider,
-          testValue,
-          testBaseUrl,
-          testExtraHeaders,
-        );
+        await testApiKeyOrThrow({
+          provider: apiKeyFromDB.provider,
+          apiKey: testValue,
+          baseUrl: testBaseUrl,
+          extraHeaders: testExtraHeaders,
+        });
+
+        // Validating a subscription credential redeems its refresh token, and
+        // the issuer may rotate it — invalidating the submitted one. Persist
+        // the newest token or the stored credential is dead on arrival. Only
+        // the direct-value path applies: vault references and SigV4 payloads
+        // are not subscription credentials.
+        if (body.apiKey && secretPayload.apiKey === body.apiKey) {
+          secretPayload = {
+            apiKey: withLatestRotatedRefreshToken(body.apiKey),
+          };
+        }
 
         // Update or create the secret
         if (apiKeyFromDB.secretId) {
@@ -950,12 +985,16 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? body.extraHeaders
             : apiKeyFromDB.extraHeaders;
         if (apiKeyValue) {
-          await testApiKeyOrThrow(
-            apiKeyFromDB.provider,
-            apiKeyValue,
-            testBaseUrl,
-            testExtraHeaders,
-          );
+          // Re-testing the STORED credential: pass the row id so a rotated
+          // subscription refresh token is persisted back to this key instead
+          // of discarded (which would leave the stored token dead).
+          await testApiKeyOrThrow({
+            provider: apiKeyFromDB.provider,
+            apiKey: apiKeyValue,
+            baseUrl: testBaseUrl,
+            extraHeaders: testExtraHeaders,
+            providerApiKeyId: apiKeyFromDB.id,
+          });
         } else if (
           apiKeyFromDB.provider === "azure" &&
           isAzureOpenAiEntraIdEnabled()
@@ -970,12 +1009,12 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           anthropicWorkloadIdentity.isEnabled()
         ) {
           // Keyless Anthropic WIF key — re-test with the updated runtime settings.
-          await testApiKeyOrThrow(
-            apiKeyFromDB.provider,
-            "",
-            testBaseUrl,
-            testExtraHeaders,
-          );
+          await testApiKeyOrThrow({
+            provider: apiKeyFromDB.provider,
+            apiKey: "",
+            baseUrl: testBaseUrl,
+            extraHeaders: testExtraHeaders,
+          });
         } else if (
           isProviderApiKeyOptional({
             provider: apiKeyFromDB.provider,
@@ -1061,6 +1100,126 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const updated = await LlmProviderApiKeyModel.findById(params.id);
+      if (!updated) {
+        throw new ApiError(404, "LLM provider API key not found");
+      }
+      return reply.send(updated);
+    },
+  );
+
+  // Reconnect (re-authenticate) the caller's own personal subscription key.
+  // Self-service on purpose: connecting a subscription is self-service (the
+  // create route + device flows carry no permission requirement), so RECONNECTING
+  // the same credential after it expires must not suddenly demand
+  // llmProviderApiKey:update — that stranded default members in a loop where
+  // the sign-in completed but the rotated credential could never be saved.
+  fastify.post(
+    "/api/llm-provider-api-keys/:id/reconnect",
+    {
+      schema: {
+        operationId: RouteId.ReconnectLlmProviderApiKey,
+        description:
+          "Re-authenticate the caller's own personal subscription key in place, rotating its stored credential",
+        tags: ["LLM Provider API Keys"],
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        body: z.object({
+          /** The fresh device-flow credential for the same subscription. */
+          apiKey: z.string().min(1),
+        }),
+        response: constructResponseSchema(SelectLlmProviderApiKeySchema),
+      },
+    },
+    async ({ params, body, organizationId, user }, reply) => {
+      const keyRow = await LlmProviderApiKeyModel.findById(params.id);
+      if (!keyRow || keyRow.organizationId !== organizationId) {
+        throw new ApiError(404, "LLM provider API key not found");
+      }
+      // Another user's personal key is invisible (404, matching the GET route);
+      // shared keys go through the regular permission-gated edit flow.
+      if (keyRow.scope === "personal" && keyRow.userId !== user.id) {
+        throw new ApiError(404, "LLM provider API key not found");
+      }
+      if (keyRow.scope !== "personal") {
+        throw new ApiError(
+          400,
+          "Only personal subscription keys can be reconnected — shared keys use the regular edit flow.",
+        );
+      }
+      // The new credential must be subscription material for this key's
+      // provider: a per-user provider's own token (GitHub/Microsoft Copilot) or
+      // a marker-encoded subscription credential (ChatGPT, X Premium). A plain
+      // API key must go through the permission-gated edit flow instead.
+      if (
+        !credentialRequiresPerUserScope({
+          provider: keyRow.provider,
+          apiKey: body.apiKey,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "Reconnect only accepts a subscription sign-in credential — to change an API key, use the regular edit flow.",
+        );
+      }
+      // For providers that also take plain API keys, the ROW must already hold
+      // a subscription credential — reconnect refreshes a sign-in, it does not
+      // convert an API key into one. An unreadable stored secret (e.g. rotated
+      // encryption key) still qualifies: recovery is exactly the point.
+      if (
+        isCredentialLevelSubscriptionProvider(keyRow.provider) &&
+        keyRow.secretId
+      ) {
+        const secretRow = await SecretModel.findById(keyRow.secretId);
+        if (secretRow?.isByosVault) {
+          throw new ApiError(
+            400,
+            "This key's credential lives in your external Vault, which is read-only — update it there instead.",
+          );
+        }
+        const storedValue = await getSecretValueForLlmProviderApiKey(
+          keyRow.secretId,
+        );
+        if (
+          storedValue !== undefined &&
+          !isSubscriptionCredential(storedValue)
+        ) {
+          throw new ApiError(
+            400,
+            "This key stores a plain API key, not a subscription sign-in — use the regular edit flow.",
+          );
+        }
+      }
+
+      // Validate by redeeming. The manager stashes any rotation so the
+      // persisted credential carries the newest refresh token.
+      await testApiKeyOrThrow({
+        provider: keyRow.provider,
+        apiKey: body.apiKey,
+        baseUrl: resolveRuntimeTestBaseUrl({ body: {}, apiKey: keyRow }),
+        extraHeaders: keyRow.extraHeaders,
+      });
+      const latestValue = withLatestRotatedRefreshToken(body.apiKey);
+
+      if (keyRow.secretId) {
+        await secretManager().updateSecret(keyRow.secretId, {
+          apiKey: latestValue,
+        });
+      } else {
+        const secret = await secretManager().createSecret(
+          { apiKey: latestValue },
+          getChatApiKeySecretName({
+            scope: "personal",
+            teamId: null,
+            userId: user.id,
+          }),
+        );
+        await LlmProviderApiKeyModel.update(keyRow.id, {
+          secretId: secret.id,
+        });
+      }
+
+      const updated = await LlmProviderApiKeyModel.findById(keyRow.id);
       if (!updated) {
         throw new ApiError(404, "LLM provider API key not found");
       }

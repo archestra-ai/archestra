@@ -84,8 +84,20 @@ export interface StaticModel {
   displayName: string;
 }
 
+export interface ModelFetchOptions {
+  /**
+   * The llm_provider_api_keys row the credential came from, when it already
+   * exists. Subscription-credential fetchers (ChatGPT/Codex, X Premium) pass it
+   * to their token manager so a rotated refresh token is cached and persisted
+   * back to the row — an ID-less redemption instead stashes the rotation for
+   * `latestKnownRefreshToken`, which only helps within the same request.
+   */
+  providerApiKeyId?: string;
+}
+
 export type ModelFetcher = (
   apiKey: string,
   baseUrl?: string | null,
   extraHeaders?: Record<string, string> | null,
+  opts?: ModelFetchOptions,
 ) => Promise<ModelInfo[]>;

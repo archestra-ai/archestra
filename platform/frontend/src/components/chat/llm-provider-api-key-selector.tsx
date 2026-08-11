@@ -412,6 +412,11 @@ export function LlmProviderApiKeySelector({
           defaultValues={subscriptionToConnect.defaultValues}
           allowedProviders={[subscriptionToConnect.provider]}
           credentialMode="subscription"
+          requiresExactSubscriptionCredential={Boolean(
+            pinnedSubscriptionOption &&
+              pinnedSubscriptionOption.subscriptionKind ===
+                subscriptionToConnect.subscriptionKind,
+          )}
           reconnectKeyId={reconnectKeyId ?? undefined}
           onSuccess={() =>
             setConnectedKindToSelect(subscriptionToConnect.subscriptionKind)

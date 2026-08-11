@@ -3902,6 +3902,241 @@ describe("ChatOpsManager attachment passthrough", () => {
   });
 });
 
+// =============================================================================
+// Slack conversation context — which timestamps the model is handed
+// =============================================================================
+
+describe("ChatOpsManager Slack conversation context", () => {
+  // A thread opened by one message and continued by a later reply. The reply is
+  // what triggers the run, so it is the message the agent is answering.
+  const THREAD_ROOT_TS = "1786388787.394499";
+  const REPLY_TS = "1786399123.777111";
+
+  function createSlackProvider(overrides: {
+    getUserEmail: () => Promise<string | null>;
+    getMessagePermalink?: (params: {
+      channelId: string;
+      messageId: string;
+    }) => Promise<string | null>;
+  }): ChatOpsProvider {
+    return {
+      providerId: "slack",
+      displayName: "Slack",
+      isConfigured: () => true,
+      initialize: async () => {},
+      cleanup: async () => {},
+      validateWebhookRequest: async () => true,
+      handleValidationChallenge: () => null,
+      parseWebhookNotification: async () => null,
+      sendReply: async () => "reply-id",
+      parseInteractivePayload: () => null,
+      sendAgentSelectionCard: async () => {},
+      getThreadHistory: async () => [],
+      getUserEmail: overrides.getUserEmail,
+      getChannelName: async () => "test-channel",
+      getWorkspaceId: () => "T_CTX",
+      getWorkspaceName: () => "Test Workspace",
+      hasMissingScopes: () => false,
+      notifyMissingScopes: async () => {},
+      downloadFiles: async () => [],
+      discoverChannels: async () => null,
+      addApprovalRequestForm: async () => {},
+      updateApprovalRequest: async () => {},
+      ...(overrides.getMessagePermalink && {
+        getMessagePermalink: overrides.getMessagePermalink,
+      }),
+    };
+  }
+
+  function slackMessage(
+    overrides: Partial<IncomingChatMessage> = {},
+  ): IncomingChatMessage {
+    return {
+      messageId: REPLY_TS,
+      channelId: "C_CTX",
+      workspaceId: "T_CTX",
+      threadId: THREAD_ROOT_TS,
+      senderId: "U_CTX",
+      senderName: "Slack User",
+      text: "turn this into a task",
+      rawText: "@Bot turn this into a task",
+      timestamp: new Date(),
+      isThreadReply: true,
+      metadata: {
+        eventType: "message",
+        channelType: "im",
+        conversationType: "personal",
+      },
+      ...overrides,
+    };
+  }
+
+  test("hands the model the triggering message ts, not only the thread root", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Done",
+        messageId: "msg-ctx-1",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-ctx-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "Done" }],
+        },
+      });
+
+    const user = await makeUser({ email: "slack-ctx@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_CTX",
+      workspaceId: "T_CTX",
+      agentId: agent.id,
+    });
+
+    const provider = createSlackProvider({
+      getUserEmail: async () => "slack-ctx@example.com",
+    });
+
+    await new ChatOpsManager().processMessage({
+      message: slackMessage(),
+      provider,
+    });
+
+    const sent = executorSpy.mock.calls[0][0].message;
+    // The regression: the reply's ts used to be absent entirely, so a tool told
+    // to anchor to "this message" could only be handed the thread opener.
+    expect(sent).toContain(`- Message ts: ${REPLY_TS}`);
+    // The thread root stays available, distinctly labelled.
+    expect(sent).toContain(`- Thread message ts: ${THREAD_ROOT_TS}`);
+  });
+
+  test("links the permalink to the triggering message, not the thread root", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
+      text: "Done",
+      messageId: "msg-ctx-2",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "msg-ctx-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Done" }],
+      },
+    });
+
+    const user = await makeUser({ email: "slack-link@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_CTX",
+      workspaceId: "T_CTX",
+      agentId: agent.id,
+    });
+
+    const permalinkSpy = vi
+      .fn()
+      .mockResolvedValue("https://example.slack.test/archives/C_CTX/p1");
+    const provider = createSlackProvider({
+      getUserEmail: async () => "slack-link@example.com",
+      getMessagePermalink: permalinkSpy,
+    });
+
+    await new ChatOpsManager().processMessage({
+      message: slackMessage(),
+      provider,
+    });
+
+    expect(permalinkSpy).toHaveBeenCalledWith({
+      channelId: "C_CTX",
+      messageId: REPLY_TS,
+    });
+  });
+
+  test("uses the message's own ts as both values for a top-level message", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Done",
+        messageId: "msg-ctx-3",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-ctx-3",
+          role: "assistant",
+          parts: [{ type: "text", text: "Done" }],
+        },
+      });
+
+    const user = await makeUser({ email: "slack-root@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_CTX",
+      workspaceId: "T_CTX",
+      agentId: agent.id,
+    });
+
+    const provider = createSlackProvider({
+      getUserEmail: async () => "slack-root@example.com",
+    });
+
+    // A message that opens a thread: Slack reports no thread_ts, so the
+    // triggering message IS the root and both lines carry the same ts.
+    await new ChatOpsManager().processMessage({
+      message: slackMessage({
+        messageId: THREAD_ROOT_TS,
+        threadId: THREAD_ROOT_TS,
+        isThreadReply: false,
+      }),
+      provider,
+    });
+
+    const sent = executorSpy.mock.calls[0][0].message;
+    expect(sent).toContain(`- Message ts: ${THREAD_ROOT_TS}`);
+    expect(sent).toContain(`- Thread message ts: ${THREAD_ROOT_TS}`);
+  });
+});
+
 describe("buildChatOpsSessionId", () => {
   test("uses threadId when provided", () => {
     expect(buildChatOpsSessionId("slack", "C123", "T456")).toBe(

@@ -53,6 +53,7 @@ function Harness({
   credentialMode,
   progressive,
   allowPersonalSubscriptions,
+  requiresExactSubscriptionCredential,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
@@ -60,6 +61,7 @@ function Harness({
   credentialMode?: "api-key" | "subscription";
   progressive?: boolean;
   allowPersonalSubscriptions?: boolean;
+  requiresExactSubscriptionCredential?: boolean;
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...defaults },
@@ -74,6 +76,7 @@ function Harness({
       credentialMode={credentialMode}
       progressive={progressive}
       allowPersonalSubscriptions={allowPersonalSubscriptions}
+      requiresExactSubscriptionCredential={requiresExactSubscriptionCredential}
     />
   );
 }
@@ -85,6 +88,7 @@ function renderForm(options?: {
   credentialMode?: "api-key" | "subscription";
   progressive?: boolean;
   allowPersonalSubscriptions?: boolean;
+  requiresExactSubscriptionCredential?: boolean;
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -98,6 +102,9 @@ function renderForm(options?: {
         credentialMode={options?.credentialMode}
         progressive={options?.progressive}
         allowPersonalSubscriptions={options?.allowPersonalSubscriptions}
+        requiresExactSubscriptionCredential={
+          options?.requiresExactSubscriptionCredential
+        }
       />
     </QueryClientProvider>,
   );
@@ -171,6 +178,30 @@ describe("LlmProviderApiKeyForm", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "This provider has no API-key alternative",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      "Store a provider API key in Vault instead",
+    );
+  });
+
+  it("does not offer an ordinary Vault key for an exact-subscription agent pin", () => {
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "byosEnabled",
+    );
+    renderForm({
+      credentialMode: "subscription",
+      requiresExactSubscriptionCredential: true,
+      defaults: {
+        provider: "xai",
+        authMethod: "subscription",
+      },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This agent requires the same personal subscription",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "choose a different agent or model",
     );
     expect(screen.getByRole("alert")).not.toHaveTextContent(
       "Store a provider API key in Vault instead",

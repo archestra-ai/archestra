@@ -3,6 +3,7 @@ import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -233,6 +234,44 @@ describe("llmOauthClientsRoutes", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
       'Only one provider API key can be mapped for provider "openai"',
+    );
+  });
+
+  test("rejects a credential-level subscription mapping for client credentials", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      name: "Subscription Mapping Proxy",
+      agentType: "llm_proxy",
+    });
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "rt-personal",
+          userId: "x-user",
+        }),
+      },
+    });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Unsafe Subscription Client",
+        allowedLlmProxyIds: [agent.id],
+        providerApiKeys: [{ provider: "xai", providerApiKeyId: apiKey.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain(
+      "X Premium (SuperGrok) is per-user",
     );
   });
 

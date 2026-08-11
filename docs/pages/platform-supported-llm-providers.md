@@ -23,7 +23,15 @@ The model router exposes one OpenAI-compatible interface for models across confi
 - **Models API** (`/models`) for provider-qualified chat and embedding model IDs
 - **Embeddings API** (`/embeddings`) for embedding models across supported providers
 
-Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, and Cohere have no compatible embeddings API and return `501 Not Implemented`.
+Embedding models use the same provider-qualified IDs as chat models (for example `openai:text-embedding-3-small` or `gemini:gemini-embedding-001`). Anthropic, Bedrock, Cohere, and GitHub Copilot have no compatible embeddings API and return `501 Not Implemented`.
+
+### GitHub Copilot Through the Model Router
+
+GitHub Copilot is routable, with one difference from every other provider: it serves each model over a single API. The router reads which one from the model and sends the request there. Codex and GPT-5.x models go to the Responses API; the rest go to Chat Completions.
+
+Requesting a Responses-only model on `/chat/completions` returns `400 Bad Request` naming the endpoint to use instead.
+
+A Copilot key is tied to one GitHub account, so it is routable only through your own personal virtual key. That key can hold your other providers too, so one router endpoint reaches all of them. See [GitHub Copilot](#github-copilot).
 
 ### Model Router Connection Details
 
@@ -629,6 +637,8 @@ The Models API tells you which one to use. Each entry lists its API in `supporte
 - **Base URL**: `http://localhost:9000/v1/github-copilot/{profile-id}`
 - **Authentication**: Pass your **GitHub OAuth token** (the credential below) in the `Authorization` header as `Bearer <token>`
 
+Copilot models are also reachable through the model router as `github-copilot:<model-id>`. See [GitHub Copilot Through the Model Router](#github-copilot-through-the-model-router).
+
 ### Authentication
 
 A GitHub Copilot provider key stores a **long-lived GitHub OAuth token** (`gho_`/`ghu_…`) for an account with an active Copilot subscription — not a Copilot API key, which does not exist. Archestra exchanges that token for a short-lived Copilot bearer on every request (cached and refreshed automatically), so clients only ever present the GitHub token.
@@ -651,7 +661,7 @@ Obtain the token in either way:
 ### Important Notes
 
 - **No static API keys**: access is per-user via a GitHub OAuth token; model availability follows that account's Copilot subscription tier.
-- **Per-user only**: because the token is tied to one GitHub account, Copilot keys are **personal scope only** — they can't be shared via team/org scope or wrapped in a shared (org/team or multi-provider model-router) virtual key. Each user connects their own account. When someone uses an agent with a Copilot model but hasn't connected yet, Archestra resolves *their* key (never the agent owner's) and prompts them to connect: an inline "Connect GitHub Copilot" card in chat, or a message with a Settings link in Slack/Teams. Email and scheduled runs fail with an actionable message.
+- **Per-user only**: because the token is tied to one GitHub account, Copilot keys are **personal scope only** — they can't be shared via team/org scope or wrapped in a team- or org-scoped virtual key. Each user connects their own account. Your own personal virtual key may map Copilot alongside other providers, which is what makes it routable through the model router. When someone uses an agent with a Copilot model but hasn't connected yet, Archestra resolves *their* key (never the agent owner's) and prompts them to connect: an inline "Connect GitHub Copilot" card in chat, or a message with a Settings link in Slack/Teams. Email and scheduled runs fail with an actionable message.
 - **Generative models only**: the `/models` listing covers every model reachable through `/chat/completions` or `/responses`. Copilot also serves an Anthropic `/v1/messages` shim and embedding models, which Archestra does not route to.
 - **GitHub Enterprise**: point the base, token-exchange, and device-auth URLs at your GHE host. Organizations with their own GitHub App can override the client id.
 

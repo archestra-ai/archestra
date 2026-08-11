@@ -1,9 +1,14 @@
 import {
+  credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
   LLM_PROXY_OAUTH_SCOPE,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  perUserCredentialLabel,
+  type ResourceVisibilityScope,
   RouteId,
+  requiresResponsesApi,
   type SupportedProvider,
+  subscriptionKindFromCredential,
 } from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -26,6 +31,7 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import type { Agent, LLMProvider } from "@/types";
 import {
   ApiError,
@@ -38,6 +44,8 @@ import {
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
   geminiEmbeddingsAdapterFactory,
+  githubCopilotAdapterFactory,
+  githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
   makeOpenAiCompatibleEmbeddingsAdapterFactory,
   minimaxAdapterFactory,
@@ -75,6 +83,7 @@ import {
 } from "../llm-proxy-handler";
 import {
   buildRoutableModelId,
+  type ModelRouterResolution,
   resolveModelRoute,
   sortRoutableModels,
 } from "../model-router-resolver";
@@ -101,6 +110,8 @@ type ModelRouterMappedProviderKey = {
   providerApiKeyName: string;
   secretId: string | null;
   baseUrl: string | null;
+  scope: ResourceVisibilityScope;
+  userId: string | null;
 };
 
 type ModelRouterUserProviderKey = Awaited<
@@ -110,6 +121,8 @@ type ModelRouterUserProviderKey = Awaited<
 type ModelRouterVirtualKeyAuth = {
   authMethod: "virtual_key";
   organizationId: string;
+  virtualKeyScope: ResourceVisibilityScope;
+  virtualKeyAuthorId: string | null;
   providerApiKeysByProvider: Map<
     SupportedProvider,
     ModelRouterMappedProviderKey
@@ -204,6 +217,7 @@ const openAiWireProviders = {
   azure: azureAdapterFactory,
   cerebras: cerebrasAdapterFactory,
   deepseek: deepseekAdapterFactory,
+  "github-copilot": githubCopilotAdapterFactory,
   groq: groqAdapterFactory,
   minimax: minimaxAdapterFactory,
   mistral: mistralAdapterFactory,
@@ -468,6 +482,8 @@ async function routeChatCompletion(
     "[ModelRouterProxy] Resolved model route",
   );
 
+  assertModelServesChatCompletions(resolution);
+
   const provider = getOpenAiChatProviderForResolution({
     provider: resolution.provider,
     body: routedBody,
@@ -495,6 +511,26 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
+
+  // A model its provider serves ONLY over Responses cannot survive the
+  // responses→chat→responses round trip the uniform path uses, so hand the
+  // caller's original Responses body to the provider's native Responses
+  // adapter untouched.
+  const nativeResponsesAdapter = getNativeResponsesAdapter(resolution);
+  if (nativeResponsesAdapter) {
+    await applyModelRouterAuthOverride({
+      request,
+      auth,
+      provider: resolution.provider,
+    });
+    return handleLLMProxy(
+      { ...body, model: resolution.modelId },
+      request,
+      reply,
+      nativeResponsesAdapter,
+    );
+  }
+
   const routedChatBody = {
     ...chatBody,
     model: resolution.modelId,
@@ -573,7 +609,12 @@ function getModelRouterEmbeddingsProvider(
   if (provider === "openai") {
     return openAiEmbeddingsAdapterFactory;
   }
-  if (provider in openAiWireProviders) {
+  // Copilot is an OpenAI-wire chat provider but publishes no embeddings models,
+  // and the generic OpenAI-compatible embeddings adapter would send the raw
+  // GitHub OAuth token upstream instead of exchanging it for a Copilot bearer.
+  // Resolution should never reach here for it; fall through to the 501 if it
+  // somehow does rather than emit a request that leaks the token.
+  if (provider !== "github-copilot" && provider in openAiWireProviders) {
     return makeOpenAiCompatibleEmbeddingsAdapterFactory(provider, () =>
       getProviderConfiguredBaseUrl(provider),
     );
@@ -581,6 +622,44 @@ function getModelRouterEmbeddingsProvider(
   throw new ApiError(
     501,
     `Provider "${provider}" is not yet available through the OpenAI-compatible model router embeddings endpoint.`,
+  );
+}
+
+/**
+ * The provider's native Responses adapter when the resolved model is served
+ * only over Responses, otherwise null.
+ *
+ * Keyed off the model's own published surfaces rather than the provider, so a
+ * provider that serves both wires keeps the uniform chat path for every model
+ * that accepts chat completions, and only its Responses-only models (Copilot's
+ * Codex and GPT-5.x) take the native route.
+ */
+function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
+  if (!requiresResponsesApi(resolution.supportedEndpoints)) {
+    return null;
+  }
+  if (resolution.provider === "github-copilot") {
+    return githubCopilotResponsesAdapterFactory;
+  }
+  return null;
+}
+
+/**
+ * Rejects a Responses-only model on the chat-completions endpoint locally. The
+ * request would otherwise reach a provider that answers with its own opaque
+ * "model not supported" error, which says nothing about the endpoint being the
+ * problem.
+ */
+function assertModelServesChatCompletions(
+  resolution: ModelRouterResolution,
+): void {
+  if (!requiresResponsesApi(resolution.supportedEndpoints)) {
+    return;
+  }
+  throw new ApiError(
+    400,
+    `Model "${resolution.requestedModel}" is only served over the Responses API. ` +
+      `Send this request to the model router's ${RESPONSES_SUFFIX} endpoint instead of ${CHAT_COMPLETIONS_SUFFIX}.`,
   );
 }
 
@@ -836,6 +915,8 @@ async function getModelRouterAuth(
     return {
       authMethod: "virtual_key",
       organizationId: resolved.virtualKey.organizationId,
+      virtualKeyScope: resolved.virtualKey.scope,
+      virtualKeyAuthorId: resolved.virtualKey.authorId,
       providerApiKeysByProvider: new Map(
         mappings.map((mapping) => [mapping.provider, mapping]),
       ),
@@ -900,6 +981,40 @@ async function applyModelRouterAuthOverride(params: {
   const apiKey = mappedApiKey.secretId
     ? await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)
     : undefined;
+  assertSubscriptionCredentialForProvider({
+    apiKey,
+    provider: params.provider,
+  });
+
+  if (
+    credentialRequiresPerUserScope({
+      provider: params.provider,
+      apiKey,
+    })
+  ) {
+    const isCredentialLevelSubscription =
+      subscriptionKindFromCredential(apiKey) !== null;
+    const isOwnedPersonalCredential =
+      // Provider-level Copilot virtual-key behavior predates credential-level
+      // subscriptions. Preserve that path here; its own ownership contract is
+      // enforced by virtual-key creation and the provider resolver.
+      (params.auth.authMethod === "virtual_key" &&
+        !isCredentialLevelSubscription) ||
+      (mappedApiKey.scope === "personal" &&
+        mappedApiKey.userId !== null &&
+        (params.auth.authMethod === "oauth_user"
+          ? mappedApiKey.userId === params.auth.userId
+          : params.auth.authMethod === "virtual_key" &&
+            params.auth.virtualKeyScope === "personal" &&
+            params.auth.virtualKeyAuthorId !== null &&
+            mappedApiKey.userId === params.auth.virtualKeyAuthorId));
+    if (!isOwnedPersonalCredential) {
+      throw new ApiError(
+        403,
+        `${perUserCredentialLabel({ provider: params.provider, apiKey })} is per-user: it can only be used through the same user's own personal credential.`,
+      );
+    }
+  }
   (
     params.request as FastifyRequest & {
       llmProxyAuthOverride?: LLMProxyAuthOverride;
@@ -986,6 +1101,8 @@ async function getModelRouterOAuthClientAuth(
             providerApiKeyName: apiKey.name,
             secretId: apiKey.secretId,
             baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
+            scope: apiKey.scope,
+            userId: apiKey.userId,
           },
         ];
       }),
@@ -1041,6 +1158,8 @@ async function getModelRouterUserOAuthAuth(params: {
       providerApiKeyName: apiKey.name,
       secretId: apiKey.secretId,
       baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
+      scope: apiKey.scope,
+      userId: apiKey.userId,
     });
   }
 

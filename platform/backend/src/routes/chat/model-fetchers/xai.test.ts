@@ -15,6 +15,7 @@ const MODELS_RESPONSE = {
     },
     { modelId: "grok-4-mini" },
     { _meta: { model: "grok-4-meta" } },
+    { model: "grok-api-base", baseUrl: config.llm.xai.baseUrl },
     { id: "responses-only", model: "grok-response", apiBackend: "responses" },
     { model: "different-proxy", baseUrl: "https://other.grok.test/v1" },
     { model: "grok-hidden", hidden: true },
@@ -161,6 +162,7 @@ describe("fetchXaiModels with a plain API key", () => {
       "grok-4-fast",
       "grok-4-mini",
       "grok-4-meta",
+      "grok-api-base",
     ]);
     // No OAuth hop at all for a metered key.
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -169,6 +171,30 @@ describe("fetchXaiModels with a plain API key", () => {
       | undefined;
     expect(init?.headers?.Authorization ?? init?.headers?.authorization).toBe(
       "Bearer xai-plain-key",
+    );
+  });
+
+  it("keeps models targeted at the effective custom API-key endpoint", async () => {
+    const customBaseUrl = "https://xai-gateway.example/v1";
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        data: [
+          {
+            model: "grok-custom",
+            baseUrl: customBaseUrl,
+            apiBackend: "chat_completions",
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const models = await fetchXaiModels("xai-plain-key", customBaseUrl);
+
+    expect(models.map((model) => model.id)).toEqual(["grok-custom"]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${customBaseUrl}/models`,
+      expect.any(Object),
     );
   });
 });

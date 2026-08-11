@@ -1618,6 +1618,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - Verifiable citations. In the built-in chat, the model is asked to back each claim with a short verbatim quote tagged with its source chunk's ref; this checks each quote against the chunk its ref names and logs plus meters (`rag_quote_verification_total`) every miss — a quote found in no returned chunk is a likely fabrication, a quote whose ref names no returned chunk but whose text exists in another one is a mis-citation.
+  - Default: `true`
+  - Log-only: it never blocks or alters an answer, and only covers the internal chat (external MCP clients answer where Archestra cannot see the text). Set to `false` to disable the feature: the model is no longer asked to quote, and no check runs.
+
 - **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title prefix and metadata suffix.
   - Default: `512`. Clamped to `128`–`2048`.
   - Smaller chunks make a hit more precise but carry less surrounding context; larger chunks do the reverse. Applies at ingest only — existing chunks keep the size they were written at until their connector re-syncs, so changing this mid-corpus leaves a mix until everything has been re-indexed.

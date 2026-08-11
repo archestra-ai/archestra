@@ -42,6 +42,8 @@ export type CreateLlmProviderApiKeyDialogProps = {
   allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
   /** Selects the focused progressive flow shown by this dialog. */
   credentialMode?: "api-key" | "subscription";
+  /** This dialog must connect the exact subscription kind pinned by an agent. */
+  requiresExactSubscriptionCredential?: boolean;
   showConsoleLink?: boolean;
   onSuccess?: () => void;
   /**
@@ -60,6 +62,7 @@ export function CreateLlmProviderApiKeyDialog({
   defaultValues,
   allowedProviders,
   credentialMode = "api-key",
+  requiresExactSubscriptionCredential = false,
   showConsoleLink = false,
   onSuccess,
   reconnectKeyId,
@@ -196,6 +199,9 @@ export function CreateLlmProviderApiKeyDialog({
             isPending={createMutation.isPending}
             allowedProviders={allowedProviders}
             credentialMode={credentialMode}
+            requiresExactSubscriptionCredential={
+              requiresExactSubscriptionCredential
+            }
             progressive
             allowPersonalSubscriptions={credentialMode === "subscription"}
             onSubscriptionCredential={handleSubscriptionCredential}

@@ -3,6 +3,7 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   SOURCE_HEADER,
   type SupportedProvider,
+  type SupportedProviderEndpoint,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
@@ -24,6 +25,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import authRoutes from "@/routes/auth";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   type AnthropicStubOptions,
@@ -41,6 +43,8 @@ import {
   deepseekAdapterFactory,
   geminiAdapterFactory,
   geminiEmbeddingsAdapterFactory,
+  githubCopilotAdapterFactory,
+  githubCopilotResponsesAdapterFactory,
   groqAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
@@ -92,6 +96,7 @@ async function upsertModel(params: {
   provider: SupportedProvider;
   modelId: string;
   embeddingDimensions?: 768 | 1536 | 3072;
+  supportedEndpoints?: SupportedProviderEndpoint[];
 }) {
   await ModelModel.upsert({
     externalId: `${params.provider}/${params.modelId}`,
@@ -100,6 +105,7 @@ async function upsertModel(params: {
     inputModalities: ["text"],
     outputModalities: ["text"],
     embeddingDimensions: params.embeddingDimensions,
+    supportedEndpoints: params.supportedEndpoints,
     customPricePerMillionInput: "2.50",
     customPricePerMillionOutput: "10.00",
     lastSyncedAt: new Date(),
@@ -165,6 +171,10 @@ const ROUTABLE_PROVIDER_CASES: Array<{
   { provider: "cohere", modelId: "command-a-03-2025" },
   { provider: "deepseek", modelId: "deepseek-chat" },
   { provider: "gemini", modelId: "gemini-2.5-pro" },
+  // A Copilot model that serves chat completions takes the same uniform path
+  // as any other OpenAI-wire provider; its Responses-only siblings are covered
+  // separately below.
+  { provider: "github-copilot", modelId: "gpt-4o" },
   { provider: "groq", modelId: "llama-3.1-8b-instant" },
   { provider: "minimax", modelId: "MiniMax-M1" },
   { provider: "mistral", modelId: "mistral-large-latest" },
@@ -176,6 +186,67 @@ const ROUTABLE_PROVIDER_CASES: Array<{
   { provider: "xai", modelId: "grok-4" },
   { provider: "zhipuai", modelId: "glm-4.5" },
 ];
+
+/**
+ * Stands in for a provider's native Responses surface — the only shape a
+ * Responses-only model can be served over.
+ */
+function createResponsesTestClient() {
+  const completedResponse = {
+    id: "resp-test-copilot",
+    object: "response",
+    created_at: Math.floor(Date.now() / 1000),
+    model: "gpt-5.4-codex",
+    status: "completed",
+    output: [
+      {
+        id: "msg-test-copilot",
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [
+          {
+            type: "output_text",
+            text: "Hello from Copilot Responses",
+            annotations: [],
+          },
+        ],
+      },
+    ],
+    usage: {
+      input_tokens: 12,
+      output_tokens: 10,
+      total_tokens: 22,
+    },
+  };
+
+  return {
+    responses: {
+      create: async (params: { stream?: boolean }) => {
+        if (params.stream) {
+          return {
+            [Symbol.asyncIterator]: async function* () {
+              yield {
+                type: "response.created",
+                response: {
+                  ...completedResponse,
+                  status: "in_progress",
+                  output: [],
+                },
+              };
+              yield {
+                type: "response.output_text.delta",
+                delta: "Hello from Copilot Responses",
+              };
+              yield { type: "response.completed", response: completedResponse };
+            },
+          };
+        }
+        return completedResponse;
+      },
+    },
+  };
+}
 
 function createCohereTestClient() {
   return {
@@ -387,6 +458,7 @@ describe("model router proxy routes", () => {
       mistralAdapterFactory,
       ollamaAdapterFactory,
       openaiAdapterFactory,
+      githubCopilotAdapterFactory,
       openrouterAdapterFactory,
       perplexityAdapterFactory,
       vllmAdapterFactory,
@@ -396,6 +468,10 @@ describe("model router proxy routes", () => {
         () => createOpenAiTestClient() as never,
       );
     }
+    vi.spyOn(
+      githubCopilotResponsesAdapterFactory,
+      "createClient",
+    ).mockImplementation(() => createResponsesTestClient() as never);
     vi.spyOn(azureAdapterFactory, "createClient").mockImplementation(
       () => createAzureTestClient() as never,
     );
@@ -576,6 +652,206 @@ describe("model router proxy routes", () => {
       );
     });
   }
+
+  test("routes a Responses-only model natively through the provider's Responses surface", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "github-copilot";
+    const modelId = "gpt-5.4-codex";
+    await upsertModel({
+      provider,
+      modelId,
+      supportedEndpoints: ["/responses"],
+    });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Responses-only Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        input: "Hello",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ object: "response" });
+    // The native surface must be used verbatim: translating down to chat
+    // completions would hit an endpoint this model does not serve.
+    expect(
+      githubCopilotResponsesAdapterFactory.createClient,
+    ).toHaveBeenCalledOnce();
+    expect(githubCopilotAdapterFactory.createClient).not.toHaveBeenCalled();
+  });
+
+  test("streams a Responses-only model through the provider's Responses surface", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "github-copilot";
+    const modelId = "gpt-5.4-codex";
+    await upsertModel({
+      provider,
+      modelId,
+      supportedEndpoints: ["/responses"],
+    });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Responses-only Streaming Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/responses`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        stream: true,
+        input: "Hello",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/event-stream");
+    expect(response.body).toContain("data: [DONE]");
+    expect(
+      githubCopilotResponsesAdapterFactory.createClient,
+    ).toHaveBeenCalledOnce();
+  });
+
+  test("rejects a Responses-only model on chat completions with an actionable error", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "github-copilot";
+    const modelId = "gpt-5.4-codex";
+    await upsertModel({
+      provider,
+      modelId,
+      supportedEndpoints: ["/responses"],
+    });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Responses-only Chat Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("/responses");
+    // Nothing may reach the provider: the point of the local rejection is that
+    // the request is known-bad before it costs an upstream round trip.
+    expect(githubCopilotAdapterFactory.createClient).not.toHaveBeenCalled();
+    expect(
+      githubCopilotResponsesAdapterFactory.createClient,
+    ).not.toHaveBeenCalled();
+  });
+
+  test("rejects Copilot embedding requests rather than sending the raw token upstream", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    // Copilot is an OpenAI-wire chat provider, so a registered embedding model
+    // would otherwise fall into the generic OpenAI-compatible embeddings
+    // adapter — which skips the GitHub-token-to-Copilot-bearer exchange.
+    const provider = "github-copilot";
+    const modelId = "text-embedding-3-small";
+    await upsertModel({ provider, modelId, embeddingDimensions: 1536 });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Copilot Embedding Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        input: ["first"],
+      },
+    });
+
+    expect(response.statusCode).toBe(501);
+    expect(githubCopilotAdapterFactory.createClient).not.toHaveBeenCalled();
+  });
 
   test("records model router requests with a model router interaction source", async ({
     makeAgent,
@@ -1021,6 +1297,74 @@ describe("model router proxy routes", () => {
       authenticatedAppName: "Backend Service",
       externalAgentId: "caller-supplied-label",
     });
+  });
+
+  test("rejects a credential-level subscription mapped out of band to client credentials", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(authRoutes);
+    await app.register(modelRouterProxyRoutes);
+    const provider = "xai";
+    const modelId = "grok-4";
+    await upsertModel({ provider, modelId });
+    const organization = await makeOrganization();
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "rt-never-share",
+          userId: "x-user",
+        }),
+      },
+    });
+    const chatApiKey = await makeLlmProviderApiKey(organization.id, secret.id, {
+      provider,
+    });
+    await linkAllProviderModelsToApiKey(provider, chatApiKey.id);
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Unsafe Subscription Router",
+      agentType: "llm_proxy",
+    });
+    const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
+      organizationId: organization.id,
+      authorId: crypto.randomUUID(),
+      name: "Out-of-band Subscription Client",
+      allowedLlmProxyIds: [agent.id],
+      providerApiKeys: [{ provider, providerApiKeyId: chatApiKey.id }],
+    });
+    const tokenResponse = await app.inject({
+      method: "POST",
+      url: "/api/auth/oauth2/token",
+      payload: {
+        grant_type: "client_credentials",
+        client_id: oauthClient.clientId,
+        client_secret: clientSecret,
+        scope: LLM_PROXY_OAUTH_SCOPE,
+      },
+    });
+    expect(tokenResponse.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${tokenResponse.json().access_token}`,
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain(
+      "X Premium (SuperGrok) is per-user",
+    );
   });
 
   test("rejects Model Router access tokens for disabled LLM OAuth clients", async ({

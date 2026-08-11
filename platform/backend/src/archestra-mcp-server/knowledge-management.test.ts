@@ -12,6 +12,7 @@ import {
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
+import { QUOTE_CITATION_INSTRUCTION } from "@/knowledge-base/quote-verification";
 import { KbChunkModel, KbDocumentModel, TeamModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
@@ -158,6 +159,7 @@ describe("knowledge-management tool execution", () => {
       expect(result.structuredContent).toEqual({
         results: mockResults,
         totalChunks: 1,
+        citationInstruction: QUOTE_CITATION_INSTRUCTION,
       });
       const parsed = JSON.parse((result.content[0] as any).text);
       expect(parsed.totalChunks).toBe(1);
@@ -170,6 +172,64 @@ describe("knowledge-management tool execution", () => {
       expect(callArgs.queryText).toBe("relevant document");
       expect(callArgs.limit).toBe(10);
       expect(teamIdsSpy).toHaveBeenCalledOnce();
+
+      querySpy.mockRestore();
+    });
+
+    test("omits the citation instruction when quote verification is disabled", async ({
+      makeAgent,
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const agentWithKb = await makeAgent({
+        name: "Agent With KB (verification off)",
+        organizationId: org.id,
+        knowledgeBaseIds: [kb.id],
+      });
+
+      const querySpy = vi.spyOn(queryService, "query").mockResolvedValueOnce([
+        {
+          chunkId: "chunk-1",
+          content: "This is a relevant document",
+          score: 0.95,
+          metadata: { source: "test.md" },
+        },
+      ] as any);
+
+      // Disabling the feature must stop asking the model to quote, not just
+      // skip the check — otherwise the flag can't turn the behaviour off.
+      const original = config.kb.quoteVerificationEnabled;
+      config.kb.quoteVerificationEnabled = false;
+      try {
+        const result = await executeArchestraTool(
+          t("query_knowledge_sources"),
+          { query: "relevant document" },
+          {
+            agent: { id: agentWithKb.id, name: agentWithKb.name },
+            organizationId: org.id,
+            userId: user.id,
+          },
+        );
+
+        expect(result.isError).toBeFalsy();
+        expect(result.structuredContent).not.toHaveProperty(
+          "citationInstruction",
+        );
+        expect((result.content[0] as any).text).not.toContain(
+          QUOTE_CITATION_INSTRUCTION,
+        );
+      } finally {
+        config.kb.quoteVerificationEnabled = original;
+      }
 
       querySpy.mockRestore();
     });
@@ -431,6 +491,7 @@ describe("knowledge-management tool execution", () => {
           }),
         ],
         totalChunks: 1,
+        citationInstruction: QUOTE_CITATION_INSTRUCTION,
       });
       expect((result.content[0] as any).text).toContain(
         "Visible connector result",

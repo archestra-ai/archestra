@@ -34,6 +34,7 @@ import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
+import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -827,6 +828,7 @@ export async function getChatMcpTools({
   blockOnApprovalRequired,
   scheduleTriggerRunId,
   hookRunCollector,
+  kbChunksCollector,
   subagentToolStream,
   taskBridge,
   repeatTracker,
@@ -872,6 +874,11 @@ export async function getChatMcpTools({
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
+  /**
+   * Per-turn sink for the KB chunks `query_knowledge_sources` returns (chat
+   * path only; see kbChunksCollector on ChatToolContext).
+   */
+  kbChunksCollector?: KbChunkForQuoteCheck[];
   /**
    * Bridge that surfaces a delegated child agent's tool calls on the caller's
    * conversation surface (chat path only). Forwarded into delegation tools so a
@@ -1042,6 +1049,7 @@ export async function getChatMcpTools({
       user,
       blockOnApprovalRequired,
       hookRunCollector,
+      kbChunksCollector,
       subagentToolStream,
       taskBridge,
       mcpGwToken,

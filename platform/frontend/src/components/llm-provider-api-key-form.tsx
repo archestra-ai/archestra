@@ -405,6 +405,8 @@ interface LlmProviderApiKeyFormProps {
   allowPersonalSubscriptions?: boolean;
   /** Dedicated credential flow shown by the create dialog. */
   credentialMode?: "api-key" | "subscription";
+  /** The caller is satisfying an agent pin that requires this exact subscription kind. */
+  requiresExactSubscriptionCredential?: boolean;
   /** Hide optional API-key fields behind an Advanced settings disclosure. */
   progressive?: boolean;
   /** Called when a subscription sign-in returns a credential. */
@@ -426,6 +428,7 @@ export function LlmProviderApiKeyForm({
   forEmbedding = false,
   allowPersonalSubscriptions = true,
   credentialMode,
+  requiresExactSubscriptionCredential = false,
   progressive = false,
   onSubscriptionCredential,
 }: LlmProviderApiKeyFormProps) {
@@ -1130,9 +1133,11 @@ export function LlmProviderApiKeyForm({
                       <p className="mt-1 text-xs text-muted-foreground">
                         Archestra has read-only access to your external Vault,
                         so it cannot save or rotate OAuth credentials there.
-                        {subscriptionHasApiKeyAlternative
-                          ? " Store a provider API key in Vault instead, or ask an administrator to use managed secret storage."
-                          : " This provider has no API-key alternative, so an administrator must use managed secret storage to enable subscription sign-in."}
+                        {requiresExactSubscriptionCredential
+                          ? " This agent requires the same personal subscription, so a provider API key from Vault will not work. Ask an administrator to use managed secret storage, or choose a different agent or model."
+                          : subscriptionHasApiKeyAlternative
+                            ? " Store a provider API key in Vault instead, or ask an administrator to use managed secret storage."
+                            : " This provider has no API-key alternative, so an administrator must use managed secret storage to enable subscription sign-in."}
                       </p>
                     </div>
                   ) : (

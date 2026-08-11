@@ -1176,10 +1176,11 @@ export async function handleLLMProxy<
     const finalRequest = requestAdapter.toProviderRequest();
 
     // Which called tool names count as available to evaluatePolicies, in the
-    // canonical form tool-call names are compared in. Declared names rather
-    // than `getTools()`, which keeps only schema-carrying custom tools: a
-    // provider built-in the caller declared and executes itself (Anthropic's
-    // bash/text_editor/computer) is absent from that list, so every call to
+    // canonical form tool-call names are compared in. Read from the request
+    // body rather than `getTools()`, which keeps only schema-carrying function
+    // tools: a tool the caller declared and executes itself (Anthropic's
+    // bash/text_editor/computer, OpenAI chat `custom` tools, every non-function
+    // tool on the Responses surface) is absent from that list, so every call to
     // one would be refused.
     //
     // Those names resolve to no `toolsTable` row, so no policy speaks for them
@@ -1188,11 +1189,8 @@ export async function handleLLMProxy<
     // them, and leaves the client — which is the one executing them — as the
     // boundary that governs them.
     const enabledToolNames = new Set(
-      (
-        requestAdapter.getDeclaredToolNames?.() ??
-        requestAdapter.getTools().map((t) => t.name)
-      )
-        .filter(Boolean)
+      utils
+        .collectDeclaredToolNames(requestAdapter.getOriginalRequest())
         .map(canonicalizeToolName),
     );
 

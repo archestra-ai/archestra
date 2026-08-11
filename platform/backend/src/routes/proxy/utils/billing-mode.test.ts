@@ -109,6 +109,7 @@ describe("openai isSubscriptionCredential (Codex credential format)", () => {
 describe("xai isSubscriptionCredential (X Premium credential format)", () => {
   const subscriptionCredential = encodeXaiSubscriptionCredential({
     refreshToken: "rt_test",
+    userId: "x-user-123",
   });
   const isSubscription = (apiKey: string | undefined) =>
     xaiAdapterFactory.isSubscriptionCredential?.(apiKey) ?? false;

@@ -5,6 +5,7 @@ import { isRateLimited } from "@/agents/utils";
 import { CacheKey } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import { decodeJwtClaims } from "@/services/openai-codex-credentials";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import {
   xaiOauthEndpoints,
@@ -171,6 +172,7 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let payload: {
         access_token?: string;
         refresh_token?: string;
+        id_token?: string;
         error?: string;
       };
       try {
@@ -195,10 +197,32 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "X sign-in returned no refresh token — the offline_access scope must be requested",
           );
         }
+        const identityClaims = payload.id_token
+          ? decodeJwtClaims(payload.id_token)
+          : undefined;
+        const userId =
+          typeof identityClaims?.sub === "string"
+            ? identityClaims.sub.trim()
+            : "";
+        if (!userId) {
+          logger.error(
+            "[XaiSubscriptionAuth] token response has no usable id_token subject",
+          );
+          throw new ApiError(
+            502,
+            "X sign-in returned no account identity — reconnect and ensure the openid scope is requested",
+          );
+        }
+        const email =
+          typeof identityClaims?.email === "string" && identityClaims.email
+            ? identityClaims.email
+            : undefined;
         return {
           status: "complete" as const,
           credential: encodeXaiSubscriptionCredential({
             refreshToken: payload.refresh_token,
+            userId,
+            ...(email ? { email } : {}),
           }),
         };
       }
@@ -256,9 +280,10 @@ const DevicePollResponseSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("complete"),
     /**
-     * The encoded X Premium credential (the refresh token), used by the frontend
-     * as the `apiKey` of a standard CreateLlmProviderApiKey call against the
-     * `xai` provider. Redeemed for short-lived access tokens at request time.
+     * The encoded X Premium credential (refresh token plus account identity),
+     * used by the frontend as the `apiKey` of a standard
+     * CreateLlmProviderApiKey call against the `xai` provider. Redeemed for
+     * short-lived access tokens at request time.
      */
     credential: z.string(),
   }),

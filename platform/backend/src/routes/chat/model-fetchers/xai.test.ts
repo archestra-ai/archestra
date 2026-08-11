@@ -9,8 +9,8 @@ const MODELS_RESPONSE = {
 };
 
 /**
- * Routes the three calls a subscription listing makes — OIDC discovery, the
- * token redemption, then the live /models fetch — to their own responses.
+ * Routes the three calls a subscription listing makes — OIDC discovery, token
+ * redemption, then the session proxy's live /models fetch — to their own responses.
  */
 function stubXaiFetch(options?: { redemption?: Response }) {
   const issuer = config.llm.xai.subscription.issuer;
@@ -40,19 +40,22 @@ afterEach(() => {
 
 describe("fetchXaiModels with an X Premium subscription credential", () => {
   it("lists models live under the redeemed bearer", async () => {
-    // xAI serves subscription traffic on its ordinary OpenAI-compatible surface,
-    // so unlike Codex the catalog is fetched rather than hardcoded.
     const fetchMock = stubXaiFetch();
 
     const models = await fetchXaiModels(
-      encodeXaiSubscriptionCredential({ refreshToken: "rt_secret" }),
+      encodeXaiSubscriptionCredential({
+        refreshToken: "rt_secret",
+        userId: "x-user-123",
+        email: "x@example.com",
+      }),
     );
 
     expect(models.map((model) => model.id)).toEqual(["grok-4", "grok-4-fast"]);
     expect(models.every((model) => model.provider === "xai")).toBe(true);
 
-    const modelsCall = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes("/models"),
+    const modelsCall = fetchMock.mock.calls.find(
+      ([url]) =>
+        String(url) === `${config.llm.xai.subscription.baseUrl}/models`,
     );
     expect(modelsCall).toBeDefined();
     const init = modelsCall?.[1] as
@@ -63,6 +66,15 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
     expect(init?.headers?.Authorization ?? init?.headers?.authorization).toBe(
       "Bearer at_1",
     );
+    expect(init?.headers).toEqual(
+      expect.objectContaining({
+        "X-XAI-Token-Auth": "xai-grok-cli",
+        "x-userid": "x-user-123",
+        "x-email": "x@example.com",
+        "x-grok-client-identifier": "archestra",
+        "x-grok-client-mode": "headless",
+      }),
+    );
   });
 
   it("refuses to send the redeemed bearer to a per-key base URL override", async () => {
@@ -72,10 +84,13 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
 
     await expect(
       fetchXaiModels(
-        encodeXaiSubscriptionCredential({ refreshToken: "rt_secret" }),
+        encodeXaiSubscriptionCredential({
+          refreshToken: "rt_secret",
+          userId: "x-user-123",
+        }),
         "https://attacker.example/v1",
       ),
-    ).rejects.toThrow(/configured xAI API base URL/);
+    ).rejects.toThrow(/per-key base URL override/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -86,9 +101,24 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
 
     await expect(
       fetchXaiModels(
-        encodeXaiSubscriptionCredential({ refreshToken: "rt_bad" }),
+        encodeXaiSubscriptionCredential({
+          refreshToken: "rt_bad",
+          userId: "x-user-123",
+        }),
       ),
     ).rejects.toThrow(/Reconnect your X account/);
+  });
+
+  it.each([
+    ["a malformed xAI marker", "xai-subscription:not-base64"],
+    ["another provider marker", "chatgpt-oauth:encoded-refresh-token"],
+  ])("rejects %s before any fetch", async (_label, credential) => {
+    const fetchMock = stubXaiFetch();
+
+    await expect(
+      fetchXaiModels(credential, "https://attacker.example/v1"),
+    ).rejects.toThrow(/Reconnect|reconnect/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

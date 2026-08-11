@@ -506,6 +506,7 @@ The marker is advice, not a quality verdict. Models are treated as suitable unle
 | Variable                     | Required | Description                                                                    |
 | ---------------------------- | -------- | ------------------------------------------------------------------------------ |
 | `ARCHESTRA_XAI_BASE_URL`     | No       | xAI API base URL (default: `https://api.x.ai/v1`)                             |
+| `ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL` | No | X Premium session proxy (default: `https://cli-chat-proxy.grok.com/v1`) |
 | `ARCHESTRA_CHAT_XAI_API_KEY` | No       | Default API key for xAI (can be overridden per conversation/team/org)       |
 
 ### Getting an API Key
@@ -518,9 +519,11 @@ Reuse an X Premium (SuperGrok) subscription for chat instead of a metered API ke
 
 These keys are per-user and personal-only: each person connects their own X account. Requests are billed to the subscription. An agent set up with a subscription key always runs on the chatting user's own subscription — never someone else's. Users without a connected account get a sign-in prompt in chat.
 
-The model list comes from xAI's own `/models` endpoint under your subscription, so it reflects what the account is actually entitled to.
+The model list and inference requests use xAI's dedicated Grok CLI session proxy, not the metered `api.x.ai` API-key surface. Session requests carry the account identity returned by the device login.
 
-Subscription keys only talk to the configured xAI endpoint. A [per-key base URL override](/docs/platform-llm-proxy-authentication#custom-base-urls) is rejected.
+Subscription keys only talk to the configured xAI subscription endpoint. A [per-key base URL override](/docs/platform-llm-proxy-authentication#custom-base-urls) is rejected.
+
+Subscription sign-in is unavailable when Bring Your Own Secrets uses a read-only external Vault, because Archestra cannot save or rotate OAuth credentials there. Use a Vault-backed xAI API key instead, or switch to managed secret storage.
 
 ### Popular Models
 

@@ -137,6 +137,26 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.queryByText("Extra HTTP headers")).not.toBeInTheDocument();
   });
 
+  it("explains why subscription sign-in is unavailable with BYOS", () => {
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "byosEnabled",
+    );
+    renderForm({
+      credentialMode: "subscription",
+      defaults: {
+        provider: "xai",
+        authMethod: "subscription",
+      },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Subscription sign-in is unavailable with Bring Your Own Secrets",
+    );
+    expect(
+      screen.queryByRole("button", { name: /Sign in with X/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("reveals optional API key settings progressively", async () => {
     const user = userEvent.setup();
     renderForm({ credentialMode: "api-key", progressive: true });

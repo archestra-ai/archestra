@@ -14,6 +14,7 @@ import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
+import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
   InsertLlmProviderApiKey,
@@ -90,7 +91,7 @@ class LlmProviderApiKeyModel {
    * chat/agent preflight needs to know that the pinned credential is somebody's
    * personal subscription — and which one — to gate sending behind "connect
    * your own account" for every subscription kind, not just ChatGPT. Only
-   * credential-level subscription providers' secrets are ever decrypted, and
+   * credential-level subscription providers' secrets are ever resolved, and
    * only the derived kind is returned — never the value.
    */
   static async findByIdWithSubscriptionInfo(id: string): Promise<
@@ -104,6 +105,8 @@ class LlmProviderApiKeyModel {
       .select({
         apiKey: schema.llmProviderApiKeysTable,
         secret: schema.secretsTable.secret,
+        secretIsVault: schema.secretsTable.isVault,
+        secretIsByosVault: schema.secretsTable.isByosVault,
       })
       .from(schema.llmProviderApiKeysTable)
       .leftJoin(
@@ -116,11 +119,13 @@ class LlmProviderApiKeyModel {
       return null;
     }
 
-    const subscriptionKind = isCredentialLevelSubscriptionProvider(
-      row.apiKey.provider,
-    )
-      ? subscriptionKindFromCredential(decryptApiKeyValue(row.secret))
-      : null;
+    const subscriptionKind = await subscriptionKindFromStoredSecret({
+      provider: row.apiKey.provider,
+      secretId: row.apiKey.secretId,
+      secret: row.secret,
+      secretIsVault: row.secretIsVault,
+      secretIsByosVault: row.secretIsByosVault,
+    });
 
     return {
       ...row.apiKey,
@@ -268,7 +273,7 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    return apiKeys.map(toApiKeyWithScopeInfo);
+    return await Promise.all(apiKeys.map(toApiKeyWithScopeInfo));
   }
 
   /**
@@ -375,7 +380,7 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    return apiKeys.map(toApiKeyWithScopeInfo);
+    return await Promise.all(apiKeys.map(toApiKeyWithScopeInfo));
   }
 
   /**
@@ -542,8 +547,8 @@ class LlmProviderApiKeyModel {
    * credentials are per-user, so when resolution lands on someone else's
    * subscription key (e.g. attached to a shared agent) the acting user's own
    * subscription is substituted — this is that lookup. The marker lives inside
-   * the encrypted secret, so the user's personal keys for the subscription's
-   * provider are decrypted here (the value is only handed to the
+   * the resolved secret, so the user's personal keys for the subscription's
+   * provider are read here (the value is only handed to the
    * credential-resolution caller).
    */
   static async findPersonalSubscriptionKey({
@@ -558,7 +563,6 @@ class LlmProviderApiKeyModel {
     const candidates = await db
       .select({
         apiKey: schema.llmProviderApiKeysTable,
-        secret: schema.secretsTable.secret,
       })
       .from(schema.llmProviderApiKeysTable)
       .innerJoin(
@@ -582,9 +586,11 @@ class LlmProviderApiKeyModel {
       );
 
     for (const candidate of candidates) {
-      const apiKeyValue = decryptApiKeyValue(candidate.secret);
+      const apiKeyValue = candidate.apiKey.secretId
+        ? await getSecretValueForLlmProviderApiKey(candidate.apiKey.secretId)
+        : undefined;
       if (
-        apiKeyValue !== null &&
+        apiKeyValue !== undefined &&
         subscriptionKindFromCredential(apiKeyValue) === kind
       ) {
         return { apiKey: candidate.apiKey, apiKeyValue };
@@ -913,16 +919,17 @@ class LlmProviderApiKeyModel {
 
 /**
  * Maps a list-query row (key + joined secret columns) to the response shape,
- * deriving the secret-value metadata (vault reference, ChatGPT-subscription
- * marker) and dropping the secret columns.
+ * deriving the secret-value metadata (vault reference, subscription marker)
+ * and dropping the secret columns.
  *
  * The secret is decrypted only when its value is actually inspected: BYOS-vault
  * secrets carry the "path#key" reference to surface (the BYOS manager is the
  * only writer of vault references, and it always sets `isByosVault`), and
- * OpenAI secrets may carry the ChatGPT-subscription marker. Every other key
- * skips the decrypt; the decrypted value never leaves this mapper either way.
+ * credential-level providers may carry a subscription marker. Vault-backed
+ * values are resolved only for those providers; the value never leaves this
+ * mapper either way.
  */
-function toApiKeyWithScopeInfo<
+async function toApiKeyWithScopeInfo<
   T extends {
     provider: string;
     secretId: string | null;
@@ -932,19 +939,27 @@ function toApiKeyWithScopeInfo<
   },
 >(
   key: T,
-): Omit<T, "secret" | "secretIsVault" | "secretIsByosVault"> & {
-  vaultSecretPath: string | null;
-  vaultSecretKey: string | null;
-  secretStorageType: SecretStorageType;
-  subscriptionKind: SubscriptionCredentialKind | null;
-  isChatgptSubscription: boolean;
-} {
-  const apiKeyValue =
+): Promise<
+  Omit<T, "secret" | "secretIsVault" | "secretIsByosVault"> & {
+    vaultSecretPath: string | null;
+    vaultSecretKey: string | null;
+    secretStorageType: SecretStorageType;
+    subscriptionKind: SubscriptionCredentialKind | null;
+    isChatgptSubscription: boolean;
+  }
+> {
+  const storedApiKeyValue =
     isCredentialLevelSubscriptionProvider(key.provider) || key.secretIsByosVault
       ? decryptApiKeyValue(key.secret)
       : null;
-  const vaultRef = parseVaultReferenceFromApiKey(apiKeyValue);
-  const subscriptionKind = subscriptionKindFromCredential(apiKeyValue);
+  const vaultRef = parseVaultReferenceFromApiKey(storedApiKeyValue);
+  const subscriptionKind = await subscriptionKindFromStoredSecret({
+    provider: key.provider,
+    secretId: key.secretId,
+    secret: key.secret,
+    secretIsVault: key.secretIsVault,
+    secretIsByosVault: key.secretIsByosVault,
+  });
   const { secret: _secret, secretIsVault, secretIsByosVault, ...rest } = key;
   return {
     ...rest,
@@ -960,6 +975,37 @@ function toApiKeyWithScopeInfo<
     // on ChatGPT specifically; both derive from the same marker read.
     isChatgptSubscription: subscriptionKind === "chatgpt",
   };
+}
+
+/** Resolve Vault-backed values only for providers whose credential kind needs it. */
+async function subscriptionKindFromStoredSecret(params: {
+  provider: string;
+  secretId: string | null;
+  secret: SecretValue | null;
+  secretIsVault: boolean | null;
+  secretIsByosVault: boolean | null;
+}): Promise<SubscriptionCredentialKind | null> {
+  if (!isCredentialLevelSubscriptionProvider(params.provider)) {
+    return null;
+  }
+
+  let apiKeyValue = decryptApiKeyValue(params.secret);
+  if (
+    params.secretId &&
+    (params.secretIsVault === true || params.secretIsByosVault === true)
+  ) {
+    try {
+      apiKeyValue =
+        (await getSecretValueForLlmProviderApiKey(params.secretId)) ?? null;
+    } catch (error) {
+      logger.warn(
+        { error, secretId: params.secretId },
+        "Failed to resolve Vault-backed LLM provider secret while deriving subscription metadata",
+      );
+      apiKeyValue = null;
+    }
+  }
+  return subscriptionKindFromCredential(apiKeyValue);
 }
 
 /**

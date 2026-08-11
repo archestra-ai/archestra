@@ -5,7 +5,7 @@
  * Each user holds a long-lived xAI `refresh_token` (obtained via the device flow
  * — see routes/xai-subscription-auth) which is NOT accepted by api.x.ai directly.
  * It is redeemed at the issuer's token endpoint for a short-lived `access_token`
- * used as the bearer against the ordinary OpenAI-compatible surface.
+ * used as the bearer against xAI's OpenAI-compatible CLI chat proxy.
  *
  * The redemption sits in the LLM proxy hot path, so this manager caches access
  * tokens per llm_provider_api_keys row id and single-flights concurrent
@@ -218,13 +218,15 @@ class XaiSubscriptionTokenManager {
       );
       return;
     }
-    if (!decodeXaiSubscriptionCredential(storedValue)) {
+    const storedCredential = decodeXaiSubscriptionCredential(storedValue);
+    if (!storedCredential) {
       // The stored secret is no longer an X Premium credential (e.g.
       // reconnected as a plain API key). Don't overwrite it.
       return;
     }
     await secretManager().updateSecret(keyRow.secretId, {
       apiKey: encodeXaiSubscriptionCredential({
+        ...storedCredential,
         refreshToken: newRefreshToken,
       }),
     });
@@ -266,7 +268,7 @@ export function createXaiSubscriptionFetch(params: {
       return redemptionErrorResponse(
         new ApiError(
           400,
-          "X Premium (SuperGrok) credentials can only be used against the configured xAI API base URL — remove the per-key base URL override or use an API key instead.",
+          "X Premium (SuperGrok) credentials can only be used against the configured xAI subscription endpoint — remove the per-key base URL override or use an API key instead.",
         ),
       );
     }
@@ -274,8 +276,15 @@ export function createXaiSubscriptionFetch(params: {
     const doFetch = async (accessToken: string) => {
       const headers = new Headers(init?.headers);
       // xAI authenticates with the OAuth access token, never the inbound
-      // placeholder key — strip and replace.
+      // placeholder key. The proxy also requires the identity/client headers
+      // used by xAI's first-party Grok client; set them after caller headers so
+      // a per-key override cannot spoof another account.
       headers.set("authorization", `Bearer ${accessToken}`);
+      for (const [name, value] of Object.entries(
+        xaiSubscriptionSessionHeaders(credential),
+      )) {
+        headers.set(name, value);
+      }
       return baseFetch(input, { ...init, headers });
     };
 
@@ -369,17 +378,34 @@ export function xaiOauthErrorLogFields(body: string): {
 }
 
 /**
- * True when a URL is on the configured xAI API origin — the only origin an
+ * True when a URL is on the configured xAI session-proxy origin — the only origin an
  * X Premium subscription bearer may be sent to. Shared by the proxy fetch
  * wrapper and the xai model fetcher so the fail-closed rule cannot drift
  * between the two.
  */
 export function isXaiSubscriptionBearerOrigin(url: string): boolean {
   try {
-    return new URL(url).origin === new URL(config.llm.xai.baseUrl).origin;
+    return (
+      new URL(url).origin ===
+      new URL(config.llm.xai.subscription.baseUrl).origin
+    );
   } catch {
     return false;
   }
+}
+
+/** Required companion headers for xAI OAuth-session requests. */
+export function xaiSubscriptionSessionHeaders(
+  credential: XaiSubscriptionCredential,
+): Record<string, string> {
+  return {
+    "X-XAI-Token-Auth": "xai-grok-cli",
+    "x-userid": credential.userId,
+    ...(credential.email ? { "x-email": credential.email } : {}),
+    "x-grok-client-version": config.api.version,
+    "x-grok-client-identifier": "archestra",
+    "x-grok-client-mode": "headless",
+  };
 }
 
 // ===== Internal helpers =====

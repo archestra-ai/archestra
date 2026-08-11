@@ -54,6 +54,14 @@ function poll(app: FastifyInstanceWithZod) {
   });
 }
 
+function idToken(claims: Record<string, unknown>): string {
+  return [
+    Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url"),
+    Buffer.from(JSON.stringify(claims)).toString("base64url"),
+    "signature",
+  ].join(".");
+}
+
 describe("POST /api/xai-subscription-auth/device/poll", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
@@ -86,6 +94,7 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
       Response.json({
         access_token: "xai-access-token",
         refresh_token: "xai-refresh-token",
+        id_token: idToken({ sub: "x-user-123", email: "x@example.com" }),
         expires_in: 3600,
       }),
     );
@@ -99,6 +108,8 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
     // must round-trip through the decoder the proxy adapter uses.
     expect(decodeXaiSubscriptionCredential(body.credential)).toEqual({
       refreshToken: "xai-refresh-token",
+      userId: "x-user-123",
+      email: "x@example.com",
     });
 
     const tokenCall = fetchMock.mock.calls.find(
@@ -169,5 +180,19 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
 
     expect(response.statusCode).toBe(502);
     expect(response.json().error.message).toContain("refresh token");
+  });
+
+  test("502s when xAI grants no usable account identity", async () => {
+    mockXaiFetch(() =>
+      Response.json({
+        access_token: "xai-access-token",
+        refresh_token: "xai-refresh-token",
+      }),
+    );
+
+    const response = await poll(app);
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error.message).toContain("account identity");
   });
 });

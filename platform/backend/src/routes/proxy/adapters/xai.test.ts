@@ -2,6 +2,8 @@ import {
   ArchestraInternalErrorCode,
   SUBSCRIPTION_CREDENTIALS,
 } from "@archestra/shared";
+import config from "@/config";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { describe, expect, test } from "@/test";
 import type { ApiError } from "@/types";
 import { xaiAdapterFactory } from "./xai";
@@ -34,6 +36,41 @@ describe("createClient", () => {
         source: "chat",
       }),
     ).not.toThrow();
+  });
+
+  test("routes a subscription credential through the configured session proxy", () => {
+    const client = xaiAdapterFactory.createClient(
+      encodeXaiSubscriptionCredential({
+        refreshToken: "rt_secret",
+        userId: "x-user-123",
+      }),
+      { baseUrl: config.llm.xai.baseUrl, source: "chat" },
+    );
+
+    expect((client as { baseURL: string }).baseURL).toBe(
+      config.llm.xai.subscription.baseUrl,
+    );
+  });
+
+  test("rejects another provider's subscription marker", () => {
+    expect(() =>
+      xaiAdapterFactory.createClient("chatgpt-oauth:encoded-refresh-token", {
+        baseUrl: config.llm.xai.baseUrl,
+        source: "chat",
+      }),
+    ).toThrow(/another provider/);
+  });
+
+  test("rejects a per-key base URL for a subscription credential", () => {
+    expect(() =>
+      xaiAdapterFactory.createClient(
+        encodeXaiSubscriptionCredential({
+          refreshToken: "rt_secret",
+          userId: "x-user-123",
+        }),
+        { baseUrl: "https://custom.example/v1", source: "chat" },
+      ),
+    ).toThrow(/per-key base URL/);
   });
 });
 

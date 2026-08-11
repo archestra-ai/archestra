@@ -13,10 +13,11 @@
  * fetcher, this provider's token manager) decode it. That keeps the DB schema and
  * the whole credential-resolution path unchanged.
  *
- * The encoded payload is just the long-lived `refresh_token`. Unlike Codex there
- * is no account identifier to carry: xAI infers the account from the bearer and
- * requires no companion header. Short-lived access tokens are redeemed from the
- * refresh token at request time — see services/xai-subscription-token.
+ * The encoded payload carries the long-lived `refresh_token` plus the account
+ * identity read from the device flow's `id_token`. xAI's session proxy requires
+ * that identity in companion headers on every request. Short-lived access
+ * tokens are redeemed from the refresh token at request time — see
+ * services/xai-subscription-token.
  */
 
 import { SUBSCRIPTION_CREDENTIALS } from "@archestra/shared";
@@ -32,6 +33,10 @@ const XAI_SUBSCRIPTION_CREDENTIAL_MARKER =
 export interface XaiSubscriptionCredential {
   /** Long-lived xAI OAuth refresh token (may rotate on redemption). */
   refreshToken: string;
+  /** `sub` from the xAI id_token, sent as the required `x-userid` header. */
+  userId: string;
+  /** Optional account email sent as `x-email`, matching xAI's first-party client. */
+  email?: string;
 }
 
 /** True when a resolved credential string is an X Premium credential. */
@@ -49,9 +54,9 @@ export function encodeXaiSubscriptionCredential(
 ): string {
   // Fail loudly at encode time rather than minting a valid-looking string that
   // only breaks later at request time (decode rejects the same empty value).
-  if (!credential.refreshToken) {
+  if (!credential.refreshToken || !credential.userId) {
     throw new Error(
-      "Cannot encode X Premium credential with an empty refreshToken",
+      "Cannot encode X Premium credential with an empty refreshToken or userId",
     );
   }
   const json = JSON.stringify(credential);
@@ -71,10 +76,16 @@ export function decodeXaiSubscriptionCredential(
     );
     const json = Buffer.from(b64, "base64").toString("utf8");
     const parsed = JSON.parse(json) as Partial<XaiSubscriptionCredential>;
-    if (!parsed.refreshToken) {
+    if (!parsed.refreshToken || !parsed.userId) {
       return null;
     }
-    return { refreshToken: parsed.refreshToken };
+    return {
+      refreshToken: parsed.refreshToken,
+      userId: parsed.userId,
+      ...(typeof parsed.email === "string" && parsed.email
+        ? { email: parsed.email }
+        : {}),
+    };
   } catch {
     return null;
   }

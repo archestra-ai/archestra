@@ -110,28 +110,17 @@ describe("subscriptionKindFromKeyMetadata", () => {
     ).toBe("chatgpt");
   });
 
-  it("falls back to the connect-flow key name when the secret is unreadable", () => {
-    // Vault-backed deployments: the metadata endpoint cannot inspect the secret,
-    // so the kind rides on the name the connect flow assigned.
+  it("does not infer credential kind from a mutable display name", () => {
     expect(
       subscriptionKindFromKeyMetadata({
         provider: "xai",
         name: "X Premium (SuperGrok)",
       }),
-    ).toBe("x-premium");
+    ).toBeNull();
     expect(
       subscriptionKindFromKeyMetadata({
         provider: "openai",
         name: " chatgpt subscription ",
-      }),
-    ).toBe("chatgpt");
-  });
-
-  it("does not match the name fallback across providers", () => {
-    expect(
-      subscriptionKindFromKeyMetadata({
-        provider: "openai",
-        name: "X Premium (SuperGrok)",
       }),
     ).toBeNull();
   });

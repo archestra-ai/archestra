@@ -2070,12 +2070,14 @@ const config = {
       /**
        * "X Premium (SuperGrok)" subscription auth mode on the xAI provider:
        * reuse a user's X Premium subscription for chat instead of a metered
-       * console API key. Unlike ChatGPT/Codex — which serves subscription
-       * traffic from a separate backend — xAI accepts the redeemed bearer on
-       * its ordinary OpenAI-compatible surface, so `baseUrl` above covers
-       * inference and only the OAuth side is configured here.
+       * console API key. xAI serves OAuth sessions through the Grok CLI chat
+       * proxy, separately from the metered `api.x.ai` API-key surface above.
        */
       subscription: {
+        /** OpenAI-compatible inference/model endpoint for OAuth sessions. */
+        baseUrl:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL ||
+          "https://cli-chat-proxy.grok.com/v1",
         /** OAuth issuer; its OIDC discovery document supplies the endpoints. */
         issuer:
           process.env.ARCHESTRA_XAI_SUBSCRIPTION_ISSUER || "https://auth.x.ai",
@@ -2086,8 +2088,8 @@ const config = {
         /**
          * Scopes requested at device-authorization time, space-separated.
          * `offline_access` is what yields the long-lived refresh token the
-         * provider key stores; `api:access`/`grok-cli:access` are what api.x.ai
-         * accepts the redeemed bearer for. Overridable because xAI gates some
+         * provider key stores; `grok-cli:access` authorizes the session proxy.
+         * Overridable because xAI gates some
          * scopes by plan — an operator whose accounts are refused
          * `grok-cli:access` can drop it without a code change.
          */

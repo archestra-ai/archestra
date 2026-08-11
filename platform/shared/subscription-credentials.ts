@@ -214,7 +214,6 @@ export function subscriptionKindFromCredential(
  */
 interface SubscriptionKeyMetadata {
   provider: string;
-  name: string;
   subscriptionKind?: SubscriptionCredentialKind | null;
   isChatgptSubscription?: boolean;
 }
@@ -222,14 +221,9 @@ interface SubscriptionKeyMetadata {
 /**
  * The subscription a key's METADATA identifies, or null for an ordinary key.
  *
- * `subscriptionKind` is derived server-side by inspecting the stored secret,
- * which is impossible on deployments where the secret column holds only a
- * vault reference — there the kind arrives null even for a connected
- * subscription key. This falls back to the key's name: the connect flows name
- * the key they create with the registry label, so a name that equals the label
- * of a credential-level kind on the same provider identifies that kind. The
- * fallback is a heuristic — a renamed key degrades to "ordinary key" — but it
- * is UI-only; the send path always re-derives the kind from the real secret.
+ * `subscriptionKind` is derived server-side by inspecting the resolved secret.
+ * Display names are intentionally never used as an authentication signal: they
+ * are mutable, and an ordinary API key is allowed to share a registry label.
  */
 export function subscriptionKindFromKeyMetadata(
   key: SubscriptionKeyMetadata,
@@ -243,17 +237,7 @@ export function subscriptionKindFromKeyMetadata(
   ) {
     return "chatgpt";
   }
-  const name = key.name.trim().toLowerCase();
-  return (
-    SUBSCRIPTION_CREDENTIAL_KINDS.find((kind) => {
-      const { provider, label, marker } = SUBSCRIPTION_CREDENTIALS[kind];
-      return (
-        marker !== null &&
-        provider === key.provider &&
-        label.toLowerCase() === name
-      );
-    }) ?? null
-  );
+  return null;
 }
 
 /**

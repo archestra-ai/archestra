@@ -21,22 +21,19 @@ describe("isPersonalSubscription", () => {
     ).toBe(true);
   });
 
-  test("falls back to the connect-flow name when the secret is unreadable", () => {
-    // Vault-backed deployments: subscriptionKind arrives null even for a
-    // connected subscription key, so the name the connect flow assigned is the
-    // only remaining signal.
+  test("does not treat a registry-label display name as credential metadata", () => {
     expect(
       isPersonalSubscription({
         provider: "xai",
         name: "X Premium (SuperGrok)",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isPersonalSubscription({
         provider: "openai",
         name: "ChatGPT Subscription",
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   test("keeps the legacy ChatGPT boolean working", () => {

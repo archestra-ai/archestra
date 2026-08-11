@@ -1,8 +1,13 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  SUBSCRIPTION_CREDENTIALS,
+  type SupportedProvider,
+  subscriptionKindFromCredential,
+} from "@archestra/shared";
 import config from "@/config";
 import { decodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import {
-  isXaiSubscriptionBearerOrigin,
+  xaiSubscriptionSessionHeaders,
   xaiSubscriptionTokenManager,
 } from "@/services/xai-subscription-token";
 import { ApiError, type OpenAi } from "@/types";
@@ -32,42 +37,64 @@ function mapXaiModel(
  *
  * With an "X Premium (SuperGrok)" subscription credential the stored secret is
  * an encoded OAuth credential rather than a bearer token, so it is first
- * redeemed for a short-lived access token. Unlike the ChatGPT/Codex equivalent
- * there is no maintained model list to fall back on: xAI serves subscription
- * traffic on its ordinary OpenAI-compatible surface, `/models` included, so the
- * catalog stays live and reflects whatever the account is actually entitled to.
+ * redeemed for a short-lived access token and sent to xAI's dedicated session
+ * proxy with the required account/client headers. Plain API keys continue to
+ * use the configured metered API endpoint.
  */
 export async function fetchXaiModels(
   apiKey: string,
   baseUrlOverride?: string | null,
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
-  const baseUrl = baseUrlOverride || config.llm.xai.baseUrl;
-
+  let baseUrl = baseUrlOverride || config.llm.xai.baseUrl;
   let bearer = apiKey;
+  let requestHeaders = extraHeaders;
+  const subscriptionKind = subscriptionKindFromCredential(apiKey);
+  if (
+    subscriptionKind &&
+    SUBSCRIPTION_CREDENTIALS[subscriptionKind].provider !== "xai"
+  ) {
+    throw new ApiError(
+      401,
+      "The selected xAI key contains a subscription credential for another provider. Reconnect the correct credential.",
+      ArchestraInternalErrorCode.ProviderAuthRequired,
+    );
+  }
   const subscriptionCredential = decodeXaiSubscriptionCredential(apiKey);
+  if (subscriptionKind === "x-premium" && !subscriptionCredential) {
+    throw new ApiError(
+      401,
+      "Your X Premium (SuperGrok) sign-in is unreadable. Reconnect your X account to continue.",
+      ArchestraInternalErrorCode.ProviderAuthRequired,
+    );
+  }
   if (subscriptionCredential) {
-    // Same fail-closed rule as the proxy fetch wrapper: a per-key base URL is
-    // user-supplied, so the redeemed subscription bearer must never be sent to
-    // an arbitrary override.
-    if (baseUrlOverride && !isXaiSubscriptionBearerOrigin(baseUrlOverride)) {
+    // A per-key override describes an API-key endpoint, never the first-party
+    // subscription proxy. Reject it instead of silently sending OAuth material
+    // to a user-supplied origin.
+    if (baseUrlOverride) {
       throw new ApiError(
         400,
-        "X Premium (SuperGrok) credentials can only be used against the configured xAI API base URL — remove the per-key base URL override or use an API key instead.",
+        "X Premium (SuperGrok) credentials cannot use a per-key base URL override — remove it or use an API key instead.",
       );
     }
+    baseUrl = config.llm.xai.subscription.baseUrl;
     // Throws (401) when the refresh token is rejected, so key creation surfaces
     // a real "reconnect your X account" error instead of an empty list.
     bearer = await xaiSubscriptionTokenManager.getAccessToken({
       refreshToken: subscriptionCredential.refreshToken,
     });
+    requestHeaders = {
+      ...(extraHeaders ?? {}),
+      ...xaiSubscriptionSessionHeaders(subscriptionCredential),
+    };
   }
 
   const data = await fetchModelsWithBearerAuth<{ data: XaiRawModel[] }>({
     url: joinBaseUrl(baseUrl, "/models"),
     apiKey: bearer,
     errorLabel: "xAI models",
-    extraHeaders,
+    extraHeaders: requestHeaders,
   });
 
   return data.data.map((model) => mapXaiModel(model, "xai"));

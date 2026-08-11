@@ -9,10 +9,14 @@ describe("xai subscription credential codec", () => {
   it("round-trips a credential through encode/decode", () => {
     const encoded = encodeXaiSubscriptionCredential({
       refreshToken: "rt_secret",
+      userId: "user_123",
+      email: "user@example.com",
     });
     expect(isXaiSubscriptionCredential(encoded)).toBe(true);
     expect(decodeXaiSubscriptionCredential(encoded)).toEqual({
       refreshToken: "rt_secret",
+      userId: "user_123",
+      email: "user@example.com",
     });
   });
 
@@ -27,16 +31,19 @@ describe("xai subscription credential codec", () => {
       decodeXaiSubscriptionCredential("xai-subscription:not-base64!!"),
     ).toBeNull();
     const empty = `xai-subscription:${Buffer.from(
-      JSON.stringify({ refreshToken: "" }),
+      JSON.stringify({ refreshToken: "", userId: "" }),
     ).toString("base64")}`;
     expect(decodeXaiSubscriptionCredential(empty)).toBeNull();
   });
 
-  it("refuses to encode an empty refresh token", () => {
+  it("refuses to encode an empty refresh token or user id", () => {
     // Failing here beats minting a valid-looking key that only breaks at
     // request time.
     expect(() =>
-      encodeXaiSubscriptionCredential({ refreshToken: "" }),
+      encodeXaiSubscriptionCredential({ refreshToken: "", userId: "user" }),
+    ).toThrow();
+    expect(() =>
+      encodeXaiSubscriptionCredential({ refreshToken: "rt", userId: "" }),
     ).toThrow();
   });
 });

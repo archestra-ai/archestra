@@ -6,7 +6,11 @@
  * and only overrides provider-specific configuration (baseUrl, api key behavior).
  */
 
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  SUBSCRIPTION_CREDENTIALS,
+  subscriptionKindFromCredential,
+} from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -249,10 +253,21 @@ export const xaiAdapterFactory: LLMProvider<
       : undefined;
 
     // "X Premium (SuperGrok)" subscription auth mode: the resolved credential is
-    // an encoded xAI OAuth credential, not a console key. The base URL is the
-    // same OpenAI-compatible surface either way — only the bearer differs, and
-    // it is swapped in the fetch wrapper because createClient is synchronous.
+    // an encoded xAI OAuth credential, not a console key. Session traffic uses
+    // xAI's dedicated CLI chat proxy and swaps the bearer in a fetch wrapper
+    // because createClient is synchronous.
     const strippedApiKey = stripBearerPrefix(apiKey);
+    const subscriptionKind = subscriptionKindFromCredential(strippedApiKey);
+    if (
+      subscriptionKind &&
+      SUBSCRIPTION_CREDENTIALS[subscriptionKind].provider !== "xai"
+    ) {
+      throw new ApiError(
+        401,
+        "The selected xAI key contains a subscription credential for another provider. Reconnect the correct credential.",
+        ArchestraInternalErrorCode.ProviderAuthRequired,
+      );
+    }
     const subscriptionCredential =
       decodeXaiSubscriptionCredential(strippedApiKey);
     // A marker-prefixed value that doesn't decode is a corrupted subscription
@@ -271,11 +286,21 @@ export const xaiAdapterFactory: LLMProvider<
       );
     }
     if (subscriptionCredential) {
+      if (
+        options.baseUrl &&
+        options.baseUrl.replace(/\/+$/, "") !==
+          config.llm.xai.baseUrl.replace(/\/+$/, "")
+      ) {
+        throw new ApiError(
+          400,
+          "X Premium (SuperGrok) credentials cannot use a per-key base URL override — remove it or use an API key instead.",
+        );
+      }
       return new OpenAIProvider({
         maxRetries: PROXY_SDK_MAX_RETRIES,
         // Placeholder satisfies the SDK; the wrapper sets the real bearer.
         apiKey: "xai-subscription",
-        baseURL: options.baseUrl,
+        baseURL: config.llm.xai.subscription.baseUrl,
         fetch: createXaiSubscriptionFetch({
           credential: subscriptionCredential,
           providerApiKeyId: options.llmProviderApiKeyId,

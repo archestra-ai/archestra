@@ -14,6 +14,7 @@ vi.mock("@/config", async () =>
       xai: {
         baseUrl: "https://api.x.ai/v1",
         subscription: {
+          baseUrl: "https://cli-chat-proxy.grok.test/v1",
           issuer: "https://auth.x.ai",
           clientId: "test-xai-client-id",
           scopes: "openid offline_access api:access",
@@ -421,15 +422,18 @@ describe("createXaiSubscriptionFetch", () => {
       .mockResolvedValue(new Response("ok"));
 
     const wrapped = createXaiSubscriptionFetch({
-      credential: { refreshToken: "rt_retry" },
+      credential: { refreshToken: "rt_retry", userId: "x-user-123" },
       providerApiKeyId: "key-retry",
       innerFetch,
     });
-    const response = await wrapped("https://api.x.ai/v1/chat/completions", {
-      method: "POST",
-      headers: { authorization: "Bearer xai-subscription" },
-      body: "{}",
-    });
+    const response = await wrapped(
+      "https://cli-chat-proxy.grok.test/v1/chat/completions",
+      {
+        method: "POST",
+        headers: { authorization: "Bearer xai-subscription" },
+        body: "{}",
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(innerFetch).toHaveBeenCalledTimes(2);
@@ -457,18 +461,36 @@ describe("createXaiSubscriptionFetch", () => {
     const innerFetch = vi.fn().mockResolvedValue(new Response("ok"));
 
     const wrapped = createXaiSubscriptionFetch({
-      credential: { refreshToken: "stored-refresh-token" },
+      credential: {
+        refreshToken: "stored-refresh-token",
+        userId: "x-user-123",
+        email: "x@example.com",
+      },
       innerFetch,
     });
-    await wrapped("https://api.x.ai/v1/chat/completions", {
+    await wrapped("https://cli-chat-proxy.grok.test/v1/chat/completions", {
       method: "POST",
-      headers: { authorization: "Bearer xai-subscription" },
+      headers: {
+        authorization: "Bearer xai-subscription",
+        "x-userid": "attacker-controlled",
+      },
       body: "{}",
     });
 
     const [, init] = innerFetch.mock.calls[0];
     expect((init.headers as Headers).get("authorization")).toBe(
       "Bearer redeemed-access-token",
+    );
+    expect((init.headers as Headers).get("x-xai-token-auth")).toBe(
+      "xai-grok-cli",
+    );
+    expect((init.headers as Headers).get("x-userid")).toBe("x-user-123");
+    expect((init.headers as Headers).get("x-email")).toBe("x@example.com");
+    expect((init.headers as Headers).get("x-grok-client-identifier")).toBe(
+      "archestra",
+    );
+    expect((init.headers as Headers).get("x-grok-client-mode")).toBe(
+      "headless",
     );
   });
 
@@ -480,7 +502,10 @@ describe("createXaiSubscriptionFetch", () => {
     const innerFetch = vi.fn();
 
     const wrapped = createXaiSubscriptionFetch({
-      credential: { refreshToken: "stored-refresh-token" },
+      credential: {
+        refreshToken: "stored-refresh-token",
+        userId: "x-user-123",
+      },
       innerFetch,
     });
     const response = await wrapped("https://evil.example.com/v1/models");

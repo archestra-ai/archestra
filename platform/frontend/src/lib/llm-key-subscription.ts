@@ -24,8 +24,6 @@ interface SubscriptionCheckableLlmKey {
  * they never offer a credential the backend will reject.
  */
 export function isPersonalSubscription(key: SubscriptionCheckableLlmKey) {
-  // subscriptionKindFromKeyMetadata carries the name fallback for keys whose
-  // secret is unreadable to the metadata endpoint (vault-backed deployments).
   return (
     subscriptionKindFromKeyMetadata(key) != null ||
     providerRequiresPerUserCredential(key.provider)

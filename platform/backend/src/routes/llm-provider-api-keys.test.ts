@@ -226,6 +226,7 @@ describe("GET /api/llm-provider-api-keys/available", () => {
       secret: {
         apiKey: encodeXaiSubscriptionCredential({
           refreshToken: "owner-refresh-token",
+          userId: "owner-x-user-id",
         }),
       },
     });
@@ -435,6 +436,7 @@ describe("LLM Provider API Keys CRUD", () => {
       secret: {
         apiKey: encodeXaiSubscriptionCredential({
           refreshToken: "rt-get-by-id",
+          userId: "x-user-id",
         }),
       },
     });

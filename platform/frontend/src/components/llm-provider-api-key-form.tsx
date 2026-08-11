@@ -601,6 +601,12 @@ export function LlmProviderApiKeyForm({
   const connectCopy = activeSubscriptionKind
     ? SUBSCRIPTION_CREDENTIALS[activeSubscriptionKind].connect
     : null;
+  // BYOS Vault is intentionally read-only: Archestra can resolve references
+  // but cannot write or rotate an OAuth credential in the customer's Vault.
+  // Keep the dedicated connect surfaces open long enough to explain the
+  // limitation, but never start a flow whose completion cannot be saved.
+  const subscriptionUnavailableWithByos =
+    Boolean(byosEnabled) && activeSubscriptionKind !== null;
   const perUserScopeReason =
     connectCopy?.perUserScopeReason ??
     `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
@@ -1079,7 +1085,10 @@ export function LlmProviderApiKeyForm({
                     <TabsTrigger value="api-key" disabled={isPending}>
                       API Key
                     </TabsTrigger>
-                    <TabsTrigger value="subscription" disabled={isPending}>
+                    <TabsTrigger
+                      value="subscription"
+                      disabled={isPending || Boolean(byosEnabled)}
+                    >
                       {SUBSCRIPTION_CREDENTIALS[providerSubscriptionKind].label}
                     </TabsTrigger>
                   </TabsList>
@@ -1106,32 +1115,54 @@ export function LlmProviderApiKeyForm({
                       )}
                     </>
                   )}
-                  {perUserCredentialConnected && (
-                    <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
-                      <div>
-                        <p className="font-medium text-green-600 dark:text-green-400">
-                          {connectCopy.connectedTitle}
-                        </p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {connectCopy.connectedDescription}
-                          {isEditMode && !isCredentialSubscriptionMode ? (
-                            <span>
-                              {" Sign in again below to refresh the token."}
-                            </span>
-                          ) : null}
-                        </p>
-                      </div>
+                  {subscriptionUnavailableWithByos ? (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+                    >
+                      <p className="font-medium">
+                        Subscription sign-in is unavailable with Bring Your Own
+                        Secrets
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Archestra has read-only access to your external Vault,
+                        so it cannot save or rotate OAuth credentials there.
+                        Store a provider API key in Vault instead, or ask an
+                        administrator to use managed secret storage.
+                      </p>
                     </div>
+                  ) : (
+                    <>
+                      {perUserCredentialConnected && (
+                        <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
+                          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
+                          <div>
+                            <p className="font-medium text-green-600 dark:text-green-400">
+                              {connectCopy.connectedTitle}
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {connectCopy.connectedDescription}
+                              {isEditMode && !isCredentialSubscriptionMode ? (
+                                <span>
+                                  {" Sign in again below to refresh the token."}
+                                </span>
+                              ) : null}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      <SubscriptionSignIn
+                        kind={activeSubscriptionKind}
+                        disabled={isPending}
+                        onSecret={(secret) => {
+                          form.setValue("apiKey", secret, {
+                            shouldDirty: true,
+                          });
+                          onSubscriptionCredential?.(secret);
+                        }}
+                      />
+                    </>
                   )}
-                  <SubscriptionSignIn
-                    kind={activeSubscriptionKind}
-                    disabled={isPending}
-                    onSecret={(secret) => {
-                      form.setValue("apiKey", secret, { shouldDirty: true });
-                      onSubscriptionCredential?.(secret);
-                    }}
-                  />
                 </>
               ) : (
                 <>

@@ -16,6 +16,7 @@ vi.mock("@/config", async () =>
         subscription: {
           baseUrl: "https://cli-chat-proxy.grok.test/v1",
           issuer: "https://auth.x.ai",
+          clientVersion: "1.0.0-test",
           clientId: "test-xai-client-id",
           scopes: "openid offline_access api:access",
         },
@@ -212,7 +213,7 @@ function stubRedemptionFetch(
     return Response.json(mint({ index }));
   });
   vi.stubGlobal("fetch", fetchMock);
-  return { redeemedRefreshTokens };
+  return { redeemedRefreshTokens, fetchMock };
 }
 
 // The manager is a module singleton whose token cache survives across tests,
@@ -220,10 +221,12 @@ function stubRedemptionFetch(
 // resetting shared state.
 describe("xaiSubscriptionTokenManager", () => {
   test("caches the access token per key row", async () => {
-    const { redeemedRefreshTokens } = stubRedemptionFetch(({ index }) => ({
-      access_token: `at_${index}`,
-      expires_in: 3600,
-    }));
+    const { redeemedRefreshTokens, fetchMock } = stubRedemptionFetch(
+      ({ index }) => ({
+        access_token: `at_${index}`,
+        expires_in: 3600,
+      }),
+    );
 
     const first = await xaiSubscriptionTokenManager.getAccessToken({
       refreshToken: "rt_cache",
@@ -237,6 +240,7 @@ describe("xaiSubscriptionTokenManager", () => {
     expect(first).toBe("at_0");
     expect(second).toBe("at_0");
     expect(redeemedRefreshTokens).toEqual(["rt_cache"]);
+    expect(fetchMock.mock.calls.at(-1)?.[1]?.redirect).toBe("manual");
   });
 
   test("honors a JWT exp shorter than the default TTL when expires_in is absent", async () => {
@@ -492,6 +496,40 @@ describe("createXaiSubscriptionFetch", () => {
     expect((init.headers as Headers).get("x-grok-client-mode")).toBe(
       "headless",
     );
+    expect((init.headers as Headers).get("x-grok-client-version")).toBe(
+      "1.0.0-test",
+    );
+    expect((init.headers as Headers).get("user-agent")).toContain(
+      "grok-build/1.0.0-test",
+    );
+    expect((init.headers as Headers).get("x-authenticateresponse")).toBe(
+      "authenticate-response",
+    );
+    expect((init.headers as Headers).get("x-grok-model-override")).toBeNull();
+    expect(init.redirect).toBe("manual");
+  });
+
+  test("sets the session proxy model-routing header from the request body", async () => {
+    stubRedemptionFetch(() => ({
+      access_token: "at_model",
+      expires_in: 3600,
+    }));
+    const innerFetch = vi.fn().mockResolvedValue(new Response("ok"));
+    const wrapped = createXaiSubscriptionFetch({
+      credential: { refreshToken: "rt_model", userId: "x-user-123" },
+      innerFetch,
+    });
+
+    await wrapped("https://cli-chat-proxy.grok.test/v1/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({ model: "grok-routing-slug", messages: [] }),
+    });
+
+    const [, init] = innerFetch.mock.calls[0];
+    expect((init.headers as Headers).get("x-grok-model-override")).toBe(
+      "grok-routing-slug",
+    );
+    expect(init.redirect).toBe("manual");
   });
 
   test("refuses to send the bearer to a base URL outside the configured origin", async () => {

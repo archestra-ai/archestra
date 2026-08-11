@@ -214,6 +214,8 @@ export function subscriptionKindFromCredential(
  */
 interface SubscriptionKeyMetadata {
   provider: string;
+  /** Mutable display name carried by full key rows; deliberately ignored. */
+  name?: string;
   subscriptionKind?: SubscriptionCredentialKind | null;
   isChatgptSubscription?: boolean;
 }

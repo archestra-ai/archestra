@@ -121,6 +121,7 @@ describe("POST /api/xai-subscription-auth/device/poll", () => {
     expect(init?.headers["content-type"]).toBe(
       "application/x-www-form-urlencoded",
     );
+    expect(init?.redirect).toBe("manual");
     const sent = init?.body as URLSearchParams;
     expect(sent.get("client_id")).toBe("test-xai-client-id");
     expect(sent.get("device_code")).toBe("device-123");

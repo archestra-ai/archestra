@@ -5,7 +5,22 @@ import { fetchXaiModels } from "./xai";
 
 const DISCOVERY_PATH = "/.well-known/openid-configuration";
 const MODELS_RESPONSE = {
-  data: [{ id: "grok-4", created: 1_700_000_000 }, { id: "grok-4-fast" }],
+  data: [
+    { id: "grok-4", created: 1_700_000_000 },
+    {
+      id: "catalog-grok-4-fast",
+      model: "grok-4-fast",
+      name: "Grok 4 Fast",
+      apiBackend: "chat_completions",
+    },
+    { modelId: "grok-4-mini" },
+    { _meta: { model: "grok-4-meta" } },
+    { id: "responses-only", model: "grok-response", apiBackend: "responses" },
+    { model: "different-proxy", baseUrl: "https://other.grok.test/v1" },
+    { model: "grok-hidden", hidden: true },
+    { model: "grok-unsupported", supportedInApi: false },
+    { name: "missing an identifier" },
+  ],
 };
 
 /**
@@ -50,8 +65,19 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
       }),
     );
 
-    expect(models.map((model) => model.id)).toEqual(["grok-4", "grok-4-fast"]);
+    expect(models.map((model) => model.id)).toEqual([
+      "grok-4",
+      "grok-4-fast",
+      "grok-4-mini",
+      "grok-4-meta",
+    ]);
+    expect(models[1].displayName).toBe("Grok 4 Fast");
     expect(models.every((model) => model.provider === "xai")).toBe(true);
+    expect(
+      models.every((model) =>
+        model.capabilities?.supportedEndpoints?.includes("/chat/completions"),
+      ),
+    ).toBe(true);
 
     const modelsCall = fetchMock.mock.calls.find(
       ([url]) =>
@@ -59,7 +85,7 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
     );
     expect(modelsCall).toBeDefined();
     const init = modelsCall?.[1] as
-      | { headers?: Record<string, string> }
+      | { headers?: Record<string, string>; redirect?: RequestRedirect }
       | undefined;
     // The stored secret is an encoded credential, never a usable bearer — the
     // redeemed access token is what reaches xAI.
@@ -75,6 +101,7 @@ describe("fetchXaiModels with an X Premium subscription credential", () => {
         "x-grok-client-mode": "headless",
       }),
     );
+    expect(init?.redirect).toBe("manual");
   });
 
   it("refuses to send the redeemed bearer to a per-key base URL override", async () => {
@@ -128,7 +155,12 @@ describe("fetchXaiModels with a plain API key", () => {
 
     const models = await fetchXaiModels("xai-plain-key");
 
-    expect(models.map((model) => model.id)).toEqual(["grok-4", "grok-4-fast"]);
+    expect(models.map((model) => model.id)).toEqual([
+      "grok-4",
+      "grok-4-fast",
+      "grok-4-mini",
+      "grok-4-meta",
+    ]);
     // No OAuth hop at all for a metered key.
     expect(fetchMock).toHaveBeenCalledOnce();
     const init = fetchMock.mock.calls[0][1] as

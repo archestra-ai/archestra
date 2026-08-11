@@ -8,6 +8,9 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 vi.mock("sonner");
 
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: vi.fn(() => false),
+}));
 
 // The card brands the client-side fallback copy, which otherwise reaches for
 // the appearance-settings query and needs a QueryClientProvider.

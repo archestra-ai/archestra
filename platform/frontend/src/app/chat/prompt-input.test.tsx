@@ -408,6 +408,24 @@ describe("ArchestraPromptInput", () => {
     expect(mockTextInputClear).not.toHaveBeenCalled();
   });
 
+  it("uses the subscription registry's X sign-in label", () => {
+    render(
+      <ArchestraPromptInput
+        {...defaultProps}
+        subscriptionConnectRequired
+        subscriptionProvider="xai"
+        modelSource="agent"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Sign in with X" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Sign in with xAI" }),
+    ).not.toBeInTheDocument();
+  });
+
   describe("Limited-for-complex-tasks badge", () => {
     const badgeName = /limited for complex tasks/i;
 

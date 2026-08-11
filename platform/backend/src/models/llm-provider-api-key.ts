@@ -165,6 +165,7 @@ class LlmProviderApiKeyModel {
       search?: string;
       provider?: SupportedProvider;
     },
+    options?: { includeSubscriptionInfo?: boolean },
   ): Promise<LlmProviderApiKeyWithScopeInfo[]> {
     // Build conditions based on visibility rules
     const conditions = [
@@ -273,7 +274,11 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    return await Promise.all(apiKeys.map(toApiKeyWithScopeInfo));
+    return await Promise.all(
+      apiKeys.map((key) =>
+        toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+      ),
+    );
   }
 
   /**
@@ -285,6 +290,7 @@ class LlmProviderApiKeyModel {
     userId: string,
     userTeamIds: string[],
     provider?: SupportedProvider,
+    options?: { includeSubscriptionInfo?: boolean },
   ): Promise<LlmProviderApiKeyWithScopeInfo[]> {
     // Build conditions
     const conditions = [
@@ -380,7 +386,11 @@ class LlmProviderApiKeyModel {
       .where(and(...conditions))
       .orderBy(schema.llmProviderApiKeysTable.createdAt);
 
-    return await Promise.all(apiKeys.map(toApiKeyWithScopeInfo));
+    return await Promise.all(
+      apiKeys.map((key) =>
+        toApiKeyWithScopeInfo(key, options?.includeSubscriptionInfo === true),
+      ),
+    );
   }
 
   /**
@@ -586,9 +596,21 @@ class LlmProviderApiKeyModel {
       );
 
     for (const candidate of candidates) {
-      const apiKeyValue = candidate.apiKey.secretId
-        ? await getSecretValueForLlmProviderApiKey(candidate.apiKey.secretId)
-        : undefined;
+      let apiKeyValue: string | undefined;
+      try {
+        apiKeyValue = candidate.apiKey.secretId
+          ? await getSecretValueForLlmProviderApiKey(candidate.apiKey.secretId)
+          : undefined;
+      } catch (error) {
+        // A stale/inaccessible Vault reference must not prevent a later valid
+        // personal credential from satisfying the shared-agent substitution.
+        // Listing metadata follows the same fail-soft rule.
+        logger.warn(
+          { error, secretId: candidate.apiKey.secretId },
+          "Failed to resolve personal subscription candidate; trying the next credential",
+        );
+        continue;
+      }
       if (
         apiKeyValue !== undefined &&
         subscriptionKindFromCredential(apiKeyValue) === kind
@@ -926,8 +948,8 @@ class LlmProviderApiKeyModel {
  * secrets carry the "path#key" reference to surface (the BYOS manager is the
  * only writer of vault references, and it always sets `isByosVault`), and
  * credential-level providers may carry a subscription marker. Vault-backed
- * values are resolved only for those providers; the value never leaves this
- * mapper either way.
+ * values are resolved only for explicitly enriched response surfaces and only
+ * for those providers; the value never leaves this mapper either way.
  */
 async function toApiKeyWithScopeInfo<
   T extends {
@@ -939,6 +961,7 @@ async function toApiKeyWithScopeInfo<
   },
 >(
   key: T,
+  includeSubscriptionInfo: boolean,
 ): Promise<
   Omit<T, "secret" | "secretIsVault" | "secretIsByosVault"> & {
     vaultSecretPath: string | null;
@@ -953,13 +976,15 @@ async function toApiKeyWithScopeInfo<
       ? decryptApiKeyValue(key.secret)
       : null;
   const vaultRef = parseVaultReferenceFromApiKey(storedApiKeyValue);
-  const subscriptionKind = await subscriptionKindFromStoredSecret({
-    provider: key.provider,
-    secretId: key.secretId,
-    secret: key.secret,
-    secretIsVault: key.secretIsVault,
-    secretIsByosVault: key.secretIsByosVault,
-  });
+  const subscriptionKind = includeSubscriptionInfo
+    ? await subscriptionKindFromStoredSecret({
+        provider: key.provider,
+        secretId: key.secretId,
+        secret: key.secret,
+        secretIsVault: key.secretIsVault,
+        secretIsByosVault: key.secretIsByosVault,
+      })
+    : null;
   const { secret: _secret, secretIsVault, secretIsByosVault, ...rest } = key;
   return {
     ...rest,

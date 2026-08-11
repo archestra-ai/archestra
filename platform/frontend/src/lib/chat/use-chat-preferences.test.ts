@@ -442,7 +442,7 @@ describe("getAgentSubscriptionConnection", () => {
     ).toEqual({ requiresConnection: true, isConnected: true });
   });
 
-  test("legacy ChatGPT key metadata (name only, no kind) still gates and connects", () => {
+  test("a ChatGPT display name without authoritative metadata does not gate", () => {
     const agent = {
       llmApiKeyId: "owner-chatgpt",
       resolvedLlmProvider: "openai" as const,
@@ -460,29 +460,10 @@ describe("getAgentSubscriptionConnection", () => {
         credentials: [pinnedLegacyChatgpt],
         userId: "viewer",
       }),
-    ).toEqual({ requiresConnection: true, isConnected: false });
-    expect(
-      getAgentSubscriptionConnection({
-        agent,
-        credentials: [
-          pinnedLegacyChatgpt,
-          {
-            id: "viewer-chatgpt",
-            provider: "openai",
-            name: "ChatGPT Subscription",
-            userId: "viewer",
-            isChatgptSubscription: true,
-          },
-        ],
-        userId: "viewer",
-      }),
-    ).toEqual({ requiresConnection: true, isConnected: true });
+    ).toEqual({ requiresConnection: false, isConnected: undefined });
   });
 
-  test("X Premium key metadata (name only, no kind) still gates and connects", () => {
-    // Vault-backed deployments: the metadata endpoint cannot read the stored
-    // secret, so the kind rides on the name the connect flow assigned — same
-    // fallback the legacy ChatGPT keys rely on.
+  test("an X Premium display name without authoritative metadata does not gate", () => {
     const agent = {
       llmApiKeyId: "owner-x-premium-nokind",
       resolvedLlmProvider: "xai" as const,
@@ -500,22 +481,7 @@ describe("getAgentSubscriptionConnection", () => {
         credentials: [pinnedNameOnly],
         userId: "viewer",
       }),
-    ).toEqual({ requiresConnection: true, isConnected: false });
-    expect(
-      getAgentSubscriptionConnection({
-        agent,
-        credentials: [
-          pinnedNameOnly,
-          {
-            id: "viewer-x-premium-nokind",
-            provider: "xai",
-            name: "X Premium (SuperGrok)",
-            userId: "viewer",
-          },
-        ],
-        userId: "viewer",
-      }),
-    ).toEqual({ requiresConnection: true, isConnected: true });
+    ).toEqual({ requiresConnection: false, isConnected: undefined });
   });
 
   test("an ordinary shared key requires no connection", () => {

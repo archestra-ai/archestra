@@ -77,12 +77,14 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   CreateLlmProviderApiKeyDialog: (props: {
     open: boolean;
     title: string;
+    description?: string;
     defaultValues?: unknown;
     allowedProviders?: unknown;
   }) =>
     props.open ? (
       <div data-testid="create-dialog">
         {props.title}
+        {props.description}
         {JSON.stringify(props.defaultValues)}
         {JSON.stringify(props.allowedProviders)}
       </div>
@@ -324,10 +326,7 @@ describe("ApiKeysPage", () => {
     expect(screen.getAllByText("Connect")).toHaveLength(3);
   });
 
-  it("shows a name-only X Premium key as connected when secret metadata is unavailable", () => {
-    // Vault-backed deployments: subscriptionKind arrives null even for a
-    // connected key, so the row falls back to the name the connect flow
-    // assigned instead of rendering "Not connected".
+  it("does not classify an ordinary key from the mutable X Premium display name", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -346,8 +345,10 @@ describe("ApiKeysPage", () => {
 
     render(<ApiKeysPage />);
 
-    expect(screen.getAllByText("X Premium (SuperGrok)")).toHaveLength(1);
-    expect(screen.getAllByText("Connect")).toHaveLength(3);
+    // The subscription row remains unconnected and the same-named ordinary key
+    // remains its own credential row.
+    expect(screen.getAllByText("X Premium (SuperGrok)")).toHaveLength(2);
+    expect(screen.getAllByText("Connect")).toHaveLength(4);
   });
 
   it("reopens an X Premium key from the edit URL param in subscription mode", async () => {
@@ -459,5 +460,22 @@ describe("ApiKeysPage", () => {
       '"authMethod":"subscription"',
     );
     expect(screen.getByTestId("create-dialog")).toHaveTextContent('["openai"]');
+  });
+
+  it("uses the registry's X-specific connect copy", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    render(<ApiKeysPage />);
+
+    fireEvent.click(screen.getAllByText("Connect")[3]);
+
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent(
+      "Sign in with X",
+    );
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent(
+      "Connect the X account that holds your X Premium (SuperGrok) subscription",
+    );
   });
 });

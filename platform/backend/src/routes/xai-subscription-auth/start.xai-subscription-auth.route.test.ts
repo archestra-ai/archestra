@@ -17,6 +17,7 @@ vi.mock("@/config", async () =>
       xai: {
         subscription: {
           issuer: "https://auth.x.ai",
+          verificationOrigin: "https://accounts.x.ai",
           clientId: "test-xai-client-id",
           scopes: "openid offline_access api:access",
         },
@@ -109,6 +110,7 @@ describe("POST /api/xai-subscription-auth/device/start", () => {
     expect(init?.headers["content-type"]).toBe(
       "application/x-www-form-urlencoded",
     );
+    expect(init?.redirect).toBe("manual");
     const body = init?.body as URLSearchParams;
     expect(body.get("client_id")).toBe("test-xai-client-id");
     expect(body.get("scope")).toBe("openid offline_access api:access");
@@ -154,6 +156,30 @@ describe("POST /api/xai-subscription-auth/device/start", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ interval: 5, expiresIn: 900 });
+  });
+
+  test.each([
+    "javascript:alert(document.domain)",
+    "data:text/html,phishing",
+    "http://accounts.x.ai/device",
+    "https://accounts.x.ai.evil.example/device",
+    "https://evil.example/device",
+  ])("rejects an untrusted verification URL: %s", async (verificationUri) => {
+    mockXaiFetch(() =>
+      Response.json({
+        device_code: "device-123",
+        user_code: "ABCD-1234",
+        verification_uri: verificationUri,
+      }),
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/xai-subscription-auth/device/start",
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error.message).toMatch(/untrusted verification URL/);
   });
 
   test("maps an xAI failure to a 502", async () => {

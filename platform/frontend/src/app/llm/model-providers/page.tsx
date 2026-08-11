@@ -378,9 +378,8 @@ export default function ApiKeysPage() {
             credential.provider === subscription.provider &&
             // A credential-level subscription shares its provider with ordinary
             // API keys, so match on the kind the backend read off the secret
-            // (with the connect-flow name fallback for secrets the metadata
-            // endpoint can't read); a provider-level one is identified by its
-            // provider alone.
+            // using authoritative metadata resolved from the stored secret); a
+            // provider-level one is identified by its provider alone.
             (SUBSCRIPTION_CREDENTIALS[subscription.subscriptionKind].marker ===
               null ||
               subscriptionKindFromKeyMetadata(credential) ===
@@ -622,15 +621,17 @@ export default function ApiKeysPage() {
             !row.original.credential
           ) {
             const subscription = row.original;
+            // Personal subscription creation is intentionally self-service on
+            // the backend, including for default members who only have key-read
+            // permission. Do not apply the admin API-key create gate here.
             return (
-              <PermissionButton
-                permissions={{ llmProviderApiKey: ["create"] }}
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setSubscriptionToConnect(subscription)}
               >
                 Connect
-              </PermissionButton>
+              </Button>
             );
           }
           const credential =
@@ -767,8 +768,14 @@ export default function ApiKeysPage() {
             onOpenChange={(open) => {
               if (!open) setSubscriptionToConnect(null);
             }}
-            title={`Sign in with ${subscriptionToConnect.name}`}
-            description={`Connect your ${subscriptionToConnect.name} subscription`}
+            title={
+              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.subscriptionKind]
+                .connect.signInTitle
+            }
+            description={
+              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.subscriptionKind]
+                .connect.signInDescription
+            }
             defaultValues={subscriptionToConnect.defaultValues}
             allowedProviders={[subscriptionToConnect.provider]}
             credentialMode="subscription"

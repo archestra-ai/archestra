@@ -193,7 +193,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     expect(onApiKeyChange).not.toHaveBeenCalled();
   });
 
-  it("recognizes a pinned ChatGPT subscription when secret metadata is unavailable", () => {
+  it("does not infer a pinned ChatGPT subscription from its mutable name", () => {
     const agentOwnerKey = {
       id: "agent-owner-chatgpt-key",
       name: "ChatGPT Subscription",
@@ -220,14 +220,14 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(
       screen.getByRole("button", {
-        name: /^ChatGPT Subscription Connect\s*Selected$/,
+        name: /^ChatGPT Subscription Connected\s*Selected$/,
       }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", {
-        name: /^ChatGPT Subscription Connected\s*Selected$/,
+      screen.getByRole("button", {
+        name: /^ChatGPT Subscription Connect$/,
       }),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
   });
 
   it("opens the pinned subscription flow when the composer requests connection", () => {
@@ -237,7 +237,8 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       provider: "openai",
       scope: "personal",
       userId: "another-user",
-      isChatgptSubscription: false,
+      subscriptionKind: "chatgpt",
+      isChatgptSubscription: true,
       isAgentKey: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -350,11 +351,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     ).toBeInTheDocument();
   });
 
-  it("recognizes a name-only X Premium key when secret metadata is unavailable", () => {
-    // Vault-backed deployments: the metadata endpoint cannot read the stored
-    // secret, so subscriptionKind arrives null and only the connect-flow name
-    // identifies the subscription. A differently-named plain key must still
-    // stay an ordinary credential row.
+  it("does not let a mutable name turn an ordinary xAI key into a subscription", () => {
     const nameOnlyXPremiumKey = {
       id: "x-premium-name-only",
       name: "X Premium (SuperGrok)",
@@ -380,8 +377,8 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       screen.getByRole("button", { name: "X Premium (SuperGrok) Connected" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "X Premium (SuperGrok) Connect" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Plain xAI key Connected" }),
     ).toBeInTheDocument();

@@ -273,8 +273,14 @@ export function createXaiSubscriptionFetch(params: {
       );
     }
 
+    const modelOverride = await xaiModelOverrideFromRequest(input, init);
     const doFetch = async (accessToken: string) => {
-      const headers = new Headers(init?.headers);
+      const headers = new Headers(
+        input instanceof Request ? input.headers : undefined,
+      );
+      new Headers(init?.headers).forEach((value, name) => {
+        headers.set(name, value);
+      });
       // xAI authenticates with the OAuth access token, never the inbound
       // placeholder key. The proxy also requires the identity/client headers
       // used by xAI's first-party Grok client; set them after caller headers so
@@ -285,7 +291,16 @@ export function createXaiSubscriptionFetch(params: {
       )) {
         headers.set(name, value);
       }
-      return baseFetch(input, { ...init, headers });
+      // These are inference-only proxy headers. `/models` uses the shared
+      // session identity headers above but does not need proxy middleware or
+      // model-routing overrides.
+      headers.set("x-authenticateresponse", "authenticate-response");
+      if (modelOverride) {
+        headers.set("x-grok-model-override", modelOverride);
+      }
+      // Never replay OAuth/session headers to a redirect target. The initial
+      // origin is pinned above; redirects must be surfaced as upstream errors.
+      return baseFetch(input, { ...init, headers, redirect: "manual" });
     };
 
     let accessToken: string;
@@ -398,13 +413,15 @@ export function isXaiSubscriptionBearerOrigin(url: string): boolean {
 export function xaiSubscriptionSessionHeaders(
   credential: XaiSubscriptionCredential,
 ): Record<string, string> {
+  const { clientVersion } = config.llm.xai.subscription;
   return {
     "X-XAI-Token-Auth": "xai-grok-cli",
     "x-userid": credential.userId,
     ...(credential.email ? { "x-email": credential.email } : {}),
-    "x-grok-client-version": config.api.version,
+    "x-grok-client-version": clientVersion,
     "x-grok-client-identifier": "archestra",
     "x-grok-client-mode": "headless",
+    "user-agent": `archestra/${config.api.version} grok-build/${clientVersion}`,
   };
 }
 
@@ -414,6 +431,31 @@ type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit,
 ) => Promise<Response>;
+
+async function xaiModelOverrideFromRequest(
+  input: string | URL | Request,
+  init?: RequestInit,
+): Promise<string | undefined> {
+  let body: string | undefined;
+  if (typeof init?.body === "string") {
+    body = init.body;
+  } else if (input instanceof Request) {
+    try {
+      body = await input.clone().text();
+    } catch {
+      return undefined;
+    }
+  }
+  if (!body) {
+    return undefined;
+  }
+  try {
+    const model = (JSON.parse(body) as { model?: unknown }).model;
+    return typeof model === "string" && model.length > 0 ? model : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 interface XaiOauthEndpoints {
   deviceAuthorizationEndpoint: string;
@@ -464,7 +506,10 @@ async function discoverXaiOauthEndpoints(
   const url = `${issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`;
   let response: Response;
   try {
-    response = await fetch(url, { headers: { accept: "application/json" } });
+    response = await fetch(url, {
+      headers: { accept: "application/json" },
+      redirect: "manual",
+    });
   } catch (error) {
     logger.error({ error }, "[XaiSubscription] OIDC discovery request failed");
     throw new ApiError(502, "Could not reach the xAI sign-in service");
@@ -645,6 +690,7 @@ async function redeemWithXai(refreshToken: string): Promise<{
       refresh_token: refreshToken,
       client_id: clientId,
     }),
+    redirect: "manual",
   });
 
   if (!response.ok) {

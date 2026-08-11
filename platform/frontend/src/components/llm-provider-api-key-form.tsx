@@ -607,6 +607,9 @@ export function LlmProviderApiKeyForm({
   // limitation, but never start a flow whose completion cannot be saved.
   const subscriptionUnavailableWithByos =
     Boolean(byosEnabled) && activeSubscriptionKind !== null;
+  const subscriptionHasApiKeyAlternative = activeSubscriptionKind
+    ? SUBSCRIPTION_CREDENTIALS[activeSubscriptionKind].marker !== null
+    : false;
   const perUserScopeReason =
     connectCopy?.perUserScopeReason ??
     `${providerConfig.name} keys are per-user — each person connects their own account, so they can only be personal.`;
@@ -1127,8 +1130,9 @@ export function LlmProviderApiKeyForm({
                       <p className="mt-1 text-xs text-muted-foreground">
                         Archestra has read-only access to your external Vault,
                         so it cannot save or rotate OAuth credentials there.
-                        Store a provider API key in Vault instead, or ask an
-                        administrator to use managed secret storage.
+                        {subscriptionHasApiKeyAlternative
+                          ? " Store a provider API key in Vault instead, or ask an administrator to use managed secret storage."
+                          : " This provider has no API-key alternative, so an administrator must use managed secret storage to enable subscription sign-in."}
                       </p>
                     </div>
                   ) : (

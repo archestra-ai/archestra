@@ -2081,6 +2081,13 @@ const config = {
         /** OAuth issuer; its OIDC discovery document supplies the endpoints. */
         issuer:
           process.env.ARCHESTRA_XAI_SUBSCRIPTION_ISSUER || "https://auth.x.ai",
+        /** Browser origin allowed for the device-flow verification page. */
+        verificationOrigin:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_VERIFICATION_ORIGIN ||
+          "https://accounts.x.ai",
+        /** First-party session protocol version this integration targets. */
+        clientVersion:
+          process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION || "1.0.0",
         /** Public OAuth client id used for the X Premium device-code login. */
         clientId:
           process.env.ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_ID ||

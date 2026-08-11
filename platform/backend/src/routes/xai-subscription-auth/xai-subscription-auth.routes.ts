@@ -82,6 +82,7 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "content-type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({ client_id: clientId, scope: scopes }),
+        redirect: "manual",
       });
       if (!response.ok) {
         const body = await response.text();
@@ -108,14 +109,16 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       const payload = parsed.data;
+      const verificationUri = validateVerificationUri(
+        payload.verification_uri_complete ?? payload.verification_uri,
+      );
 
       return {
         deviceCode: payload.device_code,
         userCode: payload.user_code,
         // `verification_uri_complete` embeds the user code, so approving is a
         // single click; the plain URI (where the code is typed) is the fallback.
-        verificationUri:
-          payload.verification_uri_complete ?? payload.verification_uri,
+        verificationUri,
         interval: payload.interval ?? 5,
         expiresIn: payload.expires_in ?? 900,
       };
@@ -165,6 +168,7 @@ const xaiSubscriptionAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           device_code: body.deviceCode,
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
         }),
+        redirect: "manual",
       });
 
       // RFC 8628 reports flow states (authorization_pending, …) as HTTP 400 with
@@ -301,3 +305,45 @@ const DeviceCodePayloadSchema = z.looseObject({
   interval: z.number().optional(),
   expires_in: z.number().optional(),
 });
+
+/**
+ * The frontend opens this value in a new tab, so treat it as a redirect target
+ * rather than inert OAuth metadata. Pin it to the configured HTTPS origin
+ * (`accounts.x.ai` by default) and reject credentials/fragments as ambiguity on
+ * an authorization page.
+ */
+function validateVerificationUri(value: string): string {
+  let verificationUrl: URL;
+  let allowedOrigin: URL;
+  try {
+    verificationUrl = new URL(value);
+    allowedOrigin = new URL(config.llm.xai.subscription.verificationOrigin);
+  } catch {
+    throw new ApiError(
+      502,
+      "The xAI sign-in service returned an unusable verification URL",
+    );
+  }
+
+  if (
+    verificationUrl.protocol !== "https:" ||
+    allowedOrigin.protocol !== "https:" ||
+    verificationUrl.origin !== allowedOrigin.origin ||
+    verificationUrl.username ||
+    verificationUrl.password ||
+    verificationUrl.hash
+  ) {
+    logger.error(
+      {
+        verificationOrigin: verificationUrl.origin,
+        expectedOrigin: allowedOrigin.origin,
+      },
+      "[XaiSubscriptionAuth] refusing an untrusted device verification URL",
+    );
+    throw new ApiError(
+      502,
+      "The xAI sign-in service returned an untrusted verification URL",
+    );
+  }
+  return verificationUrl.toString();
+}

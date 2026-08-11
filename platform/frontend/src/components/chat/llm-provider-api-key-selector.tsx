@@ -449,8 +449,7 @@ function subscriptionMatchesKind(
   const { provider, marker } = SUBSCRIPTION_CREDENTIALS[kind];
   if (key.provider !== provider) return false;
   if (marker === null) return true;
-  // The metadata helper carries the connect-flow name fallback for keys whose
-  // secret is unreadable to the metadata endpoint (vault-backed deployments).
+  // The metadata helper consumes only the authoritative server-derived kind.
   return subscriptionKindFromKeyMetadata(key) === kind;
 }
 

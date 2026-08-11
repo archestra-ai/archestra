@@ -4,7 +4,9 @@ import {
   type ContextWindowBreakdown,
   E2eTestId,
   providerDisplayNames,
+  SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
+  subscriptionKindForProvider,
   type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
@@ -206,12 +208,16 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     ? providerToLogoProvider[currentProvider]
     : null;
   const providerToConnect = subscriptionProvider ?? currentProvider;
-  const subscriptionProviderLabel =
-    providerToConnect === "openai"
-      ? "ChatGPT"
-      : providerToConnect
-        ? (providerDisplayNames[providerToConnect] ?? providerToConnect)
-        : "subscription";
+  const subscriptionKind = providerToConnect
+    ? subscriptionKindForProvider(providerToConnect)
+    : null;
+  const subscriptionSignInTitle = subscriptionKind
+    ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].connect.signInTitle
+    : `Sign in with ${
+        providerToConnect
+          ? (providerDisplayNames[providerToConnect] ?? providerToConnect)
+          : "subscription"
+      }`;
 
   // Label for the model-source badge. A custom model is a "chat override" when
   // it is scoped to an existing conversation, and a "user override" otherwise
@@ -384,7 +390,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                               className="mt-2 h-7 gap-1.5 px-2 text-xs"
                               onClick={onSubscriptionConnect}
                             >
-                              Sign in with {subscriptionProviderLabel}
+                              {subscriptionSignInTitle}
                             </Button>
                           )}
                       </div>
@@ -432,7 +438,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       className="h-7 px-2 text-xs"
                       onClick={onSubscriptionConnect}
                     >
-                      Sign in with {subscriptionProviderLabel}
+                      {subscriptionSignInTitle}
                     </Button>
                   )}
                 {tokensUsed > 0 && maxContextLength && (
@@ -591,7 +597,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 className="h-8 px-2 text-xs text-primary hover:text-primary"
                 onClick={onSubscriptionConnect}
               >
-                Sign in with {subscriptionProviderLabel}
+                {subscriptionSignInTitle}
               </Button>
             )}
           {!canSeeProviderSettings ? null : showDefaultLogo &&
@@ -641,7 +647,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   className="h-8 gap-1 px-2 text-xs text-primary hover:text-primary"
                   onClick={onSubscriptionConnect}
                 >
-                  Sign in with {subscriptionProviderLabel}
+                  {subscriptionSignInTitle}
                 </Button>
               )}
               {!subscriptionConnectRequired && (

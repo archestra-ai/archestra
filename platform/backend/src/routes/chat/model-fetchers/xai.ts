@@ -15,20 +15,92 @@ import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { ModelInfo } from "./types";
 
-type XaiRawModel = OpenAi.Types.Model | OpenAi.Types.OrlandoModel;
+type XaiRawModel =
+  | OpenAi.Types.Model
+  | OpenAi.Types.OrlandoModel
+  | {
+      id?: unknown;
+      model?: unknown;
+      modelId?: unknown;
+      name?: unknown;
+      created?: unknown;
+      apiBackend?: unknown;
+      api_backend?: unknown;
+      baseUrl?: unknown;
+      base_url?: unknown;
+      hidden?: unknown;
+      supportedInApi?: unknown;
+      supported_in_api?: unknown;
+      _meta?: {
+        model?: unknown;
+        modelId?: unknown;
+        hidden?: unknown;
+        supportedInApi?: unknown;
+      };
+    };
 
 function mapXaiModel(
   model: XaiRawModel,
   provider: SupportedProvider,
-): ModelInfo {
+): ModelInfo | null {
+  // The subscription proxy separates its catalog id from the model slug sent
+  // on the wire. It also publishes models for multiple protocols, while
+  // Archestra's xAI adapter currently implements chat completions only. Mirror
+  // xAI's first-party precedence and fail closed on entries we cannot invoke.
+  const apiBackend =
+    "apiBackend" in model || "api_backend" in model
+      ? (model.apiBackend ?? model.api_backend)
+      : undefined;
+  const modelBaseUrl =
+    "baseUrl" in model || "base_url" in model
+      ? (model.baseUrl ?? model.base_url)
+      : undefined;
+  const hidden =
+    ("hidden" in model && model.hidden === true) ||
+    ("_meta" in model && model._meta?.hidden === true);
+  const supportedInApi =
+    "supportedInApi" in model || "supported_in_api" in model || "_meta" in model
+      ? (model.supportedInApi ??
+        model.supported_in_api ??
+        model._meta?.supportedInApi)
+      : undefined;
+  if (
+    hidden ||
+    supportedInApi === false ||
+    (typeof apiBackend === "string" && apiBackend !== "chat_completions") ||
+    (typeof modelBaseUrl === "string" &&
+      modelBaseUrl.replace(/\/+$/, "") !==
+        config.llm.xai.subscription.baseUrl.replace(/\/+$/, ""))
+  ) {
+    return null;
+  }
+  const candidateIds = [
+    "model" in model ? model.model : undefined,
+    "modelId" in model ? model.modelId : undefined,
+    model.id,
+    "_meta" in model ? model._meta?.model : undefined,
+    "_meta" in model ? model._meta?.modelId : undefined,
+  ];
+  const id = candidateIds.find(
+    (candidate): candidate is string =>
+      typeof candidate === "string" && candidate.length > 0,
+  );
+  if (!id) {
+    return null;
+  }
+  const displayName =
+    "name" in model && typeof model.name === "string" && model.name
+      ? model.name
+      : id;
   return {
-    id: model.id,
-    displayName: model.id,
+    id,
+    displayName,
     provider,
     createdAt:
       "created" in model && typeof model.created === "number"
         ? new Date(model.created * 1000).toISOString()
         : undefined,
+    capabilities: { supportedEndpoints: ["/chat/completions"] },
   };
 }
 
@@ -95,7 +167,11 @@ export async function fetchXaiModels(
     apiKey: bearer,
     errorLabel: "xAI models",
     extraHeaders: requestHeaders,
+    redirect: subscriptionCredential ? "manual" : undefined,
   });
 
-  return data.data.map((model) => mapXaiModel(model, "xai"));
+  return data.data.flatMap((model) => {
+    const mapped = mapXaiModel(model, "xai");
+    return mapped ? [mapped] : [];
+  });
 }

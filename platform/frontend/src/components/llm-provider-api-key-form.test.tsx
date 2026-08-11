@@ -152,9 +152,29 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Subscription sign-in is unavailable with Bring Your Own Secrets",
     );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Store a provider API key in Vault instead",
+    );
     expect(
       screen.queryByRole("button", { name: /Sign in with X/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not offer an impossible Vault API-key fallback for subscription-only providers", () => {
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "byosEnabled",
+    );
+    renderForm({
+      credentialMode: "subscription",
+      defaults: { provider: "github-copilot" },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This provider has no API-key alternative",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      "Store a provider API key in Vault instead",
+    );
   });
 
   it("reveals optional API key settings progressively", async () => {

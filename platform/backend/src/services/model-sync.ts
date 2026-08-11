@@ -34,6 +34,7 @@ import {
   resolveCrossProviderPrices,
   resolveSelfHostedModelMetadata,
 } from "@/services/cross-provider-pricing";
+import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   resolveVendorPublishedPrices,
   type VendorPublishedPrices,
@@ -90,6 +91,10 @@ class ModelSyncService {
     }
 
     try {
+      assertSubscriptionCredentialForProvider({
+        apiKey: apiKeyValue,
+        provider,
+      });
       // 1. Fetch models from provider API
       const providerModels = await fetcher(apiKeyValue, baseUrl, extraHeaders);
 

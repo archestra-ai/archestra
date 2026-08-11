@@ -318,8 +318,7 @@ export function getAgentSubscriptionConnection(params: {
     (credential) => credential.id === agent?.llmApiKeyId,
   );
   // Which subscription the pinned credential encodes, from the server-derived
-  // metadata (populated for included agent keys too), with the connect-flow
-  // name fallback for keys whose secret was unreadable.
+  // metadata (populated for included agent keys too).
   const pinnedSubscriptionKind = pinnedCredential
     ? subscriptionKindFromKeyMetadata(pinnedCredential)
     : null;

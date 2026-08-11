@@ -9,6 +9,7 @@ import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { Button } from "@/components/ui/button";
+import { useFeature } from "@/lib/config/config.query";
 import { useCreateLlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export function ProviderAuthRequiredCard({
   // ChatGPT mode, since the provider itself is not per-user. Anything else
   // falls back to the Model Providers link.
   const subscriptionKind = subscriptionKindForProvider(provider);
+  const byosEnabled = useFeature("byosEnabled") === true;
 
   return (
     <div
@@ -68,7 +70,19 @@ export function ProviderAuthRequiredCard({
             </p>
           </div>
 
-          {subscriptionKind ? (
+          {subscriptionKind && byosEnabled ? (
+            <div
+              role="alert"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs"
+            >
+              Subscription sign-in is unavailable because this deployment uses a
+              read-only external Vault. Ask an administrator to use managed
+              secret storage
+              {SUBSCRIPTION_CREDENTIALS[subscriptionKind].marker !== null
+                ? ", or connect a provider API key from Vault instead."
+                : "."}
+            </div>
+          ) : subscriptionKind ? (
             <SubscriptionSignIn
               kind={subscriptionKind}
               disabled={createKey.isPending}

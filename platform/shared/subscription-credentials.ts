@@ -227,7 +227,6 @@ interface SubscriptionKeyMetadata {
   /** Mutable display name carried by full key rows; deliberately ignored. */
   name?: string;
   subscriptionKind?: SubscriptionCredentialKind | null;
-  isChatgptSubscription?: boolean;
 }
 
 /**
@@ -240,16 +239,7 @@ interface SubscriptionKeyMetadata {
 export function subscriptionKindFromKeyMetadata(
   key: SubscriptionKeyMetadata,
 ): SubscriptionCredentialKind | null {
-  if (key.subscriptionKind != null) {
-    return key.subscriptionKind;
-  }
-  if (
-    key.isChatgptSubscription === true &&
-    key.provider === SUBSCRIPTION_CREDENTIALS.chatgpt.provider
-  ) {
-    return "chatgpt";
-  }
-  return null;
+  return key.subscriptionKind ?? null;
 }
 
 /**

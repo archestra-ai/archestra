@@ -111,16 +111,6 @@ describe("subscriptionKindFromKeyMetadata", () => {
     ).toBe("x-premium");
   });
 
-  it("keeps the legacy ChatGPT boolean working", () => {
-    expect(
-      subscriptionKindFromKeyMetadata({
-        provider: "openai",
-        name: "whatever",
-        isChatgptSubscription: true,
-      }),
-    ).toBe("chatgpt");
-  });
-
   it("does not infer credential kind from a mutable display name", () => {
     expect(
       subscriptionKindFromKeyMetadata({

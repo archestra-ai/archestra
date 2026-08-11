@@ -293,7 +293,6 @@ interface AgentSubscriptionCredential {
   name: string;
   userId?: string | null;
   subscriptionKind?: SubscriptionCredentialKind | null;
-  isChatgptSubscription?: boolean;
 }
 
 /**

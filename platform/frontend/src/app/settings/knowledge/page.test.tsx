@@ -74,8 +74,7 @@ let mockApiKeys: Array<{
   name: string;
   provider: string;
   scope: string;
-  isChatgptSubscription?: boolean;
-  subscriptionKind?: string;
+  subscriptionKind?: string | null;
 }> = [];
 let mockEmbeddingModels: Array<{
   id: string;
@@ -710,7 +709,7 @@ describe("KnowledgeSettingsPage", () => {
           name: "ChatGPT Subscription",
           provider: "openai",
           scope: "personal",
-          isChatgptSubscription: true,
+          subscriptionKind: "chatgpt",
         },
       ];
       renderPage();

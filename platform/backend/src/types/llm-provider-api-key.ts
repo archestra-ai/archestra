@@ -83,12 +83,6 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
      * subscription with its row.
      */
     subscriptionKind: SubscriptionCredentialKindSchema.nullable().optional(),
-    /**
-     * True when the stored credential is an OpenAI "ChatGPT Subscription"
-     * (Codex) credential. Narrower restatement of `subscriptionKind`, kept for
-     * the surfaces that branch on ChatGPT specifically.
-     */
-    isChatgptSubscription: z.boolean().optional(),
   });
 
 export type LlmProviderApiKeyWithScopeInfo = z.infer<

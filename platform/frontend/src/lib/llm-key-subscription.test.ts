@@ -41,7 +41,7 @@ describe("isPersonalSubscription", () => {
       isPersonalSubscription({
         provider: "openai",
         name: "whatever",
-        isChatgptSubscription: true,
+        subscriptionKind: "chatgpt",
       }),
     ).toBe(true);
   });

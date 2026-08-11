@@ -109,7 +109,6 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       scope: "personal",
       userId: "current-user",
       subscriptionKind: "chatgpt",
-      isChatgptSubscription: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
       data: [chatgptKey],
@@ -133,7 +132,6 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       scope: "personal",
       userId: "another-user",
       subscriptionKind: "chatgpt",
-      isChatgptSubscription: true,
       isAgentKey: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -205,7 +203,6 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       provider: "openai",
       scope: "personal",
       userId: "another-user",
-      isChatgptSubscription: false,
       isAgentKey: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -243,7 +240,6 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       scope: "personal",
       userId: "another-user",
       subscriptionKind: "chatgpt",
-      isChatgptSubscription: true,
       isAgentKey: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -276,7 +272,6 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       scope: "personal",
       userId: "current-user",
       subscriptionKind: "chatgpt",
-      isChatgptSubscription: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
       data: [chatgptKey],

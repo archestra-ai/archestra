@@ -41,6 +41,7 @@ import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-clien
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import { fromResponsesUsage, toResponsesUsage } from "./responses-usage";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
+import { subscriptionAuthRequiredCode } from "./subscription-auth-error";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
 type OpenAiResponsesResponse = OpenAi.Types.ResponsesResponse;
@@ -171,16 +172,7 @@ export const openAiResponsesAdapterFactory: LLMProvider<
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
     }
-    // The ChatGPT-subscription (Codex) fetch wrapper reports a dead sign-in
-    // (expired/revoked refresh token) as a synthetic 401 whose body carries the
-    // normalized code; relay it so the chat mapper renders the reconnect card.
-    if (
-      get(error, "error.internal_code") ===
-      ArchestraInternalErrorCode.ProviderAuthRequired
-    ) {
-      return ArchestraInternalErrorCode.ProviderAuthRequired;
-    }
-    return undefined;
+    return subscriptionAuthRequiredCode(error);
   },
 
   extractErrorMessage(error: unknown): string {

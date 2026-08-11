@@ -38,10 +38,7 @@ type DropdownLlmProviderApiKey = Pick<
   "id" | "name" | "provider"
 > &
   Partial<
-    Pick<
-      LlmProviderApiKey,
-      "scope" | "teamName" | "subscriptionKind" | "isChatgptSubscription"
-    >
+    Pick<LlmProviderApiKey, "scope" | "teamName" | "subscriptionKind">
   > & {
     connectRequired?: boolean;
   };

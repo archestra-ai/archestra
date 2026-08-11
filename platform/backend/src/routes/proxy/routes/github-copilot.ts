@@ -194,6 +194,7 @@ const githubCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     logger.debug({ agentId }, "[UnifiedProxy] Listing GitHub Copilot models");
     return toOpenAiModelsList(
       await fetchGithubCopilotModels(apiKey, baseUrl, extraHeaders),
+      "github-copilot",
     );
   }
 

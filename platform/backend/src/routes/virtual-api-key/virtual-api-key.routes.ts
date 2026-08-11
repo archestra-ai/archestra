@@ -621,11 +621,13 @@ async function validateProviderApiKeys(params: {
       );
     }
 
-    // Per-user-credential providers (GitHub Copilot) are individual tokens. A
-    // virtual key is itself a shareable secret, so it may only wrap a per-user
-    // key when it is the user's OWN personal key in their OWN personal virtual
-    // key, and never bundled with other providers (a shared model-router key
-    // would expose one user's token to everyone routing through it).
+    // Per-user credentials (GitHub/Microsoft Copilot, or a ChatGPT-subscription
+    // key on `openai`) are one individual's token, so a virtual key may only
+    // wrap one when it is the user's OWN personal key inside their OWN personal
+    // virtual key. Personal scope is what keeps the token unshared — the number
+    // of mappings does not, so a per-user credential may sit alongside other
+    // providers in a personal model-router key. Ownership is re-checked per
+    // mapping at request time in `llm-proxy-auth`.
     const secret = secretsById.get(mapping.providerApiKeyId);
     if (
       credentialRequiresPerUserScope({
@@ -637,10 +639,10 @@ async function validateProviderApiKeys(params: {
         provider: mapping.provider,
         apiKey: secret,
       });
-      if (scope !== "personal" || mappings.length > 1) {
+      if (scope !== "personal") {
         throw new ApiError(
           400,
-          `${label} is per-user: it can only be wrapped in your own personal virtual key on its own, not in a shared or multi-provider (model-router) key.`,
+          `${label} is per-user: it can only be wrapped in your own personal virtual key, not a shared team- or org-scoped one.`,
         );
       }
       if (apiKey.scope !== "personal" || apiKey.userId !== userId) {

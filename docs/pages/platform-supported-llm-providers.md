@@ -31,7 +31,7 @@ GitHub Copilot is routable, with one difference from every other provider: it se
 
 Requesting a Responses-only model on `/chat/completions` returns `400 Bad Request` naming the endpoint to use instead.
 
-A Copilot key is tied to one GitHub account, so it is routable only through your own personal virtual key — never a shared or multi-provider one. See [GitHub Copilot](#github-copilot).
+A Copilot key is tied to one GitHub account, so it is routable only through your own personal virtual key. That key can hold your other providers too, so one router endpoint reaches all of them. See [GitHub Copilot](#github-copilot).
 
 ### Model Router Connection Details
 
@@ -640,7 +640,7 @@ Obtain the token in either way:
 ### Important Notes
 
 - **No static API keys**: access is per-user via a GitHub OAuth token; model availability follows that account's Copilot subscription tier.
-- **Per-user only**: because the token is tied to one GitHub account, Copilot keys are **personal scope only** — they can't be shared via team/org scope or wrapped in a shared (org/team or multi-provider model-router) virtual key. Each user connects their own account. When someone uses an agent with a Copilot model but hasn't connected yet, Archestra resolves *their* key (never the agent owner's) and prompts them to connect: an inline "Connect GitHub Copilot" card in chat, or a message with a Settings link in Slack/Teams. Email and scheduled runs fail with an actionable message.
+- **Per-user only**: because the token is tied to one GitHub account, Copilot keys are **personal scope only** — they can't be shared via team/org scope or wrapped in a team- or org-scoped virtual key. Each user connects their own account. Your own personal virtual key may map Copilot alongside other providers, which is what makes it routable through the model router. When someone uses an agent with a Copilot model but hasn't connected yet, Archestra resolves *their* key (never the agent owner's) and prompts them to connect: an inline "Connect GitHub Copilot" card in chat, or a message with a Settings link in Slack/Teams. Email and scheduled runs fail with an actionable message.
 - **Generative models only**: the `/models` listing covers every model reachable through `/chat/completions` or `/responses`. Copilot also serves an Anthropic `/v1/messages` shim and embedding models, which Archestra does not route to.
 - **GitHub Enterprise**: point the base, token-exchange, and device-auth URLs at your GHE host. Organizations with their own GitHub App can override the client id.
 

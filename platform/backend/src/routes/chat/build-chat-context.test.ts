@@ -45,6 +45,7 @@ describe("buildChatContext enabled-tool selection", () => {
       openedApp: undefined,
       projectFileNames: undefined,
       hookRunCollector: [],
+      kbChunksCollector: [],
       elicitation: {} as never,
       subagentToolStream: {} as never,
       taskBridge: {} as never,

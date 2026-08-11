@@ -10,6 +10,7 @@ import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
+import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import { ConversationEnabledToolModel } from "@/models";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
 import type { ToolExposureMode } from "@/types";
@@ -38,6 +39,12 @@ export async function buildChatContext(params: {
   /** Filenames of the project's shared files, when this chat belongs to a project. */
   projectFileNames: string[] | undefined;
   hookRunCollector: CollectedHookRun[];
+  /**
+   * Per-turn sink for the KB chunks `query_knowledge_sources` returns, absent
+   * when quote verification is disabled (see kbChunksCollector on
+   * ChatToolContext).
+   */
+  kbChunksCollector: KbChunkForQuoteCheck[] | undefined;
   elicitation: ChatMcpElicitationBridge;
   subagentToolStream: SubagentToolStreamBridge;
   taskBridge: ChatTaskBridge;
@@ -73,6 +80,7 @@ export async function buildChatContext(params: {
     openedApp,
     projectFileNames,
     hookRunCollector,
+    kbChunksCollector,
     elicitation,
     subagentToolStream,
     taskBridge,
@@ -111,6 +119,7 @@ export async function buildChatContext(params: {
       elicitation,
       user,
       hookRunCollector,
+      kbChunksCollector,
       subagentToolStream,
       taskBridge,
       repeatTracker,

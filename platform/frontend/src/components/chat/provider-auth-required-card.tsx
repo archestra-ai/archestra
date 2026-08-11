@@ -4,13 +4,19 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   subscriptionKindForProvider,
+  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useCreateLlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
+import {
+  useAvailableLlmProviderApiKeys,
+  useCreateLlmProviderApiKey,
+  useReconnectLlmProviderApiKey,
+} from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 
 interface ProviderAuthRequiredCardProps {
@@ -40,6 +46,11 @@ export function ProviderAuthRequiredCard({
   onConnected,
 }: ProviderAuthRequiredCardProps) {
   const createKey = useCreateLlmProviderApiKey();
+  const reconnectKey = useReconnectLlmProviderApiKey();
+  // Read defensively: suites that render this card mock the auth query module
+  // wholesale, and the card should fall back to the create path rather than
+  // crash (same convention as `model-providers/page.tsx`).
+  const currentUserId = useSession()?.data?.user?.id;
   const isPreflight = variant === "preflight";
   // An auth-required error only ever names a provider that carries a
   // subscription — `openai` reaches here solely through its credential-level
@@ -47,6 +58,34 @@ export function ProviderAuthRequiredCard({
   // falls back to the Model Providers link.
   const subscriptionKind = subscriptionKindForProvider(provider);
   const byosEnabled = useFeature("byosEnabled") === true;
+  // The user's existing personal key for this subscription, if any. A sign-in
+  // then RECONNECTS that key in place instead of minting a duplicate row: the
+  // card most often appears because an existing key's sign-in expired, and a
+  // second row would leave conversations pinned to the dead one still failing.
+  const { data: availableKeys = [] } = useAvailableLlmProviderApiKeys({
+    provider,
+    enabled: subscriptionKind !== null,
+    toastOnError: false,
+  });
+  const existingSubscriptionKey = subscriptionKind
+    ? availableKeys
+        .filter(
+          (key) =>
+            key.scope === "personal" &&
+            currentUserId !== undefined &&
+            key.userId === currentUserId &&
+            key.provider === provider &&
+            (SUBSCRIPTION_CREDENTIALS[subscriptionKind].marker === null ||
+              subscriptionKindFromKeyMetadata(key) === subscriptionKind),
+        )
+        // Mirror backend key resolution (isPrimary first, then oldest) so the
+        // row that gets reconnected is the one resolution will actually pick.
+        .sort(
+          (a, b) =>
+            Number(b.isPrimary) - Number(a.isPrimary) ||
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        )[0]
+    : undefined;
 
   return (
     <div
@@ -83,25 +122,32 @@ export function ProviderAuthRequiredCard({
           ) : subscriptionKind ? (
             <SubscriptionSignIn
               kind={subscriptionKind}
-              disabled={createKey.isPending}
+              disabled={createKey.isPending || reconnectKey.isPending}
               onSecret={async (secret) => {
                 const { label } = SUBSCRIPTION_CREDENTIALS[subscriptionKind];
-                // The mutation hook surfaces provider/validation failures. Let
-                // its rejected promise reach the device-flow component so it
+                // The mutation hooks surface provider/validation failures. Let
+                // a rejected promise reach the device-flow component so it
                 // resets to a retryable state instead of claiming success.
-                await createKey.mutateAsync({
-                  name: label,
-                  provider,
-                  apiKey: secret,
-                  scope: "personal",
-                });
+                if (existingSubscriptionKey) {
+                  await reconnectKey.mutateAsync({
+                    id: existingSubscriptionKey.id,
+                    apiKey: secret,
+                  });
+                } else {
+                  await createKey.mutateAsync({
+                    name: label,
+                    provider,
+                    apiKey: secret,
+                    scope: "personal",
+                  });
+                }
                 toast.success(
                   isPreflight
                     ? `${label} connected`
                     : `${label} connected — retrying…`,
                 );
-                // Re-run the original prompt now that the key exists; the
-                // create mutation already invalidated the model/key caches.
+                // Re-run the original prompt now that the key works; both
+                // mutations already invalidated the model/key caches.
                 onConnected?.();
               }}
             />

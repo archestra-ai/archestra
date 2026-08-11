@@ -1,0 +1,143 @@
+{
+  "name": "circleci__remote-mcp",
+  "display_name": "CircleCI",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjk5ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI1OSI+PGcgZmlsbD0iIzM0MzQzNCI+PGNpcmNsZSBjeD0iMTI2LjE1NyIgY3k9IjEyOS4wMDgiIHI9IjMwLjU5MyIvPjxwYXRoIGQ9Ik0xLjIwNCA5Ni41NzJjMCAuMzY4LS4zNjkgMS4xMDUtLjM2OSAxLjQ3NGMwIDMuMzE3IDIuNTggNi4yNjYgNi4yNjYgNi4yNjZoNTEuOTcyYzIuNTggMCA0LjQyMy0xLjQ3NCA1LjUyOS0zLjY4NmMxMC42OS0yMy41OSAzNC4yOC0zOS40NCA2MS4xODYtMzkuNDRjMzcuMjI4IDAgNjcuNDUzIDMwLjIyNSA2Ny40NTMgNjcuNDUzcy0zMC4yMjUgNjcuNDUzLTY3LjQ1MyA2Ny40NTNjLTI3LjI3NiAwLTUwLjQ5Ny0xNi4yMTgtNjEuMTg2LTM5LjA3MWMtMS4xMDYtMi41OC0yLjk0OS00LjA1NS01LjUzLTQuMDU1SDcuMTAzYy0zLjMxOCAwLTYuMjY3IDIuNTgtNi4yNjcgNi4yNjdjMCAuMzY4IDAgMS4xMDUuMzY5IDEuNDc0YzE0LjM3NSA1Ni4wMjYgNjQuODcyIDk3LjMwOSAxMjQuOTUzIDk3LjMwOWM3MS4xMzkgMCAxMjkuMDA4LTU3Ljg3IDEyOS4wMDgtMTI5LjAwOFMxOTcuMjk1IDAgMTI2LjE1NyAwQzY2LjA3NyAwIDE1LjU3OSA0MS4yODMgMS4yMDQgOTYuNTcyIi8+PC9nPjwvc3ZnPg==",
+  "description": "Official remote MCP server for CircleCI. Exposes an organization's CI/CD data - pipeline runs, workflows, jobs, job logs, test results, and artifacts - plus deploy components and environments, orb metadata and source, config validation, usage-data export, and workflow rerun/cancel.",
+  "oauth_config": {
+    "name": "CircleCI MCP",
+    "server_url": "https://mcp.circleci.com/v1/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": [],
+    "description": "CircleCI MCP Server (dynamic registration)",
+    "default_scopes": [],
+    "supports_resource_metadata": true
+  },
+  "tools": [
+    {
+      "name": "cancel_workflow",
+      "description": "Cancel a running CircleCI workflow, given its UUID (a workflow id from list_workflows or get_workflow). Cancellation is asynchronous: a successful call means the request was accepted, not that the workflow has stopped yet."
+    },
+    {
+      "name": "download_usage_data",
+      "description": "Export a CircleCI organization's usage data as downloadable CSV files. This is a two-phase, asynchronous tool. Phase 1 — start: call with org (an org slug like \"gh/acme\" or an org UUID), start_date, and end_date (both YYYY-MM-DD, a window of at most 31 days) and no export_id; it returns an export_id. Phase 2 — poll/download: call again with that export_id and the same org; once the export is ready it returns pre-signed download URLs (no auth needed), or asks you to try again in a minute while it is still being prepared. Optionally include shared_org_ids on Phase 1 to cover additional organizations."
+    },
+    {
+      "name": "get_deploy_component",
+      "description": "Fetch a single CircleCI deploy component by its UUID (a component id from list_deploy_components), returning its name and owning project ID."
+    },
+    {
+      "name": "get_deploy_environment",
+      "description": "Fetch a single CircleCI deploy environment by its UUID (an environment id from list_deploy_environments), returning its name and owning org ID."
+    },
+    {
+      "name": "get_job",
+      "description": "Fetch a single CircleCI job by its UUID (a job id from list_jobs), returning its phase, outcome, and per-step detail including each step's exit code — the signal for which step failed."
+    },
+    {
+      "name": "get_job_logs",
+      "description": "Fetch the stdout/stderr of a CircleCI job's steps, given the job's UUID (a job id from list_jobs). When no step is named, the failed steps are read automatically — the fast path from a failing job to the output that explains it. Output is rendered to plain text (ANSI escapes stripped, progress-bar redraws collapsed) unless raw=true. Use tail_lines to keep only the final lines of each step (where errors surface), and execution to pick among a parallel job's executions."
+    },
+    {
+      "name": "get_orb",
+      "description": "Fetch a registry orb's metadata and published version history — given the orb as \"namespace/name\" (e.g. \"circleci/go\") or an orb UUID. Returns the latest version, 30-day usage stats, categories, and the list of published (stable) versions: the signal for whether a version pinned in a config is stale and what to bump it to. Use get_orb_source to read a specific version's definition."
+    },
+    {
+      "name": "get_orb_source",
+      "description": "Fetch the YAML source of an orb version referenced by a CircleCI config — given the orb as \"namespace/name\" optionally pinned to a version (\"circleci/go@1.2.3\", \"@volatile\" for latest, or a dev label \"@dev:my-branch\"); with no @version the latest published version is read. The source is the definition of the commands, jobs, executors, and parameters the config invokes — read it to learn how to call an orb correctly. Works only for registry orbs (namespace/name), not inline or URL orbs."
+    },
+    {
+      "name": "get_run",
+      "description": "Fetch a single CircleCI run by its UUID (a run id from list_runs), returning its phase, outcome, VCS details, and any config errors. The next step in the CI-access chain: a run's id feeds list_workflows."
+    },
+    {
+      "name": "get_workflow",
+      "description": "Fetch a single CircleCI workflow by its UUID (a workflow id from list_workflows), returning its name, phase, and outcome. A workflow's id feeds list_jobs."
+    },
+    {
+      "name": "list_artifacts",
+      "description": "List the artifacts a CircleCI job produced — the files it persisted beyond the run, such as test reports, coverage, build outputs, or logs — given the job's UUID (a job id from list_jobs or get_job). Each artifact carries its path within the job and a URL to download it."
+    },
+    {
+      "name": "list_deploy_component_versions",
+      "description": "List versions of a CircleCI deploy component — given the component's UUID (a component id from list_deploy_components or get_deploy_component). Optionally filter by deploy environment with the environment parameter."
+    },
+    {
+      "name": "list_deploy_components",
+      "description": "List CircleCI deploy components for a project — given its slug (\"gh/org/repo\") or UUID. Deploy components are the deployable units of a project (services, applications, libraries). Each component's id feeds get_deploy_component and list_deploy_component_versions."
+    },
+    {
+      "name": "list_deploy_environments",
+      "description": "List CircleCI deploy environments for an organization — given its slug (\"gh/myorg\") or UUID. Deploy environments represent named targets such as production or staging where components are released. Each environment's id feeds get_deploy_environment and can filter list_deploy_component_versions."
+    },
+    {
+      "name": "list_deployments",
+      "description": "List recent CircleCI deployments for a project — given its slug (\"gh/org/repo\") or UUID. Returns deployments newest-first with component name, version, type, status, and timestamps. Use this to answer \"what was last deployed\" or \"when was version X deployed\" without first looking up component or environment IDs."
+    },
+    {
+      "name": "list_job_tests",
+      "description": "List a CircleCI job's test results, given the job's UUID (a job id from list_jobs or get_job). By default only failing tests are returned — the ones that explain a failure; set all=true to include passing and skipped tests. Narrow further with filter (\"result=...\", \"name=...\", \"classname=...\"). A job's full test set can be very large, so the number returned is capped by limit (defaults to 100); when more tests matched than were returned, truncated is true — narrow the filter or raise limit for the rest."
+    },
+    {
+      "name": "list_jobs",
+      "description": "List the jobs belonging to a CircleCI workflow, given the workflow's UUID (a workflow id from list_workflows or get_workflow). The next step in the CI-access chain: each job's id feeds get_job."
+    },
+    {
+      "name": "list_runs",
+      "description": "List CircleCI runs for a project — given its slug (\"gh/org/repo\") or UUID — or the authenticated user's own runs across all projects (mine=true). Optionally filter by git branch and/or pipeline status. This is the entry point of the CI-access tool chain; each run's id feeds get_run and the workflow/job tools."
+    },
+    {
+      "name": "list_workflows",
+      "description": "List the workflows belonging to a CircleCI run, given the run's UUID (a run id from list_runs or get_run). The next step in the CI-access chain: each workflow's id feeds get_workflow and list_jobs."
+    },
+    {
+      "name": "me",
+      "description": "Get details of the authenticated CircleCI user. Use this when a request is about the user's own profile, or when information is missing to build other tool calls (for example the caller's id or login)."
+    },
+    {
+      "name": "rerun_workflow",
+      "description": "Rerun a CircleCI workflow, given its UUID (a workflow id from list_workflows or get_workflow). By default every job reruns from the start; set from_failed=true to rerun only the failed jobs and everything downstream of them, reusing the successful ones. A rerun creates a new workflow, whose id is returned to follow the new run."
+    },
+    {
+      "name": "validate_config",
+      "description": "Validate a CircleCI pipeline config by compiling it — the equivalent of the `circleci config validate` CLI command. Pass the raw config YAML (the contents of .circleci/config.yml) as config; the server expands orbs, resolves parameter expressions, and expands matrix jobs, returning valid=true on success or valid=false with the compilation errors on failure. Supply org (a slug like \"gh/acme\" or a UUID) whenever the config references anything org-scoped: private registry orbs, or URL orbs — any orb whose value is a URL rather than \"namespace/name@version\", which are gated by the org's URL orb allow-list. Without org, only public registry orbs resolve, so those references fail with errors like \"not permitted by the organization's URL orb allow-list\" or \"orb not found\" — these are false negatives from missing org context, NOT real config problems, so before reporting a config invalid, check whether it declares private or URL orbs and if so retry with org. set preview_next=true to preview upcoming, potentially breaking config changes; pass pipeline_parameters to resolve << pipeline.parameters.* >> expressions."
+    }
+  ],
+  "prompts": [],
+  "keywords": [
+    "circleci",
+    "ci",
+    "cd",
+    "continuous-integration",
+    "continuous-delivery",
+    "devops",
+    "pipelines",
+    "builds",
+    "testing",
+    "deployments"
+  ],
+  "user_config": {},
+  "readme": null,
+  "category": "Development",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "author": {
+    "name": "CircleCI",
+    "url": "https://circleci.com/"
+  },
+  "homepage": "https://circleci.com/product/mcp/",
+  "documentation": "https://circleci.com/docs/guides/toolkit/connecting-to-the-circleci-mcp-server/",
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.circleci.com/v1/mcp",
+    "docs_url": "https://circleci.com/docs/guides/toolkit/circleci-mcp-overview/"
+  },
+  "github_info": null,
+  "programming_language": null
+}

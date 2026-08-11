@@ -45,6 +45,7 @@ import type {
   Interaction,
   InteractionAuthMethod,
   SessionSummary,
+  SessionUnattributedReason,
   SortingQuery,
   UserInfo,
 } from "@/types";
@@ -1314,6 +1315,12 @@ class InteractionModel {
           userNames: sql<
             string[]
           >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.name} ORDER BY ${schema.usersTable.name}), NULL)`,
+          // Ids alongside names: two members can share a display name, which
+          // collapses them into a single entry above and leaves consumers
+          // matching on an ambiguous string. Ids identify the actual users.
+          userIds: sql<
+            string[]
+          >`ARRAY_REMOVE(ARRAY_AGG(DISTINCT ${schema.usersTable.id}), NULL)`,
           // Get conversation title if sessionId matches a conversation (for Archestra Chat sessions)
           conversationTitle: max(schema.conversationsTable.title),
         })
@@ -1387,6 +1394,8 @@ class InteractionModel {
       const externalAgentIds = s.externalAgentIds
         ? s.externalAgentIds.split(",").filter(Boolean)
         : [];
+      const authMethods = parseInteractionAuthMethods(s.authMethods);
+      const userIds = s.userIds ?? [];
 
       const sessionKey = s.sessionId ?? s.interactionId;
       const lastInteraction = sessionKey
@@ -1425,9 +1434,11 @@ class InteractionModel {
         externalAgentIdLabels: externalAgentIds.map((id) =>
           resolveExternalAgentIdLabel(id, agentNamesMap),
         ),
-        authMethods: parseInteractionAuthMethods(s.authMethods),
+        authMethods,
         authenticatedAppNames: s.authenticatedAppNames ?? [],
         userNames: s.userNames ?? [],
+        userIds,
+        unattributedReason: deriveUnattributedReason(userIds, authMethods),
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
         conversationTitle: s.conversationTitle,
@@ -1802,6 +1813,37 @@ function buildLastUserMessagePreview(
   } catch {
     return null;
   }
+}
+
+/**
+ * Explain an unattributed session from the credentials its interactions used.
+ *
+ * Returns null when the session has users. Ordering matters: a session can mix
+ * auth methods, and the most specific explanation wins over `unknown`.
+ */
+function deriveUnattributedReason(
+  userIds: string[],
+  authMethods: InteractionAuthMethod[],
+): SessionUnattributedReason | null {
+  if (userIds.length > 0) {
+    return null;
+  }
+  const methods = new Set(authMethods);
+  // A virtual key that reached here is org-scoped by definition: a personal
+  // one sets the interaction's user, which would have populated userIds.
+  if (methods.has("virtual_key")) {
+    return "shared_virtual_key";
+  }
+  if (methods.has("provider_key")) {
+    return "provider_key";
+  }
+  if (methods.has("oauth_client_credentials")) {
+    return "client_credentials";
+  }
+  if (methods.has("internal")) {
+    return "internal";
+  }
+  return "unknown";
 }
 
 function parseInteractionAuthMethods(

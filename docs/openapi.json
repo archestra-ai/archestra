@@ -171664,6 +171664,33 @@
                               "type": "string"
                             }
                           },
+                          "userIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "unattributedReason": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "shared_virtual_key",
+                                  "provider_key",
+                                  "client_credentials",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
                           "lastUserMessagePreview": {
                             "nullable": true,
                             "description": "Short preview (max 200 chars) of the session's last user message. Raw request bodies are not returned by this listing.",
@@ -171711,6 +171738,8 @@
                           "authMethods",
                           "authenticatedAppNames",
                           "userNames",
+                          "userIds",
+                          "unattributedReason",
                           "lastUserMessagePreview",
                           "lastInteractionType",
                           "conversationTitle",

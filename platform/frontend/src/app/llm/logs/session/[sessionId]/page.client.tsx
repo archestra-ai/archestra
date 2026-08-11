@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -218,9 +219,10 @@ export default function SessionDetailPage({
             {userNames.map((userName) => (
               <Badge key={userName} variant="outline" className="text-xs">
                 <User className="h-3 w-3 mr-1" />
-                {userName}
+                <span>{userName}</span>
               </Badge>
             ))}
+            <UnattributedUserBadge reason={sessionData?.unattributedReason} />
           </>
         }
       >

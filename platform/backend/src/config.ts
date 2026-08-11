@@ -2756,21 +2756,6 @@ const config = {
           300000,
         )
       : undefined,
-    /**
-     * Reject external proxy traffic that cannot be attributed to a user.
-     *
-     * Off by default, and deliberately so: turning it on rejects requests that
-     * work today — org-scoped virtual keys and raw provider keys identify
-     * nobody. It exists for orgs that need every request tied to a person
-     * (per-developer cost reporting, audit requirements) and would rather fail
-     * a misconfigured client loudly than silently lose its attribution.
-     *
-     * Internal (loopback) traffic is never subject to this — Archestra's own
-     * embedding and title-generation calls have no acting user by design.
-     */
-    requireUserAttribution:
-      process.env.ARCHESTRA_LLM_PROXY_REQUIRE_USER_ATTRIBUTION?.trim() ===
-      "true",
   },
   kb: {
     // BETA gate for the auto-sync-permissions connector visibility: the

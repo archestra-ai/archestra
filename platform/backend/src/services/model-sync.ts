@@ -1,5 +1,6 @@
 import {
   isSmallModel,
+  MODELS_DEV_ENRICHMENT_PROVIDER_MAP,
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
   requiresPerplexityAgentApi,
@@ -641,7 +642,13 @@ function buildCapabilitiesMap(
   const map = new Map<string, ProviderModelCapabilities>();
 
   for (const [providerId, providerData] of Object.entries(modelsDevData)) {
-    const mappedProvider = MODELS_DEV_PROVIDER_MAP[providerId];
+    // Providers mapped to null in MODELS_DEV_PROVIDER_MAP are excluded from
+    // direct models.dev row creation, but some of them still carry the best
+    // per-model metadata for the models their own endpoint reports
+    // (GitHub Copilot, Azure) — the enrichment map re-admits those here.
+    const mappedProvider =
+      MODELS_DEV_PROVIDER_MAP[providerId] ??
+      MODELS_DEV_ENRICHMENT_PROVIDER_MAP[providerId];
     if (mappedProvider !== targetProvider) {
       continue;
     }
@@ -745,6 +752,21 @@ function inferModelCapabilities(params: {
 
   if (provider === "perplexity") {
     return inferPerplexityCapabilities(modelId);
+  }
+
+  if (provider === "github-copilot") {
+    // Every catalogued Copilot model is a chat model (the fetcher drops
+    // embeddings and `completion` types), so text-in/text-out is a safe floor
+    // for models the models.dev catalog doesn't cover. Sits below the
+    // models.dev tier in the resolution order, so a registry entry with richer
+    // modalities (image/pdf input) wins whenever one exists. Without the
+    // floor, an uncovered model stores null modalities, which makes the model
+    // edit dialog invalid the moment it opens (see inferOllamaCapabilities).
+    return {
+      ...emptyCapabilities(),
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    };
   }
 
   return emptyCapabilities();
@@ -909,6 +931,24 @@ function normalizeKnownModelCapabilities(params: {
       outputModalities: [],
       supportsToolCalling: false,
     };
+  }
+
+  // An Azure embedding deployment stays classified as one even when the
+  // models.dev azure entry it can now match (via the enrichment map) lists a
+  // "text" output — the registry records embeddings that way. Mirrors
+  // inferAzureCapabilities, which the registry tier would otherwise outrank.
+  if (provider === "azure") {
+    const isEmbedding = [modelId, underlyingModelName].some((name) =>
+      name?.toLowerCase().includes("embedding"),
+    );
+    if (isEmbedding) {
+      return {
+        ...capabilities,
+        inputModalities: ["text"],
+        outputModalities: [],
+        supportsToolCalling: false,
+      };
+    }
   }
 
   // KB-supported Bedrock embedding models: the KB's own Bedrock client is the

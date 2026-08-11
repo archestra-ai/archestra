@@ -5,6 +5,10 @@ import {
   E2eTestId,
   formatSecretStorageType,
   isProviderApiKeyOptional,
+  SUBSCRIPTION_CREDENTIAL_KINDS,
+  SUBSCRIPTION_CREDENTIALS,
+  type SubscriptionCredentialKind,
+  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -49,7 +53,6 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { InlineTag } from "@/components/ui/inline-tag";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
   SelectContent,
@@ -83,14 +86,13 @@ import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import { isEditApiKeyFormValid } from "./edit-key-form.utils";
 
 type SubscriptionProvider =
-  | "openai"
-  | "github-copilot"
-  | "microsoft-365-copilot";
+  (typeof SUBSCRIPTION_CREDENTIALS)[SubscriptionCredentialKind]["provider"];
 
 type ModelProviderRow =
   | (LlmProviderApiKeyResponse & { kind: "credential" })
   | {
       kind: "subscription";
+      subscriptionKind: SubscriptionCredentialKind;
       id: string;
       name: string;
       provider: SubscriptionProvider;
@@ -117,42 +119,31 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
-  openaiAuthMethod: "api-key",
+  authMethod: "api-key",
 };
 
-const SUBSCRIPTION_PROVIDERS = [
-  {
-    id: "subscription-chatgpt",
-    name: "ChatGPT",
-    provider: "openai" as const,
+/**
+ * The "Connect subscription" rows, derived from the shared registry so a new
+ * subscription appears here without editing this page.
+ */
+const SUBSCRIPTION_PROVIDERS = SUBSCRIPTION_CREDENTIAL_KINDS.map((kind) => {
+  const { provider, displayName, marker } = SUBSCRIPTION_CREDENTIALS[kind];
+  return {
+    id: `subscription-${kind}`,
+    subscriptionKind: kind,
+    name: displayName,
+    provider,
     defaultValues: {
-      name: "ChatGPT",
-      provider: "openai" as const,
+      name: displayName,
+      provider,
       scope: "personal" as const,
-      openaiAuthMethod: "chatgpt-subscription" as const,
+      // Credential-level subscriptions share their provider with ordinary API
+      // keys, so the form has to open on the subscription tab. Provider-level
+      // ones have no tabs and ignore this.
+      ...(marker !== null ? { authMethod: "subscription" as const } : {}),
     },
-  },
-  {
-    id: "subscription-github-copilot",
-    name: "GitHub Copilot",
-    provider: "github-copilot" as const,
-    defaultValues: {
-      name: "GitHub Copilot",
-      provider: "github-copilot" as const,
-      scope: "personal" as const,
-    },
-  },
-  {
-    id: "subscription-microsoft-365-copilot",
-    name: "Microsoft 365 Copilot",
-    provider: "microsoft-365-copilot" as const,
-    defaultValues: {
-      name: "Microsoft 365 Copilot",
-      provider: "microsoft-365-copilot" as const,
-      scope: "personal" as const,
-    },
-  },
-];
+  };
+});
 
 export default function ApiKeysPage() {
   const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
@@ -260,11 +251,9 @@ export default function ApiKeysPage() {
         awsAccessKeyId: null,
         awsSecretAccessKey: null,
         awsSessionToken: null,
-        // Open on the auth-mode tab that matches the stored credential: ChatGPT
-        // Subscription keys land on the subscription tab, plain keys on API Key.
-        openaiAuthMethod: editingApiKey.isChatgptSubscription
-          ? "chatgpt-subscription"
-          : "api-key",
+        // Open on the auth-mode tab that matches the stored credential:
+        // subscription keys land on the subscription tab, plain keys on API Key.
+        authMethod: editingApiKey.subscriptionKind ? "subscription" : "api-key",
       });
     }
   }, [editingApiKey, editForm]);
@@ -362,14 +351,13 @@ export default function ApiKeysPage() {
   const isEditValid = isEditApiKeyFormValid(editFormValues);
 
   const addApiKeyButton = (
-    <PermissionButton
-      permissions={{ llmProviderApiKey: ["create"] }}
+    <Button
       onClick={() => setIsCreateDialogOpen(true)}
       data-testid={E2eTestId.AddChatApiKeyButton}
     >
       <Plus className="h-4 w-4" />
       Add API Key
-    </PermissionButton>
+    </Button>
   );
 
   const apiKeys = queriedApiKeys;
@@ -385,10 +373,15 @@ export default function ApiKeysPage() {
         allApiKeys.find(
           (credential) =>
             credential.scope === "personal" &&
-            (subscription.provider === "openai"
-              ? credential.provider === "openai" &&
-                credential.isChatgptSubscription === true
-              : credential.provider === subscription.provider),
+            credential.provider === subscription.provider &&
+            // A credential-level subscription shares its provider with ordinary
+            // API keys, so match on the kind the backend read off the secret
+            // using authoritative metadata resolved from the stored secret); a
+            // provider-level one is identified by its provider alone.
+            (SUBSCRIPTION_CREDENTIALS[subscription.subscriptionKind].marker ===
+              null ||
+              subscriptionKindFromKeyMetadata(credential) ===
+                subscription.subscriptionKind),
         ) ?? null,
     }));
     const connectedIds = new Set(
@@ -626,15 +619,17 @@ export default function ApiKeysPage() {
             !row.original.credential
           ) {
             const subscription = row.original;
+            // Personal subscription creation is intentionally self-service on
+            // the backend, including for default members who only have key-read
+            // permission. Do not apply the admin API-key create gate here.
             return (
-              <PermissionButton
-                permissions={{ llmProviderApiKey: ["create"] }}
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setSubscriptionToConnect(subscription)}
               >
                 Connect
-              </PermissionButton>
+              </Button>
             );
           }
           const credential =
@@ -771,8 +766,14 @@ export default function ApiKeysPage() {
             onOpenChange={(open) => {
               if (!open) setSubscriptionToConnect(null);
             }}
-            title={`Sign in with ${subscriptionToConnect.name}`}
-            description={`Connect your ${subscriptionToConnect.name} subscription`}
+            title={
+              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.subscriptionKind]
+                .connect.signInTitle
+            }
+            description={
+              SUBSCRIPTION_CREDENTIALS[subscriptionToConnect.subscriptionKind]
+                .connect.signInDescription
+            }
             defaultValues={subscriptionToConnect.defaultValues}
             allowedProviders={[subscriptionToConnect.provider]}
             credentialMode="subscription"

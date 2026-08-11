@@ -1,6 +1,8 @@
 import {
   createPaginatedResponseSchema,
+  credentialRequiresPerUserScope,
   PaginationQuerySchema,
+  perUserCredentialLabel,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -16,10 +18,6 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { readVirtualKeyValue } from "@/services/connection-setup";
-import {
-  credentialRequiresPerUserScope,
-  perUserCredentialLabel,
-} from "@/services/openai-codex-credentials";
 import {
   ApiError,
   constructResponseSchema,

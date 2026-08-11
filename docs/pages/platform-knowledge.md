@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-10
+lastUpdated: 2026-08-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -111,7 +111,7 @@ Open **Settings > Knowledge**. An embedding model must be set before Knowledge B
 
 Pick the API key and embedding model. The embedding model vectorizes ingested documents so they can be queried semantically. The same model is used for both indexing and querying, which is why it is locked once saved.
 
-- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072.
+- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072. Keys connected through a subscription sign-in (an X Premium login, for example) do not appear — Knowledge needs an API key.
 - **Model** — any embedding-capable model exposed by the selected key.
 
 To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions cannot be edited until the configuration is dropped.
@@ -122,7 +122,7 @@ To change the embedding model, click **Drop** to clear the existing index — ev
 
 Pick the model that scores and reorders search results by relevance. Reranking is optional — without it, search returns fused results unranked.
 
-- **Key** — any LLM provider key.
+- **Key** — any LLM provider API key. Subscription sign-ins do not appear here either.
 - **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
 
 A chat model also powers query expansion and [contextual retrieval](#contextual-retrieval). A Cohere Rerank model only scores results, so both are skipped with one configured.

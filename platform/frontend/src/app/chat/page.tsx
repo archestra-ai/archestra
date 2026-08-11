@@ -180,6 +180,7 @@ import {
   agentRequiresPerUserConnect,
   agentToolsUnavailableForModel,
   deriveModelSource,
+  getAgentSubscriptionConnection,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig } from "@/lib/config/config.query";
@@ -3846,52 +3847,6 @@ function ReviewChatNoKeyNotice({ onKeyAdded }: { onKeyAdded: () => void }) {
       />
     </div>
   );
-}
-
-function getAgentSubscriptionConnection(params: {
-  agent:
-    | {
-        llmApiKeyId?: string | null;
-        resolvedLlmProvider?: SupportedProvider;
-        llmProviderRequiresPerUserCredential?: boolean;
-      }
-    | undefined;
-  credentials: LlmProviderApiKey[];
-  userId?: string;
-}) {
-  const { agent, credentials, userId } = params;
-  const pinnedCredential = credentials.find(
-    (credential) => credential.id === agent?.llmApiKeyId,
-  );
-  const requiresConnection = Boolean(
-    agent?.llmProviderRequiresPerUserCredential ||
-      (pinnedCredential?.provider === "openai" &&
-        (pinnedCredential.isChatgptSubscription === true ||
-          pinnedCredential.name.trim().toLowerCase() ===
-            "chatgpt subscription")),
-  );
-  if (!requiresConnection) {
-    return { requiresConnection: false, isConnected: undefined };
-  }
-
-  const provider = pinnedCredential?.provider ?? agent?.resolvedLlmProvider;
-  const isChatgptSubscription =
-    pinnedCredential?.provider === "openai" &&
-    (pinnedCredential.isChatgptSubscription === true ||
-      pinnedCredential.name.trim().toLowerCase() === "chatgpt subscription");
-  const isConnected = Boolean(
-    userId &&
-      credentials.some(
-        (credential) =>
-          credential.userId === userId &&
-          (isChatgptSubscription
-            ? credential.provider === "openai" &&
-              (credential.isChatgptSubscription === true ||
-                credential.name.trim().toLowerCase() === "chatgpt subscription")
-            : credential.provider === provider),
-      ),
-  );
-  return { requiresConnection, isConnected };
 }
 
 function subscriptionDebug(event: string, data: Record<string, unknown>) {

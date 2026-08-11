@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  isProviderApiKeyOptional,
-  providerRequiresPerUserCredential,
-} from "@archestra/shared";
+import { isProviderApiKeyOptional } from "@archestra/shared";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -53,6 +50,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useFeature } from "@/lib/config/config.query";
+import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import {
   useEmbeddingModels,
   useLlmModels,
@@ -92,7 +90,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
-  openaiAuthMethod: "api-key",
+  authMethod: "api-key",
 };
 
 const EMBEDDING_DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
@@ -277,10 +275,11 @@ function ApiKeySelector({
   const prevSelectableCountRef = useRef<number | null>(null);
 
   const allKeys = apiKeys ?? [];
+  // Knowledge connections run outside the LLM proxy, so personal subscription
+  // credentials (ChatGPT, X Premium, Copilot, …) cannot be used here — the
+  // backend rejects them on connect. Only offer ordinary shareable API keys.
   const organizationKeys = allKeys.filter(
-    (key) =>
-      key.isChatgptSubscription !== true &&
-      !providerRequiresPerUserCredential(key.provider),
+    (key) => !isPersonalSubscription(key),
   );
   const keys = allowedKeyIds
     ? organizationKeys.filter((k) => allowedKeyIds.has(k.id))

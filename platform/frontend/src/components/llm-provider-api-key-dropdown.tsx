@@ -5,7 +5,6 @@ import {
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
   providerDisplayNames,
-  providerRequiresPerUserCredential,
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -30,6 +29,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +38,10 @@ type DropdownLlmProviderApiKey = Pick<
   "id" | "name" | "provider"
 > &
   Partial<
-    Pick<LlmProviderApiKey, "scope" | "teamName" | "isChatgptSubscription">
+    Pick<
+      LlmProviderApiKey,
+      "scope" | "teamName" | "subscriptionKind" | "isChatgptSubscription"
+    >
   > & {
     connectRequired?: boolean;
   };
@@ -340,15 +343,6 @@ function groupKeysByProvider(availableKeys: DropdownLlmProviderApiKey[]) {
   }
 
   return grouped;
-}
-
-function isPersonalSubscription(key: DropdownLlmProviderApiKey) {
-  return (
-    (key.provider === "openai" &&
-      (key.isChatgptSubscription === true ||
-        key.name.trim().toLowerCase() === "chatgpt subscription")) ||
-    providerRequiresPerUserCredential(key.provider)
-  );
 }
 
 function ProviderGroupHeading({ provider }: { provider: SupportedProvider }) {

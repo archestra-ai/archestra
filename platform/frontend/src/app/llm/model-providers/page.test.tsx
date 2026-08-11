@@ -1,9 +1,11 @@
 "use client";
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseLlmProviderApiKeys = vi.fn();
+const mockUseLlmProviderApiKey = vi.fn();
+const mockLlmProviderApiKeyForm = vi.fn();
 
 vi.mock("next/image", () => ({
   default: ({
@@ -15,8 +17,17 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/components/page-layout", () => ({
-  PageLayout: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  PageLayout: ({
+    actionButton,
+    children,
+  }: {
+    actionButton?: React.ReactNode;
+    children: React.ReactNode;
+  }) => (
+    <div>
+      {actionButton}
+      {children}
+    </div>
   ),
 }));
 
@@ -29,9 +40,8 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
-  useLlmProviderApiKey: () => ({
-    data: null,
-  }),
+  useLlmProviderApiKey: (...args: unknown[]) =>
+    mockUseLlmProviderApiKey(...args),
   useLlmProviderApiKeys: (...args: unknown[]) =>
     mockUseLlmProviderApiKeys(...args),
   useUpdateLlmProviderApiKey: () => ({
@@ -76,12 +86,14 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   CreateLlmProviderApiKeyDialog: (props: {
     open: boolean;
     title: string;
+    description?: string;
     defaultValues?: unknown;
     allowedProviders?: unknown;
   }) =>
     props.open ? (
       <div data-testid="create-dialog">
         {props.title}
+        {props.description}
         {JSON.stringify(props.defaultValues)}
         {JSON.stringify(props.allowedProviders)}
       </div>
@@ -106,7 +118,11 @@ vi.mock("@/components/form-dialog", () => ({
 
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "__placeholder__",
-  LlmProviderApiKeyForm: () => null,
+  LlmProviderApiKeyForm: (props: unknown) => {
+    mockLlmProviderApiKeyForm(props);
+    return null;
+  },
+  deserializeExtraHeaders: () => [],
   PROVIDER_CONFIG: {
     anthropic: { icon: "/anthropic.svg", name: "Anthropic" },
     gemini: { icon: "/gemini.svg", name: "Gemini" },
@@ -119,6 +135,7 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
       name: "Microsoft 365 Copilot",
     },
     openai: { icon: "/openai.svg", name: "OpenAI" },
+    xai: { icon: "/icons/xai.png", name: "xAI" },
   },
 }));
 
@@ -235,6 +252,9 @@ describe("ApiKeysPage", () => {
       data: [],
       isPending: false,
     });
+    mockUseLlmProviderApiKey.mockReturnValue({
+      data: null,
+    });
   });
 
   it("does not query API keys while read permission is still loading", () => {
@@ -273,7 +293,21 @@ describe("ApiKeysPage", () => {
     });
   });
 
-  it("always shows the three personal subscription credentials", () => {
+  it("lets a default member open personal API-key creation", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+
+    render(<ApiKeysPage />);
+    fireEvent.click(screen.getByTestId("add-chat-api-key-button"));
+
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent(
+      "Add API Key",
+    );
+  });
+
+  it("always shows the personal subscription credentials from the registry", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -284,7 +318,8 @@ describe("ApiKeysPage", () => {
     expect(screen.getByText("ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("GitHub Copilot")).toBeInTheDocument();
     expect(screen.getByText("Microsoft 365 Copilot")).toBeInTheDocument();
-    expect(screen.getAllByText("Connect")).toHaveLength(3);
+    expect(screen.getByText("X Premium (SuperGrok)")).toBeInTheDocument();
+    expect(screen.getAllByText("Connect")).toHaveLength(4);
   });
 
   it("represents a connected subscription once and removes its connect action", () => {
@@ -297,6 +332,7 @@ describe("ApiKeysPage", () => {
       name: "Existing ChatGPT credential",
       provider: "openai",
       scope: "personal",
+      subscriptionKind: "chatgpt",
       isChatgptSubscription: true,
     };
     mockUseLlmProviderApiKeys.mockReturnValue({
@@ -310,7 +346,77 @@ describe("ApiKeysPage", () => {
     expect(
       screen.queryByText("Existing ChatGPT credential"),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("Connect")).toHaveLength(2);
+    expect(screen.getAllByText("Connect")).toHaveLength(3);
+  });
+
+  it("does not classify an ordinary key from the mutable X Premium display name", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "x-premium-key",
+          name: "X Premium (SuperGrok)",
+          provider: "xai",
+          scope: "personal",
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    // The subscription row remains unconnected and the same-named ordinary key
+    // remains its own credential row.
+    expect(screen.getAllByText("X Premium (SuperGrok)")).toHaveLength(2);
+    expect(screen.getAllByText("Connect")).toHaveLength(4);
+  });
+
+  it("reopens an X Premium key from the edit URL param in subscription mode", async () => {
+    // The reviewer-reported F5 case: ?edit=<id> resolves the key through the
+    // single-key endpoint, which must carry subscriptionKind so the dialog
+    // reopens on the subscription auth mode, not the API-key tab.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("edit=x-premium-key") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockUseLlmProviderApiKey.mockReturnValue({
+      data: {
+        id: "x-premium-key",
+        name: "X Premium (SuperGrok)",
+        provider: "xai",
+        scope: "personal",
+        secretId: "secret-1",
+        subscriptionKind: "x-premium",
+        isChatgptSubscription: false,
+        baseUrl: null,
+        inferenceBaseUrl: null,
+        extraHeaders: null,
+        teamId: null,
+        isPrimary: false,
+      },
+    });
+
+    render(<ApiKeysPage />);
+
+    await waitFor(() => {
+      expect(mockLlmProviderApiKeyForm).toHaveBeenCalled();
+    });
+    const formProps = mockLlmProviderApiKeyForm.mock.lastCall?.[0] as {
+      existingKey: { subscriptionKind?: string | null };
+      form: { getValues: (name: string) => unknown };
+    };
+    expect(formProps.existingKey.subscriptionKind).toBe("x-premium");
+    await waitFor(() => {
+      expect(formProps.form.getValues("authMethod")).toBe("subscription");
+    });
   });
 
   it("names who each scoped credential is accessible to", () => {
@@ -354,9 +460,9 @@ describe("ApiKeysPage", () => {
 
     // The owner is the point: the backend already joins userName, and before
     // this column showed only a generic scope word for every personal key.
-    // "Me" appears four times — the viewer's own key plus the three
+    // "Me" appears five times — the viewer's own key plus the four
     // subscription rows, which are the viewer's own accounts by definition.
-    expect(screen.getAllByText("Me")).toHaveLength(4);
+    expect(screen.getAllByText("Me")).toHaveLength(5);
     expect(screen.getByText("Dana")).toBeInTheDocument();
     expect(screen.getByText("Organization")).toBeInTheDocument();
   });
@@ -374,8 +480,25 @@ describe("ApiKeysPage", () => {
       "Sign in with ChatGPT",
     );
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
-      '"openaiAuthMethod":"chatgpt-subscription"',
+      '"authMethod":"subscription"',
     );
     expect(screen.getByTestId("create-dialog")).toHaveTextContent('["openai"]');
+  });
+
+  it("uses the registry's X-specific connect copy", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    render(<ApiKeysPage />);
+
+    fireEvent.click(screen.getAllByText("Connect")[3]);
+
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent(
+      "Sign in with X",
+    );
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent(
+      "Connect the X account that holds your X Premium (SuperGrok) subscription",
+    );
   });
 });

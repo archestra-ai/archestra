@@ -18,7 +18,6 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
-  providerRequiresPerUserCredential,
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -188,6 +187,7 @@ import {
   useIsKnowledgeBaseConfigured,
   useKnowledgeBases,
 } from "@/lib/knowledge/knowledge-base.query";
+import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
@@ -1517,9 +1517,7 @@ function AgentDialogBody({
     [availableApiKeys, llmApiKeyId],
   );
   const selectedApiKeyIsSubscription =
-    selectedApiKey !== undefined &&
-    (selectedApiKey.isChatgptSubscription === true ||
-      providerRequiresPerUserCredential(selectedApiKey.provider));
+    selectedApiKey !== undefined && isPersonalSubscription(selectedApiKey);
 
   // The selected model's row: source of the derived provider (like prompt
   // input's initialProvider/currentProvider) and of the capability gating

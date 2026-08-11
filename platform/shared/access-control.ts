@@ -1194,6 +1194,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // OpenAI (ChatGPT subscription) key.
   [RouteId.OpenaiCodexDeviceAuthStart]: {},
   [RouteId.OpenaiCodexDeviceAuthPoll]: {},
+  // Same self-service rationale for the X Premium (SuperGrok) device flow: it
+  // only obtains the caller's own OAuth credential for a new personal xAI
+  // (X Premium subscription) key.
+  [RouteId.XaiSubscriptionDeviceAuthStart]: {},
+  [RouteId.XaiSubscriptionDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },

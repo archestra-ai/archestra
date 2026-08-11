@@ -7,7 +7,9 @@ import {
   providerRequiresPerUserCredential,
   type RankedModel,
   resolveModelSelection,
+  type SubscriptionCredentialKind,
   type SupportedProvider,
+  subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 
 export type { ModelSource };
@@ -282,6 +284,70 @@ export function agentRequiresPerUserConnect(params: {
   if (!selectedModelId || selectedModelId !== agent.modelId) return false;
   if (isCredentialConnected !== undefined) return !isCredentialConnected;
   return selectedModel?.isConnected !== true;
+}
+
+/** Structural subset of an available-keys row (LlmProviderApiKeyWithScopeInfo). */
+interface AgentSubscriptionCredential {
+  id: string;
+  provider: SupportedProvider;
+  name: string;
+  userId?: string | null;
+  subscriptionKind?: SubscriptionCredentialKind | null;
+  isChatgptSubscription?: boolean;
+}
+
+/**
+ * Whether the agent's pinned credential requires the viewer to connect their
+ * own per-user account, and — if so — whether they already have. Feeds
+ * `agentRequiresPerUserConnect` (which additionally gates on the agent's model
+ * staying selected).
+ */
+export function getAgentSubscriptionConnection(params: {
+  agent:
+    | {
+        llmApiKeyId?: string | null;
+        resolvedLlmProvider?: SupportedProvider;
+        llmProviderRequiresPerUserCredential?: boolean;
+      }
+    | undefined;
+  credentials: AgentSubscriptionCredential[];
+  userId?: string;
+}) {
+  const { agent, credentials, userId } = params;
+  const pinnedCredential = credentials.find(
+    (credential) => credential.id === agent?.llmApiKeyId,
+  );
+  // Which subscription the pinned credential encodes, from the server-derived
+  // metadata (populated for included agent keys too).
+  const pinnedSubscriptionKind = pinnedCredential
+    ? subscriptionKindFromKeyMetadata(pinnedCredential)
+    : null;
+  const requiresConnection = Boolean(
+    agent?.llmProviderRequiresPerUserCredential ||
+      pinnedSubscriptionKind != null,
+  );
+  if (!requiresConnection) {
+    return { requiresConnection: false, isConnected: undefined };
+  }
+
+  const provider = pinnedCredential?.provider ?? agent?.resolvedLlmProvider;
+  // Mirror the send path (resolveProviderApiKey → substituteOwnSubscriptionKey):
+  // a credential-level subscription is only satisfied by the viewer's own
+  // personal key of the SAME kind — a plain xAI console key does not connect an
+  // X Premium agent. Provider-level subscriptions (Copilot) accept any personal
+  // key of the provider, because every key of that provider is per-user.
+  const isConnected = Boolean(
+    userId &&
+      credentials.some(
+        (credential) =>
+          credential.userId === userId &&
+          (pinnedSubscriptionKind != null
+            ? subscriptionKindFromKeyMetadata(credential) ===
+              pinnedSubscriptionKind
+            : credential.provider === provider),
+      ),
+  );
+  return { requiresConnection, isConnected };
 }
 
 /**

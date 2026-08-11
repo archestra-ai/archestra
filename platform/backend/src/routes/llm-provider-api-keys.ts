@@ -1,6 +1,8 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
+  credentialRequiresPerUserScope,
   isProviderApiKeyOptional,
+  perUserCredentialLabel,
   providerDisplayNames,
   RouteId,
   type SupportedProvider,
@@ -36,10 +38,6 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
-import {
-  credentialRequiresPerUserScope,
-  perUserCredentialLabel,
-} from "@/services/openai-codex-credentials";
 import {
   ApiError,
   constructResponseSchema,
@@ -240,6 +238,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search: query.search,
           provider: query.provider,
         },
+        { includeSubscriptionInfo: true },
       );
       return reply.send(apiKeys);
     },
@@ -272,17 +271,29 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user.id,
         userTeamIds,
         query.provider,
+        { includeSubscriptionInfo: true },
       );
 
-      // If includeKeyId is provided and not already in results, fetch it separately
+      // If includeKeyId is provided and not already in results, fetch it separately.
+      // Subscription metadata rides along so the chat/agent preflight can tell
+      // that the pinned key is somebody's personal subscription (and which one)
+      // even though the viewer can't list the key itself.
       if (
         query.includeKeyId &&
         !apiKeys.some((k) => k.id === query.includeKeyId)
       ) {
-        const agentKey = await LlmProviderApiKeyModel.findById(
+        // Check organization membership before resolving secret-derived
+        // subscription metadata for an agent-pinned key.
+        const storedAgentKey = await LlmProviderApiKeyModel.findById(
           query.includeKeyId,
         );
-        if (agentKey && agentKey.organizationId === organizationId) {
+        const agentKey =
+          storedAgentKey?.organizationId === organizationId
+            ? await LlmProviderApiKeyModel.findByIdWithSubscriptionInfo(
+                storedAgentKey.id,
+              )
+            : null;
+        if (agentKey) {
           apiKeys.push({
             ...agentKey,
             teamName: null,
@@ -651,9 +662,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params, organizationId, user }, reply) => {
-      const apiKey = await LlmProviderApiKeyModel.findById(params.id);
+      // Subscription metadata included: the edit dialog's URL-param path
+      // resolves a single key through this route and needs the derived kind to
+      // reopen a subscription key on its connected card rather than the
+      // API-key tab.
+      const storedApiKey = await LlmProviderApiKeyModel.findById(params.id);
 
-      if (!apiKey || apiKey.organizationId !== organizationId) {
+      if (!storedApiKey || storedApiKey.organizationId !== organizationId) {
         throw new ApiError(404, "LLM provider API key not found");
       }
 
@@ -667,15 +682,31 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       // Personal keys: only visible to owner
-      if (apiKey.scope === "personal" && apiKey.userId !== user.id) {
+      if (
+        storedApiKey.scope === "personal" &&
+        storedApiKey.userId !== user.id
+      ) {
         throw new ApiError(404, "LLM provider API key not found");
       }
 
       // Team keys: visible to team members or admins
-      if (apiKey.scope === "team" && !isLlmProviderApiKeyAdmin) {
-        if (!apiKey.teamId || !userTeamIds.includes(apiKey.teamId)) {
+      if (storedApiKey.scope === "team" && !isLlmProviderApiKeyAdmin) {
+        if (
+          !storedApiKey.teamId ||
+          !userTeamIds.includes(storedApiKey.teamId)
+        ) {
           throw new ApiError(404, "LLM provider API key not found");
         }
+      }
+
+      // Resolve Vault-backed subscription metadata only after organization and
+      // scope authorization. The edit dialog needs it, but an unauthorized ID
+      // must never trigger a privileged external secret-store read.
+      const apiKey = await LlmProviderApiKeyModel.findByIdWithSubscriptionInfo(
+        storedApiKey.id,
+      );
+      if (!apiKey) {
+        throw new ApiError(404, "LLM provider API key not found");
       }
 
       return reply.send(apiKey);

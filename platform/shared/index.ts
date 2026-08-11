@@ -49,6 +49,7 @@ export * from "./seeded-app-render";
 export * from "./slack";
 export * from "./sso-template-helpers";
 export * from "./statistics";
+export * from "./subscription-credentials";
 export * from "./system-prompt-template";
 export * from "./test-mcp-server";
 export * from "./themes/theme-config";

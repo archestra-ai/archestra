@@ -1,7 +1,10 @@
 import {
+  credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
   LLM_PROXY_OAUTH_SCOPE,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  perUserCredentialLabel,
+  type ResourceVisibilityScope,
   RouteId,
   requiresResponsesApi,
   type SupportedProvider,
@@ -27,6 +30,7 @@ import {
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import type { Agent, LLMProvider } from "@/types";
 import {
   ApiError,
@@ -105,6 +109,8 @@ type ModelRouterMappedProviderKey = {
   providerApiKeyName: string;
   secretId: string | null;
   baseUrl: string | null;
+  scope: ResourceVisibilityScope;
+  userId: string | null;
 };
 
 type ModelRouterUserProviderKey = Awaited<
@@ -114,6 +120,8 @@ type ModelRouterUserProviderKey = Awaited<
 type ModelRouterVirtualKeyAuth = {
   authMethod: "virtual_key";
   organizationId: string;
+  virtualKeyScope: ResourceVisibilityScope;
+  virtualKeyAuthorId: string | null;
   providerApiKeysByProvider: Map<
     SupportedProvider,
     ModelRouterMappedProviderKey
@@ -906,6 +914,8 @@ async function getModelRouterAuth(
     return {
       authMethod: "virtual_key",
       organizationId: resolved.virtualKey.organizationId,
+      virtualKeyScope: resolved.virtualKey.scope,
+      virtualKeyAuthorId: resolved.virtualKey.authorId,
       providerApiKeysByProvider: new Map(
         mappings.map((mapping) => [mapping.provider, mapping]),
       ),
@@ -970,6 +980,33 @@ async function applyModelRouterAuthOverride(params: {
   const apiKey = mappedApiKey.secretId
     ? await getSecretValueForLlmProviderApiKey(mappedApiKey.secretId)
     : undefined;
+  assertSubscriptionCredentialForProvider({
+    apiKey,
+    provider: params.provider,
+  });
+
+  if (
+    credentialRequiresPerUserScope({
+      provider: params.provider,
+      apiKey,
+    })
+  ) {
+    const isOwnedPersonalCredential =
+      mappedApiKey.scope === "personal" &&
+      mappedApiKey.userId !== null &&
+      (params.auth.authMethod === "oauth_user"
+        ? mappedApiKey.userId === params.auth.userId
+        : params.auth.authMethod === "virtual_key" &&
+          params.auth.virtualKeyScope === "personal" &&
+          params.auth.virtualKeyAuthorId !== null &&
+          mappedApiKey.userId === params.auth.virtualKeyAuthorId);
+    if (!isOwnedPersonalCredential) {
+      throw new ApiError(
+        403,
+        `${perUserCredentialLabel({ provider: params.provider, apiKey })} is per-user: it can only be used through the same user's own personal credential.`,
+      );
+    }
+  }
   (
     params.request as FastifyRequest & {
       llmProxyAuthOverride?: LLMProxyAuthOverride;
@@ -1056,6 +1093,8 @@ async function getModelRouterOAuthClientAuth(
             providerApiKeyName: apiKey.name,
             secretId: apiKey.secretId,
             baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
+            scope: apiKey.scope,
+            userId: apiKey.userId,
           },
         ];
       }),
@@ -1111,6 +1150,8 @@ async function getModelRouterUserOAuthAuth(params: {
       providerApiKeyName: apiKey.name,
       secretId: apiKey.secretId,
       baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
+      scope: apiKey.scope,
+      userId: apiKey.userId,
     });
   }
 

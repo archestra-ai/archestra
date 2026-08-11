@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { beforeEach, describe, expect, test } from "@/test";
 import { testProviderApiKey } from "./registry";
 
@@ -55,5 +56,21 @@ describe("provider fetcher registry", () => {
       Authorization: "Bearer test-key",
       "kubeflow-userid": "user@example.com",
     });
+  });
+
+  test("rejects a foreign subscription marker before the provider fetcher", async () => {
+    const xaiCredential = encodeXaiSubscriptionCredential({
+      refreshToken: "rt-never-forward",
+      userId: "x-user",
+    });
+
+    await expect(
+      testProviderApiKey(
+        "openai",
+        xaiCredential,
+        "https://attacker.example/v1",
+      ),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

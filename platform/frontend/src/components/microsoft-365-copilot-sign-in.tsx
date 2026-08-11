@@ -12,7 +12,7 @@ import {
 
 interface Microsoft365CopilotSignInProps {
   /** Receives the user's Entra refresh token once the device flow completes. */
-  onToken: (token: string) => void;
+  onToken: (token: string) => void | Promise<void>;
   disabled?: boolean;
 }
 
@@ -72,8 +72,12 @@ export function Microsoft365CopilotSignIn({
         return;
       }
       if (result.status === "complete") {
-        setCompleted(true);
-        onTokenRef.current(result.refreshToken);
+        try {
+          await onTokenRef.current(result.refreshToken);
+          if (!cancelled) setCompleted(true);
+        } catch {
+          if (!cancelled) setFlow(null);
+        }
         return;
       }
       if (result.status === "slow_down") {

@@ -21,7 +21,7 @@ interface OpenaiCodexSignInProps {
    * Receives the encoded ChatGPT-subscription credential once the device flow
    * completes; the form stores it as the OpenAI provider key.
    */
-  onCredential: (credential: string) => void;
+  onCredential: (credential: string) => void | Promise<void>;
   disabled?: boolean;
 }
 
@@ -85,8 +85,12 @@ export function OpenaiCodexSignIn({
         return;
       }
       if (result.status === "complete") {
-        setCompleted(true);
-        onCredentialRef.current(result.credential);
+        try {
+          await onCredentialRef.current(result.credential);
+          if (!cancelled) setCompleted(true);
+        } catch {
+          if (!cancelled) setFlow(null);
+        }
         return;
       }
       if (result.status === "slow_down") {

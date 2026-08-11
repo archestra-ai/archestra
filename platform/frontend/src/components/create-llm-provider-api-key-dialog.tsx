@@ -1,8 +1,9 @@
 "use client";
 
 import {
-  CHATGPT_SUBSCRIPTION_LABEL,
   isProviderApiKeyOptional,
+  SUBSCRIPTION_CREDENTIALS,
+  subscriptionKindForProvider,
 } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
@@ -41,6 +42,8 @@ export type CreateLlmProviderApiKeyDialogProps = {
   allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
   /** Selects the focused progressive flow shown by this dialog. */
   credentialMode?: "api-key" | "subscription";
+  /** This dialog must connect the exact subscription kind pinned by an agent. */
+  requiresExactSubscriptionCredential?: boolean;
   showConsoleLink?: boolean;
   onSuccess?: () => void;
   /**
@@ -59,6 +62,7 @@ export function CreateLlmProviderApiKeyDialog({
   defaultValues,
   allowedProviders,
   credentialMode = "api-key",
+  requiresExactSubscriptionCredential = false,
   showConsoleLink = false,
   onSuccess,
   reconnectKeyId,
@@ -103,13 +107,18 @@ export function CreateLlmProviderApiKeyDialog({
   const createCredential = async (values: LlmProviderApiKeyFormValues) => {
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
+    // A subscription key defaults to the subscription's own name rather than the
+    // provider's, so an unnamed ChatGPT key isn't just called "OpenAI".
+    const subscriptionKind =
+      values.authMethod === "subscription"
+        ? subscriptionKindForProvider(values.provider)
+        : null;
     try {
       await createMutation.mutateAsync({
         name:
           values.name?.trim() ||
-          (values.provider === "openai" &&
-          values.openaiAuthMethod === "chatgpt-subscription"
-            ? CHATGPT_SUBSCRIPTION_LABEL
+          (subscriptionKind
+            ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].label
             : PROVIDER_CONFIG[values.provider].name),
         provider: values.provider,
         apiKey: isBedrockSigV4 ? undefined : values.apiKey || undefined,
@@ -140,32 +149,31 @@ export function CreateLlmProviderApiKeyDialog({
       });
       onOpenChange(false);
       onSuccess?.();
+      return true;
     } catch {
       // Error handled by mutation
+      return false;
     }
   };
   const handleCreate = form.handleSubmit(createCredential);
-  const handleSubscriptionCredential = (credential: string) => {
+  const handleSubscriptionCredential = async (credential: string) => {
     if (reconnectKeyId) {
       // Re-authentication: rotate the existing key's secret in place — a
       // second create would leave a duplicate credential row behind, with the
       // stale one still selected in conversations.
-      void (async () => {
-        try {
-          await updateMutation.mutateAsync({
-            id: reconnectKeyId,
-            data: { apiKey: credential },
-          });
-          onOpenChange(false);
-          onSuccess?.();
-        } catch {
-          // Error handled by mutation
-        }
-      })();
+      await updateMutation.mutateAsync({
+        id: reconnectKeyId,
+        data: { apiKey: credential },
+      });
+      onOpenChange(false);
+      onSuccess?.();
       return;
     }
     const values = { ...form.getValues(), apiKey: credential };
-    void createCredential(values);
+    const created = await createCredential(values);
+    if (!created) {
+      throw new Error("Subscription credential was not saved");
+    }
   };
 
   return (
@@ -191,6 +199,9 @@ export function CreateLlmProviderApiKeyDialog({
             isPending={createMutation.isPending}
             allowedProviders={allowedProviders}
             credentialMode={credentialMode}
+            requiresExactSubscriptionCredential={
+              requiresExactSubscriptionCredential
+            }
             progressive
             allowPersonalSubscriptions={credentialMode === "subscription"}
             onSubscriptionCredential={handleSubscriptionCredential}
@@ -238,7 +249,7 @@ function getDefaultFormValues(params: {
     awsAccessKeyId: null,
     awsSecretAccessKey: null,
     awsSessionToken: null,
-    openaiAuthMethod: "api-key",
+    authMethod: "api-key",
     ...defaultValues,
   };
 }

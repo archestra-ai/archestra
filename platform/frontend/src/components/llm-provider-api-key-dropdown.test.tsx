@@ -135,11 +135,24 @@ describe("LlmProviderApiKeyDropdown", () => {
           scope: "personal",
         },
         {
+          id: "x-premium-subscription",
+          name: "X Premium (SuperGrok)",
+          provider: "xai",
+          scope: "personal",
+          subscriptionKind: "x-premium",
+        },
+        {
           id: "openai-key",
           name: "OpenAI production",
           provider: "openai",
           scope: "org",
           isChatgptSubscription: false,
+        },
+        {
+          id: "xai-key",
+          name: "xAI production",
+          provider: "xai",
+          scope: "org",
         },
       ] as LlmProviderApiKey[],
       selectedApiKeyId: "chatgpt-subscription",
@@ -156,10 +169,46 @@ describe("LlmProviderApiKeyDropdown", () => {
       screen.getByText("Each user connects their own account"),
     ).toBeInTheDocument();
     expect(screen.getByText("API keys")).toBeInTheDocument();
-    expect(screen.getAllByText("Per-user")).toHaveLength(3);
+    expect(screen.getAllByText("Per-user")).toHaveLength(4);
+    expect(
+      screen.getByRole("option", { name: /x premium \(supergrok\)/i }),
+    ).toHaveTextContent("Per-user");
     expect(
       screen.getByRole("option", { name: /openai production/i }),
     ).not.toHaveTextContent("Per-user");
+    expect(
+      screen.getByRole("option", { name: /xai production/i }),
+    ).not.toHaveTextContent("Per-user");
+  });
+
+  it("groups an unconnected X Premium entry under personal subscriptions", async () => {
+    const user = userEvent.setup();
+
+    renderDropdown({
+      availableKeys: [
+        {
+          id: "connect-subscription-x-premium",
+          name: "X Premium (SuperGrok)",
+          provider: "xai",
+          scope: "personal",
+          subscriptionKind: "x-premium",
+          connectRequired: true,
+        },
+      ],
+      selectedApiKeyId: null,
+      onSelectKey: () => {},
+      triggerVariant: "button",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /select provider key/i }),
+    );
+
+    expect(screen.getByText("Personal subscriptions")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /x premium \(supergrok\).*connect/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("API keys")).not.toBeInTheDocument();
   });
 
   it("labels unconnected subscription options as connect actions", async () => {

@@ -681,6 +681,8 @@ describe("LlmProviderApiKeyModel", () => {
         user.id,
         [],
         false,
+        undefined,
+        { includeSubscriptionInfo: true },
       );
 
       const codexKey = visible.find((k) => k.name === "ChatGPT Subscription");
@@ -720,6 +722,8 @@ describe("LlmProviderApiKeyModel", () => {
           user.id,
           [],
           false,
+          undefined,
+          { includeSubscriptionInfo: true },
         );
 
         expect(visible).toHaveLength(1);

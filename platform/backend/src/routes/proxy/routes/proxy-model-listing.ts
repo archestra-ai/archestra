@@ -6,6 +6,7 @@ import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 import { LlmProviderApiKeyModel } from "@/models";
 import type { ModelInfo } from "@/routes/chat/model-fetchers/types";
+import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { ApiError } from "@/types";
 import {
   validateVirtualApiKey,
@@ -74,6 +75,7 @@ export async function resolveProxyModelsApiKey(params: {
   // Raw keys carry no per-key extra headers, matching the inference path's
   // raw-bearer branch (no parent provider-key row to read them from).
   if (!hasArchestraTokenPrefix(token)) {
+    assertSubscriptionCredentialForProvider({ apiKey: token, provider });
     return { apiKey: token, baseUrl: undefined, extraHeaders: null };
   }
 
@@ -83,6 +85,10 @@ export async function resolveProxyModelsApiKey(params: {
     if (!resolved.apiKey) {
       throw new ApiError(401, `Could not resolve an API key for ${provider}.`);
     }
+    assertSubscriptionCredentialForProvider({
+      apiKey: resolved.apiKey,
+      provider,
+    });
     // Per-key extra headers (e.g. gateway RBAC headers) live on the parent
     // provider key, applied here the same way the inference path applies them.
     const providerKey = resolved.chatApiKeyId

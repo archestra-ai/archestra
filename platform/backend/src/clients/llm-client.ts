@@ -21,6 +21,7 @@ import {
   LOOPBACK_HOST,
   PROVIDER_BASE_URL_HEADER,
   perplexityAgentApiBaseUrl,
+  providerDisplayNames,
   providerHasMultipleSurfaces,
   providerRequiresPerUserCredential,
   requiresOpenAiResponsesApi,
@@ -28,11 +29,14 @@ import {
   requiresResponsesApi,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
+  SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   type SupportedProviderEndpoint,
+  subscriptionKindFromCredential,
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
+
 import { context, propagation } from "@opentelemetry/api";
 import {
   extractReasoningMiddleware,
@@ -62,7 +66,6 @@ import config from "@/config";
 import { INCOGNITO_KEY_HEADER } from "@/content-encryption/incognito";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
-import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -134,15 +137,18 @@ export function createDirectLLMModel({
   if (cfg.apiKeyRequiredMessage && !apiKey) {
     throw new ApiError(400, cfg.apiKeyRequiredMessage);
   }
-  if (provider === "openai" && isOpenAiCodexCredential(apiKey)) {
-    // ChatGPT-subscription (Codex) credentials only work through the LLM proxy's
-    // openai adapter, which redeems a short-lived Codex access token and targets
-    // the Codex backend. This direct AI-SDK path (built-in subagents, knowledge
-    // base) would send the encoded refresh token to api.openai.com as a bearer —
-    // a credential leak and a guaranteed 401 — so fail closed.
+  const subscriptionKind = subscriptionKindFromCredential(apiKey);
+  if (subscriptionKind) {
+    // Subscription credentials only work through the LLM proxy adapter that
+    // decodes the marker and redeems a short-lived access token against the
+    // vendor's subscription backend. This direct AI-SDK path (built-in
+    // subagents, knowledge base) would send the encoded refresh token to the
+    // provider's metered API as a bearer — a credential leak and a guaranteed
+    // 401 — so fail closed.
+    const { label } = SUBSCRIPTION_CREDENTIALS[subscriptionKind];
     throw new ApiError(
       400,
-      "ChatGPT subscription (Codex) credentials cannot be used on the direct LLM path (built-in subagents, knowledge base). Configure a standard OpenAI API key for these, or pick a different model.",
+      `${label} credentials cannot be used on the direct LLM path (built-in subagents, knowledge base). Configure a standard ${providerDisplayNames[provider]} API key for these, or pick a different model.`,
     );
   }
   const resolvedBaseUrl = baseUrl ?? cfg.defaultBaseUrl;

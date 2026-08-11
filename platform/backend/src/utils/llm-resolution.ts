@@ -1,6 +1,7 @@
 import {
   DEFAULT_MODELS,
   isCompleteModelSelection,
+  isSubscriptionCredential,
   type ModelSelection,
   providerRequiresPerUserCredential,
   resolveModelSelection,
@@ -20,7 +21,6 @@ import {
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
-import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /** A fully dereferenced selection ready for an LLM call. */
@@ -212,11 +212,11 @@ export async function resolveBestAvailableLlm(params: {
       provider,
     });
 
-    // A ChatGPT-subscription (Codex) openai credential only works through the
-    // proxy adapter, not the direct AI-SDK path this selection feeds (built-in
-    // subagents). Skip it so resolution falls through to a usable provider
-    // instead of handing the marker to createDirectLLMModel.
-    if (chatApiKeyId && !isOpenAiCodexCredential(apiKey)) {
+    // A subscription credential only works through the proxy adapter, not the
+    // direct AI-SDK path this selection feeds (built-in subagents). Skip it so
+    // resolution falls through to a usable provider instead of handing the
+    // marker to createDirectLLMModel.
+    if (chatApiKeyId && !isSubscriptionCredential(apiKey)) {
       const bestModel =
         await LlmProviderApiKeyModelLinkModel.getBestModel(chatApiKeyId);
       if (bestModel) {
@@ -281,13 +281,13 @@ export async function resolveConfiguredAgentLlm(agent: {
         apiKeyRecord.secretId,
       );
       apiKey = (secret as string) ?? undefined;
-      // A ChatGPT-subscription (Codex) credential is likewise one person's
-      // token — per-user at the KEY level on `openai`, only detectable on the
-      // decrypted secret. This helper doesn't know the acting user, so never
-      // hand the credential out from here; the fall-through resolution
+      // A subscription credential is likewise one person's token — per-user at
+      // the KEY level on a provider that also takes API keys, only detectable
+      // on the decrypted secret. This helper doesn't know the acting user, so
+      // never hand the credential out from here; the fall-through resolution
       // enforces ownership (owner gets this same key back, anyone else gets
       // their own subscription or the connect prompt).
-      if (apiKey !== undefined && isOpenAiCodexCredential(apiKey)) {
+      if (apiKey !== undefined && isSubscriptionCredential(apiKey)) {
         apiKey = undefined;
       }
     }

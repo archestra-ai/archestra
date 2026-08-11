@@ -356,6 +356,11 @@ export const RouteId = {
   OpenaiCodexDeviceAuthStart: "openaiCodexDeviceAuthStart",
   OpenaiCodexDeviceAuthPoll: "openaiCodexDeviceAuthPoll",
 
+  // xAI "X Premium (SuperGrok)" device-flow sign-in — connects an X Premium
+  // subscription as an xAI provider credential
+  XaiSubscriptionDeviceAuthStart: "xaiSubscriptionDeviceAuthStart",
+  XaiSubscriptionDeviceAuthPoll: "xaiSubscriptionDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",

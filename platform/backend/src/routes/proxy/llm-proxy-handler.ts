@@ -72,6 +72,7 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
+import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
   DUAL_LLM_KEEPALIVE_SSE_COMMENT,
@@ -1156,6 +1157,11 @@ export async function handleLLMProxy<
 
     const effectiveBaseUrl =
       perKeyBaseUrl || providerBaseUrlHeader || provider.getBaseUrl();
+
+    assertSubscriptionCredentialForProvider({
+      apiKey,
+      provider: providerName,
+    });
 
     // Create client with observability (each provider handles metrics internally)
     const abortSignal =

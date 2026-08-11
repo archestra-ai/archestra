@@ -398,7 +398,7 @@ export function xaiOauthErrorLogFields(body: string): {
  * wrapper and the xai model fetcher so the fail-closed rule cannot drift
  * between the two.
  */
-export function isXaiSubscriptionBearerOrigin(url: string): boolean {
+function isXaiSubscriptionBearerOrigin(url: string): boolean {
   try {
     return (
       new URL(url).origin ===

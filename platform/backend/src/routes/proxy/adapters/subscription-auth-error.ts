@@ -14,7 +14,7 @@ import { get } from "lodash-es";
  */
 export function subscriptionAuthRequiredCode(
   error: unknown,
-): ArchestraInternalErrorCode.ProviderAuthRequired | undefined {
+): typeof ArchestraInternalErrorCode.ProviderAuthRequired | undefined {
   return get(error, "error.internal_code") ===
     ArchestraInternalErrorCode.ProviderAuthRequired
     ? ArchestraInternalErrorCode.ProviderAuthRequired

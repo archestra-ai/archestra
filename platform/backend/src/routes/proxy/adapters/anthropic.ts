@@ -175,14 +175,6 @@ class AnthropicRequestAdapter
     return result;
   }
 
-  getDeclaredToolNames(): string[] {
-    return (this.request.tools ?? [])
-      .map((tool) => (tool as { name?: unknown }).name)
-      .filter(
-        (name): name is string => typeof name === "string" && name !== "",
-      );
-  }
-
   hasTools(): boolean {
     return (this.request.tools?.length ?? 0) > 0;
   }

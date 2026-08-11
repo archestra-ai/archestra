@@ -208,7 +208,16 @@ export function toAnthropicModelsList(models: ModelInfo[]) {
   };
 }
 
-export function toOpenAiModelsList(models: ModelInfo[]) {
+/**
+ * `ownedBy` is the provider actually serving the models. It used to be
+ * hardcoded to "openai" — right on the OpenAI route by coincidence, wrong on
+ * the GitHub Copilot and Microsoft 365 Copilot routes, and contradicting the
+ * model router, which reports `owned_by: <provider>` for the same models.
+ */
+export function toOpenAiModelsList(
+  models: ModelInfo[],
+  ownedBy: SupportedProvider,
+) {
   return {
     object: "list" as const,
     data: models.map((model) => ({
@@ -217,7 +226,7 @@ export function toOpenAiModelsList(models: ModelInfo[]) {
       created: model.createdAt
         ? Math.floor(new Date(model.createdAt).getTime() / 1000)
         : 0,
-      owned_by: "openai",
+      owned_by: ownedBy,
     })),
   };
 }

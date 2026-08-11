@@ -139,6 +139,7 @@ const microsoft365CopilotProxyRoutes: FastifyPluginAsyncZod = async (
     );
     return toOpenAiModelsList(
       await fetchMicrosoft365CopilotModels(apiKey, baseUrl, extraHeaders),
+      "microsoft-365-copilot",
     );
   }
 

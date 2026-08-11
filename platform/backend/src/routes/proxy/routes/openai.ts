@@ -232,6 +232,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     logger.debug({ agentId }, "[UnifiedProxy] Listing OpenAI models");
     return toOpenAiModelsList(
       await fetchOpenAiModels(apiKey, baseUrl, extraHeaders),
+      "openai",
     );
   }
 

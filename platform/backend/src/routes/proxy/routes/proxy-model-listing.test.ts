@@ -17,6 +17,15 @@ vi.mock("@/routes/chat/model-fetchers/anthropic", async (importOriginal) => ({
   >()),
   fetchAnthropicModels: vi.fn(),
 }));
+vi.mock(
+  "@/routes/chat/model-fetchers/github-copilot",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/routes/chat/model-fetchers/github-copilot")
+    >()),
+    fetchGithubCopilotModels: vi.fn(),
+  }),
+);
 vi.mock("@/routes/chat/model-fetchers/openai", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("@/routes/chat/model-fetchers/openai")
@@ -25,12 +34,17 @@ vi.mock("@/routes/chat/model-fetchers/openai", async (importOriginal) => ({
 }));
 
 import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
+import { fetchGithubCopilotModels } from "@/routes/chat/model-fetchers/github-copilot";
 import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
 import anthropicProxyRoutes from "./anthropic";
+import githubCopilotProxyRoutes from "./github-copilot";
 import openAiProxyRoutes from "./openai";
 
 async function buildApp(
-  plugin: typeof anthropicProxyRoutes | typeof openAiProxyRoutes,
+  plugin:
+    | typeof anthropicProxyRoutes
+    | typeof openAiProxyRoutes
+    | typeof githubCopilotProxyRoutes,
 ) {
   const app = Fastify().withTypeProvider<ZodTypeProvider>();
   app.setValidatorCompiler(validatorCompiler);
@@ -407,6 +421,65 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
       undefined,
       null,
     );
+  });
+
+  test("github-copilot: reports the serving provider in owned_by, not openai", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    // The list helper used to hardcode owned_by: "openai" — right on the
+    // OpenAI route by coincidence, wrong here, and contradicting the model
+    // router, which reports owned_by: "github-copilot" for the same models.
+    vi.mocked(fetchGithubCopilotModels).mockResolvedValue([
+      {
+        id: "gpt-4o",
+        displayName: "GPT-4o",
+        provider: "github-copilot",
+        createdAt: "2025-01-01T00:00:00.000Z",
+      },
+      {
+        id: "gpt-5.3-codex",
+        displayName: "gpt-5.3-codex",
+        provider: "github-copilot",
+      },
+    ]);
+    const app = await buildApp(githubCopilotProxyRoutes);
+
+    // A Copilot credential is per-user, and llm-proxy-auth re-checks at
+    // request time that both the virtual key and the mapped provider key are
+    // the same user's personal keys — so the fixture must model real
+    // ownership, not just a mapping.
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const secret = await makeSecret({ secret: { apiKey: "gho_real_token" } });
+    const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "github-copilot",
+      scope: "personal",
+      userId: owner.id,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "vk-copilot",
+      scope: "personal",
+      authorId: owner.id,
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/github-copilot/${randomUUID()}/models`,
+      headers: { authorization: `Bearer ${value}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { data: Array<{ owned_by: string }> };
+    expect(body.data).toHaveLength(2);
+    for (const model of body.data) {
+      expect(model.owned_by).toBe("github-copilot");
+    }
   });
 
   test("openai: default-agent route lists models", async ({

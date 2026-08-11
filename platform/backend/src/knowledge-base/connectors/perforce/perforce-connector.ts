@@ -327,6 +327,7 @@ export class PerforceConnector extends BaseConnector {
           itemId: depotFile,
           name: depotFile,
           reason: `unsupported Perforce filetype "${fileType}"`,
+          category: "unsupported_type",
         });
       }
     }
@@ -371,6 +372,7 @@ export class PerforceConnector extends BaseConnector {
         fallback: null,
         itemId: file.depotFile,
         resource: "file_content",
+        itemUnavailable: true,
       });
     }
   }

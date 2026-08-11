@@ -60,10 +60,12 @@ import {
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import AgentExcludedSkillModel from "./agent-excluded-skill";
 import AgentExcludedSubagentModel from "./agent-excluded-subagent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentLabelModel from "./agent-label";
+import AgentSkillModel from "./agent-skill";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
@@ -73,12 +75,6 @@ import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
-
-/** The columns a boot-time sync reconciles against a shipped built-in definition. */
-type BuiltInAgentSyncRow = Pick<
-  typeof schema.agentsTable.$inferSelect,
-  "id" | "name" | "description" | "systemPrompt" | "builtInAgentConfig"
->;
 
 class AgentModel {
   /**
@@ -415,7 +411,14 @@ class AgentModel {
       connectorIds,
       suggestedPrompts,
       ...agent
-    }: InsertAgent & { isPersonalGateway?: boolean; slug?: string },
+    }: InsertAgent & {
+      isPersonalGateway?: boolean;
+      // Server-owned like isPersonalGateway: omitted from the request schemas
+      // (the skill-assignment routes are the only client-facing write path)
+      // but a real column create() honours for internal callers and fixtures.
+      accessAllSkills?: boolean;
+      slug?: string;
+    },
     authorId?: string,
     options?: {
       /**
@@ -1558,6 +1561,27 @@ class AgentModel {
     return result?.organizationId ?? null;
   }
 
+  /**
+   * Toggle Auto skill mode for the gateway's `skill://` surface.
+   *
+   * Narrow on purpose: the general `update` carries side effects irrelevant to
+   * this flag (delegation-tool sync, exclusion pre-fill) and cannot join a
+   * caller's transaction, which this needs so the mode and the assignment set
+   * change together.
+   */
+  static async setAccessAllSkills(
+    id: string,
+    accessAllSkills: boolean,
+    tx?: Transaction,
+  ): Promise<void> {
+    await (tx ?? db)
+      .update(schema.agentsTable)
+      .set({ accessAllSkills })
+      .where(
+        and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
+      );
+  }
+
   static async findEnvironmentId(id: string): Promise<string | null> {
     const [result] = await db
       .select({ environmentId: schema.agentsTable.environmentId })
@@ -1800,18 +1824,34 @@ class AgentModel {
   static async findAccessibleDelegationTargets(params: {
     userId: string;
     isAdmin: boolean;
+    organizationId: string;
     excludeAgentId: string;
     /**
      * The calling agent's environment: delegation never crosses environment
      * boundaries (null is the Default environment), mirroring tool isolation.
+     * The advisor is the one exception — its org-wide (env-less) row is
+     * reachable from every environment.
      */
     environmentId: string | null;
   }): Promise<
     Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
   > {
-    const { userId, isAdmin, excludeAgentId, environmentId } = params;
+    const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
+      params;
+
+    // The env-less advisor is reachable from every environment; scoping to the
+    // caller's organization keeps that exception from surfacing another org's
+    // advisor (the admin branch below has no other org fence).
+    const advisorException = and(
+      isNull(schema.agentsTable.environmentId),
+      eq(
+        sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+        BUILT_IN_AGENT_IDS.ADVISOR,
+      ),
+    );
 
     const baseConditions = [
+      eq(schema.agentsTable.organizationId, organizationId),
       eq(schema.agentsTable.agentType, "agent"),
       or(
         eq(schema.agentsTable.builtIn, false),
@@ -1821,9 +1861,12 @@ class AgentModel {
         ),
       ),
       ne(schema.agentsTable.id, excludeAgentId),
-      environmentId === null
-        ? isNull(schema.agentsTable.environmentId)
-        : eq(schema.agentsTable.environmentId, environmentId),
+      or(
+        environmentId === null
+          ? isNull(schema.agentsTable.environmentId)
+          : eq(schema.agentsTable.environmentId, environmentId),
+        advisorException,
+      ),
       notDeleted(schema.agentsTable),
     ];
 
@@ -1918,8 +1961,18 @@ class AgentModel {
   /**
    * Includes `environmentId` so callers can apply the environment fence beside
    * the permission checks, without a second round-trip per target.
+   *
+   * `organizationId` is an OPTIONAL tenant fence. The scope checks downstream
+   * cannot supply one: `requireScopedModifyPermission` returns early for an
+   * admin, and that admin flag is the caller's role in the caller's OWN org, so
+   * nothing ever compares the target's tenant. Callers that accept agent ids
+   * straight from a request body should pass it, which drops foreign-org agents
+   * from the map and makes them indistinguishable from ids that do not exist.
    */
-  static async findByIdsForPermissionCheck(ids: string[]): Promise<
+  static async findByIdsForPermissionCheck(
+    ids: string[],
+    organizationId?: string,
+  ): Promise<
     Map<
       string,
       {
@@ -1949,6 +2002,9 @@ class AgentModel {
           and(
             inArray(schema.agentsTable.id, ids),
             notDeleted(schema.agentsTable),
+            organizationId
+              ? eq(schema.agentsTable.organizationId, organizationId)
+              : undefined,
           ),
         ),
       AgentTeamModel.getTeamDetailsForAgents(ids),
@@ -2638,42 +2694,6 @@ class AgentModel {
       connectorIds: currentConnectorIds,
       suggestedPrompts: currentSuggestedPrompts.get(id) ?? [],
     };
-  }
-
-  /**
-   * The advisor is the one built-in that exists per environment rather than
-   * once per organization: delegation never crosses environments, so an agent
-   * can only reach the advisor sitting in its own. `null` is the Default
-   * environment, and is a distinct row from every named one.
-   */
-  static async getAdvisorForEnvironment(params: {
-    organizationId: string;
-    environmentId: string | null;
-  }): Promise<BuiltInAgentSyncRow | null> {
-    const { organizationId, environmentId } = params;
-
-    const [row] = await db
-      .select({
-        id: schema.agentsTable.id,
-        name: schema.agentsTable.name,
-        description: schema.agentsTable.description,
-        systemPrompt: schema.agentsTable.systemPrompt,
-        builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
-      })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.ADVISOR}`,
-          eq(schema.agentsTable.organizationId, organizationId),
-          environmentId === null
-            ? isNull(schema.agentsTable.environmentId)
-            : eq(schema.agentsTable.environmentId, environmentId),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .limit(1);
-
-    return row ?? null;
   }
 
   /**
@@ -3617,6 +3637,8 @@ class AgentModel {
       connectorIds,
       delegations,
       excludedSubagentIds,
+      skillIds,
+      excludedSkillIds,
       excludedToolIds,
       hookRows,
       suggestedPrompts,
@@ -3630,6 +3652,12 @@ class AgentModel {
       AgentConnectorAssignmentModel.getConnectorIds(id),
       AgentToolModel.getDelegationTargets(id),
       AgentExcludedSubagentModel.findTargetAgentIdsByAgent(id),
+      // The skill-publication routes audit through this snapshot too, so the
+      // published set and its Auto-mode exclusions must diff like any other
+      // relational field — publishing a skill to a gateway's token holders is
+      // exactly the change the log exists to show.
+      AgentSkillModel.findSkillIdsByAgent(id),
+      AgentExcludedSkillModel.findSkillIdsByAgent(id),
       AgentExcludedToolModel.findToolIdsByAgent(id),
       // Hook IDENTITY only, never `content`: a hook edit must produce a
       // non-empty diff, but script bodies would ride along on every unrelated
@@ -3699,6 +3727,7 @@ class AgentModel {
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,
+      accessAllSkills: row.accessAllSkills,
       // passthrough_headers is a text[] of header NAMES (no values), so it is
       // safe to capture verbatim.
       passthroughHeaders: [...(row.passthroughHeaders ?? [])].sort(),
@@ -3715,6 +3744,8 @@ class AgentModel {
       labels: labels.sort(),
       delegationTargets,
       excludedSubagentIds: [...excludedSubagentIds].sort(),
+      skillIds: [...skillIds].sort(),
+      excludedSkillIds: [...excludedSkillIds].sort(),
       excludedToolIds: [...excludedToolIds].sort(),
       hooks: hookRows
         .map((h) => `${h.event}/${h.fileName}${h.enabled ? "" : " (disabled)"}`)

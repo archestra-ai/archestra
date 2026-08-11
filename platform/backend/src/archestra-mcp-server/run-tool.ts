@@ -536,6 +536,14 @@ async function dispatchTool({
         abortSignal: signal,
         // A detached call outlives the synchronous timeout by design.
         ...(detachable ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
+        // Incognito: the persisted mcp_tool_calls row is encrypted under the
+        // conversation key, or redacted when there is none to encrypt under.
+        ...(context.suppressContentLogging
+          ? {
+              suppressContentLogging: true,
+              incognitoAudit: context.incognitoAudit,
+            }
+          : {}),
       },
     );
 

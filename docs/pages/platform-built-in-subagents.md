@@ -3,7 +3,7 @@ title: Built-in Subagents
 category: Agents
 order: 10
 description: The system subagents Archestra seeds into every organization, and what each one does
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,13 +14,17 @@ An admin can open a built-in subagent in its settings and change its **system pr
 
 ## Advisor
 
+The Advisor is in beta.
+
 The Advisor is a stronger model an agent consults at the decisions that shape a task: which approach to take, an error that keeps coming back, whether the work is really done. Everything else stays on the agent's own model.
 
 Turn it on per agent or MCP gateway with **Enable Advisor**, under **Subagents**. It works the same in Auto and Custom mode. Pick the Advisor's model in its own settings — a stronger model than the callers use is the point.
 
+Enabling the Advisor also instructs the agent to consult it before delivering a final answer, sharing the raw evidence behind the answer — samples of skipped input, for example — so the advice reviews the work, not a summary of it. When the Advisor's recommendation differs from the agent's own answer, the agent follows the Advisor. MCP Gateways advertise the Advisor tool without this instruction; the calling model's own prompt decides when to consult.
+
 The Advisor cannot see the conversation, the files, or the tools. It reads only the message the calling model writes, then returns advice. It changes nothing.
 
-Each environment has its own Advisor, created and removed with the environment. An agent reaches only the Advisor in its own environment, so consultations count against that environment's [cost limits](/docs/platform-costs-and-limits). Each consultation is a separate interaction, billed at the Advisor's model rates. The agent consults at decision points rather than on every turn, so a cheap agent model paired with a strong Advisor usually costs less than running the strong model throughout.
+There is one Advisor per organization, reachable from every environment. Consultations count against the consulting agent's environment [cost limits](/docs/platform-costs-and-limits). Each consultation is a separate interaction, billed at the Advisor's model rates. The agent consults at decision points rather than on every turn, so a cheap agent model paired with a strong Advisor usually costs less than running the strong model throughout.
 
 ## Policy Configuration Subagent
 

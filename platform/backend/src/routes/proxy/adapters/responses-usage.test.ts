@@ -1,5 +1,6 @@
 import { describe, expect, test } from "@/test";
 import { azureResponsesAdapterFactory } from "./azure-responses";
+import { githubCopilotResponsesAdapterFactory } from "./github-copilot-responses";
 import { openaiAdapterFactory } from "./openai";
 import { openAiResponsesAdapterFactory } from "./openai-responses";
 import { makeResponsesFromChatAdapterFactory } from "./openai-responses-from-chat";
@@ -29,6 +30,8 @@ const FACTORIES = {
   // Composes from the OpenAI Responses factory, so it must inherit the fix.
   "perplexity-responses": () =>
     perplexityResponsesAdapterFactory.createStreamAdapter(),
+  "github-copilot-responses": () =>
+    githubCopilotResponsesAdapterFactory.createStreamAdapter(),
   // The model router's chat -> Responses translation.
   "responses-from-chat": () =>
     makeResponsesFromChatAdapterFactory(
@@ -37,11 +40,12 @@ const FACTORIES = {
     ).createStreamAdapter(),
 };
 
-/** The three transports that read and write the Responses wire shape natively. */
+/** The transports that read and write the Responses wire shape natively. */
 const NATIVE_FACTORIES = {
   "openai-responses": FACTORIES["openai-responses"],
   "azure-responses": FACTORIES["azure-responses"],
   "perplexity-responses": FACTORIES["perplexity-responses"],
+  "github-copilot-responses": FACTORIES["github-copilot-responses"],
 };
 
 /** Pull the `response.completed` frame's usage out of a synthesized stream. */

@@ -4,12 +4,14 @@ import {
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   getCreationDefaultArchestraToolShortNames,
+  PLAYWRIGHT_MCP_CATALOG_ID,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
+  buildBulkToolUpdate,
   computeMcpEnvConflicts,
   computeSharedPersonalPins,
   filterDefaultArchestraToolIds,
@@ -21,7 +23,9 @@ import {
   shouldResetCredentialPin,
   sortAndFilterTools,
   sortCatalogItems,
+  summarizeBulkFailure,
 } from "./agent-tools-editor.utils";
+import { DYNAMIC_CREDENTIAL_VALUE } from "./token-select";
 
 const OTHER_CATALOG_ID = "other-catalog-id";
 
@@ -800,5 +804,274 @@ describe("setsEqual", () => {
   it("detects differing members and differing sizes", () => {
     expect(setsEqual(new Set(["a", "b"]), new Set(["a", "c"]))).toBe(false);
     expect(setsEqual(new Set(["a"]), new Set(["a", "b"]))).toBe(false);
+  });
+});
+
+describe("buildBulkToolUpdate", () => {
+  const AGENT = "agent-1";
+
+  const pending = (
+    catalogId: string,
+    selected: string[],
+    credentialSourceId: string | null,
+    catalogItem: {
+      serverType?: string | null;
+      enterpriseManagedConfig?: unknown;
+      id?: string;
+    } = {},
+  ) =>
+    [
+      catalogId,
+      {
+        selectedToolIds: new Set(selected),
+        credentialSourceId,
+        catalogItem: {
+          id: catalogItem.id ?? catalogId,
+          serverType: catalogItem.serverType ?? "remote",
+          enterpriseManagedConfig: catalogItem.enterpriseManagedConfig,
+        },
+      },
+    ] as const;
+
+  const assigned = (
+    toolId: string,
+    mcpServerId: string | null,
+    credentialResolutionMode:
+      | "static"
+      | "dynamic"
+      | "enterprise_managed" = "static",
+  ) => ({ tool: { id: toolId }, mcpServerId, credentialResolutionMode });
+
+  it("folds edits across catalogs into one assignments/removals pair", () => {
+    const result = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [
+        pending("cat-a", ["t1", "t2"], "srv-a"),
+        pending("cat-b", ["t4"], "srv-b"),
+      ],
+      assignedToolsByCatalog: new Map([
+        ["cat-a", [assigned("t1", "srv-a"), assigned("t3", "srv-a")]],
+        ["cat-b", [assigned("t5", "srv-b")]],
+      ]),
+      isNewAgent: false,
+    });
+
+    // One flat pair for the whole editor, not one request per catalog or tool.
+    expect(result.assignments).toEqual([
+      {
+        agentId: AGENT,
+        toolId: "t2",
+        mcpServerId: "srv-a",
+        resolveAtCallTime: false,
+        credentialResolutionMode: "static",
+      },
+      {
+        agentId: AGENT,
+        toolId: "t4",
+        mcpServerId: "srv-b",
+        resolveAtCallTime: false,
+        credentialResolutionMode: "static",
+      },
+    ]);
+    expect(result.removals).toEqual([
+      { agentId: AGENT, toolId: "t3" },
+      { agentId: AGENT, toolId: "t5" },
+    ]);
+    expect(result.hasChanges).toBe(true);
+  });
+
+  it("diffs a new agent's built-in catalog against the creation defaults", () => {
+    const result = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [
+        pending(ARCHESTRA_MCP_CATALOG_ID, ["d1"], null, {
+          serverType: "builtin",
+        }),
+      ],
+      assignedToolsByCatalog: new Map(),
+      isNewAgent: true,
+      creationDefaultToolIds: ["d1", "d2"],
+    });
+
+    // d2 was unchecked, so it needs a real unassign; d1 was left checked and the
+    // backend already assigned it, so re-assigning it would be redundant.
+    expect(result.removals).toEqual([{ agentId: AGENT, toolId: "d2" }]);
+    expect(result.assignments).toEqual([]);
+    expect(result.hasChanges).toBe(true);
+  });
+
+  it("ignores the creation defaults when editing an existing agent", () => {
+    const result = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [
+        pending(ARCHESTRA_MCP_CATALOG_ID, ["d1"], null, {
+          serverType: "builtin",
+        }),
+      ],
+      assignedToolsByCatalog: new Map(),
+      isNewAgent: false,
+      creationDefaultToolIds: ["d1", "d2"],
+    });
+
+    expect(result.removals).toEqual([]);
+    expect(result.assignments).toEqual([
+      {
+        agentId: AGENT,
+        toolId: "d1",
+        mcpServerId: null,
+        resolveAtCallTime: false,
+        credentialResolutionMode: "static",
+      },
+    ]);
+  });
+
+  it("re-assigns a kept tool whose credential changed", () => {
+    const result = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [pending("cat-a", ["t1"], "srv-new")],
+      assignedToolsByCatalog: new Map([["cat-a", [assigned("t1", "srv-old")]]]),
+      isNewAgent: false,
+    });
+
+    expect(result.assignments).toEqual([
+      {
+        agentId: AGENT,
+        toolId: "t1",
+        mcpServerId: "srv-new",
+        resolveAtCallTime: false,
+        credentialResolutionMode: "static",
+      },
+    ]);
+    expect(result.removals).toEqual([]);
+    expect(result.hasChanges).toBe(true);
+  });
+
+  it("leaves a kept tool alone when its credential is unchanged", () => {
+    const result = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [
+        pending("cat-a", ["t1"], DYNAMIC_CREDENTIAL_VALUE),
+        pending("cat-b", ["t2"], "srv-b"),
+      ],
+      assignedToolsByCatalog: new Map([
+        ["cat-a", [assigned("t1", null, "dynamic")]],
+        ["cat-b", [assigned("t2", "srv-b")]],
+      ]),
+      isNewAgent: false,
+    });
+
+    expect(result).toEqual({
+      assignments: [],
+      removals: [],
+      hasChanges: false,
+    });
+  });
+
+  it.each([
+    ["an app", { serverType: "app" }, "cat-app"],
+    ["the Playwright catalog", {}, PLAYWRIGHT_MCP_CATALOG_ID],
+    ["an explicit dynamic selection", {}, "cat-dyn"],
+  ])("binds %s dynamically and clears any pinned server", (_label, item, id) => {
+    const result = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [
+        // A stale pin is carried in for the first two: a late-bound mode must
+        // clear it rather than carry it over.
+        pending(
+          id,
+          ["t1"],
+          id === "cat-dyn" ? DYNAMIC_CREDENTIAL_VALUE : "srv-stale",
+          item,
+        ),
+      ],
+      assignedToolsByCatalog: new Map(),
+      isNewAgent: false,
+    });
+
+    expect(result.assignments).toEqual([
+      {
+        agentId: AGENT,
+        toolId: "t1",
+        mcpServerId: null,
+        resolveAtCallTime: true,
+        credentialResolutionMode: "dynamic",
+      },
+    ]);
+  });
+
+  it("uses the enterprise-managed mode only when the binding is dynamic", () => {
+    const enterprise = { enterpriseManagedConfig: { some: "config" } };
+
+    const dynamic = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [
+        pending("cat-e", ["t1"], DYNAMIC_CREDENTIAL_VALUE, enterprise),
+      ],
+      assignedToolsByCatalog: new Map(),
+      isNewAgent: false,
+    });
+    expect(dynamic.assignments).toEqual([
+      {
+        agentId: AGENT,
+        toolId: "t1",
+        mcpServerId: null,
+        resolveAtCallTime: true,
+        credentialResolutionMode: "enterprise_managed",
+      },
+    ]);
+
+    // Same catalog, but the user pinned a server — the explicit pin wins.
+    const pinned = buildBulkToolUpdate({
+      targetAgentId: AGENT,
+      pendingChanges: [pending("cat-e", ["t1"], "srv-a", enterprise)],
+      assignedToolsByCatalog: new Map(),
+      isNewAgent: false,
+    });
+    expect(pinned.assignments).toEqual([
+      {
+        agentId: AGENT,
+        toolId: "t1",
+        mcpServerId: "srv-a",
+        resolveAtCallTime: false,
+        credentialResolutionMode: "static",
+      },
+    ]);
+  });
+
+  it("reports no changes when nothing is pending", () => {
+    expect(
+      buildBulkToolUpdate({
+        targetAgentId: AGENT,
+        pendingChanges: [],
+        assignedToolsByCatalog: new Map([["cat-a", [assigned("t1", "srv-a")]]]),
+        isNewAgent: false,
+      }),
+    ).toEqual({ assignments: [], removals: [], hasChanges: false });
+  });
+});
+
+describe("summarizeBulkFailure", () => {
+  // The regression guard: a response carrying only `notAssigned`/`duplicates`
+  // has an empty `failed`, and must not read as an error. On the create path
+  // agent-dialog reacts to a throw by deleting the agent it just created.
+  it("returns undefined when nothing failed", () => {
+    expect(summarizeBulkFailure(undefined)).toBeUndefined();
+    expect(summarizeBulkFailure([])).toBeUndefined();
+  });
+
+  it("returns a single failure's message verbatim", () => {
+    expect(summarizeBulkFailure([{ error: "Tool not found" }])).toBe(
+      "Tool not found",
+    );
+  });
+
+  it("reports the first failure and counts the rest", () => {
+    expect(
+      summarizeBulkFailure([
+        { error: "Tool not found" },
+        { error: "Agent not found" },
+        { error: "Server unreachable" },
+      ]),
+    ).toBe("Tool not found (and 2 more)");
   });
 });

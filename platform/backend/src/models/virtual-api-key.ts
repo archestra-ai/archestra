@@ -57,6 +57,8 @@ type ProviderApiKeyInfo = ProviderApiKeyInput & {
 type ProviderApiKeyRoutingInfo = ProviderApiKeyInfo & {
   secretId: string | null;
   baseUrl: string | null;
+  scope: ResourceVisibilityScope;
+  userId: string | null;
 };
 
 type VirtualApiKeyAccessContext = {
@@ -700,6 +702,8 @@ class VirtualApiKeyModel {
           schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
         providerApiKeyName: schema.llmProviderApiKeysTable.name,
         secretId: schema.llmProviderApiKeysTable.secretId,
+        scope: schema.llmProviderApiKeysTable.scope,
+        userId: schema.llmProviderApiKeysTable.userId,
         baseUrl: sql<
           string | null
         >`coalesce(${schema.llmProviderApiKeysTable.inferenceBaseUrl}, ${schema.llmProviderApiKeysTable.baseUrl})`,

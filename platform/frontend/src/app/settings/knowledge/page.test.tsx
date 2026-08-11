@@ -75,6 +75,7 @@ let mockApiKeys: Array<{
   provider: string;
   scope: string;
   isChatgptSubscription?: boolean;
+  subscriptionKind?: string;
 }> = [];
 let mockEmbeddingModels: Array<{
   id: string;
@@ -726,6 +727,49 @@ describe("KnowledgeSettingsPage", () => {
 
       expect(
         screen.queryByRole("option", { name: /ChatGPT Subscription/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("does not offer an X Premium (SuperGrok) credential while still offering a plain xAI key", async () => {
+      const user = userEvent.setup();
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: "xai-key",
+        rerankerModel: "gpt-4o",
+      };
+      mockApiKeys = [
+        {
+          id: "xai-key",
+          name: "xAI Console Key",
+          provider: "xai",
+          scope: "org",
+        },
+        {
+          id: "x-premium-key",
+          name: "X Premium (SuperGrok)",
+          provider: "xai",
+          scope: "personal",
+          subscriptionKind: "x-premium",
+        },
+      ];
+      renderPage();
+
+      const rerankingCard = screen
+        .getByText("Reranking Configuration")
+        .closest('[data-slot="card"]');
+      expect(rerankingCard).not.toBeNull();
+      await user.click(
+        within(rerankingCard as HTMLElement).getByRole("button", {
+          name: /xAI Console Key/i,
+        }),
+      );
+
+      expect(
+        screen.getByRole("option", { name: /xAI Console Key/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /X Premium/i }),
       ).not.toBeInTheDocument();
     });
   });

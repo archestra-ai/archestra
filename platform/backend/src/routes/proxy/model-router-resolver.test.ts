@@ -45,6 +45,8 @@ describe("model-router-resolver", () => {
         provider: "anthropic",
         modelId: "claude-haiku-resolver-test",
         requestedModel: "anthropic:claude-haiku-resolver-test",
+        // Single-surface provider: nothing for the router to choose between.
+        supportedEndpoints: null,
       });
     });
 

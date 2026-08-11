@@ -2,17 +2,104 @@
 title: Knowledge
 category: Knowledge
 order: 1
-description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
-lastUpdated: 2026-08-03
+description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
+lastUpdated: 2026-08-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions. The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra — no external vector database or separate retrieval service required.
+A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions.
 
 > **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
 
 ![Agent answering from a Jira Knowledge Base with cited sources](/docs/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
+
+## How Retrieval Works
+
+The whole pipeline runs inside Archestra on PostgreSQL with pgvector. There is no external vector database and no separate retrieval service to operate.
+
+### Indexing
+
+Connectors run on a cron schedule. Each document goes through the same four steps.
+
+1. **Extract.** Text is pulled from the source. Office documents and PDFs are read through format-specific extractors; PDF text comes from the document's text layer. A PDF without a text layer — a scan, for example — is skipped and counted in the sync run details. With a multimodal embedding model configured, images are embedded directly rather than described.
+2. **Chunk.** The document is split into passages of roughly 512 tokens, on paragraph and sentence boundaries. Each chunk carries its document title and the document's metadata, so it can be matched on its own.
+3. **Add context.** Optionally, the document is summarized once and that summary is indexed with every one of its chunks. See [Contextual Retrieval](#contextual-retrieval).
+4. **Embed.** Each chunk is vectorized with the configured embedding model and stored alongside a keyword index of the same text.
+
+A document whose content has not changed since the last sync is skipped, so a re-sync only pays for what actually changed.
+
+```mermaid
+flowchart LR
+    C[Connectors] -->|cron schedule| D[Documents]
+    D --> CH[Chunking]
+    CH --> CTX[Document context]
+    CTX -->|Embedding provider API| E[Embedding]
+    E --> PG[(PostgreSQL + pgvector)]
+```
+
+### Querying
+
+A search runs both a semantic and a keyword pass, then narrows the results.
+
+1. **Expand the query.** The reranking model rewrites the question into a semantic phrasing and a set of keyword queries. This catches documents that use different words than the asker did. Identifiers, ticket numbers, and error codes are preserved verbatim.
+2. **Search both ways.** Every query variant runs against the vector index and the keyword index in parallel.
+3. **Fuse.** Results are merged with Reciprocal Rank Fusion, which favors chunks that rank well across several variants rather than one.
+4. **Rerank.** The reranking model scores each surviving chunk against the original question and drops the irrelevant ones.
+5. **Filter by access.** Chunks the asking user cannot read are removed. This applies to every result, at every stage.
+6. **Widen.** The chunks either side of each hit are stitched back on, so a passage that starts mid-sentence arrives with its surroundings. See [Context Expansion](#context-expansion).
+
+```mermaid
+flowchart LR
+    Q[Agent Query] --> QX[Query Expansion]
+    QX --> VS[Vector Search]
+    QX --> FTS[Keyword Search]
+    VS --> RRF[Reciprocal Rank Fusion]
+    FTS --> RRF
+    RRF --> RR[Reranking]
+    RR --> ACL[Access Filtering]
+    ACL --> CE[Context Expansion]
+    CE --> R[Results]
+```
+
+### Citations
+
+Every result carries the document title, its URL in the source system, the connector it came from, and the position of the chunk within the document. An agent answering from a Knowledge Base cites those sources in its reply, so a reader can open the original.
+
+In the built-in chat, the agent also marks each claim with a numbered reference and lists a short verbatim quote for each — tagged with the chunk it came from — in a Sources section at the end of the answer. Archestra checks each quote against the chunk it cites — a quote found in no returned chunk is logged as a likely fabrication. The check never blocks or alters an answer, and it covers the built-in chat only. Set `ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED` to `false` to turn it off.
+
+### Contextual Retrieval
+
+Chunking separates a passage from the context it sits in. A chunk reading "the limit was raised to 5,000 per minute" is a poor match for "what is the rate limit on the billing API", because neither the product nor the subject appears in it.
+
+Turn contextual retrieval on and each document is summarized once at ingest. That summary is indexed with every chunk of the document, so the chunk above becomes findable by a question naming the billing API. The summary shapes matching only — it is never added to the text the agent reads.
+
+It costs one LLM call per document per sync, billed against the reranking model, and needs a reranking model that can generate text. Enable it with `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED`.
+
+### Context Expansion
+
+Search ranks chunks, but a chunk boundary falls wherever the chunker put it. A hit can begin mid-sentence or cut a table in half.
+
+After ranking, the neighbouring chunks are stitched back onto each hit. Ranking is unaffected — this only widens the passage the agent reads. Expansion stops at any chunk the user cannot read, so it never becomes a way around access control. Set the radius with `ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS`.
+
+### Keyword Search Language
+
+The keyword index stems words so that different forms of one word match. Stemming is language-specific: "Katzen" and "Katze" only collapse to the same term under German rules.
+
+Set the language on each connector under **Advanced > Keyword Search Language**, to match the language its documents are written in. Choose **Simple** to turn stemming off, which suits source code and mixed-language sources. One deployment can index an English wiki and a German one correctly at the same time. The setting applies on the connector's next sync.
+
+### Tuning
+
+These settings are deployment-wide. See [Deployment](/docs/platform-deployment#knowledge-base-configuration) for the full reference.
+
+| Setting | Default | Controls |
+| --- | --- | --- |
+| `ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED` | `true` | Whether keyword search runs alongside vector search |
+| `ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS` | `512` | Size of one chunk. Smaller is more precise, larger carries more context |
+| `ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS` | `1` | How many neighbouring chunks are stitched onto a hit |
+| `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED` | `false` | Whether documents are summarized into their chunks at ingest |
+
+Chunk size and contextual retrieval apply at ingest, so a change takes effect as each connector re-syncs.
 
 ## Configuration
 
@@ -24,10 +111,24 @@ Open **Settings > Knowledge**. An embedding model must be set before Knowledge B
 
 Pick the API key and embedding model. The embedding model vectorizes ingested documents so they can be queried semantically. The same model is used for both indexing and querying, which is why it is locked once saved.
 
-- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072.
+- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072. Keys connected through a subscription sign-in (an X Premium login, for example) do not appear — Knowledge needs an API key.
 - **Model** — any embedding-capable model exposed by the selected key.
 
-To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions cannot be edited until the configuration is dropped.
+To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions and input modalities cannot be edited until the configuration is dropped.
+
+### Image Embedding
+
+Connectors index image files only when the configured embedding model accepts image input. These models do:
+
+| Provider    | Model                                                                 | Image formats                |
+| ----------- | --------------------------------------------------------------------- | ---------------------------- |
+| Gemini      | `gemini-embedding-2`                                                  | PNG, JPEG                    |
+| AWS Bedrock | Amazon Titan Multimodal Embeddings G1 (`amazon.titan-embed-image-v1`) | JPEG, PNG                    |
+| AWS Bedrock | Cohere Embed English v3 and Multilingual v3                           | JPEG, PNG                    |
+
+Archestra currently treats embedding models not listed above as text-only, even when their providers may offer multimodal variants that are not yet supported by the knowledge-base client. They cannot be marked as accepting image input in **LLM Providers > Models**. Connectors skip image formats the model does not accept — a GIF, for example. Images ingested under an earlier configuration are skipped at embedding time. The document completes without them, and the run shows the skipped count.
+
+Titan Multimodal G1 accepts 256 text tokens per input. Cohere Embed v3 accepts 2048 characters — roughly 500 tokens. Longer text chunks are truncated before embedding — only the start of the chunk lands in the vector. Use a text embedding model when your corpus is mostly documents.
 
 ### Reranking Configuration
 
@@ -35,10 +136,10 @@ To change the embedding model, click **Drop** to clear the existing index — ev
 
 Pick the model that scores and reorders search results by relevance. Reranking is optional — without it, search returns fused results unranked.
 
-- **Key** — any LLM provider key.
+- **Key** — any LLM provider API key. Subscription sign-ins do not appear here either.
 - **Model** — any chat model from that provider. Cohere Rerank models are also supported, on Cohere keys and Azure AI Foundry keys, and are called through their native rerank API.
 
-A chat model also powers query expansion (rephrasings that improve recall). A Cohere Rerank model only scores results, so expansion is skipped with one configured.
+A chat model also powers query expansion and [contextual retrieval](#contextual-retrieval). A Cohere Rerank model only scores results, so both are skipped with one configured.
 
 ## Creating a Knowledge Base
 
@@ -88,7 +189,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 | Confluence   | Supported             |
 | GitHub       | Supported             |
 | Jira         | Supported             |
-| Google Drive | Planned               |
+| Google Drive | Supported             |
 | Salesforce   | Planned               |
 | SharePoint   | Planned               |
 | Asana        | Not supported         |
@@ -123,9 +224,19 @@ Create the key in [Atlassian administration](https://admin.atlassian.com) under 
 
 The API token stays required. Atlassian does not accept admin API keys on the Jira and Confluence APIs.
 
+## Deleting and Restoring Knowledge Bases and Connectors
+
+Deleting a knowledge base or connector moves it to a trash — the record is hidden but kept. Deleting a knowledge base leaves its connectors alone: they are unlinked from it, but they are not deleted and keep syncing. Deleting a connector does stop its syncs, and destroys its stored credential.
+
+Anyone with `knowledgeSource:delete` switches the status filter to **Deleted** to open the trash. **Restore** returns the entry to active. A restored knowledge base is immediately live for its previously-assigned agents. A restored connector comes back disabled — re-authenticate it, then enable it to resume syncing.
+
+Global admins can also delete an entry from the trash for good, with **Delete permanently**. For a knowledge base this destroys the record and its agent and connector assignments; its connectors survive. For a connector it destroys every document it has indexed, along with its run history and access mappings. Nothing brings either back.
+
 ## Supported Connectors
 
 Archestra ships with these built-in connector types.
+
+A sync that indexes nothing, on a connector that holds nothing, finishes as **No documents** rather than a success. The run names the likely cause -- content that was never shared with the credential, a folder that identity cannot see, or a file-type filter that excludes everything. A later sync that finds no changes is an ordinary success.
 
 ### Jira
 
@@ -276,7 +387,7 @@ Where to find each value:
 
 ### OneDrive
 
-Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (e.g., `gemini-embedding-2-preview`), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
+Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (see [Image Embedding](#image-embedding)), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
 
 | Field         | Description                                                                                                          |
 | ------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -310,14 +421,54 @@ Sync files from Google Drive (My Drive and Shared Drives).
 
 **Indexed:** files from My Drive and Shared Drives. Supported document types include `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log`, `.docx`, `.pdf`, and `.pptx`. Google Workspace files (Docs, Sheets, Slides) are also indexed. When a multimodal embedding model is configured, image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) are indexed too. Files larger than 10 MB are skipped.
 
-**Authentication:** either a service account JSON key (recommended) or a short-lived OAuth2 access token with the `drive.readonly` scope. For a service account: create one in the [Google Cloud Console](https://console.cloud.google.com/), enable the Google Drive API, download the JSON key, and share the target folders or drives with the service account email. Paste the full JSON contents (or the bearer token) into the **Service Account Key / OAuth Token** field.
+**Authentication:** pick one of three modes. The mode decides which Google identity the connector acts as, and so what it can index.
 
-| Field               | Description                                                                                                                                                 |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Drive IDs           | Comma-separated shared drive IDs to sync (optional -- providing Drive IDs automatically enables shared-drive API access; leave blank to sync from My Drive) |
-| Folder ID           | Restrict sync to a specific folder (optional -- find the ID in the folder's Google Drive URL)                                                               |
-| File Types          | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)                                                            |
-| Recursive Traversal | Sync files from all nested subfolders when a Folder ID is set (default: on)                                                                                 |
+| Mode                        | What it indexes                                                    | Who signs in to Google    | The catch                                                              |
+| --------------------------- | ------------------------------------------------------------------ | ------------------------- | ---------------------------------------------------------------------- |
+| **Google Workspace domain** | Every shared drive, plus every user's My Drive, across your domain | Nobody                    | A super admin has to authorize delegation once, in the Admin console   |
+| **One Google account**      | Whatever that one person can already see in Drive                  | That person, once         | Everyone the Knowledge Base reaches sees whatever that person can see  |
+| **Service account only**    | Only what has been shared with the key's own address               | Nobody                    | Somebody has to share every folder with it, by hand, forever           |
+
+Use the Workspace domain mode if you have a Workspace tenant -- coverage keeps up with the organization on its own. Reach for one Google account when a single person's Drive is the corpus, or when nobody can change Admin console settings. Service account only suits a small, fixed set of folders somebody is willing to maintain.
+
+#### Google Workspace Domain
+
+A service account with domain-wide delegation impersonates users across your domain. Coverage follows the organization -- a drive created next week is picked up by the next sync, with nobody sharing anything by hand.
+
+In the [Google Cloud Console](https://console.cloud.google.com/), create a service account, enable the Google Drive API and the Admin SDK API, and download the JSON key. Copy the service account's client ID from its **Advanced settings**.
+
+In the [Google Admin console](https://admin.google.com/), go to **Security -> Access and data control -> API controls -> Domain-wide delegation**. Add that client ID with two scopes:
+
+```
+https://www.googleapis.com/auth/drive.readonly
+https://www.googleapis.com/auth/admin.directory.user.readonly
+```
+
+Paste the JSON key into the connector and enter a Workspace admin address as the **Delegated admin email**. Setting a Folder ID or Drive IDs scopes the sync to those instead, and the connector then acts as that one admin.
+
+#### One Google Account
+
+Someone authorizes their own Drive through Google, and the connector indexes what they can see. Archestra stores a refresh token, so the sync keeps working once the first hour is up.
+
+Only that one person authorizes -- whoever sets the connector up. Nobody else signs in to Google, and there is no per-user prompt. What they can see becomes readable by everyone the Knowledge Base is shared with, so pick the account whose view of Drive matches the audience you intend.
+
+This mode needs a Google OAuth client on the deployment. Create a **Web application** client in the Cloud Console, enable the Google Drive API, and register the redirect URI the connector form shows you. Set `ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID` and `ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_SECRET` to that client's credentials.
+
+Saving the connector sends you to Google. The connector page then names the connected account and offers **Reconnect** -- you need it if that account ever revokes access.
+
+#### Service Account Only
+
+The connector sees only what someone has shared with the service account's email address. Create the service account and key as above, then share each target folder or drive with that address.
+
+| Field                 | Description                                                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delegated admin email | Workspace admin the service account impersonates (Google Workspace domain mode)                                                                             |
+| Drive IDs             | Comma-separated shared drive IDs to sync (optional -- providing Drive IDs automatically enables shared-drive API access; leave blank to sync from My Drive) |
+| Folder ID             | Restrict sync to a specific folder (optional -- find the ID in the folder's Google Drive URL)                                                               |
+| File Types            | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)                                                            |
+| Recursive Traversal   | Sync files from all nested subfolders when a Folder ID is set (default: on)                                                                                 |
+
+**Test connection** checks the setup rather than just the credential. It confirms that impersonation works for the delegated admin, that the directory can be read when the sync will enumerate one, and that any folder or shared drive you named is reachable. The result says which of those failed.
 
 ### Dropbox
 
@@ -452,31 +603,3 @@ A connector can be assigned a deployment environment. Only agents and gateways i
 ## Adding New Connector Types
 
 See [Adding Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for a developer guide on implementing new connector types.
-
-## Architecture
-
-The RAG stack runs entirely within PostgreSQL — no external vector database. See [Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for the full configuration reference.
-
-**Ingestion.** Connectors run on a cron schedule; documents are chunked and embedded into PostgreSQL with pgvector.
-
-```mermaid
-flowchart LR
-    C[Connectors] -->|cron schedule| D[Documents]
-    D --> CH[Chunking]
-    CH -->|Embedding provider API| E[Embedding]
-    E --> PG[(PostgreSQL + pgvector)]
-```
-
-**Querying.** The agent's query is embedded, then vector and optional full-text search run in parallel. Results are fused, reranked, and ACL-filtered before being returned.
-
-```mermaid
-flowchart LR
-    Q[Agent Query] -->|Embedding provider API| QE[Query Embedding]
-    QE --> VS[Vector Search]
-    QE --> FTS["Full-Text Search (configurable)"]
-    VS --> RRF[Reciprocal Rank Fusion]
-    FTS --> RRF
-    RRF --> RR[Reranking]
-    RR --> ACL[ACL Filtering]
-    ACL --> R[Results]
-```

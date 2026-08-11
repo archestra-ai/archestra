@@ -26,6 +26,7 @@ import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/con
 import { ConnectorUnassignedUsersAlert } from "@/app/knowledge/connectors/_parts/connector-unassigned-users-alert";
 import { ConnectorUserGroupsTable } from "@/app/knowledge/connectors/_parts/connector-user-groups-table";
 import { contentRunPhase } from "@/app/knowledge/connectors/_parts/content-run-phase";
+import { GoogleDriveConnectionCard } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
@@ -573,6 +574,8 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           </Link>
         </Button>
 
+        <GoogleDriveConnectionCard connector={connector} />
+
         <div className="rounded-lg border p-4">
           {/* Two symmetric rows on wide screens: the documents family (Last
               Documents Sync / Documents Sync Schedule) sits directly above
@@ -698,6 +701,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   <SelectItem value="completed_with_errors">
                     Completed with errors
                   </SelectItem>
+                  <SelectItem value="no_documents">No documents</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
                   <SelectItem value="partial">Partial</SelectItem>
                   <SelectItem value="superseded">Superseded</SelectItem>

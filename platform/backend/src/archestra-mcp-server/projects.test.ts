@@ -15,6 +15,8 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 
 const TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_project_from_conversation`;
 const SHARE_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}set_project_share`;
+const LIST_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_projects`;
+const GET_TOOL_NAME = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_project`;
 
 describe("create_project_from_conversation tool", () => {
   let agent: Agent;
@@ -286,5 +288,208 @@ describe("set_project_share tool", () => {
       "organization-wide project sharing",
     );
     expect(await ProjectShareModel.findByProjectId(project.id)).toBeNull();
+  });
+});
+
+describe("project read tools (list_projects, get_project)", () => {
+  let agent: Agent;
+  let userId: string;
+  let organizationId: string;
+  let baseContext: ArchestraContext;
+
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    userId = user.id;
+    organizationId = org.id;
+    agent = await makeAgent({ organizationId });
+    baseContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId,
+      organizationId,
+    };
+  });
+
+  /** A second member's project, optionally shared with the whole org. */
+  async function makeForeignProject(
+    makeUser: any,
+    makeMember: any,
+    name: string,
+    shareWithOrg: boolean,
+  ) {
+    const stranger = await makeUser();
+    await makeMember(stranger.id, organizationId, { role: "admin" });
+    const project = await projectService.create({
+      organizationId,
+      userId: stranger.id,
+      name,
+      description: null,
+    });
+    if (shareWithOrg) {
+      await projectService.setShare({
+        id: project.id,
+        organizationId,
+        userId: stranger.id,
+        visibility: "organization",
+        teamIds: [],
+      });
+    }
+    return { project, strangerId: stranger.id as string };
+  }
+
+  test("lists own and shared projects but not another member's private one", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const mine = await projectService.create({
+      organizationId,
+      userId,
+      name: "mine",
+      description: null,
+    });
+    const { project: shared } = await makeForeignProject(
+      makeUser,
+      makeMember,
+      "shared-with-org",
+      true,
+    );
+    const { project: hidden } = await makeForeignProject(
+      makeUser,
+      makeMember,
+      "strangers-private",
+      false,
+    );
+
+    const result = await executeArchestraTool(LIST_TOOL_NAME, {}, baseContext);
+
+    expect(result.isError).toBe(false);
+    const ids = (
+      result.structuredContent as { projects: { id: string }[] }
+    ).projects.map((p) => p.id);
+    expect(ids).toContain(mine.id);
+    expect(ids).toContain(shared.id);
+    expect(ids).not.toContain(hidden.id);
+  });
+
+  test("narrows the list by query", async () => {
+    await projectService.create({
+      organizationId,
+      userId,
+      name: "quarterly-planning",
+      description: null,
+    });
+    await projectService.create({
+      organizationId,
+      userId,
+      name: "unrelated",
+      description: null,
+    });
+
+    const result = await executeArchestraTool(
+      LIST_TOOL_NAME,
+      { query: "quarterly" },
+      baseContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(
+      (
+        result.structuredContent as { projects: { name: string }[] }
+      ).projects.map((p) => p.name),
+    ).toEqual(["quarterly-planning"]);
+  });
+
+  test("returns a project's instructions and files in one call", async () => {
+    const project = await projectService.create({
+      organizationId,
+      userId,
+      name: "with-context",
+      description: null,
+    });
+    await projectService.setInstructions({
+      id: project.id,
+      organizationId,
+      userId,
+      content: "# House rules\nAlways cite sources.",
+    });
+    await fileStore.put({
+      organizationId,
+      userId,
+      projectId: project.id,
+      conversationId: null,
+      filename: "spec.md",
+      mimeType: "text/plain",
+      sizeBytes: 4,
+      data: Buffer.from("spec"),
+    });
+
+    const result = await executeArchestraTool(
+      GET_TOOL_NAME,
+      { project_id: project.id },
+      baseContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const out = result.structuredContent as {
+      id: string;
+      instructions: string;
+      instructions_truncated: boolean;
+      files: { filename: string }[];
+    };
+    expect(out.id).toBe(project.id);
+    expect(out.instructions).toContain("Always cite sources.");
+    expect(out.instructions_truncated).toBe(false);
+    expect(out.files.map((f) => f.filename)).toContain("spec.md");
+  });
+
+  test("flags truncation instead of inlining very long instructions", async () => {
+    const project = await projectService.create({
+      organizationId,
+      userId,
+      name: "verbose",
+      description: null,
+    });
+    await projectService.setInstructions({
+      id: project.id,
+      organizationId,
+      userId,
+      content: "x".repeat(20_001),
+    });
+
+    const result = await executeArchestraTool(
+      GET_TOOL_NAME,
+      { project_id: project.id },
+      baseContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const out = result.structuredContent as {
+      instructions: string;
+      instructions_truncated: boolean;
+    };
+    expect(out.instructions_truncated).toBe(true);
+    expect(out.instructions).toHaveLength(20_000);
+  });
+
+  test("refuses a project the caller cannot access", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const { project } = await makeForeignProject(
+      makeUser,
+      makeMember,
+      "off-limits",
+      false,
+    );
+
+    const result = await executeArchestraTool(
+      GET_TOOL_NAME,
+      { project_id: project.id },
+      baseContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Project not found");
   });
 });

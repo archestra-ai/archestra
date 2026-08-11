@@ -14,6 +14,8 @@ const {
   createConnector,
   updateConnector,
   deleteConnector,
+  restoreConnector,
+  permanentlyDeleteConnector,
   syncConnector,
   forceResyncConnector,
   testConnectorConnection,
@@ -27,6 +29,7 @@ const {
   assignConnectorToKnowledgeBases,
   unassignConnectorFromKnowledgeBase,
   getConnectorKnowledgeBases,
+  startGoogleDriveConnectorOAuth,
 } = archestraApiSdk;
 
 type ConnectorsQuery = NonNullable<
@@ -40,7 +43,7 @@ type ConnectorsListParams = Pick<
 };
 type ConnectorsPaginatedParams = Pick<
   ConnectorsQuery,
-  "limit" | "offset" | "search" | "connectorType"
+  "limit" | "offset" | "search" | "connectorType" | "status"
 >;
 
 /** One synced upstream group, as `useConnectorUserGroups` returns it. */
@@ -215,6 +218,59 @@ export function useDeleteConnector() {
   });
 }
 
+/**
+ * Restore a soft-deleted connector from the trash view (admins). The stored
+ * credential was destroyed at delete, so the connector comes back disabled —
+ * the toast tells the admin the follow-up steps.
+ */
+export function useRestoreConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await restoreConnector({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      toast.success(
+        "Connector restored as disabled — re-authenticate it, then enable it to resume syncing",
+      );
+    },
+  });
+}
+
+/** Permanently delete a soft-deleted connector (admin-only trash action). */
+export function usePermanentlyDeleteConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await permanentlyDeleteConnector({
+        path: { id },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, id) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      // Drop the detail and document queries for an id that no longer
+      // resolves, rather than letting a stale URL remount them into a 404.
+      queryClient.removeQueries({ queryKey: ["connectors", id] });
+      toast.success("Connector permanently deleted");
+    },
+  });
+}
+
 export function useSyncConnector() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -294,6 +350,39 @@ export function useTestConnectorConnection() {
           errorMessage: clipErrorMessage(data.error),
         });
         toast.error(data.error || "Connection test failed");
+      }
+    },
+  });
+}
+
+/**
+ * Send the browser to Google to authorize a Drive connector.
+ *
+ * A full-page redirect rather than a popup: the flow ends on a backend
+ * callback that stores the refresh token and redirects back here, so no token
+ * is handed between windows and the browser returns to the page it left with
+ * the connector already connected.
+ */
+export function useStartGoogleDriveOAuth() {
+  return useMutation({
+    mutationFn: async (params: { connectorId: string; returnTo?: string }) => {
+      const { data, error } = await startGoogleDriveConnectorOAuth({
+        path: { id: params.connectorId },
+        body: {
+          returnTo:
+            params.returnTo ??
+            (typeof window === "undefined" ? undefined : window.location.href),
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.authorizationUrl) {
+        window.location.href = data.authorizationUrl;
       }
     },
   });

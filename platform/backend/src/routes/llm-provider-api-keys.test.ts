@@ -70,6 +70,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { validateProviderAllowed } from "./llm-provider-api-keys";
 
 const mockAnthropicWifIsEnabled = vi.mocked(
@@ -214,6 +215,74 @@ describe("GET /api/llm-provider-api-keys/available", () => {
     expect(getBestModelsForApiKeysSpy).toHaveBeenCalledWith([apiKey.id]);
     expect(getBestModelSpy).not.toHaveBeenCalled();
   });
+
+  test("includeKeyId carries subscription metadata for another user's X Premium key", async ({
+    makeSecret,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "owner-refresh-token",
+          userId: "owner-x-user-id",
+        }),
+      },
+    });
+    const ownerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+      name: "X Premium (SuperGrok)",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/available?includeKeyId=${ownerKey.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const includedKey = response
+      .json()
+      .find((key: { id: string }) => key.id === ownerKey.id);
+    // The viewer can't list the owner's personal key, but the included agent
+    // key must say it is an X Premium credential so the chat/agent preflight
+    // gates sending behind "connect your own account".
+    expect(includedKey).toMatchObject({
+      isAgentKey: true,
+      subscriptionKind: "x-premium",
+    });
+  });
+
+  test("includeKeyId reports no subscription kind for a plain xAI key", async ({
+    makeSecret,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: { apiKey: "xai-plain-console-key" },
+    });
+    const ownerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+      name: "Owner xAI Key",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/available?includeKeyId=${ownerKey.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const includedKey = response
+      .json()
+      .find((key: { id: string }) => key.id === ownerKey.id);
+    expect(includedKey).toMatchObject({ isAgentKey: true });
+    expect(includedKey.subscriptionKind ?? null).toBeNull();
+  });
 });
 
 describe("LLM Provider API Keys CRUD", () => {
@@ -354,6 +423,40 @@ describe("LLM Provider API Keys CRUD", () => {
     const apiKey = response.json();
     expect(apiKey.id).toBe(createdKey.id);
     expect(apiKey.name).toBe("Get By ID Test Key");
+  });
+
+  test("returns subscription metadata for a single key fetched by ID", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // The edit dialog's URL-param path (?edit=<id>) resolves through this
+    // route; without the derived kind an F5 mid-edit would reopen an
+    // X Premium key on the API-key tab with no connected card.
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "rt-get-by-id",
+          userId: "x-user-id",
+        }),
+      },
+    });
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: user.id,
+      name: "X Premium (SuperGrok)",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/llm-provider-api-keys/${key.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: key.id,
+      subscriptionKind: "x-premium",
+    });
   });
 
   test("should update an LLM provider API key name", async () => {

@@ -1,7 +1,16 @@
-import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
-import db, { schema } from "@/database";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  or,
+} from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { softDelete } from "@/database/soft-delete";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import type {
   InsertKnowledgeBase,
   KnowledgeBase,
@@ -9,35 +18,71 @@ import type {
 } from "@/types";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 
+/**
+ * Filters shared by the list and its count, so a page can never show N rows
+ * with a total of N + rows the other filter would have excluded. `status`
+ * picks the lifecycle slice: `deleted` is the trash view, every other read
+ * stays `notDeleted`.
+ */
+function buildOrgFilters(params: {
+  organizationId: string;
+  search?: string;
+  status?: "active" | "deleted";
+}) {
+  const normalizedSearch = params.search?.trim();
+  return [
+    params.status === "deleted"
+      ? isNotNull(schema.knowledgeBasesTable.deletedAt)
+      : notDeleted(schema.knowledgeBasesTable),
+    eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
+    ...(normalizedSearch
+      ? [
+          or(
+            ilike(schema.knowledgeBasesTable.name, `%${normalizedSearch}%`),
+            ilike(
+              schema.knowledgeBasesTable.description,
+              `%${normalizedSearch}%`,
+            ),
+          ),
+        ]
+      : []),
+  ];
+}
+
 class KnowledgeBaseModel {
   static async findByOrganization(params: {
     organizationId: string;
     limit?: number;
     offset?: number;
     search?: string;
+    status?: "active" | "deleted";
   }): Promise<KnowledgeBase[]> {
-    const normalizedSearch = params.search?.trim();
-    const filters = [
-      notDeleted(schema.knowledgeBasesTable),
-      eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
-      ...(normalizedSearch
-        ? [
-            or(
-              ilike(schema.knowledgeBasesTable.name, `%${normalizedSearch}%`),
-              ilike(
-                schema.knowledgeBasesTable.description,
-                `%${normalizedSearch}%`,
-              ),
-            ),
-          ]
-        : []),
-    ];
+    const filters = buildOrgFilters(params);
 
     let query = db
       .select()
       .from(schema.knowledgeBasesTable)
       .where(and(...filters))
-      .orderBy(desc(schema.knowledgeBasesTable.createdAt))
+      // The trash renders `deletedAt` as its only temporal column, so it sorts
+      // by it — ordering by `createdAt` there would scatter the visible column
+      // into arbitrary order. `deletedAt` is non-null across that slice by
+      // construction (buildOrgFilters pins `isNotNull`), so no null ordering.
+      //
+      // `id` breaks ties on both branches: LIMIT/OFFSET needs a total order, or
+      // a tie group straddling a page boundary renders a row twice and drops
+      // another. Ties are the normal case, not the edge one — `createdAt`
+      // defaults to now(), the transaction timestamp, so rows inserted together
+      // are stamped identically, and a cascade hands `softDelete` one shared
+      // `at` deliberately. The uuid is random: a determinism key, not a recency
+      // proxy. This settles the order for a fixed snapshot only — OFFSET paging
+      // still shifts under a concurrent restore/purge, which would take keyset
+      // pagination to close.
+      .orderBy(
+        params.status === "deleted"
+          ? desc(schema.knowledgeBasesTable.deletedAt)
+          : desc(schema.knowledgeBasesTable.createdAt),
+        desc(schema.knowledgeBasesTable.id),
+      )
       .$dynamic();
 
     if (params.limit !== undefined) {
@@ -126,31 +171,116 @@ class KnowledgeBaseModel {
     return count > 0;
   }
 
+  /**
+   * Restore: clears `deleted_at`, pure stamp-removal. Junction rows (agent
+   * assignments, connector links) were never stamped, so the KB comes back
+   * with its prior assignments live. Returns false when no soft-deleted row
+   * matched, which the restore route surfaces as a 404.
+   */
+  static async restore(id: string): Promise<boolean> {
+    const count = await restore(
+      db,
+      schema.knowledgeBasesTable,
+      eq(schema.knowledgeBasesTable.id, id),
+    );
+
+    return count > 0;
+  }
+
+  /**
+   * Org-scoped lookup of a SOFT-DELETED knowledge base, for the restore route.
+   * Does NOT filter `notDeleted` — it is the one point read that must see
+   * deleted rows.
+   */
+  static async findDeletedByIdForOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<KnowledgeBase | null> {
+    const [result] = await db
+      .select()
+      .from(schema.knowledgeBasesTable)
+      .where(
+        and(
+          eq(schema.knowledgeBasesTable.id, id),
+          eq(schema.knowledgeBasesTable.organizationId, organizationId),
+          isNotNull(schema.knowledgeBasesTable.deletedAt),
+        ),
+      );
+
+    return result ?? null;
+  }
+
+  /**
+   * Physical delete, for the permanent-delete route. Locks on `(id,
+   * organization_id, deleted_at IS NOT NULL)` so the purge is
+   * self-authorizing — the route needs no separate existence read — and a
+   * concurrent restore wins the race (it either commits first, leaving no
+   * soft-deleted row to find, or blocks until this transaction commits and
+   * then finds no row at all). Children (agent assignments, connector
+   * assignments) cascade.
+   */
+  static async purge(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    return await withDbTransaction(async (tx) => {
+      const [locked] = await tx
+        .select({ id: schema.knowledgeBasesTable.id })
+        .from(schema.knowledgeBasesTable)
+        .where(
+          and(
+            eq(schema.knowledgeBasesTable.id, params.id),
+            eq(
+              schema.knowledgeBasesTable.organizationId,
+              params.organizationId,
+            ),
+            isNotNull(schema.knowledgeBasesTable.deletedAt),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!locked) return false;
+
+      const count = await hardDelete(
+        tx,
+        schema.knowledgeBasesTable,
+        eq(schema.knowledgeBasesTable.id, params.id),
+      );
+      return count > 0;
+    });
+  }
+
+  /** Identity-only audit snapshot for purge audit rows; org-scoped. */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.knowledgeBasesTable.id,
+        name: schema.knowledgeBasesTable.name,
+        deletedAt: schema.knowledgeBasesTable.deletedAt,
+      })
+      .from(schema.knowledgeBasesTable)
+      .where(
+        and(
+          eq(schema.knowledgeBasesTable.id, id),
+          eq(schema.knowledgeBasesTable.organizationId, organizationId),
+        ),
+      );
+    if (!row) return null;
+    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
+  }
+
   static async countByOrganization(params: {
     organizationId: string;
     search?: string;
+    status?: "active" | "deleted";
   }): Promise<number> {
-    const normalizedSearch = params.search?.trim();
-    const filters = [
-      notDeleted(schema.knowledgeBasesTable),
-      eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
-      ...(normalizedSearch
-        ? [
-            or(
-              ilike(schema.knowledgeBasesTable.name, `%${normalizedSearch}%`),
-              ilike(
-                schema.knowledgeBasesTable.description,
-                `%${normalizedSearch}%`,
-              ),
-            ),
-          ]
-        : []),
-    ];
-
     const [result] = await db
       .select({ count: count() })
       .from(schema.knowledgeBasesTable)
-      .where(and(...filters));
+      .where(and(...buildOrgFilters(params)));
 
     return result?.count ?? 0;
   }

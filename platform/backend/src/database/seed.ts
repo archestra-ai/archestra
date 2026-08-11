@@ -12,6 +12,7 @@ import {
   DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
+  isSubscriptionCredential,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
@@ -24,7 +25,7 @@ import {
   SupportedProviders,
   testMcpServerCommand,
 } from "@archestra/shared";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { verifyJwksSigningKey } from "@/auth/jwks-signing-key-guard";
 import config, {
@@ -38,7 +39,6 @@ import {
   AgentModel,
   AgentVersionModel,
   AppModel,
-  EnvironmentModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
   McpHttpSessionModel,
@@ -178,55 +178,18 @@ export async function syncBuiltInAgents(): Promise<void> {
       advisorAgentDefinition(),
     ];
 
-    for (const builtInAgent of builtInAgents) {
-      // The advisor is reachable only through delegation, which never crosses
-      // environments — so it needs a row in each one, not just the Default.
-      // Every other built-in is invoked by the platform itself and stays
-      // org-wide.
-      const environmentIds =
-        builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.ADVISOR
-          ? [
-              null,
-              ...(
-                await EnvironmentModel.listForOrganization(organization.id)
-              ).map((environment) => environment.id),
-            ]
-          : [null];
+    // The advisor used to have a row per environment; a replica still running
+    // the old code can recreate one mid-rolling-deploy. Retire strays before
+    // the sync below so the org-wide lookup never picks one.
+    await retireEnvironmentScopedAdvisors(organization.id);
 
-      for (const environmentId of environmentIds) {
-        await syncBuiltInAgentRow({
-          organizationId: organization.id,
-          builtInAgent,
-          environmentId,
-        });
-      }
+    for (const builtInAgent of builtInAgents) {
+      await syncBuiltInAgentRow({
+        organizationId: organization.id,
+        builtInAgent,
+      });
     }
   }
-}
-
-/**
- * Gives an environment its own advisor. Delegation never crosses environments,
- * so an agent in an environment without this row sees the "Consult the
- * advisor" switch and reaches nothing when it calls.
- *
- * @public — called by the environment service on create
- */
-export async function syncAdvisorForEnvironment(params: {
-  organizationId: string;
-  environmentId: string | null;
-}): Promise<void> {
-  // advisorAgentDefinition reads the branding singleton, which holds whichever
-  // organization was synced last — the boot sweep's final one on a multi-org
-  // deployment. Sync it here first or a new environment can be seeded with
-  // another organization's brand baked into its advisor.
-  const organization = await OrganizationModel.getById(params.organizationId);
-  archestraMcpBranding.syncFromOrganization(organization);
-
-  await syncBuiltInAgentRow({
-    organizationId: params.organizationId,
-    builtInAgent: advisorAgentDefinition(),
-    environmentId: params.environmentId,
-  });
 }
 
 /**
@@ -578,7 +541,7 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       continue;
     }
 
-    const decision = decideEnvSeed(provider);
+    const decision = decideEnvSeed(provider, apiKeyValue);
     if (decision.kind === "skip") {
       logger.warn(
         { provider },
@@ -651,7 +614,10 @@ type EnvSeedDecision =
  *
  * @public — unit-tested in seed.test.ts
  */
-export function decideEnvSeed(provider: SupportedProvider): EnvSeedDecision {
+export function decideEnvSeed(
+  provider: SupportedProvider,
+  apiKeyValue: string,
+): EnvSeedDecision {
   const baseUrl = getProviderConfiguredBaseUrl(provider);
 
   // Per-user providers (GitHub Copilot) must never be seeded as an org-wide key
@@ -660,6 +626,17 @@ export function decideEnvSeed(provider: SupportedProvider): EnvSeedDecision {
     return {
       kind: "skip",
       reason: "per-user provider; each user connects their own account",
+    };
+  }
+
+  // A subscription credential in the env var is one person's vendor account;
+  // seeding it as an org-wide primary key would redeem that personal token for
+  // everyone. resolveProviderApiKey refuses the same value at request time.
+  if (isSubscriptionCredential(apiKeyValue)) {
+    return {
+      kind: "skip",
+      reason:
+        "subscription credentials are per-user; refusing to seed an org-wide key",
     };
   }
 
@@ -1088,28 +1065,50 @@ function advisorAgentDefinition(): BuiltInAgentDefinition {
 }
 
 /**
- * Reconciles one built-in agent row — a `(organization, definition,
- * environment)` triple — against its shipped definition. Inserts when missing,
- * otherwise carries forward the fields a deploy owns.
+ * Soft-deletes advisor rows carrying an environment_id. The advisor is
+ * org-wide; an environment-scoped row can only be residue recreated by a
+ * replica still running pre-collapse code. Soft rather than hard delete:
+ * anything pointing at the stray stays inert behind notDeleted() filters,
+ * and nothing configured on it is worth remapping.
+ */
+async function retireEnvironmentScopedAdvisors(
+  organizationId: string,
+): Promise<void> {
+  const retired = await db
+    .update(schema.agentsTable)
+    .set({ deletedAt: new Date() })
+    .where(
+      and(
+        eq(schema.agentsTable.organizationId, organizationId),
+        sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.ADVISOR}`,
+        isNotNull(schema.agentsTable.environmentId),
+        isNull(schema.agentsTable.deletedAt),
+      ),
+    )
+    .returning({ id: schema.agentsTable.id });
+
+  if (retired.length > 0) {
+    logger.warn(
+      { organizationId, retiredAdvisorIds: retired.map((row) => row.id) },
+      "Retired stray environment-scoped advisor rows",
+    );
+  }
+}
+
+/**
+ * Reconciles one built-in agent row per organization against its shipped
+ * definition. Inserts when missing, otherwise carries forward the fields a
+ * deploy owns.
  */
 async function syncBuiltInAgentRow(params: {
   organizationId: string;
   builtInAgent: BuiltInAgentDefinition;
-  environmentId: string | null;
 }): Promise<void> {
-  const { organizationId, builtInAgent, environmentId } = params;
-  // The advisor has a row per environment, so the org-wide lookup would
-  // return an arbitrary one of them.
-  const existing =
-    builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.ADVISOR
-      ? await AgentModel.getAdvisorForEnvironment({
-          organizationId,
-          environmentId,
-        })
-      : await AgentModel.getBuiltInAgent(
-          builtInAgent.builtInAgentId,
-          organizationId,
-        );
+  const { organizationId, builtInAgent } = params;
+  const existing = await AgentModel.getBuiltInAgent(
+    builtInAgent.builtInAgentId,
+    organizationId,
+  );
 
   if (!existing) {
     const [inserted] = await db
@@ -1122,7 +1121,6 @@ async function syncBuiltInAgentRow(params: {
         description: builtInAgent.description,
         systemPrompt: builtInAgent.systemPrompt,
         builtInAgentConfig: builtInAgent.builtInAgentConfig,
-        environmentId,
       })
       .returning({ id: schema.agentsTable.id });
     // This path writes agentsTable directly rather than through
@@ -1134,7 +1132,6 @@ async function syncBuiltInAgentRow(params: {
       {
         builtInAgentId: builtInAgent.builtInAgentId,
         organizationId,
-        environmentId,
       },
       "Seeded built-in agent",
     );

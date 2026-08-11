@@ -72,13 +72,18 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     # cve-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
     go get github.com/go-jose/go-jose/v4@v4.1.4 && \
     # cve-2026-45022: go-git validation issue fixed in >= 5.19.0
-    go get github.com/go-git/go-git/v5@v5.19.0 && \
+    # cve-2026-71556: go-git link following fixed in >= 5.19.2
+    go get github.com/go-git/go-git/v5@v5.19.2 && \
     # cve-2026-44973: go-billy path traversal fixed in >= 5.9.0
     go get github.com/go-git/go-billy/v5@v5.9.0 && \
-    # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0
-    go get golang.org/x/net@v0.55.0 && \
+    # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
+    # Pinned to 0.56.0 (not 0.55.0) because go-git 5.19.2 requires >= 0.56.0 — asking for
+    # anything lower here makes `go get` downgrade go-git back below 5.19.2 to satisfy it,
+    # silently reintroducing cve-2026-71556. Do not lower without also lowering go-git.
+    go get golang.org/x/net@v0.56.0 && \
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
-    go get golang.org/x/crypto@v0.52.0 && \
+    # Pinned to 0.53.0 for the same go-git 5.19.2 floor reason as x/net above.
+    go get golang.org/x/crypto@v0.53.0 && \
     go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5

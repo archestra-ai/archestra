@@ -18,7 +18,6 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
-  providerRequiresPerUserCredential,
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -55,6 +54,11 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
+import {
+  AgentSkillsEditor,
+  type EditableSkill,
+} from "@/components/agent-skills-editor";
+import type { GatewayLike } from "@/components/agent-skills-editor.utils";
 import {
   AgentToolExclusionsEditor,
   type AgentToolExclusionsEditorRef,
@@ -156,6 +160,12 @@ import {
   useUpdateProfile,
 } from "@/lib/agent.query";
 import {
+  useAgentSkillExclusions,
+  useAgentSkills,
+  useUpdateAgentSkillExclusions,
+  useUpdateAgentSkills,
+} from "@/lib/agent-skills.query";
+import {
   useAgentSubagentExclusions,
   useUpdateAgentSubagentExclusions,
 } from "@/lib/agent-subagent-exclusions.query";
@@ -164,20 +174,23 @@ import {
   useAgentDelegations,
   useSyncAgentDelegations,
 } from "@/lib/agent-tools.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
   useIsKnowledgeBaseConfigured,
   useKnowledgeBases,
 } from "@/lib/knowledge/knowledge-base.query";
+import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
@@ -190,6 +203,70 @@ import {
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
+
+/** The API caps `limit` at 100, which is as much as the skill picker can load. */
+const SKILL_PICKER_PAGE_SIZE = 100;
+
+/**
+ * The skill catalog page plus the rows the assignment API returned, deduped by
+ * id with the catalog winning (it is the fresher read of the two).
+ *
+ * The second source exists because the first is capped: a configured skill
+ * beyond the first page is not in the catalog page, and rendering the picker
+ * from that page alone would silently hide it.
+ */
+function mergeSkillsById(
+  ...sources: Array<readonly EditableSkill[] | undefined>
+): EditableSkill[] {
+  const byId = new Map<string, EditableSkill>();
+  for (const source of sources) {
+    for (const skill of source ?? []) {
+      if (!byId.has(skill.id)) byId.set(skill.id, skill);
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Remembers the row behind every id in `selectedIds`, for as long as it stays
+ * selected, drawing from whatever `sources` currently hold it.
+ *
+ * The picker's rows are one catalog page plus the hits for the query being
+ * typed, so a skill selected from one search belongs to neither once the query
+ * changes. Its chip would disappear while its id stayed selected and was still
+ * submitted on save — a published skill an admin can neither see nor remove.
+ * The last source in the merge, so a fresher row always wins.
+ *
+ * Returns a stable array: it is a `useMemo` input, and a new identity per
+ * render would defeat the memo it feeds.
+ */
+function useRememberedSkills(
+  selectedIds: string[],
+  sources: Array<readonly EditableSkill[] | undefined>,
+): EditableSkill[] {
+  const remembered = useRef(new Map<string, EditableSkill>());
+  const snapshot = useRef<EditableSkill[]>([]);
+  const selected = new Set(selectedIds);
+
+  let changed = false;
+  for (const source of sources) {
+    for (const skill of source ?? []) {
+      if (!selected.has(skill.id)) continue;
+      if (remembered.current.get(skill.id) === skill) continue;
+      remembered.current.set(skill.id, skill);
+      changed = true;
+    }
+  }
+  // Deselecting has to drop the row too, or an id removed and re-added would
+  // resurrect a stale copy of it.
+  for (const id of remembered.current.keys()) {
+    if (selected.has(id)) continue;
+    remembered.current.delete(id);
+    changed = true;
+  }
+  if (changed) snapshot.current = [...remembered.current.values()];
+  return snapshot.current;
+}
 
 // Component to display tools for a specific agent
 function AgentToolsList({ agentId }: { agentId: string }) {
@@ -699,7 +776,58 @@ interface AgentDialogProps {
   openToolsCombobox?: boolean;
 }
 
-export function AgentDialog({
+/**
+ * Wrapper whose only job is to give the dialog body a fresh mount per agent.
+ *
+ * Every list page keeps one dialog mounted and swaps the `agent` prop as rows
+ * are opened, and several of the body's controls are seeded from per-agent
+ * requests that land after the swap — delegations, subagent exclusions, and the
+ * published-skill sets. Without a remount the body keeps the previous agent's
+ * values until those land: it renders one agent's configuration under another's
+ * name, counts as edited, and a save issues the full-replace PUTs that write it
+ * onto the wrong agent. Remounting makes that unrepresentable rather than
+ * relying on every call site to pass a `key`.
+ */
+export function AgentDialog(props: AgentDialogProps) {
+  const { key, agent } = useAgentInstance(props);
+  return <AgentDialogBody key={key} {...props} agent={agent} />;
+}
+
+/**
+ * The entity the body is mounted for, and the key that identifies it — `new`
+ * in create mode, where there is nothing per-agent to load.
+ *
+ * Held still while the dialog is closed, because closing clears the caller's
+ * entity in the same render that flips `open` — swapping the body out right
+ * then would cut off the dialog's exit animation.
+ *
+ * An open dialog holds its agent too. Callers derive the prop from a list
+ * query rather than from dialog state (chat picks the agent out of a
+ * refetching list), so an agent deleted elsewhere — or briefly absent from a
+ * refetch — turned the dialog into an empty create form mid-edit: the key fell
+ * back to `new` and remounted the body, discarding every pending change with
+ * no prompt, and the next save would have created a second agent. Only the
+ * transition into open adopts an absent entity, which is what create mode is.
+ */
+function useAgentInstance({ open, agent }: AgentDialogProps): {
+  key: string;
+  agent: AgentDialogProps["agent"];
+} {
+  const heldAgent = useRef(agent);
+  const wasOpen = useRef(false);
+
+  if (open && (!wasOpen.current || agent)) {
+    heldAgent.current = agent;
+  }
+  wasOpen.current = open;
+
+  return {
+    key: heldAgent.current?.id ?? "new",
+    agent: heldAgent.current,
+  };
+}
+
+function AgentDialogBody({
   open,
   onOpenChange,
   agent,
@@ -727,15 +855,102 @@ export function AgentDialog({
   const deleteAgent = useDeleteProfile();
   const updateAgent = useUpdateProfile();
   const syncDelegations = useSyncAgentDelegations();
-  const { data: currentDelegations = [], isFetched: delegationsFetched } =
+  // Every set below is seeded from its own request and saved back as a full
+  // replace, so all of them gate on `isSuccess` rather than `isFetched`:
+  // `isFetched` also counts a failed attempt, and seeding an empty set from one
+  // turns a single failed GET into a save that deletes what it could not read.
+  const { data: currentDelegations = [], isSuccess: delegationsLoaded } =
     useAgentDelegations(agentType !== "llm_proxy" ? agent?.id : undefined);
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
   const {
     data: currentSubagentExclusions,
-    isFetched: subagentExclusionsFetched,
+    isSuccess: subagentExclusionsLoaded,
   } = useAgentSubagentExclusions(
     agentType !== "llm_proxy" ? agent?.id : undefined,
   );
+  // Which skills this gateway publishes over `skill://` (SEP-2640). Offered on
+  // exactly the agent types that serve MCP resources — the same set that gets
+  // the tool control, so LLM proxies have neither — and only where the
+  // deployment has enabled the draft extension. The API enforces the same
+  // split, so a proxy cannot be given a published set out of band.
+  const mcpGatewaySkillsEnabled = useFeature("mcpGatewaySkillsEnabled");
+  // `skill:read` is the API's floor on these endpoints — publishing a skill
+  // hands its body to every holder of the gateway's token, so it is not
+  // something gateway permission alone buys. Hiding the section for a caller
+  // without the capability is the difference between a control they never see
+  // and one that 403s when they save.
+  const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
+  const showSkills =
+    mcpGatewaySkillsEnabled === true &&
+    !!canReadSkills &&
+    !agent?.builtIn &&
+    (agentType === "mcp_gateway" ||
+      agentType === "agent" ||
+      agentType === "profile");
+  // The section renders only while the dialog is open, but the component stays
+  // mounted closed on the list and chat pages — so without `open` every one of
+  // those page loads fetches a skill catalog for a dialog nobody opened.
+  const loadSkills = open && showSkills;
+  const syncSkills = useUpdateAgentSkills();
+  const syncSkillExclusions = useUpdateAgentSkillExclusions();
+  const {
+    data: currentSkillAssignments,
+    isSuccess: skillAssignmentsLoaded,
+    isError: skillAssignmentsFailed,
+  } = useAgentSkills(loadSkills ? agent?.id : undefined);
+  const {
+    data: currentSkillExclusions,
+    isSuccess: skillExclusionsLoaded,
+    isError: skillExclusionsFailed,
+  } = useAgentSkillExclusions(loadSkills ? agent?.id : undefined);
+  // Create mode has no agent to read from, so both queries stay disabled and
+  // the editors are usable at once; edit mode waits for both, because the
+  // section is one full-replace save over the pair.
+  const skillsQueriesEnabled = loadSkills && !!agent?.id;
+  const skillsLoaded =
+    !skillsQueriesEnabled || (skillAssignmentsLoaded && skillExclusionsLoaded);
+  const skillsFailed =
+    skillsQueriesEnabled && (skillAssignmentsFailed || skillExclusionsFailed);
+  // The picker opens on the first page of skills by name; `limit` is capped at
+  // 100 by the API.
+  const { data: skillsPage, isFetching: skillsPageFetching } =
+    useSkillsPaginated(
+      {
+        limit: SKILL_PICKER_PAGE_SIZE,
+        offset: 0,
+        sortBy: "name",
+        sortDirection: "asc",
+      },
+      { enabled: loadSkills },
+    );
+  // Typing in the picker searches the whole catalog server-side rather than
+  // filtering the loaded page, so a skill past the first 100 is reachable at
+  // all. Only the mode's own picker is mounted at a time, so one query serves
+  // both; it stays idle until there is something to search for.
+  const [skillSearch, setSkillSearch] = useState("");
+  const debouncedSkillSearch = useDebouncedValue(skillSearch, 250);
+  const { data: skillSearchPage, isFetching: skillSearchFetching } =
+    useSkillsPaginated(
+      {
+        limit: SKILL_PICKER_PAGE_SIZE,
+        offset: 0,
+        sortBy: "name",
+        sortDirection: "asc",
+        search: debouncedSkillSearch,
+      },
+      { enabled: loadSkills && debouncedSkillSearch.trim().length > 0 },
+    );
+  // The debounce is part of the wait: between the keystroke and the request the
+  // picker holds only the first page, and calling that "No skills found." is
+  // how a user concludes a skill they can see in the catalog does not exist.
+  //
+  // The first page counts for the same reason. A user who opens the picker
+  // before it lands would otherwise read the settled empty message about a
+  // catalog that simply has not arrived.
+  const skillSearchPending =
+    (skillSearch.trim().length > 0 &&
+      (skillSearch !== debouncedSkillSearch || skillSearchFetching)) ||
+    (skillsPageFetching && !skillsPage);
   const { data: canReadIdentityProviders } = useHasPermissions({
     identityProvider: ["read"],
   });
@@ -868,6 +1083,13 @@ export function AgentDialog({
   // Delegation targets excluded from the Auto surface ("Auto All Except Some").
   // Inert while in Custom subagent mode. Seeded async from the backend.
   const [disabledSubagentIds, setDisabledSubagentIds] = useState<string[]>([]);
+  // Skills published over `skill://`. Auto exposes every org-scoped skill in the
+  // agent's environment minus exclusions; Custom publishes exactly the assigned
+  // set. Both sets persist independently, so switching mode discards neither.
+  // All three are seeded async from the backend.
+  const [accessAllSkills, setAccessAllSkills] = useState(false);
+  const [assignedSkillIds, setAssignedSkillIds] = useState<string[]>([]);
+  const [excludedSkillIds, setExcludedSkillIds] = useState<string[]>([]);
   // Auto-mode exclusions dirty tracking: { initial, current } normalized
   // payloads reported by the exclusions editor (null until it initializes and
   // after it unmounts when the dialog closes).
@@ -930,17 +1152,98 @@ export function AgentDialog({
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
     isPolicyConfigBuiltIn ||
-    isDualLlmMainBuiltIn ||
-    // The advisor is the one built-in that exists per environment, so which one
-    // you are editing is not otherwise visible on the form.
-    isAdvisorBuiltIn;
+    isDualLlmMainBuiltIn;
   const showToolsAndSubagents =
     !isBuiltIn &&
     (agentType === "mcp_gateway" ||
       agentType === "agent" ||
       agentType === "profile");
+  // The delegation targets and the disabled-subagent set each arrive from their
+  // own request. Until both have succeeded the editors would render a
+  // not-yet-seeded empty list, which reads as "delegates to nothing" and can be
+  // saved as one — both sets are written back as full replaces. Create mode has
+  // nothing to wait for.
+  const subagentSetsLoaded =
+    !agent?.id ||
+    agentType === "llm_proxy" ||
+    (delegationsLoaded && subagentExclusionsLoaded);
   const showSecurity =
     !isBuiltIn && (agentType === "llm_proxy" || agentType === "agent");
+  // The environment comes from the form rather than the stored agent: the
+  // agent update lands before the skills PUT, so a pending environment change
+  // is what the API will judge the assignment against.
+  const skillGateway: GatewayLike = {
+    environmentId: environmentId ?? null,
+  };
+  // Personal skills are publishable only by their author, so the picker needs
+  // to know who is signed in. Independent of the agent row — the rule holds in
+  // create mode too, before any gateway exists.
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id ?? null;
+  // Rows the admin has picked, kept for as long as they stay picked. Without
+  // this a skill chosen from one search vanishes the moment the query changes —
+  // it is in neither the catalog page nor the new search hits — while its id
+  // stays selected and is still submitted, publishing something that can be
+  // neither seen nor removed.
+  const pickedAssignedSkills = useRememberedSkills(assignedSkillIds, [
+    skillsPage?.data,
+    skillSearchPage?.data,
+    currentSkillAssignments?.skills,
+  ]);
+  const pickedExcludedSkills = useRememberedSkills(excludedSkillIds, [
+    skillsPage?.data,
+    skillSearchPage?.data,
+    currentSkillExclusions?.skills,
+  ]);
+  // The catalog page, the server-side search hits, the rows the API returned
+  // for what is already configured, and the rows picked earlier this session.
+  // The merge is what keeps the picker honest: `limit` is capped at 100, so an
+  // assignment outside that page would otherwise render no chip at all — the
+  // count would say five while three were shown, and the missing ones could be
+  // neither seen nor removed.
+  const availableSkills: EditableSkill[] = useMemo(
+    () =>
+      mergeSkillsById(
+        skillsPage?.data,
+        skillSearchPage?.data,
+        currentSkillAssignments?.skills,
+        pickedAssignedSkills,
+      ),
+    [
+      skillsPage,
+      skillSearchPage,
+      currentSkillAssignments,
+      pickedAssignedSkills,
+    ],
+  );
+  // Auto publishes org-scoped skills only, so those are the only ones worth
+  // offering to exclude from it — merged with the configured exclusions for the
+  // same reason as above.
+  //
+  // An exclusion outlives the scope it was made under: nothing prunes the id
+  // when an excluded skill is re-scoped to team or personal. Such a row is kept
+  // so its chip stays visible and removable — the same reason AgentSkillsEditor
+  // exempts already-selected rows from its `disabled` check. Dropping it would
+  // leave the count saying three while two chips showed, with the third
+  // re-submitted verbatim on every save and reachable from nowhere.
+  const orgScopedSkills = useMemo(() => {
+    const excluded = new Set([
+      ...(currentSkillExclusions?.excludedSkillIds ?? []),
+      ...excludedSkillIds,
+    ]);
+    return mergeSkillsById(
+      skillsPage?.data,
+      skillSearchPage?.data,
+      currentSkillExclusions?.skills,
+      pickedExcludedSkills,
+    ).filter((skill) => skill.scope === "org" || excluded.has(skill.id));
+  }, [
+    skillsPage,
+    skillSearchPage,
+    currentSkillExclusions,
+    excludedSkillIds,
+    pickedExcludedSkills,
+  ]);
 
   // Reset form when dialog opens/closes or agent changes
   useEffect(() => {
@@ -1040,10 +1343,18 @@ export function AgentDialog({
       setAutoConfigureOnToolDiscovery(nextValues.autoConfigureOnToolDiscovery);
       setDualLlmMaxRounds(nextValues.dualLlmMaxRounds);
       if (!agentData) {
-        // Create mode clears delegations here; edit mode syncs them from the
-        // loaded agent in a separate effect so refetches don't wipe them.
+        // Create mode only. The create dialog is the one instance whose key
+        // never changes, so reopening it reuses the mount and has to be cleared
+        // here; edit mode remounts per agent and seeds each set from its own
+        // request, and clearing here would instead wipe pending edits on every
+        // agent refetch.
         setSelectedDelegationTargetIds([]);
         setDisabledSubagentIds([]);
+        // A new gateway publishes nothing until an admin opts in, so Custom
+        // with an empty set is the default rather than Auto.
+        setAccessAllSkills(false);
+        setAssignedSkillIds([]);
+        setExcludedSkillIds([]);
       }
       initialSnapshotRef.current = buildAgentFormSnapshot(nextValues);
 
@@ -1056,16 +1367,18 @@ export function AgentDialog({
   // Sync selectedDelegationTargetIds with currentDelegations when data loads.
   // Agent refetches can update freshAgent after delegations have loaded; keeping
   // delegations out of the agent reset path avoids clearing them on save.
+  // Seeding waits for success, never mere completion: a failed read seeds an
+  // empty set, and the save below writes empty sets back as a full replace.
   const currentDelegationIds = currentDelegations.map((a) => a.id).join(",");
   const agentId = agent?.id;
 
   useEffect(() => {
-    if (open && agentId && delegationsFetched) {
+    if (open && agentId && delegationsLoaded) {
       setSelectedDelegationTargetIds(
         currentDelegationIds.split(",").filter(Boolean),
       );
     }
-  }, [open, agentId, currentDelegationIds, delegationsFetched]);
+  }, [open, agentId, currentDelegationIds, delegationsLoaded]);
 
   // Seed the Auto-mode disabled-subagents set once the exclusions load. Kept out
   // of the agent reset path (same reasoning as delegations above) so a refetch
@@ -1075,19 +1388,49 @@ export function AgentDialog({
   ).join(",");
 
   useEffect(() => {
-    if (open && agentId && subagentExclusionsFetched) {
+    if (open && agentId && subagentExclusionsLoaded) {
       setDisabledSubagentIds(
         currentExcludedSubagentIds.split(",").filter(Boolean),
       );
     }
-  }, [open, agentId, currentExcludedSubagentIds, subagentExclusionsFetched]);
+  }, [open, agentId, currentExcludedSubagentIds, subagentExclusionsLoaded]);
 
-  // One advisor per environment, because delegation never crosses environments:
-  // the switch has to target the one this agent could actually reach.
+  // Seed the published-skill sets once they load, for the same reason as the
+  // subagent sets above: they arrive after the agent reset, so keeping them out
+  // of that path stops a refetch from wiping pending edits.
+  const currentAssignedSkillIds = (
+    currentSkillAssignments?.skillIds ?? []
+  ).join(",");
+  const currentSavedAccessAllSkills =
+    currentSkillAssignments?.accessAllSkills ?? false;
+
+  useEffect(() => {
+    if (open && agentId && skillAssignmentsLoaded) {
+      setAssignedSkillIds(currentAssignedSkillIds.split(",").filter(Boolean));
+      setAccessAllSkills(currentSavedAccessAllSkills);
+    }
+  }, [
+    open,
+    agentId,
+    currentAssignedSkillIds,
+    currentSavedAccessAllSkills,
+    skillAssignmentsLoaded,
+  ]);
+
+  const currentExcludedSkillIds = (
+    currentSkillExclusions?.excludedSkillIds ?? []
+  ).join(",");
+
+  useEffect(() => {
+    if (open && agentId && skillExclusionsLoaded) {
+      setExcludedSkillIds(currentExcludedSkillIds.split(",").filter(Boolean));
+    }
+  }, [open, agentId, currentExcludedSkillIds, skillExclusionsLoaded]);
+
+  // One org-wide advisor: delegation reaches it from every environment, so the
+  // switch targets the same row wherever this agent lives.
   const advisorAgentId = allInternalAgents.find(
-    (a) =>
-      a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
-      (a.environmentId ?? null) === (environmentId ?? null),
+    (a) => a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR,
   )?.id;
 
   // Consulting the advisor is off until someone turns it on, and a new agent
@@ -1144,25 +1487,12 @@ export function AgentDialog({
   // the Auto surface. So the advisor has to match the switch in both sets, not
   // just the one the current mode reads — a grant stranded in the other set is
   // a live consultation nothing in the dialog can show or clear.
-  // Another environment's advisor can only have been left by an earlier
-  // configuration: it is undispatchable from here, invisible in the dialog, and
-  // would come alive the moment this agent moved to that environment.
-  const foreignAdvisorIds = allInternalAgents
-    .filter(
-      (a) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
-        a.id !== advisorAgentId,
-    )
-    .map((a) => a.id);
-  const withoutForeignAdvisors = (ids: string[]) =>
-    ids.filter((id) => !foreignAdvisorIds.includes(id));
-
   const delegationTargetIdsToSave = advisorListedWhen(
-    withoutForeignAdvisors(selectedDelegationTargetIds),
+    selectedDelegationTargetIds,
     advisorEnabled,
   );
   const disabledSubagentIdsToSave = advisorListedWhen(
-    withoutForeignAdvisors(disabledSubagentIds),
+    disabledSubagentIds,
     !advisorEnabled,
   );
 
@@ -1180,36 +1510,6 @@ export function AgentDialog({
     writeAdvisorEnabled(advisorEnabled);
   };
 
-  // Each environment has its own advisor, so moving the agent has to move the
-  // setting onto that environment's row and retire the old one from both sets
-  // — a grant left pointing at another environment's advisor can never be
-  // dispatched, and nothing in the dialog would show it.
-  const handleEnvironmentChange = (nextEnvironmentId: string | null) => {
-    const enabled = advisorEnabled;
-    const previousAdvisorId = advisorAgentId;
-    const nextAdvisorId = allInternalAgents.find(
-      (a) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR &&
-        (a.environmentId ?? null) === nextEnvironmentId,
-    )?.id;
-
-    setEnvironmentId(nextEnvironmentId);
-    setDisabledSubagentIds((ids) =>
-      listedWhen(
-        listedWhen(ids, previousAdvisorId, false),
-        nextAdvisorId,
-        !enabled,
-      ),
-    );
-    setSelectedDelegationTargetIds((ids) =>
-      listedWhen(
-        listedWhen(ids, previousAdvisorId, false),
-        nextAdvisorId,
-        enabled,
-      ),
-    );
-  };
-
   // LLM Configuration: computed values and bidirectional auto-linking
   // (same reactive pattern as prompt input: LlmProviderApiKeySelector + onProviderChange)
   const selectedApiKey = useMemo(
@@ -1217,9 +1517,7 @@ export function AgentDialog({
     [availableApiKeys, llmApiKeyId],
   );
   const selectedApiKeyIsSubscription =
-    selectedApiKey !== undefined &&
-    (selectedApiKey.isChatgptSubscription === true ||
-      providerRequiresPerUserCredential(selectedApiKey.provider));
+    selectedApiKey !== undefined && isPersonalSubscription(selectedApiKey);
 
   // The selected model's row: source of the derived provider (like prompt
   // input's initialProvider/currentProvider) and of the capability gating
@@ -1356,6 +1654,38 @@ export function AgentDialog({
       : undefined;
 
     setIsSaving(true);
+
+    // Persist the published-skill sets, each only when it changed (same
+    // no-op-audit reasoning as the delegation sets below). The assignment PUT
+    // carries the Auto toggle with it, so a mode flip alone is a change worth
+    // writing. Skipped entirely while the reads behind the editors have not
+    // succeeded: the sets on screen are then defaults, not the gateway's.
+    const savePublishedSkills = async (targetAgentId: string) => {
+      if (!showSkills || !skillsLoaded || !targetAgentId) return;
+      if (
+        hasUnsavedChanges(
+          [...(currentSkillAssignments?.skillIds ?? [])].sort(),
+          [...assignedSkillIds].sort(),
+        ) ||
+        (currentSkillAssignments?.accessAllSkills ?? false) !== accessAllSkills
+      ) {
+        await syncSkills.mutateAsync({
+          agentId: targetAgentId,
+          assignments: { accessAllSkills, skillIds: assignedSkillIds },
+        });
+      }
+      if (
+        hasUnsavedChanges(
+          [...(currentSkillExclusions?.excludedSkillIds ?? [])].sort(),
+          [...excludedSkillIds].sort(),
+        )
+      ) {
+        await syncSkillExclusions.mutateAsync({
+          agentId: targetAgentId,
+          exclusions: { excludedSkillIds },
+        });
+      }
+    };
 
     try {
       let savedAgentId: string;
@@ -1496,6 +1826,12 @@ export function AgentDialog({
             await agentHooksEditorRef.current?.saveChanges({
               agentId: savedAgentId,
             });
+            // Published skills too, and before `onCreated` below: both call
+            // sites close the dialog from it, so a rejection afterwards would
+            // land on a screen that has already said "created successfully",
+            // with the selection gone and a half-configured gateway left
+            // behind. Inside the rollback instead, it deletes the agent.
+            await savePublishedSkills(savedAgentId);
           } catch (error) {
             await deleteAgent.mutateAsync(savedAgentId);
             toast.error(
@@ -1547,6 +1883,12 @@ export function AgentDialog({
         });
       }
 
+      // Edit mode only: create mode wrote them inside the rollback above,
+      // before `onCreated` closed the dialog.
+      if (agent) {
+        await savePublishedSkills(savedAgentId);
+      }
+
       // Close dialog on success
       onOpenChange(false);
     } catch (_error) {
@@ -1590,6 +1932,15 @@ export function AgentDialog({
     createAgent,
     syncDelegations,
     syncSubagentExclusions,
+    showSkills,
+    skillsLoaded,
+    accessAllSkills,
+    assignedSkillIds,
+    excludedSkillIds,
+    currentSkillAssignments,
+    currentSkillExclusions,
+    syncSkills,
+    syncSkillExclusions,
     onCreated,
     onOpenChange,
     supportsIdentityProvider,
@@ -1660,7 +2011,22 @@ export function AgentDialog({
       // baseline the editor reports (same pattern as delegations above)
       // rather than the open-time snapshot.
       (exclusionsState !== null &&
-        hasUnsavedChanges(exclusionsState.initial, exclusionsState.current)));
+        hasUnsavedChanges(exclusionsState.initial, exclusionsState.current)) ||
+      // Published skills load async too, so all three are diffed against their
+      // fetched baselines rather than the open-time snapshot — and only once
+      // those baselines exist, so a failed read is never mistaken for an edit.
+      (showSkills &&
+        skillsLoaded &&
+        (hasUnsavedChanges(
+          [...(currentSkillAssignments?.skillIds ?? [])].sort(),
+          [...assignedSkillIds].sort(),
+        ) ||
+          (currentSkillAssignments?.accessAllSkills ?? false) !==
+            accessAllSkills ||
+          hasUnsavedChanges(
+            [...(currentSkillExclusions?.excludedSkillIds ?? [])].sort(),
+            [...excludedSkillIds].sort(),
+          ))));
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
 
   const handleClose = guard.requestClose;
@@ -1773,23 +2139,20 @@ export function AgentDialog({
                         Dagger engine + egress policy.
                       - LLM proxy / MCP gateway: assigns the deployment environment
                         so its usage falls under environment-scoped cost limits.
+                      The advisor renders no selector: it is configured once for
+                      the organization and reachable from every environment.
                       Renders disabled when only the default environment exists. */}
                     {(isInternalAgent ||
                       agentType === "llm_proxy" ||
-                      agentType === "mcp_gateway") && (
-                      <EnvironmentSelector
-                        value={environmentId ?? null}
-                        onChange={handleEnvironmentChange}
-                        resource={getResourceForAgentType(agentType)}
-                        helpText={
-                          isAdvisorBuiltIn
-                            ? "Each environment has its own advisor, reachable only by the agents in that environment. Set a model on each one you want consulted."
-                            : environmentHelpText
-                        }
-                        // Moving it would strand every agent that consults it.
-                        disabled={isAdvisorBuiltIn}
-                      />
-                    )}
+                      agentType === "mcp_gateway") &&
+                      !isAdvisorBuiltIn && (
+                        <EnvironmentSelector
+                          value={environmentId ?? null}
+                          onChange={setEnvironmentId}
+                          resource={getResourceForAgentType(agentType)}
+                          helpText={environmentHelpText}
+                        />
+                      )}
 
                     {/* Built-in agent config */}
                     {isPolicyConfigBuiltIn && (
@@ -2459,107 +2822,226 @@ export function AgentDialog({
                 {showToolsAndSubagents && (
                   <div className="rounded-lg border bg-card p-4 space-y-4">
                     <h3 className="text-sm font-semibold">Subagents</h3>
-                    <div className="space-y-2">
-                      <Tabs
-                        value={accessAllSubagents ? "auto" : "custom"}
-                        onValueChange={handleSubagentModeChange}
-                      >
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="auto">Auto</TabsTrigger>
-                          <TabsTrigger value="custom">Custom</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                      {accessAllSubagents ? (
-                        <div className="space-y-2">
-                          <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Can delegate to any agent the calling user can
-                              access, in this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"}'s
-                              environment — new agents included automatically
-                            </li>
-                            <li className="flex gap-2">
-                              <CheckIcon className="mt-px size-3.5 shrink-0" />
-                              Disable specific agents below to keep them off the
-                              delegation surface
-                            </li>
-                          </ul>
+                    {!subagentSetsLoaded ? (
+                      <p className="text-sm text-muted-foreground">
+                        <span>Loading subagents…</span>
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        <Tabs
+                          value={accessAllSubagents ? "auto" : "custom"}
+                          onValueChange={handleSubagentModeChange}
+                        >
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="auto">Auto</TabsTrigger>
+                            <TabsTrigger value="custom">Custom</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                        {accessAllSubagents ? (
+                          <div className="space-y-2">
+                            <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
+                              <li className="flex gap-2">
+                                <CheckIcon className="mt-px size-3.5 shrink-0" />
+                                Can delegate to any agent the calling user can
+                                access, in this{" "}
+                                {agentTypeDisplayName[agentType] || "agent"}'s
+                                environment — new agents included automatically
+                              </li>
+                              <li className="flex gap-2">
+                                <CheckIcon className="mt-px size-3.5 shrink-0" />
+                                Disable specific agents below to keep them off
+                                the delegation surface
+                              </li>
+                            </ul>
+                            <div className="space-y-1.5">
+                              <p className="text-sm text-muted-foreground">
+                                Disabled subagents ({disabledSubagentCount})
+                              </p>
+                              <SubagentsEditor
+                                availableAgents={allInternalAgents}
+                                selectedAgentIds={disabledSubagentIds}
+                                onSelectionChange={setDisabledSubagentIds}
+                                currentAgentId={agent?.id}
+                                placeholder="Search agents to disable..."
+                                showCreateAction={false}
+                                tone="exclude"
+                              />
+                            </div>
+                          </div>
+                        ) : (
                           <div className="space-y-1.5">
+                            <p className="pt-1 text-xs text-muted-foreground">
+                              Only the subagents you assign below can be
+                              delegated to by this{" "}
+                              {agentTypeDisplayName[agentType] || "agent"}.
+                            </p>
                             <p className="text-sm text-muted-foreground">
-                              Disabled subagents ({disabledSubagentCount})
+                              Subagents ({delegationTargetCount})
                             </p>
                             <SubagentsEditor
                               availableAgents={allInternalAgents}
-                              selectedAgentIds={disabledSubagentIds}
-                              onSelectionChange={setDisabledSubagentIds}
+                              selectedAgentIds={selectedDelegationTargetIds}
+                              onSelectionChange={setSelectedDelegationTargetIds}
                               currentAgentId={agent?.id}
-                              placeholder="Search agents to disable..."
-                              showCreateAction={false}
-                              tone="exclude"
                             />
                           </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <p className="pt-1 text-xs text-muted-foreground">
-                            Only the subagents you assign below can be delegated
-                            to by this{" "}
-                            {agentTypeDisplayName[agentType] || "agent"}.
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Subagents ({delegationTargetCount})
-                          </p>
-                          <SubagentsEditor
-                            availableAgents={allInternalAgents}
-                            selectedAgentIds={selectedDelegationTargetIds}
-                            onSelectionChange={setSelectedDelegationTargetIds}
-                            currentAgentId={agent?.id}
-                          />
-                        </div>
-                      )}
-                      {/* Outside the Auto/Custom split on purpose: whether this
+                        )}
+                        {/* Outside the Auto/Custom split on purpose: whether this
                         agent can consult the advisor is one decision, even
                         though the two modes record it differently. */}
-                      {advisorAgentId && (
-                        <div className="flex items-center justify-between gap-4 border-t pt-4">
-                          <div className="space-y-0.5">
-                            <Label htmlFor="consult-advisor">
-                              Enable Advisor
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                              Pairs this{" "}
-                              {agentTypeDisplayName[agentType] || "agent"} with
-                              a stronger model it consults at key moments. Those
-                              calls are billed at the advisor model&apos;s
-                              rates, and usually cost less than running the
-                              stronger model throughout.{" "}
-                              {/* New tab: this dialog holds unsaved edits that
+                        {advisorAgentId && (
+                          <div className="flex items-center justify-between gap-4 border-t pt-4">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <Label htmlFor="consult-advisor">
+                                  Enable Advisor
+                                </Label>
+                                <Badge
+                                  variant="secondary"
+                                  className="px-1.5 py-0 text-[10px]"
+                                >
+                                  Beta
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Pairs this{" "}
+                                {agentTypeDisplayName[agentType] || "agent"}{" "}
+                                with a stronger model it consults at key
+                                moments. Those calls are billed at the advisor
+                                model&apos;s rates, and usually cost less than
+                                running the stronger model throughout.{" "}
+                                {/* New tab: this dialog holds unsaved edits that
                                 navigating away would discard. */}
-                              <Link
-                                href={`/agents?edit=${advisorAgentId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 underline underline-offset-4"
-                              >
-                                Edit the Advisor agent
-                                <span className="sr-only">
-                                  (opens in new tab)
-                                </span>
-                                <ExternalLink aria-hidden className="h-3 w-3" />
-                              </Link>
-                              .
-                            </p>
+                                <Link
+                                  href={`/agents?edit=${advisorAgentId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 underline underline-offset-4"
+                                >
+                                  Edit the Advisor agent
+                                  <span className="sr-only">
+                                    (opens in new tab)
+                                  </span>
+                                  <ExternalLink
+                                    aria-hidden
+                                    className="h-3 w-3"
+                                  />
+                                </Link>
+                                .
+                              </p>
+                            </div>
+                            <Switch
+                              id="consult-advisor"
+                              checked={advisorEnabled}
+                              onCheckedChange={writeAdvisorEnabled}
+                              data-testid={E2eTestId.ConsultAdvisorSwitch}
+                            />
                           </div>
-                          <Switch
-                            id="consult-advisor"
-                            checked={advisorEnabled}
-                            onCheckedChange={writeAdvisorEnabled}
-                            data-testid={E2eTestId.ConsultAdvisorSwitch}
-                          />
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Section 5: Skills published over MCP (SEP-2640). Behind the
+                  draft-extension feature flag. */}
+                {showSkills && (
+                  <div className="rounded-lg border bg-card p-4 space-y-4">
+                    <h3 className="text-sm font-semibold">Published skills</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Skills this {agentTypeDisplayName[agentType] || "agent"}{" "}
+                      serves to MCP clients as <code>skill://</code> resources,
+                      alongside the client's own.
+                    </p>
+                    {/* Nothing editable until the reads behind it succeed. The
+                      controls below are seeded from those reads and saved back
+                      as a full replace, so rendering their defaults early would
+                      show a gateway publishing everything as publishing
+                      nothing — and let an admin save that reading. */}
+                    {skillsFailed ? (
+                      <p className="text-sm text-destructive">
+                        <span>
+                          Could not load the published skills for this{" "}
+                          {agentTypeDisplayName[agentType] || "agent"}. Close
+                          and reopen to try again — the published set stays as
+                          it is, and your other changes still save.
+                        </span>
+                      </p>
+                    ) : !skillsLoaded ? (
+                      <p className="text-sm text-muted-foreground">
+                        <span>Loading published skills…</span>
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        <Tabs
+                          value={accessAllSkills ? "auto" : "custom"}
+                          onValueChange={(value) =>
+                            setAccessAllSkills(value === "auto")
+                          }
+                        >
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="auto">Auto</TabsTrigger>
+                            <TabsTrigger value="custom">Custom</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                        {accessAllSkills ? (
+                          <div className="space-y-2">
+                            <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
+                              <li className="flex gap-2">
+                                <CheckIcon className="mt-px size-3.5 shrink-0" />
+                                Publishes every organization-scoped skill in
+                                this{" "}
+                                {agentTypeDisplayName[agentType] || "agent"}
+                                's environment — new ones included automatically
+                              </li>
+                              <li className="flex gap-2">
+                                <CheckIcon className="mt-px size-3.5 shrink-0" />
+                                Team and personal skills are never published
+                                automatically; assign them in Custom instead
+                              </li>
+                            </ul>
+                            <div className="space-y-1.5">
+                              <p className="text-sm text-muted-foreground">
+                                Excluded skills ({excludedSkillIds.length})
+                              </p>
+                              <AgentSkillsEditor
+                                availableSkills={orgScopedSkills}
+                                selectedSkillIds={excludedSkillIds}
+                                onSelectionChange={setExcludedSkillIds}
+                                gateway={skillGateway}
+                                currentUserId={currentUserId}
+                                tone="exclude"
+                                onSearchChange={setSkillSearch}
+                                isSearching={skillSearchPending}
+                                placeholder="Search skills to exclude..."
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <p className="pt-1 text-xs text-muted-foreground">
+                              Only the skills you assign below are published.
+                              Templated and agent-delegated skills cannot be
+                              published, a personal skill only by its own
+                              author, and a skill restricted to other
+                              environments not at all.
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Skills ({assignedSkillIds.length})
+                            </p>
+                            <AgentSkillsEditor
+                              availableSkills={availableSkills}
+                              selectedSkillIds={assignedSkillIds}
+                              onSelectionChange={setAssignedSkillIds}
+                              gateway={skillGateway}
+                              currentUserId={currentUserId}
+                              onSearchChange={setSkillSearch}
+                              isSearching={skillSearchPending}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

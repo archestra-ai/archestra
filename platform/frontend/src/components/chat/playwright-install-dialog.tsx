@@ -58,7 +58,10 @@ export function usePlaywrightSetupRequired(
 
   // Check if current user has Playwright installed using lightweight queries only
   // (no mutations) to avoid interfering with install state in the dialog/right panel
-  const { data: playwrightServers = [] } = useMcpServers({
+  const {
+    data: playwrightServers = [],
+    isLoading: isLoadingPlaywrightServers,
+  } = useMcpServers({
     catalogId: PLAYWRIGHT_MCP_CATALOG_ID,
     enabled: options?.enabled,
   });
@@ -151,7 +154,11 @@ export function usePlaywrightSetupRequired(
   // defaults that may not reflect the user's custom selection.
   const isAwaitingEnabledTools = !!conversationId && !enabledToolsData;
 
+  // Until the user's Playwright servers come back, an empty list is
+  // indistinguishable from "not installed" — claiming setup is required off that
+  // shows the setup card to users who already have a browser.
   const isRequired =
+    !isLoadingPlaywrightServers &&
     !isPlaywrightInstalledByCurrentUser &&
     !isAwaitingEnabledTools &&
     (hasEnabledPlaywrightTool || enabledSubAgentHasPlaywrightTools);

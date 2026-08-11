@@ -774,15 +774,15 @@ const MATRIX: MatrixRow[] = [
     },
   },
   {
-    name: "bedrock/amazon.titan-embed-text-v1 — embedding, priced by AWS on input alone",
+    name: "bedrock/amazon.titan-embed-text-v1 — embedding, priced by AWS on input alone, text-only modalities from the KB client",
     provider: "bedrock",
     modelId: "amazon.titan-embed-text-v1",
     expected: {
       contextLength: null,
       outputLength: null,
-      inputModalities: null,
-      outputModalities: null,
-      supportsToolCalling: null,
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
       pricePerMillionInput: "0.1",
       pricePerMillionOutput: "0",
       priceSource: "aws",
@@ -1149,9 +1149,9 @@ const MATRIX: MatrixRow[] = [
     },
   },
   {
-    name: "gemini/gemini-embedding-2-preview — normalized to multimodal input with no output",
+    name: "gemini/gemini-embedding-2 — normalized to multimodal input with no output",
     provider: "gemini",
-    modelId: "gemini-embedding-2-preview",
+    modelId: "gemini-embedding-2",
     expected: {
       contextLength: null,
       outputLength: null,

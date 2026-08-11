@@ -19,7 +19,7 @@ export class GeminiEmbeddingError extends Error {
  * Supports both text strings and inline images (multimodal), as well as
  * API key mode and Vertex AI mode (via `createGoogleGenAIClient`).
  *
- * TODO: Add support for audio and video modalities — gemini-embedding-2-preview
+ * TODO: Add support for audio and video modalities — gemini-embedding-2
  * supports text, image, audio, video, and PDF inputs.
  *
  * Gemini's native embedding API does not report token usage, so `prompt_tokens`

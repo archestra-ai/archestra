@@ -102,7 +102,7 @@ describe("POST /api/llm-virtual-keys", () => {
     expect(response.statusCode).toBe(200);
   });
 
-  test("per-user provider: rejects org-scoped or model-router virtual keys containing it", async ({
+  test("per-user provider: rejects shared (org-scoped) virtual keys containing it", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
@@ -113,14 +113,7 @@ describe("POST /api/llm-virtual-keys", () => {
       copilotSecret.id,
       { provider: "github-copilot", scope: "personal", userId: user.id },
     );
-    const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
-    const openaiKey = await makeLlmProviderApiKey(
-      organizationId,
-      openaiSecret.id,
-      { provider: "openai", scope: "org" },
-    );
 
-    // Org-scoped (shared) virtual key wrapping the per-user key → rejected
     const orgScoped = await app.inject({
       method: "POST",
       url: "/api/llm-virtual-keys",
@@ -135,9 +128,29 @@ describe("POST /api/llm-virtual-keys", () => {
     });
     expect(orgScoped.statusCode).toBe(400);
     expect(orgScoped.json().error.message).toContain("per-user");
+  });
 
-    // Multi-provider (model-router) bundle containing the per-user key → rejected
-    const bundle = await app.inject({
+  test("per-user provider: allows it alongside other providers in a personal model-router key", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    // Personal scope — not mapping count — is what keeps the token unshared, so
+    // a Copilot key may ride in the owner's own multi-provider router key. That
+    // is the point of the router: one endpoint reaching every provider.
+    const copilotSecret = await makeSecret({ secret: { apiKey: "gho_self" } });
+    const copilotKey = await makeLlmProviderApiKey(
+      organizationId,
+      copilotSecret.id,
+      { provider: "github-copilot", scope: "personal", userId: user.id },
+    );
+    const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const openaiKey = await makeLlmProviderApiKey(
+      organizationId,
+      openaiSecret.id,
+      { provider: "openai", scope: "org" },
+    );
+
+    const response = await app.inject({
       method: "POST",
       url: "/api/llm-virtual-keys",
       payload: {
@@ -150,8 +163,49 @@ describe("POST /api/llm-virtual-keys", () => {
         teams: [],
       },
     });
-    expect(bundle.statusCode).toBe(400);
-    expect(bundle.json().error.message).toContain("per-user");
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  test("per-user provider: rejects another user's key in a personal model-router key", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+    makeUser,
+  }) => {
+    // Ownership is the check that carries the weight once mapping count no
+    // longer does: a personal router key may not wrap someone else's token.
+    const otherUser = await makeUser({ email: "someone-else@test.com" });
+    const copilotSecret = await makeSecret({ secret: { apiKey: "gho_other" } });
+    const otherCopilotKey = await makeLlmProviderApiKey(
+      organizationId,
+      copilotSecret.id,
+      { provider: "github-copilot", scope: "personal", userId: otherUser.id },
+    );
+    const openaiSecret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const openaiKey = await makeLlmProviderApiKey(
+      organizationId,
+      openaiSecret.id,
+      { provider: "openai", scope: "org" },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Borrowed Copilot Router VK",
+        providerApiKeys: [
+          { provider: "github-copilot", providerApiKeyId: otherCopilotKey.id },
+          { provider: "openai", providerApiKeyId: openaiKey.id },
+        ],
+        scope: "personal",
+        teams: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain(
+      "your own personal github-copilot key",
+    );
   });
 
   test("ChatGPT-subscription (Codex) openai key: rejected in a shared org-scoped virtual key", async ({

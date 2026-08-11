@@ -646,7 +646,8 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:read": "View Knowledge Bases and Connectors",
   "knowledgeSource:create": "Create Knowledge Bases and Connectors",
   "knowledgeSource:update": "Modify Knowledge Bases and Connectors",
-  "knowledgeSource:delete": "Delete Knowledge Bases and Connectors",
+  "knowledgeSource:delete":
+    "Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
     "View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions",
@@ -739,6 +740,18 @@ export const requiredEndpointPermissionsMap: Partial<
   // Subagent (delegation-target) exclusions: agent-type read/update permission checked dynamically in handler
   [RouteId.GetAgentSubagentExclusions]: {},
   [RouteId.UpdateAgentSubagentExclusions]: {},
+  // Skill assignments/exclusions (what the gateway publishes over skill://):
+  // agent-type read/update permission checked dynamically in handler, on top
+  // of this floor. `skill:read` is the floor rather than `{}` because these
+  // routes both disclose skills (name, description, scope, author) and decide
+  // which ones a gateway hands to every holder of its token — neither belongs
+  // to a caller whose role was deliberately stripped of the skill resource.
+  // Visibility of each named skill is checked per id in the assignment
+  // service; this is the capability half, and both are load-bearing.
+  [RouteId.GetAgentSkills]: { skill: ["read"] },
+  [RouteId.UpdateAgentSkills]: { skill: ["read"] },
+  [RouteId.GetAgentSkillExclusions]: { skill: ["read"] },
+  [RouteId.UpdateAgentSkillExclusions]: { skill: ["read"] },
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
@@ -757,9 +770,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Tool-assignment routes: agent-type update checked dynamically in handler
   [RouteId.AssignToolToAgent]: {},
   [RouteId.BulkAssignTools]: {},
-  [RouteId.BulkUpdateAgentTools]: {
-    toolPolicy: ["update"],
-  },
+  [RouteId.BulkUpdateAgentTools]: {},
   [RouteId.AutoConfigureAgentToolPolicies]: {
     toolPolicy: ["update"],
   },
@@ -1183,6 +1194,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // OpenAI (ChatGPT subscription) key.
   [RouteId.OpenaiCodexDeviceAuthStart]: {},
   [RouteId.OpenaiCodexDeviceAuthPoll]: {},
+  // Same self-service rationale for the X Premium (SuperGrok) device flow: it
+  // only obtains the caller's own OAuth credential for a new personal xAI
+  // (X Premium subscription) key.
+  [RouteId.XaiSubscriptionDeviceAuthStart]: {},
+  [RouteId.XaiSubscriptionDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },
@@ -1427,6 +1443,11 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicConfig]: {},
+  /**
+   * Ingest product-usage (RUM) events from the web client.
+   * Any authenticated user — every signed-in browser session reports usage.
+   */
+  [RouteId.IngestRumEvents]: {},
   // Public: reports only whether a two-factor sign-in challenge is pending,
   // so the auth pages can redirect when they don't apply. Auth is skipped in
   // middleware for this path.
@@ -1634,6 +1655,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetKnowledgeBase]: { knowledgeSource: ["read"] },
   [RouteId.UpdateKnowledgeBase]: { knowledgeSource: ["update"] },
   [RouteId.DeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
+  // Restore is the inverse of delete — same gate, as for skills and projects.
+  [RouteId.RestoreKnowledgeBase]: { knowledgeSource: ["delete"] },
+  // Permanent deletion is irreversible, so the handler narrows this further to
+  // a built-in admin ROLE — no knowledgeSource permission, `admin` included,
+  // gets you past the trash.
+  [RouteId.PermanentlyDeleteKnowledgeBase]: { knowledgeSource: ["delete"] },
   [RouteId.GetKnowledgeBaseHealth]: { knowledgeSource: ["read"] },
 
   // Knowledge Base Connector Routes
@@ -1644,6 +1671,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectorDocument]: { knowledgeSource: ["read"] },
   [RouteId.UpdateConnector]: { knowledgeSource: ["update"] },
   [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
+  // Same gates as the knowledge-base pair above.
+  [RouteId.RestoreConnector]: { knowledgeSource: ["delete"] },
+  [RouteId.PermanentlyDeleteConnector]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },
@@ -1657,6 +1687,15 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
+  // Starting an authorization ends in a credential being written onto the
+  // connector, so it takes the same grant as any other edit.
+  [RouteId.StartGoogleDriveConnectorOAuth]: { knowledgeSource: ["update"] },
+  // Google redirects the browser here, and the session rides along (the
+  // cookie is SameSite=Lax, which a top-level GET navigation carries). The
+  // handler additionally requires that session to be the one that started the
+  // flow, so an authorization cannot be redeemed onto someone else's
+  // connector.
+  [RouteId.CompleteGoogleDriveConnectorOAuth]: { knowledgeSource: ["update"] },
 
   // Connector Knowledge Base Assignment Routes
   [RouteId.AssignConnectorToKnowledgeBases]: { knowledgeSource: ["update"] },

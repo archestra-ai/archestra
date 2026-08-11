@@ -3,7 +3,7 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-07-27
+lastUpdated: 2026-08-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -258,5 +258,7 @@ Use cases:
 - Self-hosted Ollama at a non-default address
 - OpenAI-compatible proxies
 - Regional endpoints
+
+Keys connected through a subscription sign-in do not support a base URL override. An X Premium (SuperGrok) key, for example, only talks to the configured xAI endpoint — a key that carries an override is rejected.
 
 When a virtual key or OAuth client access token is resolved, the mapped provider key's base URL is used automatically.

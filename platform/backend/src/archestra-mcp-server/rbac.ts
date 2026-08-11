@@ -151,6 +151,11 @@ export const TOOL_PERMISSIONS: Record<
   // restricts to the owner/project-admin and gates org-wide visibility behind
   // project:share-org.
   set_project_share: { resource: "project", action: "update" },
+  // Reads mirror the GetProjects/GetProject routes. The permission is only the
+  // floor: both handlers narrow to what the caller can actually reach (owner or
+  // shared-with), so `project:read` never widens visibility past their own set.
+  list_projects: { resource: "project", action: "read" },
+  get_project: { resource: "project", action: "read" },
 
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,

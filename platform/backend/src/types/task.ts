@@ -6,7 +6,11 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-export type TaskHandler = (payload: Record<string, unknown>) => Promise<void>;
+export type TaskHandlerContext = { taskId: string };
+export type TaskHandler = (
+  payload: Record<string, unknown>,
+  context: TaskHandlerContext,
+) => Promise<void>;
 
 export const TaskStatusSchema = z.enum([
   "pending",
@@ -29,6 +33,7 @@ export const TaskTypeSchema = z.enum([
   "content_encryption_backfill",
   "check_due_skill_github_syncs",
   "skill_github_sync",
+  "skill_publication_backfill",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -69,6 +74,7 @@ export const TASK_LANES = {
     "content_encryption_backfill",
     "check_due_skill_github_syncs",
     "skill_github_sync",
+    "skill_publication_backfill",
   ],
 } as const satisfies Record<string, TaskType[]>;
 

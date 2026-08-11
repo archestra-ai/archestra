@@ -17,6 +17,8 @@ const embeddingRequests: Array<{
   dimensions?: number;
 }> = [];
 const responseQueue: EmbeddingResponseSpec[] = [];
+const bedrockEmbeddingRequests: string[] = [];
+const bedrockTransientFailures = new Map<string, number>();
 
 // openai@6 requests base64 embeddings by default and decodes them client-side,
 // so the wire payload must carry Float32Array bytes, not a JSON number array.
@@ -65,6 +67,33 @@ const embeddingHandler = http.post(
   },
 );
 
+const bedrockEmbeddingHandler = http.post(
+  "https://bedrock-runtime.us-east-1.amazonaws.com/model/:modelId/invoke",
+  async ({ request }) => {
+    const body = (await request.json()) as { inputText?: string };
+    const input = body.inputText ?? "";
+    bedrockEmbeddingRequests.push(input);
+    const transientFailuresRemaining = bedrockTransientFailures.get(input) ?? 0;
+    if (transientFailuresRemaining > 0) {
+      bedrockTransientFailures.set(input, transientFailuresRemaining - 1);
+      return HttpResponse.json(
+        { message: "temporary outage" },
+        { status: 503 },
+      );
+    }
+    if (input.includes("bad chunk")) {
+      return HttpResponse.json(
+        { message: "deterministic bad input" },
+        { status: 400 },
+      );
+    }
+    return HttpResponse.json({
+      embedding: Array.from({ length: 1024 }, () => 0.1),
+      inputTextTokenCount: 2,
+    });
+  },
+);
+
 const mockGetDefaultOrgEmbeddingConfig = vi.hoisted(() => vi.fn());
 vi.mock("./kb-llm-client", () => ({
   getDefaultOrgEmbeddingConfig: mockGetDefaultOrgEmbeddingConfig,
@@ -103,15 +132,129 @@ function makeEmbeddingContext() {
     dimensions: 1536,
     provider: "openai" as const,
     inputModalities: null,
+    acceptedImageMimeTypes: null,
   };
 }
 
 describe("EmbeddingService", () => {
-  useMswServer(embeddingHandler);
+  useMswServer(embeddingHandler, bedrockEmbeddingHandler);
 
   beforeEach(() => {
     embeddingRequests.length = 0;
+    bedrockEmbeddingRequests.length = 0;
+    bedrockTransientFailures.clear();
     responseQueue.length = 0;
+  });
+
+  test("persists successful Bedrock fan-out results and fails only the affected document", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: {
+        apiKey: "test-key",
+        baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        model: "amazon.titan-embed-image-v1",
+        dimensions: 1024,
+        provider: "bedrock",
+        inputModalities: ["text", "image"],
+        acceptedImageMimeTypes: ["image/png", "image/jpeg"],
+      },
+    });
+
+    const good = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Good",
+      content: "good",
+      contentHash: "partial-bedrock-good",
+      embeddingStatus: "pending",
+    });
+    const bad = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Bad",
+      content: "bad",
+      contentHash: "partial-bedrock-bad",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: good.id, content: "good chunk", chunkIndex: 0 },
+      { documentId: bad.id, content: "bad chunk", chunkIndex: 0 },
+    ]);
+
+    const outcome = await embeddingService.processDocuments([good.id, bad.id]);
+
+    expect(outcome.failedDocumentCount).toBe(1);
+    expect((await KbDocumentModel.findById(good.id))?.embeddingStatus).toBe(
+      "completed",
+    );
+    expect((await KbDocumentModel.findById(bad.id))?.embeddingStatus).toBe(
+      "failed",
+    );
+    expect(bedrockEmbeddingRequests).toHaveLength(2);
+  });
+
+  test("retries only transiently failed Bedrock inputs without replaying successes", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: {
+        apiKey: "test-key",
+        baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        model: "amazon.titan-embed-image-v1",
+        dimensions: 1024,
+        provider: "bedrock",
+        inputModalities: ["text", "image"],
+        acceptedImageMimeTypes: ["image/png", "image/jpeg"],
+      },
+    });
+
+    const good = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Good",
+      content: "good",
+      contentHash: "retry-bedrock-good",
+      embeddingStatus: "pending",
+    });
+    const flaky = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Flaky",
+      content: "flaky",
+      contentHash: "retry-bedrock-flaky",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: good.id, content: "good retry chunk", chunkIndex: 0 },
+      { documentId: flaky.id, content: "flaky retry chunk", chunkIndex: 0 },
+    ]);
+    bedrockTransientFailures.set("flaky retry chunk", 1);
+
+    const outcome = await embeddingService.processDocuments([
+      good.id,
+      flaky.id,
+    ]);
+
+    expect(outcome.failedDocumentCount).toBe(0);
+    expect(
+      bedrockEmbeddingRequests.filter((input) => input === "good retry chunk"),
+    ).toHaveLength(1);
+    expect(
+      bedrockEmbeddingRequests.filter((input) => input === "flaky retry chunk"),
+    ).toHaveLength(2);
   });
 
   test("processes pending document — chunks get embeddings, status completed", async ({
@@ -601,5 +744,158 @@ describe("EmbeddingService", () => {
     expect(embeddingRequests).toHaveLength(1);
     const [interaction] = await waitForKbInteractions(1);
     expect(interaction.connectorId).toBeNull();
+  });
+
+  test("processDocument skips image chunks the model can't embed and still completes", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Mixed Doc",
+      content: "Text with an inline image",
+      contentHash: "hash-skip-single",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: doc.id, content: "Text chunk", chunkIndex: 0 },
+      {
+        documentId: doc.id,
+        content: "data:image/png;base64,aW1hZ2U=",
+        chunkIndex: 1,
+      },
+    ]);
+
+    responseQueue.push({ kind: "ok", embeddings: [makeFakeEmbedding(1)] });
+
+    // makeEmbeddingContext resolves inputModalities: null — image support
+    // unknown, so the image chunk must be skipped, not sent to a rejection.
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("completed");
+
+    expect(embeddingRequests).toHaveLength(1);
+    expect(embeddingRequests[0].input).toEqual(["Text chunk"]);
+
+    const chunks = await KbChunkModel.findByDocument(doc.id);
+    const textChunk = chunks.find((c) => c.chunkIndex === 0);
+    const imageChunk = chunks.find((c) => c.chunkIndex === 1);
+    expect(textChunk?.embedding).toHaveLength(1536);
+    expect(imageChunk?.embedding).toBeNull();
+  });
+
+  test("processDocument skips image formats outside the model's accepted list", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Animated Doc",
+      content: "Text with an inline GIF",
+      contentHash: "hash-skip-format",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: doc.id, content: "Text chunk", chunkIndex: 0 },
+      {
+        documentId: doc.id,
+        content: "data:image/gif;base64,Z2lm",
+        chunkIndex: 1,
+      },
+    ]);
+
+    responseQueue.push({ kind: "ok", embeddings: [makeFakeEmbedding(1)] });
+
+    // Image modality is allowed, but the model takes JPEG/PNG only — the GIF
+    // chunk is skipped instead of sent to a certain provider rejection.
+    await embeddingService.processDocument(doc.id, {
+      ...makeEmbeddingContext(),
+      inputModalities: ["text", "image"],
+      acceptedImageMimeTypes: ["image/jpeg", "image/png"],
+    });
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("completed");
+
+    expect(embeddingRequests).toHaveLength(1);
+    expect(embeddingRequests[0].input).toEqual(["Text chunk"]);
+
+    const chunks = await KbChunkModel.findByDocument(doc.id);
+    const gifChunk = chunks.find((c) => c.chunkIndex === 1);
+    expect(gifChunk?.embedding).toBeNull();
+  });
+
+  test("processDocuments completes a media document with zero embedded chunks and surfaces the skip count", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: makeEmbeddingContext(),
+    });
+
+    // A media document is a single image chunk (ingested when a previous
+    // configuration allowed images).
+    const mediaDoc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Screenshot",
+      content: "data:image/png;base64,aW1hZ2U=",
+      contentHash: "hash-skip-media",
+      embeddingStatus: "pending",
+    });
+    const textDoc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Notes",
+      content: "Notes content",
+      contentHash: "hash-skip-text",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      {
+        documentId: mediaDoc.id,
+        content: "data:image/png;base64,aW1hZ2U=",
+        chunkIndex: 0,
+      },
+      { documentId: textDoc.id, content: "Notes chunk", chunkIndex: 0 },
+    ]);
+
+    responseQueue.push({ kind: "ok", embeddings: [makeFakeEmbedding(1)] });
+
+    const outcome = await embeddingService.processDocuments([
+      mediaDoc.id,
+      textDoc.id,
+    ]);
+
+    // Neither document fails; the skip is reported, not swallowed into logs.
+    expect(outcome.failedDocumentCount).toBe(0);
+    expect(outcome.skippedImageChunkCount).toBe(1);
+
+    const updatedMedia = await KbDocumentModel.findById(mediaDoc.id);
+    expect(updatedMedia?.embeddingStatus).toBe("completed");
+    const updatedText = await KbDocumentModel.findById(textDoc.id);
+    expect(updatedText?.embeddingStatus).toBe("completed");
+
+    expect(embeddingRequests).toHaveLength(1);
+    expect(embeddingRequests[0].input).toEqual(["Notes chunk"]);
   });
 });

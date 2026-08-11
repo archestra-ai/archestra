@@ -51,9 +51,16 @@ export function makeConfig(
       virtualKeyDefaultExpirationSeconds: 3600,
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
+      chatIncognitoEnabled: false,
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,
+      kbGoogleDriveOAuth: {
+        configured: false,
+        redirectUri:
+          "http://localhost:3000/api/connectors/gdrive/oauth/callback",
+      },
+      mcpGatewaySkillsEnabled: false,
       hackathonRecorderEnabled: true,
       // Off by default, exactly as a real deployment has it.
       hackathonVideoDownloadEnabled: false,
@@ -85,6 +92,7 @@ export function makePublicConfig(
       instanceId: null,
       posthog: { key: "", host: "" },
     },
+    rum: { enabled: false, sampleRate: 1 },
     ...overrides,
     maintenanceMode: overrides.maintenanceMode ?? null,
     siteNotificationMessage: overrides.siteNotificationMessage ?? null,

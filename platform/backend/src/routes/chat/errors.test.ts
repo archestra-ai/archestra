@@ -110,6 +110,37 @@ describe("mapProviderError - per-user provider auth required", () => {
       providerLabel: "ChatGPT Subscription",
     });
   });
+
+  it("reclassifies a revoked X Premium envelope (internal_code) to the reconnect card labeled with the subscription", () => {
+    // Same synthetic-401 shape as the Codex case, produced by the xAI
+    // subscription fetch wrapper and relayed by the xAI adapter's
+    // extractInternalCode.
+    const revokedMessage =
+      "Your X Premium (SuperGrok) sign-in has expired or been revoked. Reconnect your X account to continue.";
+    const result = mapProviderError(
+      {
+        name: "AI_APICallError",
+        statusCode: 401,
+        responseBody: JSON.stringify({
+          error: {
+            type: "authentication_error",
+            message: revokedMessage,
+            internal_code: ArchestraInternalErrorCode.ProviderAuthRequired,
+          },
+        }),
+        isRetryable: false,
+      },
+      "xai",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ProviderAuthRequired);
+    expect(result.isRetryable).toBe(false);
+    expect(result.message).toBe(revokedMessage);
+    expect(result.authAction).toEqual({
+      provider: "xai",
+      providerLabel: "X Premium (SuperGrok)",
+    });
+  });
 });
 
 describe("mapProviderError - request too large", () => {

@@ -26,6 +26,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import config from "@/config";
 import {
   AgentExcludedSubagentModel,
   AgentModel,
@@ -36,8 +37,16 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mustExist,
+  test,
+} from "@/test";
 import mcpGatewayRoutes from "./index";
+import { MCP_SERVER_INFO_META_KEY } from "./protocol";
 
 /**
  * Helper to create MCP gateway request headers
@@ -144,22 +153,32 @@ describe("MCP Gateway (stateless mode)", () => {
       isOrganizationToken: true,
     });
 
-    // Send initialize request
-    const initResponse = await app.inject({
-      method: "POST",
-      url: `/v1/mcp/${agent.id}`,
-      headers: makeMcpHeaders(token.value),
-      payload: {
-        jsonrpc: "2.0",
-        method: "initialize",
-        params: {
-          protocolVersion: "2024-11-05",
-          capabilities: {},
-          clientInfo: { name: "test-client", version: "1.0.0" },
+    // Pin the skills flag rather than inherit it from the developer's .env:
+    // this test asserts the flag-off extension set, and the flag-on
+    // declaration is protocol.test.ts's business.
+    const original = config.mcpGateway.skillsEnabled;
+    let initResponse: Awaited<ReturnType<typeof app.inject>>;
+    try {
+      config.mcpGateway.skillsEnabled = false;
+      // Send initialize request
+      initResponse = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test-client", version: "1.0.0" },
+          },
+          id: 1,
         },
-        id: 1,
-      },
-    });
+      });
+    } finally {
+      config.mcpGateway.skillsEnabled = original;
+    }
 
     expect(initResponse.statusCode).toBe(200);
 
@@ -172,6 +191,197 @@ describe("MCP Gateway (stateless mode)", () => {
       [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
       [MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID]: {},
     });
+  });
+
+  test("reserves the skill://archestra namespace while the skills surface is off", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // The skills surface is off here (the deployment flag is off), which is
+    // exactly the window where falling through would let an upstream server
+    // answer for the platform's own prefix. A parseable skill URI must come
+    // back not-found — never be proxied upstream.
+    const agent = await makeAgent();
+    const org = await makeOrganization();
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    // A well-formed URI, an unknown scope, and malformed percent-encoding all
+    // stay inside the reserved authority.
+    for (const uri of [
+      "skill://archestra/shared/refunds/SKILL.md",
+      "skill://archestra/unknown-scope/evil.md",
+      "skill://archestra/shared/%zz/SKILL.md",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "resources/read",
+          params: { uri },
+          id: 2,
+        },
+      });
+
+      expect(response.statusCode, uri).toBe(200);
+      const body = response.json();
+      // SEP-2164 retired the MCP-specific -32002 for missing resources; the
+      // current revision (and SEP-2640 for skill URIs) answers -32602.
+      expect(body.error.code, uri).toBe(-32602);
+      expect(body.error.message, uri).toContain("Resource not found");
+    }
+  });
+
+  test("dispatches skills/list only while the skills surface is enabled", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // Everything else about the skills surface is tested by calling its
+    // handlers directly. This is the one test that proves the handlers are
+    // REACHABLE: an inverted guard, a wrong config key, or a dropped
+    // `isSkillMethod` check would ship the whole feature dead — the method
+    // falling through to the SDK, which answers -32601 — with the rest of the
+    // suite still green.
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const listSkills = async () =>
+      await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "skills/list", params: {}, id: 3 },
+      });
+
+    const original = config.mcpGateway.skillsEnabled;
+    try {
+      config.mcpGateway.skillsEnabled = false;
+      const off = (await listSkills()).json();
+      expect(off.error.code).toBe(-32601);
+
+      config.mcpGateway.skillsEnabled = true;
+      const on = (await listSkills()).json();
+      expect(on.error).toBeUndefined();
+      expect(on.result.skills).toEqual([]);
+      // The current revision's result envelope. The skill methods are
+      // dispatched ahead of the SDK, so nothing downstream stamps this for
+      // them — dropping the wrap here would ship results without the
+      // mandatory `resultType`.
+      expect(on.result.resultType).toBe("complete");
+      expect(on.result._meta[MCP_SERVER_INFO_META_KEY]).toMatchObject({
+        name: `archestra-agent-${agent.id}`,
+      });
+    } finally {
+      config.mcpGateway.skillsEnabled = original;
+    }
+  });
+
+  test("a skills notification gets 202 and no JSON-RPC response", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // A notification — same method, no id — must never be answered. The skill
+    // dispatch refuses bodies without an id, so the spelling falls through to
+    // the SDK transport, whose notification path acknowledges with 202 and an
+    // empty body — never a JSON-RPC response with `id: null`.
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const original = config.mcpGateway.skillsEnabled;
+    try {
+      config.mcpGateway.skillsEnabled = true;
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "skills/list", params: {} },
+      });
+      expect(response.statusCode).toBe(202);
+      expect(response.body).toBe("");
+    } finally {
+      config.mcpGateway.skillsEnabled = original;
+    }
+  });
+
+  test("serves a skill:// read only while the skills surface is enabled", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // The read half of the reachability check above. `resources/read` is an
+    // ordinary SDK request whose handler branches on the flag, so an inverted
+    // guard there ships every skill read as not-found while listings work —
+    // and no other test reaches that branch with the flag on.
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllSkills: true,
+    });
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: "reachable-skill",
+        description: "Served over the gateway",
+        content: "# Instructions",
+        scope: "org",
+      },
+      files: [],
+    });
+
+    const readManifest = async () =>
+      await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "resources/read",
+          params: {
+            uri: "skill://archestra/shared/reachable-skill/SKILL.md",
+          },
+          id: 4,
+        },
+      });
+
+    const original = config.mcpGateway.skillsEnabled;
+    try {
+      config.mcpGateway.skillsEnabled = false;
+      expect((await readManifest()).json().error.code).toBe(-32602);
+
+      config.mcpGateway.skillsEnabled = true;
+      const on = (await readManifest()).json();
+      expect(on.error).toBeUndefined();
+      expect(on.result.contents[0]).toMatchObject({
+        uri: "skill://archestra/shared/reachable-skill/SKILL.md",
+        mimeType: "text/markdown",
+      });
+      expect(on.result.contents[0].text).toContain("name: reachable-skill");
+    } finally {
+      config.mcpGateway.skillsEnabled = original;
+    }
   });
 
   test("handles tools/list request successfully (stateless)", async ({
@@ -568,7 +778,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(names).toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 
-  test("Auto-tool mode exclusions: a disabled app's launch tool is withheld from tools/list until enabled, even for its own author", async ({
+  test("Auto-tool mode: a disabled app's launch tool is undiscoverable until enabled, even for its own author", async ({
     makeAgent,
     makeApp,
     makeMember,
@@ -586,16 +796,19 @@ describe("MCP Gateway (stateless mode)", () => {
       scope: "org",
       enabled: false,
     });
-    const server = await McpServerModel.findById(disabledApp.mcpServerId!);
+    const server = mustExist(
+      await McpServerModel.findById(mustExist(disabledApp.mcpServerId)),
+    );
     const [launchTool] = await ToolModel.findByCatalogIdWithMeta(
-      server!.catalogId,
+      server.catalogId,
     );
     const launchToolName = launchTool.name;
 
-    // "Agent auto mode": the gateway agent has accessAllTools on, so dynamic
-    // discovery — not just explicit assignment — feeds tools/list. This is the
-    // same code path "MCP Gateway auto mode" drives, so one round trip through
-    // the real /v1/mcp route proves both.
+    // "Agent auto mode": the gateway agent has accessAllTools on, so the tool
+    // is reached by dynamic discovery rather than explicit assignment. Auto mode
+    // deliberately advertises only search_tools/run_tool, so the disabled-app
+    // rule is observed where dynamic discovery actually happens — search_tools —
+    // over the real /v1/mcp route.
     const gatewayAgent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
@@ -603,7 +816,7 @@ describe("MCP Gateway (stateless mode)", () => {
     });
     const token = await UserTokenModel.create(author.id, org.id);
 
-    async function listToolNames(): Promise<string[]> {
+    async function searchToolNames(): Promise<string[]> {
       await initializeMcpSession({
         app,
         agentId: gatewayAgent.id,
@@ -613,20 +826,78 @@ describe("MCP Gateway (stateless mode)", () => {
         method: "POST",
         url: `/v1/mcp/${gatewayAgent.id}`,
         headers: makeMcpHeaders(token.value),
-        payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: TOOL_SEARCH_TOOLS_FULL_NAME,
+            arguments: { query: launchToolName, limit: 20 },
+          },
+          id: 2,
+        },
       });
       expect(response.statusCode).toBe(200);
-      return response
-        .json()
-        .result.tools.map((tool: { name: string }) => tool.name);
+      const body = response.json();
+      expect(body.result.isError).toBeFalsy();
+      return (body.result.structuredContent?.tools ?? []).map(
+        (tool: { toolName: string }) => tool.toolName,
+      );
     }
 
-    // Withheld while disabled — even for the app's own author.
-    expect(await listToolNames()).not.toContain(launchToolName);
+    // Undiscoverable while disabled — even for the app's own author.
+    expect(await searchToolNames()).not.toContain(launchToolName);
 
     // Enabling surfaces it, over the same real route, for the same caller.
     await AppModel.setEnabled(disabledApp.id, true);
-    expect(await listToolNames()).toContain(launchToolName);
+    expect(await searchToolNames()).toContain(launchToolName);
+  });
+
+  test("Auto-tool mode: tools/list advertises only the search/run pair even when an app is dynamically reachable", async ({
+    makeAgent,
+    makeApp,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    await makeMember(author.id, org.id, { role: "admin" });
+    // An enabled, org-scoped app: dynamically reachable by the caller, and its
+    // launch tool carries a ui:// resource — the class that used to be
+    // advertised top-level and blew the listing up on installs with many apps.
+    await makeApp({
+      organizationId: org.id,
+      authorId: author.id,
+      scope: "org",
+      enabled: true,
+    });
+    const gatewayAgent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+    const token = await UserTokenModel.create(author.id, org.id);
+
+    await initializeMcpSession({
+      app,
+      agentId: gatewayAgent.id,
+      token: token.value,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${gatewayAgent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const names = response
+      .json()
+      .result.tools.map((tool: { name: string }) => tool.name)
+      .sort();
+    expect(names).toEqual(
+      [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
+    );
   });
 
   test("returns 401 with WWW-Authenticate header for missing authorization header", async ({

@@ -28,12 +28,132 @@ describe("ModelSyncService", () => {
   const originalAzureFetcher = modelFetchers.azure;
   const originalGeminiFetcher = modelFetchers.gemini;
   const originalOpenrouterFetcher = modelFetchers.openrouter;
+  const originalOllamaFetcher = modelFetchers.ollama;
 
   afterEach(() => {
     modelFetchers.openai = originalOpenAiFetcher;
     modelFetchers.azure = originalAzureFetcher;
     modelFetchers.gemini = originalGeminiFetcher;
     modelFetchers.openrouter = originalOpenrouterFetcher;
+    modelFetchers.ollama = originalOllamaFetcher;
+  });
+
+  test("two Ollama endpoints sharing a tag keep independent agent verdicts", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secretA = await makeSecret({ secret: { apiKey: "endpoint-a" } });
+    const secretB = await makeSecret({ secret: { apiKey: "endpoint-b" } });
+    const keyA = await makeLlmProviderApiKey(org.id, secretA.id, {
+      provider: "ollama",
+    });
+    const keyB = await makeLlmProviderApiKey(org.id, secretB.id, {
+      provider: "ollama",
+    });
+
+    // The same tag on both endpoints, naming different builds: a 4B on A and
+    // a 70B on B. Both syncs upsert the same globally unique (provider,
+    // model_id) row, so only the link can tell the two endpoints apart.
+    modelFetchers.ollama = async (apiKeyValue) => [
+      {
+        id: "custom:latest",
+        displayName: "custom:latest",
+        provider: "ollama" as SupportedProvider,
+        capabilities: {
+          parameterCount:
+            apiKeyValue === "endpoint-a" ? 4_000_000_000 : 70_000_000_000,
+        },
+      },
+    ];
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: keyA.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint-a",
+    });
+    // B finishing last must not flip A's verdict, as a row-level column would.
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: keyB.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint-b",
+    });
+
+    const [forA] = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      keyA.id,
+    ]);
+    const [forB] = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      keyB.id,
+    ]);
+    expect(forA.recommendedForAgents).toBe(false);
+    expect(forB.recommendedForAgents).toBe(true);
+
+    // A listing spanning both keys collapses to one row per model; the
+    // warning must survive the merge rather than be averaged away.
+    const merged = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      keyA.id,
+      keyB.id,
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].recommendedForAgents).toBe(false);
+  });
+
+  test("a sync that learns nothing keeps the link verdict; a full refresh corrects it", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "endpoint" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "ollama",
+    });
+
+    const serve = (parameterCount: number | null) => async () => [
+      {
+        id: "custom:latest",
+        displayName: "custom:latest",
+        provider: "ollama" as SupportedProvider,
+        capabilities: { parameterCount },
+      },
+    ];
+
+    modelFetchers.ollama = serve(4_000_000_000);
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint",
+    });
+
+    // A time-boxed /api/show miss reports no size, so the sync derives no
+    // verdict. The known one must survive rather than silently un-flag.
+    modelFetchers.ollama = serve(null);
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint",
+    });
+
+    let [linked] = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      apiKey.id,
+    ]);
+    expect(linked.recommendedForAgents).toBe(false);
+
+    // The tag was repointed at a 70B build; a full refresh is the way a
+    // stale verdict self-corrects.
+    modelFetchers.ollama = serve(70_000_000_000);
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "ollama",
+      apiKeyValue: "endpoint",
+      forceRefresh: true,
+    });
+
+    [linked] = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
+      apiKey.id,
+    ]);
+    expect(linked.recommendedForAgents).toBe(true);
   });
 
   test("stores models with the API key's provider, not detected provider", async ({
@@ -112,6 +232,53 @@ describe("ModelSyncService", () => {
       await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([apiKey.id]);
     expect(linkedModels).toHaveLength(3);
     expect(linkedModels.every((m) => m.model.provider === "openai")).toBe(true);
+  });
+
+  test("reclassifies a proxy-discovered model once the provider's catalog returns it", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+
+    // Both rows exist because the proxy saw the ids before any key synced them.
+    await ModelModel.ensureModelExists("gpt-4o", "openai");
+    // A client-invented id no catalog lists, so the sync below never names it.
+    await ModelModel.ensureModelExists("gpt-4o[1m]", "openai");
+
+    modelFetchers.openai = async () => [
+      {
+        id: "gpt-4o",
+        displayName: "GPT-4o",
+        provider: "openai" as SupportedProvider,
+      },
+    ];
+
+    await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "openai",
+      apiKeyValue: "test-key",
+    });
+
+    // The catalog returned it, so it is an ordinary synced model now and
+    // deleting the key can clean it up.
+    const synced = await ModelModel.findByProviderAndModelId(
+      "openai",
+      "gpt-4o",
+    );
+    expect(synced?.discoveredViaLlmProxy).toBe(false);
+
+    // Nothing returned this one, so it keeps the protection that lets a custom
+    // price survive having no API key link.
+    const untouched = await ModelModel.findByProviderAndModelId(
+      "openai",
+      "gpt-4o[1m]",
+    );
+    expect(untouched?.discoveredViaLlmProxy).toBe(true);
   });
 
   test("forceRefresh resets custom pricing, normal sync preserves it", async ({
@@ -290,10 +457,10 @@ describe("ModelSyncService", () => {
     expect(flashAfterResync?.outputModalities).toEqual(["text", "image"]);
   });
 
-  test("normalizes gemini-embedding-2-preview as multimodal during sync", () => {
+  test("normalizes gemini-embedding-2 as multimodal during sync", () => {
     const capabilities = resolveModelCapabilities({
       provider: "gemini",
-      modelId: "gemini-embedding-2-preview",
+      modelId: "gemini-embedding-2",
       capabilities: {
         description: "Gemini Embedding 2 Preview",
         contextLength: null,
@@ -301,6 +468,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: true,
+        supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -311,6 +479,67 @@ describe("ModelSyncService", () => {
     expect(capabilities.inputModalities).toEqual(["text", "image"]);
     expect(capabilities.outputModalities).toEqual([]);
     expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("normalizes KB-supported Bedrock embedding models to the KB client's modality support", () => {
+    // Titan Multimodal G1: whatever the registries say, the row must reflect the
+    // KB client's image path.
+    const titanImage = resolveModelCapabilities({
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-image-v1",
+      capabilities: {
+        description: "Titan Multimodal Embeddings G1",
+        contextLength: null,
+        outputLength: null,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: null,
+        supportedEndpoints: null,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
+      },
+    });
+    expect(titanImage.inputModalities).toEqual(["text", "image"]);
+    expect(titanImage.outputModalities).toEqual([]);
+    expect(titanImage.supportsToolCalling).toBe(false);
+
+    // Titan text: the vendor entry (Cohere direct also takes images for their
+    // models; Titan text does not) can't out-vote the KB client's text-only path.
+    const titanText = resolveModelCapabilities({
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-text-v2:0",
+      capabilities: {
+        description: "Titan Text Embeddings V2",
+        contextLength: null,
+        outputLength: null,
+        inputModalities: ["text", "image"],
+        outputModalities: null,
+        supportsToolCalling: null,
+        supportedEndpoints: null,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
+      },
+    });
+    expect(titanText.inputModalities).toEqual(["text"]);
+
+    // A Cohere profile resolves through its underlying foundation-model id.
+    const cohereProfile = resolveModelCapabilities({
+      provider: "bedrock",
+      modelId: "us.cohere.embed-english-v3",
+      underlyingModelName: "cohere.embed-english-v3",
+    });
+    expect(cohereProfile.inputModalities).toEqual(["text", "image"]);
+
+    // Non-embedding Bedrock models are untouched by the normalization.
+    const chat = resolveModelCapabilities({
+      provider: "bedrock",
+      modelId: "us.anthropic.claude-opus-5-v1:0",
+    });
+    expect(chat.inputModalities).toBeNull();
   });
 
   test("records perplexity models as tool-less when nothing upstream declares tool support", () => {
@@ -439,6 +668,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text", "image"],
         outputModalities: ["text"],
         supportsToolCalling: false,
+        supportedEndpoints: null,
         promptPricePerToken: null,
         completionPricePerToken: null,
         cacheReadPricePerToken: null,
@@ -460,6 +690,7 @@ describe("ModelSyncService", () => {
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: false,
+        supportedEndpoints: null,
         promptPricePerToken: "0.0000002",
         completionPricePerToken: "0.0000008",
         cacheReadPricePerToken: null,

@@ -1,7 +1,12 @@
 import { describe, expect, test } from "@/test";
 import {
+  InsertKnowledgeBaseConnectorSchema,
+  UpdateKnowledgeBaseConnectorSchema,
+} from "./knowledge-base-connector";
+import {
   ConfluenceConfigSchema,
   ConnectorConfigSchema,
+  ConnectorCredentialsSchema,
   GithubConfigSchema,
   GitlabConfigSchema,
   JiraConfigSchema,
@@ -232,6 +237,86 @@ describe("knowledge-connector schemas", () => {
       if (result.type === "confluence") {
         expect(result.confluenceUrl).toBe("https://mycompany.atlassian.net");
       }
+    });
+  });
+
+  /**
+   * Credentials belong in the connector's vaulted secret bag, never in `config`
+   * — which is persisted as jsonb and echoed back verbatim by the
+   * create/update knowledge connector MCP tools. The tools take `config` as a
+   * free-form object and expose no credentials field, so a model has nowhere
+   * else to put a token it invents; only these schemas keep it out of the
+   * database and the tool result. A `.passthrough()`/`.loose()`/`.catchall()`
+   * on any member of the union would silently reopen that path.
+   */
+  describe("credential fields never survive into config", () => {
+    const credentialKeys = Object.keys(ConnectorCredentialsSchema.shape);
+    const smuggled = "smuggled-credential-value";
+    const smuggledCredentials = Object.fromEntries(
+      credentialKeys.map((key) => [key, smuggled]),
+    );
+
+    function expectStripped(parsed: unknown) {
+      expect(JSON.stringify(parsed)).not.toContain(smuggled);
+      for (const key of credentialKeys) {
+        expect(parsed).not.toHaveProperty(key);
+      }
+    }
+
+    // Guards the assertions below: an empty key list would make every
+    // stripping check pass without testing anything, and deriving the list
+    // means a newly added credential field is covered without editing this.
+    test("derives a non-empty key list from the credentials bag", () => {
+      expect(credentialKeys).toContain("apiToken");
+      expect(credentialKeys.length).toBeGreaterThan(1);
+    });
+
+    test.each([
+      [
+        "jira",
+        { type: "jira", jiraBaseUrl: "mycompany.atlassian.net", isCloud: true },
+      ],
+      [
+        "github",
+        { type: "github", githubUrl: "api.github.com", owner: "test-org" },
+      ],
+      [
+        "web_crawler",
+        { type: "web_crawler", startUrl: "https://docs.example.com" },
+      ],
+    ])("ConnectorConfigSchema strips them from a %s config", (_type, base) => {
+      expectStripped(
+        ConnectorConfigSchema.parse({ ...base, ...smuggledCredentials }),
+      );
+    });
+
+    test("the connector create write path strips them", () => {
+      const parsed = InsertKnowledgeBaseConnectorSchema.parse({
+        organizationId: "org-1",
+        name: "connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "mycompany.atlassian.net",
+          isCloud: true,
+          ...smuggledCredentials,
+        },
+      });
+      expect(JSON.stringify(parsed)).not.toContain(smuggled);
+      expectStripped(parsed.config);
+    });
+
+    test("the connector update write path strips them", () => {
+      const parsed = UpdateKnowledgeBaseConnectorSchema.partial().parse({
+        config: {
+          type: "jira",
+          jiraBaseUrl: "mycompany.atlassian.net",
+          isCloud: true,
+          ...smuggledCredentials,
+        },
+      });
+      expect(JSON.stringify(parsed)).not.toContain(smuggled);
+      expectStripped(parsed.config);
     });
   });
 

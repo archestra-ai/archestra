@@ -20,6 +20,10 @@ export const RouteId = {
   UpdateAgentToolExclusions: "updateAgentToolExclusions",
   GetAgentSubagentExclusions: "getAgentSubagentExclusions",
   UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",
+  GetAgentSkills: "getAgentSkills",
+  UpdateAgentSkills: "updateAgentSkills",
+  GetAgentSkillExclusions: "getAgentSkillExclusions",
+  UpdateAgentSkillExclusions: "updateAgentSkillExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -56,6 +60,9 @@ export const RouteId = {
   // Config Routes
   GetConfig: "getConfig",
   GetPublicConfig: "getPublicConfig",
+
+  // RUM Routes
+  IngestRumEvents: "ingestRumEvents",
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
@@ -320,6 +327,12 @@ export const RouteId = {
     "githubCopilotListModelsWithDefaultAgent",
   GithubCopilotListModelsWithAgent: "githubCopilotListModelsWithAgent",
 
+  // Proxy Routes - GitHub Copilot Responses API (the surface Copilot's
+  // Codex/GPT-5.x models are served on; they reject /chat/completions)
+  GithubCopilotResponsesWithDefaultAgent:
+    "githubCopilotResponsesWithDefaultAgent",
+  GithubCopilotResponsesWithAgent: "githubCopilotResponsesWithAgent",
+
   // GitHub Copilot device-flow sign-in (creates personal provider keys)
   GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
   GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",
@@ -342,6 +355,11 @@ export const RouteId = {
   // ChatGPT/Codex subscription as an OpenAI provider credential
   OpenaiCodexDeviceAuthStart: "openaiCodexDeviceAuthStart",
   OpenaiCodexDeviceAuthPoll: "openaiCodexDeviceAuthPoll",
+
+  // xAI "X Premium (SuperGrok)" device-flow sign-in — connects an X Premium
+  // subscription as an xAI provider credential
+  XaiSubscriptionDeviceAuthStart: "xaiSubscriptionDeviceAuthStart",
+  XaiSubscriptionDeviceAuthPoll: "xaiSubscriptionDeviceAuthPoll",
 
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
@@ -601,6 +619,8 @@ export const RouteId = {
   GetKnowledgeBase: "getKnowledgeBase",
   UpdateKnowledgeBase: "updateKnowledgeBase",
   DeleteKnowledgeBase: "deleteKnowledgeBase",
+  RestoreKnowledgeBase: "restoreKnowledgeBase",
+  PermanentlyDeleteKnowledgeBase: "permanentlyDeleteKnowledgeBase",
   GetKnowledgeBaseHealth: "getKnowledgeBaseHealth",
 
   // Knowledge Base Connector Routes
@@ -611,6 +631,8 @@ export const RouteId = {
   GetConnectorDocument: "getConnectorDocument",
   UpdateConnector: "updateConnector",
   DeleteConnector: "deleteConnector",
+  RestoreConnector: "restoreConnector",
+  PermanentlyDeleteConnector: "permanentlyDeleteConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
   TriggerPermissionSync: "triggerPermissionSync",
@@ -620,6 +642,8 @@ export const RouteId = {
   DeleteConnectorMemberOverride: "deleteConnectorMemberOverride",
   ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
+  StartGoogleDriveConnectorOAuth: "startGoogleDriveConnectorOAuth",
+  CompleteGoogleDriveConnectorOAuth: "completeGoogleDriveConnectorOAuth",
 
   // Connector Knowledge Base Assignment Routes
   AssignConnectorToKnowledgeBases: "assignConnectorToKnowledgeBases",

@@ -185,7 +185,7 @@ Some skills only work in specific environments — a Python interpreter, a parti
 
 ## Distribution to external clients
 
-The two skill tools are plain MCP tools. Any external client — Claude Code, Cursor, Codex, n8n — that connects to an agent's MCP gateway sees them alongside the rest of that agent's tools and gets the same progressive-disclosure flow. A skill authored once in Archestra is reachable from everywhere the agent is plugged in, with no `SKILL.md` copies to keep in sync. To hand skills to a client as portable bundles instead, see [Sharing Skills](./platform-agent-skills-sharing).
+The two skill tools are plain MCP tools. Any external client — Claude Code, Cursor, Codex, n8n — that connects to an agent's MCP gateway sees them alongside the rest of that agent's tools and gets the same progressive-disclosure flow. A skill authored once in Archestra is reachable from everywhere the agent is plugged in, with no `SKILL.md` copies to keep in sync. To hand skills to a client as portable bundles instead, see [Sharing Skills](./platform-agent-skills-sharing). A gateway can also publish skills as `skill://` resources, which a client lists alongside its own skills — see [Publishing Skills over MCP](./platform-mcp-gateway-skills).
 
 ## Skills vs Agents
 

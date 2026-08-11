@@ -416,6 +416,40 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/chat");
   });
 
+  it("offers a new incognito chat only when the feature is enabled", () => {
+    const { rerender } = render(
+      <ConversationSearchPalette {...defaultProps} />,
+    );
+    expect(screen.queryByText("New incognito chat")).not.toBeInTheDocument();
+
+    vi.mocked(useFeature).mockReturnValue(true);
+    rerender(<ConversationSearchPalette {...defaultProps} />);
+
+    fireEvent.click(screen.getByText("New incognito chat"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat?incognito=1");
+  });
+
+  it("shows the project a chat belongs to, like the sidebar does", () => {
+    mockUseConversations.mockReturnValue({
+      data: [
+        {
+          id: "conv-1",
+          title: "First conversation",
+          updatedAt: new Date().toISOString(),
+          lastMessageAt: new Date().toISOString(),
+          messages: [],
+          projectName: "Acme Redesign",
+        },
+      ],
+      isLoading: false,
+      isFetching: false,
+    });
+
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(screen.getByText("Acme Redesign")).toBeInTheDocument();
+  });
+
   it("does not offer the removed Client Credentials destination", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
     expect(

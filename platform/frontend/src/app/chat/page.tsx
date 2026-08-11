@@ -4,6 +4,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ChatMessageFeedback,
   type ChatSkillMetadata,
+  type ThinkingEffortSetting,
   toPlaceholderTitle,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -56,6 +57,7 @@ import {
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
@@ -156,6 +158,11 @@ import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
+  generateIncognitoKey,
+  isActionAvailableForConversation,
+} from "@/lib/chat/incognito";
+import { createLatestWriteQueue } from "@/lib/chat/latest-write-queue";
+import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,
 } from "@/lib/chat/pending-chat-handoff-files";
@@ -165,9 +172,15 @@ import {
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
 import {
+  foldConfirmedThinkingEffort,
+  writePendingThinkingEffort,
+} from "@/lib/chat/thinking-effort-cache";
+import {
+  agentNotRecommendedForModel,
   agentRequiresPerUserConnect,
   agentToolsUnavailableForModel,
   deriveModelSource,
+  getAgentSubscriptionConnection,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig } from "@/lib/config/config.query";
@@ -175,6 +188,7 @@ import {
   type ConnectivityState,
   useConnectivity,
 } from "@/lib/config/connectivity";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -242,6 +256,7 @@ export function ChatPageContent({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const appName = useAppName();
 
   const [conversationId, setConversationId] = useState<string | undefined>(
     routeConversationId,
@@ -445,6 +460,8 @@ export function ChatPageContent({
     provider: initialProvider,
     modelSource: initialModelSource,
     setApiKeyId: setInitialApiKeyId,
+    thinkingEffort: initialThinkingEffort,
+    setThinkingEffort: setInitialThinkingEffort,
     onAgentChange: handleInitialAgentChange,
     onModelChange: handleInitialModelChange,
     onProviderChange: handleInitialProviderChange,
@@ -464,6 +481,22 @@ export function ChatPageContent({
     isProjectLoading: !!newChatProjectId && isNewChatProjectPending,
     routeConversationId,
   });
+
+  // Whether the NEXT chat created from the new-chat composer is incognito.
+  // Only meaningful pre-conversation; reset after a successful create so a
+  // later new chat never inherits it silently.
+  const [isIncognitoDraft, setIsIncognitoDraft] = useState(false);
+
+  // `?incognito=1` (command palette entry / Alt+I) arms the composer toggle.
+  // One-shot, same posture as user_prompt and skillId: the param is stripped
+  // once applied, so a reload can't silently re-arm it and a second Alt+I is a
+  // real navigation rather than a no-op push of an identical URL.
+  const urlIncognitoDraft = searchParams.get("incognito") === "1";
+  useEffect(() => {
+    if (!urlIncognitoDraft) return;
+    setIsIncognitoDraft(true);
+    clearIncognitoQueryParam({ pathname, router, searchParams });
+  }, [urlIncognitoDraft, pathname, router, searchParams]);
 
   // Persist the user's (model, key) pick as their member default for the
   // existing-conversation handlers below (the initial handlers persist via the
@@ -684,7 +717,9 @@ export function ChatPageContent({
   const canManageShare =
     !!conversationId &&
     !!conversation &&
-    conversation.userId === session?.user.id;
+    conversation.userId === session?.user.id &&
+    // Incognito conversations cannot be shared (the backend rejects it).
+    isActionAvailableForConversation(conversation, "share");
   useConversationShare(canManageShare ? conversationId : undefined);
 
   // Turning this chat into a project is owner-only (same as sharing) and
@@ -977,6 +1012,29 @@ export function ChatPageContent({
     [conversationAgent, conversationModelId, chatModels],
   );
 
+  // A small local model (e.g. a 4B Ollama tag) paired with a tooled agent will
+  // usually still run the loop, just unreliably — so this warns where the
+  // no-tools notice states, and defers to it when both would apply.
+  const initialNotRecommended = useMemo(
+    () =>
+      agentNotRecommendedForModel({
+        agent: internalAgents.find((a) => a.id === initialAgentId),
+        selectedModelId: initialModel,
+        models: chatModels,
+      }),
+    [internalAgents, initialAgentId, initialModel, chatModels],
+  );
+
+  const conversationNotRecommended = useMemo(
+    () =>
+      agentNotRecommendedForModel({
+        agent: conversationAgent,
+        selectedModelId: conversationModelId,
+        models: chatModels,
+      }),
+    [conversationAgent, conversationModelId, chatModels],
+  );
+
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
     const modelId = conversationId ? conversationModelId : initialModel;
@@ -999,6 +1057,11 @@ export function ChatPageContent({
   const updateConversationMutation = useUpdateConversation();
   const updateConversationMutateRef = useRef(updateConversationMutation.mutate);
   updateConversationMutateRef.current = updateConversationMutation.mutate;
+  const updateConversationMutateAsyncRef = useRef(
+    updateConversationMutation.mutateAsync,
+  );
+  updateConversationMutateAsyncRef.current =
+    updateConversationMutation.mutateAsync;
 
   // Handle model change — use refs for chatModels and conversation to keep
   // callback reference stable. A new callback reference would re-trigger
@@ -1042,6 +1105,85 @@ export function ChatPageContent({
       persistMemberDefaultModel(modelId, chatApiKeyId);
     },
     [persistMemberDefaultModel],
+  );
+
+  // The composer's own state is the one source for the depth. Finishing a
+  // message invalidates the conversation query, so the row cannot hold an
+  // unconfirmed pick — the refetch would hand back the value the persist request
+  // has not reached yet and silently undo the click.
+  // Boxed so that picking auto — which is itself null — is distinguishable from
+  // having nothing pending.
+  const [pendingThinkingEffort, setPendingThinkingEffortState] = useState<{
+    effort: ThinkingEffortSetting;
+  } | null>(null);
+  const settlePendingThinkingEffortRef = useRef(
+    (effort: ThinkingEffortSetting) => {
+      // Leaves a newer pick alone — it owns the control now.
+      setPendingThinkingEffortState((current) =>
+        current?.effort === effort ? null : current,
+      );
+    },
+  );
+  const queryClientRef = useRef(queryClient);
+  queryClientRef.current = queryClient;
+
+  const thinkingEffortQueueRef = useRef(
+    createLatestWriteQueue<{
+      conversationId: string;
+      effort: ThinkingEffortSetting;
+    }>(async ({ conversationId: id, effort }) => {
+      const updated = await updateConversationMutateAsyncRef.current({
+        id,
+        thinkingEffort: effort,
+      });
+      if (updated) {
+        foldConfirmedThinkingEffort(queryClientRef.current, id, effort);
+      }
+      // callApi reports a failure and resolves with null, so a rejected write
+      // arrives here too; dropping the pick falls the control back to the row.
+      settlePendingThinkingEffortRef.current(effort);
+    }),
+  );
+
+  // A different chat has its own depth; carrying this one's pick across would
+  // show the wrong value and send it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on conversation switch — conversationId is the trigger, not a read
+  useEffect(() => {
+    setPendingThinkingEffortState(null);
+  }, [conversationId]);
+
+  // Turns the composer does not send itself — a queued message draining, a
+  // regenerate — read the pick from here rather than from this component.
+  // Cleared on the way out too: a pick left behind for a chat the user has
+  // navigated away from would still be read by a turn draining for that chat,
+  // long after the composer forgot it.
+  useEffect(() => {
+    if (!conversationId) return;
+    writePendingThinkingEffort(
+      queryClient,
+      conversationId,
+      pendingThinkingEffort,
+    );
+    return () => {
+      writePendingThinkingEffort(queryClient, conversationId, null);
+    };
+  }, [conversationId, pendingThinkingEffort, queryClient]);
+
+  const displayedThinkingEffort = pendingThinkingEffort
+    ? pendingThinkingEffort.effort
+    : conversation?.thinkingEffort;
+
+  const handleThinkingEffortChange = useCallback(
+    (effort: ThinkingEffortSetting) => {
+      const conv = conversationRef.current;
+      if (!conv) return;
+      setPendingThinkingEffortState({ effort });
+      thinkingEffortQueueRef.current.set({
+        conversationId: conv.id,
+        effort,
+      });
+    },
+    [],
   );
 
   // Handle API key change - preselect best model for the new key's provider.
@@ -1902,7 +2044,7 @@ export function ChatPageContent({
     }
   };
 
-  const handleSubmit: ArchestraPromptInputProps["onSubmit"] = (
+  const handleSubmit: ArchestraPromptInputProps["onSubmit"] = async (
     message,
     e,
     options,
@@ -2291,35 +2433,49 @@ export function ChatPageContent({
         chatApiKeyId: initialApiKeyId,
         title,
         projectId: searchParams.get("project"),
+        thinkingEffort: initialThinkingEffort,
       });
       if (!input) {
         return false;
       }
 
-      createConversationMutation.mutate(input, {
-        onSuccess: (newConversation) => {
-          if (newConversation) {
-            // A recording started from scratch (before this chat had an id)
-            // becomes this conversation's recording now that its id exists, so
-            // the timer and buffered capture carry across the transition.
-            appSessionRecorder.adoptConversation(newConversation.id);
-            // A review deep link (/chat/new -> /chat with reviewSrc) adopts the
-            // submission under the fresh id here, so the replay panel survives
-            // the navigation to /chat/<id> (which drops the URL params).
-            const pendingReview = pendingReviewContextRef.current;
-            if (pendingReview) {
-              setReviewContext(newConversation.id, pendingReview);
+      // Incognito: the conversation DEK is generated here, in the browser,
+      // BEFORE the create request. It rides along as a header; the mutation's
+      // onSuccess stores it under the fresh conversation id before any
+      // navigation or stream start reads it.
+      const incognitoKey = isIncognitoDraft ? generateIncognitoKey() : null;
+
+      createConversationMutation.mutate(
+        incognitoKey ? { ...input, incognito: true, incognitoKey } : input,
+        {
+          onSuccess: (newConversation) => {
+            if (newConversation) {
+              setIsIncognitoDraft(false);
+              // A recording started from scratch (before this chat had an id)
+              // becomes this conversation's recording now that its id exists,
+              // so the timer and buffered capture carry across the transition.
+              appSessionRecorder.adoptConversation(newConversation.id);
+              // A review deep link (/chat/new -> /chat with reviewSrc) adopts
+              // the submission under the fresh id here, so the replay panel
+              // survives the navigation to /chat/<id> (which drops the URL
+              // params).
+              const pendingReview = pendingReviewContextRef.current;
+              if (pendingReview) {
+                setReviewContext(newConversation.id, pendingReview);
+              }
+              void onSuccess?.(newConversation);
             }
-            void onSuccess?.(newConversation);
-          }
+          },
         },
-      });
+      );
       return true;
     },
     [
       initialAgentId,
       initialModel,
       initialApiKeyId,
+      isIncognitoDraft,
+      initialThinkingEffort,
       createConversationMutation,
       searchParams,
       appSessionRecorder.adoptConversation,
@@ -2831,6 +2987,36 @@ export function ChatPageContent({
     );
   }
 
+  // Incognito tombstone: the conversation exists and the viewer may see it,
+  // but this browser holds no (valid) encryption key, so the server returned
+  // the locked view. Deliberately its own branch — this is not a 404, the
+  // chat is real but undecryptable here.
+  if (conversationId && conversation?.contentLocked) {
+    return (
+      <div className="flex h-full w-full items-center justify-center p-8">
+        <Card className="w-full max-w-xl">
+          <CardHeader className="justify-items-center text-center gap-3 pt-8">
+            <IncognitoIcon className="mx-auto block size-14" />
+            <CardTitle className="text-xl">
+              This chat can&apos;t be unlocked
+            </CardTitle>
+            <CardDescription className="max-w-md text-sm leading-relaxed">
+              This is an incognito chat. Its encryption key existed only in the
+              browser that created it and wasn&apos;t found here — clearing
+              browser data or switching browsers removes the key. {appName}{" "}
+              cannot decrypt the messages.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center pb-8">
+            <Button asChild>
+              <Link href="/chat">Start a new chat</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // A chat opened via a handoff (project composer, app, SSO, a2a, deep link)
   // lands on /chat carrying a `user_prompt` (or a stashed-attachments marker),
   // auto-creates a conversation, then navigates to /chat/<id>. Rendering the
@@ -3061,21 +3247,28 @@ export function ChatPageContent({
                               </div>
                             </div>
                           </div>
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
-                            <Button
-                              onClick={() => {
-                                if (shouldPromptForForkAgentSelection) {
-                                  setIsForkDialogOpen(true);
-                                  return;
-                                }
+                          {/* Forking is rejected for incognito chats, so the
+                              affordance is hidden rather than left to fail. */}
+                          {isActionAvailableForConversation(
+                            conversation,
+                            "fork",
+                          ) && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
+                              <Button
+                                onClick={() => {
+                                  if (shouldPromptForForkAgentSelection) {
+                                    setIsForkDialogOpen(true);
+                                    return;
+                                  }
 
-                                void handleForkConversation();
-                              }}
-                            >
-                              <Plus className="h-4 w-4" />
-                              Start New Chat from here
-                            </Button>
-                          </div>
+                                  void handleForkConversation();
+                                }}
+                              >
+                                <Plus className="h-4 w-4" />
+                                Start New Chat from here
+                              </Button>
+                            </div>
+                          )}
                         </div>
                         <div className="text-center">
                           <Version inline />
@@ -3124,6 +3317,9 @@ export function ChatPageContent({
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               toolsUnavailable={conversationToolsUnavailable}
+                              notRecommendedForAgents={
+                                conversationNotRecommended
+                              }
                               onStop={handleStopStreaming}
                               status={status}
                               selectedModel={conversationModelId ?? ""}
@@ -3161,7 +3357,14 @@ export function ChatPageContent({
                                 conversationPerUserConnect.provider
                               }
                               isContextCompacting={isContextCompacting}
-                              onCompactConversation={handleCompactConversation}
+                              onCompactConversation={
+                                isActionAvailableForConversation(
+                                  conversation,
+                                  "compaction",
+                                )
+                                  ? handleCompactConversation
+                                  : undefined
+                              }
                               isPlaywrightSetupVisible={
                                 isPlaywrightSetupVisible
                               }
@@ -3170,6 +3373,10 @@ export function ChatPageContent({
                               modelSource={conversationModelSource}
                               onResetModelOverride={
                                 handleConversationResetModelOverride
+                              }
+                              thinkingEffort={displayedThinkingEffort}
+                              onThinkingEffortChange={
+                                handleThinkingEffortChange
                               }
                               agentRequiresPerUserConnect={
                                 isApplyingAgentSelection ||
@@ -3309,6 +3516,9 @@ export function ChatPageContent({
                                 <ArchestraPromptInput
                                   onSubmit={handleInitialSubmit}
                                   toolsUnavailable={initialToolsUnavailable}
+                                  notRecommendedForAgents={
+                                    initialNotRecommended
+                                  }
                                   status={
                                     createConversationMutation.isPending
                                       ? "submitted"
@@ -3349,9 +3559,15 @@ export function ChatPageContent({
                                   }
                                   selectorAgentId={initialAgentId}
                                   onAgentChange={handleInitialAgentChange}
+                                  incognito={isIncognitoDraft}
+                                  onIncognitoChange={setIsIncognitoDraft}
                                   modelSource={initialModelSource}
                                   onResetModelOverride={
                                     handleResetModelOverride
+                                  }
+                                  thinkingEffort={initialThinkingEffort}
+                                  onThinkingEffortChange={
+                                    setInitialThinkingEffort
                                   }
                                   agentRequiresPerUserConnect={
                                     isAgentSubscriptionMetadataPending ||
@@ -3516,6 +3732,21 @@ function clearUserPromptQueryParam(params: {
   params.router.replace(nextUrl);
 }
 
+// `incognito` arms the composer toggle once (command palette / Alt+I) and is
+// then dropped, same one-shot posture as user_prompt and skillId.
+function clearIncognitoQueryParam(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  nextSearchParams.delete("incognito");
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
+}
+
 // skillId is a one-shot deep-link param (same posture as user_prompt): drop it
 // once the skill has been resolved and staged so it is never processed twice.
 function clearSkillIdQueryParam(params: {
@@ -3616,52 +3847,6 @@ function ReviewChatNoKeyNotice({ onKeyAdded }: { onKeyAdded: () => void }) {
       />
     </div>
   );
-}
-
-function getAgentSubscriptionConnection(params: {
-  agent:
-    | {
-        llmApiKeyId?: string | null;
-        resolvedLlmProvider?: SupportedProvider;
-        llmProviderRequiresPerUserCredential?: boolean;
-      }
-    | undefined;
-  credentials: LlmProviderApiKey[];
-  userId?: string;
-}) {
-  const { agent, credentials, userId } = params;
-  const pinnedCredential = credentials.find(
-    (credential) => credential.id === agent?.llmApiKeyId,
-  );
-  const requiresConnection = Boolean(
-    agent?.llmProviderRequiresPerUserCredential ||
-      (pinnedCredential?.provider === "openai" &&
-        (pinnedCredential.isChatgptSubscription === true ||
-          pinnedCredential.name.trim().toLowerCase() ===
-            "chatgpt subscription")),
-  );
-  if (!requiresConnection) {
-    return { requiresConnection: false, isConnected: undefined };
-  }
-
-  const provider = pinnedCredential?.provider ?? agent?.resolvedLlmProvider;
-  const isChatgptSubscription =
-    pinnedCredential?.provider === "openai" &&
-    (pinnedCredential.isChatgptSubscription === true ||
-      pinnedCredential.name.trim().toLowerCase() === "chatgpt subscription");
-  const isConnected = Boolean(
-    userId &&
-      credentials.some(
-        (credential) =>
-          credential.userId === userId &&
-          (isChatgptSubscription
-            ? credential.provider === "openai" &&
-              (credential.isChatgptSubscription === true ||
-                credential.name.trim().toLowerCase() === "chatgpt subscription")
-            : credential.provider === provider),
-      ),
-  );
-  return { requiresConnection, isConnected };
 }
 
 function subscriptionDebug(event: string, data: Record<string, unknown>) {

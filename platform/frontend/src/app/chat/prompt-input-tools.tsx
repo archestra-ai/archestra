@@ -4,7 +4,10 @@ import {
   type ContextWindowBreakdown,
   E2eTestId,
   providerDisplayNames,
+  SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
+  subscriptionKindForProvider,
+  type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { memo, useCallback } from "react";
@@ -15,13 +18,16 @@ import {
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
 import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
+import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-recommendation-notice";
 import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
+import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
+import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -36,7 +42,10 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { providerToLogoProvider } from "@/lib/provider-logos";
+import { cn } from "@/lib/utils";
 
 export interface ChatPromptInputToolsProps {
   selectedModel: string;
@@ -53,6 +62,21 @@ export interface ChatPromptInputToolsProps {
   onProviderChange?: (provider: SupportedProvider, apiKeyId: string) => void;
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
+  /**
+   * Hide the attachment button entirely (incognito conversations: the backend
+   * rejects attachments, so no affordance — not even a disabled one — shows).
+   */
+  attachmentsHidden?: boolean;
+  /**
+   * Whether the next chat will be created incognito. New-chat composer only —
+   * the toggle renders only while there is no conversation yet.
+   */
+  incognito?: boolean;
+  /**
+   * Provided only by the new-chat composer; together with the
+   * `chatIncognitoEnabled` feature flag it enables the incognito toggle.
+   */
+  onIncognitoChange?: (incognito: boolean) => void;
   /** Whether the agent has a code sandbox available (allows any file type) */
   sandboxAvailable?: boolean;
   /** Whether models are still loading - passed to API key selector */
@@ -89,8 +113,17 @@ export interface ChatPromptInputToolsProps {
    * shifts when it toggles.
    */
   toolsUnavailable?: boolean;
+  /**
+   * The selected model is small enough that the agent's tools may be called
+   * unreliably over a multi-step task. Same compact-chip treatment as
+   * {@link toolsUnavailable}, and mutually exclusive with it.
+   */
+  notRecommendedForAgents?: boolean;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
+  /** Reasoning depth for Gemini flash models; ignored by every other model. */
+  thinkingEffort?: ThinkingEffortSetting;
+  onThinkingEffortChange?: (effort: ThinkingEffortSetting) => void;
   /**
    * The selected agent pins a per-user-credential model (e.g. GitHub Copilot)
    * that the viewer hasn't connected. Keep the agent's model and subscription
@@ -134,6 +167,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onApiKeyChange,
   onProviderChange,
   allowFileUploads = false,
+  attachmentsHidden = false,
+  incognito = false,
+  onIncognitoChange,
   sandboxAvailable = false,
   isModelsLoading = false,
   tokensUsed = 0,
@@ -148,7 +184,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
+  notRecommendedForAgents = false,
   onResetModelOverride,
+  thinkingEffort = null,
+  onThinkingEffortChange,
   agentRequiresPerUserConnect = false,
   subscriptionConnectRequired = false,
   subscriptionProvider,
@@ -169,12 +208,16 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     ? providerToLogoProvider[currentProvider]
     : null;
   const providerToConnect = subscriptionProvider ?? currentProvider;
-  const subscriptionProviderLabel =
-    providerToConnect === "openai"
-      ? "ChatGPT"
-      : providerToConnect
-        ? (providerDisplayNames[providerToConnect] ?? providerToConnect)
-        : "subscription";
+  const subscriptionKind = providerToConnect
+    ? subscriptionKindForProvider(providerToConnect)
+    : null;
+  const subscriptionSignInTitle = subscriptionKind
+    ? SUBSCRIPTION_CREDENTIALS[subscriptionKind].connect.signInTitle
+    : `Sign in with ${
+        providerToConnect
+          ? (providerDisplayNames[providerToConnect] ?? providerToConnect)
+          : "subscription"
+      }`;
 
   // Label for the model-source badge. A custom model is a "chat override" when
   // it is scoped to an existing conversation, and a "user override" otherwise
@@ -200,6 +243,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const { data: canUpdateAgentSettings } = useHasPermissions({
     agentSettings: ["update"],
   });
+
+  // Incognito toggle: only on the new-chat composer (no conversation yet —
+  // the same gate InitialAgentSelector uses via its callback prop) and only
+  // when the instance has incognito chats enabled.
+  const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
+  const appName = useAppName();
+  const showIncognitoToggle =
+    incognitoEnabled && !conversationId && !!onIncognitoChange;
 
   // RBAC: check if user can see agent picker and provider settings in chat
   const { data: canSeeAgentPicker } = useHasPermissions({
@@ -339,7 +390,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                               className="mt-2 h-7 gap-1.5 px-2 text-xs"
                               onClick={onSubscriptionConnect}
                             >
-                              Sign in with {subscriptionProviderLabel}
+                              {subscriptionSignInTitle}
                             </Button>
                           )}
                       </div>
@@ -360,6 +411,19 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                           suppressAutoSelect={agentRequiresPerUserConnect}
                           fallbackModelName={agentModelDisplayName}
                         />
+                        {onThinkingEffortChange && (
+                          <ThinkingEffortSelector
+                            selectedModel={selectedModel}
+                            apiKeyId={
+                              conversationId
+                                ? currentConversationChatApiKeyId
+                                : initialApiKeyId
+                            }
+                            value={thinkingEffort}
+                            onChange={onThinkingEffortChange}
+                            className="mt-2 w-fit"
+                          />
+                        )}
                       </div>
                     )}
                   </>
@@ -374,7 +438,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       className="h-7 px-2 text-xs"
                       onClick={onSubscriptionConnect}
                     >
-                      Sign in with {subscriptionProviderLabel}
+                      {subscriptionSignInTitle}
                     </Button>
                   )}
                 {tokensUsed > 0 && maxContextLength && (
@@ -411,8 +475,19 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </Popover>
         ))}
 
-      {/* File attachment button - always visible */}
-      {showFileUploadButton ? (
+      {/* Rendered beside whichever control the collapsed toolbar picked (the
+          logo shortcut or the three-dots menu) and outside the RBAC gate: a
+          warning that only exists inside a popover — or only for users who can
+          see provider settings — is a warning most narrow-viewport users never
+          get. The wide toolbar renders its own copy below. */}
+      {isNarrow && notRecommendedForAgents && (
+        <NotRecommendedForAgentsNoticeBadge />
+      )}
+
+      {/* File attachment button - always visible, except on incognito
+          conversations where the affordance is hidden entirely (the backend
+          rejects attachments there). */}
+      {attachmentsHidden ? null : showFileUploadButton ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -464,6 +539,43 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         </Tooltip>
       )}
 
+      {/* Incognito toggle — placed with the always-visible controls (next to
+          the attachment button) so it renders in both the wide and the
+          collapsed (narrow) toolbar without duplication. */}
+      {showIncognitoToggle && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={incognito}
+              aria-label="Incognito chat"
+              className={cn(
+                "h-8 px-2",
+                incognito &&
+                  "bg-accent text-accent-foreground hover:bg-accent/80",
+              )}
+              onClick={() => {
+                // Files staged before the toggle would ride the first message
+                // of a chat that rejects attachments — drop them now (the
+                // attach button hides while the toggle is on).
+                if (!incognito) {
+                  attachments.clear();
+                }
+                onIncognitoChange?.(!incognito);
+              }}
+            >
+              <IncognitoIcon className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={4} className="max-w-64">
+            Incognito chat: encrypted with a key that stays in this browser.{" "}
+            {appName} cannot read it. Not usable from other devices.
+          </TooltipContent>
+        </Tooltip>
+      )}
+
       {/* Wide: inline toolbar items */}
       {!isNarrow && (
         <>
@@ -485,7 +597,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 className="h-8 px-2 text-xs text-primary hover:text-primary"
                 onClick={onSubscriptionConnect}
               >
-                Sign in with {subscriptionProviderLabel}
+                {subscriptionSignInTitle}
               </Button>
             )}
           {!canSeeProviderSettings ? null : showDefaultLogo &&
@@ -535,7 +647,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   className="h-8 gap-1 px-2 text-xs text-primary hover:text-primary"
                   onClick={onSubscriptionConnect}
                 >
-                  Sign in with {subscriptionProviderLabel}
+                  {subscriptionSignInTitle}
                 </Button>
               )}
               {!subscriptionConnectRequired && (
@@ -550,6 +662,19 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   }
                   suppressAutoSelect={agentRequiresPerUserConnect}
                   fallbackModelName={agentModelDisplayName}
+                />
+              )}
+              {!subscriptionConnectRequired && onThinkingEffortChange && (
+                <ThinkingEffortSelector
+                  selectedModel={selectedModel}
+                  apiKeyId={
+                    conversationId
+                      ? currentConversationChatApiKeyId
+                      : initialApiKeyId
+                  }
+                  value={thinkingEffort}
+                  onChange={onThinkingEffortChange}
+                  className="mr-1"
                 />
               )}
               {modelSource && !subscriptionConnectRequired && (
@@ -570,6 +695,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </div>
           )}
           {toolsUnavailable && <NoToolsModelBadge />}
+          {notRecommendedForAgents && <NotRecommendedForAgentsNoticeBadge />}
           {tokensUsed > 0 && maxContextLength && (
             <ContextWindowDialog
               breakdown={contextWindow ?? null}

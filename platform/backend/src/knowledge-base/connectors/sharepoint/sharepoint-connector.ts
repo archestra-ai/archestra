@@ -19,13 +19,18 @@ import {
   BaseConnector,
   buildCheckpoint,
   extractErrorMessage,
+  resolveIngestibleImageMimeTypes,
 } from "../base-connector";
 import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
-import { parsePdfBuffer } from "../pdf-utils";
+import {
+  describePdfEmptyText,
+  describePdfExtractionWarning,
+  parsePdfBuffer,
+} from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
@@ -123,6 +128,8 @@ export class SharePointConnector extends BaseConnector {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
+    embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): Promise<number | null> {
     const parsed = parseSharePointConfig(params.config);
     if (!parsed) return null;
@@ -135,6 +142,11 @@ export class SharePointConnector extends BaseConnector {
       const safetyBufferedSyncFrom = syncFrom
         ? subtractSafetyBuffer(syncFrom)
         : undefined;
+      const imageMimeTypes = resolveIngestibleImageMimeTypes({
+        connectorImageMimeTypes: Object.values(IMAGE_MIME_TYPES),
+        embeddingInputModalities: params.embeddingInputModalities,
+        embeddingAcceptedImageMimeTypes: params.embeddingAcceptedImageMimeTypes,
+      });
 
       const client = this.getGraphClient(params.credentials, parsed);
       const siteResolution = await this.resolveSite(client, parsed.siteUrl);
@@ -161,6 +173,7 @@ export class SharePointConnector extends BaseConnector {
           recursive,
           maxDepth,
           syncFrom: safetyBufferedSyncFrom,
+          imageMimeTypes,
         });
       }
 
@@ -189,6 +202,7 @@ export class SharePointConnector extends BaseConnector {
     startTime?: Date;
     endTime?: Date;
     embeddingInputModalities?: ModelInputModality[];
+    embeddingAcceptedImageMimeTypes?: string[];
   }): AsyncGenerator<ConnectorSyncBatch> {
     const parsed = parseSharePointConfig(params.config);
     if (!parsed) {
@@ -204,8 +218,11 @@ export class SharePointConnector extends BaseConnector {
     const safetyBufferedSyncFrom = syncFrom
       ? subtractSafetyBuffer(syncFrom)
       : undefined;
-    const supportsImages =
-      params.embeddingInputModalities?.includes("image") ?? false;
+    const imageMimeTypes = resolveIngestibleImageMimeTypes({
+      connectorImageMimeTypes: Object.values(IMAGE_MIME_TYPES),
+      embeddingInputModalities: params.embeddingInputModalities,
+      embeddingAcceptedImageMimeTypes: params.embeddingAcceptedImageMimeTypes,
+    });
 
     // Single client instance — SDK handles token acquisition and refresh automatically.
     const client = this.getGraphClient(params.credentials, parsed);
@@ -239,7 +256,7 @@ export class SharePointConnector extends BaseConnector {
         recursive,
         includePages: parsed.includePages,
         syncFrom,
-        supportsImages,
+        imageMimeTypes: [...imageMimeTypes],
       },
       "Starting SharePoint sync",
     );
@@ -254,7 +271,7 @@ export class SharePointConnector extends BaseConnector {
       progress,
       syncFrom: safetyBufferedSyncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
     });
 
     // Sync site pages if enabled
@@ -337,7 +354,7 @@ export class SharePointConnector extends BaseConnector {
     };
     syncFrom: string | undefined;
     batchSize: number;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
       client,
@@ -348,7 +365,7 @@ export class SharePointConnector extends BaseConnector {
       progress,
       syncFrom,
       batchSize,
-      supportsImages,
+      imageMimeTypes,
     } = params;
 
     const driveIds =
@@ -370,7 +387,7 @@ export class SharePointConnector extends BaseConnector {
         syncFrom,
         batchSize,
         hasMoreDrives: !isLastDrive,
-        supportsImages,
+        imageMimeTypes,
       });
     }
   }
@@ -405,7 +422,7 @@ export class SharePointConnector extends BaseConnector {
     syncFrom: string | undefined;
     batchSize: number;
     hasMoreDrives: boolean;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
       client,
@@ -417,7 +434,7 @@ export class SharePointConnector extends BaseConnector {
       syncFrom,
       batchSize,
       hasMoreDrives,
-      supportsImages,
+      imageMimeTypes,
     } = params;
 
     const adapter: FolderTraversalAdapter = {
@@ -451,7 +468,7 @@ export class SharePointConnector extends BaseConnector {
         syncFrom,
         batchSize,
         hasMoreFolders: hasMoreFolders || hasMoreDrives,
-        supportsImages,
+        imageMimeTypes,
       });
     }
   }
@@ -468,7 +485,7 @@ export class SharePointConnector extends BaseConnector {
     syncFrom: string | undefined;
     batchSize: number;
     hasMoreFolders: boolean;
-    supportsImages: boolean;
+    imageMimeTypes: ReadonlySet<string>;
   }): AsyncGenerator<ConnectorSyncBatch> {
     const {
       client,
@@ -479,7 +496,7 @@ export class SharePointConnector extends BaseConnector {
       syncFrom,
       batchSize,
       hasMoreFolders,
-      supportsImages,
+      imageMimeTypes,
     } = params;
 
     let url: string =
@@ -505,7 +522,7 @@ export class SharePointConnector extends BaseConnector {
         (item) =>
           item.file &&
           !item.folder &&
-          isSupportedFile(item.name, supportsImages) &&
+          isSupportedFile(item.name, imageMimeTypes) &&
           // Client-side incremental filter: Graph API does not support
           // $filter on lastModifiedDateTime for drive item children.
           isModifiedSince(item.lastModifiedDateTime, syncFrom),
@@ -524,7 +541,18 @@ export class SharePointConnector extends BaseConnector {
             );
             // Skip files with no extractable content or media to avoid indexing
             // title-only documents that provide no search value.
-            if (!result.text.trim() && !result.mediaContent) return null;
+            if (!result.text.trim() && !result.mediaContent) {
+              this.trackSkipped({
+                itemId: item.id,
+                name: item.name,
+                reason:
+                  result.emptyReason ??
+                  "Empty content — no text or media could be extracted",
+                category: "no_extractable_text",
+                sourceScope: { metadataField: "driveId", value: driveId },
+              });
+              return null;
+            }
             return driveItemToDocument(
               item,
               driveId,
@@ -535,6 +563,7 @@ export class SharePointConnector extends BaseConnector {
           fallback: null,
           itemId: item.id,
           resource: "driveItem",
+          itemUnavailable: true,
         });
         if (doc) documents.push(doc);
       }
@@ -581,6 +610,7 @@ export class SharePointConnector extends BaseConnector {
       yield {
         documents,
         failures: this.flushFailures(),
+        skipped: this.flushSkipped(),
         checkpoint: buildCheckpoint({
           type: "sharepoint",
           itemUpdatedAt: checkpointAt ? new Date(checkpointAt) : undefined,
@@ -631,6 +661,8 @@ export class SharePointConnector extends BaseConnector {
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
+    /** Why the text came back empty, for skip reporting on the run. */
+    emptyReason?: string;
   }> {
     const ext = getFileExtension(fileName);
     const contentPath = `/drives/${driveId}/items/${itemId}/content`;
@@ -654,8 +686,20 @@ export class SharePointConnector extends BaseConnector {
         .api(contentPath)
         .responseType(ResponseType.ARRAYBUFFER)
         .get()) as ArrayBuffer;
-      const text = await extractTextFromBinary(Buffer.from(arrayBuffer), ext);
-      return { text: text.slice(0, MAX_CONTENT_LENGTH) };
+      const extracted = await extractTextFromBinary(
+        Buffer.from(arrayBuffer),
+        ext,
+      );
+      if (extracted.warning) {
+        this.log.warn(
+          { itemId, fileName, reason: extracted.warning },
+          "SharePoint: PDF page extraction warning",
+        );
+      }
+      return {
+        text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        emptyReason: extracted.emptyReason,
+      };
     }
 
     // Image files: download as base64 for multimodal embedding
@@ -669,7 +713,10 @@ export class SharePointConnector extends BaseConnector {
           { fileName, sizeBytes: arrayBuffer.byteLength },
           "SharePoint: skipping oversized image",
         );
-        return { text: "" };
+        return {
+          text: "",
+          emptyReason: "Image exceeds the maximum size supported for embedding",
+        };
       }
       const mimeType = IMAGE_MIME_TYPES[ext] ?? "application/octet-stream";
       const data = Buffer.from(arrayBuffer).toString("base64");
@@ -731,12 +778,22 @@ export class SharePointConnector extends BaseConnector {
             );
             // Skip pages with no extractable content to avoid indexing
             // title-only documents that provide no search value.
-            if (!content.trim()) return null;
+            if (!content.trim()) {
+              this.trackSkipped({
+                itemId: page.id,
+                sourceId: `page-${page.id}`,
+                name: page.title || page.name,
+                reason: "Page has no extractable content",
+                category: "no_extractable_text",
+              });
+              return null;
+            }
             return sitePageToDocument(page, siteId, content);
           },
           fallback: null,
           itemId: page.id,
           resource: "sitePage",
+          itemUnavailable: true,
         });
         if (doc) documents.push(doc);
       }
@@ -774,6 +831,7 @@ export class SharePointConnector extends BaseConnector {
       yield {
         documents,
         failures: this.flushFailures(),
+        skipped: this.flushSkipped(),
         checkpoint: buildCheckpoint({
           type: "sharepoint",
           itemUpdatedAt: checkpointAt ? new Date(checkpointAt) : undefined,
@@ -824,9 +882,17 @@ export class SharePointConnector extends BaseConnector {
     recursive: boolean;
     maxDepth: number | undefined;
     syncFrom: string | undefined;
+    imageMimeTypes: ReadonlySet<string>;
   }): Promise<number> {
-    const { client, driveId, folderPath, recursive, maxDepth, syncFrom } =
-      params;
+    const {
+      client,
+      driveId,
+      folderPath,
+      recursive,
+      maxDepth,
+      syncFrom,
+      imageMimeTypes,
+    } = params;
 
     const adapter: FolderTraversalAdapter = {
       listDirectSubfolders: (parentId) =>
@@ -850,6 +916,7 @@ export class SharePointConnector extends BaseConnector {
         folderId,
         rootFolderPath: folderId === "root" ? folderPath : undefined,
         syncFrom,
+        imageMimeTypes,
       });
     }
 
@@ -862,8 +929,16 @@ export class SharePointConnector extends BaseConnector {
     folderId: string;
     rootFolderPath: string | undefined;
     syncFrom: string | undefined;
+    imageMimeTypes: ReadonlySet<string>;
   }): Promise<number> {
-    const { client, driveId, folderId, rootFolderPath, syncFrom } = params;
+    const {
+      client,
+      driveId,
+      folderId,
+      rootFolderPath,
+      syncFrom,
+      imageMimeTypes,
+    } = params;
 
     let url: string | undefined =
       folderId === "root"
@@ -879,7 +954,7 @@ export class SharePointConnector extends BaseConnector {
         (item) =>
           item.file &&
           !item.folder &&
-          isSupportedFile(item.name) &&
+          isSupportedFile(item.name, imageMimeTypes) &&
           isModifiedSince(item.lastModifiedDateTime, syncFrom),
       ).length;
       url = result["@odata.nextLink"] ?? undefined;
@@ -1155,12 +1230,15 @@ function buildSitePagesUrl(siteId: string, batchSize: number): string {
   return `${GRAPH_API_BASE}/sites/${siteId}/pages?${params.toString()}`;
 }
 
-function isSupportedFile(name: string, supportsImages = false): boolean {
+function isSupportedFile(
+  name: string,
+  imageMimeTypes: ReadonlySet<string>,
+): boolean {
   const ext = getFileExtension(name);
   return (
     SUPPORTED_TEXT_EXTENSIONS.has(ext) ||
     SUPPORTED_BINARY_EXTENSIONS.has(ext) ||
-    (supportsImages && SUPPORTED_IMAGE_EXTENSIONS.has(ext))
+    imageMimeTypes.has(IMAGE_MIME_TYPES[ext] ?? "")
   );
 }
 
@@ -1199,22 +1277,27 @@ function isModifiedSince(
 async function extractTextFromBinary(
   buffer: Buffer,
   ext: string,
-): Promise<string> {
+): Promise<{ text: string; emptyReason?: string; warning?: string }> {
   switch (ext) {
     case ".docx": {
-      return extractTextFromDocx(buffer);
+      return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
-      return parsePdfBuffer(buffer);
+      const result = await parsePdfBuffer(buffer);
+      return {
+        text: result.text,
+        emptyReason: describePdfEmptyText(result),
+        warning: describePdfExtractionWarning(result),
+      };
     }
     case ".pptx": {
-      return extractTextFromPptx(buffer);
+      return { text: await extractTextFromPptx(buffer) };
     }
     case ".xlsx": {
-      return extractTextFromXlsx(buffer);
+      return { text: await extractTextFromXlsx(buffer) };
     }
     default:
-      return "";
+      return { text: "" };
   }
 }
 

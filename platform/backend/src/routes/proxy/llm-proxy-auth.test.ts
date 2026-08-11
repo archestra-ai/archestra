@@ -5,6 +5,7 @@ import {
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { AgentLabelModel, AgentModel, VirtualApiKeyModel } from "@/models";
+import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import {
@@ -174,6 +175,67 @@ describe("validateVirtualApiKey", () => {
     await expect(validateVirtualApiKey(value, "anthropic")).rejects.toThrow(
       'Virtual API key is not mapped to provider "anthropic".',
     );
+  });
+
+  test("rejects a foreign subscription marker immediately after virtual-key resolution", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({
+      secret: {
+        apiKey: encodeXaiSubscriptionCredential({
+          refreshToken: "rt-never-forward",
+          userId: "x-user",
+        }),
+      },
+    });
+    const openaiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: openaiKey.id }],
+      name: "out-of-band-swapped-marker",
+    });
+
+    await expect(validateVirtualApiKey(value, "openai")).rejects.toMatchObject({
+      statusCode: 401,
+    });
+  });
+
+  test("rejects a Bearer-wrapped subscription in a legacy shared virtual key", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: {
+        apiKey: `bEaReR ${encodeXaiSubscriptionCredential({
+          refreshToken: "rt-never-share",
+          userId: "x-user",
+        })}`,
+      },
+    });
+    const xaiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      providerApiKeys: [{ provider: "xai", providerApiKeyId: xaiKey.id }],
+      name: "legacy-shared-x-premium",
+      scope: "org",
+      authorId: owner.id,
+    });
+
+    await expect(validateVirtualApiKey(value, "xai")).rejects.toMatchObject({
+      statusCode: 403,
+    });
   });
 
   test("returns resolved API key and baseUrl on success", async ({

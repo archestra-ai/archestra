@@ -3,6 +3,7 @@
 import {
   type archestraApiTypes,
   getConnectorNamePlaceholder,
+  type TextSearchLanguage,
 } from "@archestra/shared";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -45,6 +46,7 @@ import {
 import { ConnectorTypeIcon } from "./connector-icons";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
+import { TextSearchLanguagePicker } from "./text-search-language-picker";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
 type ConnectorItem = Pick<
@@ -57,6 +59,7 @@ type ConnectorItem = Pick<
   | "connectorType"
   | "config"
   | "schedule"
+  | "ftsLanguage"
   | "permissionSyncIntervalSeconds"
   | "enabled"
   | "environmentId"
@@ -71,6 +74,7 @@ type EditConnectorFormValues = {
   apiToken: string;
   adminApiKey: string;
   schedule: string;
+  ftsLanguage: TextSearchLanguage;
   permissionSyncIntervalSeconds: number;
   environmentId: string | null;
 };
@@ -98,6 +102,7 @@ export function EditConnectorDialog({
       apiToken: "",
       adminApiKey: "",
       schedule: connector.schedule,
+      ftsLanguage: connector.ftsLanguage,
       permissionSyncIntervalSeconds: connector.permissionSyncIntervalSeconds,
       environmentId: connector.environmentId ?? null,
     },
@@ -116,6 +121,7 @@ export function EditConnectorDialog({
         apiToken: "",
         adminApiKey: "",
         schedule: connector.schedule,
+        ftsLanguage: connector.ftsLanguage,
         permissionSyncIntervalSeconds: connector.permissionSyncIntervalSeconds,
         environmentId: connector.environmentId ?? null,
       });
@@ -129,6 +135,7 @@ export function EditConnectorDialog({
   const needsEmail = connectorNeedsEmail(connectorType);
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const authMethod = form.watch("config.authMethod") as string | undefined;
+  const authMode = form.watch("config.authMode") as string | undefined;
   // App-auth GitHub connectors inherit their host from the App config, so the
   // connector's own URL field is hidden to avoid a misleading second host
   const usesGithubApp =
@@ -145,6 +152,7 @@ export function EditConnectorDialog({
     emailRequired,
     mode: "edit",
     authMethod,
+    authMode,
   });
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
@@ -169,6 +177,7 @@ export function EditConnectorDialog({
         ) as archestraApiTypes.CreateConnectorData["body"]["config"],
         environmentId: values.environmentId,
         schedule: values.schedule,
+        ftsLanguage: values.ftsLanguage,
         ...(visibility === "auto-sync-permissions" && {
           permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
         }),
@@ -419,6 +428,7 @@ export function EditConnectorDialog({
                   connectorTypeLabel={typeLabel}
                 />
               )}
+              <TextSearchLanguagePicker form={form} name="ftsLanguage" />
               <ConnectorAdvancedConfigFields
                 connectorType={connectorType}
                 form={form}

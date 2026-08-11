@@ -492,3 +492,86 @@ describe("resolveProviderApiKey — ChatGPT-subscription (Codex) per-user guard"
     expect(result.apiKey).toBeUndefined();
   });
 });
+
+describe("resolveProviderApiKey — cross-provider subscription marker", () => {
+  // A ChatGPT (openai) marker inside an xai row's secret: reachable via
+  // out-of-band secret rotation, which nothing re-validates. The openai
+  // marker's encoded refresh token must never leave through the xai adapter
+  // as a raw bearer, and substitution must not return an openai key to a
+  // caller that will proceed as xai.
+  const chatgptCredential = encodeOpenAiCodexCredential({
+    refreshToken: "refresh-mismatch",
+    accountId: "mismatch-account",
+  });
+
+  test("refuses the mismatched credential even for the key's own owner", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const secret = await makeSecret({
+      secret: { apiKey: chatgptCredential },
+    });
+    await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: owner.id,
+      provider: "xai",
+    });
+
+    expect(result.apiKey).toBeUndefined();
+    expect(result.authRequired?.provider).toBe("xai");
+  });
+
+  test("refuses to substitute across providers for an agent-attached key", async ({
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const actingUser = await makeUser();
+    const secret = await makeSecret({
+      secret: { apiKey: chatgptCredential },
+    });
+    const ownerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "xai",
+      scope: "personal",
+      userId: owner.id,
+    });
+    // The acting user owns a legitimate ChatGPT subscription key —
+    // substitution by marker kind alone would wrongly return it here.
+    const actingSecret = await makeSecret({
+      secret: {
+        apiKey: encodeOpenAiCodexCredential({
+          refreshToken: "refresh-acting",
+          accountId: "acting-account",
+        }),
+      },
+    });
+    await makeLlmProviderApiKey(org.id, actingSecret.id, {
+      provider: "openai",
+      scope: "personal",
+      userId: actingUser.id,
+    });
+
+    const result = await resolveProviderApiKey({
+      organizationId: org.id,
+      userId: actingUser.id,
+      provider: "xai",
+      agentLlmApiKeyId: ownerKey.id,
+    });
+
+    expect(result.apiKey).toBeUndefined();
+    expect(result.authRequired?.provider).toBe("xai");
+  });
+});

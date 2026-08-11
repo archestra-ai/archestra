@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-08-04
+lastUpdated: 2026-08-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,6 +27,23 @@ An MCP server usually moves through this lifecycle:
 This separation lets admins curate a small approved catalog while still allowing each user or team to connect with their own credentials.
 
 Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform-apps) is also backed by its own registry entry: it appears here as a read-only card (visible to users with `app:read`) whose pencil manages the app's server settings — visibility, environment, assigned tools, and deletion — while authoring stays at `/a/:id`.
+
+## Adding Registry Entries
+
+Add a server at **MCP Registry → Add Server**. Two starting points are available:
+
+- **Start from scratch** — fill in the form manually.
+- **Select from Online Catalog** — pick a public catalog server to pre-fill the form.
+
+When you start from scratch, the form still uses the online catalog. If the command, image, or URL you type matches a catalog server, the empty name, description, and logo fields fill in automatically — a toast with Undo confirms it. Fields you already edited are never touched.
+
+If what you type matches a server already in your registry, a warning appears next to the Add Server button. Use **Show existing server** to go to that entry instead of creating a duplicate, or dismiss the warning.
+
+The Connection section has a collapsible **Import & export** block. It shows the configuration as JSON and follows the form fields as you type. Pick a format: Claude Code (`mcpServers`), VS Code (`mcp.json`), or the MCP registry (`server.json`). Copy or download the JSON for another client. To import, paste a config from a README or another client into the block — it shows what will change, and nothing applies until you press Apply.
+
+![Import & export block in the Connection section](/docs/automated_screenshots/platform-private-registry_import-export-block.webp)
+
+The block understands the common formats: Claude Desktop and Cursor (`mcpServers`), VS Code and Copilot (`servers` with `inputs`), the official MCP registry `server.json`, and bare command/args objects. A pasted config selects its own format automatically. Placeholder secrets like `<token>` are never stored — they become install-time prompts. Stored secret values appear as `<secret>` and stay preserved. Pasting a full config into the form's Command, Arguments, or Server URL field loads it into the same block.
 
 ## Server Configuration
 

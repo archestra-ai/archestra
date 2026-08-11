@@ -181,40 +181,6 @@ export function isTransientK8sApiError(error: unknown): boolean {
 }
 
 /**
- * Run `fn` over `items` with at most `limit` in flight at once. Used to bound
- * fan-outs that hit the Kubernetes API for every MCP server — full
- * parallelism across a large install base trips the API server's Priority &
- * Fairness throttling (429 "Too many requests"). Per-item failures are
- * captured, not thrown, mirroring `Promise.allSettled`.
- */
-export async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  const results = new Array<PromiseSettledResult<R>>(items.length);
-  let nextIndex = 0;
-  const workers = Array.from(
-    { length: Math.max(1, Math.min(limit, items.length)) },
-    async () => {
-      while (nextIndex < items.length) {
-        const index = nextIndex++;
-        try {
-          results[index] = {
-            status: "fulfilled",
-            value: await fn(items[index] as T),
-          };
-        } catch (reason) {
-          results[index] = { status: "rejected", reason };
-        }
-      }
-    },
-  );
-  await Promise.all(workers);
-  return results;
-}
-
-/**
  * Retry a Kubernetes API call on transient API-server errors (429/5xx),
  * honoring the server's `retry-after` header when present (API Priority &
  * Fairness sends one with every 429). Non-transient errors (404, 403, 409,

@@ -6,7 +6,11 @@
  * and only overrides provider-specific configuration (baseUrl, api key behavior).
  */
 
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  SUBSCRIPTION_CREDENTIALS,
+  subscriptionKindFromCredential,
+} from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -15,13 +19,20 @@ import type {
 } from "openai/resources/chat/completions/completions";
 import config from "@/config";
 import { metrics } from "@/observability";
-import type {
-  CreateClientOptions,
-  LLMProvider,
-  LLMRequestAdapter,
-  LLMResponseAdapter,
-  LLMStreamAdapter,
-  Xai,
+import { stripBearerTransportPrefix } from "@/services/subscription-credential-guard";
+import {
+  decodeXaiSubscriptionCredential,
+  isXaiSubscriptionCredential,
+} from "@/services/xai-subscription-credentials";
+import { createXaiSubscriptionFetch } from "@/services/xai-subscription-token";
+import {
+  ApiError,
+  type CreateClientOptions,
+  type LLMProvider,
+  type LLMRequestAdapter,
+  type LLMResponseAdapter,
+  type LLMStreamAdapter,
+  type Xai,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -205,6 +216,15 @@ export const xaiAdapterFactory: LLMProvider<
     return headers.authorization;
   },
 
+  isSubscriptionCredential(apiKey: string | undefined): boolean {
+    // X Premium (SuperGrok) credentials travel through the proxy as
+    // marker-prefixed encoded strings (`xai-subscription:…`). They are covered
+    // by a flat-rate plan, so they must classify as subscription — the same rule
+    // as ChatGPT/Codex credentials on the openai adapter. Plain console API keys
+    // stay metered.
+    return isXaiSubscriptionCredential(stripBearerTransportPrefix(apiKey));
+  },
+
   getBaseUrl(): string | undefined {
     return config.llm.xai.baseUrl;
   },
@@ -222,6 +242,64 @@ export const xaiAdapterFactory: LLMProvider<
     const customFetch = options.agent
       ? metrics.llm.getObservableFetch("xai", options.agent, options.source)
       : undefined;
+
+    // "X Premium (SuperGrok)" subscription auth mode: the resolved credential is
+    // an encoded xAI OAuth credential, not a console key. Session traffic uses
+    // xAI's dedicated CLI chat proxy and swaps the bearer in a fetch wrapper
+    // because createClient is synchronous.
+    const strippedApiKey = stripBearerTransportPrefix(apiKey);
+    const subscriptionKind = subscriptionKindFromCredential(strippedApiKey);
+    if (
+      subscriptionKind &&
+      SUBSCRIPTION_CREDENTIALS[subscriptionKind].provider !== "xai"
+    ) {
+      throw new ApiError(
+        401,
+        "The selected xAI key contains a subscription credential for another provider. Reconnect the correct credential.",
+        ArchestraInternalErrorCode.ProviderAuthRequired,
+      );
+    }
+    const subscriptionCredential =
+      decodeXaiSubscriptionCredential(strippedApiKey);
+    // A marker-prefixed value that doesn't decode is a corrupted subscription
+    // credential, never a console key: falling through to the plain-key branch
+    // would send it as a raw bearer to options.baseUrl, which per-key
+    // overrides make user-supplied — the exact leak the subscription fetch's
+    // origin pin fails closed against.
+    if (
+      !subscriptionCredential &&
+      isXaiSubscriptionCredential(strippedApiKey)
+    ) {
+      throw new ApiError(
+        401,
+        "Your X Premium (SuperGrok) sign-in is unreadable. Reconnect your X account to keep using your subscription.",
+        ArchestraInternalErrorCode.ProviderAuthRequired,
+      );
+    }
+    if (subscriptionCredential) {
+      if (
+        options.baseUrl &&
+        options.baseUrl.replace(/\/+$/, "") !==
+          config.llm.xai.baseUrl.replace(/\/+$/, "")
+      ) {
+        throw new ApiError(
+          400,
+          "X Premium (SuperGrok) credentials cannot use a per-key base URL override — remove it or use an API key instead.",
+        );
+      }
+      return new OpenAIProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
+        // Placeholder satisfies the SDK; the wrapper sets the real bearer.
+        apiKey: "xai-subscription",
+        baseURL: config.llm.xai.subscription.baseUrl,
+        fetch: createXaiSubscriptionFetch({
+          credential: subscriptionCredential,
+          providerApiKeyId: options.llmProviderApiKeyId,
+          innerFetch: customFetch,
+        }),
+        defaultHeaders: options.defaultHeaders,
+      });
+    }
 
     return new OpenAIProvider({
       maxRetries: PROXY_SDK_MAX_RETRIES,
@@ -269,6 +347,15 @@ export const xaiAdapterFactory: LLMProvider<
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    // The X Premium (SuperGrok) fetch wrapper reports a dead sign-in
+    // (expired/revoked refresh token) as a synthetic 401 whose body carries the
+    // normalized code; relay it so the chat mapper renders the reconnect card.
+    if (
+      get(error, "error.internal_code") ===
+      ArchestraInternalErrorCode.ProviderAuthRequired
+    ) {
+      return ArchestraInternalErrorCode.ProviderAuthRequired;
     }
     return undefined;
   },

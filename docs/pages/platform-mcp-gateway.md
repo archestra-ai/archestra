@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -129,6 +129,10 @@ The gateway decides per call: anything that finishes within the threshold (10 se
 
 One limit to know: a tool that asks for interactive input after its call became a task fails with an explanatory error, since no one is connected to answer. Re-run the call without task mode to answer interactively.
 
+## Published Skills
+
+A gateway can also publish your organization's skills to connecting clients as `skill://` resources. The client reads them alongside its own. See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills).
+
 ## Access Control
 
 Gateway access depends on both the caller and the gateway configuration. A user must be allowed to see the MCP Gateway, usually through organization visibility or team membership, and the gateway must have the specific tool assigned to it.
@@ -150,7 +154,7 @@ Those two tools are enabled implicitly and do not appear in the built-in tool pi
 
 Use this when the full tool list is too large or noisy to send to the model on every turn, but the gateway still needs the same underlying tool access.
 
-With **Auto** tool mode also enabled, a signed-in user's `search_tools` and `run_tool` reach every MCP catalog tool and knowledge source that user can access. Credentials resolve at call time per the MCP server's **Default credential** setting — on behalf of the user by default, or one shared account when the server is configured that way. Nothing is assigned to the gateway. Sessions authenticated with org or team tokens stay limited to assigned tools, and the org-wide **Dynamic Tool Access** security setting can disable the behavior entirely.
+With **Auto** tool mode also enabled, a signed-in user's `search_tools` and `run_tool` reach every MCP catalog tool and knowledge source that user can access. `tools/list` still returns only those two tools, however many the user can reach. Credentials resolve at call time per the MCP server's **Default credential** setting — on behalf of the user by default, or one shared account when the server is configured that way. Nothing is assigned to the gateway. Sessions authenticated with org or team tokens stay limited to assigned tools, and the org-wide **Dynamic Tool Access** security setting can disable the behavior entirely.
 
 Tool call policies still apply to the target tool. `run_tool` does not bypass input conditions, team conditions, untrusted-context rules, or approval-required rules.
 

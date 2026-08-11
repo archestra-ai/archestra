@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type { SupportedProvider, ThinkingEffort } from "@archestra/shared";
 import { desc, isNull, sql } from "drizzle-orm";
 import {
   boolean,
@@ -8,7 +8,10 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { ConversationOrigin } from "@/types/conversation";
+import type {
+  ConversationOrigin,
+  IncognitoEscrowBlob,
+} from "@/types/conversation";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
@@ -43,6 +46,18 @@ const conversationsTable = softDeletablePgTable(
     modelId: uuid("model_id").references(() => modelsTable.id, {
       onDelete: "set null",
     }),
+    /**
+     * How hard the model should reason before answering. Each provider decides
+     * what the three levels mean for a given model, and a model with no such
+     * control ignores it — so the value survives a switch to one of those and
+     * applies again on the way back.
+     *
+     * Null is the model's own default: no depth was chosen, so no reasoning
+     * field and the model reasons as it would have anyway. Nullable rather than
+     * defaulted because model defaults disagree with each other, so no level of
+     * ours could stand in for "unchanged" — see ThinkingEffortSetting.
+     */
+    thinkingEffort: text("thinking_effort").$type<ThinkingEffort>(),
     hasCustomToolSelection: boolean("has_custom_tool_selection")
       .notNull()
       .default(false),
@@ -91,6 +106,17 @@ const conversationsTable = softDeletablePgTable(
     titleIsPlaceholder: boolean("title_is_placeholder")
       .notNull()
       .default(false),
+    /**
+     * Incognito conversations: message content is encrypted under a
+     * browser-held per-conversation key the server never persists.
+     * `incognitoDekFingerprint` rejects wrong keys up front;
+     * `incognitoEscrow` is the enterprise escrow record (RSA-wrapped key or
+     * Vault reference — see content-encryption/incognito-escrow.ts), null
+     * when escrow is not configured.
+     */
+    incognito: boolean("incognito").notNull().default(false),
+    incognitoDekFingerprint: text("incognito_dek_fingerprint"),
+    incognitoEscrow: jsonb("incognito_escrow").$type<IncognitoEscrowBlob>(),
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
     lastMessageAt: timestamp("last_message_at", { mode: "date" })
       .notNull()

@@ -714,6 +714,50 @@ describe("ConnectorRunModel", () => {
       const after = await ConnectorRunModel.findById(run.id);
       expect(after?.documentsProcessed).toBe(3);
     });
+
+    test("counter increments compose with concurrent completeBatch additions instead of clobbering them", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const run = await makeConnectorRun(connector.id, { status: "running" });
+
+      // A batch-embedding handler records embed-time skips and failures while
+      // the sync loop is still paging (totalBatches is unset until the loop
+      // finishes, so the run stays "running").
+      await ConnectorRunModel.completeBatch(run.id, {
+        failedItems: 1,
+        error: "Embedding failed",
+        skippedItems: 3,
+      });
+
+      // The sync loop's next progress flush writes its own deltas — it must
+      // add to the embed-side counts, not overwrite them with its local total.
+      const result = await ConnectorRunModel.updateIfOwned({
+        runId: run.id,
+        epoch: 0,
+        data: { documentsProcessed: 10 },
+        increments: { itemErrors: 2, itemsSkipped: 5 },
+      });
+
+      expect(result?.itemErrors).toBe(3);
+      expect(result?.itemsSkipped).toBe(8);
+      expect(result?.documentsProcessed).toBe(10);
+
+      // A zero delta leaves the counters untouched.
+      const unchanged = await ConnectorRunModel.updateIfOwned({
+        runId: run.id,
+        epoch: 0,
+        data: { documentsProcessed: 11 },
+        increments: { itemErrors: 0, itemsSkipped: 0 },
+      });
+      expect(unchanged?.itemErrors).toBe(3);
+      expect(unchanged?.itemsSkipped).toBe(8);
+    });
   });
 
   describe("renewLease", () => {
@@ -846,6 +890,73 @@ describe("ConnectorRunModel", () => {
   });
 
   describe("completeBatch", () => {
+    test("records a queue task outcome exactly once across retries", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 2,
+        completedBatches: 0,
+      });
+      const task = await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: { connectorRunId: run.id, documentIds: ["doc-1"] },
+      });
+
+      await ConnectorRunModel.completeBatch(
+        run.id,
+        { failedItems: 1, skippedItems: 2, error: "bad input" },
+        task.id,
+      );
+      const retried = await ConnectorRunModel.completeBatch(
+        run.id,
+        { failedItems: 1, skippedItems: 2, error: "bad input" },
+        task.id,
+      );
+
+      expect(retried?.completedBatches).toBe(1);
+      expect(retried?.itemErrors).toBe(1);
+      expect(retried?.itemsSkipped).toBe(2);
+    });
+
+    test("records late outcomes on a partial run without changing its status", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const completedAt = new Date("2026-08-11T10:00:00.000Z");
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "partial",
+        startedAt: new Date("2026-08-11T09:00:00.000Z"),
+        completedAt,
+        totalBatches: 1,
+        completedBatches: 0,
+      });
+
+      const result = await ConnectorRunModel.completeBatch(run.id, {
+        failedItems: 1,
+        skippedItems: 2,
+        error: "late failure",
+      });
+
+      expect(result?.status).toBe("partial");
+      expect(result?.completedBatches).toBe(1);
+      expect(result?.itemErrors).toBe(1);
+      expect(result?.itemsSkipped).toBe(2);
+      expect(result?.completedAt).toEqual(completedAt);
+    });
+
     test("is a no-op for a superseded run (does not touch status or counters)", async ({
       makeOrganization,
       makeKnowledgeBase,
@@ -929,6 +1040,35 @@ describe("ConnectorRunModel", () => {
       expect(result?.status).toBe("success");
       expect(result?.completedBatches).toBe(1);
       expect(result?.completedAt).not.toBeNull();
+    });
+
+    test("accumulates skipped items without failing the run", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(),
+        totalBatches: 2,
+        completedBatches: 0,
+      });
+
+      await ConnectorRunModel.completeBatch(run.id, { skippedItems: 2 });
+      const result = await ConnectorRunModel.completeBatch(run.id, {
+        skippedItems: 1,
+      });
+
+      // Skips are informational: they add up on the run but never turn a clean
+      // run into completed_with_errors.
+      expect(result?.itemsSkipped).toBe(3);
+      expect(result?.itemErrors).toBe(0);
+      expect(result?.status).toBe("success");
     });
   });
 

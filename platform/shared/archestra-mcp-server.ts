@@ -131,6 +131,12 @@ export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
 // Change who can see a project (org-wide, teams, or owner-only).
 export const TOOL_SET_PROJECT_SHARE_SHORT_NAME = "set_project_share";
+// Discover the projects the caller can reach, and read one project's context
+// (its instructions plus the files it owns). Both work headlessly — unlike the
+// two tools above they never consult the current chat — so an external MCP
+// client on a gateway can pull a project's context into its own session.
+export const TOOL_LIST_PROJECTS_SHORT_NAME = "list_projects";
+export const TOOL_GET_PROJECT_SHORT_NAME = "get_project";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
@@ -257,6 +263,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_SET_PROJECT_SHARE_SHORT_NAME,
+  TOOL_LIST_PROJECTS_SHORT_NAME,
+  TOOL_GET_PROJECT_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -321,9 +329,15 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "tool_assignment", label: "Tool Assignment" },
   { id: "knowledge_management", label: "Knowledge Management" },
   { id: "chat", label: "Chat" },
+  { id: "projects", label: "Projects" },
   { id: "meta", label: "Meta" },
   { id: "skills", label: "Skills" },
-  { id: "skill_sandbox", label: "Skill Sandbox" },
+  // `id` keeps the original spelling so the taxonomy keys stay stable; the
+  // label follows the feature's user-facing name (docs page "Code Sandbox").
+  { id: "skill_sandbox", label: "Code Sandbox" },
+  // The persistent file store, which the code runtime gates but never touches:
+  // these operate on saved files, not on a container.
+  { id: "files", label: "Files" },
   { id: "apps", label: "Apps" },
 ] as const;
 
@@ -423,8 +437,11 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   unassign_knowledge_connector_from_agent: "knowledge_management",
 
   todo_write: "chat",
-  create_project_from_conversation: "chat",
-  set_project_share: "chat",
+
+  create_project_from_conversation: "projects",
+  set_project_share: "projects",
+  list_projects: "projects",
+  get_project: "projects",
 
   search_tools: "meta",
   run_tool: "meta",
@@ -438,13 +455,14 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   run_command: "skill_sandbox",
   download_file: "skill_sandbox",
   upload_file: "skill_sandbox",
-  search_files: "skill_sandbox",
-  read_file: "skill_sandbox",
-  save_file: "skill_sandbox",
-  edit_file: "skill_sandbox",
-  delete_file: "skill_sandbox",
-  copy_file: "skill_sandbox",
-  read_file_raw: "skill_sandbox",
+
+  search_files: "files",
+  read_file: "files",
+  save_file: "files",
+  edit_file: "files",
+  delete_file: "files",
+  copy_file: "files",
+  read_file_raw: "files",
 
   scaffold_app: "apps",
   refine_app: "apps",

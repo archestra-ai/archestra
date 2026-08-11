@@ -11,7 +11,7 @@ import {
   getArchestraToolShortName,
   isAppRuntimeOnlyArchestraToolShortName,
 } from "@archestra/shared";
-import { getArchestraMcpTools } from "@/archestra-mcp-server";
+import { getAllArchestraMcpTools } from "@/archestra-mcp-server";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";
 
@@ -62,6 +62,45 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
   // callers holding `project:share-org`.
   set_project_share:
     "Beyond `project:update`, the caller must own the project (or hold `project:admin`), and moving a project into or out of organization-wide visibility additionally requires `project:share-org`.",
+  // The read tools stay on the caller's own reach: `project:admin` oversight of
+  // a foreign project is a REST/UI capability and does not extend to them.
+  list_projects:
+    "Returns only projects the caller owns or that are shared with them. `project:admin` oversight of other members' projects does **not** extend to this tool.",
+  get_project:
+    "Readable only for projects the caller owns or that are shared with them. `project:admin` oversight of other members' projects does **not** extend to this tool.",
+};
+
+/**
+ * Deployment prerequisites for groups whose tools are only served once a
+ * runtime is configured (the `isToolRuntimeEnabled` filter in
+ * `archestra-mcp-server/index.ts`). This page documents the full product
+ * surface, so a reader whose deployment omits the runtime needs to know why
+ * these tools are absent from their `tools/list`.
+ */
+const CODE_RUNTIME_PREREQUISITE =
+  "served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
+
+const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
+  skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/platform-code-sandbox) page covers what the runtime is and how an agent uses it.`,
+  // Same gate as the sandbox, since these tools ship from the same module —
+  // but they read and write saved files rather than entering a container, so
+  // the note says what they are instead of pointing at the runtime page.
+  files: `These tools are ${CODE_RUNTIME_PREREQUISITE} They operate on the conversation's persistent files, not inside the sandbox container.`,
+};
+
+const HOOK_RUNTIME_NOTE =
+  "Served only when the code runtime is enabled (the same prerequisite as the [Code Sandbox](#code-sandbox) tools), because a hook executes in the conversation sandbox.";
+
+/**
+ * Availability notes for individual tools whose group is otherwise
+ * unconditional — the hook tools sit in the Agents group but carry the code
+ * runtime's prerequisite.
+ */
+const toolAvailabilityNotes: Partial<Record<ArchestraToolShortName, string>> = {
+  list_hooks: HOOK_RUNTIME_NOTE,
+  create_hook: HOOK_RUNTIME_NOTE,
+  update_hook: HOOK_RUNTIME_NOTE,
+  delete_hook: HOOK_RUNTIME_NOTE,
 };
 
 // === Script entry point ===
@@ -89,7 +128,7 @@ async function main() {
 
   // App-runtime-only built-ins are not part of the agent-facing surface this
   // page documents (they are covered on the Apps page).
-  const tools = getArchestraMcpTools().filter((tool) => {
+  const tools = getAllArchestraMcpTools().filter((tool) => {
     const shortName = getArchestraToolShortName(tool.name);
     return !(shortName && isAppRuntimeOnlyArchestraToolShortName(shortName));
   });
@@ -124,7 +163,7 @@ lastUpdated: ${lastUpdated}
 function generateMarkdownBody(): string {
   // App-runtime-only built-ins are not part of the agent-facing surface this
   // page documents (they are covered on the Apps page).
-  const tools = getArchestraMcpTools().filter((tool) => {
+  const tools = getAllArchestraMcpTools().filter((tool) => {
     const shortName = getArchestraToolShortName(tool.name);
     return !(shortName && isAppRuntimeOnlyArchestraToolShortName(shortName));
   });
@@ -145,6 +184,7 @@ function generateMarkdownBody(): string {
       description: string;
       requiredPermission: ToolPermissionDisplay;
       accessNote?: string;
+      availabilityNote?: string;
       inputSchema: JsonSchema;
       outputSchema?: JsonSchema;
     }[]
@@ -170,10 +210,13 @@ function generateMarkdownBody(): string {
       description: truncateDescription(tool.description ?? ""),
       requiredPermission: formatToolPermission(typedShortName),
       accessNote: toolAccessNotes[typedShortName],
+      availabilityNote: toolAvailabilityNotes[typedShortName],
       inputSchema: tool.inputSchema as JsonSchema,
       outputSchema: tool.outputSchema as JsonSchema | undefined,
     });
   }
+
+  assertEveryMappedToolRendered(grouped);
 
   // Sort groups by order
   const sortedGroups = [...grouped.entries()].sort(
@@ -184,6 +227,10 @@ function generateMarkdownBody(): string {
   const referenceSections: string[] = [];
   for (const [group, groupTools] of sortedGroups) {
     let section = `### ${groupLabel.get(group) ?? group}\n\n`;
+    const groupAvailabilityNote = groupAvailabilityNotes[group];
+    if (groupAvailabilityNote) {
+      section += `${groupAvailabilityNote}\n\n`;
+    }
     section += "| Tool | Description | Required RBAC Permission |\n";
     section += "|------|-------------|--------------------------|\n";
 
@@ -203,13 +250,14 @@ function generateMarkdownBody(): string {
 
     // Add detailed input schemas for each tool in this group
     for (const tool of groupTools) {
-      const schemaMarkdown = renderToolSchemas(
-        tool.shortName,
-        tool.requiredPermission,
-        tool.inputSchema,
-        tool.outputSchema,
-        tool.accessNote,
-      );
+      const schemaMarkdown = renderToolSchemas({
+        toolName: tool.shortName,
+        requiredPermission: tool.requiredPermission,
+        inputSchema: tool.inputSchema,
+        outputSchema: tool.outputSchema,
+        accessNote: tool.accessNote,
+        availabilityNote: tool.availabilityNote,
+      });
       if (schemaMarkdown) {
         section += `\n${schemaMarkdown}`;
       }
@@ -289,6 +337,36 @@ function generateMarkdownContent(existingContent: string | null): string {
   return `${generateFrontmatter(lastUpdated)}${newBody}`;
 }
 
+/**
+ * Fails the build when a tool carrying a group mapping never reached the page.
+ * The `Record<ArchestraToolShortName, …>` typing of the taxonomy guarantees
+ * every tool is *classified*; only this guarantees every tool is *rendered*,
+ * which a conditionally-built source list can silently break.
+ */
+function assertEveryMappedToolRendered(
+  grouped: Map<ArchestraToolGroupId, { shortName: ArchestraToolShortName }[]>,
+): void {
+  const rendered = new Set(
+    [...grouped.values()].flat().map((tool) => tool.shortName),
+  );
+
+  const missing = Object.keys(ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME).filter(
+    (shortName) =>
+      !rendered.has(shortName as ArchestraToolShortName) &&
+      !isAppRuntimeOnlyArchestraToolShortName(shortName),
+  );
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Tools missing from the generated reference: ${missing.join(", ")}. ` +
+        "Every tool in ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME must be documented — " +
+        "check that getAllArchestraMcpTools() still returns it unconditionally, " +
+        "or add it to APP_RUNTIME_ONLY_ARCHESTRA_TOOL_SHORT_NAMES if it is not " +
+        "part of the agent-facing surface.",
+    );
+  }
+}
+
 function truncateDescription(description: string): string {
   let cleaned = description.replace(/\s*IMPORTANT:.*$/s, "").trim();
 
@@ -342,15 +420,27 @@ interface JsonSchema {
   oneOf?: JsonSchema[];
 }
 
-function renderToolSchemas(
-  toolName: ArchestraToolShortName,
-  requiredPermission: ToolPermissionDisplay,
-  inputSchema: JsonSchema,
-  outputSchema?: JsonSchema,
-  accessNote?: string,
-): string | null {
+function renderToolSchemas(params: {
+  toolName: ArchestraToolShortName;
+  requiredPermission: ToolPermissionDisplay;
+  inputSchema: JsonSchema;
+  outputSchema?: JsonSchema;
+  accessNote?: string;
+  availabilityNote?: string;
+}): string | null {
+  const {
+    toolName,
+    requiredPermission,
+    inputSchema,
+    outputSchema,
+    accessNote,
+    availabilityNote,
+  } = params;
   let md = `#### ${toolName}\n\n`;
   md += `Required RBAC permission: ${requiredPermission}\n\n`;
+  if (availabilityNote) {
+    md += `Availability: ${availabilityNote}\n\n`;
+  }
   if (accessNote) {
     md += `Additional access requirement: ${accessNote}\n\n`;
   }

@@ -25,6 +25,7 @@ vi.mock("@sentry/node", async (importOriginal) => {
 });
 
 import config from "@/config";
+import OrganizationModel from "@/models/organization";
 // Import after mock setup
 import healthRoutes from "@/routes/health";
 import { createFastifyInstance } from "./server";
@@ -735,6 +736,75 @@ describe("createFastifyInstance", () => {
         message: "Compilers working",
         query: "value",
       });
+    });
+  });
+
+  describe("browser API documents", () => {
+    test("uses a stable content-versioned favicon without changing API clients", async () => {
+      const favicon =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==";
+      const appearanceSpy = vi
+        .spyOn(OrganizationModel, "getAppearanceSettings")
+        .mockResolvedValue({ favicon } as never);
+      const app = createFastifyInstance();
+      app.get("/api/test-browser-document", async () => ({ value: "ok" }));
+
+      try {
+        const browserHeaders = {
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+        };
+        const firstNavigation = await app.inject({
+          method: "GET",
+          url: "/api/test-browser-document",
+          headers: browserHeaders,
+        });
+        const reload = await app.inject({
+          method: "GET",
+          url: "/api/test-browser-document",
+          headers: browserHeaders,
+        });
+        const navigationWithoutFetchMetadata = await app.inject({
+          method: "GET",
+          url: "/api/test-browser-document?source=qa",
+          headers: { accept: "text/html,application/xhtml+xml" },
+        });
+        const apiClient = await app.inject({
+          method: "GET",
+          url: "/api/test-browser-document",
+          headers: { accept: "application/json, */*" },
+        });
+        const fetchRequest = await app.inject({
+          method: "GET",
+          url: "/api/test-browser-document",
+          headers: {
+            accept: "text/html",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+          },
+        });
+
+        expect(firstNavigation.headers["content-type"]).toContain("text/html");
+        expect(firstNavigation.body).toContain(
+          '<link rel="icon" href="/favicon.ico?v=48ac386978254451">',
+        );
+        expect(reload.body).toContain(
+          '<link rel="icon" href="/favicon.ico?v=48ac386978254451">',
+        );
+        expect(navigationWithoutFetchMetadata.body).toContain(
+          '<link rel="icon" href="/favicon.ico?v=48ac386978254451">',
+        );
+        expect(apiClient.headers["content-type"]).toContain("application/json");
+        expect(apiClient.json()).toEqual({ value: "ok" });
+        expect(fetchRequest.headers["content-type"]).toContain(
+          "application/json",
+        );
+        expect(fetchRequest.json()).toEqual({ value: "ok" });
+        expect(appearanceSpy).toHaveBeenCalledTimes(3);
+      } finally {
+        appearanceSpy.mockRestore();
+        await app.close();
+      }
     });
   });
 });

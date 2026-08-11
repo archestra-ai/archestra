@@ -22,3 +22,25 @@ export function countTokens(encoding: Tiktoken, text: string): number {
 export function encodeText(encoding: Tiktoken, text: string): Uint32Array {
   return encoding.encode(text, undefined, []);
 }
+
+/**
+ * Truncate `text` to at most `maxTokens` tokens, returning it unchanged when
+ * it already fits. cl100k is a byte-level BPE, so a token boundary can split a
+ * multi-byte character — the decoded prefix is cleaned of the trailing
+ * replacement character that such a split produces.
+ */
+export function truncateToTokens(
+  encoding: Tiktoken,
+  text: string,
+  maxTokens: number,
+): string {
+  if (maxTokens <= 0) {
+    return "";
+  }
+  const tokens = encodeText(encoding, text);
+  if (tokens.length <= maxTokens) {
+    return text;
+  }
+  const bytes = encoding.decode(tokens.slice(0, maxTokens));
+  return new TextDecoder("utf-8").decode(bytes).replace(/�+$/, "");
+}

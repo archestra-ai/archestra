@@ -48,16 +48,21 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
     title,
     defaultValues,
     reconnectKeyId,
+    requiresExactSubscriptionCredential,
   }: {
     title: string;
-    defaultValues: { provider?: string; openaiAuthMethod?: string };
+    defaultValues: { provider?: string; authMethod?: string };
     reconnectKeyId?: string;
+    requiresExactSubscriptionCredential?: boolean;
   }) => (
     <div>
       <span>{title}</span>
       <span>{defaultValues.provider}</span>
-      <span>{defaultValues.openaiAuthMethod}</span>
+      <span>{defaultValues.authMethod}</span>
       {reconnectKeyId && <span>{`reconnect:${reconnectKeyId}`}</span>}
+      {requiresExactSubscriptionCredential && (
+        <span>exact-subscription-required</span>
+      )}
     </div>
   ),
 }));
@@ -91,6 +96,9 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     expect(
       screen.getByRole("button", { name: "Microsoft 365 Copilot Connect" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+    ).toBeInTheDocument();
   });
 
   it("does not duplicate a connected subscription", () => {
@@ -100,6 +108,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       provider: "openai",
       scope: "personal",
       userId: "current-user",
+      subscriptionKind: "chatgpt",
       isChatgptSubscription: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -123,6 +132,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       provider: "openai",
       scope: "personal",
       userId: "another-user",
+      subscriptionKind: "chatgpt",
       isChatgptSubscription: true,
       isAgentKey: true,
     } as LlmProviderApiKey;
@@ -188,7 +198,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     expect(onApiKeyChange).not.toHaveBeenCalled();
   });
 
-  it("recognizes a pinned ChatGPT subscription when secret metadata is unavailable", () => {
+  it("does not infer a pinned ChatGPT subscription from its mutable name", () => {
     const agentOwnerKey = {
       id: "agent-owner-chatgpt-key",
       name: "ChatGPT Subscription",
@@ -215,14 +225,14 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(
       screen.getByRole("button", {
-        name: /^ChatGPT Subscription Connect\s*Selected$/,
+        name: /^ChatGPT Subscription Connected\s*Selected$/,
       }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", {
-        name: /^ChatGPT Subscription Connected\s*Selected$/,
+      screen.getByRole("button", {
+        name: /^ChatGPT Subscription Connect$/,
       }),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
   });
 
   it("opens the pinned subscription flow when the composer requests connection", () => {
@@ -232,7 +242,8 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       provider: "openai",
       scope: "personal",
       userId: "another-user",
-      isChatgptSubscription: false,
+      subscriptionKind: "chatgpt",
+      isChatgptSubscription: true,
       isAgentKey: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -252,7 +263,8 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     );
 
     expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
-    expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
+    expect(screen.getByText("subscription")).toBeInTheDocument();
+    expect(screen.getByText("exact-subscription-required")).toBeInTheDocument();
   });
 
   it("re-opens the sign-in flow to reconnect a connected subscription that is already selected", async () => {
@@ -263,6 +275,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       provider: "openai",
       scope: "personal",
       userId: "current-user",
+      subscriptionKind: "chatgpt",
       isChatgptSubscription: true,
     } as LlmProviderApiKey;
     vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
@@ -303,7 +316,114 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
-    expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
+    expect(screen.getByText("subscription")).toBeInTheDocument();
+  });
+
+  it("recognizes an X Premium key as connected without absorbing plain xAI API keys", () => {
+    // Both keys live on the `xai` provider; only the subscriptionKind the
+    // backend read off the stored secret distinguishes the subscription.
+    const xPremiumKey = {
+      id: "x-premium-key",
+      name: "X Premium (SuperGrok)",
+      provider: "xai",
+      scope: "personal",
+      userId: "current-user",
+      subscriptionKind: "x-premium",
+    } as LlmProviderApiKey;
+    const xaiApiKey = {
+      id: "xai-api-key",
+      name: "Plain xAI key",
+      provider: "xai",
+      scope: "org",
+      userId: null,
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [xPremiumKey, xaiApiKey],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    renderSelector();
+
+    expect(
+      screen.getByRole("button", { name: "X Premium (SuperGrok) Connected" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+    ).not.toBeInTheDocument();
+    // The plain key stays an ordinary credential row, untouched by the
+    // subscription matching.
+    expect(
+      screen.getByRole("button", { name: "Plain xAI key Connected" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not let a mutable name turn an ordinary xAI key into a subscription", () => {
+    const nameOnlyXPremiumKey = {
+      id: "x-premium-name-only",
+      name: "X Premium (SuperGrok)",
+      provider: "xai",
+      scope: "personal",
+      userId: "current-user",
+    } as LlmProviderApiKey;
+    const xaiApiKey = {
+      id: "xai-api-key",
+      name: "Plain xAI key",
+      provider: "xai",
+      scope: "org",
+      userId: null,
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [nameOnlyXPremiumKey, xaiApiKey],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    renderSelector();
+
+    expect(
+      screen.getByRole("button", { name: "X Premium (SuperGrok) Connected" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "X Premium (SuperGrok) Connect" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Plain xAI key Connected" }),
+    ).toBeInTheDocument();
+  });
+
+  it("re-opens the X sign-in flow to reconnect a selected X Premium key", async () => {
+    const user = userEvent.setup();
+    const xPremiumKey = {
+      id: "x-premium-key",
+      name: "X Premium (SuperGrok)",
+      provider: "xai",
+      scope: "personal",
+      userId: "current-user",
+      subscriptionKind: "x-premium",
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [xPremiumKey],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    render(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId="x-premium-key"
+        currentProvider="xai"
+        onApiKeyChange={() => {}}
+        suppressAutoSelect
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /^X Premium \(SuperGrok\) Connected\s*Selected$/,
+      }),
+    );
+
+    expect(
+      screen.getByText("Reconnect X Premium (SuperGrok)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("reconnect:x-premium-key")).toBeInTheDocument();
   });
 });
 

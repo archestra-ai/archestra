@@ -5,7 +5,7 @@ import {
   decryptStringWithKey,
   deriveKeyFromSecret,
   encryptStringWithKey,
-  isEncryptedEnvelope,
+  isContentEnvelope,
 } from "@/utils/crypto";
 
 /**
@@ -145,16 +145,12 @@ export function contentKeyFingerprint(): string {
     .slice(0, 32);
 }
 
-/** Strict envelope-object check (see `isEncryptedEnvelope` for the format). */
-export function isContentEnvelope(value: unknown): value is ContentEnvelope {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 1 &&
-    isEncryptedEnvelope((value as Record<string, unknown>).__encrypted)
-  );
-}
+/**
+ * Strict envelope-object check — the implementation lives in `@/utils/crypto`
+ * (AGPL: envelope detection is generic); re-exported so existing enterprise
+ * importers keep their path.
+ */
+export { isContentEnvelope } from "@/utils/crypto";
 
 /**
  * Reset derived-key caches after mutating config in tests.

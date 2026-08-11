@@ -14,10 +14,12 @@ import {
   useConversationFiles,
   useConversations,
   useConversationUpdatedCacheSync,
+  useCreateConversation,
   useDeleteConversation,
   useKeepViewedConversationRead,
   useMarkConversationRead,
   useMemberDefaultModel,
+  useUpdateConversation,
 } from "./chat.query";
 
 vi.mock("@archestra/shared", () => ({
@@ -30,6 +32,8 @@ vi.mock("@archestra/shared", () => ({
     markChatConversationRead: vi.fn(),
     deleteChatConversation: vi.fn(),
     clearChatConversationErrors: vi.fn(),
+    updateChatConversation: vi.fn(),
+    createChatConversation: vi.fn(),
   },
   PLAYWRIGHT_MCP_CATALOG_ID: "playwright-catalog-id",
   PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
@@ -311,6 +315,25 @@ describe("mergeUpdatedConversationIntoCache", () => {
     expect(merged.modelId).toBe("model-gpt41");
   });
 
+  test("leaves the reasoning depth to the composer", () => {
+    // The composer owns what it displays, including clicks its write queue
+    // coalesces away; echoing a response back here would flip the control to
+    // whichever request answered last.
+    const oldConversation = makeConversation();
+    const updatedConversation = {
+      ...oldConversation,
+      thinkingEffort: "high",
+    } satisfies archestraApiTypes.UpdateChatConversationResponses["200"];
+
+    const merged = mergeUpdatedConversationIntoCache(
+      oldConversation,
+      updatedConversation,
+      { id: "conversation-1", thinkingEffort: "high" },
+    );
+
+    expect(merged.thinkingEffort).toBe("low");
+  });
+
   test("a rename carries the cleared placeholder flag into the cache", () => {
     // Stale `true` here would make the chat look retitleable to the auto-title
     // gate for the rest of the session, undoing the rename the user just made.
@@ -398,6 +421,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     chatApiKeyId: "key-openai",
     title: "Test",
     titleIsPlaceholder: false,
+    thinkingEffort: "low",
     selectedModel: "gpt-4o",
     selectedProvider: "openai",
     modelId: null,
@@ -407,6 +431,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     artifact: null,
     projectId: null,
     origin: "user",
+    incognito: false,
     pinnedAt: null,
     lastMessageAt: "2026-03-17T00:00:00.000Z",
     createdAt: "2026-03-17T00:00:00.000Z",
@@ -667,5 +692,62 @@ describe("useClearChatErrors", () => {
 
     // The delete didn't take, so the user must still see the error.
     expect(cachedChatErrors(queryClient)).toEqual(rows);
+  });
+});
+
+describe("thinking effort reaches the wire", () => {
+  // Both mutations rebuild the request body from an explicit field list, so a
+  // new field is dropped silently unless it is added there. Type-checking does
+  // not catch it: the extra property is accepted by the argument type.
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("sends the effort when updating a conversation", async () => {
+    vi.mocked(archestraApiSdk.updateChatConversation).mockResolvedValue({
+      data: { ...makeConversation(), thinkingEffort: "high" },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.updateChatConversation>>);
+
+    const { result } = renderHook(() => useUpdateConversation(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "c1",
+        thinkingEffort: "high",
+      });
+    });
+
+    expect(archestraApiSdk.updateChatConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ thinkingEffort: "high" }),
+      }),
+    );
+  });
+
+  it("sends the effort when creating a conversation", async () => {
+    vi.mocked(archestraApiSdk.createChatConversation).mockResolvedValue({
+      data: { ...makeConversation(), thinkingEffort: "high" },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.createChatConversation>>);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        agentId: "agent-a",
+        thinkingEffort: "high",
+      });
+    });
+
+    expect(archestraApiSdk.createChatConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ thinkingEffort: "high" }),
+      }),
+    );
   });
 });

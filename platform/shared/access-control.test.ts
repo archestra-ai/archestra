@@ -147,6 +147,14 @@ describe("access-control", () => {
         {},
       );
     });
+
+    // The map is Partial<>: deleting this entry compiles fine and turns every
+    // RUM ingest into a 403 the fire-and-forget client swallows silently.
+    test("IngestRumEvents stays authenticated-only", () => {
+      expect(requiredEndpointPermissionsMap[RouteId.IngestRumEvents]).toEqual(
+        {},
+      );
+    });
   });
 
   describe("sandbox artifact route", () => {

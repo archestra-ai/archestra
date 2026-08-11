@@ -18,7 +18,6 @@ import {
   extractGroupsFromClaims,
 } from "@/auth/idp-team-sync-cache.ee";
 import { LRUCacheManager } from "@/cache-manager";
-import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";

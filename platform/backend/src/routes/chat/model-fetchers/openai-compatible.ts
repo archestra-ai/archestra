@@ -7,6 +7,8 @@ interface FetchModelsWithBearerAuthParams {
   apiKey: string;
   errorLabel: string;
   extraHeaders?: Record<string, string> | null;
+  /** OAuth-session callers must not replay identity headers across redirects. */
+  redirect?: RequestRedirect;
 }
 
 export async function fetchModelsWithBearerAuth<TSchema extends z.ZodType>(
@@ -18,12 +20,13 @@ export async function fetchModelsWithBearerAuth<T>(
 export async function fetchModelsWithBearerAuth<TSchema extends z.ZodType>(
   params: FetchModelsWithBearerAuthParams & { schema?: TSchema },
 ): Promise<z.infer<TSchema> | unknown> {
-  const { url, apiKey, errorLabel, extraHeaders, schema } = params;
+  const { url, apiKey, errorLabel, extraHeaders, redirect, schema } = params;
   const response = await fetch(url, {
     headers: {
       ...(extraHeaders ?? {}),
       Authorization: `Bearer ${apiKey}`,
     },
+    redirect,
   });
 
   if (!response.ok) {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ThinkingEffort } from "./thinking-effort";
 
 /**
  * Supported LLM providers
@@ -62,12 +63,65 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:chatCompletions",
   "azure:responses",
   "github-copilot:chatCompletions",
+  "github-copilot:responses",
   "microsoft-365-copilot:chatCompletions",
   "archestra:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
 export type SupportedProvider = z.infer<typeof SupportedProvidersSchema>;
+
+/**
+ * The wire formats a single provider can serve one model catalog over, spelled
+ * as the provider spells them. Only GitHub Copilot publishes this per model
+ * today (`supported_endpoints` on its `/models` entries), and it is the only
+ * discriminator available there: its Codex and GPT-5.x models accept only
+ * `/responses` while the rest accept only `/chat/completions`, and both
+ * families use bare ids like `gpt-5.5` and `gpt-4o`, so — unlike Perplexity,
+ * where a vendor prefix marks the Agent API — nothing about the id says which
+ * surface a model belongs to. Persisted per model so the surface survives to
+ * request time.
+ */
+export const ProviderEndpointSchema = z.enum([
+  "/chat/completions",
+  "/responses",
+]);
+export type SupportedProviderEndpoint = z.infer<typeof ProviderEndpointSchema>;
+
+/**
+ * True for providers that serve one model catalog over more than one wire
+ * format, where the model id alone does not say which. Gates the per-model
+ * surface lookup on the chat hot path so single-surface providers — every
+ * other one — pay nothing for it.
+ *
+ * Perplexity is deliberately absent: it also serves two surfaces, but its
+ * catalogs are disjoint by construction and `requiresPerplexityAgentApi`
+ * reads the answer straight off the id, with no row to fetch.
+ */
+export function providerHasMultipleSurfaces(
+  provider: SupportedProvider,
+): boolean {
+  return provider === "github-copilot";
+}
+
+/**
+ * True when a model must be invoked through the Responses API — i.e. the
+ * provider published its supported endpoints and `/chat/completions` was not
+ * among them. Absent or empty data answers `false` so a model whose surface is
+ * unknown keeps the chat-completions default rather than being routed to a
+ * surface it may not serve.
+ */
+export function requiresResponsesApi(
+  supportedEndpoints: readonly string[] | null | undefined,
+): boolean {
+  if (!supportedEndpoints || supportedEndpoints.length === 0) {
+    return false;
+  }
+  return (
+    supportedEndpoints.includes("/responses") &&
+    !supportedEndpoints.includes("/chat/completions")
+  );
+}
 
 /**
  * Type guard to check if a value is a valid SupportedProvider
@@ -173,13 +227,6 @@ export function providerRequiresPerUserCredential(
   return PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.has(provider);
 }
 
-/**
- * Display name of the OpenAI "ChatGPT Subscription" (Codex) auth mode — the
- * credential-level per-user case on the `openai` provider, governed by the same
- * rules as PROVIDERS_REQUIRING_PER_USER_CREDENTIAL.
- */
-export const CHATGPT_SUBSCRIPTION_LABEL = "ChatGPT Subscription";
-
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
   azureEntraIdEnabled?: boolean;
@@ -201,6 +248,40 @@ export function isProviderApiKeyOptional(params: {
  */
 export function isSelfHostedProvider(provider: SupportedProvider): boolean {
   return PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider);
+}
+
+/**
+ * Total parameter count at or below which a model is surfaced as "small". 8B is
+ * where the open-weight families that ship a tool-calling chat template start
+ * (Llama 3.1 8B, Qwen3 8B), so it is the boundary below which a model is likely
+ * to have been trained for chat rather than for tool use.
+ *
+ * A statement about SIZE, not quality, and the copy must stay that way:
+ * parameter count is a poor predictor of agentic skill — Llama 3.3 70B scores
+ * as low as a 12B model on published agentic benchmarks, so a threshold on size
+ * can only ever say "small", never "weak".
+ *
+ * The bound is inclusive, but it sits just under the counts real 8B builds
+ * report — Llama 3 8B reports 8_030_261_248 — so the nominal-8B tier falls
+ * outside it and only genuinely smaller models are marked. That ~30M gap is
+ * deliberate, not an off-by-one: closing it flips every 8B model to badged.
+ *
+ * Keep this at or below ~20B. Above that it starts catching mixture-of-experts
+ * models (gpt-oss:20b, qwen3:30b-a3b), whose total parameter count describes
+ * neither their compute per token nor their capability — at which point MoE
+ * handling becomes load-bearing and this constant is no longer sufficient.
+ */
+export const SMALL_MODEL_MAX_PARAMETERS = 8_000_000_000;
+
+/**
+ * True when a model's reported size is small enough to warn about. Requires a
+ * known count: null means the serving backend reported no size, and no claim is
+ * made. Only Ollama reports one today, so this is null everywhere else.
+ */
+export function isSmallModel(parameterCount: number | null): boolean {
+  return (
+    parameterCount !== null && parameterCount <= SMALL_MODEL_MAX_PARAMETERS
+  );
 }
 
 /**
@@ -228,6 +309,11 @@ export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
   "vllm",
   "xai",
   "zhipuai",
+  // OpenAI-wire on chat completions, plus a native Responses surface that the
+  // router hands Responses-only models to directly (see
+  // `providerHasMultipleSurfaces`). Its credential is per-user, so it is
+  // routable only through the owner's own personal virtual key.
+  "github-copilot",
   // Translated by the router
   "anthropic",
   "bedrock",
@@ -744,6 +830,42 @@ export function anthropicSupportsThinkingDisabled(modelId: string): boolean {
   return !ANTHROPIC_UNCONDITIONAL_THINKING_MODEL_MARKERS.some((marker) =>
     id.includes(marker),
   );
+}
+
+/**
+ * True when a chosen reasoning depth is worth offering for an Anthropic model.
+ *
+ * Deliberately the same set as {@link anthropicThinksByDefault}, and delegating
+ * rather than listing markers again so the two cannot drift. The reasoning is
+ * that `output_config.effort` only *means* reasoning depth while thinking is
+ * on: Opus 4.5–4.8 and Sonnet 4.6 accept the field but keep thinking off until
+ * a request asks for it, so a depth there would move token spend without
+ * producing any of the reasoning the control names.
+ *
+ * Reaching them would mean sending `thinking: {type: "adaptive"}` alongside the
+ * effort, which the display wrapper in `clients/llm-client.ts` currently treats
+ * as a caller opting out of summaries — a bigger change than this control.
+ *
+ * Older models (Sonnet 4.5, Haiku 4.5 and earlier) reject the field outright.
+ */
+export function anthropicSupportsThinkingEffort(modelId: string): boolean {
+  return anthropicThinksByDefault(modelId);
+}
+
+/**
+ * The `output_config.effort` a chosen depth maps to, or null when the model is
+ * outside {@link anthropicSupportsThinkingEffort}.
+ *
+ * Mapped by name. Anthropic's own default is `high` rather than `medium`, but
+ * that is auto's business, not this function's: a conversation nobody has
+ * touched never reaches here, so the levels can mean what they say instead of
+ * being shifted to keep one of them standing in for "unchanged".
+ */
+export function anthropicEffortForThinkingEffort(
+  modelId: string,
+  effort: ThinkingEffort,
+): ThinkingEffort | null {
+  return anthropicSupportsThinkingEffort(modelId) ? effort : null;
 }
 
 /**

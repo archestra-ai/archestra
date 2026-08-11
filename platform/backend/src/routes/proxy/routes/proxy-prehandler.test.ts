@@ -49,7 +49,7 @@ describe("createProxyPreHandler", () => {
 
   async function setupProxy(params: {
     apiPrefix: string;
-    endpointSuffix: string;
+    endpointSuffix: string | string[];
     rewritePrefix?: string;
     providerName: string;
     skipErrorResponse?: Record<string, unknown>;
@@ -334,21 +334,24 @@ describe("createProxyPreHandler", () => {
         rejectUnhandledPaths: true,
       });
 
-      // An unsupported endpoint (e.g. /responses) must be rejected, not proxied
-      // — forwarding would leak the raw GitHub token upstream.
+      // An endpoint this proxy does not serve must be rejected, not proxied —
+      // forwarding would leak the raw GitHub token upstream.
       const response = await app.inject({
         method: "POST",
-        url: "/v1/github-copilot/responses",
+        url: "/v1/github-copilot/embeddings",
         headers: { "content-type": "application/json" },
-        payload: { model: "gpt-5.3-codex", input: "hi" },
+        payload: { model: "text-embedding-3-small", input: "hi" },
       });
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
-      expect(body.error.message).toContain("/chat/completions and /models");
+      // Derived from this setup's single configured suffix, plus /models.
+      expect(body.error.message).toContain("/chat/completions, /models");
       // The message must name the offending request and the expected base
       // URL, so a misconfigured client sees the cause in its own error body.
-      expect(body.error.message).toContain("POST /v1/github-copilot/responses");
+      expect(body.error.message).toContain(
+        "POST /v1/github-copilot/embeddings",
+      );
       expect(body.error.message).toContain(
         '"/v1/github-copilot" or "/v1/github-copilot/<llm-proxy-id>"',
       );
@@ -378,6 +381,56 @@ describe("createProxyPreHandler", () => {
       expect(body.error.type).toBe("invalid_request_error");
       expect(body.error.message).toContain("GET /v1/github-copilot/v1/models");
       expect(body.error.message).toContain('no trailing "/v1"');
+      expect(upstreamHits).toBe(0);
+    });
+
+    // The message used to hardcode "/chat/completions and /models", so a
+    // provider that gained a surface advertised it as unsupported in the very
+    // error a misconfigured client sees.
+    test("rejectUnhandledPaths: lists every configured endpoint, not a hardcoded pair", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/github-copilot",
+        endpointSuffix: ["/chat/completions", "/responses"],
+        providerName: "GitHubCopilot",
+        rejectUnhandledPaths: true,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/github-copilot/v1/embeddings",
+        headers: { "content-type": "application/json" },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      const { error } = JSON.parse(response.body);
+      expect(error.message).toContain(
+        "only supports the /chat/completions, /responses, /models endpoints",
+      );
+      expect(upstreamHits).toBe(0);
+    });
+
+    test("rejectUnhandledPaths: routes a configured /responses suffix to its own handler", async () => {
+      await setupProxy({
+        apiPrefix: "/v1/github-copilot",
+        endpointSuffix: ["/chat/completions", "/responses"],
+        providerName: "GitHubCopilot",
+        rejectUnhandledPaths: true,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/github-copilot/responses",
+        headers: { "content-type": "application/json" },
+        payload: { model: "gpt-5.3-codex", input: "hi" },
+      });
+
+      // Skipped for the dedicated route rather than rejected as unsupported,
+      // and never forwarded — forwarding would relay the raw GitHub token.
+      expect(response.statusCode).toBe(400);
+      expect(JSON.parse(response.body).error.message).not.toContain(
+        "only supports",
+      );
       expect(upstreamHits).toBe(0);
     });
 

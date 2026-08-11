@@ -4,6 +4,7 @@ import {
   BaseConnector,
   buildCheckpoint,
   extractErrorMessage,
+  resolveIngestibleImageMimeTypes,
 } from "./base-connector";
 
 /**
@@ -32,6 +33,8 @@ class TestableConnector extends BaseConnector {
     fallback: T;
     itemId: string | number;
     resource: string;
+    itemUnavailable?: boolean;
+    recoverySourceId?: string;
   }): Promise<T> {
     return this.safeItemFetch(params);
   }
@@ -154,6 +157,29 @@ describe("BaseConnector", () => {
         resource: "comments",
         error: "502 Bad Gateway",
       });
+    });
+
+    test("records a provisional top-level item failure", async () => {
+      await connector.testSafeItemFetch({
+        fetch: async () => {
+          throw new Error("viewer cannot download");
+        },
+        fallback: null,
+        itemId: "file-1",
+        resource: "driveFile",
+        itemUnavailable: true,
+        recoverySourceId: "file-1",
+      });
+
+      expect(connector.testFlushFailures()).toEqual([
+        {
+          itemId: "file-1",
+          resource: "driveFile",
+          error: "viewer cannot download",
+          itemUnavailable: true,
+          recoverySourceId: "file-1",
+        },
+      ]);
     });
 
     test("collects multiple failures", async () => {
@@ -446,5 +472,43 @@ describe("extractErrorMessage", () => {
     expect(extractErrorMessage(new Error("Invalid PDF structure"))).toBe(
       "Invalid PDF structure",
     );
+  });
+});
+
+describe("resolveIngestibleImageMimeTypes", () => {
+  const connectorImageMimeTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
+
+  test("is empty when the embedding model takes no image input", () => {
+    expect(
+      resolveIngestibleImageMimeTypes({
+        connectorImageMimeTypes,
+        embeddingInputModalities: ["text"],
+      }).size,
+    ).toBe(0);
+    expect(
+      resolveIngestibleImageMimeTypes({ connectorImageMimeTypes }).size,
+    ).toBe(0);
+  });
+
+  test("keeps every connector-supported format when the client has no restriction", () => {
+    const result = resolveIngestibleImageMimeTypes({
+      connectorImageMimeTypes,
+      embeddingInputModalities: ["text", "image"],
+    });
+    expect([...result]).toEqual(connectorImageMimeTypes);
+  });
+
+  test("intersects with the embedding client's accepted formats", () => {
+    const result = resolveIngestibleImageMimeTypes({
+      connectorImageMimeTypes,
+      embeddingInputModalities: ["text", "image"],
+      embeddingAcceptedImageMimeTypes: ["image/jpeg", "image/png"],
+    });
+    expect([...result]).toEqual(["image/jpeg", "image/png"]);
   });
 });

@@ -74,6 +74,10 @@ export const InsertSkillSchema = createInsertSchema(schema.skillsTable, {
   latestVersion: true,
   usageCount: true,
   lastUsedAt: true,
+  // derived from the frontmatter columns and the body by `SkillModel`; a
+  // caller-supplied value would advertise a digest over bytes nobody stored.
+  frontmatterBlob: true,
+  digest: true,
   // sync bookkeeping is system-owned (stamped by the sync worker).
   lastSyncedAt: true,
   lastSyncError: true,
@@ -93,6 +97,9 @@ export const UpdateSkillSchema = createUpdateSchema(schema.skillsTable, {
   latestVersion: true,
   usageCount: true,
   lastUsedAt: true,
+  // model-owned, same as on insert.
+  frontmatterBlob: true,
+  digest: true,
   // sync state changes only through dedicated model methods
   // (setGithubSync / markGithubSyncResult), never a generic update.
   githubSyncInterval: true,
@@ -157,11 +164,25 @@ export const InsertSkillFileSchema = createInsertSchema(
   },
 ).omit({
   id: true,
+  // computed from the bytes being written; never supplied by a caller.
+  digest: true,
   createdAt: true,
 });
 
+/**
+ * A skill row as the REST API returns it.
+ *
+ * `frontmatterBlob` is dropped: it is a re-serialization of frontmatter the row
+ * already carries in its own columns, stored only so the MCP publication path
+ * has stable bytes to digest. No API client reads it, and the list endpoint
+ * already returns each skill's full `content`.
+ */
+export const SkillResponseSchema = SelectSkillSchema.omit({
+  frontmatterBlob: true,
+});
+
 /** A skill with its bundled resource files attached. */
-export const SkillWithFilesSchema = SelectSkillSchema.extend({
+export const SkillWithFilesSchema = SkillResponseSchema.extend({
   files: z.array(SelectSkillFileSchema),
 });
 
@@ -193,6 +214,40 @@ export const SkillUsageStatisticsSchema = z.object({
 });
 
 export type Skill = z.infer<typeof SelectSkillSchema>;
+
+/**
+ * A skill row without its body — what the MCP publication path resolves over.
+ *
+ * `content` is the largest column on the table and the gateway's listing,
+ * directory-read and `skills/get` surfaces never render it, so the queries
+ * backing them project it away. Only a manifest read needs a body, and it
+ * fetches the one it needs (`SkillModel.findManifestSourceById`).
+ */
+export type PublishableSkill = Omit<Skill, "content">;
+
+/**
+ * Every column a `SKILL.md` is composed from, as one row.
+ *
+ * The published blob and the fields it was serialized from travel together on
+ * purpose: composing a manifest from a blob read at one moment and a body read
+ * at another yields bytes that were never a committed state of the row, and so
+ * match no digest this platform has ever advertised. Whether the manifest comes
+ * from `frontmatterBlob` or is rebuilt from the fields (a row predating those
+ * columns, or one an invalidating write reset), both halves must come from the
+ * same read — see `SkillModel.findManifestSourceById`.
+ */
+export type SkillManifestSource = Pick<
+  Skill,
+  | "name"
+  | "description"
+  | "license"
+  | "compatibility"
+  | "allowedTools"
+  | "metadata"
+  | "content"
+  | "frontmatterBlob"
+  | "digest"
+>;
 export type SkillUsageStatistics = z.infer<typeof SkillUsageStatisticsSchema>;
 export type InsertSkill = z.infer<typeof InsertSkillSchema>;
 export type UpdateSkill = z.infer<typeof UpdateSkillSchema>;

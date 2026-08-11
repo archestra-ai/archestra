@@ -4,6 +4,8 @@ import { archestraApiSdk } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { clearSsoSignInAttempt } from "@/lib/auth/sso-sign-in-attempt";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; reset is a no-op when RUM never started
+import { rumClient } from "@/lib/rum.ee";
 
 export function SignOutWithIdpLogout() {
   const hasStarted = useRef(false);
@@ -25,6 +27,12 @@ export function SignOutWithIdpLogout() {
 
 async function performSignOut() {
   clearSsoSignInAttempt();
+
+  // Flush pending usage telemetry while the session cookie is still valid,
+  // then forget the RUM session and last-user markers: a telemetry session
+  // must not outlive the user who produced it (on a shared machine the next
+  // sign-in would otherwise inherit this session id).
+  rumClient.reset();
 
   // Fetch IdP logout URL while still authenticated
   let idpLogoutUrl: string | null = null;

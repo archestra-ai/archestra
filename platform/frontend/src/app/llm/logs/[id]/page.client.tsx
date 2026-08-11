@@ -1,10 +1,15 @@
 "use client";
 
-import { type archestraApiTypes, DynamicInteraction } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DynamicInteraction,
+  isIncognitoUnavailableContent,
+} from "@archestra/shared";
 import { ArrowLeft, Database, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { BilledCost } from "@/components/billed-cost";
+import { IncognitoContentUnavailable } from "@/components/incognito-content-unavailable";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread from "@/components/message-thread";
@@ -314,7 +319,13 @@ function LogDetail({
                 </span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <JsonCodeBlock value={dynamicInteraction.request} />
+                {isIncognitoUnavailableContent(dynamicInteraction.request) ? (
+                  <IncognitoContentUnavailable
+                    value={dynamicInteraction.request}
+                  />
+                ) : (
+                  <JsonCodeBlock value={dynamicInteraction.request} />
+                )}
               </AccordionContent>
             </AccordionItem>
 
@@ -329,7 +340,17 @@ function LogDetail({
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-6 pb-4">
-                  <JsonCodeBlock value={dynamicInteraction.processedRequest} />
+                  {isIncognitoUnavailableContent(
+                    dynamicInteraction.processedRequest,
+                  ) ? (
+                    <IncognitoContentUnavailable
+                      value={dynamicInteraction.processedRequest}
+                    />
+                  ) : (
+                    <JsonCodeBlock
+                      value={dynamicInteraction.processedRequest}
+                    />
+                  )}
                   <p className="text-xs text-muted-foreground mt-2">
                     This shows the request after processing (e.g., TOON
                     conversion, trusted data filtering, etc.)
@@ -346,7 +367,13 @@ function LogDetail({
                 <span className="text-base font-semibold">Raw Response</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                <JsonCodeBlock value={dynamicInteraction.response} />
+                {isIncognitoUnavailableContent(dynamicInteraction.response) ? (
+                  <IncognitoContentUnavailable
+                    value={dynamicInteraction.response}
+                  />
+                ) : (
+                  <JsonCodeBlock value={dynamicInteraction.response} />
+                )}
               </AccordionContent>
             </AccordionItem>
           </Accordion>

@@ -35,7 +35,7 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
   vaultSecretKey: null,
   isPrimary: false,
   bedrockAuthMethod: "api-key",
-  openaiAuthMethod: "api-key",
+  authMethod: "api-key",
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
@@ -53,6 +53,7 @@ function Harness({
   credentialMode,
   progressive,
   allowPersonalSubscriptions,
+  requiresExactSubscriptionCredential,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
@@ -60,6 +61,7 @@ function Harness({
   credentialMode?: "api-key" | "subscription";
   progressive?: boolean;
   allowPersonalSubscriptions?: boolean;
+  requiresExactSubscriptionCredential?: boolean;
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...defaults },
@@ -74,6 +76,7 @@ function Harness({
       credentialMode={credentialMode}
       progressive={progressive}
       allowPersonalSubscriptions={allowPersonalSubscriptions}
+      requiresExactSubscriptionCredential={requiresExactSubscriptionCredential}
     />
   );
 }
@@ -85,6 +88,7 @@ function renderForm(options?: {
   credentialMode?: "api-key" | "subscription";
   progressive?: boolean;
   allowPersonalSubscriptions?: boolean;
+  requiresExactSubscriptionCredential?: boolean;
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -98,6 +102,9 @@ function renderForm(options?: {
         credentialMode={options?.credentialMode}
         progressive={options?.progressive}
         allowPersonalSubscriptions={options?.allowPersonalSubscriptions}
+        requiresExactSubscriptionCredential={
+          options?.requiresExactSubscriptionCredential
+        }
       />
     </QueryClientProvider>,
   );
@@ -123,7 +130,7 @@ describe("LlmProviderApiKeyForm", () => {
       credentialMode: "subscription",
       defaults: {
         provider: "openai",
-        openaiAuthMethod: "chatgpt-subscription",
+        authMethod: "subscription",
       },
     });
 
@@ -135,6 +142,70 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.queryByText("Primary key")).not.toBeInTheDocument();
     expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
     expect(screen.queryByText("Extra HTTP headers")).not.toBeInTheDocument();
+  });
+
+  it("explains why subscription sign-in is unavailable with BYOS", () => {
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "byosEnabled",
+    );
+    renderForm({
+      credentialMode: "subscription",
+      defaults: {
+        provider: "xai",
+        authMethod: "subscription",
+      },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Subscription sign-in is unavailable with Bring Your Own Secrets",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Store a provider API key in Vault instead",
+    );
+    expect(
+      screen.queryByRole("button", { name: /Sign in with X/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer an impossible Vault API-key fallback for subscription-only providers", () => {
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "byosEnabled",
+    );
+    renderForm({
+      credentialMode: "subscription",
+      defaults: { provider: "github-copilot" },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This provider has no API-key alternative",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      "Store a provider API key in Vault instead",
+    );
+  });
+
+  it("does not offer an ordinary Vault key for an exact-subscription agent pin", () => {
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "byosEnabled",
+    );
+    renderForm({
+      credentialMode: "subscription",
+      requiresExactSubscriptionCredential: true,
+      defaults: {
+        provider: "xai",
+        authMethod: "subscription",
+      },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This agent requires the same personal subscription",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "choose a different agent or model",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      "Store a provider API key in Vault instead",
+    );
   });
 
   it("reveals optional API key settings progressively", async () => {
@@ -270,7 +341,7 @@ describe("LlmProviderApiKeyForm", () => {
     });
 
     act(() => {
-      form.setValue("openaiAuthMethod", "chatgpt-subscription");
+      form.setValue("authMethod", "subscription");
     });
     await waitFor(() => {
       expect(form.getValues("name")).toBe("ChatGPT Subscription");
@@ -278,7 +349,7 @@ describe("LlmProviderApiKeyForm", () => {
 
     // Switching back to the API-key tab restores the plain provider default.
     act(() => {
-      form.setValue("openaiAuthMethod", "api-key");
+      form.setValue("authMethod", "api-key");
     });
     await waitFor(() => {
       expect(form.getValues("name")).toBe("OpenAI");
@@ -305,12 +376,13 @@ describe("LlmProviderApiKeyForm", () => {
       isPrimary: false,
       createdAt: "2026-07-16T00:00:00.000Z",
       updatedAt: "2026-07-16T00:00:00.000Z",
+      subscriptionKind: "chatgpt",
       isChatgptSubscription: true,
     } as LlmProviderApiKeyResponse;
 
     renderForm({
       existingKey,
-      defaults: { openaiAuthMethod: "chatgpt-subscription" },
+      defaults: { authMethod: "subscription" },
     });
 
     await waitFor(() => {
@@ -342,7 +414,7 @@ describe("LlmProviderApiKeyForm", () => {
 
     renderForm({
       existingKey,
-      defaults: { openaiAuthMethod: "chatgpt-subscription" },
+      defaults: { authMethod: "subscription" },
     });
 
     await waitFor(() => {

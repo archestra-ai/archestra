@@ -1,4 +1,7 @@
-import type { PaginationQuery } from "@archestra/shared";
+import {
+  type PaginationQuery,
+  redactCatalogToolArguments,
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -9,6 +12,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNull,
   lte,
   max,
   or,
@@ -16,15 +20,16 @@ import {
   sql,
 } from "drizzle-orm";
 import {
+  decryptMcpToolCallContent,
+  encryptMcpToolCallContent,
+  readMcpToolCallRow,
+} from "@/content-encryption/audit-rows";
+import type { IncognitoAuditContext } from "@/content-encryption/incognito";
+import {
   isContentDecryptionAvailable,
   isContentEncryptionEnabled,
   // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
 } from "@/content-encryption/index.ee";
-import {
-  decryptMcpToolCallRow,
-  encryptMcpToolCallInsert,
-  // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
-} from "@/content-encryption/rows.ee";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -58,15 +63,30 @@ function buildMcpToolCallSearchCondition(search: string) {
 }
 
 class McpToolCallModel {
-  static async create(data: InsertMcpToolCall) {
+  /**
+   * @param auditContext when present, this tool call belongs to an incognito
+   * conversation: `toolCall`/`toolResult` are encrypted under that
+   * conversation's browser-held key and the row is stamped with the
+   * discriminator, instead of the server key (or plaintext).
+   */
+  static async create(
+    data: InsertMcpToolCall,
+    auditContext?: IncognitoAuditContext | null,
+  ) {
+    const audit = auditContext ?? null;
     const [mcpToolCall] = await db
       .insert(schema.mcpToolCallsTable)
       // Spread first: the encrypt helper mutates in place, and callers must
       // keep their plaintext copy (e.g. to build the JSON-RPC response).
-      .values(encryptMcpToolCallInsert({ ...data }))
+      .values(
+        encryptMcpToolCallContent(redactToolCallArguments({ ...data }), audit),
+      )
       .returning();
 
-    return decryptMcpToolCallRow(mcpToolCall);
+    // Decrypting on a write path is only safe because the key came from this
+    // caller. A read path that might meet a row keyed to a conversation it
+    // cannot open must go through the locked-row guards instead.
+    return decryptMcpToolCallContent(mcpToolCall, audit);
   }
 
   /**
@@ -164,7 +184,7 @@ class McpToolCallModel {
     ]);
 
     return createPaginatedResult(
-      data.map((row) => toVisibleMcpToolCall(decryptMcpToolCallRow(row))),
+      data.map((row) => toVisibleMcpToolCall(readMcpToolCallRow(row))),
       Number(total),
       pagination,
     );
@@ -239,7 +259,7 @@ class McpToolCallModel {
       }
     }
 
-    return toVisibleMcpToolCall(decryptMcpToolCallRow(mcpToolCall));
+    return toVisibleMcpToolCall(readMcpToolCallRow(mcpToolCall));
   }
 
   static async getAllMcpToolCallsForAgent(
@@ -256,7 +276,7 @@ class McpToolCallModel {
         ),
       )
       .orderBy(asc(schema.mcpToolCallsTable.createdAt));
-    return rows.map(decryptMcpToolCallRow);
+    return rows.map(readMcpToolCallRow);
   }
 
   /**
@@ -334,7 +354,7 @@ class McpToolCallModel {
     ]);
 
     return createPaginatedResult(
-      data.map(decryptMcpToolCallRow) as McpToolCall[],
+      data.map(readMcpToolCallRow) as McpToolCall[],
       Number(total),
       pagination,
     );
@@ -414,13 +434,19 @@ class McpToolCallModel {
         SELECT id, created_at::text AS created_at_text, tool_result
         FROM ${schema.mcpToolCallsTable}
         WHERE method = 'tools/call' AND tool_result IS NOT NULL
+          -- Incognito rows are keyed to a browser this process cannot reach,
+          -- so their result is unreadable here. Excluded in SQL rather than
+          -- skipped in JS: the locked sentinel has no top-level isError, so
+          -- an encrypted FAILURE would otherwise be counted as the first
+          -- success and mis-fire onboarding.
+          AND incognito_conversation_id IS NULL
         ${cursorClause}
         ORDER BY created_at ASC, id ASC
         LIMIT ${batchSize}
       `);
 
       for (const row of page.rows) {
-        const result = decryptMcpToolCallRow(row).tool_result;
+        const result = readMcpToolCallRow(row).tool_result;
         const isError =
           typeof result === "object" &&
           result !== null &&
@@ -493,6 +519,12 @@ class McpToolCallModel {
         and(
           eq(schema.mcpToolCallsTable.method, "tools/call"),
           sql`${schema.mcpToolCallsTable.toolResult} IS NOT NULL`,
+          // Same exclusion as the decrypting branch, and it matters MORE here:
+          // this path runs when at-rest encryption is off, where incognito
+          // rows still exist, and it reads `isError` straight out of JSON. A
+          // DEK envelope has no such key, so an encrypted failure would read
+          // as a success.
+          isNull(schema.mcpToolCallsTable.incognitoConversationId),
           sql`(${schema.mcpToolCallsTable.toolResult} ->> 'isError') IS DISTINCT FROM 'true'`,
         ),
       )
@@ -524,4 +556,21 @@ function toVisibleMcpToolCall(
     appId: row.appDeletedAt ? null : toolCall.appId,
     appName: row.appDeletedAt ? null : toolCall.appName,
   };
+}
+
+/**
+ * Strips credential values out of the logged arguments. Reassigns `toolCall`
+ * rather than editing it, so the caller's plaintext copy — which the gateway
+ * still needs for its JSON-RPC response — is left intact.
+ */
+function redactToolCallArguments(values: InsertMcpToolCall): InsertMcpToolCall {
+  const toolCall = values.toolCall;
+  if (!toolCall?.arguments) return values;
+
+  const redacted = redactCatalogToolArguments(toolCall.arguments);
+  // Same reference back means nothing matched; skip the rewrite entirely.
+  if (redacted === toolCall.arguments) return values;
+
+  values.toolCall = { ...toolCall, arguments: redacted };
+  return values;
 }

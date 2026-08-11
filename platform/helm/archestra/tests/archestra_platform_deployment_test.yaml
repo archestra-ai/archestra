@@ -465,6 +465,20 @@ tests:
               value: "true"
             - name: ARCHESTRA_CODE_RUNTIME_ENABLED
               value: "true"
+            - name: ARCHESTRA_NODE_MEMORY_RESERVED_MIB
+              value: "384"
+            - name: ARCHESTRA_NODE_MEMORY_REQUEST_MIB
+              valueFrom:
+                resourceFieldRef:
+                  containerName: archestra-platform
+                  resource: requests.memory
+                  divisor: 1Mi
+            - name: ARCHESTRA_NODE_MEMORY_LIMIT_MIB
+              valueFrom:
+                resourceFieldRef:
+                  containerName: archestra-platform
+                  resource: limits.memory
+                  divisor: 1Mi
             - name: ARCHESTRA_PROCESS_TYPE
               value: "web"
 
@@ -933,6 +947,31 @@ tests:
           content:
             name: ARCHESTRA_NODE_HEAPSNAPSHOT_NEAR_HEAP_LIMIT
             value: "1"
+
+  # The web container runs the Next.js server alongside the backend under a
+  # single memory limit, so the launcher must take its old-space percentage over
+  # what the backend can actually use. Without the reservation the granted heap
+  # plus the co-located processes exceed the limit, and the cgroup kills the
+  # container before V8 ever reaches its own ceiling.
+  - it: should reserve memory for the co-located frontend on the web container
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_RESERVED_MIB
+            value: "384"
+
+  - it: should omit the reservation when it is set to zero
+    documentIndex: 1
+    set:
+      archestra.webContainerReservedMemoryMib: 0
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_RESERVED_MIB
+            value: "0"
 
   - it: should set ARCHESTRA_ORCHESTRATOR_KUBECONFIG env var when kubeconfig volume is mounted
     documentIndex: 1
@@ -1686,6 +1725,24 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: "3Gi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_REQUEST_MIB
+            valueFrom:
+              resourceFieldRef:
+                containerName: archestra-platform
+                resource: requests.memory
+                divisor: 1Mi
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_NODE_MEMORY_LIMIT_MIB
+            valueFrom:
+              resourceFieldRef:
+                containerName: archestra-platform
+                resource: limits.memory
+                divisor: 1Mi
 
   - it: should allow overriding resource requests and limits
     documentIndex: 1

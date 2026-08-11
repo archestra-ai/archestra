@@ -1,0 +1,1 @@
+ALTER TABLE "api_key_models" ADD COLUMN "recommended_for_agents" boolean;

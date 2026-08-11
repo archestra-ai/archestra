@@ -172,6 +172,14 @@ export const ModelCapabilitiesSchema = SelectModelSchema.pick({
   outputModalities: true,
   supportsToolCalling: true,
 }).extend({
+  /**
+   * Endpoint-scoped agent-suitability verdict from the `api_key_models` link
+   * (not a `models` column). Tri-state: `false` is evidence-backed, `true`
+   * means the evidence says fine, null means no evidence. Only `false` is
+   * ever surfaced. Aggregated pessimistically when a listing spans several
+   * keys.
+   */
+  recommendedForAgents: z.boolean().nullable(),
   /** Price per million tokens for input (computed from per-token price) */
   pricePerMillionInput: z.string().nullable(),
   /** Price per million tokens for output (computed from per-token price) */
@@ -218,6 +226,10 @@ export const PatchModelBodySchema = createUpdateSchema(
     inputModalities: z
       .array(ModelInputModalitySchema)
       .min(1, "At least one input modality is required")
+      .refine(
+        (modalities) => new Set(modalities).size === modalities.length,
+        "Input modalities must be unique",
+      )
       .nullable()
       .optional(),
     outputModalities: z.array(ModelOutputModalitySchema).nullable().optional(),
@@ -366,5 +378,12 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
    * default and make raising the window impossible.
    */
   effectiveContextLength: z.number().nullable(),
+  /**
+   * Whether the platform's embedding client can send images to this model.
+   * `null` when the client imposes no per-model limit (Gemini). Only meaningful
+   * for embedding models; the edit dialog uses it to disable the image input
+   * modality, and the update route rejects what the dialog disables.
+   */
+  embeddingClientImageCapable: z.boolean().nullable(),
 });
 export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;

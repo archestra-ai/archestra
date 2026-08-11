@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,
   Ban,
+  ChevronRight,
   Code,
   ExternalLink,
   Globe,
@@ -23,11 +24,17 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { lazy, useEffect, useMemo, useRef, useState } from "react";
-import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
+import { lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type FieldErrors,
+  type UseFormReturn,
+  useFieldArray,
+  useForm,
+} from "react-hook-form";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
@@ -39,14 +46,24 @@ import {
   EnterpriseManagedCredentialFields,
 } from "@/components/enterprise-managed-credential-fields";
 import { EnvironmentSelector } from "@/components/environment-selector";
-import { EnvironmentVariablesFormField } from "@/components/environment-variables-form-field";
+import {
+  EnvFromSection,
+  EnvironmentVariablesFormField,
+  SecretFilesSection,
+} from "@/components/environment-variables-form-field";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
@@ -95,6 +112,12 @@ import {
   type CascadeSnapshot,
   computeCascadeOutcome,
 } from "./cascade-decision";
+import { CatalogTemplateAutofill } from "./catalog-template-autofill";
+import {
+  ConnectionJsonPanel,
+  type ConnectionJsonPanelController,
+  ServerTypeBadge,
+} from "./connection-json-panel";
 import {
   compileValidationRegex,
   validateFieldAgainstRegex,
@@ -107,6 +130,12 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+import {
+  authSectionApplies,
+  headersSectionApplies,
+} from "./mcp-config-changes";
+import { parseMcpConfigText } from "./mcp-config-import";
+import { RegistryDuplicateNotice } from "./registry-duplicate-notice";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -176,10 +205,23 @@ interface McpCatalogFormProps {
          * Saving is also guarded internally, but disabling gives a visible cue.
          */
         hasBlockingErrors: boolean;
+        /**
+         * Create mode only: the registry-duplicate warning, for the page to
+         * dock INSIDE its sticky footer container — the always-visible commit
+         * point. Renders null while there is nothing to warn about.
+         */
+        duplicateNotice?: React.ReactNode;
       }) => React.ReactNode);
   catalogButton?: React.ReactNode;
   /** Optional banner/notice rendered at the very top of the form body. */
   notice?: React.ReactNode;
+  /**
+   * Create mode: silently pre-fill pristine identity fields (name,
+   * description, logo) when the typed connection matches an online-catalog
+   * template. The page passes the org's online-catalog setting — off by
+   * default so embedded/edit uses never query the catalog.
+   */
+  catalogAutofillEnabled?: boolean;
   formValues?: McpCatalogFormValues;
   /** Called when form dirty state changes */
   onDirtyChange?: (isDirty: boolean) => void;
@@ -201,12 +243,34 @@ export function McpCatalogForm({
   footer,
   catalogButton,
   notice,
+  catalogAutofillEnabled = false,
   formValues,
   onDirtyChange,
   submitRef,
   embedded = false,
   affectedServerCount = 0,
 }: McpCatalogFormProps) {
+  // The form is the primary editing surface. Its JSON projection lives
+  // embedded at the bottom of the Connection card (ConnectionJsonPanel): a
+  // live mirror for export, and the one reviewed door for imports.
+  const jsonPanelRef = useRef<ConnectionJsonPanelController | null>(null);
+  // Ref, not state: read only inside submit handlers, and toggling it must
+  // not re-render this (large) form.
+  const jsonDraftPendingRef = useRef(false);
+  const handleJsonDraftStateChange = useCallback((pending: boolean) => {
+    jsonDraftPendingRef.current = pending;
+  }, []);
+  // A pending JSON draft blocks saving: submitting would silently ignore the
+  // drafted config, so the only paths forward are Apply or Discard — the
+  // guard names them and brings the panel into view.
+  const blockOnJsonDraft = useCallback(() => {
+    toast.error(
+      "Unapplied JSON edits — apply or discard them in the Connection section first.",
+    );
+    jsonPanelRef.current?.reveal();
+  }, []);
+  const [sharingOpen, setSharingOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const localConfigSecretId =
     initialValues?.serverType === "local"
       ? initialValues.localConfigSecretId
@@ -311,23 +375,81 @@ export function McpCatalogForm({
         }),
   });
 
+  // Target for the Authentication subtitle's "Turn off Multitenant" link:
+  // opens Advanced and brings the tenancy control into view.
+  const tenancyRef = useRef<HTMLDivElement | null>(null);
+  const revealTenancyControl = () => {
+    setAdvancedOpen(true);
+    // Radix mounts the collapsible content on open — scroll on the next tick.
+    setTimeout(() => {
+      tenancyRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      tenancyRef.current?.querySelector("button")?.focus();
+    }, 50);
+  };
+
+  // A failed validation must never be invisible: open any collapsed section
+  // that contains an error before RHF focuses it.
+  const revealValidationErrors = useCallback(
+    (errors: FieldErrors<McpCatalogFormValues>) => {
+      if (errors.localConfig?.imagePullSecrets || errors.localConfig?.envFrom) {
+        setAdvancedOpen(true);
+      }
+      if (errors.scope || errors.teams || errors.environmentId) {
+        setSharingOpen(true);
+      }
+    },
+    [],
+  );
+
   // Expose imperative submit to parent
   useEffect(() => {
     if (submitRef) {
-      submitRef.current = form.handleSubmit((values) =>
-        onSubmit(values, form),
-      ) as () => Promise<void>;
+      submitRef.current = form.handleSubmit((values) => {
+        // Same guard as the in-form submit path: an unapplied JSON draft
+        // must never be silently dropped by an imperative save either.
+        if (jsonDraftPendingRef.current) {
+          blockOnJsonDraft();
+          return;
+        }
+        return onSubmit(values, form);
+      }, revealValidationErrors) as () => Promise<void>;
     }
     return () => {
       if (submitRef) submitRef.current = null;
     };
-  }, [submitRef, form, onSubmit]);
+  }, [submitRef, form, onSubmit, revealValidationErrors, blockOnJsonDraft]);
+
+  // Hydrated stored secret values (edit mode). Serialization masks by value
+  // identity against this bag, so a stored secret never reaches the JSON
+  // view or the clipboard even if its row's type was flipped before saving.
+  const storedSecretValues = useMemo(() => {
+    const secret = localConfigSecret?.secret;
+    if (!secret) return undefined;
+    const out: Record<string, string> = {};
+    for (const [secretKey, value] of Object.entries(secret)) {
+      if (value !== null && value !== undefined) out[secretKey] = String(value);
+    }
+    return out;
+  }, [localConfigSecret]);
 
   const authMethod = form.watch("authMethod");
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
   const currentTransportType = form.watch("localConfig.transportType");
   const isMultitenant = Boolean(form.watch("multitenant"));
+  // Section gates — the same predicates the import dialog uses for its
+  // consequence lines (single-sourced in mcp-config-changes).
+  const showAuthSection = authSectionApplies({
+    serverType: currentServerType,
+    multitenant: isMultitenant,
+  });
+  const showHeadersSection = headersSectionApplies({
+    serverType: currentServerType,
+    localConfig: { transportType: currentTransportType },
+  });
   const isTenancyLocked = Boolean(initialValues);
   const selectedIdentityProviderId = form.watch(
     "enterpriseManagedConfig.identityProviderId",
@@ -451,6 +573,38 @@ export function McpCatalogForm({
     if (next.some((envVar, i) => envVar !== envVars[i])) {
       form.setValue("localConfig.environment", next, { shouldDirty: true });
     }
+  };
+
+  // Smart paste for the URL/Command/Arguments fields. A bare JSON array is
+  // ordinary field content: it fills Arguments in place (only there — pasted
+  // anywhere else it falls through as plain text). A full MCP config object
+  // (mcpServers/servers wrapper, registry server.json, …) is a server import
+  // and always goes through the one reviewed apply path: the Connection
+  // card's JSON panel, loaded with the pasted text.
+  const handleConfigPaste = (
+    event: React.ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+    options: { acceptArgsArray: boolean },
+  ) => {
+    const pastedText = event.clipboardData.getData("text/plain");
+    const result = parseMcpConfigText(pastedText);
+
+    if (result.status === "args-array" && options.acceptArgsArray) {
+      event.preventDefault();
+      form.setValue("localConfig.arguments", result.args.join("\n"), {
+        shouldDirty: true,
+      });
+      toast.success(
+        `Pasted JSON array as ${result.args.length} argument${result.args.length === 1 ? "" : "s"}`,
+      );
+      return;
+    }
+
+    if (result.status !== "servers") {
+      return; // Not a config — let the browser paste normally.
+    }
+
+    event.preventDefault();
+    jsonPanelRef.current?.reviewPaste(pastedText);
   };
 
   useEffect(() => {
@@ -667,6 +821,16 @@ export function McpCatalogForm({
   }
   const hasEnvRuleViolations = envRuleViolations.length > 0;
   const currentScope = form.watch("scope");
+
+  // Governance fields live behind a collapsed "Sharing & placement" section:
+  // they all have safe defaults, so the essentials stay above the fold. The
+  // section force-opens while a bound-environment rule violation needs fixing.
+  const scopeLabel =
+    currentScope === "org"
+      ? "Organization"
+      : currentScope === "team"
+        ? "Team"
+        : "Personal";
   const selectedTeams = form.watch("teams") ?? [];
   // A team-scoped item may be shared with teams the editor doesn't belong to,
   // which the assignable-teams picker never lists — take their names from the
@@ -919,6 +1083,10 @@ export function McpCatalogForm({
     // environment switch). The Save button is disabled in that state, but guard
     // here too so an Enter-key submit can't bypass it.
     if (hasEnvRuleViolations) return;
+    if (jsonDraftPendingRef.current) {
+      blockOnJsonDraft();
+      return;
+    }
     // Cascade-confirm decision delegated to a pure function so it can be
     // matrix-tested without rendering, and so frontend + backend share
     // the same decision tree shape. See `cascade-decision.ts`.
@@ -943,7 +1111,9 @@ export function McpCatalogForm({
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(handleSubmit)}
+        // On validation errors, reveal any collapsed section holding an error
+        // before RHF focuses the failing field.
+        onSubmit={form.handleSubmit(handleSubmit, revealValidationErrors)}
         className="flex min-h-0 flex-1 flex-col"
         autoComplete={MCP_CONFIG_AUTOCOMPLETE}
         data-1p-ignore="true"
@@ -988,600 +1158,59 @@ export function McpCatalogForm({
             ) : null}
             {catalogButton}
 
-            <div className="space-y-4">
-              <div className="flex items-stretch gap-3">
-                <AgentIconPicker
-                  value={form.watch("icon") ?? null}
-                  fallbackType="server"
-                  onChange={(icon) =>
-                    form.setValue("icon", icon, { shouldDirty: true })
-                  }
-                  showLogos
-                  className="h-auto w-16 self-stretch rounded-md"
-                />
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>
-                        Name <span className="text-destructive">*</span>
-                        <ReinstallHint
-                          show={isNameDirty}
-                          label="renames tools"
-                        />
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="e.g., GitHub MCP Server"
-                          disabled={isNameLocked}
-                          {...field}
-                        />
-                      </FormControl>
-                      {isNameLocked && (
-                        <FormDescription>
-                          {isAppBacked
-                            ? "This server is backed by an app — rename it from the app's settings."
-                            : "This is a built-in server — its name is system-managed and cannot be changed."}
-                        </FormDescription>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Describe what this MCP server does..."
-                        className="min-h-20"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="scope"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <VisibilitySelector
-                        label="Access"
-                        value={
-                          (field.value ?? "personal") as
-                            | "personal"
-                            | "team"
-                            | "org"
-                        }
-                        options={visibilityOptions}
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          if (value !== "team") {
-                            form.setValue("teams", [], { shouldDirty: true });
-                          }
-                        }}
-                      >
-                        {currentScope === "team" && (
-                          <div className="space-y-6">
-                            <div className="space-y-2">
-                              <Label>Add Team</Label>
-                              <SearchableSelect
-                                value=""
-                                onValueChange={(teamId) =>
-                                  form.setValue(
-                                    "teams",
-                                    [
-                                      ...selectedTeams,
-                                      { id: teamId, level: "use" },
-                                    ],
-                                    { shouldDirty: true },
-                                  )
-                                }
-                                items={(teams ?? []).map((t) => ({
-                                  value: t.id,
-                                  label: t.name,
-                                  disabled: selectedTeams.some(
-                                    (s) => s.id === t.id,
-                                  ),
-                                }))}
-                                placeholder="Select a team"
-                                searchPlaceholder="Search teams by name"
-                                emptyMessage="No matching teams found."
-                                className="w-full"
-                              />
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label>Teams ({selectedTeams.length})</Label>
-                              {selectedTeams.length === 0 ? (
-                                <div className="rounded-lg border border-dashed p-4 text-center">
-                                  <p className="text-sm text-muted-foreground">
-                                    No teams added yet
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {selectedTeams.map((selected) => (
-                                    <div
-                                      key={selected.id}
-                                      className="grid grid-cols-[minmax(0,1fr)_180px_40px] items-center gap-3 rounded-lg border p-3"
-                                    >
-                                      <p className="truncate text-sm font-medium">
-                                        {teamNameById.get(selected.id) ??
-                                          selected.id}
-                                      </p>
-                                      <Select
-                                        value={selected.level}
-                                        onValueChange={(level) =>
-                                          form.setValue(
-                                            "teams",
-                                            selectedTeams.map((t) =>
-                                              t.id === selected.id
-                                                ? {
-                                                    ...t,
-                                                    level: level as
-                                                      | "use"
-                                                      | "write",
-                                                  }
-                                                : t,
-                                            ),
-                                            { shouldDirty: true },
-                                          )
-                                        }
-                                      >
-                                        <SelectTrigger className="w-full">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="use">
-                                            Use
-                                          </SelectItem>
-                                          <SelectItem value="write">
-                                            Manage
-                                          </SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() =>
-                                          form.setValue(
-                                            "teams",
-                                            selectedTeams.filter(
-                                              (t) => t.id !== selected.id,
-                                            ),
-                                            { shouldDirty: true },
-                                          )
-                                        }
-                                      >
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                        <span className="sr-only">
-                                          Remove team
-                                        </span>
-                                      </Button>
-                                    </div>
-                                  ))}
-                                  <FormDescription>
-                                    <strong>Use</strong> — members can find this
-                                    MCP server, install it for themselves, and
-                                    use shared connections.{" "}
-                                    <strong>Manage</strong> additionally lets
-                                    the team&apos;s admins edit it, change its
-                                    environment, and manage sharing.
-                                  </FormDescription>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </VisibilitySelector>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="environmentId"
-                render={({ field }) => (
-                  <EnvironmentSelector
-                    value={field.value ?? null}
-                    onChange={field.onChange}
-                    resource="mcpRegistry"
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-stretch gap-3">
+                  <AgentIconPicker
+                    value={form.watch("icon") ?? null}
+                    fallbackType="server"
+                    onChange={(icon) =>
+                      form.setValue("icon", icon, { shouldDirty: true })
+                    }
+                    showLogos
+                    className="h-auto w-16 self-stretch rounded-md"
                   />
-                )}
-              />
-              {hasEnvRuleViolations && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/20"
-                >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
-                  <div className="space-y-1 text-foreground/90">
-                    <div className="font-semibold text-foreground">
-                      {envRuleViolations.length} value
-                      {envRuleViolations.length === 1 ? null : <span>s</span>}{" "}
-                      not allowed in “{boundEnvironmentName}”
-                    </div>
-                    <div>
-                      Edit or remove{" "}
-                      {envRuleViolations.length === 1 ? "it" : "them"}, or
-                      choose another environment, before saving:{" "}
-                      <span className="font-mono">
-                        {envRuleViolations.join(", ")}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {mode === "create" && (
-                <div className="space-y-2">
-                  <Label>Server Type</Label>
-                  <div className="flex rounded-lg border border-border overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => form.setValue("serverType", "remote")}
-                      className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors ${
-                        currentServerType === "remote"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <Globe className="h-4 w-4" />
-                        Remote
-                      </span>
-                      <span
-                        className={`text-xs font-normal ${currentServerType === "remote" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                      >
-                        Orchestrated externally
-                      </span>
-                    </button>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            isLocalMcpEnabled &&
-                            form.setValue("serverType", "local")
-                          }
-                          disabled={!isLocalMcpEnabled}
-                          className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
-                            !isLocalMcpEnabled
-                              ? "bg-background text-muted-foreground/50 cursor-not-allowed"
-                              : currentServerType === "local"
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
-                          }`}
-                        >
-                          <span className="flex items-center gap-2">
-                            <Server className="h-4 w-4" />
-                            Self-hosted
-                          </span>
-                          <span
-                            className={`text-xs font-normal ${!isLocalMcpEnabled ? "text-muted-foreground/50" : currentServerType === "local" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                          >
-                            Orchestrated in Kubernetes
-                          </span>
-                        </button>
-                      </TooltipTrigger>
-                      {!isLocalMcpEnabled && (
-                        <TooltipContent>
-                          <p className="max-w-xs">
-                            {LOCAL_MCP_DISABLED_MESSAGE}
-                          </p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </div>
-                </div>
-              )}
-              {currentServerType === "local" && (
-                <div className="space-y-2">
-                  <Label>Tenancy</Label>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div
-                        className={`flex rounded-lg border border-border overflow-hidden ${
-                          isTenancyLocked ? "opacity-60" : ""
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          disabled={isTenancyLocked}
-                          onClick={() => handleMultitenantChange(false)}
-                          className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors ${
-                            isTenancyLocked ? "cursor-not-allowed" : ""
-                          } ${
-                            !isMultitenant
-                              ? "bg-primary text-primary-foreground"
-                              : `bg-background text-muted-foreground ${
-                                  isTenancyLocked
-                                    ? ""
-                                    : "hover:text-foreground hover:bg-muted"
-                                }`
-                          }`}
-                        >
-                          <span>Single-tenant</span>
-                          <span
-                            className={`text-xs font-normal ${!isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                          >
-                            Dedicated deployment per installation
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isTenancyLocked}
-                          onClick={() => handleMultitenantChange(true)}
-                          className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
-                            isTenancyLocked ? "cursor-not-allowed" : ""
-                          } ${
-                            isMultitenant
-                              ? "bg-primary text-primary-foreground"
-                              : `bg-background text-muted-foreground ${
-                                  isTenancyLocked
-                                    ? ""
-                                    : "hover:text-foreground hover:bg-muted"
-                                }`
-                          }`}
-                        >
-                          <span>Multi-tenant</span>
-                          <span
-                            className={`text-xs font-normal ${isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-                          >
-                            Shared deployment, Gateway adds caller identity
-                          </span>
-                        </button>
-                      </div>
-                    </TooltipTrigger>
-                    {isTenancyLocked && (
-                      <TooltipContent>
-                        <p className="max-w-xs">
-                          Tenancy cannot be changed after the server is created.
-                          Delete and recreate the server to switch tenancy mode.
-                        </p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </div>
-              )}
-            </div>
-
-            {currentServerType === "local" && <Separator />}
-
-            <div className="space-y-4">
-              {currentServerType === "local" ? (
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-base">Deployment</h3>
-                  <p className="text-sm text-muted-foreground">
-                    How {appName} runs this server in Kubernetes.
-                  </p>
-                </div>
-              ) : null}
-
-              {currentServerType === "remote" && (
-                <FormField
-                  control={form.control}
-                  name="serverUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Server URL <span className="text-destructive">*</span>
-                        <ReinstallHint show={isServerUrlDirty} />
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="https://api.example.com/mcp"
-                          className="font-mono"
-                          autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
-              {currentServerType === "local" && (
-                <>
                   <FormField
                     control={form.control}
-                    name="localConfig.command"
+                    name="name"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="flex-1">
                         <FormLabel>
-                          Command
-                          <ReinstallHint show={isCommandDirty} />
+                          Name <span className="text-destructive">*</span>
+                          <ReinstallHint
+                            show={isNameDirty}
+                            label="renames tools"
+                          />
                         </FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="node"
-                            className="font-mono"
-                            autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                            placeholder="e.g., GitHub MCP Server"
+                            disabled={isNameLocked}
                             {...field}
                           />
                         </FormControl>
-                        <FormDescription>
-                          The executable command to run. Optional if Docker
-                          Image is set (will use image's default{" "}
-                          <code>CMD</code>).
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="localConfig.arguments"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Arguments (one per line)
-                          <ReinstallHint show={isArgumentsDirty} />
-                        </FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
-                            className="font-mono min-h-20"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="localConfig.transportType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Transport Type
-                          <ReinstallHint show={isTransportTypeDirty} />
-                        </FormLabel>
-                        <FormControl>
-                          <RadioGroup
-                            onValueChange={field.onChange}
-                            value={field.value || "streamable-http"}
-                            className="space-y-1"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="streamable-http"
-                                id="transport-http"
-                              />
-                              <FormLabel
-                                htmlFor="transport-http"
-                                className="font-normal cursor-pointer"
-                              >
-                                Streamable HTTP (default)
-                              </FormLabel>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value="stdio"
-                                id="transport-stdio"
-                              />
-                              <FormLabel
-                                htmlFor="transport-stdio"
-                                className="font-normal cursor-pointer"
-                              >
-                                stdio
-                              </FormLabel>
-                            </div>
-                          </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {form.watch("localConfig.transportType") ===
-                    "streamable-http" && (
-                    <div className="grid gap-4 sm:grid-cols-2 rounded-lg border p-4">
-                      <FormField
-                        control={form.control}
-                        name="localConfig.httpPort"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              HTTP Port (optional)
-                              <ReinstallHint show={isHttpPortDirty} />
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                placeholder="8080"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
+                        {isNameLocked && (
+                          <FormDescription>
+                            {isAppBacked
+                              ? "This server is backed by an app — rename it from the app's settings."
+                              : "This is a built-in server — its name is system-managed and cannot be changed."}
+                          </FormDescription>
                         )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="localConfig.httpPath"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              HTTP Path (optional)
-                              <ReinstallHint show={isHttpPathDirty} />
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder="/mcp"
-                                className="font-mono"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {currentServerType === "local" && (
-              <div className="space-y-4">
-                <EnvironmentVariablesFormField
-                  fields={fields}
-                  append={append}
-                  remove={remove}
-                  fieldNamePrefix="localConfig.environment"
-                  form={form}
-                  validateValue={validateConfigValue}
-                  useExternalSecretsManager={showByosOption}
-                  secretKeysWithStoredValue={storedSecretKeys}
-                  disablePromptOnInstallation={isMultitenant}
-                  disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
-                  labelSuffix={<ReinstallHint show={isEnvDirty} />}
-                  envFrom={{
-                    fields: envFromFields,
-                    append: appendEnvFrom,
-                    remove: removeEnvFrom,
-                    watch: form.watch,
-                    setValue: form.setValue,
-                    register: form.register,
-                    fieldNamePrefix: "localConfig.envFrom",
-                  }}
-                />
-              </div>
-            )}
-
-            {currentServerType === "local" && (
-              <div className="space-y-4">
-                <h3 className="font-semibold text-base">Docker</h3>
-
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
                   control={form.control}
-                  name="localConfig.dockerImage"
+                  name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        Image (optional)
-                        <ReinstallHint show={isDockerImageDirty} />
-                      </FormLabel>
+                      <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder={mcpServerBaseImage}
-                          className="font-mono"
+                        <Textarea
+                          placeholder="Describe what this MCP server does..."
+                          className="min-h-20"
                           {...field}
                         />
                       </FormControl>
@@ -1590,335 +1219,580 @@ export function McpCatalogForm({
                   )}
                 />
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-base">
-                      Image Pull Secrets
-                    </h3>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        appendImagePullSecret({ source: "existing", name: "" })
-                      }
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add
-                    </Button>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-medium">Labels</h3>
+                    {labels.length > 0 && (
+                      <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                        {labels.length}
+                      </span>
+                    )}
                   </div>
-
-                  {imagePullSecretFields.length === 0 ? (
-                    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                      No image pull secrets configured.
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Kubernetes secrets for pulling container images from
-                      private registries.{" "}
-                      <ExternalDocsLink
-                        href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
-                        className="underline underline-offset-2 hover:text-primary/80"
-                        showIcon={false}
-                      >
-                        Learn more
-                      </ExternalDocsLink>
-                    </p>
-                  )}
-
-                  {imagePullSecretFields.map((field, index) => {
-                    const watchField = (key: string) =>
-                      form.watch(
-                        // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
-                        `localConfig.imagePullSecrets.${index}.${key}` as any,
-                      ) ?? "";
-                    const setField = (key: string, value: string) =>
-                      form.setValue(
-                        // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
-                        `localConfig.imagePullSecrets.${index}.${key}` as any,
-                        value,
-                      );
-                    const source = watchField("source");
-
-                    return (
-                      <div
-                        key={field.id}
-                        className="border rounded-lg p-3 space-y-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <Select
-                            value={source}
-                            onValueChange={(val) => {
-                              if (val === "existing") {
-                                updateImagePullSecret(index, {
-                                  source: "existing",
-                                  name: "",
-                                });
-                              } else {
-                                updateImagePullSecret(index, {
-                                  source: "credentials",
-                                  server: "",
-                                  username: "",
-                                  email: "",
-                                });
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="w-[200px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="existing">
-                                Existing Secret
-                              </SelectItem>
-                              <SelectItem value="credentials">
-                                Registry Credentials
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeImagePullSecret(index)}
-                            aria-label="Remove image pull secret"
-                          >
-                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                          </Button>
-                        </div>
-
-                        {source === "existing" ? (
-                          <SearchableSelect
-                            value={watchField("name")}
-                            onValueChange={(val) => setField("name", val)}
-                            items={imagePullSecretItems}
-                            placeholder="Select a secret..."
-                            searchPlaceholder="Search secrets..."
-                            allowCustom
-                            multiline
-                            className="w-full"
-                            contentClassName="w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))]"
-                            emptyMessage="No image pull secrets found."
-                          />
-                        ) : (
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Server</Label>
-                              <Input
-                                placeholder="e.g. quay.io"
-                                aria-label="Server"
-                                className="font-mono"
-                                autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                                value={watchField("server")}
-                                onChange={(e) =>
-                                  setField("server", e.target.value)
-                                }
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Username</Label>
-                              <Input
-                                placeholder="username"
-                                aria-label="Username"
-                                autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                                value={watchField("username")}
-                                onChange={(e) =>
-                                  setField("username", e.target.value)
-                                }
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Password</Label>
-                              <SecretInput
-                                placeholder={
-                                  mode === "edit" && !watchField("password")
-                                    ? "Saved — leave blank to keep"
-                                    : "password"
-                                }
-                                value={watchField("password") ?? ""}
-                                onChange={(e) =>
-                                  setField("password", e.target.value)
-                                }
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">
-                                Email (optional)
-                              </Label>
-                              <Input
-                                placeholder="email@example.com"
-                                aria-label="Email"
-                                autoComplete={MCP_CONFIG_AUTOCOMPLETE}
-                                value={watchField("email")}
-                                onChange={(e) =>
-                                  setField("email", e.target.value)
-                                }
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  <ProfileLabels
+                    ref={labelsRef}
+                    labels={labels}
+                    onLabelsChange={setLabels}
+                    showLabel={false}
+                  />
                 </div>
               </div>
-            )}
 
-            {(currentServerType === "remote" ||
-              (currentServerType === "local" && isMultitenant)) && (
-              <Separator />
-            )}
-            {(currentServerType === "remote" ||
-              (currentServerType === "local" && isMultitenant)) && (
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <h3 className="font-semibold text-base">
-                    Authentication
-                    <ReinstallHint show={isAuthDirty} />
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    If your MCP server is multitenant, MCP Gateway will use
-                    these ways to prove the caller&apos;s identity.
-                    {mcpAuthDocsUrl ? (
-                      <>
-                        {" "}
-                        <ExternalDocsLink
-                          href={mcpAuthDocsUrl}
-                          className="underline"
-                          showIcon={false}
-                        >
-                          Learn more
-                        </ExternalDocsLink>
-                      </>
-                    ) : null}
-                  </p>
-                </div>
-                <FormField
-                  control={form.control}
-                  name="authMethod"
-                  render={({ field }) => {
-                    const authCards: Array<{
-                      value: McpCatalogFormValues["authMethod"];
-                      title: string;
-                      description: string;
-                      icon: ReactNode;
-                      badge?: {
-                        label: string;
-                        variant?: "default" | "secondary";
-                      };
-                      customBadge?: ReactNode;
-                      available: boolean;
-                      disabledReason?: ReactNode | null;
-                    }> = [
-                      {
-                        value: "none",
-                        title: "None",
-                        description:
-                          currentServerType === "remote"
-                            ? "No auth — server is public or single-tenant"
-                            : "No auth — credentials passed via env vars",
-                        icon: <Ban className="h-4 w-4" />,
-                        available: true,
-                      },
-                      {
-                        value: "auth_header",
-                        title: "Token header",
-                        description: "Prompt the user for a token at install",
-                        icon: <KeyRound className="h-4 w-4" />,
-                        badge: { label: "Common", variant: "secondary" },
-                        available:
-                          currentServerType === "remote" ||
-                          (currentServerType === "local" &&
-                            currentTransportType === "streamable-http"),
-                      },
-                      {
-                        value: "oauth",
-                        title: "OAuth 2.1",
-                        description: "Auto-discovered from the server URL",
-                        icon: <Sparkles className="h-4 w-4" />,
-                        badge: { label: "Recommended" },
-                        available:
-                          currentServerType === "remote" ||
-                          currentServerType === "local",
-                      },
-                      {
-                        value: "oauth_client_credentials",
-                        title: "OAuth 2.0 client credentials",
-                        description: "Server-to-server, no user interaction",
-                        icon: <Code className="h-4 w-4" />,
-                        available: currentServerType === "remote",
-                      },
-                      {
-                        value: "enterprise_managed",
-                        title: "IdP token exchange",
-                        description:
-                          "Trade caller's IdP token for an upstream one",
-                        icon: <IdCard className="h-4 w-4" />,
-                        customBadge: enterpriseAuthDisabledBadge,
-                        available: !enterpriseAuthDisabled,
-                        disabledReason: enterpriseAuthDisabledReason,
-                      },
-                      {
-                        value: "idp_jwt",
-                        title: "IdP signed JWT",
-                        description: "Sign a JWT with a configured IdP key",
-                        icon: <IdCard className="h-4 w-4" />,
-                        customBadge: enterpriseAuthDisabledBadge,
-                        available: !enterpriseAuthDisabled,
-                        disabledReason: enterpriseAuthDisabledReason,
-                      },
-                      {
-                        value: "bearer",
-                        title: "Access token header (legacy)",
-                        description: "Legacy mode — kept for backwards compat",
-                        icon: <KeyRound className="h-4 w-4" />,
-                        available: authMethod === "bearer",
-                      },
-                    ];
+              <Card>
+                {/* No description: the Import & export block right below
+                    carries its own paste/import invitation. */}
+                <CardHeader>
+                  <CardTitle className="text-base">Connection</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <ConnectionJsonPanel
+                      form={form}
+                      mode={mode}
+                      storedSecretValues={storedSecretValues}
+                      appName={appName}
+                      controllerRef={jsonPanelRef}
+                      onDraftStateChange={handleJsonDraftStateChange}
+                    />
 
-                    const visibleCards = authCards.filter(
-                      (card) =>
-                        card.available ||
-                        card.disabledReason != null ||
-                        card.customBadge != null,
-                    );
+                    {mode === "edit" && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">Server type</span>
+                        <ServerTypeBadge serverType={currentServerType} />
+                        <span className="text-muted-foreground">
+                          Fixed after creation
+                        </span>
+                      </div>
+                    )}
+                    {mode === "create" && (
+                      <div className="space-y-2">
+                        <Label>Server Type</Label>
+                        <div className="flex rounded-lg border border-border overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              form.setValue("serverType", "remote")
+                            }
+                            className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors ${
+                              currentServerType === "remote"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Globe className="h-4 w-4" />
+                              Remote
+                            </span>
+                            <span
+                              className={`text-xs font-normal ${currentServerType === "remote" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                            >
+                              Orchestrated externally
+                            </span>
+                          </button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  isLocalMcpEnabled &&
+                                  form.setValue("serverType", "local")
+                                }
+                                disabled={!isLocalMcpEnabled}
+                                className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
+                                  !isLocalMcpEnabled
+                                    ? "bg-background text-muted-foreground/50 cursor-not-allowed"
+                                    : currentServerType === "local"
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted"
+                                }`}
+                              >
+                                <span className="flex items-center gap-2">
+                                  <Server className="h-4 w-4" />
+                                  Self-hosted
+                                </span>
+                                <span
+                                  className={`text-xs font-normal ${!isLocalMcpEnabled ? "text-muted-foreground/50" : currentServerType === "local" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                                >
+                                  Orchestrated in Kubernetes
+                                </span>
+                              </button>
+                            </TooltipTrigger>
+                            {!isLocalMcpEnabled && (
+                              <TooltipContent>
+                                <p className="max-w-xs">
+                                  {LOCAL_MCP_DISABLED_MESSAGE}
+                                </p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </div>
+                      </div>
+                    )}
+                    <div className="space-y-4">
+                      {currentServerType === "local" ? (
+                        <div className="space-y-1">
+                          <h3 className="font-semibold text-base">
+                            Deployment
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            How {appName} runs this server in Kubernetes.
+                          </p>
+                        </div>
+                      ) : null}
 
-                    return (
-                      <FormItem>
-                        <FormControl>
-                          <div className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {visibleCards.map((card) => (
-                                <AuthMethodCard
-                                  key={card.value}
-                                  title={card.title}
-                                  description={card.description}
-                                  icon={card.icon}
-                                  badge={card.badge}
-                                  customBadge={card.customBadge}
-                                  selected={field.value === card.value}
-                                  disabled={!card.available}
-                                  disabledReason={card.disabledReason}
-                                  onSelect={() =>
-                                    handleAuthMethodChange(card.value)
+                      {currentServerType === "remote" && (
+                        <FormField
+                          control={form.control}
+                          name="serverUrl"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                Server URL{" "}
+                                <span className="text-destructive">*</span>
+                                <ReinstallHint show={isServerUrlDirty} />
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="https://api.example.com/mcp"
+                                  className="font-mono"
+                                  autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                                  {...field}
+                                  onPaste={(event) =>
+                                    handleConfigPaste(event, {
+                                      acceptArgsArray: false,
+                                    })
                                   }
                                 />
-                              ))}
-                            </div>
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
-                            {authMethod === "oauth" && (
-                              <div className="space-y-4 border rounded-lg p-5">
-                                {currentServerType === "local" && (
+                      {currentServerType === "local" && (
+                        <>
+                          <FormField
+                            control={form.control}
+                            name="localConfig.command"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>
+                                  Command
+                                  <ReinstallHint show={isCommandDirty} />
+                                </FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="node"
+                                    className="font-mono"
+                                    autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                                    {...field}
+                                    onPaste={(event) =>
+                                      handleConfigPaste(event, {
+                                        acceptArgsArray: false,
+                                      })
+                                    }
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  The executable command to run. Optional if
+                                  Docker Image is set (will use image's default{" "}
+                                  <code>CMD</code>).
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="localConfig.arguments"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>
+                                  Arguments (one per line)
+                                  <ReinstallHint show={isArgumentsDirty} />
+                                </FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    placeholder={`/path/to/server.js\n--verbose`}
+                                    className="font-mono min-h-20"
+                                    {...field}
+                                    onPaste={(event) =>
+                                      handleConfigPaste(event, {
+                                        acceptArgsArray: true,
+                                      })
+                                    }
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  Pasting a JSON array fills the arguments;
+                                  pasting a full MCP server config (e.g. an{" "}
+                                  <code>mcpServers</code> block) loads it into
+                                  the Import &amp; export block for review.
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="localConfig.transportType"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>
+                                  Transport Type
+                                  <ReinstallHint show={isTransportTypeDirty} />
+                                </FormLabel>
+                                <FormControl>
+                                  <RadioGroup
+                                    onValueChange={field.onChange}
+                                    value={field.value || "streamable-http"}
+                                    className="space-y-1"
+                                  >
+                                    <div className="flex items-center space-x-2">
+                                      <RadioGroupItem
+                                        value="streamable-http"
+                                        id="transport-http"
+                                      />
+                                      <FormLabel
+                                        htmlFor="transport-http"
+                                        className="font-normal cursor-pointer"
+                                      >
+                                        Streamable HTTP (default)
+                                      </FormLabel>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <RadioGroupItem
+                                        value="stdio"
+                                        id="transport-stdio"
+                                      />
+                                      <FormLabel
+                                        htmlFor="transport-stdio"
+                                        className="font-normal cursor-pointer"
+                                      >
+                                        stdio
+                                      </FormLabel>
+                                    </div>
+                                  </RadioGroup>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          {form.watch("localConfig.transportType") ===
+                            "streamable-http" && (
+                            <div className="grid gap-4 sm:grid-cols-2 rounded-lg border p-4">
+                              <FormField
+                                control={form.control}
+                                name="localConfig.httpPort"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      HTTP Port (optional)
+                                      <ReinstallHint show={isHttpPortDirty} />
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        placeholder="8080"
+                                        className="font-mono"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="localConfig.httpPath"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>
+                                      HTTP Path (optional)
+                                      <ReinstallHint show={isHttpPathDirty} />
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        placeholder="/mcp"
+                                        className="font-mono"
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {currentServerType === "local" && (
+                      <div className="space-y-4">
+                        <EnvironmentVariablesFormField
+                          fields={fields}
+                          append={append}
+                          remove={remove}
+                          fieldNamePrefix="localConfig.environment"
+                          form={form}
+                          validateValue={validateConfigValue}
+                          useExternalSecretsManager={showByosOption}
+                          secretKeysWithStoredValue={storedSecretKeys}
+                          disablePromptOnInstallation={isMultitenant}
+                          disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
+                          labelSuffix={<ReinstallHint show={isEnvDirty} />}
+                          // k8s-only config (envFrom, secret files) lives in
+                          // Advanced — the Connection card holds exactly what
+                          // the mcpServers JSON can express.
+                          showSecretFiles={false}
+                        />
+                      </div>
+                    )}
+
+                    {currentServerType === "local" && (
+                      <div className="space-y-4">
+                        <h3 className="font-semibold text-base">Docker</h3>
+
+                        <FormField
+                          control={form.control}
+                          name="localConfig.dockerImage"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                Image (optional)
+                                <ReinstallHint show={isDockerImageDirty} />
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder={mcpServerBaseImage}
+                                  className="font-mono"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {mode === "create" && catalogAutofillEnabled && (
+                <CatalogTemplateAutofill form={form} />
+              )}
+
+              {showAuthSection && <Separator />}
+              {showAuthSection && (
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <h3 className="font-semibold text-base">
+                      Authentication
+                      <ReinstallHint show={isAuthDirty} />
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {currentServerType === "remote" ? (
+                        <span>
+                          Shown for remote servers — {appName} can attach
+                          credentials when connecting on your users&apos;
+                          behalf. Choose None if the server needs no
+                          credentials.
+                        </span>
+                      ) : (
+                        <span>
+                          Shown because Multitenant is on — callers share one
+                          deployment, so the gateway proves each caller&apos;s
+                          identity.{" "}
+                          {isTenancyLocked ? (
+                            <span>Multitenant is fixed after creation.</span>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="underline underline-offset-2"
+                                onClick={revealTenancyControl}
+                              >
+                                Turn off Multitenant
+                              </button>{" "}
+                              <span>to hide this section.</span>
+                            </>
+                          )}
+                        </span>
+                      )}
+                      {mcpAuthDocsUrl ? (
+                        <>
+                          {" "}
+                          <ExternalDocsLink
+                            href={mcpAuthDocsUrl}
+                            className="underline"
+                            showIcon={false}
+                          >
+                            Learn more
+                          </ExternalDocsLink>
+                        </>
+                      ) : null}
+                    </p>
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="authMethod"
+                    render={({ field }) => {
+                      const authCards: Array<{
+                        value: McpCatalogFormValues["authMethod"];
+                        title: string;
+                        description: string;
+                        icon: ReactNode;
+                        badge?: {
+                          label: string;
+                          variant?: "default" | "secondary";
+                        };
+                        customBadge?: ReactNode;
+                        available: boolean;
+                        disabledReason?: ReactNode | null;
+                      }> = [
+                        {
+                          value: "none",
+                          title: "None",
+                          description:
+                            currentServerType === "remote"
+                              ? "No auth — server is public or single-tenant"
+                              : "No auth — credentials passed via env vars",
+                          icon: <Ban className="h-4 w-4" />,
+                          available: true,
+                        },
+                        {
+                          value: "auth_header",
+                          title: "Token header",
+                          description: "Prompt the user for a token at install",
+                          icon: <KeyRound className="h-4 w-4" />,
+                          badge: { label: "Common", variant: "secondary" },
+                          available:
+                            currentServerType === "remote" ||
+                            (currentServerType === "local" &&
+                              currentTransportType === "streamable-http"),
+                        },
+                        {
+                          value: "oauth",
+                          title: "OAuth 2.1",
+                          description: "Auto-discovered from the server URL",
+                          icon: <Sparkles className="h-4 w-4" />,
+                          badge: { label: "Recommended" },
+                          available:
+                            currentServerType === "remote" ||
+                            currentServerType === "local",
+                        },
+                        {
+                          value: "oauth_client_credentials",
+                          title: "OAuth 2.0 client credentials",
+                          description: "Server-to-server, no user interaction",
+                          icon: <Code className="h-4 w-4" />,
+                          available: currentServerType === "remote",
+                        },
+                        {
+                          value: "enterprise_managed",
+                          title: "IdP token exchange",
+                          description:
+                            "Trade caller's IdP token for an upstream one",
+                          icon: <IdCard className="h-4 w-4" />,
+                          customBadge: enterpriseAuthDisabledBadge,
+                          available: !enterpriseAuthDisabled,
+                          disabledReason: enterpriseAuthDisabledReason,
+                        },
+                        {
+                          value: "idp_jwt",
+                          title: "IdP signed JWT",
+                          description: "Sign a JWT with a configured IdP key",
+                          icon: <IdCard className="h-4 w-4" />,
+                          customBadge: enterpriseAuthDisabledBadge,
+                          available: !enterpriseAuthDisabled,
+                          disabledReason: enterpriseAuthDisabledReason,
+                        },
+                        {
+                          value: "bearer",
+                          title: "Access token header (legacy)",
+                          description:
+                            "Legacy mode — kept for backwards compat",
+                          icon: <KeyRound className="h-4 w-4" />,
+                          available: authMethod === "bearer",
+                        },
+                      ];
+
+                      const visibleCards = authCards.filter(
+                        (card) =>
+                          card.available ||
+                          card.disabledReason != null ||
+                          card.customBadge != null,
+                      );
+
+                      return (
+                        <FormItem>
+                          <FormControl>
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {visibleCards.map((card) => (
+                                  <AuthMethodCard
+                                    key={card.value}
+                                    title={card.title}
+                                    description={card.description}
+                                    icon={card.icon}
+                                    badge={card.badge}
+                                    customBadge={card.customBadge}
+                                    selected={field.value === card.value}
+                                    disabled={!card.available}
+                                    disabledReason={card.disabledReason}
+                                    onSelect={() =>
+                                      handleAuthMethodChange(card.value)
+                                    }
+                                  />
+                                ))}
+                              </div>
+
+                              {authMethod === "oauth" && (
+                                <div className="space-y-4 border rounded-lg p-5">
+                                  {currentServerType === "local" && (
+                                    <FormField
+                                      control={form.control}
+                                      name="oauthConfig.oauthServerUrl"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>
+                                            OAuth Server URL{" "}
+                                            <span className="text-destructive">
+                                              *
+                                            </span>
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              placeholder="https://auth.example.com"
+                                              className="font-mono"
+                                              {...field}
+                                            />
+                                          </FormControl>
+                                          <FormDescription>
+                                            Base URL used for OAuth discovery.
+                                            Use the issuer or auth server base
+                                            URL here, not the token endpoint.
+                                            This is separate from the
+                                            K8s-deployed server.
+                                          </FormDescription>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                  )}
+
                                   <FormField
                                     control={form.control}
-                                    name="oauthConfig.oauthServerUrl"
+                                    name="oauthConfig.authServerUrl"
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormLabel>
-                                          OAuth Server URL{" "}
-                                          <span className="text-destructive">
-                                            *
-                                          </span>
+                                          Authorization Server URL
                                         </FormLabel>
                                         <FormControl>
                                           <Input
@@ -1928,339 +1802,61 @@ export function McpCatalogForm({
                                           />
                                         </FormControl>
                                         <FormDescription>
-                                          Base URL used for OAuth discovery. Use
-                                          the issuer or auth server base URL
-                                          here, not the token endpoint. This is
-                                          separate from the K8s-deployed server.
+                                          Optional override for discovery when
+                                          the MCP server URL is not the OAuth
+                                          issuer.
                                         </FormDescription>
                                         <FormMessage />
                                       </FormItem>
                                     )}
                                   />
-                                )}
 
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.authServerUrl"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>
-                                        Authorization Server URL
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://auth.example.com"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Optional override for discovery when the
-                                        MCP server URL is not the OAuth issuer.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.authorizationEndpoint"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>
-                                        Authorization Endpoint
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://auth.example.com/oauth/authorize"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Optional direct authorization endpoint
-                                        override. When set, it overrides
-                                        discovery. Set together with Token
-                                        Endpoint.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.wellKnownUrl"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>
-                                        Well-Known Metadata URL
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://auth.example.com/.well-known/openid-configuration"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Optional direct metadata endpoint
-                                        override when provider discovery is
-                                        non-standard.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.tokenEndpoint"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>
-                                        Token Endpoint{" "}
-                                        <span className="text-destructive">
-                                          *
-                                        </span>
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://auth.example.com/oauth/token"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Optional direct token endpoint override.
-                                        When set, it overrides discovery. Set
-                                        together with Authorization Endpoint.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.client_id"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Client ID</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="your-client-id (optional for dynamic registration)"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Leave empty if the server supports
-                                        dynamic client registration
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                {showByosOption ? (
-                                  <div className="space-y-2">
-                                    <Label>Client Secret</Label>
-                                    <ExternalSecretSelector
-                                      selectedTeamId={oauthVaultTeamId}
-                                      selectedSecretPath={oauthVaultSecretPath}
-                                      selectedSecretKey={oauthVaultSecretKey}
-                                      onTeamChange={setOauthVaultTeamId}
-                                      onSecretChange={setOauthVaultSecretPath}
-                                      onSecretKeyChange={setOauthVaultSecretKey}
-                                    />
-                                  </div>
-                                ) : (
                                   <FormField
                                     control={form.control}
-                                    name="oauthConfig.client_secret"
+                                    name="oauthConfig.authorizationEndpoint"
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel>Client Secret</FormLabel>
+                                        <FormLabel>
+                                          Authorization Endpoint
+                                        </FormLabel>
                                         <FormControl>
-                                          <SecretInput
-                                            placeholder="your-client-secret (optional)"
+                                          <Input
+                                            placeholder="https://auth.example.com/oauth/authorize"
                                             className="font-mono"
                                             {...field}
                                           />
                                         </FormControl>
+                                        <FormDescription>
+                                          Optional direct authorization endpoint
+                                          override. When set, it overrides
+                                          discovery. Set together with Token
+                                          Endpoint.
+                                        </FormDescription>
                                         <FormMessage />
                                       </FormItem>
                                     )}
                                   />
-                                )}
 
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.redirect_uris"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>
-                                        MCP OAuth callback URIs{" "}
-                                        <span className="text-destructive">
-                                          *
-                                        </span>
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Use {appName}'s MCP install callback,
-                                        usually{" "}
-                                        <code>
-                                          {typeof window !== "undefined"
-                                            ? `${window.location.origin}/oauth-callback`
-                                            : "https://app.example.com/oauth-callback"}
-                                        </code>
-                                        . Do not use the SSO callback URL under{" "}
-                                        <code>/api/auth/sso/callback</code>.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.resource"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Protected Resource</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://api.example.com or api://client-id"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Optional OAuth resource/audience sent in
-                                        the authorization request and token
-                                        exchange. Leave blank to omit the OAuth
-                                        resource parameter.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.scopes"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Scopes</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="read, write"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Comma-separated list of OAuth scopes.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.additional_scopes"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Additional scopes</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="offline_access"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Always appended on top of the requested
-                                        scopes. offline_access is added by
-                                        default so the provider returns a
-                                        refresh token; clear it for providers
-                                        that reject it (e.g. Google).
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.supports_resource_metadata"
-                                  render={({ field }) => (
-                                    <FormItem className="flex flex-row items-start space-x-2 space-y-0">
-                                      <FormControl>
-                                        <Checkbox
-                                          checked={field.value}
-                                          onCheckedChange={field.onChange}
-                                          className="mt-1"
-                                        />
-                                      </FormControl>
-                                      <div className="space-y-1 leading-none">
-                                        <FormLabel className="font-normal cursor-pointer">
-                                          Supports OAuth Resource Metadata
-                                        </FormLabel>
-                                        <FormDescription>
-                                          Enable if the server publishes OAuth
-                                          metadata at
-                                          /.well-known/oauth-authorization-server
-                                          for automatic endpoint discovery
-                                        </FormDescription>
-                                      </div>
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>
-                            )}
-                            {authMethod === "bearer" && (
-                              <div className="space-y-4 border rounded-lg p-5">
-                                <div className="bg-muted p-4 rounded-lg">
-                                  <p className="text-sm text-muted-foreground">
-                                    Users will be prompted to provide their
-                                    access token when installing this server.
-                                  </p>
-                                </div>
-
-                                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                                   <FormField
                                     control={form.control}
-                                    name="authHeaderName"
+                                    name="oauthConfig.wellKnownUrl"
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel>Auth Header Name</FormLabel>
-                                        <FormDescription className="text-xs">
-                                          Defaults to <code>Authorization</code>
-                                          . Set a custom header such as{" "}
-                                          <code>x-api-key</code> when the
-                                          upstream server expects the token
-                                          outside the standard authorization
-                                          header.
-                                        </FormDescription>
+                                        <FormLabel>
+                                          Well-Known Metadata URL
+                                        </FormLabel>
                                         <FormControl>
                                           <Input
-                                            placeholder="Authorization"
-                                            autoComplete={
-                                              MCP_CONFIG_AUTOCOMPLETE
-                                            }
+                                            placeholder="https://auth.example.com/.well-known/openid-configuration"
+                                            className="font-mono"
                                             {...field}
                                           />
                                         </FormControl>
+                                        <FormDescription>
+                                          Optional direct metadata endpoint
+                                          override when provider discovery is
+                                          non-standard.
+                                        </FormDescription>
                                         <FormMessage />
                                       </FormItem>
                                     )}
@@ -2268,334 +1864,1089 @@ export function McpCatalogForm({
 
                                   <FormField
                                     control={form.control}
-                                    name="includeBearerPrefix"
+                                    name="oauthConfig.tokenEndpoint"
                                     render={({ field }) => (
-                                      <FormItem className="flex items-center gap-2 rounded-md border px-3 py-2 md:mb-0">
+                                      <FormItem>
+                                        <FormLabel>
+                                          Token Endpoint{" "}
+                                          <span className="text-destructive">
+                                            *
+                                          </span>
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="https://auth.example.com/oauth/token"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Optional direct token endpoint
+                                          override. When set, it overrides
+                                          discovery. Set together with
+                                          Authorization Endpoint.
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.client_id"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Client ID</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="your-client-id (optional for dynamic registration)"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Leave empty if the server supports
+                                          dynamic client registration
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  {showByosOption ? (
+                                    <div className="space-y-2">
+                                      <Label>Client Secret</Label>
+                                      <ExternalSecretSelector
+                                        selectedTeamId={oauthVaultTeamId}
+                                        selectedSecretPath={
+                                          oauthVaultSecretPath
+                                        }
+                                        selectedSecretKey={oauthVaultSecretKey}
+                                        onTeamChange={setOauthVaultTeamId}
+                                        onSecretChange={setOauthVaultSecretPath}
+                                        onSecretKeyChange={
+                                          setOauthVaultSecretKey
+                                        }
+                                      />
+                                    </div>
+                                  ) : (
+                                    <FormField
+                                      control={form.control}
+                                      name="oauthConfig.client_secret"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>Client Secret</FormLabel>
+                                          <FormControl>
+                                            <SecretInput
+                                              placeholder="your-client-secret (optional)"
+                                              className="font-mono"
+                                              {...field}
+                                            />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                  )}
+
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.redirect_uris"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          MCP OAuth callback URIs{" "}
+                                          <span className="text-destructive">
+                                            *
+                                          </span>
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="https://localhost:3000/oauth-callback, https://app.example.com/oauth-callback"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Use {appName}'s MCP install callback,
+                                          usually{" "}
+                                          <code>
+                                            {typeof window !== "undefined"
+                                              ? `${window.location.origin}/oauth-callback`
+                                              : "https://app.example.com/oauth-callback"}
+                                          </code>
+                                          . Do not use the SSO callback URL
+                                          under{" "}
+                                          <code>/api/auth/sso/callback</code>.
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.resource"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          Protected Resource
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="https://api.example.com or api://client-id"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Optional OAuth resource/audience sent
+                                          in the authorization request and token
+                                          exchange. Leave blank to omit the
+                                          OAuth resource parameter.
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.scopes"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Scopes</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="read, write"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Comma-separated list of OAuth scopes.
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.additional_scopes"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Additional scopes</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="offline_access"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Always appended on top of the
+                                          requested scopes. offline_access is
+                                          added by default so the provider
+                                          returns a refresh token; clear it for
+                                          providers that reject it (e.g.
+                                          Google).
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.supports_resource_metadata"
+                                    render={({ field }) => (
+                                      <FormItem className="flex flex-row items-start space-x-2 space-y-0">
                                         <FormControl>
                                           <Checkbox
                                             checked={field.value}
-                                            onCheckedChange={(checked) =>
-                                              field.onChange(Boolean(checked))
-                                            }
-                                            id="include-bearer-prefix"
+                                            onCheckedChange={field.onChange}
+                                            className="mt-1"
                                           />
                                         </FormControl>
-                                        <FormLabel
-                                          htmlFor="include-bearer-prefix"
-                                          className="cursor-pointer font-normal"
-                                        >
-                                          Include Bearer Prefix
-                                        </FormLabel>
+                                        <div className="space-y-1 leading-none">
+                                          <FormLabel className="font-normal cursor-pointer">
+                                            Supports OAuth Resource Metadata
+                                          </FormLabel>
+                                          <FormDescription>
+                                            Enable if the server publishes OAuth
+                                            metadata at
+                                            /.well-known/oauth-authorization-server
+                                            for automatic endpoint discovery
+                                          </FormDescription>
+                                        </div>
                                       </FormItem>
                                     )}
                                   />
                                 </div>
-                              </div>
-                            )}
-                            {authMethod === "oauth_client_credentials" && (
-                              <div className="space-y-4 border rounded-lg p-5">
-                                <div className="bg-muted p-4 rounded-lg">
-                                  <p className="text-sm text-muted-foreground">
-                                    Installations will prompt for a shared
-                                    client ID, client secret, and audience.{" "}
-                                    {appName} will exchange them for a
-                                    short-lived bearer token at runtime and
-                                    refresh it automatically.
-                                  </p>
+                              )}
+                              {authMethod === "bearer" && (
+                                <div className="space-y-4 border rounded-lg p-5">
+                                  <div className="bg-muted p-4 rounded-lg">
+                                    <p className="text-sm text-muted-foreground">
+                                      Users will be prompted to provide their
+                                      access token when installing this server.
+                                    </p>
+                                  </div>
+
+                                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                                    <FormField
+                                      control={form.control}
+                                      name="authHeaderName"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>
+                                            Auth Header Name
+                                          </FormLabel>
+                                          <FormDescription className="text-xs">
+                                            Defaults to{" "}
+                                            <code>Authorization</code>. Set a
+                                            custom header such as{" "}
+                                            <code>x-api-key</code> when the
+                                            upstream server expects the token
+                                            outside the standard authorization
+                                            header.
+                                          </FormDescription>
+                                          <FormControl>
+                                            <Input
+                                              placeholder="Authorization"
+                                              autoComplete={
+                                                MCP_CONFIG_AUTOCOMPLETE
+                                              }
+                                              {...field}
+                                            />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+
+                                    <FormField
+                                      control={form.control}
+                                      name="includeBearerPrefix"
+                                      render={({ field }) => (
+                                        <FormItem className="flex items-center gap-2 rounded-md border px-3 py-2 md:mb-0">
+                                          <FormControl>
+                                            <Checkbox
+                                              checked={field.value}
+                                              onCheckedChange={(checked) =>
+                                                field.onChange(Boolean(checked))
+                                              }
+                                              id="include-bearer-prefix"
+                                            />
+                                          </FormControl>
+                                          <FormLabel
+                                            htmlFor="include-bearer-prefix"
+                                            className="cursor-pointer font-normal"
+                                          >
+                                            Include Bearer Prefix
+                                          </FormLabel>
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </div>
                                 </div>
+                              )}
+                              {authMethod === "oauth_client_credentials" && (
+                                <div className="space-y-4 border rounded-lg p-5">
+                                  <div className="bg-muted p-4 rounded-lg">
+                                    <p className="text-sm text-muted-foreground">
+                                      Installations will prompt for a shared
+                                      client ID, client secret, and audience.{" "}
+                                      {appName} will exchange them for a
+                                      short-lived bearer token at runtime and
+                                      refresh it automatically.
+                                    </p>
+                                  </div>
 
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.authServerUrl"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>
-                                        Authorization Server URL
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://auth.example.com"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Optional discovery base URL when the
-                                        token endpoint is derived from an auth
-                                        server instead of entered directly.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.authServerUrl"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          Authorization Server URL
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="https://auth.example.com"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Optional discovery base URL when the
+                                          token endpoint is derived from an auth
+                                          server instead of entered directly.
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
 
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.wellKnownUrl"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>
-                                        Well-Known Metadata URL
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://auth.example.com/.well-known/openid-configuration"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Optional direct metadata endpoint
-                                        override when discovery is non-standard.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.wellKnownUrl"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          Well-Known Metadata URL
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="https://auth.example.com/.well-known/openid-configuration"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Optional direct metadata endpoint
+                                          override when discovery is
+                                          non-standard.
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
 
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.tokenEndpoint"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>
-                                        Token Endpoint{" "}
-                                        <span className="text-destructive">
-                                          *
-                                        </span>
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://auth.example.com/oauth/token"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Endpoint used to exchange the stored
-                                        client credentials for a short-lived
-                                        bearer token.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.tokenEndpoint"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>
+                                          Token Endpoint{" "}
+                                          <span className="text-destructive">
+                                            *
+                                          </span>
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="https://auth.example.com/oauth/token"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Endpoint used to exchange the stored
+                                          client credentials for a short-lived
+                                          bearer token.
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
 
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.audience"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Default Audience</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="https://api.example.com"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Optional default audience shown during
-                                        installation. Teams can override it per
-                                        shared connection.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.audience"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Default Audience</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="https://api.example.com"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Optional default audience shown during
+                                          installation. Teams can override it
+                                          per shared connection.
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
 
-                                <FormField
-                                  control={form.control}
-                                  name="oauthConfig.scopes"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Scopes</FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          placeholder="read, write"
-                                          className="font-mono"
-                                          {...field}
-                                        />
-                                      </FormControl>
-                                      <FormDescription>
-                                        Optional comma-separated OAuth scopes to
-                                        include in the client credentials token
-                                        request.
-                                      </FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>
-                            )}
-                            {authMethod === "enterprise_managed" && (
-                              <div className="space-y-4 border rounded-lg p-5">
-                                <div className="bg-muted p-4 rounded-lg">
-                                  <p className="text-sm text-muted-foreground">
-                                    Exchange the signed-in user&apos;s
-                                    identity-provider token for a downstream
-                                    credential for this MCP server.{" "}
-                                    <ExternalDocsLink
-                                      href={mcpAuthTokenExchangeDocsUrl}
-                                      className="inline-flex items-center gap-1 underline underline-offset-4"
-                                    >
-                                      Learn more
-                                    </ExternalDocsLink>
-                                  </p>
-                                  <p className="mt-2 text-sm text-muted-foreground">
-                                    {`${appName} will exchange that token at tool-call time. Use the fields below to choose what credential to request and how it should be sent to the upstream MCP server. Installations inherit these defaults automatically.`}
-                                  </p>
+                                  <FormField
+                                    control={form.control}
+                                    name="oauthConfig.scopes"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Scopes</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="read, write"
+                                            className="font-mono"
+                                            {...field}
+                                          />
+                                        </FormControl>
+                                        <FormDescription>
+                                          Optional comma-separated OAuth scopes
+                                          to include in the client credentials
+                                          token request.
+                                        </FormDescription>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
                                 </div>
+                              )}
+                              {authMethod === "enterprise_managed" && (
+                                <div className="space-y-4 border rounded-lg p-5">
+                                  <div className="bg-muted p-4 rounded-lg">
+                                    <p className="text-sm text-muted-foreground">
+                                      Exchange the signed-in user&apos;s
+                                      identity-provider token for a downstream
+                                      credential for this MCP server.{" "}
+                                      <ExternalDocsLink
+                                        href={mcpAuthTokenExchangeDocsUrl}
+                                        className="inline-flex items-center gap-1 underline underline-offset-4"
+                                      >
+                                        Learn more
+                                      </ExternalDocsLink>
+                                    </p>
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                      {`${appName} will exchange that token at tool-call time. Use the fields below to choose what credential to request and how it should be sent to the upstream MCP server. Installations inherit these defaults automatically.`}
+                                    </p>
+                                  </div>
 
-                                <EnterpriseIdentityProviderField
-                                  control={form.control}
-                                  identityProviders={oidcIdentityProviders}
-                                />
+                                  <EnterpriseIdentityProviderField
+                                    control={form.control}
+                                    identityProviders={oidcIdentityProviders}
+                                  />
 
-                                <FormField
-                                  control={form.control}
-                                  name="enterpriseManagedConfig"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormControl>
-                                        <EnterpriseManagedCredentialFields
-                                          value={
-                                            (field.value as
-                                              | EnterpriseManagedConfigInput
-                                              | null
-                                              | undefined) ?? null
-                                          }
-                                          onChange={field.onChange}
-                                        />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>
-                            )}
-                            {authMethod === "idp_jwt" && (
-                              <div className="space-y-4 border rounded-lg p-5">
-                                <div className="bg-muted p-4 rounded-lg">
-                                  <p className="text-sm text-muted-foreground">
-                                    {`${appName} will pass through the caller's IdP JWT to the upstream MCP server. In the current configuration this is sent as an Authorization: Bearer header. Use this when the upstream server validates the same JWT against the IdP's JWKS endpoint directly.`}{" "}
-                                    <ExternalDocsLink
-                                      href={mcpAuthJwksDocsUrl}
-                                      className="inline-flex items-center gap-1 underline underline-offset-4"
-                                    >
-                                      Learn more
-                                    </ExternalDocsLink>
-                                  </p>
+                                  <FormField
+                                    control={form.control}
+                                    name="enterpriseManagedConfig"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormControl>
+                                          <EnterpriseManagedCredentialFields
+                                            value={
+                                              (field.value as
+                                                | EnterpriseManagedConfigInput
+                                                | null
+                                                | undefined) ?? null
+                                            }
+                                            onChange={field.onChange}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
                                 </div>
+                              )}
+                              {authMethod === "idp_jwt" && (
+                                <div className="space-y-4 border rounded-lg p-5">
+                                  <div className="bg-muted p-4 rounded-lg">
+                                    <p className="text-sm text-muted-foreground">
+                                      {`${appName} will pass through the caller's IdP JWT to the upstream MCP server. In the current configuration this is sent as an Authorization: Bearer header. Use this when the upstream server validates the same JWT against the IdP's JWKS endpoint directly.`}{" "}
+                                      <ExternalDocsLink
+                                        href={mcpAuthJwksDocsUrl}
+                                        className="inline-flex items-center gap-1 underline underline-offset-4"
+                                      >
+                                        Learn more
+                                      </ExternalDocsLink>
+                                    </p>
+                                  </div>
 
-                                <EnterpriseIdentityProviderField
-                                  control={form.control}
-                                  identityProviders={oidcIdentityProviders}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-              </div>
-            )}
-
-            {(currentServerType === "remote" ||
-              (currentServerType === "local" &&
-                currentTransportType === "streamable-http")) && <Separator />}
-            {(currentServerType === "remote" ||
-              (currentServerType === "local" &&
-                currentTransportType === "streamable-http")) && (
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <h3 className="font-semibold text-base">
-                      Headers
-                      <ReinstallHint show={isHeadersDirty} />
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Sent on every request — for tenant IDs, regions, or other
-                      upstream metadata.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setHeaderDialog({ mode: "add" })}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Header
-                  </Button>
-                </div>
-
-                {additionalHeaderFields.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                    No headers configured.
-                  </div>
-                ) : (
-                  // TODO(e2e): tests under platform/e2e-tests previously drove
-                  // the inline header inputs; after this refactor those
-                  // interactions live in HeaderDialog (click "Add Header" /
-                  // click a row first, then operate inside the modal).
-                  <HeadersReadOnlyTable
-                    form={form}
-                    fields={additionalHeaderFields}
-                    fieldNamePrefix="additionalHeaders"
-                    onEdit={(index) => setHeaderDialog({ mode: "edit", index })}
-                    onDelete={(index) => removeAdditionalHeader(index)}
+                                  <EnterpriseIdentityProviderField
+                                    control={form.control}
+                                    identityProviders={oidcIdentityProviders}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
-                )}
-                <HeaderDialog
-                  open={headerDialog !== null}
-                  mode={headerDialog?.mode === "edit" ? "edit" : "add"}
-                  initial={
-                    headerDialog?.mode === "edit"
-                      ? readHeaderRowAsDraft(form, headerDialog.index)
-                      : null
-                  }
-                  existingHeaderNames={readOtherHeaderNames(
-                    form,
-                    additionalHeaderFields.length,
-                    headerDialog?.mode === "edit" ? headerDialog.index : null,
-                  )}
-                  validateValue={validateConfigValue}
-                  onClose={() => setHeaderDialog(null)}
-                  onConfirm={(draft) => {
-                    if (headerDialog?.mode === "add") {
-                      appendAdditionalHeader(headerDraftToRow(draft));
-                    } else if (headerDialog?.mode === "edit") {
-                      applyHeaderDraftToRow(form, headerDialog.index, draft);
-                    }
-                    setHeaderDialog(null);
-                  }}
-                />
-              </div>
-            )}
-
-            <Separator />
-            <div className={embedded ? "mb-4" : ""}>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-base">Labels</h3>
-                  {labels.length > 0 && (
-                    <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                      {labels.length}
-                    </span>
-                  )}
                 </div>
-              </div>
-              <div className="pt-4">
-                <ProfileLabels
-                  ref={labelsRef}
-                  labels={labels}
-                  onLabelsChange={setLabels}
-                  showLabel={false}
-                />
+              )}
+
+              {showHeadersSection && <Separator />}
+              {showHeadersSection && (
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <h3 className="font-semibold text-base">
+                        Headers
+                        <ReinstallHint show={isHeadersDirty} />
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Sent on every request — for tenant IDs, regions, or
+                        other upstream metadata.{" "}
+                        {currentServerType === "remote" ? (
+                          <span>Shown for remote servers.</span>
+                        ) : (
+                          <span>
+                            Shown because Transport is Streamable HTTP.
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setHeaderDialog({ mode: "add" })}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Header
+                    </Button>
+                  </div>
+
+                  {additionalHeaderFields.length === 0 ? (
+                    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                      No headers configured.
+                    </div>
+                  ) : (
+                    // TODO(e2e): tests under platform/e2e-tests previously drove
+                    // the inline header inputs; after this refactor those
+                    // interactions live in HeaderDialog (click "Add Header" /
+                    // click a row first, then operate inside the modal).
+                    <HeadersReadOnlyTable
+                      form={form}
+                      fields={additionalHeaderFields}
+                      fieldNamePrefix="additionalHeaders"
+                      onEdit={(index) =>
+                        setHeaderDialog({ mode: "edit", index })
+                      }
+                      onDelete={(index) => removeAdditionalHeader(index)}
+                    />
+                  )}
+                  <HeaderDialog
+                    open={headerDialog !== null}
+                    mode={headerDialog?.mode === "edit" ? "edit" : "add"}
+                    initial={
+                      headerDialog?.mode === "edit"
+                        ? readHeaderRowAsDraft(form, headerDialog.index)
+                        : null
+                    }
+                    existingHeaderNames={readOtherHeaderNames(
+                      form,
+                      additionalHeaderFields.length,
+                      headerDialog?.mode === "edit" ? headerDialog.index : null,
+                    )}
+                    validateValue={validateConfigValue}
+                    onClose={() => setHeaderDialog(null)}
+                    onConfirm={(draft) => {
+                      if (headerDialog?.mode === "add") {
+                        appendAdditionalHeader(headerDraftToRow(draft));
+                      } else if (headerDialog?.mode === "edit") {
+                        applyHeaderDraftToRow(form, headerDialog.index, draft);
+                      }
+                      setHeaderDialog(null);
+                    }}
+                  />
+                </div>
+              )}
+
+              <Separator />
+              <div className={embedded ? "space-y-6 mb-4" : "space-y-6"}>
+                <Collapsible
+                  open={sharingOpen || hasEnvRuleViolations}
+                  onOpenChange={setSharingOpen}
+                  className="rounded-lg border"
+                >
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted/40"
+                    >
+                      <span className="flex items-center gap-2">
+                        <ChevronRight
+                          className={`h-4 w-4 text-muted-foreground transition-transform ${
+                            sharingOpen || hasEnvRuleViolations
+                              ? "rotate-90"
+                              : ""
+                          }`}
+                        />
+                        <span>Sharing &amp; placement</span>
+                      </span>
+                      <span className="truncate font-normal text-muted-foreground">
+                        {scopeLabel} · {boundEnvironmentName}
+                      </span>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-4 border-t px-4 py-4">
+                    <FormField
+                      control={form.control}
+                      name="scope"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <VisibilitySelector
+                              label="Access"
+                              value={
+                                (field.value ?? "personal") as
+                                  | "personal"
+                                  | "team"
+                                  | "org"
+                              }
+                              options={visibilityOptions}
+                              onValueChange={(value) => {
+                                field.onChange(value);
+                                if (value !== "team") {
+                                  form.setValue("teams", [], {
+                                    shouldDirty: true,
+                                  });
+                                }
+                              }}
+                            >
+                              {currentScope === "team" && (
+                                <div className="space-y-6">
+                                  <div className="space-y-2">
+                                    <Label>Add Team</Label>
+                                    <SearchableSelect
+                                      value=""
+                                      onValueChange={(teamId) =>
+                                        form.setValue(
+                                          "teams",
+                                          [
+                                            ...selectedTeams,
+                                            { id: teamId, level: "use" },
+                                          ],
+                                          { shouldDirty: true },
+                                        )
+                                      }
+                                      items={(teams ?? []).map((t) => ({
+                                        value: t.id,
+                                        label: t.name,
+                                        disabled: selectedTeams.some(
+                                          (s) => s.id === t.id,
+                                        ),
+                                      }))}
+                                      placeholder="Select a team"
+                                      searchPlaceholder="Search teams by name"
+                                      emptyMessage="No matching teams found."
+                                      className="w-full"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label>
+                                      Teams ({selectedTeams.length})
+                                    </Label>
+                                    {selectedTeams.length === 0 ? (
+                                      <div className="rounded-lg border border-dashed p-4 text-center">
+                                        <p className="text-sm text-muted-foreground">
+                                          No teams added yet
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {selectedTeams.map((selected) => (
+                                          <div
+                                            key={selected.id}
+                                            className="grid grid-cols-[minmax(0,1fr)_180px_40px] items-center gap-3 rounded-lg border p-3"
+                                          >
+                                            <p className="truncate text-sm font-medium">
+                                              {teamNameById.get(selected.id) ??
+                                                selected.id}
+                                            </p>
+                                            <Select
+                                              value={selected.level}
+                                              onValueChange={(level) =>
+                                                form.setValue(
+                                                  "teams",
+                                                  selectedTeams.map((t) =>
+                                                    t.id === selected.id
+                                                      ? {
+                                                          ...t,
+                                                          level: level as
+                                                            | "use"
+                                                            | "write",
+                                                        }
+                                                      : t,
+                                                  ),
+                                                  { shouldDirty: true },
+                                                )
+                                              }
+                                            >
+                                              <SelectTrigger className="w-full">
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="use">
+                                                  Use
+                                                </SelectItem>
+                                                <SelectItem value="write">
+                                                  Manage
+                                                </SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() =>
+                                                form.setValue(
+                                                  "teams",
+                                                  selectedTeams.filter(
+                                                    (t) => t.id !== selected.id,
+                                                  ),
+                                                  { shouldDirty: true },
+                                                )
+                                              }
+                                            >
+                                              <Trash2 className="h-4 w-4 text-destructive" />
+                                              <span className="sr-only">
+                                                Remove team
+                                              </span>
+                                            </Button>
+                                          </div>
+                                        ))}
+                                        <FormDescription>
+                                          <strong>Use</strong> — members can
+                                          find this MCP server, install it for
+                                          themselves, and use shared
+                                          connections. <strong>Manage</strong>{" "}
+                                          additionally lets the team&apos;s
+                                          admins edit it, change its
+                                          environment, and manage sharing.
+                                        </FormDescription>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </VisibilitySelector>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="environmentId"
+                      render={({ field }) => (
+                        <EnvironmentSelector
+                          value={field.value ?? null}
+                          onChange={field.onChange}
+                          resource="mcpRegistry"
+                        />
+                      )}
+                    />
+                  </CollapsibleContent>
+                </Collapsible>
+                {hasEnvRuleViolations && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/20"
+                  >
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+                    <div className="space-y-1 text-foreground/90">
+                      <div className="font-semibold text-foreground">
+                        {envRuleViolations.length} value
+                        {envRuleViolations.length === 1 ? null : <span>s</span>}{" "}
+                        not allowed in “{boundEnvironmentName}”
+                      </div>
+                      <div>
+                        Edit or remove{" "}
+                        {envRuleViolations.length === 1 ? "it" : "them"}, or
+                        choose another environment, before saving:{" "}
+                        <span className="font-mono">
+                          {envRuleViolations.join(", ")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {currentServerType === "local" && (
+                  <Collapsible
+                    open={advancedOpen}
+                    onOpenChange={setAdvancedOpen}
+                    className="rounded-lg border"
+                  >
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-muted/40"
+                      >
+                        <span className="flex items-center gap-2">
+                          <ChevronRight
+                            className={`h-4 w-4 text-muted-foreground transition-transform ${advancedOpen ? "rotate-90" : ""}`}
+                          />
+                          <span>Advanced</span>
+                        </span>
+                        <span className="truncate font-normal text-muted-foreground">
+                          {isMultitenant ? "Multi-tenant" : "Single-tenant"}
+                        </span>
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-4 border-t px-4 py-4">
+                      <div className="space-y-2" ref={tenancyRef}>
+                        <Label>Tenancy</Label>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={`flex rounded-lg border border-border overflow-hidden ${
+                                isTenancyLocked ? "opacity-60" : ""
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                disabled={isTenancyLocked}
+                                onClick={() => handleMultitenantChange(false)}
+                                className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors ${
+                                  isTenancyLocked ? "cursor-not-allowed" : ""
+                                } ${
+                                  !isMultitenant
+                                    ? "bg-primary text-primary-foreground"
+                                    : `bg-background text-muted-foreground ${
+                                        isTenancyLocked
+                                          ? ""
+                                          : "hover:text-foreground hover:bg-muted"
+                                      }`
+                                }`}
+                              >
+                                <span>Single-tenant</span>
+                                <span
+                                  className={`text-xs font-normal ${!isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                                >
+                                  Dedicated deployment per installation
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isTenancyLocked}
+                                onClick={() => handleMultitenantChange(true)}
+                                className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
+                                  isTenancyLocked ? "cursor-not-allowed" : ""
+                                } ${
+                                  isMultitenant
+                                    ? "bg-primary text-primary-foreground"
+                                    : `bg-background text-muted-foreground ${
+                                        isTenancyLocked
+                                          ? ""
+                                          : "hover:text-foreground hover:bg-muted"
+                                      }`
+                                }`}
+                              >
+                                <span>Multi-tenant</span>
+                                <span
+                                  className={`text-xs font-normal ${isMultitenant ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                                >
+                                  Shared deployment, Gateway adds caller
+                                  identity
+                                </span>
+                              </button>
+                            </div>
+                          </TooltipTrigger>
+                          {isTenancyLocked && (
+                            <TooltipContent>
+                              <p className="max-w-xs">
+                                Tenancy cannot be changed after the server is
+                                created. Delete and recreate the server to
+                                switch tenancy mode.
+                              </p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </div>
+                      <EnvFromSection
+                        envFrom={{
+                          fields: envFromFields,
+                          append: appendEnvFrom,
+                          remove: removeEnvFrom,
+                          watch: form.watch,
+                          setValue: form.setValue,
+                          register: form.register,
+                          fieldNamePrefix: "localConfig.envFrom",
+                        }}
+                      />
+                      <SecretFilesSection
+                        form={form}
+                        fields={fields}
+                        append={append}
+                        remove={remove}
+                        fieldNamePrefix="localConfig.environment"
+                        useExternalSecretsManager={showByosOption}
+                        secretKeysWithStoredValue={storedSecretKeys}
+                        disablePromptOnInstallation={isMultitenant}
+                        disablePromptOnInstallationReason="Multi-tenant servers share one deployment, so env vars are set once at deploy time and cannot be prompted per install."
+                      />
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-base">
+                            Image Pull Secrets
+                          </h3>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              appendImagePullSecret({
+                                source: "existing",
+                                name: "",
+                              })
+                            }
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add
+                          </Button>
+                        </div>
+
+                        {imagePullSecretFields.length === 0 ? (
+                          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                            No image pull secrets configured.
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Kubernetes secrets for pulling container images from
+                            private registries.{" "}
+                            <ExternalDocsLink
+                              href="https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/"
+                              className="underline underline-offset-2 hover:text-primary/80"
+                              showIcon={false}
+                            >
+                              Learn more
+                            </ExternalDocsLink>
+                          </p>
+                        )}
+
+                        {imagePullSecretFields.map((field, index) => {
+                          const watchField = (key: string) =>
+                            form.watch(
+                              // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
+                              `localConfig.imagePullSecrets.${index}.${key}` as any,
+                            ) ?? "";
+                          const setField = (key: string, value: string) =>
+                            form.setValue(
+                              // biome-ignore lint/suspicious/noExplicitAny: discriminated union paths need cast
+                              `localConfig.imagePullSecrets.${index}.${key}` as any,
+                              value,
+                            );
+                          const source = watchField("source");
+
+                          return (
+                            <div
+                              key={field.id}
+                              className="border rounded-lg p-3 space-y-3"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <Select
+                                  value={source}
+                                  onValueChange={(val) => {
+                                    if (val === "existing") {
+                                      updateImagePullSecret(index, {
+                                        source: "existing",
+                                        name: "",
+                                      });
+                                    } else {
+                                      updateImagePullSecret(index, {
+                                        source: "credentials",
+                                        server: "",
+                                        username: "",
+                                        email: "",
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="w-[200px]">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="existing">
+                                      Existing Secret
+                                    </SelectItem>
+                                    <SelectItem value="credentials">
+                                      Registry Credentials
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeImagePullSecret(index)}
+                                  aria-label="Remove image pull secret"
+                                >
+                                  <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                </Button>
+                              </div>
+
+                              {source === "existing" ? (
+                                <SearchableSelect
+                                  value={watchField("name")}
+                                  onValueChange={(val) => setField("name", val)}
+                                  items={imagePullSecretItems}
+                                  placeholder="Select a secret..."
+                                  searchPlaceholder="Search secrets..."
+                                  allowCustom
+                                  multiline
+                                  className="w-full"
+                                  contentClassName="w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))]"
+                                  emptyMessage="No image pull secrets found."
+                                />
+                              ) : (
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Server</Label>
+                                    <Input
+                                      placeholder="e.g. quay.io"
+                                      aria-label="Server"
+                                      className="font-mono"
+                                      autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                                      value={watchField("server")}
+                                      onChange={(e) =>
+                                        setField("server", e.target.value)
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Username</Label>
+                                    <Input
+                                      placeholder="username"
+                                      aria-label="Username"
+                                      autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                                      value={watchField("username")}
+                                      onChange={(e) =>
+                                        setField("username", e.target.value)
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Password</Label>
+                                    <SecretInput
+                                      placeholder={
+                                        mode === "edit" &&
+                                        !watchField("password")
+                                          ? "Saved — leave blank to keep"
+                                          : "password"
+                                      }
+                                      value={watchField("password") ?? ""}
+                                      onChange={(e) =>
+                                        setField("password", e.target.value)
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">
+                                      Email (optional)
+                                    </Label>
+                                    <Input
+                                      placeholder="email@example.com"
+                                      aria-label="Email"
+                                      autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+                                      value={watchField("email")}
+                                      onChange={(e) =>
+                                        setField("email", e.target.value)
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
               </div>
             </div>
           </div>
@@ -2634,6 +2985,10 @@ export function McpCatalogForm({
               setLabels(labelsBaseline);
             },
             hasBlockingErrors: hasEnvRuleViolations,
+            duplicateNotice:
+              mode === "create" ? (
+                <RegistryDuplicateNotice form={form} />
+              ) : undefined,
           })
         ) : (
           footer

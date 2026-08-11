@@ -10,6 +10,8 @@
  * models at or above a minimum generation, plus first-class Gemini embeddings.
  */
 
+import type { ThinkingEffort } from "./thinking-effort";
+
 /** Output-modality families that are not usable for text chat. */
 const NON_TEXT_GEMINI_PATTERNS = ["tts", "image", "audio", "live"];
 
@@ -24,6 +26,7 @@ const GEMINI_FAMILY_MIN_VERSION: GeminiVersion = [2, 5];
 const GEMINI_FAMILY_LEGACY_MAX_VERSION: GeminiVersion = [3, 0];
 
 const GEMINI_EMBEDDING_PREFIX = "gemini-embedding-";
+const RETIRED_GEMINI_EMBEDDING_MODELS = new Set(["gemini-embedding-2-preview"]);
 
 /**
  * Lowest generation whose chat models think by default. Deliberately its own
@@ -31,6 +34,13 @@ const GEMINI_EMBEDDING_PREFIX = "gemini-embedding-";
  * independently of the thinking capability boundary.
  */
 const GEMINI_THINKING_MIN_VERSION: GeminiVersion = [2, 5];
+
+/**
+ * Lowest generation whose flash models take a `thinkingLevel` and accept
+ * `"minimal"`. The 2.5 family takes a numeric `thinkingBudget` instead, and
+ * mixing the two in one request is rejected.
+ */
+const GEMINI_THINKING_LEVEL_MIN_VERSION: GeminiVersion = [3, 0];
 
 /**
  * True when the model should appear in the selectable catalog: first-class
@@ -41,6 +51,9 @@ const GEMINI_THINKING_MIN_VERSION: GeminiVersion = [2, 5];
 export function isUsableGeminiCatalogModel(modelId: string): boolean {
   const id = modelId.toLowerCase();
 
+  if (RETIRED_GEMINI_EMBEDDING_MODELS.has(id)) {
+    return false;
+  }
   if (id.startsWith(GEMINI_EMBEDDING_PREFIX)) {
     return true;
   }
@@ -131,6 +144,63 @@ export function geminiMinimalThinkingConfig(
     return { thinkingLevel: "low" };
   }
   return id.includes("pro") ? { thinkingBudget: 128 } : { thinkingBudget: 0 };
+}
+
+/**
+ * True when the model takes a `thinkingLevel` and so can honor a chosen effort:
+ * Gemini chat models at or above {@link GEMINI_THINKING_LEVEL_MIN_VERSION}.
+ * The 2.5 family is excluded — it takes a numeric `thinkingBudget`, and the two
+ * cannot be sent together.
+ */
+export function supportsGeminiThinkingEffort(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+
+  if (!id.startsWith("gemini-")) {
+    return false;
+  }
+  if (NON_TEXT_GEMINI_PATTERNS.some((pattern) => id.includes(pattern))) {
+    return false;
+  }
+
+  const version = parseGeminiFamilyVersion(id);
+  return (
+    version !== null &&
+    compareVersion(version, GEMINI_THINKING_LEVEL_MIN_VERSION) >= 0
+  );
+}
+
+export type GeminiThinkingLevel = "minimal" | "low" | "medium" | "high";
+
+/**
+ * The `thinkingConfig.thinkingLevel` a chosen effort maps to, or null when the
+ * model is outside {@link supportsGeminiThinkingEffort} and should be sent no
+ * thinking level at all.
+ *
+ * `low` resolves per model rather than to a fixed level: flash models accept
+ * `minimal` and can effectively skip reasoning, while Pro floors at `low` and
+ * reasons whatever it is asked. Both are "as little as this model will do".
+ */
+export function geminiThinkingConfigForEffort(
+  modelId: string,
+  effort: ThinkingEffort,
+): { thinkingLevel: GeminiThinkingLevel } | null {
+  if (!supportsGeminiThinkingEffort(modelId)) {
+    return null;
+  }
+  if (effort !== "low") {
+    return { thinkingLevel: effort };
+  }
+  return {
+    thinkingLevel: acceptsGeminiMinimalThinking(modelId) ? "minimal" : "low",
+  };
+}
+
+/**
+ * Pro is the exception: asking it for less than `low` is a hard 400
+ * ("Thinking level MINIMAL is not supported"), not a silently-ignored hint.
+ */
+function acceptsGeminiMinimalThinking(modelId: string): boolean {
+  return modelId.toLowerCase().includes("flash");
 }
 
 // ===========================================================================

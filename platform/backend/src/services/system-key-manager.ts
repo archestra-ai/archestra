@@ -255,7 +255,9 @@ class SystemKeyManager {
       modelsDevData,
     });
 
-    const upsertedModels = await ModelModel.bulkUpsert(modelsToUpsert);
+    const upsertedModels = await ModelModel.bulkUpsert(modelsToUpsert, {
+      fromProviderCatalog: true,
+    });
 
     logger.info(
       { provider, apiKeyId, upsertedCount: upsertedModels.length },

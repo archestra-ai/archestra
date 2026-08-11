@@ -1,4 +1,4 @@
-import { SupportedProvidersSchema } from "@archestra/shared";
+import { SupportedProvidersSchema, THINKING_EFFORTS } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -31,17 +31,58 @@ export const ConversationOriginSchema = z.enum([
 ]);
 export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 
+/**
+ * Versioned escrow record stored on incognito conversations (enterprise
+ * break-glass recovery — see content-encryption/incognito-escrow.ts).
+ * Union of the two escrow sinks:
+ * The conversation key wrapped to the operator's RSA escrow public key, stored
+ * inline on the row. Safe there: without the offline private half the blob is
+ * useless, so the database holds ciphertext under two different keys and can
+ * open neither.
+ *
+ * Null only on a row written before escrow became mandatory.
+ */
+export const IncognitoEscrowBlobSchema = z.object({
+  v: z.literal(1),
+  alg: z.literal("RSA-OAEP-256"),
+  escrowKeyFingerprint: z.string(),
+  wrappedDek: z.string(),
+});
+export type IncognitoEscrowBlob = z.infer<typeof IncognitoEscrowBlobSchema>;
+
+/**
+ * Per-conversation content key for incognito conversations: the browser-held
+ * DEK presented on the current request plus the conversation it belongs to
+ * (the AAD binds ciphertext to the conversation). Threaded explicitly through
+ * every message read/write — never stored, never global.
+ */
+export type ConversationContentKey = {
+  dek: Buffer;
+  conversationId: string;
+};
+
+/**
+ * How hard the model should reason before answering. Null is the model's own
+ * default — no depth chosen, so the request carries no reasoning field.
+ */
+export const ThinkingEffortSchema = z.enum(THINKING_EFFORTS);
+const ThinkingEffortSettingSchema = ThinkingEffortSchema.nullable();
+
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
   selectedProvider: SupportedProvidersSchema.nullable(),
   origin: ConversationOriginSchema,
+  thinkingEffort: ThinkingEffortSettingSchema,
 };
 
 // For insert/update schema, selectedProvider is optional
 const insertUpdateExtendedFields = {
   selectedProvider: SupportedProvidersSchema.optional(),
   origin: ConversationOriginSchema.optional(),
+  // Nullable as well as optional: null is the caller choosing the model's own
+  // default, which is a different instruction from omitting the field.
+  thinkingEffort: ThinkingEffortSettingSchema.optional(),
 };
 
 export const SelectConversationSchema = createSelectSchema(
@@ -51,8 +92,20 @@ export const SelectConversationSchema = createSelectSchema(
   // shared/project viewer. Keep it out of the response shape entirely — the
   // client only needs the derived `unread` flag — so it is stripped from every
   // response, while the model still reads the raw column to compute `unread`.
-  .omit({ lastReadAt: true })
+  // The incognito escrow blob and key fingerprint are server-side bookkeeping
+  // (break-glass recovery / wrong-key rejection) — clients only need the flag.
+  .omit({
+    lastReadAt: true,
+    incognitoDekFingerprint: true,
+    incognitoEscrow: true,
+  })
   .extend({
+    /**
+     * Incognito conversations only: true when the response omits message
+     * content because no (valid) conversation key accompanied the request —
+     * the client renders the key-lost tombstone instead of a thread.
+     */
+    contentLocked: z.boolean().optional(),
     // Agent is nullable when the associated profile has been deleted
     agent: z
       .object({
@@ -103,6 +156,7 @@ export const UpdateConversationSchema = createUpdateSchema(
     agentId: true,
     artifact: true,
     pinnedAt: true,
+    thinkingEffort: true,
   })
   .extend({
     // Override pinnedAt to accept ISO date strings from the frontend.

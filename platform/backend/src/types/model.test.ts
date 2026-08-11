@@ -27,4 +27,20 @@ describe("PatchModelBodySchema", () => {
       );
     }
   });
+
+  it("rejects duplicate input modalities", () => {
+    const result = PatchModelBodySchema.safeParse({
+      embeddingDimensions: 3072,
+      inputModalities: ["text", "text"],
+      outputModalities: [],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.path).toEqual(["inputModalities"]);
+      expect(result.error.issues[0]?.message).toBe(
+        "Input modalities must be unique",
+      );
+    }
+  });
 });

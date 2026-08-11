@@ -217,6 +217,10 @@ class ConnectorSyncService {
     // and then recover it through another. Defer those unavailable-item counts
     // until the generator closes, removing ids that later produce a document.
     const provisionalUnavailableSourceIds = new Set<string>();
+    // Normally a connector's own dedupe prevents success-before-failure for a
+    // source. A connector that has degraded that guarantee can explicitly
+    // report successful source ids so reconciliation remains order-independent.
+    const recoveredUnavailableSourceIds = new Set<string>();
     let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
@@ -378,7 +382,11 @@ class ConnectorSyncService {
           for (const failure of batch.failures) {
             if (!failure.itemUnavailable) continue;
             if (failure.recoverySourceId) {
-              provisionalUnavailableSourceIds.add(failure.recoverySourceId);
+              if (
+                !recoveredUnavailableSourceIds.has(failure.recoverySourceId)
+              ) {
+                provisionalUnavailableSourceIds.add(failure.recoverySourceId);
+              }
               provisionalUnavailableItems++;
             } else {
               unavailableItems++;
@@ -404,6 +412,10 @@ class ConnectorSyncService {
           provisionalUnavailableSourceIds.delete(
             skipped.sourceId ?? String(skipped.itemId),
           );
+        }
+        for (const sourceId of batch.recoveredSourceIds ?? []) {
+          recoveredUnavailableSourceIds.add(sourceId);
+          provisionalUnavailableSourceIds.delete(sourceId);
         }
 
         // Track skipped items from this batch. Items the connector found but

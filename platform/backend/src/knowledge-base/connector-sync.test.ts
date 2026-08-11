@@ -465,6 +465,60 @@ describe("ConnectorSyncService", () => {
     expect(run?.documentsWithoutText).toBe(1);
   });
 
+  test("an earlier post-cap recovery resolves a later provisional failure", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(1),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [
+              {
+                id: "post-cap-shared-file",
+                title: "Recovered before a later failed viewer",
+                content: "The source was successfully fetched",
+              },
+            ],
+            recoveredSourceIds: ["post-cap-shared-file"],
+            checkpoint: { page: 1 },
+            hasMore: true,
+          };
+          yield {
+            documents: [],
+            failures: [
+              {
+                itemId: "post-cap-shared-file",
+                resource: "driveFile",
+                error: "later viewer could not download",
+                itemUnavailable: true,
+                recoverySourceId: "post-cap-shared-file",
+              },
+            ],
+            checkpoint: { page: 2 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    const result = await connectorSyncService.executeSync(connector.id);
+    const run = await ConnectorRunModel.findById(result.runId);
+
+    expect(result.status).toBe("success");
+    expect(run?.itemErrors).toBe(0);
+    expect(run?.documentsProcessed).toBe(1);
+  });
+
   test("deduplicates unresolved provisional failures by source", async ({
     makeOrganization,
     makeKnowledgeBase,

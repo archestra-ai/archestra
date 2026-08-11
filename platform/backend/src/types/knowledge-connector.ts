@@ -755,6 +755,12 @@ export interface ConnectorSyncBatch {
   documents: ConnectorDocument[];
   failures?: ConnectorItemFailure[];
   skipped?: ConnectorItemSkipped[];
+  /**
+   * Successfully fetched source ids that must resolve later provisional
+   * failures even when success preceded the failed attempt. Connectors only
+   * need this when their normal cross-identity dedupe guarantee is degraded.
+   */
+  recoveredSourceIds?: string[];
   checkpoint: ConnectorCheckpoint;
   hasMore: boolean;
 }

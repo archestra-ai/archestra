@@ -1123,6 +1123,7 @@ export class GoogleDriveConnector extends BaseConnector {
       });
 
       const documents: ConnectorDocument[] = [];
+      const recoveredSourceIds: string[] = [];
 
       for (const file of files) {
         const doc = await this.safeItemFetch({
@@ -1132,6 +1133,12 @@ export class GoogleDriveConnector extends BaseConnector {
               file,
               supportsImages,
             );
+            // Once the bounded dedupe set is full, later identities can see a
+            // source that already succeeded. Preserve that success outcome so
+            // a subsequent failed attempt cannot manufacture an item error.
+            if (dedupe && dedupe.size >= MAX_TRACKED_FILE_IDS && file.id) {
+              recoveredSourceIds.push(file.id);
+            }
             // Claimed only once the download has actually succeeded. Claiming
             // at listing time would let a file that failed here be written off
             // for every other identity that can see it too.
@@ -1193,6 +1200,7 @@ export class GoogleDriveConnector extends BaseConnector {
         documents,
         failures: this.flushFailures(),
         skipped: this.flushSkipped(),
+        ...(recoveredSourceIds.length > 0 ? { recoveredSourceIds } : {}),
         checkpoint: buildCheckpoint({
           type: "gdrive",
           itemUpdatedAt: progress.maxLastModified
@@ -1342,6 +1350,7 @@ export class GoogleDriveConnector extends BaseConnector {
       });
 
       const documents: ConnectorDocument[] = [];
+      const recoveredSourceIds: string[] = [];
 
       for (const file of files) {
         const doc = await this.safeItemFetch({
@@ -1351,6 +1360,9 @@ export class GoogleDriveConnector extends BaseConnector {
               file,
               supportsImages,
             );
+            if (dedupe && dedupe.size >= MAX_TRACKED_FILE_IDS && file.id) {
+              recoveredSourceIds.push(file.id);
+            }
             // See syncDriveFiles: claimed on success, never on failure.
             claimFile(dedupe, file.id);
             if (!result.text.trim() && !result.mediaContent) {
@@ -1404,6 +1416,7 @@ export class GoogleDriveConnector extends BaseConnector {
         documents,
         failures: this.flushFailures(),
         skipped: this.flushSkipped(),
+        ...(recoveredSourceIds.length > 0 ? { recoveredSourceIds } : {}),
         checkpoint: buildCheckpoint({
           type: "gdrive",
           itemUpdatedAt: progress.maxLastModified

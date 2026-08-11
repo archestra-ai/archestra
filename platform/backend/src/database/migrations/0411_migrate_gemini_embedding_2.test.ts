@@ -6,7 +6,7 @@ import { ModelModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0410_migrate_gemini_embedding_2.sql"),
+  path.join(__dirname, "0411_migrate_gemini_embedding_2.sql"),
   "utf-8",
 );
 
@@ -36,7 +36,7 @@ async function createGeminiEmbeddingModel(
   });
 }
 
-describe("0410 Gemini stable embedding migration", () => {
+describe("0411 Gemini stable embedding migration", () => {
   test("preserves a live stable dimension and does not rewrite incompatible preview configs", async ({
     makeOrganization,
     makeSecret,

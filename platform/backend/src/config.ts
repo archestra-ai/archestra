@@ -1810,6 +1810,17 @@ const config = {
       process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
       60000,
     ),
+    /**
+     * Publish this deployment's Agent Skills over the gateway as `skill://`
+     * resources, per the MCP Skills extension (SEP-2640).
+     *
+     * Rides the ARCHESTRA_BETA master switch rather than a flag of its own: the
+     * SEP is still a draft with no shipped interoperating client, which is
+     * exactly what that switch already means. Deployment-global for v1 —
+     * enabling turns the capability on for every organization and gateway at
+     * once; per-tenant gating is a follow-up.
+     */
+    skillsEnabled: process.env.ARCHESTRA_BETA === "true",
   },
   mcpServer: {
     /**
@@ -2719,6 +2730,16 @@ const config = {
     ),
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
+    /**
+     * Verifiable citations (issue #7161): in the internal chat, check the
+     * verbatim quotes the model tags with a chunk ref against the chunks
+     * `query_knowledge_sources` returned, and log + meter any quote that matches
+     * no returned chunk. Log-only — never blocks or alters the answer — so it is
+     * safe on by default; set to "false" to disable the pass entirely.
+     */
+    quoteVerificationEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED !==
+      "false",
     /**
      * Token budget for one chunk, inclusive of its title prefix and metadata
      * suffix. Applies at ingest only: existing chunks keep the size they were

@@ -50,6 +50,17 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 600,
     payload: {},
   },
+  // Digests skills and skill files written before migration 0407 so the MCP
+  // gateway can publish them — it withholds an undigested row rather than
+  // serving it unverifiable, and the listing query filters those rows out
+  // entirely, so an undigested row is invisible until this repairs it. A tick
+  // rather than a boot-only run: a failed pass must not leave the catalog
+  // withheld until someone restarts the worker. O(1) no-op once complete.
+  {
+    taskType: "skill_publication_backfill",
+    intervalSeconds: 600,
+    payload: {},
+  },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

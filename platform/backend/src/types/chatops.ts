@@ -438,8 +438,10 @@ export interface ChatOpsProvider {
 
   /**
    * Get a permalink to a specific message in the provider's web UI.
-   * Used to surface a clickable thread URL in the LLM context so tools
-   * can reference the originating conversation.
+   * Used to surface a clickable URL in the LLM context so tools can reference
+   * the originating message. Callers pass the message that triggered the run,
+   * not its thread root — Slack encodes the thread in a reply's permalink
+   * (`?thread_ts=`), so the reply link identifies both.
    * @param params.channelId - The channel ID containing the message
    * @param params.messageId - The message ID (Slack ts) to link to
    * @returns Permalink URL, or null if unavailable

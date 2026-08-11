@@ -20,6 +20,7 @@ import {
   expandQuery,
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
 } from "./query-expansion";
+import { buildChunkRef } from "./quote-verification";
 import rerank from "./reranker";
 import reciprocalRankFusion from "./rrf";
 
@@ -28,6 +29,13 @@ interface ChunkResult {
   score: number;
   chunkIndex: number;
   metadata: Record<string, unknown> | null;
+  /**
+   * Stable, model-visible citation anchor (`documentId#chunkIndex`). The model
+   * is asked to tag verbatim quotes with it, and quote verification matches a
+   * quote back against the chunk it names. Derived, not stored — no schema
+   * change.
+   */
+  ref: string;
   citation: {
     title: string;
     sourceUrl: string | null;
@@ -349,6 +357,7 @@ class QueryService {
       score: row.score,
       chunkIndex: row.chunkIndex,
       metadata: row.metadata,
+      ref: buildChunkRef(row.documentId, row.chunkIndex),
       citation: {
         title: row.title,
         sourceUrl: row.sourceUrl,

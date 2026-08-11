@@ -33,6 +33,7 @@ export const TaskTypeSchema = z.enum([
   "content_encryption_backfill",
   "check_due_skill_github_syncs",
   "skill_github_sync",
+  "skill_publication_backfill",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -73,6 +74,7 @@ export const TASK_LANES = {
     "content_encryption_backfill",
     "check_due_skill_github_syncs",
     "skill_github_sync",
+    "skill_publication_backfill",
   ],
 } as const satisfies Record<string, TaskType[]>;
 

@@ -14,6 +14,7 @@ import {
   platformExecutedAs,
   stripReservedPlatformMeta,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -50,6 +51,10 @@ import type { IncognitoAuditContext } from "@/content-encryption/incognito";
 import { sensitiveContextOriginFromBoundary } from "@/guardrails/trusted-data";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
+import {
+  type KbChunkForQuoteCheck,
+  readKbChunksFromToolResult,
+} from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import { AgentTeamModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import ChatToolExecutionClaimModel from "@/models/chat-tool-execution-claim";
@@ -114,6 +119,14 @@ export interface ChatToolContext {
   blockOnApprovalRequired?: boolean;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
+  /**
+   * Per-turn sink for the chunks `query_knowledge_sources` returned (chat path
+   * only, and only when quote verification is enabled). Filled at execution
+   * time — covering direct calls and `run_tool` dispatches alike — so the chat
+   * route's citation check never has to re-parse serialized step output (which
+   * hook feedback may have appended to). See verifyChatCitedQuotes.
+   */
+  kbChunksCollector?: KbChunkForQuoteCheck[];
   /**
    * Bridge that surfaces a delegated child agent's tool calls on the caller's
    * conversation surface (chat path only). Threaded into the child run so its
@@ -311,6 +324,18 @@ export function buildMcpGatewayTool(params: {
                 toolArguments,
               );
             }
+
+            // Verifiable citations (#7161): capture the returned KB chunks
+            // from the raw result, before it is collapsed to display text
+            // (and before PostToolUse hook feedback can be appended to that
+            // text). Covers run_tool dispatches — the only path a
+            // search_and_run_only agent has to the knowledge tool.
+            collectKbChunksForVerification({
+              ctx,
+              toolName: mcpTool.name,
+              toolArguments,
+              response: archestraResponse,
+            });
 
             // Return errors as tool-result text so the LLM can read
             // and recover, instead of throwing (which surfaces as a
@@ -780,9 +805,44 @@ export const __test = {
   appendHookFeedbackToToolResult,
   buildPreToolUseBlockedResult,
   toolResultText,
+  collectKbChunksForVerification,
 };
 
 // === Internal helpers ===
+
+/**
+ * Verifiable citations (#7161): when an archestra tool call was
+ * `query_knowledge_sources` — called directly, or dispatched through `run_tool`
+ * as the default `search_and_run_only` agents do — push the chunks it returned
+ * into the per-turn collector. Runs on the raw CallToolResult, so the capture
+ * is immune to the display-string collapse and to hook feedback. Branding-aware
+ * on both the outer name and the dispatched target (which may be a bare short
+ * name, an `archestra__`-prefixed one, or a white-labeled prefix).
+ */
+function collectKbChunksForVerification(params: {
+  ctx: Pick<ChatToolContext, "kbChunksCollector">;
+  toolName: string;
+  toolArguments: Record<string, unknown> | undefined;
+  response: CallToolResult;
+}): void {
+  const { ctx, toolName, toolArguments, response } = params;
+  if (!ctx.kbChunksCollector || response.isError) return;
+
+  const dispatch = resolveRunToolDispatch(toolName, toolArguments);
+  // An unresolved run_tool dispatch cannot name its target; run_tool itself
+  // rejects such calls, so there is nothing to capture.
+  if (dispatch.kind === "unresolved") return;
+  const targetToolName =
+    dispatch.kind === "target" ? dispatch.toolName : toolName;
+  if (
+    archestraMcpBranding.getToolShortName(targetToolName) !==
+    TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
+  ) {
+    return;
+  }
+
+  ctx.kbChunksCollector.push(...readKbChunksFromToolResult(response));
+}
 
 /**
  * MIME types that indicate a renderable UI resource (SEP-1865).

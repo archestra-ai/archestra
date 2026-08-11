@@ -1,4 +1,4 @@
--- Gemini Embedding 2 left preview and the preview endpoint was retired. Move
+-- Gemini Embedding 2 graduated and the preview endpoint was retired. Move
 -- active knowledge configurations and model-key links to the stable id while
 -- preserving the dimensions selected for the existing vector index.
 DO $$

@@ -1316,6 +1316,7 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
 - The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
+- Publishing Agent Skills over the gateway as `skill://` resources is gated by `ARCHESTRA_BETA`, not a flag of its own. It implements the draft MCP Skills extension (SEP-2640). See [Publishing Skills over MCP](/docs/platform-mcp-gateway-skills) for what a gateway publishes and how to choose it.
 
 ### MCP Servers
 
@@ -1602,6 +1603,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - Verifiable citations. In the built-in chat, the model is asked to back each claim with a short verbatim quote tagged with its source chunk's ref; this checks each quote against the chunk its ref names and logs plus meters (`rag_quote_verification_total`) every miss — a quote found in no returned chunk is a likely fabrication, a quote whose ref names no returned chunk but whose text exists in another one is a mis-citation.
+  - Default: `true`
+  - Log-only: it never blocks or alters an answer, and only covers the internal chat (external MCP clients answer where Archestra cannot see the text). Set to `false` to disable the feature: the model is no longer asked to quote, and no check runs.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title prefix and metadata suffix.
   - Default: `512`. Clamped to `128`–`2048`.

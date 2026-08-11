@@ -66,6 +66,8 @@ flowchart LR
 
 Every result carries the document title, its URL in the source system, the connector it came from, and the position of the chunk within the document. An agent answering from a Knowledge Base cites those sources in its reply, so a reader can open the original.
 
+In the built-in chat, the agent also marks each claim with a numbered reference and lists a short verbatim quote for each — tagged with the chunk it came from — in a Sources section at the end of the answer. Archestra checks each quote against the chunk it cites — a quote found in no returned chunk is logged as a likely fabrication. The check never blocks or alters an answer, and it covers the built-in chat only. Set `ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED` to `false` to turn it off.
+
 ### Contextual Retrieval
 
 Chunking separates a passage from the context it sits in. A chunk reading "the limit was raised to 5,000 per minute" is a poor match for "what is the rate limit on the billing API", because neither the product nor the subject appears in it.

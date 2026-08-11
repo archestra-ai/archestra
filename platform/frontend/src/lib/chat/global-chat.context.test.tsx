@@ -947,8 +947,8 @@ describe("ChatProvider retries", () => {
     expect(prepared?.body).toMatchObject({ thinkingEffort: "high" });
   });
 
-  it("sends a pending switch back to auto instead of the stored depth", async () => {
-    // Auto is null, so an unboxed pending value would read as "nothing
+  it("sends a pending switch back to the default instead of the stored depth", async () => {
+    // The default is null, so an unboxed pending value would read as "nothing
     // pending" and the turn would keep sending the depth the user just left.
     const { DefaultChatTransport } = await import("ai");
     mocks.getQueryData.mockImplementation((key: unknown) => {

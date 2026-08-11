@@ -21,7 +21,11 @@ import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
-import { parsePdfBuffer } from "../pdf-utils";
+import {
+  describePdfEmptyText,
+  describePdfExtractionWarning,
+  parsePdfBuffer,
+} from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
 import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
@@ -372,11 +376,24 @@ export class OneDriveConnector extends BaseConnector {
               item.id,
               item.name,
             );
+            if (result.unsupportedType) {
+              this.trackSkipped({
+                itemId: item.id,
+                name: item.name,
+                reason: "unsupported_file_type",
+                category: "unsupported_type",
+              });
+              return null;
+            }
             if (!result.text.trim() && !result.mediaContent) {
               this.trackSkipped({
                 itemId: item.id,
                 name: item.name,
-                reason: "Empty content — no text or media could be extracted",
+                reason:
+                  result.emptyReason ??
+                  "Empty content — no text or media could be extracted",
+                category: "no_extractable_text",
+                sourceScope: { metadataField: "userId", value: userId },
               });
               return null;
             }
@@ -390,6 +407,7 @@ export class OneDriveConnector extends BaseConnector {
           fallback: null,
           itemId: item.id,
           resource: "driveItem",
+          itemUnavailable: true,
         });
         if (doc) documents.push(doc);
       }
@@ -473,6 +491,13 @@ export class OneDriveConnector extends BaseConnector {
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
+    /** Why the text came back empty, for skip reporting on the run. */
+    emptyReason?: string;
+    /**
+     * The extension has no extractor at all (a fileTypes entry outside the
+     * supported sets) — an unsupported-type skip, not a document without text.
+     */
+    unsupportedType?: true;
   }> {
     const ext = getFileExtension(fileName);
     const contentPath = `/users/${userId}/drive/items/${itemId}/content`;
@@ -494,8 +519,20 @@ export class OneDriveConnector extends BaseConnector {
         .api(contentPath)
         .responseType(ResponseType.ARRAYBUFFER)
         .get()) as ArrayBuffer;
-      const text = await extractTextFromBinary(Buffer.from(arrayBuffer), ext);
-      return { text: text.slice(0, MAX_CONTENT_LENGTH) };
+      const extracted = await extractTextFromBinary(
+        Buffer.from(arrayBuffer),
+        ext,
+      );
+      if (extracted.warning) {
+        this.log.warn(
+          { itemId, fileName, reason: extracted.warning },
+          "OneDrive: PDF page extraction warning",
+        );
+      }
+      return {
+        text: extracted.text.slice(0, MAX_CONTENT_LENGTH),
+        emptyReason: extracted.emptyReason,
+      };
     }
 
     if (SUPPORTED_IMAGE_EXTENSIONS.has(ext)) {
@@ -508,7 +545,10 @@ export class OneDriveConnector extends BaseConnector {
           { fileName, sizeBytes: arrayBuffer.byteLength },
           "OneDrive: skipping oversized image",
         );
-        return { text: "" };
+        return {
+          text: "",
+          emptyReason: "Image exceeds the maximum size supported for embedding",
+        };
       }
       const mimeType = IMAGE_MIME_TYPES[ext] ?? "application/octet-stream";
       const data = Buffer.from(arrayBuffer).toString("base64");
@@ -519,7 +559,7 @@ export class OneDriveConnector extends BaseConnector {
       { fileName, ext },
       "OneDrive: skipping unsupported file type",
     );
-    return { text: "" };
+    return { text: "", unsupportedType: true };
   }
 
   private async countUserDriveItems(params: {
@@ -706,22 +746,27 @@ function isModifiedSince(
 async function extractTextFromBinary(
   buffer: Buffer,
   ext: string,
-): Promise<string> {
+): Promise<{ text: string; emptyReason?: string; warning?: string }> {
   switch (ext) {
     case ".docx": {
-      return extractTextFromDocx(buffer);
+      return { text: await extractTextFromDocx(buffer) };
     }
     case ".pdf": {
-      return parsePdfBuffer(buffer);
+      const result = await parsePdfBuffer(buffer);
+      return {
+        text: result.text,
+        emptyReason: describePdfEmptyText(result),
+        warning: describePdfExtractionWarning(result),
+      };
     }
     case ".pptx": {
-      return extractTextFromPptx(buffer);
+      return { text: await extractTextFromPptx(buffer) };
     }
     case ".xlsx": {
-      return extractTextFromXlsx(buffer);
+      return { text: await extractTextFromXlsx(buffer) };
     }
     default:
-      return "";
+      return { text: "" };
   }
 }
 

@@ -2878,6 +2878,13 @@
       "when": 1786399007005,
       "tag": "0410_skill_publication_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 411,
+      "version": "7",
+      "when": 1786404394971,
+      "tag": "0411_lumpy_johnny_blaze",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-09
+lastUpdated: 2026-08-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,7 @@ The whole pipeline runs inside Archestra on PostgreSQL with pgvector. There is n
 
 Connectors run on a cron schedule. Each document goes through the same four steps.
 
-1. **Extract.** Text is pulled from the source. Office documents and PDFs are read through format-specific extractors; PDF text comes from the document's text layer. With a multimodal embedding model configured, images are embedded directly rather than described.
+1. **Extract.** Text is pulled from the source. Office documents and PDFs are read through format-specific extractors; PDF text comes from the document's text layer. A PDF without a text layer — a scan, for example — is skipped and counted in the sync run details. With a multimodal embedding model configured, images are embedded directly rather than described.
 2. **Chunk.** The document is split into passages of roughly 512 tokens, on paragraph and sentence boundaries. Each chunk carries its document title and the document's metadata, so it can be matched on its own.
 3. **Add context.** Optionally, the document is summarized once and that summary is indexed with every one of its chunks. See [Contextual Retrieval](#contextual-retrieval).
 4. **Embed.** Each chunk is vectorized with the configured embedding model and stored alongside a keyword index of the same text.

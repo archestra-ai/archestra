@@ -415,6 +415,7 @@ export class DropboxConnector extends BaseConnector {
         fallback: null,
         itemId: file.id,
         resource: "file",
+        itemUnavailable: true,
       });
 
       if (doc) {

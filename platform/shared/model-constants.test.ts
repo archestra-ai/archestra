@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  anthropicEffortForThinkingEffort,
+  anthropicSupportsThinkingEffort,
   anthropicThinksByDefault,
   getProvidersWithOptionalApiKey,
   isProviderApiKeyOptional,
@@ -32,6 +34,56 @@ describe("anthropicThinksByDefault", () => {
     expect(anthropicThinksByDefault("claude-sonnet-4-6")).toBe(false);
     expect(anthropicThinksByDefault("claude-sonnet-4-5")).toBe(false);
     expect(anthropicThinksByDefault("claude-3-5-haiku-20241022")).toBe(false);
+  });
+});
+
+describe("anthropicSupportsThinkingEffort", () => {
+  test("offers a depth on models that already reason", () => {
+    expect(anthropicSupportsThinkingEffort("claude-opus-5")).toBe(true);
+    expect(anthropicSupportsThinkingEffort("claude-sonnet-5")).toBe(true);
+    expect(anthropicSupportsThinkingEffort("claude-fable-5")).toBe(true);
+    expect(anthropicSupportsThinkingEffort("claude-mythos-5")).toBe(true);
+  });
+
+  test("offers none where a depth would mean switching thinking on", () => {
+    // These accept output_config.effort but keep thinking off until asked, so a
+    // depth would move token spend without producing any reasoning.
+    expect(anthropicSupportsThinkingEffort("claude-opus-4-8")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-opus-4-7")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-opus-4-6")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-sonnet-4-6")).toBe(false);
+  });
+
+  test("offers none where the field is rejected outright", () => {
+    expect(anthropicSupportsThinkingEffort("claude-sonnet-4-5")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-haiku-4-5")).toBe(false);
+    expect(anthropicSupportsThinkingEffort("claude-3-5-haiku-20241022")).toBe(
+      false,
+    );
+  });
+});
+
+describe("anthropicEffortForThinkingEffort", () => {
+  test.each([
+    "low",
+    "medium",
+    "high",
+  ] as const)("%s maps to itself, because the null default carries 'unchanged' instead", (effort) => {
+    // Anthropic's own default is `high`, but a conversation nobody has
+    // touched has no depth and never reaches here — so the levels mean what
+    // they say rather than being shifted to keep one standing in for it.
+    expect(anthropicEffortForThinkingEffort("claude-opus-5", effort)).toBe(
+      effort,
+    );
+  });
+
+  test("sends nothing for a model without a selectable depth", () => {
+    expect(
+      anthropicEffortForThinkingEffort("claude-sonnet-4-5", "high"),
+    ).toBeNull();
+    expect(
+      anthropicEffortForThinkingEffort("claude-opus-4-8", "low"),
+    ).toBeNull();
   });
 });
 

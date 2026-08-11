@@ -18,6 +18,7 @@ let ragConnectorSyncDuration: client.Histogram<string>;
 let ragConnectorSyncsTotal: client.Counter<string>;
 let ragDocumentsProcessedTotal: client.Counter<string>;
 let ragDocumentsIngestedTotal: client.Counter<string>;
+let ragDocumentsWithoutTextTotal: client.Counter<string>;
 let ragChunksCreatedTotal: client.Counter<string>;
 
 // ===== Embedding metrics =====
@@ -69,6 +70,12 @@ export function initializeRagMetrics(): void {
   ragDocumentsIngestedTotal = new client.Counter({
     name: "rag_documents_ingested_total",
     help: "Total documents ingested (new or updated) during connector syncs",
+    labelNames: ["connector_type"],
+  });
+
+  ragDocumentsWithoutTextTotal = new client.Counter({
+    name: "rag_documents_without_text_total",
+    help: "Documents a content sync found but could not index (scanned PDF with no text layer, unparseable or empty file, oversized image) — skipped, so invisible to search",
     labelNames: ["connector_type"],
   });
 
@@ -184,6 +191,7 @@ export function reportConnectorSync(params: {
   durationSeconds: number;
   documentsProcessed: number;
   documentsIngested: number;
+  documentsWithoutText?: number;
 }): void {
   if (!ragConnectorSyncsTotal) {
     logger.warn("RAG metrics not initialized, skipping connector sync report");
@@ -208,6 +216,12 @@ export function reportConnectorSync(params: {
     ragDocumentsIngestedTotal.inc(
       { connector_type: params.connectorType },
       params.documentsIngested,
+    );
+  }
+  if (params.documentsWithoutText && params.documentsWithoutText > 0) {
+    ragDocumentsWithoutTextTotal.inc(
+      { connector_type: params.connectorType },
+      params.documentsWithoutText,
     );
   }
 }

@@ -526,6 +526,7 @@ export class GithubConnector extends BaseConnector {
           fallback: null,
           itemId: file.path,
           resource: "file_content",
+          itemUnavailable: true,
         });
 
         if (content !== null) {

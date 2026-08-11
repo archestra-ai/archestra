@@ -35,6 +35,7 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { IncognitoIcon } from "@/components/chat/incognito-icon";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ import {
 } from "@/lib/chat/chat-utils";
 import { isActionAvailableForConversation } from "@/lib/chat/incognito";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
@@ -298,6 +300,7 @@ const PromptInputContent = ({
   const incognitoActive =
     !isActionAvailableForConversation(conversation, "attachments") ||
     (incognito && !conversationId);
+  const appName = useAppName();
 
   // Any file type can be attached regardless of model modalities or sandbox:
   // a file the model can't read is still stored and surfaced in the
@@ -903,6 +906,22 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
+      {/* Incognito "drawer": a slim strip tucked against the composer's top
+          edge, carrying the explanation that used to live in the toggle's
+          tooltip. Paired with the dashed composer border below so an
+          incognito chat is unmistakable while composing. */}
+      {incognitoActive && (
+        <div
+          data-testid={E2eTestId.ChatIncognitoNotice}
+          className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/40 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
+        >
+          <IncognitoIcon className="size-3.5" />
+          <span>
+            Incognito chat — encrypted with a key that stays in this browser.{" "}
+            {appName} cannot read it, and it isn't available on other devices.
+          </span>
+        </div>
+      )}
       <PromptInput
         globalDrop
         multiple
@@ -910,6 +929,10 @@ const PromptInputContent = ({
         accept={showFileUploadButton ? undefined : "application/x-empty"}
         maxFileSize={storageByteLimit}
         onError={handleFileError}
+        className={cn(
+          incognitoActive &&
+            "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/40",
+        )}
       >
         {/* File attachments display - shown inline above textarea */}
         <PromptInputAttachments className="px-3 pt-2 pb-0">
@@ -955,7 +978,7 @@ const PromptInputContent = ({
             onApiKeyChange={onApiKeyChange}
             onProviderChange={onProviderChange}
             allowFileUploads={allowFileUploads}
-            attachmentsHidden={incognitoActive}
+            attachmentsDisabledByIncognito={incognitoActive}
             incognito={incognito}
             onIncognitoChange={onIncognitoChange}
             sandboxAvailable={sandboxAvailable}

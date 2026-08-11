@@ -43,7 +43,6 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
-import { useAppName } from "@/lib/hooks/use-app-name";
 import { providerToLogoProvider } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
 
@@ -63,10 +62,10 @@ export interface ChatPromptInputToolsProps {
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
   /**
-   * Hide the attachment button entirely (incognito conversations: the backend
-   * rejects attachments, so no affordance — not even a disabled one — shows).
+   * Grey out the attachment button (incognito conversations: attachment bytes
+   * are stored unencrypted server-side, so the backend rejects them).
    */
-  attachmentsHidden?: boolean;
+  attachmentsDisabledByIncognito?: boolean;
   /**
    * Whether the next chat will be created incognito. New-chat composer only —
    * the toggle renders only while there is no conversation yet.
@@ -167,7 +166,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onApiKeyChange,
   onProviderChange,
   allowFileUploads = false,
-  attachmentsHidden = false,
+  attachmentsDisabledByIncognito = false,
   incognito = false,
   onIncognitoChange,
   sandboxAvailable = false,
@@ -248,7 +247,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // the same gate InitialAgentSelector uses via its callback prop) and only
   // when the instance has incognito chats enabled.
   const incognitoEnabled = useFeature("chatIncognitoEnabled") ?? false;
-  const appName = useAppName();
   const showIncognitoToggle =
     incognitoEnabled && !conversationId && !!onIncognitoChange;
 
@@ -484,10 +482,30 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         <NotRecommendedForAgentsNoticeBadge />
       )}
 
-      {/* File attachment button - always visible, except on incognito
-          conversations where the affordance is hidden entirely (the backend
-          rejects attachments there). */}
-      {attachmentsHidden ? null : showFileUploadButton ? (
+      {/* File attachment button - always visible. Incognito greys it out
+          (the backend rejects attachments there because their bytes are
+          stored unencrypted); the org-level toggle greys it out with a
+          settings pointer. */}
+      {attachmentsDisabledByIncognito ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className="inline-flex cursor-not-allowed"
+              data-testid={E2eTestId.ChatDisabledFileUploadButton}
+            >
+              <PromptInputButton disabled>
+                <PaperclipIcon className="size-4" />
+              </PromptInputButton>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={4}>
+            <span>
+              Attachments are stored unencrypted, so incognito chats can't use
+              them
+            </span>
+          </TooltipContent>
+        </Tooltip>
+      ) : showFileUploadButton ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -559,7 +577,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               onClick={() => {
                 // Files staged before the toggle would ride the first message
                 // of a chat that rejects attachments — drop them now (the
-                // attach button hides while the toggle is on).
+                // attach button greys out while the toggle is on).
                 if (!incognito) {
                   attachments.clear();
                 }
@@ -569,9 +587,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               <IncognitoIcon className="size-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top" sideOffset={4} className="max-w-64">
-            Incognito chat: encrypted with a key that stays in this browser.{" "}
-            {appName} cannot read it. Not usable from other devices.
+          <TooltipContent side="top" sideOffset={4}>
+            Incognito chat
           </TooltipContent>
         </Tooltip>
       )}

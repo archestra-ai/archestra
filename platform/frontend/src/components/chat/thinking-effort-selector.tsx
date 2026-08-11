@@ -23,8 +23,8 @@ import { cn } from "@/lib/utils";
 const OPTIONS: { value: ThinkingEffortOption; label: string; hint: string }[] =
   [
     {
-      value: "auto",
-      label: "Auto",
+      value: "default",
+      label: "Default",
       hint: "Let the model reason as it normally would",
     },
     {
@@ -46,7 +46,7 @@ interface ThinkingEffortSelectorProps {
   /** The conversation's model as a `models` row id, not a provider model name. */
   selectedModel: string;
   apiKeyId?: string | null;
-  /** Null is auto — the model's own depth, which is what an untouched chat has. */
+  /** Null is the model's own depth, which is what an untouched chat has. */
   value: ThinkingEffortSetting;
   onChange: (effort: ThinkingEffortSetting) => void;
   disabled?: boolean;
@@ -54,9 +54,9 @@ interface ThinkingEffortSelectorProps {
 }
 
 /**
- * Reasoning depth for the Gemini flash models that let a caller choose one.
- * Renders nothing for every other model, so the composer is unchanged wherever
- * the choice would not reach the provider.
+ * Reasoning depth for the models that let a caller choose one. Renders nothing
+ * for every other model, so the composer is unchanged wherever the choice would
+ * not reach the provider.
  */
 export const ThinkingEffortSelector = memo(function ThinkingEffortSelector({
   selectedModel,
@@ -72,7 +72,7 @@ export const ThinkingEffortSelector = memo(function ThinkingEffortSelector({
   // name, so the selected row has to be resolved before either can be applied.
   const supported = useMemo(() => {
     const model = models?.find((m) => m.dbId === selectedModel);
-    return model?.provider === "gemini" && supportsThinkingEffort(model.id);
+    return model ? supportsThinkingEffort(model.provider, model.id) : false;
   }, [models, selectedModel]);
 
   const current = toThinkingEffortOption(value);

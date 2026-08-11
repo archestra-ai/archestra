@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ThinkingEffort } from "./thinking-effort";
 
 /**
  * Supported LLM providers
@@ -829,6 +830,42 @@ export function anthropicSupportsThinkingDisabled(modelId: string): boolean {
   return !ANTHROPIC_UNCONDITIONAL_THINKING_MODEL_MARKERS.some((marker) =>
     id.includes(marker),
   );
+}
+
+/**
+ * True when a chosen reasoning depth is worth offering for an Anthropic model.
+ *
+ * Deliberately the same set as {@link anthropicThinksByDefault}, and delegating
+ * rather than listing markers again so the two cannot drift. The reasoning is
+ * that `output_config.effort` only *means* reasoning depth while thinking is
+ * on: Opus 4.5–4.8 and Sonnet 4.6 accept the field but keep thinking off until
+ * a request asks for it, so a depth there would move token spend without
+ * producing any of the reasoning the control names.
+ *
+ * Reaching them would mean sending `thinking: {type: "adaptive"}` alongside the
+ * effort, which the display wrapper in `clients/llm-client.ts` currently treats
+ * as a caller opting out of summaries — a bigger change than this control.
+ *
+ * Older models (Sonnet 4.5, Haiku 4.5 and earlier) reject the field outright.
+ */
+export function anthropicSupportsThinkingEffort(modelId: string): boolean {
+  return anthropicThinksByDefault(modelId);
+}
+
+/**
+ * The `output_config.effort` a chosen depth maps to, or null when the model is
+ * outside {@link anthropicSupportsThinkingEffort}.
+ *
+ * Mapped by name. Anthropic's own default is `high` rather than `medium`, but
+ * that is auto's business, not this function's: a conversation nobody has
+ * touched never reaches here, so the levels can mean what they say instead of
+ * being shifted to keep one of them standing in for "unchanged".
+ */
+export function anthropicEffortForThinkingEffort(
+  modelId: string,
+  effort: ThinkingEffort,
+): ThinkingEffort | null {
+  return anthropicSupportsThinkingEffort(modelId) ? effort : null;
 }
 
 /**

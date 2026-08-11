@@ -40,6 +40,47 @@ import { knowledgeSourceAccessControlService } from "./source-access-control";
 const WORKER_ID = `${hostname()}#${process.pid}`;
 
 /**
+ * Fixed-memory membership filter for successful source ids reported after a
+ * connector's exact dedupe set has reached its own safety ceiling. It is lazy
+ * (ordinary runs allocate nothing), has no false negatives, and uses 32 MiB
+ * regardless of how many overflow sources a huge domain produces. A
+ * cryptographic digest plus twelve probes keeps false positives negligible for
+ * millions of overflow ids without rebuilding an unbounded Set.
+ */
+class RecoveredSourceFilter {
+  private static readonly BYTE_COUNT = 32 * 1024 * 1024;
+  private static readonly BIT_MASK = RecoveredSourceFilter.BYTE_COUNT * 8 - 1;
+  private static readonly HASH_COUNT = 12;
+
+  private readonly bits = new Uint8Array(RecoveredSourceFilter.BYTE_COUNT);
+
+  add(sourceId: string): void {
+    const digest = createHash("sha256").update(sourceId).digest();
+    let hash = digest.readUInt32LE(0);
+    const step = digest.readUInt32LE(4) | 1;
+    for (let i = 0; i < RecoveredSourceFilter.HASH_COUNT; i++) {
+      const bitIndex = hash & RecoveredSourceFilter.BIT_MASK;
+      this.bits[bitIndex >>> 3] |= 1 << (bitIndex & 7);
+      hash = (hash + step) >>> 0;
+    }
+  }
+
+  has(sourceId: string): boolean {
+    const digest = createHash("sha256").update(sourceId).digest();
+    let hash = digest.readUInt32LE(0);
+    const step = digest.readUInt32LE(4) | 1;
+    for (let i = 0; i < RecoveredSourceFilter.HASH_COUNT; i++) {
+      const bitIndex = hash & RecoveredSourceFilter.BIT_MASK;
+      if ((this.bits[bitIndex >>> 3] & (1 << (bitIndex & 7))) === 0) {
+        return false;
+      }
+      hash = (hash + step) >>> 0;
+    }
+    return true;
+  }
+}
+
+/**
  * Service that orchestrates the sync of data from external connectors
  * (e.g., Jira, Confluence) into kb_documents.
  *
@@ -207,10 +248,20 @@ class ConnectorSyncService {
     let documentsIngested = 0;
     let itemErrors = 0;
     let itemsSkipped = 0;
-    // Per-item fetch fallbacks. These stay warnings (the run is not "completed
-    // with errors" for them), but a run that ingested nothing needs to know
-    // they happened before blaming the sharing configuration.
+    let documentsWithoutText = 0;
+    let unsupportedItemsSkipped = 0;
+    // Per-item fetch fallbacks. Optional sub-resource failures stay warnings;
+    // a fallback that omits the top-level document increments itemErrors so a
+    // modified source that was not refreshed cannot leave a green run.
     let itemFetchFailures = 0;
+    // A domain-wide connector can fail to fetch a source through one identity
+    // and then recover it through another. Defer those unavailable-item counts
+    // until the generator closes, removing ids that later produce a document.
+    const provisionalUnavailableSourceIds = new Set<string>();
+    // Normally a connector's own dedupe prevents success-before-failure for a
+    // source. A connector that has degraded that guarantee can explicitly
+    // report successful source ids so reconciliation remains order-independent.
+    let recoveredUnavailableSourceIds: RecoveredSourceFilter | undefined;
     let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
@@ -361,28 +412,109 @@ class ConnectorSyncService {
           });
         }
 
-        // Sub-resource fallbacks (safeItemFetch): the item itself was still
-        // produced and ingested, possibly degraded — a warning in the run
-        // logs (each is logged at fetch time), NOT an error that flips the
-        // run to completed_with_errors. Only documents that actually failed
-        // to ingest leave data missing and deserve that status.
+        // safeItemFetch can represent either a degraded optional sub-resource
+        // or a top-level item that could not be produced. Only the latter is
+        // an item error; both remain in the failure total used by empty-run
+        // diagnosis and retain the last-known-good indexed document.
         if (batch.failures?.length) {
-          itemFetchFailures += batch.failures.length;
+          let unavailableItems = 0;
+          let provisionalUnavailableItems = 0;
+          for (const failure of batch.failures) {
+            if (failure.itemUnavailable && failure.recoverySourceId) {
+              if (
+                !recoveredUnavailableSourceIds?.has(failure.recoverySourceId)
+              ) {
+                provisionalUnavailableSourceIds.add(failure.recoverySourceId);
+              }
+              provisionalUnavailableItems++;
+              continue;
+            }
+            itemFetchFailures++;
+            if (failure.itemUnavailable) {
+              unavailableItems++;
+            }
+          }
+          itemErrors += unavailableItems;
+          documentsProcessed += unavailableItems;
           runLog.warn(
-            { failures: batch.failures.length },
-            "Batch completed with sub-resource fallbacks (see item warnings above)",
+            {
+              failures: batch.failures.length,
+              unavailableItems,
+              provisionalUnavailableItems,
+            },
+            unavailableItems > 0 || provisionalUnavailableItems > 0
+              ? "Batch completed with unavailable items (see item warnings above)"
+              : "Batch completed with sub-resource fallbacks (see item warnings above)",
           );
         }
+        for (const doc of batch.documents) {
+          provisionalUnavailableSourceIds.delete(doc.id);
+        }
+        for (const skipped of batch.skipped ?? []) {
+          provisionalUnavailableSourceIds.delete(
+            skipped.sourceId ?? String(skipped.itemId),
+          );
+        }
+        for (const sourceId of batch.recoveredSourceIds ?? []) {
+          recoveredUnavailableSourceIds ??= new RecoveredSourceFilter();
+          recoveredUnavailableSourceIds.add(sourceId);
+          provisionalUnavailableSourceIds.delete(sourceId);
+        }
 
-        // Track skipped items from this batch
+        // Track skipped items from this batch. Items the connector found but
+        // could not extract any text from (scanned PDFs without a text layer,
+        // unparseable files) are counted separately and logged at warn with
+        // the document's name — otherwise they'd look successfully indexed
+        // while never being searchable (issue #7157).
         if (batch.skipped?.length) {
           itemsSkipped += batch.skipped.length;
           documentsProcessed += batch.skipped.length;
-          for (const s of batch.skipped) {
-            runLog.debug(
-              { itemId: s.itemId, name: s.name, reason: s.reason },
-              "Item skipped",
+          const noTextRetirementTargets = batch.skipped
+            .filter((item) => item.category === "no_extractable_text")
+            .map((item) => ({
+              sourceId: item.sourceId ?? String(item.itemId),
+              sourceScope: item.sourceScope,
+            }));
+          const removedStaleDocuments =
+            await KbDocumentModel.deleteByConnectorAndSources({
+              connectorId,
+              targets: noTextRetirementTargets,
+            });
+          if (removedStaleDocuments > 0) {
+            runLog.info(
+              { removedStaleDocuments },
+              "Retired stale indexed documents for definitive no-text skips",
             );
+          }
+          for (const s of batch.skipped) {
+            if (s.category === "no_extractable_text") {
+              documentsWithoutText++;
+              // A source can change from a readable document to a scanned,
+              // empty, or unparseable version without changing its external
+              // ID. Retire the last indexed copy so stale text and chunks do
+              // not remain searchable after this definitive skip.
+              const sourceId = s.sourceId ?? String(s.itemId);
+              runLog.warn(
+                {
+                  itemId: s.itemId,
+                  sourceId,
+                  name: s.name,
+                  reason: s.reason,
+                },
+                "Document yielded no extractable text and was not indexed",
+              );
+            } else if (s.category === "unsupported_type") {
+              unsupportedItemsSkipped++;
+              runLog.debug(
+                { itemId: s.itemId, name: s.name, reason: s.reason },
+                "Unsupported item type skipped",
+              );
+            } else {
+              runLog.debug(
+                { itemId: s.itemId, name: s.name, reason: s.reason },
+                "Item skipped",
+              );
+            }
           }
         }
 
@@ -398,6 +530,7 @@ class ConnectorSyncService {
             documentsIngested,
             itemErrors,
             itemsSkipped,
+            documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
         });
@@ -440,12 +573,24 @@ class ConnectorSyncService {
         }
       }
 
+      // Count only provisional failures that no later identity recovered.
+      // Set semantics also ensure repeated failed attempts for one source are
+      // reported as one unavailable item, not one error per viewer.
+      const unresolvedUnavailableItems = provisionalUnavailableSourceIds.size;
+      itemErrors += unresolvedUnavailableItems;
+      documentsProcessed += unresolvedUnavailableItems;
+      itemFetchFailures += unresolvedUnavailableItems;
+
       // Set totalBatches so batch_embedding handlers can coordinate (fenced).
       if (batchCount > 0) {
         await ConnectorRunModel.updateIfOwned({
           runId: run.id,
           epoch,
-          data: { totalBatches: batchCount },
+          data: {
+            totalBatches: batchCount,
+            documentsProcessed,
+            itemErrors,
+          },
         });
       }
 
@@ -461,6 +606,7 @@ class ConnectorSyncService {
             documentsIngested,
             itemErrors,
             itemsSkipped,
+            documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
         });
@@ -479,6 +625,7 @@ class ConnectorSyncService {
           durationSeconds,
           documentsProcessed,
           documentsIngested,
+          documentsWithoutText,
         });
 
         runLog.info(
@@ -513,6 +660,8 @@ class ConnectorSyncService {
               itemsSkipped,
               documentsProcessed,
               itemFetchFailures,
+              documentsWithoutText,
+              unsupportedItemsSkipped,
             })
           : null;
 
@@ -526,6 +675,7 @@ class ConnectorSyncService {
             documentsIngested,
             itemErrors,
             itemsSkipped,
+            documentsWithoutText,
             error: diagnosis,
             logs: options?.getLogOutput?.() ?? null,
           },
@@ -561,6 +711,8 @@ class ConnectorSyncService {
           data: {
             documentsProcessed,
             documentsIngested,
+            itemErrors,
+            documentsWithoutText,
             logs: options?.getLogOutput?.() ?? null,
           },
         });
@@ -594,6 +746,7 @@ class ConnectorSyncService {
         durationSeconds: (Date.now() - startTime) / 1000,
         documentsProcessed,
         documentsIngested,
+        documentsWithoutText,
       });
 
       runLog.info(
@@ -621,6 +774,7 @@ class ConnectorSyncService {
           documentsIngested,
           itemErrors,
           itemsSkipped,
+          documentsWithoutText,
           error: errorMessage,
           logs: options?.getLogOutput?.() ?? null,
         },
@@ -641,6 +795,7 @@ class ConnectorSyncService {
         durationSeconds,
         documentsProcessed,
         documentsIngested,
+        documentsWithoutText,
       });
 
       runLog.error({ error: errorMessage }, "Sync failed");
@@ -951,19 +1106,60 @@ function describeEmptySync(params: {
   itemsSkipped: number;
   documentsProcessed: number;
   itemFetchFailures: number;
+  documentsWithoutText: number;
+  unsupportedItemsSkipped: number;
 }): string {
-  const { itemsSkipped, documentsProcessed, itemFetchFailures } = params;
+  const {
+    itemsSkipped,
+    documentsProcessed,
+    itemFetchFailures,
+    documentsWithoutText,
+    unsupportedItemsSkipped,
+  } = params;
 
   // Items were found and every one of them failed to come back. Pointing at
   // the sharing configuration here would send someone to the wrong console.
-  if (itemFetchFailures > 0) {
+  if (itemFetchFailures > 0 && itemsSkipped === 0) {
     return `Indexed nothing: ${itemFetchFailures} item${itemFetchFailures === 1 ? "" : "s"} were found but could not be fetched. See the run logs for the individual failures — the credential can list this source but not read its contents.`;
   }
   if (itemsSkipped > 0 && itemsSkipped === documentsProcessed) {
-    return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped as unsupported types. Widen or remove the file-type filter, or point the connector at content it can read.`;
+    // Blaming the file-type filter when the items were readable types with no
+    // text (a folder of scanned PDFs) would send someone to the wrong setting.
+    if (documentsWithoutText === itemsSkipped && itemFetchFailures === 0) {
+      return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found contained no extractable text (scanned or image-only PDFs, or files that could not be parsed). The run details name each one.`;
+    }
+    if (unsupportedItemsSkipped === itemsSkipped && itemFetchFailures === 0) {
+      return `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped as unsupported types. Widen or remove the file-type filter, or point the connector at content it can read.`;
+    }
   }
+
   if (itemsSkipped > 0) {
-    return `Indexed nothing, and skipped ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} as unsupported types. Check the file-type filter and that the content is shared with the identity this connector authenticates as.`;
+    const otherItemsSkipped = Math.max(
+      0,
+      itemsSkipped - documentsWithoutText - unsupportedItemsSkipped,
+    );
+    const causes: string[] = [];
+    if (itemFetchFailures > 0) {
+      causes.push(
+        `${itemFetchFailures} item${itemFetchFailures === 1 ? "" : "s"} could not be fetched`,
+      );
+    }
+    if (documentsWithoutText > 0) {
+      causes.push(`${documentsWithoutText} contained no extractable text`);
+    }
+    if (unsupportedItemsSkipped > 0) {
+      causes.push(`${unsupportedItemsSkipped} had unsupported types`);
+    }
+    if (otherItemsSkipped > 0) {
+      causes.push(
+        `${otherItemsSkipped} ${otherItemsSkipped === 1 ? "was" : "were"} skipped for other reasons`,
+      );
+    }
+    const prefix =
+      itemFetchFailures === 0 && itemsSkipped === documentsProcessed
+        ? `Indexed nothing: all ${itemsSkipped} item${itemsSkipped === 1 ? "" : "s"} found were skipped — `
+        : "Indexed nothing: ";
+    return `${prefix}${causes.join("; ")}. See the run logs and run details for each affected item.`;
   }
   return "Indexed nothing: the source returned no items at all. Check that the content is shared with the identity this connector authenticates as, that any folder or project scope points at something that identity can see, and that a file-type filter is not excluding everything. Test connection reports which of those it is.";
 }

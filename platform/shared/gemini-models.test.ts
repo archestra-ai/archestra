@@ -3,8 +3,8 @@ import {
   geminiThinkingConfigForEffort,
   isLegacyGeminiModel,
   isUsableGeminiCatalogModel,
+  supportsGeminiThinkingEffort,
   supportsGeminiThoughtSummaries,
-  supportsThinkingEffort,
 } from "./gemini-models";
 import { THINKING_EFFORTS } from "./thinking-effort";
 
@@ -85,7 +85,7 @@ describe("supportsGeminiThoughtSummaries", () => {
   });
 });
 
-describe("supportsThinkingEffort", () => {
+describe("supportsGeminiThinkingEffort", () => {
   test.each([
     // The 3.x line takes a thinkingLevel, Pro included.
     ["gemini-3.6-flash", true],
@@ -108,15 +108,15 @@ describe("supportsThinkingEffort", () => {
     // Unversioned ids.
     ["gemini-flash-latest", false],
   ])("%s -> effort=%s", (modelId, expected) => {
-    expect(supportsThinkingEffort(modelId)).toBe(expected);
+    expect(supportsGeminiThinkingEffort(modelId)).toBe(expected);
   });
 
   test("is case-insensitive", () => {
-    expect(supportsThinkingEffort("Gemini-3.6-Flash")).toBe(true);
+    expect(supportsGeminiThinkingEffort("Gemini-3.6-Flash")).toBe(true);
   });
 
   test("does not regress once a 3.10 generation ships", () => {
-    expect(supportsThinkingEffort("gemini-3.10-flash")).toBe(true);
+    expect(supportsGeminiThinkingEffort("gemini-3.10-flash")).toBe(true);
   });
 });
 

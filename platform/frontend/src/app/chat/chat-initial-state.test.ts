@@ -347,8 +347,8 @@ describe("buildCreateConversationInput", () => {
     });
   });
 
-  test("carries auto through as null rather than dropping it", () => {
-    // A new chat left on auto has to reach the row as auto. Dropping the field
+  test("carries an unset depth through as null rather than dropping it", () => {
+    // A new chat with no depth chosen has to reach the row that way. Dropping it
     // would instead rely on the column's own default agreeing.
     expect(
       buildCreateConversationInput({

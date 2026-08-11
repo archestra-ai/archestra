@@ -14,39 +14,45 @@ export const THINKING_EFFORTS = ["low", "medium", "high"] as const;
 export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
 
 /**
- * A conversation's stored depth, where `null` is "auto": nobody chose one, so
- * the request carries no reasoning field at all and the model applies its own
- * default.
+ * A conversation's stored depth, where `null` is the model's own default:
+ * nobody chose a depth, so the request carries no reasoning field at all.
  *
- * Auto exists because no single level can stand in for "unchanged". Model
- * defaults are not uniform and are not even all reasoning levels — gpt-5.1
+ * That state exists because no level of ours can stand in for "unchanged".
+ * Model defaults disagree, and several are not reasoning levels: gpt-5.1
  * through 5.4 default to `none`, gpt-5 and gpt-5.5+ to `medium`, Anthropic's
  * `output_config.effort` to `high`, Gemini flash to `medium` but flash-lite to
- * `minimal`. Picking any of ours as the column default would silently deepen
- * reasoning on some existing chats and shallow it on others, and charge for the
- * difference. Sending nothing is the only value that means "what this model
- * already did", for every model, including ones that do not exist yet.
+ * `minimal`. Picking any one of ours as the column default would silently
+ * deepen reasoning on some existing chats and shallow it on others, and charge
+ * for the difference. Sending nothing is the only value that means "what this
+ * model already did", for every model, including ones that do not exist yet.
+ *
+ * Deliberately not called "auto": on Claude 5 and Gemini the default really is
+ * adaptive, but on gpt-5.1–5.4 it is no reasoning at all, and a label that
+ * promised the model would decide would be wrong on exactly those.
  */
 export type ThinkingEffortSetting = ThinkingEffort | null;
 
-/** The composer's options: auto plus the explicit depths, in menu order. */
-export const THINKING_EFFORT_OPTIONS = ["auto", ...THINKING_EFFORTS] as const;
+/** The composer's options: the model's default plus the explicit depths. */
+export const THINKING_EFFORT_OPTIONS = [
+  "default",
+  ...THINKING_EFFORTS,
+] as const;
 
 export type ThinkingEffortOption = (typeof THINKING_EFFORT_OPTIONS)[number];
 
 /**
- * Auto is `null` on the wire and in the column, but a radio group needs a
- * string, so the two representations are converted at the component boundary
+ * The default is `null` on the wire and in the column, but a radio group needs
+ * a string, so the two representations are converted at the component boundary
  * rather than letting a sentinel string leak into what gets stored.
  */
 export function toThinkingEffortOption(
   setting: ThinkingEffortSetting | undefined,
 ): ThinkingEffortOption {
-  return setting ?? "auto";
+  return setting ?? "default";
 }
 
 export function fromThinkingEffortOption(
   option: ThinkingEffortOption,
 ): ThinkingEffortSetting {
-  return option === "auto" ? null : option;
+  return option === "default" ? null : option;
 }

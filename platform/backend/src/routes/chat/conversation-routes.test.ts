@@ -177,7 +177,8 @@ describe("chat conversation and message routes", () => {
       agentId: agent.id,
     });
 
-    // Auto, so shipping this changes nothing for anyone who never opens the
+    // The model's own default, so shipping this changes nothing for anyone
+    // who never opens the
     // control. No level could stand in for it — model defaults disagree, and
     // some of them are not reasoning levels at all.
     expect(conversation.thinkingEffort).toBeNull();
@@ -216,7 +217,9 @@ describe("chat conversation and message routes", () => {
     expect(afterInvalid.json().thinkingEffort).toBe("high");
   });
 
-  test("returns a conversation to auto", async ({ makeAgent }) => {
+  test("returns a conversation to the model's own default", async ({
+    makeAgent,
+  }) => {
     // Null has to survive as a value rather than being read as "field omitted",
     // or a user could set a depth and never get back to the model's own.
     const agent = await makeAgent({

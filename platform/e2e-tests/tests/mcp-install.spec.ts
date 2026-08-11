@@ -58,13 +58,14 @@ test.describe("MCP Install", () => {
     // Submit the pre-filled form to add server to registry
     await submitAddServer(adminPage);
 
-    // Creating the item continues the setup wizard on its "Connect & Verify"
+    // Creating the item continues the setup wizard on its "Test connection"
     // step — kick off the install from there, which opens the install dialog
     // to collect the prompted credentials. Wait for the step's exact-named
-    // Connect button (exact: the step title "Connect & Verify" and the create
-    // form linger on screen until the wizard navigation lands).
+    // Install button: until the wizard navigation lands, the create form is
+    // still on screen and its auth/env labels substring-match "Install",
+    // tripping strict mode.
     const stepInstallButton = adminPage.getByRole("button", {
-      name: "Connect",
+      name: "Install",
       exact: true,
     });
     await stepInstallButton.waitFor({ state: "visible", timeout: 30_000 });
@@ -184,13 +185,13 @@ rl.on("line", (line) => {
     await clickButton({ page: adminPage, options: { name: "Add Server" } });
     await adminPage.waitForLoadState("domcontentloaded");
 
-    // Creating the item lands on the setup wizard's "Connect & Verify" step.
-    // No credentials are prompted for this server, so "Connect" starts the
+    // Creating the item lands on the setup wizard's "Test connection" step.
+    // No credentials are prompted for this server, so "Install" starts the
     // install directly (no dialog). Exact match + visibility wait: until the
-    // wizard navigation lands, the step title "Connect & Verify" and the
-    // create form linger on screen.
+    // wizard navigation lands, the create form's labels substring-match
+    // "Install" and trip strict mode.
     const bogusInstallButton = adminPage.getByRole("button", {
-      name: "Connect",
+      name: "Install",
       exact: true,
     });
     await bogusInstallButton.waitFor({ state: "visible", timeout: 30_000 });

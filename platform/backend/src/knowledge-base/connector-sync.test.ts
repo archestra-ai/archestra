@@ -463,6 +463,10 @@ describe("ConnectorSyncService", () => {
     expect(run?.documentsProcessed).toBe(1);
     expect(run?.itemsSkipped).toBe(1);
     expect(run?.documentsWithoutText).toBe(1);
+    expect(run?.error).toContain(
+      "all 1 item found contained no extractable text",
+    );
+    expect(run?.error).not.toContain("could not be fetched");
   });
 
   test("an earlier post-cap recovery resolves a later provisional failure", async ({

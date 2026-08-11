@@ -40,6 +40,47 @@ import { knowledgeSourceAccessControlService } from "./source-access-control";
 const WORKER_ID = `${hostname()}#${process.pid}`;
 
 /**
+ * Fixed-memory membership filter for successful source ids reported after a
+ * connector's exact dedupe set has reached its own safety ceiling. It is lazy
+ * (ordinary runs allocate nothing), has no false negatives, and uses 32 MiB
+ * regardless of how many overflow sources a huge domain produces. A
+ * cryptographic digest plus twelve probes keeps false positives negligible for
+ * millions of overflow ids without rebuilding an unbounded Set.
+ */
+class RecoveredSourceFilter {
+  private static readonly BYTE_COUNT = 32 * 1024 * 1024;
+  private static readonly BIT_MASK = RecoveredSourceFilter.BYTE_COUNT * 8 - 1;
+  private static readonly HASH_COUNT = 12;
+
+  private readonly bits = new Uint8Array(RecoveredSourceFilter.BYTE_COUNT);
+
+  add(sourceId: string): void {
+    const digest = createHash("sha256").update(sourceId).digest();
+    let hash = digest.readUInt32LE(0);
+    const step = digest.readUInt32LE(4) | 1;
+    for (let i = 0; i < RecoveredSourceFilter.HASH_COUNT; i++) {
+      const bitIndex = hash & RecoveredSourceFilter.BIT_MASK;
+      this.bits[bitIndex >>> 3] |= 1 << (bitIndex & 7);
+      hash = (hash + step) >>> 0;
+    }
+  }
+
+  has(sourceId: string): boolean {
+    const digest = createHash("sha256").update(sourceId).digest();
+    let hash = digest.readUInt32LE(0);
+    const step = digest.readUInt32LE(4) | 1;
+    for (let i = 0; i < RecoveredSourceFilter.HASH_COUNT; i++) {
+      const bitIndex = hash & RecoveredSourceFilter.BIT_MASK;
+      if ((this.bits[bitIndex >>> 3] & (1 << (bitIndex & 7))) === 0) {
+        return false;
+      }
+      hash = (hash + step) >>> 0;
+    }
+    return true;
+  }
+}
+
+/**
  * Service that orchestrates the sync of data from external connectors
  * (e.g., Jira, Confluence) into kb_documents.
  *
@@ -220,7 +261,7 @@ class ConnectorSyncService {
     // Normally a connector's own dedupe prevents success-before-failure for a
     // source. A connector that has degraded that guarantee can explicitly
     // report successful source ids so reconciliation remains order-independent.
-    const recoveredUnavailableSourceIds = new Set<string>();
+    let recoveredUnavailableSourceIds: RecoveredSourceFilter | undefined;
     let batchCount = 0;
     const startTime = Date.now();
     let stoppedEarly = false;
@@ -376,19 +417,20 @@ class ConnectorSyncService {
         // an item error; both remain in the failure total used by empty-run
         // diagnosis and retain the last-known-good indexed document.
         if (batch.failures?.length) {
-          itemFetchFailures += batch.failures.length;
           let unavailableItems = 0;
           let provisionalUnavailableItems = 0;
           for (const failure of batch.failures) {
-            if (!failure.itemUnavailable) continue;
-            if (failure.recoverySourceId) {
+            if (failure.itemUnavailable && failure.recoverySourceId) {
               if (
-                !recoveredUnavailableSourceIds.has(failure.recoverySourceId)
+                !recoveredUnavailableSourceIds?.has(failure.recoverySourceId)
               ) {
                 provisionalUnavailableSourceIds.add(failure.recoverySourceId);
               }
               provisionalUnavailableItems++;
-            } else {
+              continue;
+            }
+            itemFetchFailures++;
+            if (failure.itemUnavailable) {
               unavailableItems++;
             }
           }
@@ -414,6 +456,7 @@ class ConnectorSyncService {
           );
         }
         for (const sourceId of batch.recoveredSourceIds ?? []) {
+          recoveredUnavailableSourceIds ??= new RecoveredSourceFilter();
           recoveredUnavailableSourceIds.add(sourceId);
           provisionalUnavailableSourceIds.delete(sourceId);
         }
@@ -536,6 +579,7 @@ class ConnectorSyncService {
       const unresolvedUnavailableItems = provisionalUnavailableSourceIds.size;
       itemErrors += unresolvedUnavailableItems;
       documentsProcessed += unresolvedUnavailableItems;
+      itemFetchFailures += unresolvedUnavailableItems;
 
       // Set totalBatches so batch_embedding handlers can coordinate (fenced).
       if (batchCount > 0) {

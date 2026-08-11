@@ -6,7 +6,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { CreateLlmProviderApiKeyDialog } from "./create-llm-provider-api-key-dialog";
 
 const mutateAsync = vi.fn();
-const updateMutateAsync = vi.fn();
+const reconnectMutateAsync = vi.fn();
 
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "••••••••••••••••",
@@ -47,8 +47,8 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     mutateAsync,
     isPending: false,
   }),
-  useUpdateLlmProviderApiKey: () => ({
-    mutateAsync: updateMutateAsync,
+  useReconnectLlmProviderApiKey: () => ({
+    mutateAsync: reconnectMutateAsync,
     isPending: false,
   }),
 }));
@@ -61,8 +61,8 @@ describe("CreateLlmProviderApiKeyDialog", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     mutateAsync.mockResolvedValue({});
-    updateMutateAsync.mockReset();
-    updateMutateAsync.mockResolvedValue({});
+    reconnectMutateAsync.mockReset();
+    reconnectMutateAsync.mockResolvedValue({});
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useHasPermissions).mockReset();
     vi.mocked(useHasPermissions).mockReturnValue({
@@ -188,6 +188,36 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     expect(onSuccess).toHaveBeenCalledOnce();
   });
 
+  it("forces personal scope for a subscription sign-in even when the form holds a shared scope", async () => {
+    // Scope coercion in the form is deferred until sign-in completes, and the
+    // sign-in callback reads form values in the same tick the credential
+    // lands — so the payload must resolve the scope itself.
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Sign in with ChatGPT"
+        description="Connect your ChatGPT account"
+        credentialMode="subscription"
+        allowedProviders={["openai"]}
+        defaultValues={{
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          scope: "org",
+          authMethod: "subscription",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: "personal", teamId: undefined }),
+    );
+  });
+
   it("rotates the existing credential in place when reconnecting a subscription", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
@@ -214,10 +244,12 @@ describe("CreateLlmProviderApiKeyDialog", () => {
 
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    // The fresh credential replaces the stored secret; no duplicate key row.
-    expect(updateMutateAsync).toHaveBeenCalledWith({
+    // The fresh credential replaces the stored secret via the self-service
+    // reconnect endpoint (default members lack llmProviderApiKey:update, so
+    // the PATCH route would 403); no duplicate key row.
+    expect(reconnectMutateAsync).toHaveBeenCalledWith({
       id: "existing-key-id",
-      data: { apiKey: "subscription-token" },
+      apiKey: "subscription-token",
     });
     expect(mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);

@@ -21,6 +21,7 @@ import { describe, expect, test } from "@/test";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentKnowledgeBaseModel from "./agent-knowledge-base";
 import AgentToolModel from "./agent-tool";
+import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
 import TeamModel from "./team";
 import ToolModel, { parseArchestraBuiltInName } from "./tool";
@@ -1002,6 +1003,108 @@ describe("ToolModel", () => {
         expect.objectContaining({ id: tool.id, name: "scoped_tool" }),
       );
       expect(result2).toBeNull();
+    });
+  });
+
+  describe("getMcpToolsByAgent - uninstalled MCP servers", () => {
+    test("hides a statically-pinned tool once its only install is uninstalled", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      const catalogItem = await makeInternalMcpCatalog();
+      const mcpServer = await makeMcpServer({ catalogId: catalogItem.id });
+      const tool = await makeTool({
+        name: "uninstalled_tool",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+      await AgentToolModel.create(agent.id, tool.id, {
+        mcpServerId: mcpServer.id,
+      });
+
+      const before = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      expect(before).toContain("uninstalled_tool");
+
+      // Uninstall: soft-deletes the install but deliberately retains the tool
+      // row and the agent_tools assignment so a reconnect restores them.
+      await McpServerModel.delete(mcpServer.id);
+
+      const after = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      expect(after).not.toContain("uninstalled_tool");
+    });
+
+    test("keeps the tool listed when a sibling install of the same catalog survives", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      const catalogItem = await makeInternalMcpCatalog();
+      const mine = await makeMcpServer({ catalogId: catalogItem.id });
+      await makeMcpServer({ catalogId: catalogItem.id });
+      const tool = await makeTool({
+        name: "shared_tool",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+      await AgentToolModel.create(agent.id, tool.id, {
+        mcpServerId: mine.id,
+      });
+
+      // Only one caller's install goes away; the call path would still route
+      // through the surviving sibling, so the tool must stay listed.
+      await McpServerModel.delete(mine.id);
+
+      const after = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      expect(after).toContain("shared_tool");
+    });
+
+    test("keeps a dynamic-credential tool listed with no installs at all", async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent();
+      const catalogItem = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "connect_at_call_time_tool",
+        parameters: {},
+        catalogId: catalogItem.id,
+      });
+      // Dynamic assignments resolve credentials per caller at call time and are
+      // meant to be advertised before anyone has connected, so the caller gets
+      // an actionable "connect" prompt rather than a missing tool.
+      await AgentToolModel.create(agent.id, tool.id, {
+        credentialResolutionMode: "dynamic",
+      });
+
+      const listed = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      expect(listed).toContain("connect_at_call_time_tool");
+    });
+
+    test("keeps built-in Archestra tools listed even though they have no install", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const agent = await makeAgent();
+      await seedAndAssignArchestraTools(agent.id);
+
+      const listed = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+        (t) => t.name,
+      );
+      expect(listed).toContain("archestra__whoami");
     });
   });
 

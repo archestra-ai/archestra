@@ -956,9 +956,7 @@ const CREDENTIAL_FINGERPRINT_KEY = config.auth.secret
  */
 function fingerprintCredential(credential: string | undefined): string {
   if (!credential) return "none";
+  const hmac = createHmac("sha256", CREDENTIAL_FINGERPRINT_KEY);
   // codeql[js/insufficient-password-hash] Buckets a bearer token for rate limiting, not password verification: the digest is never stored as a credential nor compared against one.
-  return createHmac("sha256", CREDENTIAL_FINGERPRINT_KEY)
-    .update(credential)
-    .digest("hex")
-    .slice(0, 8);
+  return hmac.update(credential).digest("hex").slice(0, 8);
 }

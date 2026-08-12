@@ -2830,6 +2830,22 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
       30,
     ),
+    /**
+     * Per-statement timeout for the chunk search lanes (vector + keyword),
+     * tighter than the pool-wide statement_timeout. Retrieval fans out into
+     * several parallel search statements per tool call, so a corpus where one
+     * lane degenerates (e.g. a keyword query matching most of a large corpus)
+     * would otherwise burn the full pool timeout once per lane and fail the
+     * whole call. A lane that exceeds this budget is dropped and the remaining
+     * lanes' results are merged instead. 0 disables the override (lanes
+     * inherit the pool-wide statement_timeout).
+     */
+    searchStatementTimeoutMillis: parseClampedInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS,
+      8_000,
+      0,
+      120_000,
+    ),
     // Liveness lease for connector sync runs. The owning worker renews the
     // lease every `heartbeatInterval`; a run whose lease is not renewed within
     // `leaseTtl` is treated as orphaned and reclaimed. TTL must be several times

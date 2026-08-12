@@ -519,9 +519,10 @@ export function McpServerCard({
     </Button>
   );
 
-  // 3 keeps the compact info row on one line at grid card width; a 4th
-  // connection folds into the +N count instead of pushing the circle stack
-  // past the card edge.
+  // A 4th connection folds into the +N count rather than lengthening the
+  // stack: the stack is the widest fixed item in the compact info row, and
+  // every extra circle comes straight out of the width the scope badge's name
+  // has left to truncate into.
   const MAX_AVATARS = 3;
   const connectionAvatars: Array<{
     type: "team" | "user";
@@ -572,30 +573,46 @@ export function McpServerCard({
   // Who can reach this catalog item. Personal items of the viewer's own say
   // nothing new — the grid already groups them under a "Personal" heading, so
   // the badge is asked not to label them "Me" (`showSelfAsMe={false}`) and
-  // renders null for that case; the gate mirrors it to keep the row (and its
-  // separator) from reserving space for an empty badge.
+  // renders null for that case; the gate mirrors it to keep the row from
+  // reserving space for an empty badge.
   const showScopeBadge =
     item.scope !== "personal" ||
     Boolean(item.authorId && item.authorId !== currentUserId);
 
-  // Whether anything follows the badge in the row. Shared by the row's "is there
-  // anything at all to show" gate and the badge's trailing divider so the two
-  // can't drift and leave a divider hanging at the end of the row.
+  /** Who is connected and whether a connection needs attention. */
+  const hasTrailingCluster =
+    !isBuiltinVariant &&
+    (connectionAvatars.length > 0 ||
+      hasOrgConnection ||
+      Boolean(oauthReauthIndicator));
+
+  /** Whether anything follows the badge in the row. */
   const hasCompactInfoAfterScopeBadge =
     toolsCount > 0 ||
     totalAgentCount > 0 ||
     (variant === "local" && deploymentServerIds.length > 0) ||
-    (!isBuiltinVariant &&
-      (connectionAvatars.length > 0 ||
-        hasOrgConnection ||
-        Boolean(oauthReauthIndicator)));
+    hasTrailingCluster;
 
   const hasCompactInfoContent = showScopeBadge || hasCompactInfoAfterScopeBadge;
 
+  /*
+    One line, and it has to stay one line at the grid's card width — which
+    leaves it roughly 250-300px to seat a scope badge, two counts, a deployment
+    state and a stack of connection avatars. Two rules keep it there.
+
+    Fixed items are `shrink-0` and the badge is the single elastic cell, so
+    pressure lands on the one thing that can absorb it — a long author or team
+    name truncates (its `title` keeps it readable) instead of every item
+    refusing to shrink and the row spilling over the card edge.
+
+    Nothing separates the items but the gap. The 1px rules that used to sit
+    between them cost ~21px each once their two gaps are counted — around a
+    fifth of the row — which is most of what a name has to truncate into.
+  */
   const compactInfoRow = hasCompactInfoContent ? (
-    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+    <div className="flex min-w-0 items-center gap-3 text-sm text-muted-foreground">
       {showScopeBadge && (
-        <>
+        <div className="flex min-w-0 items-center">
           <ResourceVisibilityBadge
             scope={item.scope}
             teams={item.teams}
@@ -603,39 +620,46 @@ export function McpServerCard({
             authorName={item.authorName}
             currentUserId={currentUserId}
             showSelfAsMe={false}
+            compact
           />
-          {hasCompactInfoAfterScopeBadge && (
-            <div className="h-4 w-px bg-border" />
-          )}
-        </>
+        </div>
       )}
       {toolsCount > 0 && (
-        <>
-          <div className="flex items-center gap-1">
-            <Wrench className="h-3.5 w-3.5" />
-            <span data-testid={`${E2eTestId.McpServerToolsCount}`}>
-              {toolsCount}
-            </span>
-          </div>
-          <div className="h-4 w-px bg-border" />
-        </>
+        <div className="flex shrink-0 items-center gap-1">
+          <Wrench className="h-3.5 w-3.5" />
+          <span data-testid={`${E2eTestId.McpServerToolsCount}`}>
+            {toolsCount}
+          </span>
+        </div>
       )}
       {totalAgentCount > 0 && (
         <>
           {/*
-            A hover card rather than a tooltip: the footer links through to the
-            full list, and tooltip content is not reachable by the pointer.
+            The popover is informational only, and it MUST NOT capture pointer
+            events: it opens directly on top of the card's action row (Chat /
+            Reinstall / Uninstall), so an interactive popover sits between the
+            cursor and those buttons and swallows the click — the user presses
+            Reinstall and nothing happens. `pointerEventsNone` puts the popper
+            wrapper out of the hit-test path so clicks fall through to the
+            button underneath. That leaves nothing clickable inside the card,
+            so the trigger itself carries the link to the full usage list.
           */}
           <HoverCard openDelay={150}>
             <HoverCardTrigger asChild>
-              <div className="flex items-center gap-1 cursor-help">
+              <Link
+                href={`/mcp/registry/${item.id}?tab=usage`}
+                aria-label={`${totalAgentCount} ${
+                  totalAgentCount === 1 ? "agent" : "agents"
+                } can use ${item.name}, view usage`}
+                className="flex shrink-0 items-center gap-1 hover:text-foreground transition-colors"
+              >
                 <Bot className="h-3.5 w-3.5" />
                 <span data-testid={`${E2eTestId.McpServerAgentsCount}`}>
                   {totalAgentCount}
                 </span>
-              </div>
+              </Link>
             </HoverCardTrigger>
-            <HoverCardContent className="w-72 p-3 text-sm">
+            <HoverCardContent pointerEventsNone className="w-72 p-3 text-sm">
               {assignedAgents.length > 0 && (
                 <AgentUsageSection
                   title={`Used by ${assignedAgents.length} ${
@@ -655,44 +679,42 @@ export function McpServerCard({
                   agents={autoModeOnlyAgents}
                 />
               )}
-              <Link
-                href={`/mcp/registry/${item.id}?tab=usage`}
-                className="mt-2.5 flex items-center gap-1 border-t pt-2 text-xs text-muted-foreground hover:text-foreground"
-              >
+              <p className="mt-2.5 flex items-center gap-1 border-t pt-2 text-xs text-muted-foreground">
                 <span>View all usage</span>
                 <ArrowUpRight className="h-3 w-3" />
-              </Link>
+              </p>
             </HoverCardContent>
           </HoverCard>
-          <div className="h-4 w-px bg-border" />
         </>
       )}
-      {variant === "local" && deploymentServerIds.length > 0 && (
-        <>
-          {deploymentSummary ? (
-            <button
-              type="button"
-              onClick={() => goToItemPage("logs")}
-              aria-label={`${deploymentSummary.running} of ${deploymentSummary.total} deployments running for ${item.name}, view logs`}
-              className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
-            >
-              <DeploymentStatusDot state={deploymentSummary.overallState} />
-              <span aria-hidden>
-                {deploymentSummary.running}/{deploymentSummary.total}
-              </span>
-            </button>
-          ) : (
-            <span className="relative flex h-2 w-2 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-muted-foreground/50 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-muted-foreground/50" />
+      {variant === "local" &&
+        deploymentServerIds.length > 0 &&
+        (deploymentSummary ? (
+          <button
+            type="button"
+            onClick={() => goToItemPage("logs")}
+            aria-label={`${deploymentSummary.running} of ${deploymentSummary.total} deployments running for ${item.name}, view logs`}
+            className="flex shrink-0 items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors"
+          >
+            <DeploymentStatusDot state={deploymentSummary.overallState} />
+            <span aria-hidden>
+              {deploymentSummary.running}/{deploymentSummary.total}
             </span>
-          )}
-          <div className="h-4 w-px bg-border" />
-        </>
-      )}
-      {!isBuiltinVariant &&
-        (connectionAvatars.length > 0 || hasOrgConnection) && (
-          <div className="flex items-center gap-2">
+          </button>
+        ) : (
+          <span className="relative flex h-2 w-2 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-muted-foreground/50 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-muted-foreground/50" />
+          </span>
+        ))}
+      {/*
+        Trailing cluster, pushed to the card's right edge by `ml-auto` so the
+        avatar stacks line up down a column of cards instead of each starting
+        wherever its neighbour's name happened to end.
+      */}
+      {hasTrailingCluster && (
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {(connectionAvatars.length > 0 || hasOrgConnection) && (
             <AvatarGroup>
               {hasOrgConnection && (
                 <TooltipProvider>
@@ -775,9 +797,10 @@ export function McpServerCard({
                 </Tooltip>
               </TooltipProvider>
             </AvatarGroup>
-          </div>
-        )}
-      {!isBuiltinVariant && oauthReauthIndicator}
+          )}
+          {oauthReauthIndicator}
+        </div>
+      )}
     </div>
   ) : null;
 
@@ -966,7 +989,10 @@ export function McpServerCard({
 
   return (
     <Card
-      className="flex flex-col relative pt-4 gap-4 h-full"
+      // `overflow-hidden` is a backstop, not the fix: the rows inside are laid
+      // out to fit. It means that if some future combination still doesn't,
+      // the card clips it instead of painting it over its neighbour.
+      className="flex flex-col relative pt-4 gap-4 h-full overflow-hidden"
       data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
     >
       <CardHeader className="gap-0">

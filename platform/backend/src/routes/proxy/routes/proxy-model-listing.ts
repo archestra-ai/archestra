@@ -80,7 +80,7 @@ export async function resolveProxyModelsApiKey(params: {
     return { apiKey: token, baseUrl: undefined, extraHeaders: null };
   }
 
-  await virtualKeyRateLimiter.check(request.ip);
+  await virtualKeyRateLimiter.check({ ip: request.ip, credential: token });
   try {
     const resolved = await validateVirtualApiKey(token, provider);
     if (!resolved.apiKey) {
@@ -107,7 +107,9 @@ export async function resolveProxyModelsApiKey(params: {
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
       // Best-effort: a failure to record must never mask the underlying 401.
-      await virtualKeyRateLimiter.recordFailure(request.ip).catch(() => {});
+      await virtualKeyRateLimiter
+        .recordFailure({ ip: request.ip, credential: token })
+        .catch(() => {});
     }
     throw error;
   }

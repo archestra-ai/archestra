@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.3.33](https://github.com/archestra-ai/archestra/compare/platform-v1.3.32...platform-v1.3.33) (2026-08-12)
+
+
+### Features
+
+* **chat:** fold the citation Sources block behind the source chips ([#7233](https://github.com/archestra-ai/archestra/issues/7233)) ([ca7c1b5](https://github.com/archestra-ai/archestra/commit/ca7c1b55e38756d27bc96f4dfe72218b8a7a3a79))
+
+
+### Bug Fixes
+
+* **guardrails:** steer dispatch-mode agents to run_tool instead of dead-ending ([#7239](https://github.com/archestra-ai/archestra/issues/7239)) ([d92fbff](https://github.com/archestra-ai/archestra/commit/d92fbffd4550caa04f917d88de229ad7e15852a7))
+* **knowledge:** citations for run_tool-dispatched queries + bounded search-lane timeouts ([#7230](https://github.com/archestra-ai/archestra/issues/7230)) ([c44a94e](https://github.com/archestra-ai/archestra/commit/c44a94e5fe64faddeae6ead6007ebab7a66b3d9b))
+* **llm-proxy:** scope the virtual-key failure limiter to the presented credential ([#7232](https://github.com/archestra-ai/archestra/issues/7232)) ([e7ac65b](https://github.com/archestra-ai/archestra/commit/e7ac65b9cbaac89a3370a2257a4456cfa040342f))
+* **mcp-gateway:** stop advertising tools whose install was uninstalled ([#7238](https://github.com/archestra-ai/archestra/issues/7238)) ([9668551](https://github.com/archestra-ai/archestra/commit/9668551f25d4c5159d1190021f1ab2a201eed4f2))
+* **mcp-registry:** keep server card metadata inside the card ([#7231](https://github.com/archestra-ai/archestra/issues/7231)) ([08c9a16](https://github.com/archestra-ai/archestra/commit/08c9a16fb6bce8072cf6c82f33228b1c9589abeb))
+* **mcp-registry:** stop the usage hover card from swallowing card action clicks ([#7237](https://github.com/archestra-ai/archestra/issues/7237)) ([4a525dc](https://github.com/archestra-ai/archestra/commit/4a525dc24681358f56496e1ee97d66ec49b6ae12))
+* **security:** stop forwarded headers from deciding loopback trust ([#7234](https://github.com/archestra-ai/archestra/issues/7234)) ([c2b09a3](https://github.com/archestra-ai/archestra/commit/c2b09a3fd17d0792e2788fe4283f8547a3214f56))
+
+
+### Performance Improvements
+
+* **knowledge:** AND-first keyword search with an OR recall fallback ([#7236](https://github.com/archestra-ai/archestra/issues/7236)) ([3cc73e0](https://github.com/archestra-ai/archestra/commit/3cc73e078a96cb759be0a96cd2af9e0ad2936bd9))
+
 ## [1.3.32](https://github.com/archestra-ai/archestra/compare/platform-v1.3.31...platform-v1.3.32) (2026-08-12)
 
 

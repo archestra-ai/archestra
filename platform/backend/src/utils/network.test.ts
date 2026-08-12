@@ -4,9 +4,43 @@ import {
   isIpLiteralHost,
   isLoopbackAddress,
   isLoopbackRedirectUri,
+  isLoopbackRequest,
   isPrivateOrLoopbackHostname,
   loopbackRedirectUriMatchesIgnoringPort,
 } from "./network";
+
+describe("isLoopbackRequest", () => {
+  test("returns true for a loopback socket peer", () => {
+    expect(isLoopbackRequest({ socket: { remoteAddress: "127.0.0.1" } })).toBe(
+      true,
+    );
+    expect(isLoopbackRequest({ socket: { remoteAddress: "::1" } })).toBe(true);
+    expect(
+      isLoopbackRequest({ socket: { remoteAddress: "::ffff:127.0.0.1" } }),
+    ).toBe(true);
+  });
+
+  test("returns false for a remote socket peer", () => {
+    expect(isLoopbackRequest({ socket: { remoteAddress: "10.0.0.5" } })).toBe(
+      false,
+    );
+  });
+
+  test("returns false when the peer is unknown", () => {
+    expect(isLoopbackRequest({ socket: {} })).toBe(false);
+    expect(isLoopbackRequest({})).toBe(false);
+  });
+
+  // The reason this helper exists: `request.ip` is derived from forwarded
+  // headers under trustProxy, so it must never decide a loopback trust seam.
+  test("ignores a request.ip that claims to be loopback", () => {
+    const spoofed = {
+      ip: "127.0.0.1",
+      socket: { remoteAddress: "203.0.113.7" },
+    };
+    expect(isLoopbackRequest(spoofed)).toBe(false);
+  });
+});
 
 describe("isLoopbackAddress", () => {
   // IPv4 loopback range (127.0.0.0/8)

@@ -718,10 +718,14 @@ The following environment variables can be used to configure Archestra Platform.
   - Must be an integer between `1` and `65535`; invalid values disable the listener with a warning
   - Helm: set `archestra.publicEndpointsPort` to inject this variable and expose the port on the Service
 
-- **`ARCHESTRA_TRUST_PROXY`** - Set this when Archestra runs behind a TLS-terminating reverse proxy (e.g. AWS ALB, nginx, Cloudflare) so that generated OAuth metadata and auth URLs use the external `https://` scheme rather than the internal `http://` scheme seen by the backend.
+- **`ARCHESTRA_TRUST_PROXY`** - Controls whether Archestra trusts the `X-Forwarded-*` headers a proxy sets. Set it when Archestra runs behind a TLS-terminating reverse proxy or load balancer (e.g. AWS ALB, nginx, Cloudflare).
   - Default: `false` (no proxy trust)
   - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
-  - Example: `ARCHESTRA_TRUST_PROXY=true`
+  - Example: `ARCHESTRA_TRUST_PROXY=35.191.0.0/16,130.211.0.0/22`
+  - Generated OAuth metadata and auth URLs use the external `https://` scheme instead of the internal `http://` scheme the backend sees.
+  - Each request resolves to the calling client's IP rather than the proxy's. Per-IP rate limits and audit `sourceIp` values follow that IP. Behind a load balancer they stay per-client instead of collapsing onto one shared address.
+  - Prefer the IP/CIDR list over `true`. With `true`, Archestra trusts a client-supplied `X-Forwarded-For` header, so a caller can choose the IP it is rate-limited and audited under. List your proxy's own ranges instead.
+  - This setting does not affect the OAuth public origin. A forwarded host is always checked against `ARCHESTRA_API_BASE_URL` and `ARCHESTRA_FRONTEND_URL`, so name your public host in one of them.
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
   - Default: `70MB` (73400320 bytes)
@@ -1617,6 +1621,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS`** - Per-statement timeout for the knowledge search lanes (vector and keyword), in milliseconds.
+  - Default: `8000`
+  - Tighter than the pool-wide `ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`. A search lane that exceeds it is dropped and the remaining lanes' results are merged. The query fails only when every lane times out. Timed-out lanes are counted in the `rag_search_lane_timeout_total` metric. Set to `0` to inherit the pool-wide timeout.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - Verifiable citations. In the built-in chat, the model is asked to back each claim with a short verbatim quote tagged with its source chunk's ref; this checks each quote against the chunk its ref names and logs plus meters (`rag_quote_verification_total`) every miss — a quote found in no returned chunk is a likely fabrication, a quote whose ref names no returned chunk but whose text exists in another one is a mis-citation.
   - Default: `true`

@@ -195,13 +195,19 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     } else if (bearerToken) {
       if (hasArchestraTokenPrefix(bearerToken)) {
         logger.info("[BedrockOpenai] auth: virtual-key");
-        await virtualKeyRateLimiter.check(request.ip);
+        await virtualKeyRateLimiter.check({
+          ip: request.ip,
+          credential: bearerToken,
+        });
         try {
           const resolved = await validateVirtualApiKey(bearerToken, "bedrock");
           apiKey = resolved.apiKey;
           baseUrl = resolved.baseUrl;
         } catch (err) {
-          await virtualKeyRateLimiter.recordFailure(request.ip);
+          await virtualKeyRateLimiter.recordFailure({
+            ip: request.ip,
+            credential: bearerToken,
+          });
           throw err;
         }
       } else {

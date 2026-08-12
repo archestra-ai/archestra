@@ -3,6 +3,7 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  QUOTE_CITATION_INSTRUCTION,
   TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
   TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
 } from "@archestra/shared";
@@ -12,7 +13,6 @@ import {
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
-import { QUOTE_CITATION_INSTRUCTION } from "@/knowledge-base/quote-verification";
 import { KbChunkModel, KbDocumentModel, TeamModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";

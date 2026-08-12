@@ -685,7 +685,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
     apiKey: undefined,
     wasVirtualKeyResolved: false,
     wasJwksAuthenticated: false,
-    requestIp: "1.2.3.4",
+    isLoopbackCaller: false,
   };
 
   test("allows request when apiKey is present", () => {
@@ -715,29 +715,13 @@ describe("assertAuthenticatedForKeylessProvider", () => {
     ).not.toThrow();
   });
 
-  test("allows localhost IPv4 without any auth", () => {
+  // Which addresses count as loopback is isLoopbackRequest's contract, covered
+  // in utils/network.test.ts. This function only consumes the verdict.
+  test("allows a loopback caller without any auth", () => {
     expect(() =>
       assertAuthenticatedForKeylessProvider({
         ...keylessArgs,
-        requestIp: "127.0.0.1",
-      }),
-    ).not.toThrow();
-  });
-
-  test("allows localhost IPv6 without any auth", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        requestIp: "::1",
-      }),
-    ).not.toThrow();
-  });
-
-  test("allows localhost IPv4-mapped IPv6 without any auth", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        requestIp: "::ffff:127.0.0.1",
+        isLoopbackCaller: true,
       }),
     ).not.toThrow();
   });
@@ -746,15 +730,6 @@ describe("assertAuthenticatedForKeylessProvider", () => {
     expect(() => assertAuthenticatedForKeylessProvider(keylessArgs)).toThrow(
       "Authentication required",
     );
-  });
-
-  test("rejects external request with empty apiKey", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        requestIp: "10.0.0.5",
-      }),
-    ).toThrow("Authentication required");
   });
 
   // When the backend authenticates upstream with its own credentials (Gemini on
@@ -796,7 +771,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
       assertAuthenticatedForKeylessProvider({
         ...keylessArgs,
         apiKey: "Bearer anything",
-        requestIp: "127.0.0.1",
+        isLoopbackCaller: true,
         providerSuppliesServerCredential: true,
       }),
     ).not.toThrow();
@@ -825,48 +800,107 @@ function createTestLimiter() {
   };
 }
 
+const KEY_A = "arch_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const KEY_B = "arch_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
 describe("VirtualKeyRateLimiter", () => {
   test("allows requests under the failure threshold", async () => {
     const { limiter } = createTestLimiter();
     for (let i = 0; i < 9; i++) {
-      await limiter.recordFailure("1.2.3.4");
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
     }
-    await expect(limiter.check("1.2.3.4")).resolves.toBeUndefined();
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+    ).resolves.toBeUndefined();
   });
 
   test("blocks requests at the failure threshold", async () => {
     const { limiter } = createTestLimiter();
     for (let i = 0; i < 10; i++) {
-      await limiter.recordFailure("1.2.3.4");
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
     }
-    await expect(limiter.check("1.2.3.4")).rejects.toThrow(
-      "Too many failed virtual API key attempts",
-    );
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+    ).rejects.toThrow("Too many failed virtual API key attempts");
   });
 
   test("does not block unrelated IPs", async () => {
     const { limiter } = createTestLimiter();
     for (let i = 0; i < 10; i++) {
-      await limiter.recordFailure("1.2.3.4");
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
     }
-    await expect(limiter.check("5.6.7.8")).resolves.toBeUndefined();
+    await expect(
+      limiter.check({ ip: "5.6.7.8", credential: KEY_A }),
+    ).resolves.toBeUndefined();
+  });
+
+  // The collateral-lockout fix: clients sharing an origin (a load balancer, or
+  // loopback for frontend-rewritten requests) must not lock each other out.
+  test("does not block a different credential from the same IP", async () => {
+    const { limiter } = createTestLimiter();
+    for (let i = 0; i < 20; i++) {
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+    }
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+    ).rejects.toThrow("Too many failed virtual API key attempts");
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_B }),
+    ).resolves.toBeUndefined();
+  });
+
+  // ...but per-credential scoping must not hand an enumerator a fresh bucket
+  // per guess, so the IP-wide backstop still closes.
+  test("blocks an IP that cycles through many distinct credentials", async () => {
+    const { limiter } = createTestLimiter();
+    for (let i = 0; i < 100; i++) {
+      await limiter.recordFailure({
+        ip: "1.2.3.4",
+        credential: `arch_guess_${i}`,
+      });
+    }
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: "arch_guess_fresh" }),
+    ).rejects.toThrow("Too many failed virtual API key attempts");
+  });
+
+  test("never writes the credential into the cache key", async () => {
+    const { limiter, store } = createTestLimiter();
+    await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+    const keys = [...store.keys()];
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      expect(key).not.toContain(KEY_A);
+    }
+  });
+
+  test("counts requests that present no credential in a shared bucket", async () => {
+    const { limiter } = createTestLimiter();
+    for (let i = 0; i < 10; i++) {
+      await limiter.recordFailure({ ip: "1.2.3.4" });
+    }
+    await expect(limiter.check({ ip: "1.2.3.4" })).rejects.toThrow(
+      "Too many failed virtual API key attempts",
+    );
   });
 
   test("increments failure count correctly", async () => {
     const { limiter, mockCache } = createTestLimiter();
-    await limiter.recordFailure("1.2.3.4");
-    await limiter.recordFailure("1.2.3.4");
-    await limiter.recordFailure("1.2.3.4");
+    await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+    await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+    await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
 
-    // Verify cache.set was called with incrementing counts
-    const setCalls = mockCache.set.mock.calls;
-    const counts = setCalls.map((call) => (call[1] as { count: number }).count);
+    // Each failure touches two buckets; the per-credential one is keyed by
+    // fingerprint, the IP-wide one by the "-ip-" infix.
+    const counts = mockCache.set.mock.calls
+      .filter((call) => !String(call[0]).includes("-ip-"))
+      .map((call) => (call[1] as { count: number }).count);
     expect(counts).toEqual([1, 2, 3]);
   });
 
   test("passes TTL to cache set", async () => {
     const { limiter, mockCache } = createTestLimiter();
-    await limiter.recordFailure("1.2.3.4");
+    await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
 
     // Verify TTL (60_000 ms) is passed
     expect(mockCache.set).toHaveBeenCalledWith(
@@ -879,23 +913,27 @@ describe("VirtualKeyRateLimiter", () => {
   test("allows requests when cache returns undefined (entry expired)", async () => {
     const { limiter, store } = createTestLimiter();
     for (let i = 0; i < 10; i++) {
-      await limiter.recordFailure("1.2.3.4");
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
     }
     // Simulate TTL expiration by clearing the store
     store.clear();
-    await expect(limiter.check("1.2.3.4")).resolves.toBeUndefined();
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+    ).resolves.toBeUndefined();
   });
 
   test("resets counter when cache entry expires and new failure recorded", async () => {
     const { limiter, store } = createTestLimiter();
     for (let i = 0; i < 10; i++) {
-      await limiter.recordFailure("1.2.3.4");
+      await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
     }
     // Simulate TTL expiration
     store.clear();
     // New failure starts fresh
-    await limiter.recordFailure("1.2.3.4");
-    await expect(limiter.check("1.2.3.4")).resolves.toBeUndefined();
+    await limiter.recordFailure({ ip: "1.2.3.4", credential: KEY_A });
+    await expect(
+      limiter.check({ ip: "1.2.3.4", credential: KEY_A }),
+    ).resolves.toBeUndefined();
   });
 });
 

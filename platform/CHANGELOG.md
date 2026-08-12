@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.3.32](https://github.com/archestra-ai/archestra/compare/platform-v1.3.31...platform-v1.3.32) (2026-08-12)
+
+
+### Features
+
+* **chat:** polish the incognito composer ([#7227](https://github.com/archestra-ai/archestra/issues/7227)) ([863c780](https://github.com/archestra-ai/archestra/commit/863c7801463dc90aaf156ac270089794483fd9e4))
+* **connection:** swap the CLI connect banner to the braille Archestra mark ([#7224](https://github.com/archestra-ai/archestra/issues/7224)) ([b11ef8d](https://github.com/archestra-ai/archestra/commit/b11ef8dc51827b20560e7446b5c1fed3ec96659b))
+* **frontend:** Revert one Import & export JSON surface for MCP server configs in the registry form ([#7226](https://github.com/archestra-ai/archestra/issues/7226)) ([4b67210](https://github.com/archestra-ai/archestra/commit/4b67210f68ecb79e1422fb2fea3f7aec0446bec2))
+* **knowledge:** multimodal embedding on Bedrock and a modality capability gate ([#7196](https://github.com/archestra-ai/archestra/issues/7196)) ([663cef0](https://github.com/archestra-ai/archestra/commit/663cef093ea420bad74fab0ad7facbb28db07595))
+* **llm-logs:** explain why a session has no user, expose user ids ([#7216](https://github.com/archestra-ai/archestra/issues/7216)) ([3f3cabb](https://github.com/archestra-ai/archestra/commit/3f3cabbafa735a39deafa3ba3418047244a95df4))
+* **llm:** connect an X Premium (SuperGrok) subscription as an xAI credential ([#7188](https://github.com/archestra-ai/archestra/issues/7188)) ([2a93cfc](https://github.com/archestra-ai/archestra/commit/2a93cfc95c2d6d2c82be498f50813e7d47c9582d))
+* **llm:** enrich GitHub Copilot and Azure models with models.dev metadata ([#7215](https://github.com/archestra-ai/archestra/issues/7215)) ([1b3213a](https://github.com/archestra-ai/archestra/commit/1b3213a58485885d15cc1b122ae4422bf30f5404))
+
+
+### Bug Fixes
+
+* **llm-proxy:** report the serving provider in /models owned_by ([#7225](https://github.com/archestra-ai/archestra/issues/7225)) ([2800b4c](https://github.com/archestra-ai/archestra/commit/2800b4c6158b98c139bc253d0efa21b0c09288c0))
+* **llm:** list [1m] context-variant siblings so Claude Code keeps 1M-context models ([#7217](https://github.com/archestra-ai/archestra/issues/7217)) ([33d5ae1](https://github.com/archestra-ai/archestra/commit/33d5ae1e85c22dbc69e7f1d03ae896f9cad700ac))
+* **llm:** subscription-credential token lifecycle, self-service reconnect, and shared-key privatization guard ([#7220](https://github.com/archestra-ai/archestra/issues/7220)) ([19dd31e](https://github.com/archestra-ai/archestra/commit/19dd31e3c0ffdcd90a6d82dc3475c2c4af8c8c39))
+* **mcp:** start OAuth directly when the install target is already fixed ([#7222](https://github.com/archestra-ai/archestra/issues/7222)) ([7ed78d0](https://github.com/archestra-ai/archestra/commit/7ed78d03043fa2b919866f154034473d4691362b))
+* **ui:** show one less installation avatar so MCP card circles don't overflow ([#7221](https://github.com/archestra-ai/archestra/issues/7221)) ([41349cd](https://github.com/archestra-ai/archestra/commit/41349cd78e10f3a6fd27b779f36ae6197ad84571))
+
+
+### Code Refactoring
+
+* **llm:** shared subscription auth-error relay and retire the isChatgptSubscription boolean ([#7223](https://github.com/archestra-ai/archestra/issues/7223)) ([c1e2bbc](https://github.com/archestra-ai/archestra/commit/c1e2bbc6372b981cb7dcb1e3cac584f93c22a201))
+
 ## [1.3.31](https://github.com/archestra-ai/archestra/compare/platform-v1.3.30...platform-v1.3.31) (2026-08-11)
 
 

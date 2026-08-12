@@ -127,7 +127,13 @@ archestra:
     #     first-time Slack/Teams sender still lands in the org.
     ARCHESTRA_AUTH_DISABLE_INVITATIONS: "true"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
-    ARCHESTRA_TRUST_PROXY: "false"
+    # Trust only the Google Front End ranges that terminate the ingress, so
+    # request.ip is the real caller instead of the load balancer. Per-IP rate
+    # limits and audit sourceIp then stop collapsing onto one shared address.
+    # These two CIDRs are the documented GCLB/health-check ranges, and are the
+    # socket peers this deployment actually sees. NOT "true": that would trust a
+    # client-supplied X-Forwarded-For and let any caller choose its own IP.
+    ARCHESTRA_TRUST_PROXY: "35.191.0.0/16,130.211.0.0/22"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS: "agents@archestraai.onmicrosoft.com"

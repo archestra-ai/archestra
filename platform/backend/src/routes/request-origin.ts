@@ -1,13 +1,13 @@
 import type { FastifyRequest } from "fastify";
 
-import config, { getMCPGatewayOauthAllowedPublicHosts } from "@/config";
+import { getMCPGatewayOauthAllowedPublicHosts } from "@/config";
 import logger from "@/logging";
 
 /**
  * Return the public origin for a request — used to build the OAuth
  * protected-resource metadata URL. Scoping origin derivation to OAuth lets MCP
  * gateway OAuth work out of the box without the (too-broad) ARCHESTRA_TRUST_PROXY,
- * while still validating the forwarded host to prevent X-Forwarded-Host spoofing.
+ * while always validating the forwarded host to prevent X-Forwarded-Host spoofing.
  * The origin-derivation logic is adapted from Fastify.
  *
  * MUST BE USED ONLY FOR MCP OAUTH (the MCP gateway and the shareable-App connector).
@@ -50,12 +50,13 @@ function computePublicRequestOrigin(request: FastifyRequest): string {
     candidateHost = directHost;
   }
 
-  // If trustProxy is set, the candidate is returned as-is.
-  // It's needed not to break any existing setups which already ARCHESTRA_TRUST_PROXY=true.
-  // Once we are happy with how scoped validation works, we can remove this alongside with the trustProxy.
-  if (config.api.trustProxy) {
-    return `${protocol}://${candidateHost}`;
-  }
+  // The allowlist applies regardless of ARCHESTRA_TRUST_PROXY. This function
+  // reads the raw X-Forwarded-Host header rather than request.hostname, so
+  // Fastify's trusted-proxy gating never filters it: honoring trustProxy here
+  // would accept a forwarded host from ANY client, including one whose socket
+  // peer is not a trusted proxy at all. A deployment that terminates TLS at a
+  // proxy names its public host in ARCHESTRA_API_BASE_URL (or
+  // ARCHESTRA_FRONTEND_URL), which is what the allowlist is built from.
 
   // Check if the candidate host is in the allowed list
   const allowed = getMCPGatewayOauthAllowedPublicHosts();

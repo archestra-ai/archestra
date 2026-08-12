@@ -89,7 +89,7 @@ import {
   UNSAFE_CONTEXT_BOUNDARY_REASON,
   type UnsafeContextBoundary,
 } from "@/types";
-import { isLoopbackAddress } from "@/utils/network";
+import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
 import {
   assertAuthenticatedForKeylessProvider,
@@ -477,7 +477,7 @@ export async function handleLLMProxy<
   const providerBaseUrlHeaderValue =
     headersForExtraction[PROVIDER_BASE_URL_HEADER.toLowerCase()];
   const isInternalChatForward =
-    isLoopbackAddress(request.ip) &&
+    isLoopbackRequest(request) &&
     typeof chatApiKeyIdHeader === "string" &&
     chatApiKeyIdHeader.length > 0 &&
     typeof providerBaseUrlHeaderValue === "string" &&
@@ -571,7 +571,7 @@ export async function handleLLMProxy<
       headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
     const headerPresent =
       typeof headerValue === "string" && headerValue.length > 0;
-    if (isLoopbackAddress(request.ip)) {
+    if (isLoopbackRequest(request)) {
       if (headerPresent) {
         perKeyChatApiKeyId = headerValue;
         perKeyChatApiKeyIdFromLoopbackHeader = true;
@@ -582,7 +582,7 @@ export async function handleLLMProxy<
       }
     } else if (headerPresent) {
       logger.warn(
-        { ip: request.ip },
+        { ip: request.socket.remoteAddress },
         `[${providerName}Proxy] ignoring provider-api-key-id header from non-loopback request`,
       );
     }
@@ -640,7 +640,7 @@ export async function handleLLMProxy<
     apiKey,
     wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
-    requestIp: request.ip,
+    isLoopbackCaller: isLoopbackRequest(request),
     providerSuppliesServerCredential:
       providerSuppliesServerCredential(providerName),
   });
@@ -682,7 +682,7 @@ export async function handleLLMProxy<
   if (!authMethod) {
     authMethod = passthroughVirtualKeyId
       ? "passthrough_virtual_key"
-      : isLoopbackAddress(request.ip)
+      : isLoopbackRequest(request)
         ? "internal"
         : "provider_key";
   }
@@ -1100,7 +1100,7 @@ export async function handleLLMProxy<
     // External clients must NOT be able to set this header — it would be an SSRF vector
     // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
     const providerBaseUrlHeader =
-      isLoopbackAddress(request.ip) &&
+      isLoopbackRequest(request) &&
       typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
         ? headersForExtraction["x-archestra-provider-base-url"]
         : undefined;
@@ -2435,7 +2435,7 @@ async function resolveDelegationBillingEnvironment(
     return undefined;
   }
 
-  if (!isLoopbackAddress(request.socket.remoteAddress)) {
+  if (!isLoopbackRequest(request)) {
     logger.warn(
       { agentId: agent.id },
       "Ignoring delegation billing environment header from a non-loopback peer",

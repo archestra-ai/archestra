@@ -5,7 +5,7 @@
  * request/response orchestration. Each function is independently testable.
  */
 
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import {
   credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
@@ -18,6 +18,7 @@ import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -920,6 +921,23 @@ function isJwtLike(token: string): boolean {
 }
 
 /**
+ * Domain-separated key for {@link fingerprintCredential}.
+ *
+ * Derived from the session-signing secret, so an existing deployment needs no
+ * new configuration, and domain-separated so a rate-limit fingerprint can never
+ * be mistaken for another HMAC that secret protects. The key must be identical
+ * on every pod — limiter state is shared through PostgreSQL, so a per-process
+ * key would give one credential a different bucket on each pod and multiply its
+ * effective threshold by the replica count. A deployment with no auth secret
+ * configured falls back to a per-process key and accepts that fragmentation.
+ */
+const CREDENTIAL_FINGERPRINT_KEY = config.auth.secret
+  ? createHmac("sha256", config.auth.secret)
+      .update("virtual-key-rate-limit-fingerprint")
+      .digest()
+  : randomBytes(32);
+
+/**
  * Reduce a presented credential to a stable, non-reversible bucket id for the
  * rate limiter's cache key.
  *
@@ -927,12 +945,20 @@ function isJwtLike(token: string): boolean {
  * their own bucket (the whole point of scoping by credential), short enough
  * that the key stays readable in the cache table. A collision merely puts two
  * credentials in one bucket — the same situation as before this scoping
- * existed — so preimage resistance, not collision resistance, is what matters,
- * and that is what keeps the token itself out of PostgreSQL.
+ * existed — so collision resistance is not what this needs to buy.
+ *
+ * Keyed rather than a bare digest because these keys are persisted: an observer
+ * of the cache table can neither read a token out of a bucket id nor confirm a
+ * guessed one, which matters most for whatever low-entropy bearer tokens a
+ * deployment's upstream may accept.
  *
  * Requests that present no credential at all share the "none" bucket.
  */
 function fingerprintCredential(credential: string | undefined): string {
   if (!credential) return "none";
-  return createHash("sha256").update(credential).digest("hex").slice(0, 8);
+  // codeql[js/insufficient-password-hash] Buckets a bearer token for rate limiting, not password verification: the digest is never stored as a credential nor compared against one.
+  return createHmac("sha256", CREDENTIAL_FINGERPRINT_KEY)
+    .update(credential)
+    .digest("hex")
+    .slice(0, 8);
 }

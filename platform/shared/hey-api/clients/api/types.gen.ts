@@ -13181,7 +13181,7 @@ export type ImportAgentData = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         }>;
     };
     path?: never;
@@ -14725,7 +14725,7 @@ export type ExportAgentResponses = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         }>;
     };
 };
@@ -33338,6 +33338,8 @@ export type GetConfigResponses = {
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
+            kbMfilesConnectorEnabled: boolean;
+            kbMfilesOauthEnabled: boolean;
             kbGoogleDriveOAuth: {
                 configured: boolean;
                 redirectUri: string;
@@ -55362,7 +55364,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -56013,7 +56015,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         /**
          * Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`.
          */
@@ -56099,7 +56101,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -56239,6 +56241,23 @@ export type GetConnectorsResponses = {
                 excludePaths?: Array<string>;
                 fileTypes?: Array<string>;
             } | {
+                type: 'mfiles';
+                baseUrl: unknown;
+                vaultGuid: string;
+                authMethod?: 'oauth_client_credentials' | 'mfiles_password_token';
+                oauthTokenEndpoint?: unknown;
+                oauthScope?: string;
+                oauthResource?: string;
+                oauthAuthConfig?: string;
+                oauthAuthConfigScope?: string;
+                oauthAccountName?: string;
+                oauthUseIdToken?: boolean;
+                oauthClientAuthMethod?: 'client_secret_post' | 'client_secret_basic';
+                domain?: string;
+                objectTypeIds?: Array<number>;
+                batchSize?: number;
+                permissionExtensionMethod?: string;
+            } | {
                 [key: string]: unknown;
             };
             secretId: string | null;
@@ -56284,7 +56303,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -56423,6 +56442,23 @@ export type CreateConnectorData = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+        } | {
+            type: 'mfiles';
+            baseUrl: string;
+            vaultGuid: string;
+            authMethod?: 'oauth_client_credentials' | 'mfiles_password_token';
+            oauthTokenEndpoint?: string;
+            oauthScope?: string;
+            oauthResource?: string;
+            oauthAuthConfig?: string;
+            oauthAuthConfigScope?: string;
+            oauthAccountName?: string;
+            oauthUseIdToken?: boolean;
+            oauthClientAuthMethod?: 'client_secret_post' | 'client_secret_basic';
+            domain?: string;
+            objectTypeIds?: Array<number>;
+            batchSize?: number;
+            permissionExtensionMethod?: string;
         };
         credentials?: {
             email?: string;
@@ -56527,7 +56563,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -56666,6 +56702,23 @@ export type CreateConnectorResponses = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+        } | {
+            type: 'mfiles';
+            baseUrl: unknown;
+            vaultGuid: string;
+            authMethod?: 'oauth_client_credentials' | 'mfiles_password_token';
+            oauthTokenEndpoint?: unknown;
+            oauthScope?: string;
+            oauthResource?: string;
+            oauthAuthConfig?: string;
+            oauthAuthConfigScope?: string;
+            oauthAccountName?: string;
+            oauthUseIdToken?: boolean;
+            oauthClientAuthMethod?: 'client_secret_post' | 'client_secret_basic';
+            domain?: string;
+            objectTypeIds?: Array<number>;
+            batchSize?: number;
+            permissionExtensionMethod?: string;
         };
         secretId: string | null;
         environmentId: string | null;
@@ -56860,7 +56913,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -56999,6 +57052,23 @@ export type GetConnectorResponses = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+        } | {
+            type: 'mfiles';
+            baseUrl: unknown;
+            vaultGuid: string;
+            authMethod?: 'oauth_client_credentials' | 'mfiles_password_token';
+            oauthTokenEndpoint?: unknown;
+            oauthScope?: string;
+            oauthResource?: string;
+            oauthAuthConfig?: string;
+            oauthAuthConfigScope?: string;
+            oauthAccountName?: string;
+            oauthUseIdToken?: boolean;
+            oauthClientAuthMethod?: 'client_secret_post' | 'client_secret_basic';
+            domain?: string;
+            objectTypeIds?: Array<number>;
+            batchSize?: number;
+            permissionExtensionMethod?: string;
         };
         secretId: string | null;
         environmentId: string | null;
@@ -57168,6 +57238,23 @@ export type UpdateConnectorData = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+        } | {
+            type: 'mfiles';
+            baseUrl: string;
+            vaultGuid: string;
+            authMethod?: 'oauth_client_credentials' | 'mfiles_password_token';
+            oauthTokenEndpoint?: string;
+            oauthScope?: string;
+            oauthResource?: string;
+            oauthAuthConfig?: string;
+            oauthAuthConfigScope?: string;
+            oauthAccountName?: string;
+            oauthUseIdToken?: boolean;
+            oauthClientAuthMethod?: 'client_secret_post' | 'client_secret_basic';
+            domain?: string;
+            objectTypeIds?: Array<number>;
+            batchSize?: number;
+            permissionExtensionMethod?: string;
         };
         credentials?: {
             email?: string;
@@ -57273,7 +57360,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -57412,6 +57499,23 @@ export type UpdateConnectorResponses = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+        } | {
+            type: 'mfiles';
+            baseUrl: unknown;
+            vaultGuid: string;
+            authMethod?: 'oauth_client_credentials' | 'mfiles_password_token';
+            oauthTokenEndpoint?: unknown;
+            oauthScope?: string;
+            oauthResource?: string;
+            oauthAuthConfig?: string;
+            oauthAuthConfigScope?: string;
+            oauthAccountName?: string;
+            oauthUseIdToken?: boolean;
+            oauthClientAuthMethod?: 'client_secret_post' | 'client_secret_basic';
+            domain?: string;
+            objectTypeIds?: Array<number>;
+            batchSize?: number;
+            permissionExtensionMethod?: string;
         };
         secretId: string | null;
         environmentId: string | null;
@@ -57539,7 +57643,7 @@ export type GetConnectorDocumentsResponses = {
             chunkCount: number;
             createdAt: string;
             updatedAt: string;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
         }>;
         pagination: {
             currentPage: number;
@@ -57736,7 +57840,7 @@ export type GetConnectorDocumentResponses = {
         chunkCount: number;
         createdAt: string;
         updatedAt: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce' | 'mfiles';
     };
 };
 
@@ -58255,6 +58359,7 @@ export type GetConnectorUserGroupsResponses = {
         totalMemberships: number;
         groups: Array<{
             groupId: string;
+            name: string | null;
             token: string;
             documentCount: number;
             lastSyncedAt: string | null;
@@ -63806,6 +63911,117 @@ export type GetMembersResponses = {
 };
 
 export type GetMembersResponse = GetMembersResponses[keyof GetMembersResponses];
+
+export type GetMfilesVafAddOnScriptData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mfiles-vaf-add-on/script';
+};
+
+export type GetMfilesVafAddOnScriptResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type GetMfilesVafAddOnDistributionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mfiles-vaf-add-on/distribution';
+};
+
+export type GetMfilesVafAddOnDistributionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMfilesVafAddOnDistributionError = GetMfilesVafAddOnDistributionErrors[keyof GetMfilesVafAddOnDistributionErrors];
+
+export type GetMfilesVafAddOnDistributionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        packageDownloadUrl: string | null;
+    };
+};
+
+export type GetMfilesVafAddOnDistributionResponse = GetMfilesVafAddOnDistributionResponses[keyof GetMfilesVafAddOnDistributionResponses];
+
+export type GetMfilesVafAddOnPackageData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mfiles-vaf-add-on/package';
+};
+
+export type GetMfilesVafAddOnPackageResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type Microsoft365CopilotDeviceAuthStartData = {
     body?: never;

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.34](https://github.com/archestra-ai/archestra/compare/platform-v1.3.33...platform-v1.3.34) (2026-08-12)
+
+
+### Features
+
+* **chat:** render assistant messages flat with reading typography ([#7228](https://github.com/archestra-ai/archestra/issues/7228)) ([4d3b268](https://github.com/archestra-ai/archestra/commit/4d3b26809e860a526dd1ca1f0033ad6f72c6213a))
+* **knowledge-base:** permission auto-sync for SharePoint and Salesforce connectors ([#7209](https://github.com/archestra-ai/archestra/issues/7209)) ([6c47127](https://github.com/archestra-ai/archestra/commit/6c47127bb6aa257cb04ca1433b86be238d017d14))
+
 ## [1.3.33](https://github.com/archestra-ai/archestra/compare/platform-v1.3.32...platform-v1.3.33) (2026-08-12)
 
 

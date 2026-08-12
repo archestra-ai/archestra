@@ -94,6 +94,42 @@ export function disabledToolsNotRunMessage(toolNames: string[]): string {
 }
 
 /**
+ * Recovery message for the LLM-proxy guardrail path when the blocked names were
+ * not in the request's tool list because the agent advertises only the
+ * search_tools/run_tool dispatch pair (`search_and_run_only` exposure, which
+ * Auto tool mode implies).
+ *
+ * `disabledToolsNotRunMessage` is the wrong steer there on both counts: the
+ * tools are not "disabled" (they are reachable, just not directly callable),
+ * and "do not call them again" strands the model — it never learns the calling
+ * convention, so a subsequent search_tools round returns the very names it was
+ * just told not to use, and the turn dead-ends. The names the model chose are
+ * usually already correct, so this hands them straight back as a run_tool
+ * retry and leaves search_tools as the fallback for when one does not resolve.
+ *
+ * The dispatch tool names are passed in as they appear in the request's tool
+ * list, so a custom-branded prefix is preserved.
+ */
+export function toolsRequireRunToolMessage(params: {
+  toolNames: string[];
+  searchToolsName: string;
+  runToolName: string;
+}): string {
+  const { toolNames, searchToolsName, runToolName } = params;
+  const quoted = toolNames.map((name) => `"${name}"`).join(", ");
+  const plural = toolNames.length > 1;
+  return (
+    `The ${plural ? "tools" : "tool"} ${quoted} cannot be called directly in ` +
+    `this chat and ${plural ? "were" : "was"} not run. Only the tools in your ` +
+    `tool list are directly callable; every other tool is invoked through ` +
+    `${runToolName}. Retry by calling ${runToolName} with tool_name set to ` +
+    `${plural ? "each exact name above" : "that exact name"} and the arguments ` +
+    `you intended in tool_args. If a name turns out not to resolve, call ` +
+    `${searchToolsName} to find the right one. Do not guess tool names.`
+  );
+}
+
+/**
  * Soft warning prepended to a successful run_tool result when a short name was
  * recovered to its exact `server__tool` form. The call ran; this steers the
  * model to pass the exact name next time so the implicit short-name fallback is

@@ -7,10 +7,16 @@ import {
   type SensitiveContextOrigin,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
+  TOOL_INVOCATION_NOT_DIRECTLY_CALLABLE_REASON,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
   type ToolInvocationEnforcementSurface,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { disabledToolsNotRunMessage } from "@/archestra-mcp-server/tool-recovery-messages";
+import {
+  disabledToolsNotRunMessage,
+  toolsRequireRunToolMessage,
+} from "@/archestra-mcp-server/tool-recovery-messages";
 import logger from "@/logging";
 import { AgentTeamModel, ToolInvocationPolicyModel, ToolModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
@@ -236,10 +242,26 @@ export const evaluatePolicies = async (
     }
   }
 
-  // If any tools were disabled, return distinct message about them
+  // If any tools were disabled, return distinct message about them.
+  //
+  // Two different situations reach here, and they need different steers. When
+  // the request's tool list carries the search_tools/run_tool dispatch pair the
+  // agent is in `search_and_run_only` exposure (which Auto tool mode implies),
+  // where third-party tools are deliberately absent from the list rather than
+  // disabled — so the model is told how to reach them through run_tool instead
+  // of being told to stop. Mirrors the same discrimination the chat surface
+  // makes for nonexistent-tool errors (`routes/chat/errors.ts`).
   if (disabledToolNames.length > 0) {
-    const message = disabledToolsNotRunMessage(disabledToolNames);
-    const reason = TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON;
+    const dispatchPair = findDispatchToolNames(enabledToolNames);
+    const message = dispatchPair
+      ? toolsRequireRunToolMessage({
+          toolNames: disabledToolNames,
+          ...dispatchPair,
+        })
+      : disabledToolsNotRunMessage(disabledToolNames);
+    const reason = dispatchPair
+      ? TOOL_INVOCATION_NOT_DIRECTLY_CALLABLE_REASON
+      : TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON;
     return {
       refusalMessage: message,
       contentMessage: message,
@@ -317,6 +339,35 @@ export const evaluatePolicies = async (
 const MCP_GATEWAY_ENFORCEMENT: PolicyEnforcementContext = {
   surface: "mcp-gateway",
 };
+
+/**
+ * The search_tools/run_tool pair as it appears in the request's tool list, or
+ * null when the list does not advertise both.
+ *
+ * Presence of the pair is what identifies a dispatch-mode surface: the gateway
+ * advertises these two only under `search_and_run_only` exposure and hides them
+ * under `full` (see `filterExposedTools` in `routes/mcp-gateway/utils.ts`), so
+ * a list containing them is one where third-party tools are reachable but not
+ * directly callable. Located by short name so a custom-branded prefix (e.g.
+ * `acme__run_tool`) is recognized and echoed back exactly as the model sees it.
+ */
+function findDispatchToolNames(
+  declaredToolNames: Set<string>,
+): { searchToolsName: string; runToolName: string } | null {
+  let searchToolsName: string | undefined;
+  let runToolName: string | undefined;
+  for (const name of declaredToolNames) {
+    const shortName = archestraMcpBranding.getToolShortName(name);
+    if (shortName === TOOL_SEARCH_TOOLS_SHORT_NAME) {
+      searchToolsName = name;
+    } else if (shortName === TOOL_RUN_TOOL_SHORT_NAME) {
+      runToolName = name;
+    }
+  }
+  return searchToolsName && runToolName
+    ? { searchToolsName, runToolName }
+    : null;
+}
 
 function buildToolInvocationPolicyBlockResult(params: {
   toolName: string;

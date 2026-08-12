@@ -1,8 +1,10 @@
 import {
   getArchestraToolFullName,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
+  TOOL_INVOCATION_NOT_DIRECTLY_CALLABLE_REASON,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
@@ -110,6 +112,123 @@ describe("evaluatePolicies", () => {
     );
 
     expect(result).toBeNull();
+  });
+
+  test("steers to run_tool instead of 'not enabled' when the tool list advertises the dispatch pair", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    // A `search_and_run_only` / Auto-mode request: the list carries only the
+    // dispatch pair, so third-party tools are reachable but never directly
+    // callable. The model calling one by name must be taught the convention,
+    // not told to stop.
+    const searchToolsName = archestraMcpBranding.getToolName(
+      TOOL_SEARCH_TOOLS_SHORT_NAME,
+    );
+    const runToolName = archestraMcpBranding.getToolName(
+      TOOL_RUN_TOOL_SHORT_NAME,
+    );
+    const enabledTools = new Set([searchToolsName, runToolName]);
+
+    const result = await evaluatePolicies(
+      [{ toolCallName: "pm__whoami", toolCallArgs: "{}" }],
+      agent.id,
+      { teamIds: [] },
+      true,
+      enabledTools,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.reason).toBe(TOOL_INVOCATION_NOT_DIRECTLY_CALLABLE_REASON);
+    expect(result?.blockedToolName).toBe("pm__whoami");
+    // The name is handed back so the retry is a single step, not a re-search.
+    expect(result?.contentMessage).toContain("pm__whoami");
+    expect(result?.contentMessage).toContain(runToolName);
+    expect(result?.contentMessage).toContain(searchToolsName);
+    // The two halves of the old dead end must be gone: the wrong diagnosis and
+    // the instruction that leaves the model with nowhere to go.
+    expect(result?.contentMessage).not.toContain("not enabled");
+    expect(result?.contentMessage).not.toContain("Do not call them again");
+  });
+
+  test("keeps the 'not enabled for this conversation' steer when the list has no dispatch pair", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    // `full` exposure hides the meta tools, so a tool missing from the list
+    // really was disabled for the conversation — run_tool is not the answer.
+    const enabledTools = new Set(["github__list_repos"]);
+
+    const result = await evaluatePolicies(
+      [{ toolCallName: "github__delete_repo", toolCallArgs: "{}" }],
+      agent.id,
+      { teamIds: [] },
+      true,
+      enabledTools,
+    );
+
+    expect(result?.reason).toBe(
+      TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
+    );
+    expect(result?.contentMessage).toContain("not enabled");
+  });
+
+  test("half a dispatch pair is not a dispatch surface", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    // search_tools alone cannot run anything, so steering at run_tool would
+    // name a tool the model cannot call.
+    const enabledTools = new Set([
+      archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME),
+    ]);
+
+    const result = await evaluatePolicies(
+      [{ toolCallName: "pm__whoami", toolCallArgs: "{}" }],
+      agent.id,
+      { teamIds: [] },
+      true,
+      enabledTools,
+    );
+
+    expect(result?.reason).toBe(
+      TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
+    );
+  });
+
+  test("the run_tool steer echoes white-labeled dispatch tool names", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+    const brandingIdentity = {
+      appName: "Acme Copilot",
+      fullWhiteLabeling: true,
+    };
+    const brandedSearchTools = getArchestraToolFullName(
+      TOOL_SEARCH_TOOLS_SHORT_NAME,
+      brandingIdentity,
+    );
+    const brandedRunTool = getArchestraToolFullName(
+      TOOL_RUN_TOOL_SHORT_NAME,
+      brandingIdentity,
+    );
+
+    const result = await evaluatePolicies(
+      [{ toolCallName: "pm__whoami", toolCallArgs: "{}" }],
+      agent.id,
+      { teamIds: [] },
+      true,
+      new Set([brandedSearchTools, brandedRunTool]),
+    );
+
+    // Naming the canonical `archestra__*` form would point the model at a tool
+    // it cannot see, defeating the recovery loop.
+    expect(result?.contentMessage).toContain(brandedRunTool);
+    expect(result?.contentMessage).not.toContain("archestra__run_tool");
   });
 
   test("a run_tool dispatch target is blocked by its sensitive-context policy even when only the wrapper was enabled", async ({

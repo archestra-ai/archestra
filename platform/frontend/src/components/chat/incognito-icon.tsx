@@ -11,7 +11,7 @@ export function IncognitoIcon({ className }: { className?: string }) {
     <span className={cn("relative inline-block shrink-0", className)}>
       <Lock
         role="img"
-        aria-label="Incognito chat"
+        aria-label="Locked chat"
         className="block size-full"
       />
     </span>

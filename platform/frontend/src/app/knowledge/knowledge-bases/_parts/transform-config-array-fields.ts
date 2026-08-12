@@ -100,7 +100,9 @@ export function transformConfigArrayFields(
     ];
     // Absent means the legacy password-token mode — the backend's default —
     // so the seeded OAuth presets must not ride along in a password config.
-    if ((result.authMethod ?? "mfiles_password_token") === "mfiles_password_token") {
+    if (
+      (result.authMethod ?? "mfiles_password_token") === "mfiles_password_token"
+    ) {
       for (const field of oauthFields) delete result[field];
     } else {
       delete result.domain;

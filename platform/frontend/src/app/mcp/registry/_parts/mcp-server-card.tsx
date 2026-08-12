@@ -620,7 +620,7 @@ export function McpServerCard({
             authorName={item.authorName}
             currentUserId={currentUserId}
             showSelfAsMe={false}
-            className="max-w-full"
+            compact
           />
         </div>
       )}

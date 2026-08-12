@@ -150,3 +150,63 @@ describe("ResourceVisibilityBadge per-user shares", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+describe("ResourceVisibilityBadge compact team scope", () => {
+  const TEAMS = [
+    { id: "t1", name: "Engineering" },
+    { id: "t2", name: "Consultants" },
+  ];
+
+  it("names the scope instead of listing every team", () => {
+    render(
+      <ResourceVisibilityBadge
+        scope="team"
+        teams={TEAMS}
+        authorId="user-other"
+        authorName="Someone"
+        currentUserId={ME}
+        showSelfAsMe
+        compact
+      />,
+    );
+
+    // One pill carrying the count, not one pill per team — a card's metadata
+    // row has a single line to spend and the roster is not what it answers.
+    expect(screen.getByText("2 teams")).toBeInTheDocument();
+    expect(screen.queryByText("Engineering")).not.toBeInTheDocument();
+    expect(screen.queryByText("Consultants")).not.toBeInTheDocument();
+  });
+
+  it("keeps the team names reachable on the collapsed pill", () => {
+    render(
+      <ResourceVisibilityBadge
+        scope="team"
+        teams={TEAMS}
+        authorId="user-other"
+        authorName="Someone"
+        currentUserId={ME}
+        showSelfAsMe
+        compact
+      />,
+    );
+
+    expect(screen.getByTitle("Engineering, Consultants")).toBeInTheDocument();
+  });
+
+  it("still lists the teams when not compact", () => {
+    render(
+      <ResourceVisibilityBadge
+        scope="team"
+        teams={TEAMS}
+        authorId="user-other"
+        authorName="Someone"
+        currentUserId={ME}
+        showSelfAsMe
+      />,
+    );
+
+    // The "Accessible to" column is asking exactly who, so it still enumerates.
+    expect(screen.getByText("Engineering")).toBeInTheDocument();
+    expect(screen.getByText("Consultants")).toBeInTheDocument();
+  });
+});

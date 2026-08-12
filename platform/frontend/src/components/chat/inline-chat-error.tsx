@@ -92,9 +92,11 @@ export function InlineChatError({
     : isEmptyModelTurn
       ? MessageSquareDashed
       : AlertCircle;
+  // Padding is explicit: assistant MessageContent is flat/unpadded by default,
+  // but this renders as a bordered card and needs the inset back.
   const containerClassName = isNeutralOutcome
-    ? "bg-muted/30 border border-border rounded-lg"
-    : "bg-destructive/10 border border-destructive/20 rounded-lg";
+    ? "bg-muted/30 border border-border rounded-lg px-4 py-3"
+    : "bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3";
   const iconClassName = isNeutralOutcome
     ? "text-muted-foreground"
     : "text-destructive";

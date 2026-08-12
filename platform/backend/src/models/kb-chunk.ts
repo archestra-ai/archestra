@@ -3,7 +3,8 @@ import {
   getEmbeddingColumnName,
   type TextSearchLanguage,
 } from "@archestra/shared";
-import { count, eq, sql } from "drizzle-orm";
+import { count, eq, type SQL, sql } from "drizzle-orm";
+import config from "@/config";
 import db, { schema } from "@/database";
 import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";
 
@@ -128,7 +129,7 @@ class KbChunkModel {
 
     const col = sql.raw(getEmbeddingColumnName(dimensions));
     const vectorCast = sql.raw(`::vector(${dimensions})`);
-    const rows = await db.execute(sql`
+    const rows = await executeWithSearchTimeout(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
@@ -306,7 +307,7 @@ class KbChunkModel {
       sql`, `,
     );
 
-    const rows = await db.execute(sql`
+    const rows = await executeWithSearchTimeout(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
         d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
@@ -457,3 +458,23 @@ class KbChunkModel {
 }
 
 export default KbChunkModel;
+
+// === Internal helpers ===
+
+/**
+ * Run a search statement under the KB-specific statement timeout
+ * ({@link config.kb.searchStatementTimeoutMillis}), leaving the pool-wide
+ * statement_timeout in force for everything else. SET LOCAL semantics via
+ * set_config(..., true) scope the override to the wrapping transaction, and
+ * set_config takes the value as a bound parameter (plain SET cannot).
+ */
+async function executeWithSearchTimeout(query: SQL) {
+  const timeoutMillis = config.kb.searchStatementTimeoutMillis;
+  if (timeoutMillis <= 0) return db.execute(query);
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT set_config('statement_timeout', ${String(timeoutMillis)}, true)`,
+    );
+    return tx.execute(query);
+  });
+}

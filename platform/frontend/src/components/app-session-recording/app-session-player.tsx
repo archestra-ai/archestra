@@ -3059,8 +3059,16 @@ function ReplayPromptEditorCard({
     <Message from={from}>
       {/* The same editor as the app description's — one seamless field with
           the actions on a quiet footer rail — wearing the bubble's own colors
-          so entering edit mode doesn't repaint the message. */}
-      <MessageContent className="!pointer-events-auto w-[85%] select-text overflow-hidden p-0">
+          so entering edit mode doesn't repaint the message. The assistant
+          variant pins the bubble surface explicitly: flat assistant turns have
+          none, but this edit control (and the ReplayAiResponseBubble it swaps
+          with) needs one. */}
+      <MessageContent
+        className={cn(
+          "!pointer-events-auto w-[85%] select-text overflow-hidden p-0",
+          from === "assistant" && "bg-secondary",
+        )}
+      >
         <Textarea
           // Focused with the caret AFTER the existing text: this edits a
           // prompt that is already written.
@@ -4785,7 +4793,10 @@ function ReplayAiResponseBubble({
         <span>AI-generated response</span>
       </div>
       <Message from="assistant" className="group/row">
-        <MessageContent className="relative ring-2 ring-primary/50">
+        {/* Explicit bubble surface: assistant MessageContent is flat/unpadded
+            by default, but this bubble is an edit control and the ring needs a
+            padded surface to outline. */}
+        <MessageContent className="relative bg-secondary px-4 py-3 ring-2 ring-primary/50">
           {/* The bubble itself is the edit control — same as the AI prompt,
               the description and every captured message. */}
           <button

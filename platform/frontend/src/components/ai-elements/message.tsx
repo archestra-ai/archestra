@@ -23,15 +23,17 @@ const messageContentVariants = cva(
   {
     variants: {
       variant: {
+        // User turns keep a filled bubble; assistant turns render flat on the
+        // page background. Padding is user-only so the assistant text edge is
+        // the visible edge — the wrapper's mb-4 alone must produce the 16px
+        // rhythm (see components/chat/CLAUDE.md). pl-2 aligns assistant prose
+        // with the Reasoning block's expanded text column.
         contained: [
-          "max-w-[80%] px-4 py-3",
+          "max-w-[80%]",
+          "group-[.is-user]:px-4 group-[.is-user]:py-3",
           "group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground",
           "group-[.is-user]:[&_a]:text-primary-foreground group-[.is-user]:[&_a]:underline group-[.is-user]:[&_a]:underline-offset-2 group-[.is-user]:[&_a]:decoration-primary-foreground/50 group-[.is-user]:[&_a]:hover:decoration-primary-foreground",
-          "group-[.is-assistant]:bg-secondary group-[.is-assistant]:text-secondary-foreground",
-        ],
-        flat: [
-          "group-[.is-user]:max-w-[80%] group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
-          "group-[.is-assistant]:text-foreground",
+          "group-[.is-assistant]:pl-2 group-[.is-assistant]:text-foreground",
         ],
       },
     },

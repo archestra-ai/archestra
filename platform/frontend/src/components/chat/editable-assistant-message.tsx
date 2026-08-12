@@ -1,7 +1,11 @@
 "use client";
 
-import type { ChatMessageFeedback } from "@archestra/shared";
+import {
+  type ChatMessageFeedback,
+  foldCitationSources,
+} from "@archestra/shared";
 import { Info } from "lucide-react";
+import { useMemo } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import {
@@ -58,6 +62,17 @@ export function EditableAssistantMessage({
     onCancelEdit,
   });
 
+  // The machine-oriented Sources block (verbatim quotes + chunk refs, written
+  // for the quote verifier) folds out of the visible answer once citations
+  // render: markers become superscripts and the quotes move behind the chips.
+  // Copying and editing keep the full original text.
+  const folded = useMemo(
+    () => (citationParts ? foldCitationSources(text) : null),
+    [citationParts, text],
+  );
+  const displayText =
+    folded && folded.entries.length > 0 ? folded.displayText : text;
+
   const handleStartEdit = () => {
     onStartEdit(partKey);
   };
@@ -97,8 +112,13 @@ export function EditableAssistantMessage({
           the hidden panel from swallowing taps meant for the content. */}
       <div className="relative max-w-[80%]">
         <MessageContent className="max-w-none">
-          <Response isStreaming={isStreaming}>{text}</Response>
-          {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
+          <Response isStreaming={isStreaming}>{displayText}</Response>
+          {citationParts && (
+            <KnowledgeGraphCitations
+              parts={citationParts}
+              citedQuotes={folded?.entries}
+            />
+          )}
         </MessageContent>
         {showActions && (
           <MessageActions

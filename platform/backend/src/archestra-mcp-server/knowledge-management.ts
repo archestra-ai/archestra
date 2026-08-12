@@ -1,4 +1,5 @@
 import {
+  QUOTE_CITATION_INSTRUCTION,
   TOOL_ASSIGN_KNOWLEDGE_BASE_TO_AGENT_SHORT_NAME,
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_AGENT_SHORT_NAME,
   TOOL_ASSIGN_KNOWLEDGE_CONNECTOR_TO_KNOWLEDGE_BASE_SHORT_NAME,
@@ -35,7 +36,6 @@ import {
   deleteConnector,
   deleteKnowledgeBase,
 } from "@/knowledge-base/knowledge-source-deletion";
-import { QUOTE_CITATION_INSTRUCTION } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,

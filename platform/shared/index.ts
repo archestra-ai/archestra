@@ -9,6 +9,7 @@ export * from "./catalog-runtime-fields";
 export * from "./catalog-shape-fixtures";
 export * from "./chat";
 export * from "./chat-error";
+export * from "./citation-quotes";
 export * from "./consts";
 export * from "./docs";
 export * from "./e2e-test-ids";

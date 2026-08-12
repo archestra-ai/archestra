@@ -25,6 +25,25 @@ export function isLoopbackAddress(ip: string | null | undefined): boolean {
 }
 
 /**
+ * Whether a request actually arrived over the loopback socket.
+ *
+ * Reads the raw socket peer, NOT `request.ip`. Under `trustProxy` Fastify
+ * rewrites `request.ip` from forwarded headers, so a remote caller could
+ * otherwise present itself as loopback and take the seams reserved for the
+ * in-process callers that dial the API over 127.0.0.1 — the provider base-URL
+ * override, the internal chat-api-key header, and the keyless-provider
+ * allowance. Every such trust decision must go through this, never `request.ip`.
+ *
+ * Structurally typed rather than taking a FastifyRequest so this module stays
+ * free of a Fastify import; the raw `IncomingMessage` shape works too.
+ */
+export function isLoopbackRequest(request: {
+  socket?: { remoteAddress?: string | undefined } | undefined;
+}): boolean {
+  return isLoopbackAddress(request.socket?.remoteAddress);
+}
+
+/**
  * Check if a redirect URI targets a loopback address.
  * Per RFC 8252 Section 7.3, authorization servers must allow any port
  * for loopback redirect URIs in native app OAuth flows.

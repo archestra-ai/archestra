@@ -685,7 +685,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
     apiKey: undefined,
     wasVirtualKeyResolved: false,
     wasJwksAuthenticated: false,
-    requestIp: "1.2.3.4",
+    isLoopbackCaller: false,
   };
 
   test("allows request when apiKey is present", () => {
@@ -715,29 +715,13 @@ describe("assertAuthenticatedForKeylessProvider", () => {
     ).not.toThrow();
   });
 
-  test("allows localhost IPv4 without any auth", () => {
+  // Which addresses count as loopback is isLoopbackRequest's contract, covered
+  // in utils/network.test.ts. This function only consumes the verdict.
+  test("allows a loopback caller without any auth", () => {
     expect(() =>
       assertAuthenticatedForKeylessProvider({
         ...keylessArgs,
-        requestIp: "127.0.0.1",
-      }),
-    ).not.toThrow();
-  });
-
-  test("allows localhost IPv6 without any auth", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        requestIp: "::1",
-      }),
-    ).not.toThrow();
-  });
-
-  test("allows localhost IPv4-mapped IPv6 without any auth", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        requestIp: "::ffff:127.0.0.1",
+        isLoopbackCaller: true,
       }),
     ).not.toThrow();
   });
@@ -746,15 +730,6 @@ describe("assertAuthenticatedForKeylessProvider", () => {
     expect(() => assertAuthenticatedForKeylessProvider(keylessArgs)).toThrow(
       "Authentication required",
     );
-  });
-
-  test("rejects external request with empty apiKey", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider({
-        ...keylessArgs,
-        requestIp: "10.0.0.5",
-      }),
-    ).toThrow("Authentication required");
   });
 
   // When the backend authenticates upstream with its own credentials (Gemini on
@@ -796,7 +771,7 @@ describe("assertAuthenticatedForKeylessProvider", () => {
       assertAuthenticatedForKeylessProvider({
         ...keylessArgs,
         apiKey: "Bearer anything",
-        requestIp: "127.0.0.1",
+        isLoopbackCaller: true,
         providerSuppliesServerCredential: true,
       }),
     ).not.toThrow();

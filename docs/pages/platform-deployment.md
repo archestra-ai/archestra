@@ -725,7 +725,7 @@ The following environment variables can be used to configure Archestra Platform.
   - Generated OAuth metadata and auth URLs use the external `https://` scheme instead of the internal `http://` scheme the backend sees.
   - Each request resolves to the calling client's IP rather than the proxy's. Per-IP rate limits and audit `sourceIp` values follow that IP. Behind a load balancer they stay per-client instead of collapsing onto one shared address.
   - Prefer the IP/CIDR list over `true`. With `true`, Archestra trusts a client-supplied `X-Forwarded-For` header, so a caller can choose the IP it is rate-limited and audited under. List your proxy's own ranges instead.
-  - Any non-`false` value also makes Archestra accept an `X-Forwarded-Host` header as its public origin without checking it against `ARCHESTRA_API_BASE_URL`. Set it only when your proxy overwrites that header on the way in.
+  - This setting does not affect the OAuth public origin. A forwarded host is always checked against `ARCHESTRA_API_BASE_URL` and `ARCHESTRA_FRONTEND_URL`, so name your public host in one of them.
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
   - Default: `70MB` (73400320 bytes)

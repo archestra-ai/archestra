@@ -35,6 +35,10 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
     kind: "element",
     render: (className) => <FolderGit2 className={className} />,
   },
+  mfiles: {
+    kind: "img",
+    src: "/icons/mfiles.webp",
+  },
 };
 
 export function hasConnectorIcon(type: string): boolean {

@@ -1,7 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE } from "@archestra/shared";
+import {
+  CONNECTOR_TYPE_LABELS,
+  PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeft,
@@ -71,6 +74,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useDialogFlagUrlParam,
   useDialogUrlParam,
@@ -127,6 +131,7 @@ export default function ConnectorDetailPage({
 }
 
 function ConnectorDetail({ connectorId }: { connectorId: string }) {
+  const appName = useAppName();
   const searchParams = useSearchParams();
   const from = searchParams.get("from");
   const backHref =
@@ -434,12 +439,13 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
               </p>
             ) : (
               <div>
-                <Badge variant="secondary" className="gap-1.5 capitalize mt-1">
+                <Badge variant="secondary" className="gap-1.5 mt-1">
                   <ConnectorTypeIcon
                     type={connector.connectorType}
                     className="h-3.5 w-3.5"
                   />
-                  {connector.connectorType}
+                  {CONNECTOR_TYPE_LABELS[connector.connectorType] ??
+                    connector.connectorType}
                 </Badge>
               </div>
             )}
@@ -621,7 +627,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   <MetadataItem label="Permissions Coverage">
                     <div
                       className="text-amber-600"
-                      title="Access-restricted until a permission sync tags them with their source permissions"
+                      title={`Their source permissions grant only accounts ${appName} hasn't matched to a user, so no one can read them yet. Map those accounts in the Users tab — they also resolve automatically once the source exposes their emails. Re-running a permission sync alone won't change this.`}
                     >
                       <span>
                         {coverage.failClosedDocuments.toLocaleString()} document
@@ -629,7 +635,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                       {coverage.failClosedDocuments === 1 ? null : (
                         <span>s</span>
                       )}
-                      <span> awaiting permission sync</span>
+                      <span> with no resolvable readers</span>
                     </div>
                   </MetadataItem>
                 )}

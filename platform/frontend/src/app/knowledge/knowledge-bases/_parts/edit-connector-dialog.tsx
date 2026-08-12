@@ -79,6 +79,18 @@ type EditConnectorFormValues = {
   environmentId: string | null;
 };
 
+function editableConnectorConfig(connector: ConnectorItem) {
+  if (
+    connector.connectorType === "mfiles" &&
+    typeof (connector.config as Record<string, unknown>).authMethod !== "string"
+  ) {
+    // Connectors created before OAuth support used password-derived MFWS
+    // tokens. Preserve that meaning when opening/saving the upgraded form.
+    return { ...connector.config, authMethod: "mfiles_password_token" };
+  }
+  return connector.config;
+}
+
 export function EditConnectorDialog({
   connector,
   open,
@@ -97,7 +109,7 @@ export function EditConnectorDialog({
       name: connector.name,
       description: connector.description ?? "",
       enabled: connector.enabled,
-      config: connector.config,
+      config: editableConnectorConfig(connector),
       email: "",
       apiToken: "",
       adminApiKey: "",
@@ -116,7 +128,7 @@ export function EditConnectorDialog({
         name: connector.name,
         description: connector.description ?? "",
         enabled: connector.enabled,
-        config: connector.config,
+        config: editableConnectorConfig(connector),
         email: "",
         apiToken: "",
         adminApiKey: "",
@@ -411,7 +423,10 @@ export function EditConnectorDialog({
             )}
 
           <Collapsible>
-            <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+            <CollapsibleTrigger
+              type="button"
+              className="flex w-full items-center justify-between cursor-pointer group border-t pt-3"
+            >
               <span className="text-sm font-medium">Advanced</span>
               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>

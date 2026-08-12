@@ -72,6 +72,7 @@ import {
   GithubAppConfigModel,
   KbContainerAclModel,
   KbDocumentModel,
+  KbExternalGroupModel,
   KbExternalUserGroupModel,
   KbMemberOverrideModel,
   KnowledgeBaseConnectorModel,
@@ -803,6 +804,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       // SPDX-SnippetEnd
 
+      if (body.connectorType === "mfiles" && !config.kb.mfilesConnectorEnabled) {
+        throw new ApiError(
+          403,
+          "The M-Files connector is not enabled on this deployment",
+        );
+      }
+      assertMfilesAuthMethodEnabled(body.config);
+
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
       const validation = await connectorImpl.validateConfig(body.config);
@@ -1150,6 +1159,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentId: body.environmentId,
         });
       }
+
+      assertMfilesAuthMethodEnabled(body.config, connector.config);
 
       // resolve the connector's auth shape after this update so credential
       // storage stays consistent across App <-> inline-secret transitions
@@ -1715,6 +1726,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.object({
                 /** Upstream group identifier as the source system names it. */
                 groupId: z.string(),
+                /** Human-readable upstream group name, when exposed. */
+                name: z.string().nullable(),
                 /** The exact `group:` ACL token written on documents. */
                 token: z.string(),
                 /** Documents on this connector whose ACL grants the group. */
@@ -1761,21 +1774,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const [{ memberships, truncated }, totalMemberships, documentCounts] =
-        await Promise.all([
-          KbExternalUserGroupModel.findMembershipsWithUsersByConnector({
-            connectorId: id,
-            organizationId,
-            limit: MAX_USER_GROUP_MEMBERSHIPS,
-          }),
-          KbExternalUserGroupModel.countByConnector(id),
-          KbDocumentModel.getGroupTokenDocumentCounts(id),
-        ]);
+      const [
+        { memberships, truncated },
+        totalMemberships,
+        documentCounts,
+        groupCatalog,
+      ] = await Promise.all([
+        KbExternalUserGroupModel.findMembershipsWithUsersByConnector({
+          connectorId: id,
+          organizationId,
+          limit: MAX_USER_GROUP_MEMBERSHIPS,
+        }),
+        KbExternalUserGroupModel.countByConnector(id),
+        KbDocumentModel.getGroupTokenDocumentCounts(id),
+        KbExternalGroupModel.findByConnector(id),
+      ]);
 
       const groups = new Map<
         string,
         {
           groupId: string;
+          name: string | null;
           token: string;
           documentCount: number;
           lastSyncedAt: string | null;
@@ -1790,6 +1809,21 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       >();
 
+      for (const catalogGroup of groupCatalog) {
+        const token = buildGroupToken({
+          connectorType: connector.connectorType,
+          groupId: catalogGroup.groupId,
+        });
+        groups.set(token, {
+          groupId: catalogGroup.groupId,
+          name: catalogGroup.name,
+          token,
+          documentCount: 0,
+          lastSyncedAt: catalogGroup.updatedAt.toISOString(),
+          members: [],
+        });
+      }
+
       for (const membership of memberships) {
         const token = buildGroupToken({
           connectorType: connector.connectorType,
@@ -1799,6 +1833,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!group) {
           group = {
             groupId: membership.groupId,
+            name: null,
             token,
             documentCount: 0,
             lastSyncedAt: null,
@@ -1832,6 +1867,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             groupId: token.startsWith(tokenPrefix)
               ? token.slice(tokenPrefix.length)
               : token,
+            name: null,
             token,
             documentCount,
             lastSyncedAt: null,
@@ -2668,6 +2704,31 @@ function appendQuery(url: string, params: Record<string, string>): string {
     parsed.searchParams.set(key, value);
   }
   return parsed.toString();
+}
+
+/**
+ * The M-Files Application Account (OAuth client-credentials) auth method is
+ * gated separately from the connector type and is off by default.
+ * `existingConfig` grandfathers a connector already using the method, so
+ * unrelated edits keep working if the flag is turned off after creation.
+ */
+function assertMfilesAuthMethodEnabled(
+  nextConfig: ConnectorConfig | undefined,
+  existingConfig?: ConnectorConfig,
+): void {
+  if (config.kb.mfilesOauthEnabled) return;
+  if (nextConfig?.type !== "mfiles") return;
+  if (nextConfig.authMethod !== "oauth_client_credentials") return;
+  if (
+    existingConfig?.type === "mfiles" &&
+    existingConfig.authMethod === "oauth_client_credentials"
+  ) {
+    return;
+  }
+  throw new ApiError(
+    403,
+    "The M-Files Application Account authentication method is not enabled on this deployment",
+  );
 }
 
 async function findConnectorOrThrow(params: {

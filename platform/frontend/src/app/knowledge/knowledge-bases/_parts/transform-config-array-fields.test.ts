@@ -84,6 +84,71 @@ describe("transformConfigArrayFields", () => {
     expect(result.projectIds).toEqual(["proj-a", "proj-b"]);
   });
 
+  it("converts M-Files objectTypeIds to non-negative integers", () => {
+    const config = {
+      type: "mfiles",
+      objectTypeIds: "0, 2, invalid, -1, 7",
+    };
+
+    const result = transformConfigArrayFields(config);
+
+    expect(result.objectTypeIds).toEqual([0, 2, 7]);
+  });
+
+  it("treats an absent M-Files authMethod as password mode and strips the seeded OAuth presets", () => {
+    expect(
+      transformConfigArrayFields({
+        type: "mfiles",
+        domain: "CONTOSO",
+        oauthAuthConfig: "Technical Credentials",
+        oauthAuthConfigScope: "technical",
+      }),
+    ).toEqual({
+      type: "mfiles",
+      domain: "CONTOSO",
+    });
+  });
+
+  it("removes credentials-mode fields that do not apply to M-Files", () => {
+    expect(
+      transformConfigArrayFields({
+        type: "mfiles",
+        authMethod: "mfiles_password_token",
+        domain: "CONTOSO",
+        oauthTokenEndpoint: "https://login.example.com/token",
+        oauthAuthConfig: "Entra ID",
+        oauthAuthConfigScope: "technical",
+        oauthAccountName: String.raw`integration\archestra`,
+        oauthUseIdToken: true,
+      }),
+    ).toEqual({
+      type: "mfiles",
+      authMethod: "mfiles_password_token",
+      domain: "CONTOSO",
+    });
+
+    expect(
+      transformConfigArrayFields({
+        type: "mfiles",
+        authMethod: "oauth_client_credentials",
+        domain: "CONTOSO",
+        oauthTokenEndpoint: "https://login.example.com/token",
+        oauthAuthConfig: "Entra ID",
+        oauthAuthConfigScope: "technical",
+        oauthAccountName: String.raw`integration\archestra`,
+        oauthScope: "",
+        oauthResource: "",
+      }),
+    ).toEqual({
+      type: "mfiles",
+      authMethod: "oauth_client_credentials",
+      oauthTokenEndpoint: "https://login.example.com/token",
+      oauthAuthConfig: "Entra ID",
+      oauthAuthConfigScope: "technical",
+      oauthAccountName: String.raw`integration\archestra`,
+    });
+  });
+
   it("trims whitespace and filters empty entries", () => {
     const config = {
       repos: " repo1 ,, repo2 , , repo3 ",

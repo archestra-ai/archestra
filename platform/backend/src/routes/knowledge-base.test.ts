@@ -7,13 +7,17 @@ import config from "@/config";
 import db from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
-import { buildGroupToken } from "@/knowledge-base/acl-tokens";
+import {
+  buildContainerToken,
+  buildGroupToken,
+} from "@/knowledge-base/acl-tokens";
 import {
   ConnectorRunModel,
   GithubAppConfigModel,
   KbChunkModel,
   KbContainerAclModel,
   KbDocumentModel,
+  KbExternalGroupModel,
   KbExternalUserGroupModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
@@ -824,6 +828,129 @@ describe("knowledge base routes", () => {
       expect(response.json().error.message).toContain(
         "At least one team must be selected for team-scoped connectors",
       );
+    });
+
+    test("rejects an M-Files connector while its beta gate is off", async () => {
+      config.kb.mfilesConnectorEnabled = false;
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "M-Files Vault",
+          connectorType: "mfiles",
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+          },
+          credentials: { email: "svc-archestra", apiToken: "vault-password" },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        "The M-Files connector is not enabled",
+      );
+    });
+
+    test("rejects the M-Files Application Account auth method while its gate is off", async () => {
+      config.kb.mfilesConnectorEnabled = true;
+      config.kb.mfilesOauthEnabled = false;
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "M-Files Vault",
+          connectorType: "mfiles",
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+            authMethod: "oauth_client_credentials",
+            oauthTokenEndpoint: "https://login.example.com/oauth2/v2.0/token",
+            oauthAuthConfig: "Entra ID",
+          },
+          credentials: { email: "client-id", apiToken: "client-secret" },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        "Application Account authentication method is not enabled",
+      );
+    });
+
+    test("rejects switching an M-Files connector to the Application Account method while its gate is off", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      config.kb.mfilesConnectorEnabled = true;
+      config.kb.mfilesOauthEnabled = false;
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "mfiles",
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+            authMethod: "mfiles_password_token",
+          },
+        },
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+            authMethod: "oauth_client_credentials",
+            oauthTokenEndpoint: "https://login.example.com/oauth2/v2.0/token",
+            oauthAuthConfig: "Entra ID",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        "Application Account authentication method is not enabled",
+      );
+    });
+
+    test("keeps editing an M-Files connector that already uses the Application Account method", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      config.kb.mfilesConnectorEnabled = true;
+      config.kb.mfilesOauthEnabled = false;
+      const oauthConfig = {
+        type: "mfiles",
+        baseUrl: "https://mfiles.example.com/m-files",
+        vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+        authMethod: "oauth_client_credentials",
+        oauthTokenEndpoint: "https://login.example.com/oauth2/v2.0/token",
+        oauthAuthConfig: "Entra ID",
+      } as const;
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { connectorType: "mfiles", config: oauthConfig },
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { name: "Renamed Vault", config: oauthConfig },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().name).toBe("Renamed Vault");
     });
 
     test("rejects team-scoped connector creation without enterprise license", async () => {
@@ -2709,7 +2836,7 @@ describe("knowledge base routes", () => {
           visibility: "auto-sync-permissions",
         },
       );
-      // One tagged doc + one still fail-closed (awaiting a pass).
+      // One directly tagged doc + one still fail-closed (awaiting a pass).
       await KbDocumentModel.create({
         organizationId,
         sourceId: "tagged",
@@ -2728,6 +2855,59 @@ describe("knowledge base routes", () => {
         contentHash: "h2",
         acl: [],
       });
+      const emptyContainerKey = "repo:empty";
+      const missingContainerKey = "repo:missing";
+      const emptyContainerToken = buildContainerToken({
+        connectorId: connector.id,
+        containerKey: emptyContainerKey,
+      });
+      await KbContainerAclModel.upsertMany([
+        {
+          organizationId,
+          connectorId: connector.id,
+          containerKey: emptyContainerKey,
+          acl: [],
+        },
+      ]);
+      // An assignment token is not access by itself: empty and missing
+      // container audiences are effectively fail-closed.
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "empty-container",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h3",
+        acl: [emptyContainerToken],
+        containerKey: emptyContainerKey,
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "missing-container",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h4",
+        acl: [
+          buildContainerToken({
+            connectorId: connector.id,
+            containerKey: missingContainerKey,
+          }),
+        ],
+        containerKey: missingContainerKey,
+      });
+      // A direct exception remains readable even if its shared audience is
+      // empty, so it must not inflate the fail-closed count.
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "direct-exception",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h5",
+        acl: [emptyContainerToken, "user_email:alice@example.com"],
+        containerKey: emptyContainerKey,
+      });
 
       const response = await app.inject({
         method: "GET",
@@ -2736,8 +2916,8 @@ describe("knowledge base routes", () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.totalDocuments).toBe(2);
-      expect(body.failClosedDocuments).toBe(1);
+      expect(body.totalDocuments).toBe(5);
+      expect(body.failClosedDocuments).toBe(3);
       expect(body.permissionSyncRunning).toBe(false);
       // Effective global schedule always yields a next run in tests.
       expect(typeof body.nextScheduledAt).toBe("string");
@@ -2916,6 +3096,7 @@ describe("knowledge base routes", () => {
       const engineers = groups.find(
         (g: { groupId: string }) => g.groupId === "engineers",
       );
+      expect(engineers.name).toBeNull();
       expect(engineers.token).toBe("group:github_engineers");
       expect(engineers.documentCount).toBe(2);
       expect(engineers.lastSyncedAt).toEqual(expect.any(String));
@@ -2953,11 +3134,53 @@ describe("knowledge base routes", () => {
       );
       expect(ghosts).toEqual({
         groupId: "ghosts",
+        name: null,
         token: "group:github_ghosts",
         documentCount: 1,
         lastSyncedAt: null,
         members: [],
       });
+    });
+
+    test("returns catalog display names and groups with no memberships or documents", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "mfiles",
+          visibility: "auto-sync-permissions",
+        },
+      );
+      await KbExternalGroupModel.upsertMany([
+        {
+          organizationId,
+          connectorId: connector.id,
+          connectorType: "mfiles",
+          groupId: "7",
+          name: "Engineering Readers",
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/user-groups`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().groups).toEqual([
+        {
+          groupId: "7",
+          name: "Engineering Readers",
+          token: "group:mfiles_7",
+          documentCount: 0,
+          lastSyncedAt: expect.any(String),
+          members: [],
+        },
+      ]);
     });
 
     test("does not resolve a user from another organization's membership", async ({

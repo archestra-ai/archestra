@@ -181,6 +181,7 @@ export const CONNECTOR_TYPE_LABELS = {
   salesforce: "Salesforce",
   web_crawler: "Web Crawler",
   perforce: "Perforce (Helix Core)",
+  mfiles: "M-Files",
 } as const;
 
 export type ConnectorType = keyof typeof CONNECTOR_TYPE_LABELS;

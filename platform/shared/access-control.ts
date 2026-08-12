@@ -701,6 +701,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // skill admin) are conditional on what the setup includes and enforced in
   // the route handler. The script GET is public (token-authenticated).
   [RouteId.CreateConnectionSetup]: {},
+  // Stores only caller-supplied installer parameters under a one-time token;
+  // reads nothing protected, so any authenticated member may mint one (the
+  // connector forms that surface it are themselves permission-gated).
+  [RouteId.GetMfilesVafAddOnDistribution]: {},
   // Provisions a personal virtual key for the manual /connection flow. The
   // llmVirtualKey:create check is enforced in the handler (mirrors the
   // virtual-key branch of CreateConnectionSetup).

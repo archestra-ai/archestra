@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useFeature } from "@/lib/config/config.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useConnector,
@@ -59,6 +60,7 @@ const CONNECTOR_TYPE_OPTIONS = [
   "gitlab",
   "servicenow",
   "perforce",
+  "mfiles",
   "web_crawler",
 ] as ConnectorType[];
 
@@ -82,6 +84,11 @@ function ConnectorsList() {
   const pageSizeFromUrl = searchParams.get("pageSize");
   const search = searchParams.get("search") || "";
   const connectorTypeFilter = searchParams.get("connectorType") || "all";
+  // M-Files is in beta: deployments that haven't opted in never see the type.
+  const mfilesEnabled = useFeature("kbMfilesConnectorEnabled") ?? false;
+  const connectorTypeOptions = CONNECTOR_TYPE_OPTIONS.filter(
+    (type) => type !== "mfiles" || mfilesEnabled,
+  );
   // The trash view; the backend serves deleted connectors to manage-deleted
   // holders only, and the status filter itself is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
@@ -361,7 +368,7 @@ function ConnectorsList() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All connector types</SelectItem>
-                {CONNECTOR_TYPE_OPTIONS.map((type) => (
+                {connectorTypeOptions.map((type) => (
                   <SelectItem key={type} value={type}>
                     <div className="flex items-center gap-2">
                       <ConnectorTypeIcon type={type} className="h-4 w-4" />

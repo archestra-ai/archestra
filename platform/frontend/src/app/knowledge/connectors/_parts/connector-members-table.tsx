@@ -6,7 +6,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { UserCog } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableFilters } from "@/components/table-filters";
@@ -109,6 +109,21 @@ export function ConnectorMembersTable({
         ...new Set((userGroups?.groups ?? []).map((group) => group.groupId)),
       ].sort(),
     [userGroups?.groups],
+  );
+
+  // Upstream groups carry a numeric id for authorization but a human name for
+  // display. Show the name and fall back to the id only when the source never
+  // exposed one.
+  const groupNameById = useMemo(
+    () =>
+      new Map(
+        (userGroups?.groups ?? []).map((group) => [group.groupId, group.name]),
+      ),
+    [userGroups?.groups],
+  );
+  const groupLabel = useCallback(
+    (groupId: string) => groupNameById.get(groupId) || groupId,
+    [groupNameById],
   );
 
   const visibleMembers = useMemo(() => {
@@ -248,7 +263,12 @@ export function ConnectorMembersTable({
         // Wider than the even share the unsized columns get: two group
         // badges plus the "+N more" badge fit on two lines.
         size: 280,
-        cell: ({ row }) => <MemberGroupBadges groups={row.original.groups} />,
+        cell: ({ row }) => (
+          <MemberGroupBadges
+            groups={row.original.groups}
+            resolveLabel={groupLabel}
+          />
+        ),
       },
       {
         id: "actions",
@@ -280,7 +300,7 @@ export function ConnectorMembersTable({
         },
       },
     ],
-    [appName, orgEmailById, openAssignDialog],
+    [appName, orgEmailById, openAssignDialog, groupLabel],
   );
 
   return (
@@ -321,7 +341,7 @@ export function ConnectorMembersTable({
               <SelectItem value="all">All groups</SelectItem>
               {groupIds.map((groupId) => (
                 <SelectItem key={groupId} value={groupId}>
-                  {groupId}
+                  {groupLabel(groupId)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -432,13 +452,19 @@ function getInitials(name: string): string {
     .join("");
 }
 
-function MemberGroupBadges({ groups }: { groups: string[] }) {
+function MemberGroupBadges({
+  groups,
+  resolveLabel,
+}: {
+  groups: string[];
+  resolveLabel: (groupId: string) => string;
+}) {
   if (groups.length === 0) {
     return <span className="text-sm text-muted-foreground">-</span>;
   }
   return (
     <CollapsedBadgeList
-      items={groups.map((group) => ({ id: group, label: group }))}
+      items={groups.map((group) => ({ id: group, label: resolveLabel(group) }))}
     />
   );
 }

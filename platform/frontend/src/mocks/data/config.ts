@@ -55,6 +55,10 @@ export function makeConfig(
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,
+      // On in the mock: the connector-dialog tests exercise the M-Files form,
+      // including its Application Account (OAuth) fields.
+      kbMfilesConnectorEnabled: true,
+      kbMfilesOauthEnabled: true,
       kbGoogleDriveOAuth: {
         configured: false,
         redirectUri:

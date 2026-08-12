@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useCreateConnector,
   useStartGoogleDriveOAuth,
@@ -105,8 +106,12 @@ export function CreateConnectorDialog({
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
 
-  const filteredConnectorOptions = CONNECTOR_OPTIONS.filter((option) =>
-    option.label.toLowerCase().includes(search.toLowerCase()),
+  // M-Files is in beta: deployments that haven't opted in never see the type.
+  const mfilesEnabled = useFeature("kbMfilesConnectorEnabled") ?? false;
+  const filteredConnectorOptions = CONNECTOR_OPTIONS.filter(
+    (option) =>
+      (option.type !== "mfiles" || mfilesEnabled) &&
+      option.label.toLowerCase().includes(search.toLowerCase()),
   );
 
   const form = useForm<CreateConnectorFormValues>({
@@ -527,7 +532,10 @@ export function CreateConnectorDialog({
                   )}
 
                 <Collapsible>
-                  <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
+                  <CollapsibleTrigger
+                    type="button"
+                    className="flex w-full items-center justify-between cursor-pointer group border-t pt-3"
+                  >
                     <span className="text-sm font-medium">Advanced</span>
                     <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>

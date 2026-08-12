@@ -68,6 +68,8 @@ function makeMockConnector(
     title: string;
     content: string;
     sourceUrl?: string;
+    metadata?: Record<string, unknown>;
+    operationalMetadataKeys?: string[];
   }>,
   options?: { hasMore?: boolean },
 ) {
@@ -820,6 +822,208 @@ describe("ConnectorSyncService", () => {
     expect(run?.documentsIngested).toBe(0); // Skipped because unchanged
   });
 
+  test("rotating completion-generation metadata does not re-chunk unchanged content", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    const content = "Stable content";
+    const stableMetadata = { mfilesObjectKey: "0:123" };
+    const contentHash = createHash("sha256")
+      .update(`${content}\n${JSON.stringify(stableMetadata)}`)
+      .digest("hex");
+    const existing = await KbDocumentModel.create({
+      organizationId: org.id,
+      sourceId: "ext-1",
+      connectorId: connector.id,
+      title: "Doc",
+      content,
+      contentHash,
+      metadata: { ...stableMetadata, mfilesBaselineGeneration: "old" },
+    });
+    await KbChunkModel.insertMany([
+      { documentId: existing.id, content: "original chunk", chunkIndex: 0 },
+    ]);
+
+    setupSecret();
+    mockGetConnector.mockReturnValue(
+      makeMockConnector([
+        {
+          id: "ext-1",
+          title: "Doc",
+          content,
+          metadata: { ...stableMetadata, mfilesBaselineGeneration: "new" },
+          operationalMetadataKeys: ["mfilesBaselineGeneration"],
+        },
+      ]),
+    );
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("success");
+    const run = await ConnectorRunModel.findById(result.runId);
+    expect(run?.documentsIngested).toBe(0);
+    const updated = await KbDocumentModel.findById(existing.id);
+    expect(updated?.metadata).toMatchObject({
+      mfilesBaselineGeneration: "new",
+    });
+    const chunks = await KbChunkModel.findByDocument(existing.id);
+    expect(chunks.map((chunk) => chunk.content)).toEqual(["original chunk"]);
+  });
+
+  test("authoritative source-scope reconciliation removes only missing documents in that scope", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+    await Promise.all([
+      KbDocumentModel.create({
+        organizationId: org.id,
+        connectorId: connector.id,
+        sourceId: "keep",
+        title: "Keep",
+        content: "keep",
+        contentHash: "keep",
+        metadata: { mfilesObjectKey: "0:123" },
+      }),
+      KbDocumentModel.create({
+        organizationId: org.id,
+        connectorId: connector.id,
+        sourceId: "stale",
+        title: "Stale",
+        content: "stale",
+        contentHash: "stale",
+        metadata: { mfilesObjectKey: "0:123" },
+      }),
+      KbDocumentModel.create({
+        organizationId: org.id,
+        connectorId: connector.id,
+        sourceId: "other-scope",
+        title: "Other",
+        content: "other",
+        contentHash: "other",
+        metadata: { mfilesObjectKey: "0:999" },
+      }),
+    ]);
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(0),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [],
+            reconcileScopes: [
+              {
+                metadataFilter: { mfilesObjectKey: "0:123" },
+                seenSourceIds: ["keep"],
+              },
+            ],
+            checkpoint: { cursor: "2" },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    await connectorSyncService.executeSync(connector.id);
+
+    await expect(
+      KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "keep",
+      }),
+    ).resolves.not.toBeNull();
+    await expect(
+      KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "stale",
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "other-scope",
+      }),
+    ).resolves.not.toBeNull();
+  });
+
+  test("completion sweep deletes only documents outside the completed baseline generation", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+    await Promise.all([
+      KbDocumentModel.create({
+        organizationId: org.id,
+        connectorId: connector.id,
+        sourceId: "current",
+        title: "Current",
+        content: "current",
+        contentHash: "current",
+        metadata: { mfilesBaselineGeneration: "generation-2" },
+      }),
+      KbDocumentModel.create({
+        organizationId: org.id,
+        connectorId: connector.id,
+        sourceId: "stale",
+        title: "Stale",
+        content: "stale",
+        contentHash: "stale",
+        metadata: { mfilesBaselineGeneration: "generation-1" },
+      }),
+    ]);
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(0),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [],
+            completionSweep: {
+              metadataKey: "mfilesBaselineGeneration",
+              generation: "generation-2",
+            },
+            checkpoint: { cursor: "baseline-head" },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    await connectorSyncService.executeSync(connector.id);
+
+    await expect(
+      KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "current",
+      }),
+    ).resolves.not.toBeNull();
+    await expect(
+      KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "stale",
+      }),
+    ).resolves.toBeNull();
+  });
+
   test("executeSync updates document when content hash changes", async ({
     makeOrganization,
     makeKnowledgeBase,
@@ -902,7 +1106,7 @@ describe("ConnectorSyncService", () => {
     expect(chunks.every((chunk) => chunk.acl.length === 0)).toBe(true);
   });
 
-  test("auto-sync connector: content re-ingest copies the permission ACL forward", async ({
+  test("auto-sync connector: changed content locks the revision until permissions refresh", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
@@ -943,17 +1147,13 @@ describe("ConnectorSyncService", () => {
 
     await connectorSyncService.executeSync(connector.id);
 
-    // Content changed, but the permission-pass ACL must be preserved, not
-    // clobbered to the empty connector-level ACL.
+    // The old ACL was evaluated for the old source revision. Changed content
+    // is unavailable until the permission pass evaluates the new revision.
     const doc = await KbDocumentModel.findById(existingDoc.id);
     expect(doc?.content).toBe("New content");
-    expect(doc?.acl).toEqual(["user_email:alice@example.com"]);
+    expect(doc?.acl).toEqual([]);
     const chunks = await KbChunkModel.findByDocument(existingDoc.id);
-    expect(
-      chunks.every((chunk) =>
-        chunk.acl.includes("user_email:alice@example.com"),
-      ),
-    ).toBe(true);
+    expect(chunks.every((chunk) => chunk.acl.length === 0)).toBe(true);
   });
 
   test("executeSync repairs unchanged documents that have no chunks", async ({

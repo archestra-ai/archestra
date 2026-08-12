@@ -40,6 +40,7 @@ export { default as mcpServerRoutes } from "./mcp-server";
 export { default as mcpServerProxyRoutes } from "./mcp-server-proxy";
 export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as memberRoutes } from "./member";
+export { default as mfilesVafAddOnRoutes } from "./mfiles-vaf-add-on/mfiles-vaf-add-on.routes";
 export { default as microsoft365CopilotAuthRoutes } from "./microsoft-365-copilot-auth/microsoft-365-copilot-auth.routes";
 export { default as oauthRoutes } from "./oauth";
 export { default as oauthServerRoutes } from "./oauth-server";

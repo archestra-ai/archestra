@@ -3,6 +3,7 @@
 import {
   type ChatMessagePart,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import { ChevronDown, ChevronUp, ExternalLink, FileText } from "lucide-react";
 import { useState } from "react";
@@ -14,12 +15,31 @@ import { Button } from "@/components/ui/button";
 import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
 
 export function hasKnowledgeBaseToolCall(parts: ChatMessagePart[]): boolean {
-  return parts.some(
-    (part) =>
-      getToolNameFromPart(part)?.endsWith(
-        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-      ) ?? false,
-  );
+  return parts.some(isKnowledgeBaseQueryPart);
+}
+
+/**
+ * True when the part is a `query_knowledge_sources` call — either invoked
+ * directly, or dispatched through the Auto-tool-mode `run_tool` wrapper. In
+ * Auto mode the part is named after the dispatcher and the real tool only
+ * appears in the call input's `tool_name`, so matching on the part name alone
+ * would miss every KB query made by an Auto-mode agent.
+ */
+function isKnowledgeBaseQueryPart(part: ChatMessagePart): boolean {
+  const partToolName = getToolNameFromPart(part);
+  if (!partToolName) return false;
+  if (partToolName.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME)) {
+    return true;
+  }
+  if (partToolName.endsWith(TOOL_RUN_TOOL_SHORT_NAME)) {
+    const dispatched = (part.input as { tool_name?: unknown } | undefined)
+      ?.tool_name;
+    return (
+      typeof dispatched === "string" &&
+      dispatched.endsWith(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME)
+    );
+  }
+  return false;
 }
 
 export interface ExtractedCitation {
@@ -37,12 +57,9 @@ export function extractCitations(
   const citations: ExtractedCitation[] = [];
 
   for (const part of parts) {
-    const isKbTool =
-      getToolNameFromPart(part)?.endsWith(
-        TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-      ) ?? false;
-
-    if (!isKbTool || part.state !== "output-available") continue;
+    if (!isKnowledgeBaseQueryPart(part) || part.state !== "output-available") {
+      continue;
+    }
 
     let results: Array<{
       citation?: {

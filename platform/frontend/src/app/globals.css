@@ -604,3 +604,13 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
     animation-delay: 0s !important;
   }
 }
+
+/* Informational hover cards (`<HoverCardContent pointerEventsNone />`) must not
+   absorb clicks meant for the UI they float over. Radix wraps positioned
+   content in a `[data-radix-popper-content-wrapper]` div that stays
+   pointer-interactive, so opting the content out is not enough on its own —
+   the wrapper has to leave the hit-test path too, and only an ancestor
+   selector can reach it. */
+[data-radix-popper-content-wrapper]:has(> [data-pointer-events-none]) {
+  pointer-events: none;
+}

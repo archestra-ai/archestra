@@ -635,19 +635,31 @@ export function McpServerCard({
       {totalAgentCount > 0 && (
         <>
           {/*
-            A hover card rather than a tooltip: the footer links through to the
-            full list, and tooltip content is not reachable by the pointer.
+            The popover is informational only, and it MUST NOT capture pointer
+            events: it opens directly on top of the card's action row (Chat /
+            Reinstall / Uninstall), so an interactive popover sits between the
+            cursor and those buttons and swallows the click — the user presses
+            Reinstall and nothing happens. `pointerEventsNone` puts the popper
+            wrapper out of the hit-test path so clicks fall through to the
+            button underneath. That leaves nothing clickable inside the card,
+            so the trigger itself carries the link to the full usage list.
           */}
           <HoverCard openDelay={150}>
             <HoverCardTrigger asChild>
-              <div className="flex shrink-0 items-center gap-1 cursor-help">
+              <Link
+                href={`/mcp/registry/${item.id}?tab=usage`}
+                aria-label={`${totalAgentCount} ${
+                  totalAgentCount === 1 ? "agent" : "agents"
+                } can use ${item.name}, view usage`}
+                className="flex shrink-0 items-center gap-1 hover:text-foreground transition-colors"
+              >
                 <Bot className="h-3.5 w-3.5" />
                 <span data-testid={`${E2eTestId.McpServerAgentsCount}`}>
                   {totalAgentCount}
                 </span>
-              </div>
+              </Link>
             </HoverCardTrigger>
-            <HoverCardContent className="w-72 p-3 text-sm">
+            <HoverCardContent pointerEventsNone className="w-72 p-3 text-sm">
               {assignedAgents.length > 0 && (
                 <AgentUsageSection
                   title={`Used by ${assignedAgents.length} ${
@@ -667,13 +679,10 @@ export function McpServerCard({
                   agents={autoModeOnlyAgents}
                 />
               )}
-              <Link
-                href={`/mcp/registry/${item.id}?tab=usage`}
-                className="mt-2.5 flex items-center gap-1 border-t pt-2 text-xs text-muted-foreground hover:text-foreground"
-              >
+              <p className="mt-2.5 flex items-center gap-1 border-t pt-2 text-xs text-muted-foreground">
                 <span>View all usage</span>
                 <ArrowUpRight className="h-3 w-3" />
-              </Link>
+              </p>
             </HoverCardContent>
           </HoverCard>
         </>

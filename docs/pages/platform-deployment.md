@@ -1618,6 +1618,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS`** - Per-statement timeout for the knowledge search lanes (vector and keyword), in milliseconds.
+  - Default: `8000`
+  - Tighter than the pool-wide `ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS`. A search lane that exceeds it is dropped and the remaining lanes' results are merged. The query fails only when every lane times out. Timed-out lanes are counted in the `rag_search_lane_timeout_total` metric. Set to `0` to inherit the pool-wide timeout.
+
 - **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - Verifiable citations. In the built-in chat, the model is asked to back each claim with a short verbatim quote tagged with its source chunk's ref; this checks each quote against the chunk its ref names and logs plus meters (`rag_quote_verification_total`) every miss — a quote found in no returned chunk is a likely fabrication, a quote whose ref names no returned chunk but whose text exists in another one is a mis-citation.
   - Default: `true`
   - Log-only: it never blocks or alters an answer, and only covers the internal chat (external MCP clients answer where Archestra cannot see the text). Set to `false` to disable the feature: the model is no longer asked to quote, and no check runs.

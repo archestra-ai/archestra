@@ -85,6 +85,7 @@ import { KbChunkModel, KbDocumentModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import { describe, expect, test } from "@/test";
 
+import { KnowledgeBaseSearchTimeoutError } from "./errors";
 import { findEmbeddingDimensionMismatch, queryService } from "./query";
 
 function makeFakeEmbedding(seed: number): number[] {
@@ -749,6 +750,132 @@ describe("QueryService", () => {
 
     const [interaction] = await waitForKbInteractions(1);
     expect(interaction.connectorId).toBeNull();
+  });
+
+  // A statement-timeout cancellation is a process-boundary condition the PGlite
+  // test database cannot produce, so these tests simulate it at the model
+  // seam with the same error shape node-postgres raises (SQLSTATE 57014
+  // wrapped by the ORM).
+  function makeStatementTimeoutError(): Error {
+    return Object.assign(new Error("Failed query: SELECT ..."), {
+      cause: Object.assign(
+        new Error("canceling statement due to statement timeout"),
+        { code: "57014" },
+      ),
+    });
+  }
+
+  test("drops a lane cut by the statement timeout and serves the surviving lane", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Timeout Survivor",
+      content: "Some content",
+      contentHash: "hash-lane-timeout-1",
+      sourceUrl: null,
+      embeddingStatus: "completed",
+    });
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Resilient chunk about TypeScript",
+        chunkIndex: 0,
+        acl: ["org:*"],
+      },
+    ]);
+
+    const vectorSpy = vi
+      .spyOn(KbChunkModel, "vectorSearch")
+      .mockRejectedValue(makeStatementTimeoutError());
+    try {
+      embeddingQueue.push(makeFakeEmbedding(1));
+      const results = await queryService.query({
+        connectorIds: [connector.id],
+        organizationId: org.id,
+        queryText: "TypeScript",
+        userAcl: ["org:*"],
+      });
+
+      // The keyword lane's hit still comes back even though the vector lane
+      // burned its statement timeout.
+      expect(results.map((r) => r.content)).toEqual([
+        "Resilient chunk about TypeScript",
+      ]);
+    } finally {
+      vectorSpy.mockRestore();
+    }
+  });
+
+  test("fails with an actionable error when every search lane times out", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    const vectorSpy = vi
+      .spyOn(KbChunkModel, "vectorSearch")
+      .mockRejectedValue(makeStatementTimeoutError());
+    const fullTextSpy = vi
+      .spyOn(KbChunkModel, "fullTextSearch")
+      .mockRejectedValue(makeStatementTimeoutError());
+    try {
+      embeddingQueue.push(makeFakeEmbedding(1));
+      await expect(
+        queryService.query({
+          connectorIds: [connector.id],
+          organizationId: org.id,
+          queryText: "TypeScript",
+          userAcl: ["org:*"],
+        }),
+      ).rejects.toThrow(KnowledgeBaseSearchTimeoutError);
+    } finally {
+      vectorSpy.mockRestore();
+      fullTextSpy.mockRestore();
+    }
+  });
+
+  test("non-timeout search failures still propagate", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    setupEmbeddingConfig();
+    setupSingleQueryExpansion();
+
+    const vectorSpy = vi
+      .spyOn(KbChunkModel, "vectorSearch")
+      .mockRejectedValue(new Error("relation does not exist"));
+    try {
+      embeddingQueue.push(makeFakeEmbedding(1));
+      await expect(
+        queryService.query({
+          connectorIds: [connector.id],
+          organizationId: org.id,
+          queryText: "TypeScript",
+          userAcl: ["org:*"],
+        }),
+      ).rejects.toThrow("relation does not exist");
+    } finally {
+      vectorSpy.mockRestore();
+    }
   });
 });
 

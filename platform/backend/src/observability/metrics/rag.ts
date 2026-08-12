@@ -30,6 +30,7 @@ let ragQueryDuration: client.Histogram<string>;
 let ragQueriesTotal: client.Counter<string>;
 let ragQueryResultsCount: client.Histogram<string>;
 let ragQuoteVerificationTotal: client.Counter<string>;
+let ragSearchLaneTimeoutTotal: client.Counter<string>;
 
 // ===== Permission-sync metrics (auto-sync-permissions connectors) =====
 let ragPermissionSyncsTotal: client.Counter<string>;
@@ -124,6 +125,12 @@ export function initializeRagMetrics(): void {
     name: "rag_quote_verification_total",
     help: "Chat-answer quotes checked against their cited knowledge chunk (issue #7161). result=matched|wrong_ref|failed|unverifiable|unparseable; `failed` = the quote appears where it should not (fabrication), `wrong_ref` = the cited ref names no returned chunk but the quote exists in another one (mis-citation), `unverifiable` = unresolvable ref and the quote is too short to search for broadly, `unparseable` (once per turn) = chunks were returned but the answer carried no parseable quote, i.e. thin citation coverage",
     labelNames: ["result"],
+  });
+
+  ragSearchLaneTimeoutTotal = new client.Counter({
+    name: "rag_search_lane_timeout_total",
+    help: "Search lanes of a knowledge query cut by the database statement timeout (ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS). A timed-out lane is dropped and the remaining lanes' results are merged; a query where every lane times out fails with an actionable error",
+    labelNames: ["lane"],
   });
 
   ragPermissionSyncsTotal = new client.Counter({
@@ -421,6 +428,15 @@ export function reportQuoteVerification(params: {
       ragQuoteVerificationTotal.inc({ result }, count);
     }
   }
+}
+
+/**
+ * Reports a search lane (one vector or keyword statement of a knowledge query)
+ * cut by the database statement timeout.
+ */
+export function reportSearchLaneTimeout(lane: "vector" | "keyword"): void {
+  if (!ragSearchLaneTimeoutTotal) return;
+  ragSearchLaneTimeoutTotal.inc({ lane });
 }
 
 /**

@@ -138,6 +138,24 @@ export class RerankerConfigUnresolvableError extends KnowledgeBaseError {
 }
 
 /**
+ * Every search lane of a knowledge query hit the database statement timeout, so
+ * there is nothing to merge and no results to return. Thrown only in that
+ * all-lanes case: a partial timeout degrades silently to the surviving lanes'
+ * results instead.
+ */
+export class KnowledgeBaseSearchTimeoutError extends KnowledgeBaseError {
+  readonly userMessage =
+    "Knowledge search timed out before any results were retrieved — the corpus is too large for the " +
+    "current search time budget. Retry with a more specific query; if this persists, an administrator " +
+    "should investigate search performance or raise ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS.";
+
+  constructor(public readonly timeoutMillis: number) {
+    super(`All knowledge search lanes timed out after ${timeoutMillis}ms`);
+    this.name = "KnowledgeBaseSearchTimeoutError";
+  }
+}
+
+/**
  * The single safe mapper: a `KnowledgeBaseError` yields its actionable
  * `userMessage`; anything else yields `undefined` so the caller falls back to its
  * generic message (never leaking internal detail). Used by both the query handler

@@ -34,6 +34,13 @@ const messageContentVariants = cva(
           "group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground",
           "group-[.is-user]:[&_a]:text-primary-foreground group-[.is-user]:[&_a]:underline group-[.is-user]:[&_a]:underline-offset-2 group-[.is-user]:[&_a]:decoration-primary-foreground/50 group-[.is-user]:[&_a]:hover:decoration-primary-foreground",
           "group-[.is-assistant]:pl-2 group-[.is-assistant]:text-foreground",
+          // Reading typography for flat assistant prose: a notch larger than
+          // the UI's text-sm, relaxed leading, and airier paragraph/list
+          // rhythm. Without the bubble the text is the whole visual, and at
+          // 14px/20px it reads cramped. Thinking blocks stay text-sm muted so
+          // the hierarchy (thinking subordinate to answer) survives.
+          "group-[.is-assistant]:text-[0.9375rem] group-[.is-assistant]:leading-relaxed",
+          "group-[.is-assistant]:[&_p]:my-3 group-[.is-assistant]:[&_ul]:my-3 group-[.is-assistant]:[&_ol]:my-3",
         ],
       },
     },

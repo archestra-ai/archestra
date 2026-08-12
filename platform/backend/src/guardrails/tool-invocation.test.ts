@@ -131,7 +131,7 @@ describe("evaluatePolicies", () => {
     const enabledTools = new Set([searchToolsName, runToolName]);
 
     const result = await evaluatePolicies(
-      [{ toolCallName: "pm__whoami", toolCallArgs: "{}" }],
+      [{ toolCallName: "github__list_issues", toolCallArgs: "{}" }],
       agent.id,
       { teamIds: [] },
       true,
@@ -140,9 +140,9 @@ describe("evaluatePolicies", () => {
 
     expect(result).not.toBeNull();
     expect(result?.reason).toBe(TOOL_INVOCATION_NOT_DIRECTLY_CALLABLE_REASON);
-    expect(result?.blockedToolName).toBe("pm__whoami");
+    expect(result?.blockedToolName).toBe("github__list_issues");
     // The name is handed back so the retry is a single step, not a re-search.
-    expect(result?.contentMessage).toContain("pm__whoami");
+    expect(result?.contentMessage).toContain("github__list_issues");
     expect(result?.contentMessage).toContain(runToolName);
     expect(result?.contentMessage).toContain(searchToolsName);
     // The two halves of the old dead end must be gone: the wrong diagnosis and
@@ -184,7 +184,7 @@ describe("evaluatePolicies", () => {
     ]);
 
     const result = await evaluatePolicies(
-      [{ toolCallName: "pm__whoami", toolCallArgs: "{}" }],
+      [{ toolCallName: "github__list_issues", toolCallArgs: "{}" }],
       agent.id,
       { teamIds: [] },
       true,
@@ -218,7 +218,7 @@ describe("evaluatePolicies", () => {
     );
 
     const result = await evaluatePolicies(
-      [{ toolCallName: "pm__whoami", toolCallArgs: "{}" }],
+      [{ toolCallName: "github__list_issues", toolCallArgs: "{}" }],
       agent.id,
       { teamIds: [] },
       true,

@@ -5,6 +5,7 @@
  * request/response orchestration. Each function is independently testable.
  */
 
+import { createHash } from "node:crypto";
 import {
   credentialRequiresPerUserScope,
   hasArchestraTokenPrefix,
@@ -552,7 +553,11 @@ export async function authenticatePassthroughProxyRequest(params: {
     throw unauthenticated;
   }
 
-  await virtualKeyRateLimiter.check(request.ip);
+  const presentedCredential = passthroughToken ?? bearerToken ?? undefined;
+  await virtualKeyRateLimiter.check({
+    ip: request.ip,
+    credential: presentedCredential,
+  });
   try {
     if (passthroughToken) {
       await validatePassthroughVirtualKey({
@@ -588,7 +593,10 @@ export async function authenticatePassthroughProxyRequest(params: {
     throw unauthenticated;
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
-      await virtualKeyRateLimiter.recordFailure(request.ip);
+      await virtualKeyRateLimiter.recordFailure({
+        ip: request.ip,
+        credential: presentedCredential,
+      });
     }
     throw error;
   }
@@ -598,7 +606,18 @@ export async function authenticatePassthroughProxyRequest(params: {
 // Virtual Key Rate Limiter
 // =========================================================================
 
+/**
+ * Failures allowed per (IP, credential) pair before that pair is rejected.
+ * Sized for a client retrying one credential, not for a shared origin.
+ */
 const RATE_LIMIT_MAX_FAILURES = 10;
+/**
+ * Failures allowed from one IP across ALL credentials before the whole IP is
+ * rejected. This is the anti-enumeration backstop, so it must stay well above
+ * the per-credential threshold: a single misconfigured client should exhaust
+ * its own bucket long before it can exhaust its origin's.
+ */
+const RATE_LIMIT_MAX_FAILURES_PER_IP = 100;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 
 interface RateLimitEntry {
@@ -607,8 +626,23 @@ interface RateLimitEntry {
 
 /**
  * Distributed rate limiter for failed virtual API key validation attempts.
- * Prevents brute-force enumeration of valid tokens by tracking failures per
- * client IP and rejecting further attempts after exceeding the threshold.
+ *
+ * Counts failures in two buckets, both of which can reject a request:
+ *
+ *  - **(IP, credential)** at {@link RATE_LIMIT_MAX_FAILURES} — the bucket that
+ *    does the day-to-day work. Scoping to the presented credential means one
+ *    client hammering a revoked token cannot lock out a different client that
+ *    holds a valid one, which is the failure mode a shared origin produces:
+ *    behind a reverse proxy or LB (or, for requests the frontend rewrites to
+ *    the API, behind loopback) many unrelated callers share a single `ip`.
+ *  - **IP-wide** at {@link RATE_LIMIT_MAX_FAILURES_PER_IP} — retains the
+ *    brute-force ceiling the per-credential bucket alone would give up, since
+ *    an enumerator gets a fresh credential bucket for every token it guesses.
+ *
+ * The credential is reduced to a short salted-by-nothing SHA-256 fingerprint
+ * rather than used verbatim: cache keys are persisted to PostgreSQL by the
+ * shared CacheManager, and a bearer token (or any prefix long enough to
+ * identify one) must not be written there in the clear.
  *
  * Uses the PostgreSQL-backed CacheManager (Keyv) so rate limit state is
  * shared across all application pods. Entries expire automatically via TTL.
@@ -634,11 +668,17 @@ export class VirtualKeyRateLimiter {
     this.cacheManager = cacheManager;
   }
 
-  async check(ip: string): Promise<void> {
-    const entry = await this.cacheManager.get<RateLimitEntry>(this.key(ip));
-    if (!entry) return;
+  async check(params: { ip: string; credential?: string }): Promise<void> {
+    const { ip, credential } = params;
+    const [credentialEntry, ipEntry] = await Promise.all([
+      this.cacheManager.get<RateLimitEntry>(this.credentialKey(ip, credential)),
+      this.cacheManager.get<RateLimitEntry>(this.ipKey(ip)),
+    ]);
 
-    if (entry.count >= RATE_LIMIT_MAX_FAILURES) {
+    if (
+      (credentialEntry?.count ?? 0) >= RATE_LIMIT_MAX_FAILURES ||
+      (ipEntry?.count ?? 0) >= RATE_LIMIT_MAX_FAILURES_PER_IP
+    ) {
       throw new ApiError(
         429,
         "Too many failed virtual API key attempts. Please try again later.",
@@ -646,18 +686,32 @@ export class VirtualKeyRateLimiter {
     }
   }
 
-  async recordFailure(ip: string): Promise<void> {
-    const entry = await this.cacheManager.get<RateLimitEntry>(this.key(ip));
-    const newCount = (entry?.count ?? 0) + 1;
+  async recordFailure(params: {
+    ip: string;
+    credential?: string;
+  }): Promise<void> {
+    const { ip, credential } = params;
+    await Promise.all([
+      this.increment(this.credentialKey(ip, credential)),
+      this.increment(this.ipKey(ip)),
+    ]);
+  }
+
+  private async increment(key: AllowedCacheKey): Promise<void> {
+    const entry = await this.cacheManager.get<RateLimitEntry>(key);
     await this.cacheManager.set<RateLimitEntry>(
-      this.key(ip),
-      { count: newCount },
+      key,
+      { count: (entry?.count ?? 0) + 1 },
       RATE_LIMIT_WINDOW_MS,
     );
   }
 
-  private key(ip: string): AllowedCacheKey {
-    return `${CacheKey.VirtualKeyRateLimit}-${ip}`;
+  private credentialKey(ip: string, credential?: string): AllowedCacheKey {
+    return `${CacheKey.VirtualKeyRateLimit}-${ip}-${fingerprintCredential(credential)}`;
+  }
+
+  private ipKey(ip: string): AllowedCacheKey {
+    return `${CacheKey.VirtualKeyRateLimit}-ip-${ip}`;
   }
 }
 
@@ -863,4 +917,22 @@ function isJwtLike(token: string): boolean {
   const parts = token.split(".");
   if (parts.length !== 3) return false;
   return parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part));
+}
+
+/**
+ * Reduce a presented credential to a stable, non-reversible bucket id for the
+ * rate limiter's cache key.
+ *
+ * Truncated to 32 bits: enough that unrelated callers on a shared origin get
+ * their own bucket (the whole point of scoping by credential), short enough
+ * that the key stays readable in the cache table. A collision merely puts two
+ * credentials in one bucket — the same situation as before this scoping
+ * existed — so preimage resistance, not collision resistance, is what matters,
+ * and that is what keeps the token itself out of PostgreSQL.
+ *
+ * Requests that present no credential at all share the "none" bucket.
+ */
+function fingerprintCredential(credential: string | undefined): string {
+  if (!credential) return "none";
+  return createHash("sha256").update(credential).digest("hex").slice(0, 8);
 }

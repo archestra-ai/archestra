@@ -379,7 +379,10 @@ export async function handleLLMProxy<
   // credential — the provider auth still comes from the Authorization header.
   // Skipped for internal loopback auth overrides (in-app chat).
   if (passthroughVirtualKeyToken && !authOverride) {
-    await virtualKeyRateLimiter.check(request.ip);
+    await virtualKeyRateLimiter.check({
+      ip: request.ip,
+      credential: passthroughVirtualKeyToken,
+    });
     try {
       const passthroughResult = await validatePassthroughVirtualKey({
         tokenValue: passthroughVirtualKeyToken,
@@ -392,7 +395,10 @@ export async function handleLLMProxy<
       resolvedUser = await UserModel.getById(userId);
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 401) {
-        await virtualKeyRateLimiter.recordFailure(request.ip);
+        await virtualKeyRateLimiter.recordFailure({
+          ip: request.ip,
+          credential: passthroughVirtualKeyToken,
+        });
       }
       throw error;
     }
@@ -508,7 +514,10 @@ export async function handleLLMProxy<
     rawApiKey &&
     hasArchestraTokenPrefix(rawApiKey)
   ) {
-    await virtualKeyRateLimiter.check(request.ip);
+    await virtualKeyRateLimiter.check({
+      ip: request.ip,
+      credential: rawApiKey,
+    });
     try {
       const virtualResult = await validateVirtualApiKey(
         rawApiKey,
@@ -542,7 +551,10 @@ export async function handleLLMProxy<
         );
       } else {
         if (error instanceof ApiError && error.statusCode === 401) {
-          await virtualKeyRateLimiter.recordFailure(request.ip);
+          await virtualKeyRateLimiter.recordFailure({
+            ip: request.ip,
+            credential: rawApiKey,
+          });
         }
         throw error;
       }

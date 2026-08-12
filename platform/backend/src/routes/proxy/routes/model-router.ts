@@ -898,7 +898,10 @@ async function getModelRouterAuth(
     return getModelRouterOAuthClientAuth(bearerToken);
   }
 
-  await virtualKeyRateLimiter.check(request.ip);
+  await virtualKeyRateLimiter.check({
+    ip: request.ip,
+    credential: bearerToken,
+  });
   try {
     const resolved = await validateVirtualApiKeyToken(bearerToken);
     const mappings = await VirtualApiKeyModel.getProviderApiKeysForRouting(
@@ -923,7 +926,10 @@ async function getModelRouterAuth(
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
       try {
-        await virtualKeyRateLimiter.recordFailure(request.ip);
+        await virtualKeyRateLimiter.recordFailure({
+          ip: request.ip,
+          credential: bearerToken,
+        });
       } catch (rateLimitError) {
         logger.warn(
           {

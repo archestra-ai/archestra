@@ -718,10 +718,14 @@ The following environment variables can be used to configure Archestra Platform.
   - Must be an integer between `1` and `65535`; invalid values disable the listener with a warning
   - Helm: set `archestra.publicEndpointsPort` to inject this variable and expose the port on the Service
 
-- **`ARCHESTRA_TRUST_PROXY`** - Set this when Archestra runs behind a TLS-terminating reverse proxy (e.g. AWS ALB, nginx, Cloudflare) so that generated OAuth metadata and auth URLs use the external `https://` scheme rather than the internal `http://` scheme seen by the backend.
+- **`ARCHESTRA_TRUST_PROXY`** - Controls whether Archestra trusts the `X-Forwarded-*` headers a proxy sets. Set it when Archestra runs behind a TLS-terminating reverse proxy or load balancer (e.g. AWS ALB, nginx, Cloudflare).
   - Default: `false` (no proxy trust)
   - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
-  - Example: `ARCHESTRA_TRUST_PROXY=true`
+  - Example: `ARCHESTRA_TRUST_PROXY=35.191.0.0/16,130.211.0.0/22`
+  - Generated OAuth metadata and auth URLs use the external `https://` scheme instead of the internal `http://` scheme the backend sees.
+  - Each request resolves to the calling client's IP rather than the proxy's. Per-IP rate limits and audit `sourceIp` values follow that IP. Behind a load balancer they stay per-client instead of collapsing onto one shared address.
+  - Prefer the IP/CIDR list over `true`. With `true`, Archestra trusts a client-supplied `X-Forwarded-For` header, so a caller can choose the IP it is rate-limited and audited under. List your proxy's own ranges instead.
+  - Any non-`false` value also makes Archestra accept an `X-Forwarded-Host` header as its public origin without checking it against `ARCHESTRA_API_BASE_URL`. Set it only when your proxy overwrites that header on the way in.
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
   - Default: `70MB` (73400320 bytes)

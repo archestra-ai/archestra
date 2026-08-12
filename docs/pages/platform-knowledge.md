@@ -190,8 +190,8 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 | GitHub       | Supported             |
 | Jira         | Supported             |
 | Google Drive | Supported             |
-| Salesforce   | Planned               |
-| SharePoint   | Planned               |
+| Salesforce   | Supported             |
+| SharePoint   | Supported             |
 | Asana        | Not supported         |
 | Dropbox      | Not supported         |
 | GitLab       | Not supported         |
@@ -207,6 +207,8 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 
 - **Jira and Confluence Cloud** only return another user's email through the product REST API when that user's Atlassian profile has email visibility set to **"Anyone"**. Add an Atlassian **organization admin API key** to the connector credentials to read managed accounts' emails.
 - **GitHub** only exposes an email the user has made **public on their profile**; no token scope reveals a private email.
+- **SharePoint** returns SharePoint user logins directly. Expanding a Microsoft 365 group or a SharePoint site group to its members needs the extra app permissions listed under [SharePoint](#sharepoint).
+- **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
 
 **Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
 
@@ -385,6 +387,20 @@ Where to find each value:
 - **Client Secret** — the secret **Value** from **Certificates & secrets** (not the secret ID).
 - **Site URL** — the exact SharePoint site web URL, not the display name.
 
+**Auto-sync permissions.** Each document library is one permission scope, and an item (file or folder) that breaks permission inheritance becomes its own scope — a document inherits its nearest such ancestor. Site pages follow the site's default library audience; per-page unique sharing is not modeled. Anonymous sharing links map to everyone in your Archestra organization; "people in your organization" links expand to the tenant's active users.
+
+Group grants (Microsoft 365 / Entra groups and SharePoint site groups) carry the group's identity, and each permission sync also snapshots those groups' member rosters — so the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream (or does not match an Archestra user's email) can be assigned manually from the Users tab. Direct grantees appear there too, under the synthetic `direct-grants` group. The roster covers groups granted on library roots; a group granted only on a single item is listed in the Groups tab but resolves no members until it also holds a library-level grant.
+
+`Sites.Read.All` covers library and item grants. Three more application permissions unlock more, progressively:
+
+| Extra permission | Unlocks |
+| ---------------- | ------- |
+| `User.Read.All` | User grants expand to emails, and organization-wide links expand to the tenant's active users. |
+| `GroupMember.Read.All` | Microsoft 365 / Entra group member rosters (the Users and Groups tabs, and group-based document access). |
+| `Sites.FullControl.All` | SharePoint site-group member rosters through the site's REST API, and permission sync switches to cheaper sharing-aware delta runs. |
+
+Each tier is detected at runtime: without it, that kind of grant or roster drops (fail-closed) and the rest of the sync proceeds.
+
 ### OneDrive
 
 Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (see [Image Embedding](#image-embedding)), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
@@ -547,6 +563,10 @@ Example advanced config:
 ```
 
 `Id`, `Name`, and `LastModifiedDate` are always included automatically.
+
+**Auto-sync permissions.** Each object is one permission scope, decided by its organization-wide default: a public object grants every active Salesforce user; a private object resolves each record individually from its owner and its share table (manual, team, and sharing-rule grants). A contact inherits its parent account's audience. Restriction rules, territory hierarchies, and high-volume portal shares are not modeled — they only ever hide content, never over-grant. The same username/password login is used for everything; no extra credential or scope is needed. Private objects on very large orgs resolve per record, so give those connectors a longer permission-sync interval.
+
+Every permission sync also snapshots the org's groups and queues with their (recursively expanded) memberships, plus record owners and per-user share grantees under the synthetic `direct-grants` group — so the connector's **Users** and **Groups** tabs show every grant-holder with their assignment status, and an account whose email is hidden (or matches no Archestra user's email) can be assigned manually from the Users tab. Inactive users stay visible in the roster but never resolve to access.
 
 ### Web Crawler
 

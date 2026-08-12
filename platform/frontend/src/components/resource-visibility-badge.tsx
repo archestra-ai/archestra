@@ -20,6 +20,7 @@ export function ResourceVisibilityBadge({
   authorName,
   currentUserId,
   showSelfAsMe,
+  compact = false,
 }: {
   scope: ResourceVisibilityScope | undefined;
   teams: TeamInfo[] | undefined;
@@ -48,6 +49,14 @@ export function ResourceVisibilityBadge({
    * where a "Me" pill on every row is noise.
    */
   showSelfAsMe: boolean;
+  /**
+   * Name the scope rather than enumerate it: one "Team" / "N teams" pill in
+   * place of a pill per team. For surfaces where the badge is one item among
+   * many competing for a single line — a card's metadata row — and the point is
+   * which kind of resource this is, not the roster. The names stay reachable in
+   * the tooltip. Columns headed "Accessible to" want the roster; leave it off.
+   */
+  compact?: boolean;
 }) {
   // An unknown scope says nothing rather than guessing. Falling through to the
   // team branch would label a resource "Team" on no evidence, which is worse
@@ -58,9 +67,17 @@ export function ResourceVisibilityBadge({
 
   if (scope === "org") {
     return (
-      <Badge variant="outline" className={cn(scopeStyles.org, "gap-1 text-xs")}>
-        <OrgIcon className="h-3 w-3" />
-        Organization
+      <Badge
+        variant="outline"
+        title="Organization"
+        className={cn(
+          scopeStyles.org,
+          BADGE_WIDTH,
+          "inline-flex items-center gap-1 overflow-hidden text-xs",
+        )}
+      >
+        <OrgIcon className="h-3 w-3 shrink-0" />
+        <span className="truncate">Organization</span>
       </Badge>
     );
   }
@@ -84,9 +101,12 @@ export function ResourceVisibilityBadge({
       return (
         <Badge
           variant="outline"
+          // `title` so a name the layout had to truncate is still readable.
+          title={displayName ?? undefined}
           className={cn(
             scopeStyles.personal,
-            "inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs",
+            BADGE_WIDTH,
+            "inline-flex items-center gap-1 overflow-hidden text-xs",
           )}
         >
           <PersonalIcon className="h-3 w-3 shrink-0" />
@@ -108,7 +128,8 @@ export function ResourceVisibilityBadge({
               aria-label={label}
               className={cn(
                 scopeStyles.personal,
-                "inline-flex max-w-[180px] cursor-help items-center gap-1 overflow-hidden text-xs",
+                BADGE_WIDTH,
+                "inline-flex cursor-help items-center gap-1 overflow-hidden text-xs",
               )}
             >
               <UserRoundCheck className="h-3 w-3 shrink-0" />
@@ -124,15 +145,36 @@ export function ResourceVisibilityBadge({
     );
   }
 
-  if (!teams || teams.length === 0) {
-    return (
+  if (!teams || teams.length === 0 || compact) {
+    // Named, not enumerated. With no teams to name there is nothing else to
+    // say; under `compact` the caller has asked for the scope only, and the
+    // roster moves to the tooltip.
+    const names = (teams ?? []).map((team) => team.name);
+    const label = names.length > 1 ? `${names.length} teams` : "Team";
+    const badge = (
       <Badge
         variant="outline"
-        className={cn(scopeStyles.team, "gap-1 text-xs")}
+        title={names.length > 0 ? names.join(", ") : "Team"}
+        className={cn(
+          scopeStyles.team,
+          BADGE_WIDTH,
+          "inline-flex items-center gap-1 overflow-hidden text-xs",
+        )}
       >
-        <TeamIcon className="h-3 w-3" />
-        Team
+        <TeamIcon className="h-3 w-3 shrink-0" />
+        <span className="truncate">{label}</span>
       </Badge>
+    );
+    if (names.length === 0) {
+      return badge;
+    }
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{badge}</TooltipTrigger>
+          <TooltipContent>{names.join(", ")}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 
@@ -147,6 +189,14 @@ export function ResourceVisibilityBadge({
     />
   );
 }
+
+/**
+ * Never wider than whatever contains it, and never more than 180px even when
+ * there is room. The container half matters: this badge sits in fixed-layout
+ * table cells narrower than 180px, where a bare `max-w-[180px]` let it render
+ * over the next column instead of truncating inside its own.
+ */
+const BADGE_WIDTH = "max-w-[min(100%,180px)]";
 
 const OrgIcon = SCOPE_META.org.icon;
 const PersonalIcon = SCOPE_META.personal.icon;
@@ -169,9 +219,12 @@ function PillRow({ pills, style }: { pills: Pill[]; style: string }) {
         <Badge
           key={key}
           variant="outline"
+          // `title` so a name the layout had to truncate is still readable.
+          title={name}
           className={cn(
             style,
-            "inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs",
+            BADGE_WIDTH,
+            "inline-flex items-center gap-1 overflow-hidden text-xs",
           )}
         >
           <Icon className="h-3 w-3 shrink-0" />

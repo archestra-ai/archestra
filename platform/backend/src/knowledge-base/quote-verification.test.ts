@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
 import {
   buildChunkRef,
   type CitedQuote,
   extractCitedQuotes,
+} from "@archestra/shared";
+import { describe, expect, it } from "vitest";
+import {
   type KbChunkForQuoteCheck,
   readKbChunksFromToolResult,
   verifyQuotes,

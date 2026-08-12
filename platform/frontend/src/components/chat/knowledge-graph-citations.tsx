@@ -2,6 +2,7 @@
 
 import {
   type ChatMessagePart,
+  type CitationSourceEntry,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
@@ -122,22 +123,75 @@ function SourceIcon({ connectorType }: { connectorType: string | null }) {
 
 export interface KnowledgeGraphCitationsProps {
   parts: ChatMessagePart[];
+  /**
+   * Quote entries folded out of the answer's Sources block
+   * (foldCitationSources). When a chip's document has entries, the chip
+   * expands to show the verbatim quotes backing the superscript markers.
+   */
+  citedQuotes?: CitationSourceEntry[];
 }
 
 const VISIBLE_COUNT = 3;
 
-function CitationChip({ citation }: { citation: ExtractedCitation }) {
+const SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+
+function markerSuperscript(marker: number): string {
+  return String(marker)
+    .split("")
+    .map((d) => SUPERSCRIPT_DIGITS[Number(d)] ?? d)
+    .join("");
+}
+
+function CitationChip({
+  citation,
+  quotes,
+  expanded,
+  onToggle,
+}: {
+  citation: ExtractedCitation;
+  quotes: CitationSourceEntry[];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const content = (
     <>
       <SourceIcon connectorType={citation.connectorType} />
       <span className="font-medium text-xs text-foreground truncate max-w-[200px]">
         {citation.title}
       </span>
-      {citation.sourceUrl && (
-        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+      {quotes.length > 0 ? (
+        <>
+          <span className="text-muted-foreground shrink-0">
+            {quotes.map((q) => markerSuperscript(q.marker)).join(" ")}
+          </span>
+          {expanded ? (
+            <ChevronUp className="h-3 w-3 text-muted-foreground shrink-0" />
+          ) : (
+            <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+          )}
+        </>
+      ) : (
+        citation.sourceUrl && (
+          <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+        )
       )}
     </>
   );
+
+  // A chip whose document has backing quotes toggles them open; the source
+  // link moves into the expanded panel so the chip stays a single control.
+  if (quotes.length > 0) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="group inline-flex items-center gap-1.5 rounded-md border bg-card px-2 py-1.5 text-xs transition-colors hover:bg-accent hover:border-accent-foreground/20 max-w-[260px]"
+      >
+        {content}
+      </button>
+    );
+  }
 
   if (citation.sourceUrl) {
     return (
@@ -161,17 +215,45 @@ function CitationChip({ citation }: { citation: ExtractedCitation }) {
 
 export function KnowledgeGraphCitations({
   parts,
+  citedQuotes,
 }: KnowledgeGraphCitationsProps) {
   const [expanded, setExpanded] = useState(false);
+  const [openDocIds, setOpenDocIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const citations = extractCitations(parts);
 
   if (citations.length === 0) return null;
+
+  const quotesByDoc = new Map<string, CitationSourceEntry[]>();
+  for (const entry of citedQuotes ?? []) {
+    const list = quotesByDoc.get(entry.documentId) ?? [];
+    list.push(entry);
+    quotesByDoc.set(entry.documentId, list);
+  }
+
+  const toggleDoc = (documentId: string) => {
+    setOpenDocIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(documentId)) {
+        next.delete(documentId);
+      } else {
+        next.add(documentId);
+      }
+      return next;
+    });
+  };
 
   const hasMore = citations.length > VISIBLE_COUNT;
   const visibleCitations = expanded
     ? citations
     : citations.slice(0, VISIBLE_COUNT);
   const hiddenCount = citations.length - VISIBLE_COUNT;
+  const openCitations = visibleCitations.filter(
+    (citation) =>
+      openDocIds.has(citation.documentId) &&
+      (quotesByDoc.get(citation.documentId)?.length ?? 0) > 0,
+  );
 
   return (
     <div className="mt-3 space-y-1.5">
@@ -180,7 +262,13 @@ export function KnowledgeGraphCitations({
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
         {visibleCitations.map((citation) => (
-          <CitationChip key={citation.documentId} citation={citation} />
+          <CitationChip
+            key={citation.documentId}
+            citation={citation}
+            quotes={quotesByDoc.get(citation.documentId) ?? []}
+            expanded={openDocIds.has(citation.documentId)}
+            onToggle={() => toggleDoc(citation.documentId)}
+          />
         ))}
         {hasMore && (
           <Button
@@ -191,18 +279,48 @@ export function KnowledgeGraphCitations({
           >
             {expanded ? (
               <>
-                Show less
+                <span>Show less</span>
                 <ChevronUp className="ml-1 h-3 w-3" />
               </>
             ) : (
               <>
-                +{hiddenCount} more
+                <span>+{hiddenCount} more</span>
                 <ChevronDown className="ml-1 h-3 w-3" />
               </>
             )}
           </Button>
         )}
       </div>
+      {openCitations.map((citation) => (
+        <div
+          key={citation.documentId}
+          className="rounded-md border bg-card px-3 py-2 text-xs space-y-1"
+        >
+          <p className="font-medium text-foreground">{citation.title}</p>
+          {(quotesByDoc.get(citation.documentId) ?? []).map((entry) => (
+            <p
+              key={`${entry.marker}-${entry.ref}`}
+              className="text-muted-foreground"
+            >
+              <span className="font-medium text-foreground">
+                {markerSuperscript(entry.marker)}
+              </span>
+              <span> “{entry.quote}”</span>
+            </p>
+          ))}
+          {citation.sourceUrl && (
+            <a
+              href={citation.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              <span>Open source</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

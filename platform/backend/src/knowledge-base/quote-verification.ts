@@ -21,24 +21,22 @@
  * surface — the one place Archestra sees the model's answer — so external MCP
  * clients that answer out of sight stay unverified.
  *
- * Pure and dependency-free by design, so the matching behaviour is unit-testable
- * in isolation.
+ * The citation format itself — the instruction, the extraction pattern, and the
+ * display-side folding — lives in `@archestra/shared` (citation-quotes.ts) so
+ * this verifier and the chat frontend parse the exact same convention. This
+ * module re-exports the pieces its existing importers use.
  */
+
+import {
+  type CitedQuote,
+  extractCitedQuotes,
+  normalizeQuoteForMatch,
+} from "@archestra/shared";
 
 /** A chunk a returned citation points at: its `ref` and the text the model saw. */
 export interface KbChunkForQuoteCheck {
   ref: string;
   content: string;
-}
-
-/**
- * A `"quote" — ref` pair extracted from the model's answer.
- *
- * @public — part of the verify result shape; asserted directly in unit tests.
- */
-export interface CitedQuote {
-  quote: string;
-  ref: string;
 }
 
 /** @public — return shape of verifyQuotes; asserted directly in unit tests. */
@@ -65,45 +63,6 @@ export interface QuoteVerificationResult {
 }
 
 /**
- * The instruction embedded in the `query_knowledge_sources` tool result so it
- * reaches the model exactly when chunks are returned. Kept next to the extractor
- * below so the requested format and the parser cannot drift apart.
- */
-export const QUOTE_CITATION_INSTRUCTION =
-  'When you state a fact drawn from these results, mark it inline with a numbered reference like [1], and list every reference in a "Sources" section at the end of your answer. Format each source line exactly as: [1] "<verbatim quote>" — <ref>, where the quote is a short excerpt (one sentence or fragment, at most 15 words) copied exactly as it appears in the supporting chunk\'s content, and <ref> is that chunk\'s "ref" value. Cite each distinct fact once and never repeat a quote.';
-
-/** Builds the stable, model-visible citation anchor for a chunk. */
-export function buildChunkRef(documentId: string, chunkIndex: number): string {
-  return `${documentId}#${chunkIndex}`;
-}
-
-/**
- * Extracts `"quote" — ref` pairs written in the {@link QUOTE_CITATION_INSTRUCTION}
- * convention — canonically `[n] "quote" — ref` lines in a trailing Sources
- * section, but position-independent: any `"quote" — ref` adjacency in the
- * answer parses, so inline or blockquoted citations still count. Tolerant of
- * the variance models introduce: straight or curly quotes, em/en/hyphen
- * dashes, and an optional backtick/bracket around the ref. Duplicate
- * (quote, ref) pairs are collapsed so repetition does not inflate counts.
- *
- * @public — exercised directly by unit tests; also used by verifyQuotes below.
- */
-export function extractCitedQuotes(answerText: string): CitedQuote[] {
-  const seen = new Set<string>();
-  const quotes: CitedQuote[] = [];
-  for (const match of answerText.matchAll(CITATION_PATTERN)) {
-    const quote = match[1]?.trim();
-    const ref = match[2]?.trim();
-    if (!quote || !ref) continue;
-    const key = `${normalizeForMatch(quote)}\u0000${ref.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    quotes.push({ quote, ref });
-  }
-  return quotes;
-}
-
-/**
  * Verifies each cited quote against the chunk its ref names. An unresolved ref
  * is never silently forgiven: the quote is classified as a mis-citation when
  * its text exists in another returned chunk, a fabrication when it exists
@@ -125,7 +84,7 @@ export function verifyQuotes(params: {
   const normalizedByRef = new Map<string, string[]>();
   const allNormalized: string[] = [];
   for (const chunk of chunks) {
-    const normalized = normalizeForMatch(stripTitlePrefix(chunk.content));
+    const normalized = normalizeQuoteForMatch(stripTitlePrefix(chunk.content));
     const ref = chunk.ref.toLowerCase();
     const contents = normalizedByRef.get(ref) ?? [];
     if (!contents.includes(normalized)) contents.push(normalized);
@@ -151,7 +110,7 @@ export function verifyQuotes(params: {
   const unverifiable: CitedQuote[] = [];
 
   for (const cited of extracted) {
-    const normalizedQuote = normalizeForMatch(cited.quote);
+    const normalizedQuote = normalizeQuoteForMatch(cited.quote);
 
     const scoped = normalizedByRef.get(cited.ref.toLowerCase());
     if (scoped !== undefined) {
@@ -238,19 +197,6 @@ export function readKbChunksFromToolResult(result: {
 const MIN_BROAD_SEARCH_QUOTE_CHARS = 12;
 
 /**
- * `"quote" — ref` where ref is a `documentId#chunkIndex` anchor. The quote body
- * may itself contain double quotes (source text routinely does): the lazy body
- * grows until a closing double quote immediately followed by the dash and a
- * ref-shaped token, so only the delimiter that actually precedes the citation
- * anchor terminates it — an embedded quote cannot end the match early and
- * truncate what gets verified. The body still excludes newlines; the ref is a
- * uuid-shaped token followed by `#<index>`. A Sources line's leading `[n]`
- * marker sits before the opening quote, outside the match.
- */
-const CITATION_PATTERN =
-  /["“”]([^\n]{1,400}?)["“”]\s*[—–-]{1,2}\s*[`[(]?\s*([0-9a-fA-F][0-9a-fA-F-]{7,}#\d+)/g;
-
-/**
  * Chunks are stored as `TITLE: <title>\n\n<body>` (see chunker.ts). The title is
  * metadata Archestra injects, not source text, so a quote should be checked
  * against the body — strip the prefix before matching.
@@ -258,22 +204,6 @@ const CITATION_PATTERN =
 function stripTitlePrefix(content: string): string {
   const match = /^TITLE: .*?\n\n/s.exec(content);
   return match ? content.slice(match[0].length) : content;
-}
-
-/**
- * Folds away the differences a model introduces when it copies a quote —
- * whitespace runs, smart quotes, dash variants, and case — so matching compares
- * the words, not the typography.
- */
-function normalizeForMatch(text: string): string {
-  return text
-    .normalize("NFKC")
-    .replace(/[‘’‚‛]/g, "'")
-    .replace(/[“”„‟]/g, '"')
-    .replace(/[–—―]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
 }
 
 /**

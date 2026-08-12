@@ -5,6 +5,7 @@ import {
   type BlockedToolPart,
   type DualLlmPart,
   extractMcpToolError,
+  foldCitationSources,
   type PartialUIMessage,
   type PolicyDeniedPart,
 } from "@archestra/shared";
@@ -335,6 +336,14 @@ const MessageThread = ({
                               }
                             }
 
+                            // Fold the machine-oriented Sources block (quotes +
+                            // chunk refs for the verifier) out of the visible
+                            // text; the citation chips re-present the quotes.
+                            const citationFold =
+                              citationParts && message.role === "assistant"
+                                ? foldCitationSources(part.text)
+                                : null;
+
                             return (
                               <Fragment key={partKey}>
                                 {shouldRenderUnsafeContextDivider && (
@@ -352,11 +361,17 @@ const MessageThread = ({
                                     {message.role === "user" ? (
                                       <UserMessageText text={part.text} />
                                     ) : (
-                                      <Response>{part.text}</Response>
+                                      <Response>
+                                        {citationFold &&
+                                        citationFold.entries.length > 0
+                                          ? citationFold.displayText
+                                          : part.text}
+                                      </Response>
                                     )}
                                     {citationParts && (
                                       <KnowledgeGraphCitations
                                         parts={citationParts}
+                                        citedQuotes={citationFold?.entries}
                                       />
                                     )}
                                   </MessageContent>

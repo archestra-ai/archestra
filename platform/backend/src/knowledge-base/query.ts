@@ -1,4 +1,8 @@
-import { addNomicTaskPrefix, type TextSearchLanguage } from "@archestra/shared";
+import {
+  addNomicTaskPrefix,
+  buildChunkRef,
+  type TextSearchLanguage,
+} from "@archestra/shared";
 import config from "@/config";
 import { isDbStatementTimeoutError } from "@/database/retry";
 import logger from "@/logging";
@@ -22,7 +26,6 @@ import {
   expandQuery,
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT,
 } from "./query-expansion";
-import { buildChunkRef } from "./quote-verification";
 import rerank from "./reranker";
 import reciprocalRankFusion from "./rrf";
 

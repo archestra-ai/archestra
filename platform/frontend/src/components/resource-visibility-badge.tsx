@@ -20,6 +20,7 @@ export function ResourceVisibilityBadge({
   authorName,
   currentUserId,
   showSelfAsMe,
+  className,
 }: {
   scope: ResourceVisibilityScope | undefined;
   teams: TeamInfo[] | undefined;
@@ -48,6 +49,13 @@ export function ResourceVisibilityBadge({
    * where a "Me" pill on every row is noise.
    */
   showSelfAsMe: boolean;
+  /**
+   * Merged onto the rendered badge. Lets a caller whose layout is tighter than
+   * the default 180px cap hand the badge its own budget — `max-w-full` inside a
+   * `min-w-0` flex cell makes the name the part that truncates, instead of the
+   * badge holding its width and pushing its row's siblings out of view.
+   */
+  className?: string;
 }) {
   // An unknown scope says nothing rather than guessing. Falling through to the
   // team branch would label a resource "Team" on no evidence, which is worse
@@ -58,9 +66,17 @@ export function ResourceVisibilityBadge({
 
   if (scope === "org") {
     return (
-      <Badge variant="outline" className={cn(scopeStyles.org, "gap-1 text-xs")}>
-        <OrgIcon className="h-3 w-3" />
-        Organization
+      <Badge
+        variant="outline"
+        title="Organization"
+        className={cn(
+          scopeStyles.org,
+          "inline-flex items-center gap-1 overflow-hidden text-xs",
+          className,
+        )}
+      >
+        <OrgIcon className="h-3 w-3 shrink-0" />
+        <span className="truncate">Organization</span>
       </Badge>
     );
   }
@@ -84,9 +100,12 @@ export function ResourceVisibilityBadge({
       return (
         <Badge
           variant="outline"
+          // `title` so a name the layout had to truncate is still readable.
+          title={displayName ?? undefined}
           className={cn(
             scopeStyles.personal,
             "inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs",
+            className,
           )}
         >
           <PersonalIcon className="h-3 w-3 shrink-0" />
@@ -109,6 +128,7 @@ export function ResourceVisibilityBadge({
               className={cn(
                 scopeStyles.personal,
                 "inline-flex max-w-[180px] cursor-help items-center gap-1 overflow-hidden text-xs",
+                className,
               )}
             >
               <UserRoundCheck className="h-3 w-3 shrink-0" />
@@ -128,10 +148,15 @@ export function ResourceVisibilityBadge({
     return (
       <Badge
         variant="outline"
-        className={cn(scopeStyles.team, "gap-1 text-xs")}
+        title="Team"
+        className={cn(
+          scopeStyles.team,
+          "inline-flex items-center gap-1 overflow-hidden text-xs",
+          className,
+        )}
       >
-        <TeamIcon className="h-3 w-3" />
-        Team
+        <TeamIcon className="h-3 w-3 shrink-0" />
+        <span className="truncate">Team</span>
       </Badge>
     );
   }
@@ -144,6 +169,7 @@ export function ResourceVisibilityBadge({
         icon: TeamIcon,
       }))}
       style={scopeStyles.team}
+      className={className}
     />
   );
 }
@@ -159,7 +185,15 @@ type Pill = { key: string; name: string; icon: typeof TeamIcon };
 const MAX_PILLS_TO_SHOW = 3;
 
 /** A row of name pills, overflowing into a "+N more" tooltip. */
-function PillRow({ pills, style }: { pills: Pill[]; style: string }) {
+function PillRow({
+  pills,
+  style,
+  className,
+}: {
+  pills: Pill[];
+  style: string;
+  className?: string;
+}) {
   const visible = pills.slice(0, MAX_PILLS_TO_SHOW);
   const remaining = pills.slice(MAX_PILLS_TO_SHOW);
 
@@ -169,9 +203,12 @@ function PillRow({ pills, style }: { pills: Pill[]; style: string }) {
         <Badge
           key={key}
           variant="outline"
+          // `title` so a name the layout had to truncate is still readable.
+          title={name}
           className={cn(
             style,
             "inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs",
+            className,
           )}
         >
           <Icon className="h-3 w-3 shrink-0" />

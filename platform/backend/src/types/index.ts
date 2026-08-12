@@ -48,6 +48,7 @@ export * from "./invitation";
 export * from "./kb-chunk";
 export * from "./kb-container-acl";
 export * from "./kb-document";
+export * from "./kb-external-group";
 export * from "./kb-external-user-group";
 export * from "./knowledge-base";
 export * from "./knowledge-base-connector";

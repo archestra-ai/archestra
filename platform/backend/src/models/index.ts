@@ -54,6 +54,7 @@ export { default as InvitationModel } from "./invitation";
 export { default as KbChunkModel } from "./kb-chunk";
 export { default as KbContainerAclModel } from "./kb-container-acl";
 export { default as KbDocumentModel } from "./kb-document";
+export { default as KbExternalGroupModel } from "./kb-external-group";
 export { default as KbExternalUserGroupModel } from "./kb-external-user-group";
 export { default as KbMemberOverrideModel } from "./kb-member-override";
 export { default as KnowledgeBaseModel } from "./knowledge-base";

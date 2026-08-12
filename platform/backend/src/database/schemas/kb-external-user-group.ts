@@ -30,6 +30,10 @@ import knowledgeBaseConnectorsTable from "./knowledge-base-connector";
  * `stale` implements the completion-gated sweep: a run marks every row stale,
  * re-upserts live memberships (clearing `stale`), then deletes the rows still
  * stale after enumeration finishes — so revoked memberships disappear.
+ *
+ * This table holds membership EDGES only. Group-level facts (display names,
+ * existence of empty groups) live in `kb_external_groups` — see its schema
+ * for the map of all group tables by identity domain.
  */
 const kbExternalUserGroupsTable = pgTable(
   "kb_external_user_groups",

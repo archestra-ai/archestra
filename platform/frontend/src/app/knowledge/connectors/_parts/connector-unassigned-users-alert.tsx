@@ -111,6 +111,8 @@ function hiddenEmailFix(connectorType: ConnectorType): string {
       return "Add an Atlassian organization admin API key to the connector credentials to fetch managed accounts' emails.";
     case "github":
       return "Ask users to add a public email to their GitHub profile.";
+    case "gitlab":
+      return "Ask users to add a public email to their GitLab profile.";
     default:
       return "User emails resolve automatically once the source makes them visible.";
   }

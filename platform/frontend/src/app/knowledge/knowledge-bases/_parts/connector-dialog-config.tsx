@@ -341,6 +341,7 @@ export function getConnectorTypeLabel(type: ConnectorType): string {
  */
 const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "github",
+  "gitlab",
   "confluence",
   "jira",
   "mfiles",
@@ -407,6 +408,8 @@ export function getPermissionSyncCredentialNote(
   switch (type) {
     case "github":
       return "Auto-sync permissions matches members by their public GitHub profile email. No token scope reveals a private email, so members without a public profile email are recorded but stay unresolvable.";
+    case "gitlab":
+      return "Auto-sync permissions matches project members by their public GitLab profile email. A non-admin token cannot read a private email, so members without a public profile email are recorded but stay unresolvable.";
     default:
       return null;
   }

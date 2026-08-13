@@ -19,8 +19,19 @@ vi.mock("@/config", async () =>
 );
 
 const ASSET_NAME = "archestra-m-files-vaf-add-on.mfappx";
+const VERSIONED_ASSET_NAME = "archestra-m-files-vaf-add-on-1.0.0.mfappx";
 const ADD_ON_TAG = "m-files-vaf-add-on-v1.0.0";
 const ADD_ON_ASSET_URL = `https://github.com/archestra-ai/archestra/releases/download/${ADD_ON_TAG}/${ASSET_NAME}`;
+const VERSIONED_ASSET_URL = `https://github.com/archestra-ai/archestra/releases/download/${ADD_ON_TAG}/${VERSIONED_ASSET_NAME}`;
+
+/** An add-on release as CI publishes it: stable-named + versioned assets. */
+const ADD_ON_RELEASE = {
+  tag_name: ADD_ON_TAG,
+  assets: [
+    { name: VERSIONED_ASSET_NAME, browser_download_url: VERSIONED_ASSET_URL },
+    { name: ASSET_NAME, browser_download_url: ADD_ON_ASSET_URL },
+  ],
+};
 
 /**
  * GitHub releases stub: `listed` is the releases list (newest first) the
@@ -78,13 +89,28 @@ describe("GET /api/mfiles-vaf-add-on/distribution", () => {
     });
   }
 
-  test("resolves the newest release that actually carries the package", async () => {
+  test("download link prefers the versioned asset of the newest release carrying the package", async () => {
     stubGitHubReleases({
       listed: [
         // Newest release is the platform's, which never carries the add-on
         // (releases are immutable, the package publishes on its own track) —
         // must be skipped, not blindly linked.
         { tag_name: "platform-v1.3.35", assets: [] },
+        ADD_ON_RELEASE,
+      ],
+    });
+    const response = await probe();
+    expect(response.statusCode).toBe(200);
+    // The versioned twin: a downloaded file names its version, and two
+    // versions don't overwrite each other on disk.
+    expect(response.json()).toEqual({
+      packageDownloadUrl: VERSIONED_ASSET_URL,
+    });
+  });
+
+  test("download link falls back to the stable asset when no versioned twin exists", async () => {
+    stubGitHubReleases({
+      listed: [
         {
           tag_name: ADD_ON_TAG,
           assets: [
@@ -108,23 +134,16 @@ describe("GET /api/mfiles-vaf-add-on/distribution", () => {
     return app.inject({ method: "GET", url: "/api/mfiles-vaf-add-on/script" });
   }
 
-  test("script bootstrap installs the released package, ref'd to its tag", async () => {
-    stubGitHubReleases({
-      listed: [
-        {
-          tag_name: ADD_ON_TAG,
-          assets: [
-            { name: ASSET_NAME, browser_download_url: ADD_ON_ASSET_URL },
-          ],
-        },
-      ],
-    });
+  test("script bootstrap installs the stable-named package, ref'd to its tag", async () => {
+    stubGitHubReleases({ listed: [ADD_ON_RELEASE] });
     const response = await fetchBootstrap();
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("text/plain");
     expect(response.body).toContain(
       "Invoke-RestMethod 'http://localhost:3000/scripts/install-m-files-vaf-add-on.ps1'",
     );
+    // The command's download is a temp file whose name never surfaces — it
+    // stays on the stable asset, not the versioned twin the form links.
     expect(response.body).toContain(`PackageUrl = '${ADD_ON_ASSET_URL}'`);
     expect(response.body).toContain(`Ref = '${ADD_ON_TAG}'`);
   });

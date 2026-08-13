@@ -335,8 +335,8 @@ function MFilesVafAddOnSection() {
         per connected M-Files Vault by vault administrator.{" "}
         <ExternalDocsLink
           href={getFrontendDocsUrl(
-            DocsPage.PlatformMfilesConnector,
-            "vaf-add-on-installation-and-access",
+            DocsPage.PlatformKnowledge,
+            "m-files-vaf-add-on",
           )}
           className="text-sm"
         >

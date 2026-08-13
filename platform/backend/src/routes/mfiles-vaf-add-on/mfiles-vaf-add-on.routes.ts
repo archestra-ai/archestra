@@ -244,7 +244,10 @@ function githubHeaders(): Record<string, string> {
  *    releases are immutable, so the package can never be attached to the
  *    platform release, which publishes before the add-on build runs.
  *    Compatibility is negotiated by the extension protocol's schema version,
- *    not by pairing release versions.
+ *    not by pairing release versions. The install command fetches the
+ *    stable-named asset (a temp file — the name never surfaces), while the
+ *    download link prefers the versioned twin so a file a person keeps says
+ *    which version it is.
  * 3. Installer defaults, no download link.
  */
 async function resolveVafAddOnDistribution(): Promise<VafAddOnDistribution> {
@@ -262,7 +265,12 @@ async function resolveVafAddOnDistribution(): Promise<VafAddOnDistribution> {
   }
 
   const release = await resolveNewestReleaseAsset();
-  if (release) return { install: release, downloadUrl: release.packageUrl };
+  if (release) {
+    return {
+      install: { packageUrl: release.packageUrl, ref: release.ref },
+      downloadUrl: release.downloadUrl,
+    };
+  }
   return { install: null, downloadUrl: null };
 }
 
@@ -386,29 +394,40 @@ async function fetchCiPackageBytes(): Promise<Buffer | null> {
   }
 }
 
-/**
- * The add-on package on the newest release that actually carries it, as an
- * install source: the verified asset URL, plus the release tag as the
- * build-from-source fallback ref (add-on release tags are ordinary git tags
- * on main commits). A scan is the only safe lookup — `releases/latest` is
- * the platform release, which cannot carry the package — so a link is only
- * offered when the asset is verified to exist. Definitive GitHub answers are
- * cached; transient failures are not, so the next probe retries.
- */
-async function resolveNewestReleaseAsset(): Promise<{
+interface VafAddOnReleaseAssets {
+  /** Stable-named asset: the install command's package source. */
   packageUrl: string;
+  /**
+   * What the form's download button serves: the versioned twin when the
+   * release carries one — a downloaded file then says which version it is,
+   * and two versions don't overwrite each other on disk — else the
+   * stable-named asset.
+   */
+  downloadUrl: string;
+  /** Release tag; doubles as the build-from-source fallback git ref. */
   ref: string;
-} | null> {
-  // `-install`: the previous shape cached under `-newest` was a bare URL
-  // string, indistinguishable from "none"-style sentinels for this shape.
+}
+
+/**
+ * The add-on package on the newest release that actually carries it. The
+ * stable-named asset is the marker that a release carries the package at
+ * all; a scan is the only safe lookup — `releases/latest` is the platform
+ * release, which cannot carry the package — so a link is only offered when
+ * the asset is verified to exist. Definitive GitHub answers are cached;
+ * transient failures are not, so the next probe retries.
+ */
+async function resolveNewestReleaseAsset(): Promise<VafAddOnReleaseAssets | null> {
+  // `-assets`: earlier deployments cached other shapes under `-newest` (a
+  // bare URL string) and `-newest-install` (no downloadUrl) — a fresh key
+  // keeps a persisted cache from serving those here.
   const cacheKey =
-    `${CacheKey.MfilesVafAddOnReleasePin}-newest-install` as const;
-  const cached = await cacheManager.get<
-    { packageUrl: string; ref: string } | "none"
-  >(cacheKey);
+    `${CacheKey.MfilesVafAddOnReleasePin}-newest-assets` as const;
+  const cached = await cacheManager.get<VafAddOnReleaseAssets | "none">(
+    cacheKey,
+  );
   if (cached) return cached === "none" ? null : cached;
 
-  let source: { packageUrl: string; ref: string } | null = null;
+  let source: VafAddOnReleaseAssets | null = null;
   try {
     const response = await fetch(`${GITHUB_API_BASE}/releases?per_page=30`, {
       headers: githubHeaders(),
@@ -420,12 +439,16 @@ async function resolveNewestReleaseAsset(): Promise<{
       assets?: Array<{ name: string; browser_download_url: string }>;
     }>;
     for (const release of releases) {
-      const asset = release.assets?.find(
+      const stable = release.assets?.find(
         (a) => a.name === VAF_ADD_ON_ASSET_NAME,
       );
-      if (asset && release.tag_name) {
+      if (stable && release.tag_name) {
+        const versioned = release.assets?.find((a) =>
+          isVersionedVafAddOnAssetName(a.name),
+        );
         source = {
-          packageUrl: asset.browser_download_url,
+          packageUrl: stable.browser_download_url,
+          downloadUrl: (versioned ?? stable).browser_download_url,
           ref: release.tag_name,
         };
         break;
@@ -436,4 +459,17 @@ async function resolveNewestReleaseAsset(): Promise<{
     return null;
   }
   return source;
+}
+
+/** `archestra-m-files-vaf-add-on-<version>.mfappx`, e.g. `-1.0.0`. */
+function isVersionedVafAddOnAssetName(name: string): boolean {
+  const [base, extension] = [
+    VAF_ADD_ON_ASSET_NAME.replace(/\.mfappx$/, ""),
+    ".mfappx",
+  ];
+  return (
+    name.startsWith(`${base}-`) &&
+    name.endsWith(extension) &&
+    name.length > base.length + 1 + extension.length
+  );
 }

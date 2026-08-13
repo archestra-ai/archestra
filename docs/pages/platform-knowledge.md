@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-11
+lastUpdated: 2026-08-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -625,9 +625,7 @@ Sync versioned files and their source permissions from an M-Files vault.
 
 **Indexed:** supported files attached to the configured M-Files object types. The default object type is `0` (documents). Text, Markdown, CSV, JSON, XML, HTML, YAML, Office documents, and PDFs are indexed; supported images are indexed when a multimodal embedding model is configured. Files larger than 25 MB are skipped.
 
-**Authentication:** a dedicated M-Files login account. Archestra exchanges its username and password for an explicit short-lived MFWS token, preserves Multi-Server Mode routing cookies, and retries once after re-authentication. Automatic permission sync also requires the Archestra VAF Add On and the **Change full control role**.
-
-Auto-sync permissions requires the companion schema-v2 Archestra VAF Add On in the vault. MFWS covers object/file transport but does not expose the complete ACL, identity, and durable change APIs required for safe deltas. The add-on supplies stable enumeration, a gap-detecting journal, exact latest-plus-cached-version permissions, and group membership. Missing/unknown add-on responses and unresolved audiences fail closed.
+**Authentication:** a dedicated M-Files login account. Archestra exchanges its username and password for an explicit short-lived MFWS token, preserves Multi-Server Mode routing cookies, and retries once after re-authentication.
 
 | Field | Description |
 | --- | --- |
@@ -639,9 +637,16 @@ Auto-sync permissions requires the companion schema-v2 Archestra VAF Add On in t
 
 Three more settings exist on the connector config and are tuned through the API rather than the form: `objectTypeIds` (managed object types, default `0`), `batchSize` (documents per indexing batch, default `50`) and `permissionExtensionMethod` (the installed VAF extension-method name, default `ArchestraKnowledgePermissionSnapshot`). Leaving them unset keeps the backend defaults.
 
-The add-on performs authoritative, resumable object enumeration and journal-backed content/permission deltas. A clean pass performs no object or ACL reads. Journal gaps and add-on/configuration changes promote the run to a completion-gated full rebuild rather than accepting a partial result.
+#### M-Files VAF Add On
 
-For the M-Files object model, API choices, add-on contract, deployment guidance, and production roadmap, see [M-Files Connector Engineering Guide](/docs/platform-mfiles-connector).
+The Archestra VAF Add On is a vault application for M-Files Server. Syncing requires it. MFWS does not expose change tracking, exact permission reads, or group membership — the add-on supplies them from inside the vault. File content never flows through it. Every call requires the **Change full control role**, enforced by M-Files itself. Unreadable permissions fail closed.
+
+Install it once per connected vault, from the connector form:
+
+- **Installation script** — copy the one-line command and run it in PowerShell on the M-Files server as a system administrator. It downloads the add-on, installs it into the vault you choose, and restarts the vault.
+- **Manual installation** — download the `.mfappx` package and install it in M-Files Admin: right-click the vault, then Applications, then Install.
+
+Pre-built packages are published as `m-files-vaf-add-on-v<version>` [releases on GitHub](https://github.com/archestra-ai/archestra/releases). The source lives in [`integrations/m-files-vaf-add-on`](https://github.com/archestra-ai/archestra/tree/main/integrations/m-files-vaf-add-on); its README covers building from source and the add-on contract. For development deployments, two variables override where the install script gets the package — see [Deployment](/docs/platform-deployment).
 
 ## Environments
 

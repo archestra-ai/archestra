@@ -180,7 +180,7 @@ jobs:
 
           cp "${stable}" "${versioned}"
           checksum=$(sha256sum "${stable}" | cut -d' ' -f1)
-          notes="$(printf 'Archestra M-Files VAF Add On v%s, built from %s.\n\nSHA-256 (`%s` and `%s` are identical): `%s`\n\nInstall and upgrade: see the M-Files connector form in the platform, or docs/pages/platform-mfiles-connector.md.' \
+          notes="$(printf 'Archestra M-Files VAF Add On v%s, built from %s.\n\nSHA-256 (`%s` and `%s` are identical): `%s`\n\nInstall and upgrade: see the M-Files connector form in the platform, or the M-Files section of docs/pages/platform-knowledge.md.' \
             "${VERSION}" "${GITHUB_SHA}" "${stable}" "${versioned}" "${checksum}")"
 
           # Draft first: assets can only be attached before publishing on a

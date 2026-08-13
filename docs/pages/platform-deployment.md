@@ -1655,7 +1655,7 @@ Permission sync for connectors using [auto-sync permissions](/docs/platform-know
 - **`ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`** - Beta gate for the whole auto-sync-permissions feature: the connector visibility option, its permission passes, and the Users and Groups tabs.
   - Default: `false`
   - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing auto-sync connectors go dormant while it is off — no passes run and the Permissions APIs return 403.
-- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`** - Beta gate for the [M-Files connector](/docs/platform-mfiles-connector): the connector type in the create dialog, creating connectors of the type, and the VAF Add On distribution endpoints.
+- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`** - Beta gate for the [M-Files connector](/docs/platform-knowledge#m-files): the connector type in the create dialog, creating connectors of the type, and the VAF Add On distribution endpoints.
   - Default: `false`
   - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing M-Files connectors keep syncing while it is off.
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT`** - Concurrency cap for the runtime-isolated permission-sync worker lane.

@@ -62,7 +62,13 @@ export function AclBadges({
     <CollapsedBadgeList
       items={acl.map((entry) => ({
         id: entry,
-        label: formatAclEntry({ entry, teams, groupNamesByToken, noun, orgMembers }),
+        label: formatAclEntry({
+          entry,
+          teams,
+          groupNamesByToken,
+          noun,
+          orgMembers,
+        }),
         // The raw token, for correlation with the Groups tab.
         title: entry,
       }))}

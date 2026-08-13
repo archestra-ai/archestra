@@ -56,7 +56,7 @@ vi.mock("next/navigation");
 
 const mockStartGoogleDriveOAuth = vi.fn();
 const MOCK_VAF_ADD_ON_DOWNLOAD_URL =
-  "https://github.com/archestra-ai/archestra/releases/download/platform-v1.2.3/archestra-m-files-vaf-add-on.mfappx";
+  "https://github.com/archestra-ai/archestra/releases/download/m-files-vaf-add-on-v1.0.0/archestra-m-files-vaf-add-on-1.0.0.mfappx";
 
 // Both M-Files gates open by default: the suite exercises the M-Files form,
 // including its Application Account (OAuth) fields. The gate tests flip
@@ -841,12 +841,12 @@ describe("CreateConnectorDialog", () => {
         .filter(
           (link) =>
             link.getAttribute("href") ===
-            "https://archestra.ai/docs/platform-mfiles-connector#vaf-add-on-installation-and-access",
+            "https://archestra.ai/docs/platform-knowledge#m-files-vaf-add-on",
         );
       expect(docsLinks).toHaveLength(1);
       // The manual path is the mutually exclusive alternative tab: the
       // script tab is pre-selected, and selecting Manual installation swaps
-      // in a download pinned to this installation's release.
+      // in a download of the newest released package.
       expect(
         screen.queryByRole("link", { name: /Download \.mfappx/ }),
       ).not.toBeInTheDocument();

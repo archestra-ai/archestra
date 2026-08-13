@@ -39,7 +39,6 @@ export const DocsPage = {
   PlatformLlmProxy: "platform-llm-proxy",
   PlatformMastraExample: "platform-mastra-example",
   PlatformMcpGateway: "platform-mcp-gateway",
-  PlatformMfilesConnector: "platform-mfiles-connector",
   PlatformMigrateFromClaudeOpenclawHermes:
     "platform-migrate-from-claude-openclaw-hermes",
   PlatformMsTeams: "platform-ms-teams",

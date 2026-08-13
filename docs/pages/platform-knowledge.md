@@ -182,27 +182,27 @@ Auto-sync connectors are gated by the dedicated `knowledgeSourceAutoSync` permis
 
 Auto-sync permissions mirrors the data source system's access control into Archestra. When a user queries the knowledge base, they get back only the content they are allowed to see in the source system. A user with the `knowledgeSource:admin` role bypasses the ACL and sees everything.
 
-Auto-sync permissions works with the connectors marked *Supported* below. The others do not support it yet.
+Auto-sync permissions works with the connectors marked *Supported* below. *Limited* means the source's access control is mirrored with a coarser audience model — the row says which. The others do not support it yet.
 
-| Connector    | Auto-sync permissions         |
-| ------------ | ----------------------------- |
-| Confluence   | Supported                     |
-| GitHub       | Supported                     |
-| Jira         | Supported                     |
-| M-Files      | Supported with the VAF Add On |
-| Google Drive | Supported                     |
-| OneDrive     | Supported                     |
-| Salesforce   | Supported                     |
-| SharePoint   | Supported                     |
-| Asana        | Not supported                 |
-| Dropbox      | Not supported                 |
-| GitLab       | Not supported                 |
-| Linear       | Not supported                 |
-| Notion       | Not supported                 |
-| Outline      | Not supported                 |
-| Perforce     | Not supported                 |
-| ServiceNow   | Not supported                 |
-| Web Crawler  | Not supported                 |
+| Connector    | Auto-sync permissions                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
+| Confluence   | Supported                                                                                                 |
+| GitHub       | Supported                                                                                                 |
+| Jira         | Supported                                                                                                 |
+| M-Files      | Supported with the VAF Add On                                                                             |
+| Google Drive | Supported                                                                                                 |
+| Notion       | Limited: every synced page is visible to all workspace members ([details](#notion-auto-sync-permissions)) |
+| OneDrive     | Supported                                                                                                 |
+| Salesforce   | Supported                                                                                                 |
+| SharePoint   | Supported                                                                                                 |
+| Asana        | Not supported                                                                                             |
+| Dropbox      | Not supported                                                                                             |
+| GitLab       | Not supported                                                                                             |
+| Linear       | Not supported                                                                                             |
+| Outline      | Not supported                                                                                             |
+| Perforce     | Not supported                                                                                             |
+| ServiceNow   | Not supported                                                                                             |
+| Web Crawler  | Not supported                                                                                             |
 
 **Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
 
@@ -211,6 +211,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 - **SharePoint** returns SharePoint user logins directly. Expanding a Microsoft 365 group or a SharePoint site group to its members needs the extra app permissions listed under [SharePoint](#sharepoint).
 - **OneDrive** resolves user grants and drive owners to emails through the `User.Read.All` app permission. Without it, those accounts stay unresolvable. See [OneDrive](#onedrive).
 - **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
+- **Notion** returns member emails only when the integration has the **"read user information including email addresses"** capability. Guests are never listed.
 
 **Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
 
@@ -356,12 +357,29 @@ Sync pages and databases from a Notion workspace.
 
 **Indexed:** pages from a Notion workspace.
 
-**Authentication:** a [Notion integration token](https://www.notion.so/my-integrations) (starts with `secret_`). Create an internal integration in your workspace and share the relevant pages or databases with it.
+**Authentication:** an internal integration secret from the [Notion Developer portal](https://app.notion.com/developers/connections). New secrets start with `ntn_`; older `secret_` tokens keep working. Create an internal integration in your workspace and share the relevant pages or databases with it.
 
 | Field        | Description                                                                                        |
 | ------------ | -------------------------------------------------------------------------------------------------- |
 | Database IDs | Comma-separated Notion database IDs to sync (optional -- leave blank to sync all accessible pages) |
 | Page IDs     | Comma-separated specific Notion page IDs to sync (optional -- takes precedence over Database IDs)  |
+
+#### Notion Auto-Sync Permissions
+
+Support is *Limited*. Notion's API does not say who can see a page — there is no sharing endpoint, and teamspaces are not exposed. Archestra cannot mirror per-page access, so every synced page shares one workspace-wide audience:
+
+- A synced page is visible to every workspace member whose Notion email matches an Archestra user's email.
+- Each permission sync refreshes the member roster from Notion's users API. The connector page shows a **Workspaces** tab in place of Groups, with one row per connector: the workspace, named as it is in Notion.
+- Guests are never in Notion's member listing, so a guest never gains access through Archestra.
+- Member emails need the integration capability **"read user information including email addresses"** (integration settings, **Capabilities** tab). A member without a readable email stays unresolvable (fail-closed) until you assign them from the Users tab.
+
+A page that is private or teamspace-restricted in Notion, but shared with the integration, becomes readable by every workspace member through Archestra. Set up the integration's access with that in mind:
+
+- Share only workspace-appropriate content with the integration — a company wiki teamspace, for example.
+- Do not share private pages or restricted teamspaces with the integration.
+- For content that must reach a narrower audience, use a separate connector with **Team-scoped** visibility.
+
+This is still stricter than an org-wide connector: access stops at the workspace member roster instead of your whole Archestra organization, and it updates as members join and leave.
 
 ### SharePoint
 

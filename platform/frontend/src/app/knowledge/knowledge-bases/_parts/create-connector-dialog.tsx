@@ -346,11 +346,13 @@ export function CreateConnectorDialog({
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
-                  Configure{" "}
-                  {selectedType ? (
-                    <span>{getConnectorTypeLabel(selectedType)}</span>
-                  ) : null}{" "}
-                  Connector
+                  <span>
+                    Configure{" "}
+                    {selectedType
+                      ? `${getConnectorTypeLabel(selectedType)} `
+                      : ""}
+                    Connector
+                  </span>
                 </DialogTitle>
                 <DialogDescription>
                   Enter the connection details for your{" "}

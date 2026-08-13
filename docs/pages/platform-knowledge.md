@@ -185,7 +185,8 @@ Auto-sync permissions mirrors the data source system's access control into Arche
 Auto-sync permissions works with the connectors marked *Supported* below. *Limited* means the source's access control is mirrored with a coarser audience model — the row says which. The others do not support it yet.
 
 | Connector    | Auto-sync permissions                                                                                     |
-| ------------ | --------------------------------------------------------------------------------------------------------- |
+| ------------ | ----------------------------------------------------------------------------------------------------------- |
+| Asana        | Supported                                                                                                 |
 | Confluence   | Supported                                                                                                 |
 | GitHub       | Supported                                                                                                 |
 | GitLab       | Supported                                                                                                 |
@@ -196,7 +197,6 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 | OneDrive     | Supported                                                                                                 |
 | Salesforce   | Supported                                                                                                 |
 | SharePoint   | Supported                                                                                                 |
-| Asana        | Not supported                                                                                             |
 | Dropbox      | Not supported                                                                                             |
 | Linear       | Not supported                                                                                             |
 | Outline      | Not supported                                                                                             |
@@ -213,6 +213,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 - **OneDrive** resolves user grants and drive owners to emails through the `User.Read.All` app permission. Without it, those accounts stay unresolvable. See [OneDrive](#onedrive).
 - **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
 - **Notion** returns member emails only when the integration has the **"read user information including email addresses"** capability. Guests are never listed.
+- **Asana** returns workspace members' emails through the same personal access token the connector already uses. No extra credential is needed, but the token's user must be able to see the synced projects and their members.
 
 **Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators, GitLab project members. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
 
@@ -336,6 +337,12 @@ Sync tasks and discussions from Asana projects.
 | Workspace GID | Your Asana workspace GID (found in the URL when viewing your workspace)                       |
 | Project GIDs  | Comma-separated project GIDs to sync (optional -- leave blank to sync all workspace projects) |
 | Tags to Skip  | Comma-separated tag names to exclude (optional)                                               |
+
+**Auto-sync permissions.** Each project is one permission scope. A project shared with the whole workspace grants every workspace member — guests excluded. Any other project grants its explicit members: users directly, teams through their team rosters. A task in several projects is readable through any of them; its scope is the union of those audiences. Task collaborators are granted individually on their tasks.
+
+Each permission sync also snapshots workspace members and team rosters — the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream can be assigned manually from the Users tab. Limited-access team members get only the projects they are explicitly added to. Guests get only explicit project and task grants.
+
+Permission reads run as the token's user. A project or roster the token cannot read stays fail-closed — use a token from a user who can see every synced project. A task removed from every synced project is hidden until a sync sees it again.
 
 ### ServiceNow
 

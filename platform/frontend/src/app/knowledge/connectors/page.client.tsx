@@ -216,7 +216,7 @@ function ConnectorsList() {
               <>
                 <ConnectorStatusBadge status={row.original.lastSyncStatus} />
                 <span
-                  className="text-xs text-muted-foreground"
+                  className="text-xs text-muted-foreground whitespace-nowrap"
                   title={formatDate({ date: row.original.lastSyncAt })}
                 >
                   {formatDistanceToNow(new Date(row.original.lastSyncAt), {

@@ -188,6 +188,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 | ------------ | ----------------------------- |
 | Confluence   | Supported                     |
 | GitHub       | Supported                     |
+| GitLab       | Supported                     |
 | Jira         | Supported                     |
 | M-Files      | Supported with the VAF Add On |
 | Google Drive | Supported                     |
@@ -196,7 +197,6 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 | SharePoint   | Supported                     |
 | Asana        | Not supported                 |
 | Dropbox      | Not supported                 |
-| GitLab       | Not supported                 |
 | Linear       | Not supported                 |
 | Notion       | Not supported                 |
 | Outline      | Not supported                 |
@@ -208,11 +208,12 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 
 - **Jira and Confluence Cloud** only return another user's email through the product REST API when that user's Atlassian profile has email visibility set to **"Anyone"**. Add an Atlassian **organization admin API key** to the connector credentials to read managed accounts' emails.
 - **GitHub** only exposes an email the user has made **public on their profile**; no token scope reveals a private email.
+- **GitLab** only exposes an email the user has made **public on their profile**. An instance admin token also reads private emails; a regular token does not.
 - **SharePoint** returns SharePoint user logins directly. Expanding a Microsoft 365 group or a SharePoint site group to its members needs the extra app permissions listed under [SharePoint](#sharepoint).
 - **OneDrive** resolves user grants and drive owners to emails through the `User.Read.All` app permission. Without it, those accounts stay unresolvable. See [OneDrive](#onedrive).
 - **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
 
-**Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
+**Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators, GitLab project members. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
 
 **Manual user assignment.** When an account's email stays hidden, assign it to an Archestra user from the Users tab.
 
@@ -303,7 +304,7 @@ Sync issues, pull request discussions, and repository files from GitHub.
 
 Sync issues and merge request discussions from GitLab.
 
-**Indexed:** issues, merge requests, and their comments from GitLab.com or self-hosted GitLab instances. System-generated notes (assignment changes, label updates, etc.) are filtered out.
+**Indexed:** issues, merge requests, their comments, and (optionally) Markdown files from GitLab.com or self-hosted GitLab instances. System-generated notes (assignment changes, label updates, etc.) are filtered out.
 
 **Authentication:** a [personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/).
 
@@ -314,7 +315,12 @@ Sync issues and merge request discussions from GitLab.
 | Project IDs            | Comma-separated specific project IDs to sync (optional -- leave blank to sync all) |
 | Include Issues         | Toggle to sync issues and their comments (default: on)                             |
 | Include Merge Requests | Toggle to sync merge requests and their comments (default: on)                     |
+| Include Markdown Files | Toggle to sync `.md` and `.mdx` files from the repository (default: off)           |
 | Labels to Skip         | Comma-separated labels to exclude (optional)                                       |
+
+**Auto-sync permissions.** Each project is one permission scope. Its audience is the project's members with the **Reporter** role or higher — direct members, members inherited from ancestor groups, and members of invited groups, each at their effective access level. Guests are excluded: GitLab does not let them read code or confidential issues, so including them would over-share. **Public** and **internal** projects are readable by everyone in your Archestra organization.
+
+Each sync snapshots one member roster per project, shown in the connector's **Users** and **Groups** tabs as `<project path> members`. A member whose email is hidden upstream stays unresolvable — assign them to an Archestra user from the Users tab, or ask them to set a public email on their GitLab profile.
 
 ### Asana
 

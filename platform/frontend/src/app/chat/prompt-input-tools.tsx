@@ -535,8 +535,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4}>
             <span>
-              Attachments are stored unencrypted, so locked chats can't use
-              them
+              Attachments are stored unencrypted, so locked chats can't use them
             </span>
           </TooltipContent>
         </Tooltip>

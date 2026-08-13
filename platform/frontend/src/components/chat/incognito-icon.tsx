@@ -9,11 +9,7 @@ import { cn } from "@/lib/utils";
 export function IncognitoIcon({ className }: { className?: string }) {
   return (
     <span className={cn("relative inline-block shrink-0", className)}>
-      <Lock
-        role="img"
-        aria-label="Locked chat"
-        className="block size-full"
-      />
+      <Lock role="img" aria-label="Locked chat" className="block size-full" />
     </span>
   );
 }

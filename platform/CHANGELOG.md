@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.35](https://github.com/archestra-ai/archestra/compare/platform-v1.3.34...platform-v1.3.35) (2026-08-13)
+
+
+### Features
+
+* **knowledge:** add production M-Files connector and VAF Add On ([#7182](https://github.com/archestra-ai/archestra/issues/7182)) ([65b33cc](https://github.com/archestra-ai/archestra/commit/65b33cc463c85d5b5e03d88c90dae2241126c72a))
+
 ## [1.3.34](https://github.com/archestra-ai/archestra/compare/platform-v1.3.33...platform-v1.3.34) (2026-08-12)
 
 

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import type { ConnectorSyncBatch } from "@/types";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConnectorSyncBatch, PermissionSnapshotYield } from "@/types";
 import { OneDriveConnector } from "./onedrive-connector";
 
 const credentials = { email: "test-client-id", apiToken: "test-client-secret" };
@@ -841,6 +841,754 @@ describe("OneDriveConnector", () => {
       });
 
       expect(count).toBe(1);
+    });
+  });
+
+  describe("permission sync", () => {
+    type ContainerYield = Extract<
+      PermissionSnapshotYield,
+      { kind: "container" }
+    >;
+    type DocumentYield = Extract<PermissionSnapshotYield, { kind: "document" }>;
+
+    const permConfig = {
+      tenantId: "test-tenant-id",
+      userIds: ["user-1"],
+    };
+
+    /** Route table: url substring → response body, or a thrown Graph error. */
+    let routes: Array<{
+      match: string;
+      body?: unknown;
+      error?: { statusCode: number };
+      /** Only match when the Prefer header contains this. */
+      prefer?: string;
+    }>;
+    let requestedUrls: string[];
+
+    function routeFor(url: string, prefer: string | null) {
+      const route = routes.find(
+        (r) =>
+          url.includes(r.match) &&
+          (r.prefer === undefined || (prefer ?? "").includes(r.prefer)),
+      );
+      if (route?.error) {
+        const err = new Error("Graph error") as Error & { statusCode: number };
+        err.statusCode = route.error.statusCode;
+        throw err;
+      }
+      if (!route) throw new Error(`No route for ${url}`);
+      return route.body;
+    }
+
+    function installClient(connector: OneDriveConnector) {
+      const mockApi = vi.fn((url: string) => {
+        let prefer: string | null = null;
+        const chain = {
+          get: () => {
+            requestedUrls.push(url);
+            return Promise.resolve(routeFor(url, prefer));
+          },
+          header: (name: string, value: string) => {
+            if (name === "Prefer") prefer = value;
+            return chain;
+          },
+          responseType: () => chain,
+          select: () => chain,
+        };
+        return chain;
+      });
+      vi.spyOn(
+        connector as unknown as { getGraphClient: () => unknown },
+        "getGraphClient",
+      ).mockReturnValue({ api: mockApi } as never);
+    }
+
+    function readBack(docs: Array<{ sourceId: string; userId?: string }>) {
+      return vi.fn(
+        async (args: {
+          metadataFilter?: Record<string, string>;
+          afterId?: string | null;
+          limit: number;
+        }) => ({
+          documents: docs
+            .filter(
+              (d) =>
+                !args.metadataFilter?.userId ||
+                d.userId === args.metadataFilter.userId,
+            )
+            .map((d) => ({
+              sourceId: d.sourceId,
+              metadata: d.userId ? { userId: d.userId } : null,
+            })),
+          nextAfterId: null,
+        }),
+      );
+    }
+
+    function syncParams(overrides?: {
+      config?: Record<string, unknown>;
+      docs?: Array<{ sourceId: string; userId?: string }>;
+      cursor?: string | null;
+      scope?: { containerKeys: string[] };
+      resolveMappedEmail?: (accountId: string) => string | null;
+    }) {
+      return {
+        config: overrides?.config ?? permConfig,
+        credentials,
+        cursor: overrides?.cursor ?? null,
+        scope: overrides?.scope,
+        resolveMappedEmail: overrides?.resolveMappedEmail,
+        readIngestedDocuments: readBack(
+          overrides?.docs ?? [{ sourceId: "I1", userId: "user-1" }],
+        ),
+      };
+    }
+
+    function collectSnapshot(gen: AsyncGenerator<PermissionSnapshotYield>) {
+      const containers = new Map<string, ContainerYield>();
+      const documents: DocumentYield[] = [];
+      return (async () => {
+        for await (const item of gen) {
+          if (item.kind === "container")
+            containers.set(item.containerKey, item);
+          else documents.push(item);
+        }
+        return { containers, documents };
+      })();
+    }
+
+    /** The user's drive resolution route (id + owner). */
+    function stubDrive() {
+      routes.push({
+        match: "/users/user-1/drive?$select=id,owner",
+        body: {
+          id: "D1",
+          owner: { user: { id: "owner-1", displayName: "Owner One" } },
+        },
+      });
+    }
+
+    /** The default delta walk over D1. */
+    function stubDeltaWalk(items: unknown[]) {
+      routes.push({
+        match: "/drives/D1/root/delta",
+        body: { value: items, "@odata.deltaLink": "delta-link-1" },
+      });
+    }
+
+    /** User.Read.All tier probe + owner email resolution. */
+    function stubUsersTier() {
+      routes.push(
+        { match: "/users?$select=id&$top=1", body: { value: [] } },
+        {
+          match: "/users/owner-1?$select=mail,userPrincipalName",
+          body: { mail: "owner@example.com" },
+        },
+      );
+    }
+
+    beforeEach(() => {
+      routes = [];
+      requestedUrls = [];
+    });
+
+    it("supportsPermissionSync is true", () => {
+      expect(new OneDriveConnector().supportsPermissionSync).toBe(true);
+    });
+
+    it("scopeKeyForDocument maps metadata.userId to the container key", () => {
+      const connector = new OneDriveConnector();
+      expect(connector.scopeKeyForDocument({ userId: "user-1" })).toBe(
+        "user:user-1",
+      );
+      expect(connector.scopeKeyForDocument({})).toBeNull();
+      expect(connector.scopeKeyForDocument({ userId: "" })).toBeNull();
+    });
+
+    it("root audience: direct grant + entra group token + drive owner; plain items assign to the top container", async () => {
+      const connector = new OneDriveConnector();
+      installClient(connector);
+      stubDrive();
+      stubDeltaWalk([
+        { id: "root", parentReference: {} },
+        { id: "I1", parentReference: { id: "root" } },
+      ]);
+      stubUsersTier();
+      routes.push(
+        {
+          match: "/drives/D1/root/permissions",
+          body: {
+            value: [
+              { grantedToV2: { user: { id: "u-alice" } } },
+              { grantedToV2: { group: { id: "G1" } } },
+            ],
+          },
+        },
+        {
+          match: "/users/u-alice?$select=mail,userPrincipalName",
+          body: { mail: "Alice@Example.com" },
+        },
+      );
+
+      const { containers, documents } = await collectSnapshot(
+        connector.syncPermissionSnapshot(syncParams()),
+      );
+
+      const top = containers.get("user:user-1");
+      expect(top).toBeDefined();
+      expect(top?.audienceResolutionFailed).toBe(false);
+      expect(top?.permissions.isPublic).toBe(false);
+      // can-read: alice + the owner; cannot-read: anyone else is absent.
+      expect([...(top?.permissions.users ?? [])].sort()).toEqual([
+        "alice@example.com",
+        "owner@example.com",
+      ]);
+      expect(top?.permissions.groups).toEqual(["entra:G1"]);
+      expect(documents).toEqual([
+        {
+          kind: "document",
+          sourceId: "I1",
+          containerKey: "user:user-1",
+          cursor: "user:user-1",
+        },
+      ]);
+    });
+
+    it("a permission-hierarchy root becomes a nested item container with its own audience", async () => {
+      const connector = new OneDriveConnector();
+      installClient(connector);
+      stubDrive();
+      stubDeltaWalk([
+        { id: "root", parentReference: {} },
+        { id: "I1", parentReference: { id: "root" } },
+        // shared facet present ⇒ unique permissions (hierarchicalsharing)
+        { id: "I2", parentReference: { id: "root" }, shared: {} },
+      ]);
+      stubUsersTier();
+      routes.push(
+        {
+          match: "/drives/D1/root/permissions",
+          body: { value: [{ grantedToV2: { user: { id: "u-alice" } } }] },
+        },
+        {
+          match: "/drives/D1/items/I2/permissions",
+          body: { value: [{ grantedToV2: { user: { id: "u-bob" } } }] },
+        },
+        {
+          match: "/users/u-alice?$select=mail,userPrincipalName",
+          body: { mail: "alice@example.com" },
+        },
+        {
+          match: "/users/u-bob?$select=mail,userPrincipalName",
+          body: { mail: "bob@example.com" },
+        },
+      );
+
+      const { containers, documents } = await collectSnapshot(
+        connector.syncPermissionSnapshot(
+          syncParams({
+            docs: [
+              { sourceId: "I1", userId: "user-1" },
+              { sourceId: "I2", userId: "user-1" },
+            ],
+          }),
+        ),
+      );
+
+      const nested = containers.get("user:user-1/item:I2");
+      expect(nested?.permissions.users).toContain("bob@example.com");
+      // the owner belongs to every audience in the drive
+      expect(nested?.permissions.users).toContain("owner@example.com");
+      // alice governs the root, not the nested subtree
+      expect(nested?.permissions.users).not.toContain("alice@example.com");
+      expect(documents.find((d) => d.sourceId === "I2")?.containerKey).toBe(
+        "user:user-1/item:I2",
+      );
+      expect(documents.find((d) => d.sourceId === "I1")?.containerKey).toBe(
+        "user:user-1",
+      );
+    });
+
+    it("an unreadable root permission list fail-closes the container — owner included", async () => {
+      const connector = new OneDriveConnector();
+      installClient(connector);
+      stubDrive();
+      stubDeltaWalk([{ id: "root", parentReference: {} }]);
+      stubUsersTier();
+      routes.push({
+        match: "/drives/D1/root/permissions",
+        error: { statusCode: 500 },
+      });
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(syncParams()),
+      );
+
+      const top = containers.get("user:user-1");
+      expect(top?.audienceResolutionFailed).toBe(true);
+      expect(top?.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+    });
+
+    it("an unreadable nested item fail-closes that subtree only", async () => {
+      const connector = new OneDriveConnector();
+      installClient(connector);
+      stubDrive();
+      stubDeltaWalk([
+        { id: "root", parentReference: {} },
+        { id: "I2", parentReference: { id: "root" }, shared: {} },
+      ]);
+      stubUsersTier();
+      routes.push(
+        {
+          match: "/drives/D1/root/permissions",
+          body: { value: [{ grantedToV2: { user: { id: "u-alice" } } }] },
+        },
+        {
+          match: "/users/u-alice?$select=mail,userPrincipalName",
+          body: { mail: "alice@example.com" },
+        },
+        {
+          match: "/drives/D1/items/I2/permissions",
+          error: { statusCode: 429 },
+        },
+      );
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(
+          syncParams({ docs: [{ sourceId: "I2", userId: "user-1" }] }),
+        ),
+      );
+
+      const nested = containers.get("user:user-1/item:I2");
+      expect(nested?.audienceResolutionFailed).toBe(true);
+      expect(nested?.permissions.users).toEqual([]);
+      const top = containers.get("user:user-1");
+      expect(top?.audienceResolutionFailed).toBe(false);
+    });
+
+    it("a failed drive resolution fail-closes the whole corpus under the top container", async () => {
+      const connector = new OneDriveConnector();
+      installClient(connector);
+      routes.push({
+        match: "/users/user-1/drive?$select=id,owner",
+        error: { statusCode: 404 },
+      });
+
+      const { containers, documents } = await collectSnapshot(
+        connector.syncPermissionSnapshot(syncParams()),
+      );
+
+      const top = containers.get("user:user-1");
+      expect(top?.audienceResolutionFailed).toBe(true);
+      expect(top?.permissions.users).toEqual([]);
+      expect(documents.map((d) => d.sourceId)).toEqual(["I1"]);
+    });
+
+    it("an empty corpus emits the boundary container without resolving its audience", async () => {
+      const connector = new OneDriveConnector();
+      installClient(connector);
+
+      const { containers, documents } = await collectSnapshot(
+        connector.syncPermissionSnapshot(syncParams({ docs: [] })),
+      );
+
+      const top = containers.get("user:user-1");
+      expect(top?.audienceResolutionFailed).toBe(false);
+      expect(top?.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(documents).toEqual([]);
+      expect(requestedUrls.some((u) => u.includes("/permissions"))).toBe(false);
+    });
+
+    it("anonymous links are public; organization links expand to active tenant users", async () => {
+      const connector = new OneDriveConnector();
+      installClient(connector);
+      stubDrive();
+      stubDeltaWalk([{ id: "root", parentReference: {} }]);
+      stubUsersTier();
+      routes.push(
+        {
+          match: "/drives/D1/root/permissions",
+          body: {
+            value: [
+              { link: { scope: "anonymous" } },
+              { link: { scope: "organization" } },
+            ],
+          },
+        },
+        {
+          match: "/users?$select=mail,userPrincipalName,accountEnabled",
+          body: {
+            value: [
+              { mail: "active@example.com", accountEnabled: true },
+              { mail: "gone@example.com", accountEnabled: false },
+            ],
+          },
+        },
+      );
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(syncParams()),
+      );
+
+      const top = containers.get("user:user-1");
+      expect(top?.permissions.isPublic).toBe(true);
+      expect(top?.permissions.users).toContain("active@example.com");
+      expect(top?.permissions.users).not.toContain("gone@example.com");
+    });
+
+    it("User.Read.All denied: unresolvable principals drop fail-closed, group tokens survive, member overrides still apply", async () => {
+      const connector = new OneDriveConnector();
+      installClient(connector);
+      stubDrive();
+      stubDeltaWalk([{ id: "root", parentReference: {} }]);
+      routes.push(
+        { match: "/users?$select=id&$top=1", error: { statusCode: 403 } },
+        {
+          match: "/drives/D1/root/permissions",
+          body: {
+            value: [
+              { grantedToV2: { user: { id: "u-alice" } } },
+              { grantedToV2: { user: { id: "u-mapped" } } },
+              { grantedToV2: { group: { id: "G1" } } },
+            ],
+          },
+        },
+      );
+
+      const { containers } = await collectSnapshot(
+        connector.syncPermissionSnapshot(
+          syncParams({
+            resolveMappedEmail: (accountId) =>
+              accountId === "u-mapped" ? "mapped@example.com" : null,
+          }),
+        ),
+      );
+
+      const top = containers.get("user:user-1");
+      expect(top?.audienceResolutionFailed).toBe(false);
+      // alice and the owner are unresolvable without User.Read.All; the
+      // admin override rescues u-mapped.
+      expect(top?.permissions.users).toEqual(["mapped@example.com"]);
+      expect(top?.permissions.groups).toEqual(["entra:G1"]);
+    });
+
+    it("resume cursor skips containers strictly before it; scope filters containers", async () => {
+      const connector = new OneDriveConnector();
+      installClient(connector);
+      const config = { ...permConfig, userIds: ["user-1", "user-2"] };
+      const docs = [
+        { sourceId: "I1", userId: "user-1" },
+        { sourceId: "I2", userId: "user-2" },
+      ];
+      routes.push({
+        match: "/users/user-2/drive?$select=id,owner",
+        body: { id: "D2", owner: { user: { id: "owner-1" } } },
+      });
+      stubUsersTier();
+      routes.push(
+        {
+          match: "/drives/D2/root/delta",
+          body: {
+            value: [{ id: "root2", parentReference: {} }],
+            "@odata.deltaLink": "dl-2",
+          },
+        },
+        { match: "/drives/D2/root/permissions", body: { value: [] } },
+      );
+
+      const cursored = await collectSnapshot(
+        connector.syncPermissionSnapshot(
+          syncParams({ config, docs, cursor: "user:user-2" }),
+        ),
+      );
+      expect([...cursored.containers.keys()]).toEqual(["user:user-2"]);
+
+      const scoped = await collectSnapshot(
+        connector.syncPermissionSnapshot(
+          syncParams({
+            config,
+            docs,
+            scope: { containerKeys: ["user:user-2"] },
+          }),
+        ),
+      );
+      expect([...scoped.containers.keys()]).toEqual(["user:user-2"]);
+    });
+
+    describe("syncGroups", () => {
+      it("rosters entra groups, site groups (empty), and direct grantees incl. the owner", async () => {
+        const connector = new OneDriveConnector();
+        installClient(connector);
+        stubDrive();
+        stubUsersTier();
+        routes.push(
+          {
+            match: "/drives/D1/root/permissions",
+            body: {
+              value: [
+                { grantedToV2: { group: { id: "G1" } } },
+                {
+                  grantedToV2: {
+                    siteGroup: { displayName: "Personal Site Members" },
+                  },
+                },
+                {
+                  grantedToV2: {
+                    user: { id: "u-alice", displayName: "Alice" },
+                  },
+                },
+              ],
+            },
+          },
+          {
+            match: "/groups/G1/transitiveMembers",
+            body: {
+              value: [
+                {
+                  "@odata.type": "#microsoft.graph.user",
+                  id: "m1",
+                  displayName: "Member One",
+                  mail: "member1@example.com",
+                  accountEnabled: true,
+                },
+                {
+                  "@odata.type": "#microsoft.graph.user",
+                  id: "m2",
+                  displayName: "Hidden Member",
+                  accountEnabled: false,
+                },
+                { "@odata.type": "#microsoft.graph.group", id: "nested-g" },
+              ],
+            },
+          },
+          {
+            match: "/users/u-alice?$select=mail,userPrincipalName",
+            body: { mail: "alice@example.com" },
+          },
+        );
+
+        const groups: Array<{
+          groupId: string;
+          members: Array<{ accountId: string; email?: string | null }>;
+        }> = [];
+        for await (const g of connector.syncGroups(syncParams())) {
+          groups.push(g);
+        }
+
+        const entra = groups.find((g) => g.groupId === "entra:G1");
+        expect(entra?.members.map((m) => m.accountId).sort()).toEqual([
+          "m1",
+          "m2",
+        ]);
+        expect(
+          entra?.members.find((m) => m.accountId === "m2")?.email,
+        ).toBeNull();
+
+        const site = groups.find(
+          (g) => g.groupId === "sitegroup:Personal Site Members",
+        );
+        expect(site?.members).toEqual([]);
+
+        const direct = groups.find((g) => g.groupId === "direct-grants");
+        expect(direct?.members.map((m) => m.accountId).sort()).toEqual([
+          "owner-1",
+          "u-alice",
+        ]);
+      });
+
+      it("GroupMember.Read.All denied: the group rosters empty (fail-closed)", async () => {
+        const connector = new OneDriveConnector();
+        installClient(connector);
+        stubDrive();
+        stubUsersTier();
+        routes.push(
+          {
+            match: "/drives/D1/root/permissions",
+            body: { value: [{ grantedToV2: { group: { id: "G1" } } }] },
+          },
+          {
+            match: "/groups/G1/transitiveMembers",
+            error: { statusCode: 403 },
+          },
+        );
+
+        const groups: Array<{ groupId: string; members: unknown[] }> = [];
+        for await (const g of connector.syncGroups(syncParams())) {
+          groups.push(g);
+        }
+        expect(groups.find((g) => g.groupId === "entra:G1")?.members).toEqual(
+          [],
+        );
+      });
+
+      it("an unreadable permission surface is skipped, not fail-closed here", async () => {
+        const connector = new OneDriveConnector();
+        installClient(connector);
+        stubDrive();
+        stubUsersTier();
+        routes.push({
+          match: "/drives/D1/root/permissions",
+          error: { statusCode: 500 },
+        });
+
+        const groups: Array<{ groupId: string }> = [];
+        for await (const g of connector.syncGroups(syncParams())) {
+          groups.push(g);
+        }
+        // only the owner's direct-grants roster survives
+        expect(groups.map((g) => g.groupId)).toEqual(["direct-grants"]);
+      });
+    });
+
+    describe("probePermissionChanges", () => {
+      it("no stored state: fullRequired with fresh delta tokens", async () => {
+        const connector = new OneDriveConnector();
+        installClient(connector);
+        stubDrive();
+        routes.push({
+          match: "/drives/D1/root/delta?token=latest",
+          body: { "@odata.deltaLink": "dl-fresh" },
+        });
+
+        const result = await connector.probePermissionChanges({
+          config: permConfig,
+          credentials,
+          state: null,
+        });
+
+        expect(result.fullRequired).toBe(true);
+        expect(result.nextState).toEqual({
+          deltaTokens: { "user:user-1": "dl-fresh" },
+        });
+      });
+
+      it("sharing-annotated drift dirties the container; unannotated drift does not (elevated tier)", async () => {
+        const connector = new OneDriveConnector();
+        installClient(connector);
+        stubDrive();
+        routes.push({
+          match: "stored-token",
+          prefer: "deltashowsharingchanges",
+          body: {
+            value: [
+              { id: "I1", parentReference: { id: "root" } },
+              {
+                id: "I2",
+                parentReference: { id: "root" },
+                "@microsoft.graph.sharedChanged": "True",
+              },
+            ],
+            "@odata.deltaLink": "dl-next",
+          },
+        });
+
+        const result = await connector.probePermissionChanges({
+          config: permConfig,
+          credentials,
+          state: { deltaTokens: { "user:user-1": "stored-token" } },
+        });
+
+        expect(result.fullRequired).toBe(false);
+        expect(result.dirtyContainerKeys).toEqual(["user:user-1"]);
+        expect(result.nextState).toEqual({
+          deltaTokens: { "user:user-1": "dl-next" },
+        });
+      });
+
+      it("sharing preference denied (403): degrades to coarse probing where any drift dirties", async () => {
+        const connector = new OneDriveConnector();
+        installClient(connector);
+        stubDrive();
+        routes.push(
+          {
+            match: "stored-token",
+            prefer: "deltashowsharingchanges",
+            error: { statusCode: 403 },
+          },
+          {
+            match: "stored-token",
+            body: {
+              value: [{ id: "I1", parentReference: { id: "root" } }],
+              "@odata.deltaLink": "dl-next",
+            },
+          },
+        );
+
+        const result = await connector.probePermissionChanges({
+          config: permConfig,
+          credentials,
+          state: { deltaTokens: { "user:user-1": "stored-token" } },
+        });
+
+        expect(result.fullRequired).toBe(false);
+        expect(result.dirtyContainerKeys).toEqual(["user:user-1"]);
+      });
+
+      it("a rejected delta token (410) promotes to a full reconcile", async () => {
+        const connector = new OneDriveConnector();
+        installClient(connector);
+        stubDrive();
+        routes.push(
+          { match: "stored-token", error: { statusCode: 410 } },
+          {
+            match: "/drives/D1/root/delta?token=latest",
+            body: { "@odata.deltaLink": "dl-fresh" },
+          },
+        );
+
+        const result = await connector.probePermissionChanges({
+          config: permConfig,
+          credentials,
+          state: { deltaTokens: { "user:user-1": "stored-token" } },
+        });
+
+        expect(result.fullRequired).toBe(true);
+        expect(result.nextState).toEqual({
+          deltaTokens: { "user:user-1": "dl-fresh" },
+        });
+      });
+    });
+
+    describe("refreshContainerAudiences", () => {
+      it("re-resolves top-level audiences and skips nested item containers", async () => {
+        const connector = new OneDriveConnector();
+        installClient(connector);
+        stubDrive();
+        stubUsersTier();
+        routes.push({
+          match: "/drives/D1/root/permissions",
+          body: { value: [{ grantedToV2: { user: { id: "u-alice" } } }] },
+        });
+        routes.push({
+          match: "/users/u-alice?$select=mail,userPrincipalName",
+          body: { mail: "alice@example.com" },
+        });
+
+        const yields: Array<{
+          containerKey: string;
+          permissions: { users?: string[] };
+        }> = [];
+        for await (const y of connector.refreshContainerAudiences({
+          config: permConfig,
+          credentials,
+          containerKeys: ["user:user-1", "user:user-1/item:I2"],
+        })) {
+          yields.push(y);
+        }
+
+        expect(yields.map((y) => y.containerKey)).toEqual(["user:user-1"]);
+        expect(yields[0].permissions.users).toContain("alice@example.com");
+        expect(yields[0].permissions.users).toContain("owner@example.com");
+      });
     });
   });
 });

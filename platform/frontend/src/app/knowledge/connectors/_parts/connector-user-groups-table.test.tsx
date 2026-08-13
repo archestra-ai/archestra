@@ -4,6 +4,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConnectorUserGroupsTable } from "./connector-user-groups-table";
+import { WORKSPACE_ROSTER_NOUN } from "./roster-noun";
 
 const mockUseConnectorUserGroups = vi.fn();
 
@@ -242,5 +243,74 @@ describe("ConnectorUserGroupsTable", () => {
     render(<ConnectorUserGroupsTable connectorId="connector-1" />);
 
     expect(screen.getByText(/No user groups synced yet/)).toBeInTheDocument();
+  });
+
+  // Notion's group id is synthetic (`workspace-members-<workspaceId>`), so the
+  // row shows the workspace id Notion itself reports — not the internal id.
+  it("identifies a workspace row by the workspace id, not the synthetic group id", () => {
+    mockUseConnectorUserGroups.mockReturnValue({
+      data: {
+        groups: [
+          {
+            groupId: "workspace-members-11111111-2222-3333-4444-555555555555",
+            name: "Acme Inc",
+            token:
+              "group:notion_workspace-members-11111111-2222-3333-4444-555555555555",
+            documentCount: 2,
+            lastSyncedAt: "2026-07-08T15:00:00.000Z",
+            members: [],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+    });
+
+    render(
+      <ConnectorUserGroupsTable
+        connectorId="connector-1"
+        noun={WORKSPACE_ROSTER_NOUN}
+      />,
+    );
+
+    expect(screen.getByText("Acme Inc")).toBeInTheDocument();
+    expect(
+      screen.getByText("ID 11111111-2222-3333-4444-555555555555"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/workspace-members-/)).not.toBeInTheDocument();
+  });
+
+  // Notion's roster rows are workspaces, and the whole page family follows
+  // the noun — column header, filters, and empty states included.
+  it("renders workspace copy when given the workspace roster noun", () => {
+    mockGroups();
+
+    render(
+      <ConnectorUserGroupsTable
+        connectorId="connector-1"
+        noun={WORKSPACE_ROSTER_NOUN}
+      />,
+    );
+
+    expect(
+      screen.getByRole("columnheader", { name: "Workspace" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Group" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("All workspaces")).toBeInTheDocument();
+
+    mockUseConnectorUserGroups.mockReturnValue({
+      data: { groups: [] },
+      isPending: false,
+      isError: false,
+    });
+    render(
+      <ConnectorUserGroupsTable
+        connectorId="connector-1"
+        noun={WORKSPACE_ROSTER_NOUN}
+      />,
+    );
+    expect(screen.getByText(/No workspaces synced yet/)).toBeInTheDocument();
   });
 });

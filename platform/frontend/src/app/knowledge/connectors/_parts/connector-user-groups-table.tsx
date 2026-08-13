@@ -30,6 +30,11 @@ import { useConnectorUserGroups } from "@/lib/knowledge/connector.query";
 import { formatDate } from "@/lib/utils";
 import { CollapsedBadgeList } from "./collapsed-badge-list";
 import { MembershipTruncationNotice } from "./connector-membership-truncation-notice";
+import {
+  capitalizeNoun,
+  GROUP_ROSTER_NOUN,
+  type RosterNoun,
+} from "./roster-noun";
 
 type GroupFilter = "all" | "fully-assigned" | "not-fully-assigned";
 
@@ -43,8 +48,10 @@ type GroupFilter = "all" | "fully-assigned" | "not-fully-assigned";
  */
 export function ConnectorUserGroupsTable({
   connectorId,
+  noun = GROUP_ROSTER_NOUN,
 }: {
   connectorId: string;
+  noun?: RosterNoun;
 }) {
   const {
     data: userGroups,
@@ -104,33 +111,38 @@ export function ConnectorUserGroupsTable({
       {
         id: "group",
         accessorKey: "groupId",
-        header: "Group",
+        header: noun.columnHeader,
         // Group ids run long (e.g. `confluence-user-access-admins-…`); a
         // fixed wide column keeps them readable instead of truncating at
         // the even share.
         size: 320,
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div
-              className="truncate text-sm font-medium"
-              title={row.original.name ?? row.original.groupId}
-            >
-              {row.original.name ?? row.original.groupId}
+        cell: ({ row }) => {
+          // A synthetic group id (Notion's `workspace-members-<workspaceId>`)
+          // is an Archestra construct: show the id the source itself shows, so
+          // this line matches what an admin sees upstream.
+          const sourceId =
+            noun.sourceId?.(row.original.groupId) ?? row.original.groupId;
+          return (
+            <div className="min-w-0">
+              <div
+                className="truncate text-sm font-medium"
+                title={row.original.name ?? row.original.groupId}
+              >
+                {row.original.name ?? row.original.groupId}
+              </div>
+              <div
+                className="truncate text-xs text-muted-foreground"
+                title={
+                  row.original.name
+                    ? `${noun.idLabel}: ${sourceId}`
+                    : row.original.token
+                }
+              >
+                {row.original.name ? `ID ${sourceId}` : row.original.token}
+              </div>
             </div>
-            <div
-              className="truncate text-xs text-muted-foreground"
-              title={
-                row.original.name
-                  ? `Stable source ID: ${row.original.groupId}`
-                  : row.original.token
-              }
-            >
-              {row.original.name
-                ? `ID ${row.original.groupId}`
-                : row.original.token}
-            </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         id: "documentCount",
@@ -147,7 +159,9 @@ export function ConnectorUserGroupsTable({
         id: "assigned",
         header: "Assigned",
         size: 110,
-        cell: ({ row }) => <GroupMembersSummary group={row.original} />,
+        cell: ({ row }) => (
+          <GroupMembersSummary group={row.original} noun={noun} />
+        ),
       },
       {
         id: "members",
@@ -179,7 +193,7 @@ export function ConnectorUserGroupsTable({
           ),
       },
     ],
-    [],
+    [noun],
   );
 
   return (
@@ -189,7 +203,7 @@ export function ConnectorUserGroupsTable({
           <SearchInput
             value={search}
             syncQueryParams={false}
-            placeholder="Search by group or member name"
+            placeholder={`Search by ${noun.singular} or member name`}
             onSearchChange={setSearch}
           />
           <Select
@@ -198,12 +212,12 @@ export function ConnectorUserGroupsTable({
           >
             <SelectTrigger
               className="h-9 w-full text-sm sm:w-[200px]"
-              aria-label="Filter groups"
+              aria-label={`Filter ${noun.plural}`}
             >
-              <SelectValue placeholder="All groups" />
+              <SelectValue placeholder={`All ${noun.plural}`} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All groups</SelectItem>
+              <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
               <SelectItem value="fully-assigned">Fully assigned</SelectItem>
               <SelectItem value="not-fully-assigned">
                 Not fully assigned
@@ -241,10 +255,10 @@ export function ConnectorUserGroupsTable({
         isLoading={isPending}
         emptyMessage={
           isError
-            ? "Failed to load user groups. Please try again."
+            ? `Failed to load ${noun.emptyNoun}. Please try again.`
             : groups.length > 0
-              ? "No groups match your search or filter."
-              : "No user groups synced yet. Groups appear after the first permission sync."
+              ? `No ${noun.plural} match your search or filter.`
+              : `No ${noun.emptyNoun} synced yet. ${capitalizeNoun(noun.plural)} appear after the first permission sync.`
         }
       />
     </div>
@@ -320,7 +334,13 @@ function compareGroupsBySeverity(
  * documents while resolving to nobody is the one state that makes documents
  * unreachable, so it gets an explicit verdict instead of a count.
  */
-function GroupMembersSummary({ group }: { group: ConnectorUserGroup }) {
+function GroupMembersSummary({
+  group,
+  noun,
+}: {
+  group: ConnectorUserGroup;
+  noun: RosterNoun;
+}) {
   const humans = group.members.filter((m) => !isServiceAccount(m));
   const assigned = humans.filter((m) => m.user).length;
 
@@ -334,7 +354,7 @@ function GroupMembersSummary({ group }: { group: ConnectorUserGroup }) {
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">
           Nobody resolves to a user, so documents granting access only through
-          this group are inaccessible.
+          this {noun.singular} are inaccessible.
         </TooltipContent>
       </Tooltip>
     ) : (

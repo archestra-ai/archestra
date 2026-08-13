@@ -436,10 +436,23 @@ export class DropboxConnector extends BaseConnector {
     await this.rateLimit();
 
     const result = await dbx.filesDownload({ path: file.id });
-    const fileBlob = (result.result as files.FileMetadata & { fileBlob?: Blob })
-      .fileBlob;
-    if (!fileBlob) return "";
-    return fileBlob.text();
+    // The SDK attaches the payload as `fileBinary` in Node and `fileBlob` in
+    // browsers/workers — read whichever is present. (The historical
+    // fileBlob-only read resolved to undefined in Node, so every download
+    // silently ingested EMPTY content.)
+    const payload = result.result as files.FileMetadata & {
+      fileBinary?: Buffer | Uint8Array;
+      fileBlob?: Blob;
+    };
+    if (payload.fileBinary) {
+      return Buffer.from(payload.fileBinary).toString("utf-8");
+    }
+    if (payload.fileBlob) return payload.fileBlob.text();
+    this.log.warn(
+      { fileId: file.id, fileName: file.name },
+      "Dropbox download returned no payload bytes",
+    );
+    return "";
   }
 }
 

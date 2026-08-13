@@ -62,7 +62,18 @@ function makeContinueResult(
   };
 }
 
+/** Node shape: the SDK attaches download bytes as `fileBinary` (never `fileBlob`). */
 function makeDownloadResult(content: string) {
+  return {
+    result: {
+      ".tag": "file",
+      fileBinary: Buffer.from(content),
+    },
+  };
+}
+
+/** Browser/worker shape: bytes arrive as a `fileBlob` instead. */
+function makeBlobDownloadResult(content: string) {
   return {
     result: {
       ".tag": "file",
@@ -190,6 +201,31 @@ describe("DropboxConnector", () => {
       expect(batches[0].documents[0].id).toBe("id:aaa");
       expect(batches[0].documents[0].title).toBe("readme.md");
       expect(batches[0].documents[1].id).toBe("id:bbb");
+    });
+
+    it("reads browser-shaped downloads (fileBlob) too", async () => {
+      mockFilesListFolder.mockResolvedValueOnce(
+        makeListFolderResult([], { cursor: "root-cursor-123" }),
+      );
+      mockFilesListFolder.mockResolvedValueOnce(makeListFolderResult([]));
+      mockFilesListFolder.mockResolvedValueOnce(
+        makeListFolderResult([makeFile("id:b1", "notes.txt")]),
+      );
+      mockFilesDownload.mockResolvedValueOnce(
+        makeBlobDownloadResult("from a blob"),
+      );
+
+      const connector = new DropboxConnector();
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents[0].content).toBe("from a blob");
     });
 
     it("skips folders and deleted entries", async () => {

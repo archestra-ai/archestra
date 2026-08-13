@@ -804,7 +804,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       // SPDX-SnippetEnd
 
-      if (body.connectorType === "mfiles" && !config.kb.mfilesConnectorEnabled) {
+      if (
+        body.connectorType === "mfiles" &&
+        !config.kb.mfilesConnectorEnabled
+      ) {
         throw new ApiError(
           403,
           "The M-Files connector is not enabled on this deployment",

@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { CollapsedBadgeList } from "./collapsed-badge-list";
 
@@ -21,6 +22,7 @@ import { CollapsedBadgeList } from "./collapsed-badge-list";
  */
 export function AclBadges({ acl }: { acl: string[] }) {
   const { data: teams } = useTeams();
+  const { data: orgMembers } = useOrganizationMembers();
 
   if (acl.length === 0) {
     return (
@@ -45,7 +47,7 @@ export function AclBadges({ acl }: { acl: string[] }) {
     <CollapsedBadgeList
       items={acl.map((entry) => ({
         id: entry,
-        label: formatAclEntry(entry, teams),
+        label: formatAclEntry(entry, teams, orgMembers),
         // The raw token, for correlation with the Groups tab.
         title: entry,
       }))}
@@ -56,6 +58,7 @@ export function AclBadges({ acl }: { acl: string[] }) {
 function formatAclEntry(
   entry: string,
   teams: { id: string; name: string }[] | undefined,
+  orgMembers: { name: string; email: string }[] | undefined,
 ): string {
   if (entry === "org:*") {
     return "Everyone in org";
@@ -66,7 +69,14 @@ function formatAclEntry(
     return `Team: ${team?.name ?? teamId}`;
   }
   if (entry.startsWith("user_email:")) {
-    return entry.slice("user_email:".length);
+    // A user grant reads as the org user it resolves to — a manually mapped
+    // account materializes the mapped user's email here, so the resolved
+    // name applies to it exactly as to an email-matched one.
+    const email = entry.slice("user_email:".length);
+    const user = orgMembers?.find(
+      (member) => member.email.toLowerCase() === email.toLowerCase(),
+    );
+    return user ? `${email} · ${user.name}` : email;
   }
   if (entry.startsWith("group:")) {
     return `Group: ${entry.slice("group:".length)}`;

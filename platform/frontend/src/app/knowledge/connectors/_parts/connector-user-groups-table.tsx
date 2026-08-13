@@ -57,21 +57,42 @@ export function ConnectorUserGroupsTable({
 
   const groups = useMemo(() => userGroups?.groups ?? [], [userGroups?.groups]);
 
-  // Distinct human accounts across the snapshot, for the member filter.
+  // Distinct people across the snapshot, for the member filter. A resolved
+  // member — email-matched or manually assigned alike — is offered as the org
+  // user it resolves to, one option per user even when several upstream
+  // accounts map to the same person; only unresolved accounts fall back to
+  // their upstream identity. Values carry a `user:` / `account:` prefix so a
+  // selection knows which side it names (see matchesMemberFilter for the
+  // reverse mapping).
   const memberOptions = useMemo(() => {
+    const byUser = new Map<string, string>();
     const byAccount = new Map<string, string>();
     for (const group of groups) {
       for (const member of group.members) {
         if (isServiceAccount(member)) continue;
-        byAccount.set(
-          member.accountId,
-          member.displayName ?? member.email ?? member.accountId,
-        );
+        if (member.user) {
+          byUser.set(
+            member.user.id,
+            `${member.user.name} (${member.user.email})`,
+          );
+        } else {
+          byAccount.set(
+            member.accountId,
+            member.displayName ?? member.email ?? member.accountId,
+          );
+        }
       }
     }
-    return [...byAccount.entries()]
-      .map(([accountId, label]) => ({ accountId, label }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+    return [
+      ...[...byUser.entries()].map(([id, label]) => ({
+        value: `user:${id}`,
+        label,
+      })),
+      ...[...byAccount.entries()].map(([id, label]) => ({
+        value: `account:${id}`,
+        label,
+      })),
+    ].sort((a, b) => a.label.localeCompare(b.label));
   }, [groups]);
 
   const visibleGroups = useMemo(() => {
@@ -81,7 +102,9 @@ export function ConnectorUserGroupsTable({
       .filter(
         (group) =>
           memberFilter === "all" ||
-          group.members.some((member) => member.accountId === memberFilter),
+          group.members.some((member) =>
+            matchesMemberFilter(member, memberFilter),
+          ),
       )
       .filter((group) => matchesSearch(group, query))
       .sort(compareGroupsBySeverity);
@@ -220,7 +243,7 @@ export function ConnectorUserGroupsTable({
             <SelectContent>
               <SelectItem value="all">All members</SelectItem>
               {memberOptions.map((member) => (
-                <SelectItem key={member.accountId} value={member.accountId}>
+                <SelectItem key={member.value} value={member.value}>
                   {member.label}
                 </SelectItem>
               ))}
@@ -258,6 +281,25 @@ function isServiceAccount(member: ConnectorUserGroupMember): boolean {
 }
 
 /**
+ * The reverse of the mapping the filter options display: a `user:` selection
+ * matches every upstream account that resolves to that org user (manual
+ * assignment and email match alike), an `account:` selection matches the one
+ * unresolved upstream account it names.
+ */
+function matchesMemberFilter(
+  member: ConnectorUserGroupMember,
+  filter: string,
+): boolean {
+  if (filter.startsWith("user:")) {
+    return member.user?.id === filter.slice("user:".length);
+  }
+  if (filter.startsWith("account:")) {
+    return !member.user && member.accountId === filter.slice("account:".length);
+  }
+  return false;
+}
+
+/**
  * Assignment buckets over human accounts: fully assigned means every human
  * member resolves to a user (a group with no human members is never "fully
  * assigned" — there is nobody who can reach what it gates).
@@ -284,7 +326,8 @@ function matchesSearch(group: ConnectorUserGroup, query: string) {
       member.email?.toLowerCase().includes(query) ||
       member.displayName?.toLowerCase().includes(query) ||
       member.accountId.toLowerCase().includes(query) ||
-      member.user?.name.toLowerCase().includes(query),
+      member.user?.name.toLowerCase().includes(query) ||
+      member.user?.email.toLowerCase().includes(query),
   );
 }
 
@@ -369,8 +412,17 @@ function GroupMemberBadges({ group }: { group: ConnectorUserGroup }) {
   );
 }
 
+/**
+ * A resolved member — email-matched or manually assigned alike — reads as the
+ * org user it resolves to (email · name), the identity access control
+ * actually grants. Only an unresolved member falls back to its upstream
+ * identity, with "email hidden" marking why it resolves to nobody.
+ */
 function memberLabel(member: ConnectorUserGroupMember): string {
-  const identity =
-    member.email ?? `${member.displayName ?? member.accountId} · email hidden`;
-  return member.user ? `${identity} · ${member.user.name}` : identity;
+  if (member.user) {
+    return `${member.user.email} · ${member.user.name}`;
+  }
+  return (
+    member.email ?? `${member.displayName ?? member.accountId} · email hidden`
+  );
 }

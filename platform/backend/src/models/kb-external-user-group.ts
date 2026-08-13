@@ -254,7 +254,8 @@ class KbExternalUserGroupModel {
       memberEmail: string | null;
       accountType: string | null;
       updatedAt: Date;
-      user: { id: string; name: string } | null;
+      /** Email included so every surface can render the resolved identity. */
+      user: { id: string; name: string; email: string } | null;
       /** How `user` resolved: manual admin mapping or the email join. */
       resolvedVia: "override" | "email" | null;
     }[];
@@ -275,9 +276,11 @@ class KbExternalUserGroupModel {
         updatedAt: t.updatedAt,
         userId: schema.usersTable.id,
         userName: schema.usersTable.name,
+        userEmail: schema.usersTable.email,
         memberId: schema.membersTable.id,
         overrideUserId: overrideUsers.id,
         overrideUserName: overrideUsers.name,
+        overrideUserEmail: overrideUsers.email,
         overrideMemberId: overrideMembers.id,
       })
       .from(t)
@@ -325,11 +328,15 @@ class KbExternalUserGroupModel {
           row.overrideMemberId &&
           row.overrideUserId &&
           row.overrideUserName !== null
-            ? { id: row.overrideUserId, name: row.overrideUserName }
+            ? {
+                id: row.overrideUserId,
+                name: row.overrideUserName,
+                email: row.overrideUserEmail ?? "",
+              }
             : null;
         const emailUser =
           row.memberId && row.userId && row.userName !== null
-            ? { id: row.userId, name: row.userName }
+            ? { id: row.userId, name: row.userName, email: row.userEmail ?? "" }
             : null;
         return {
           groupId: row.groupId,

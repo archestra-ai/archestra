@@ -23,7 +23,11 @@ import db, { schema } from "@/database";
 import { buildContainerToken } from "@/knowledge-base/acl-tokens";
 import { findAccessTokensForUserCached } from "@/knowledge-base/group-token-cache";
 import { permissionSyncService } from "@/knowledge-base/permission-sync";
-import { ConnectorRunModel, KbExternalUserGroupModel } from "@/models";
+import {
+  ConnectorRunModel,
+  KbExternalGroupModel,
+  KbExternalUserGroupModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 
 type FakeContainer = {
@@ -42,7 +46,12 @@ type FakeContainer = {
  */
 function makeFakeConnector(opts: {
   containers?: FakeContainer[];
-  groups?: { groupId: string; memberEmails: string[] }[];
+  groups?: {
+    groupId: string;
+    name?: string | null;
+    memberEmails: string[];
+    membershipResolutionFailed?: boolean;
+  }[];
   hasSyncGroups?: boolean;
   syncGroupsThrows?: boolean;
   /** Crash after this many DOCUMENT yields (containers don't count). */
@@ -51,6 +60,9 @@ function makeFakeConnector(opts: {
   /** Wire a probe hook (delta-mode tests). */
   probe?: {
     dirtyContainerKeys: string[];
+    dirtyGroupIds?: string[];
+    deletedGroupIds?: string[];
+    authoritativeAudienceScope?: boolean;
     fullRequired?: boolean;
     nextState?: Record<string, unknown>;
   };
@@ -66,10 +78,12 @@ function makeFakeConnector(opts: {
   refreshAudiences?: Record<string, DocumentPermissions>;
   /** Omit the refresh hook entirely (full-only-promotion tests). */
   withoutRefreshHook?: boolean;
+  requiresAtomicSecuritySync?: boolean;
 }) {
   // biome-ignore lint/suspicious/noExplicitAny: test double
   const impl: any = {
     supportsPermissionSync: true,
+    requiresAtomicSecuritySync: opts.requiresAtomicSecuritySync ?? false,
     async *syncPermissionSnapshot(params: {
       cursor: string | null;
       scope?: { containerKeys: string[] };
@@ -135,6 +149,9 @@ function makeFakeConnector(opts: {
     const probe = opts.probe;
     impl.probePermissionChanges = vi.fn().mockResolvedValue({
       dirtyContainerKeys: probe.dirtyContainerKeys,
+      dirtyGroupIds: probe.dirtyGroupIds ?? [],
+      deletedGroupIds: probe.deletedGroupIds ?? [],
+      authoritativeAudienceScope: probe.authoritativeAudienceScope ?? false,
       fullRequired: probe.fullRequired ?? false,
       nextState: probe.nextState ?? { cursor: "next" },
     });
@@ -146,6 +163,8 @@ function makeFakeConnector(opts: {
         // Test API stays email-shaped; the pass consumes full principals.
         yield {
           groupId: group.groupId,
+          name: group.name ?? null,
+          membershipResolutionFailed: group.membershipResolutionFailed ?? false,
           members: group.memberEmails.map((email) => ({
             accountId: email,
             displayName: null,
@@ -1028,6 +1047,167 @@ describe("permission-sync pass (containers / epoch / resume / groups)", () => {
     const state = await connectorState(connector.id);
     expect(state?.cursor).toBe("advanced");
     expect(typeof state?.lastFullReconcileAt).toBe("string");
+  });
+
+  test("an authoritative clean delta performs zero upstream ACL and group reads", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const connector = await seedConnector(org.id);
+    await seedDoc({
+      organizationId: org.id,
+      connectorId: connector.id,
+      sourceId: "assigned",
+      acl: [],
+      containerKey: "repo:o/r",
+    });
+    await seedSyncState(connector.id, {
+      lastFullReconcileAt: new Date().toISOString(),
+    });
+    const fake = makeFakeConnector({
+      groups: [{ groupId: "7", memberEmails: ["x@example.com"] }],
+      probe: {
+        dirtyContainerKeys: [],
+        dirtyGroupIds: [],
+        deletedGroupIds: [],
+        authoritativeAudienceScope: true,
+      },
+      refreshAudiences: {
+        "repo:o/r": { users: ["must-not-be-read@example.com"] },
+      },
+    });
+    const groupSpy = vi.spyOn(fake, "syncGroups");
+    const audienceSpy = vi.spyOn(fake, "refreshContainerAudiences");
+    vi.mocked(getConnector).mockReturnValue(fake);
+
+    const result = await permissionSyncService.executePass(connector.id);
+
+    expect(result.status).toBe("success");
+    expect(groupSpy).not.toHaveBeenCalled();
+    expect(audienceSpy).not.toHaveBeenCalled();
+    expect((await runStats(result.runId))?.mode).toBe("delta");
+  });
+
+  test("the group catalog preserves source names and empty groups", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const connector = await seedConnector(org.id);
+    vi.mocked(getConnector).mockReturnValue(
+      makeFakeConnector({
+        groups: [
+          {
+            groupId: "7",
+            name: "Engineering Readers",
+            memberEmails: [],
+          },
+        ],
+      }),
+    );
+
+    const result = await permissionSyncService.executePass(connector.id);
+
+    expect(result.status).toBe("success");
+    const catalog = await KbExternalGroupModel.findByConnector(connector.id);
+    expect(catalog).toEqual([
+      expect.objectContaining({
+        groupId: "7",
+        name: "Engineering Readers",
+      }),
+    ]);
+  });
+
+  test("authoritative group deltas replace dirty groups and remove deleted groups", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const connector = await seedConnector(org.id);
+    await seedSyncState(connector.id, {
+      lastFullReconcileAt: new Date().toISOString(),
+    });
+    await KbExternalGroupModel.upsertMany([
+      {
+        organizationId: org.id,
+        connectorId: connector.id,
+        connectorType: "github",
+        groupId: "9",
+        name: "Deleted group",
+      },
+    ]);
+    await KbExternalUserGroupModel.upsertMany([
+      {
+        organizationId: org.id,
+        connectorId: connector.id,
+        connectorType: "github",
+        groupId: "9",
+        externalAccountId: "old@example.com",
+        memberEmail: "old@example.com",
+      },
+    ]);
+    vi.mocked(getConnector).mockReturnValue(
+      makeFakeConnector({
+        groups: [
+          {
+            groupId: "7",
+            name: "Renamed readers",
+            memberEmails: ["new@example.com"],
+          },
+        ],
+        probe: {
+          dirtyContainerKeys: [],
+          dirtyGroupIds: ["7"],
+          deletedGroupIds: ["9"],
+          authoritativeAudienceScope: true,
+        },
+        requiresAtomicSecuritySync: true,
+      }),
+    );
+
+    const result = await permissionSyncService.executePass(connector.id);
+
+    expect(result.status).toBe("success");
+    const catalog = await KbExternalGroupModel.findByConnector(connector.id);
+    expect(catalog.map(({ groupId, name }) => ({ groupId, name }))).toEqual([
+      { groupId: "7", name: "Renamed readers" },
+    ]);
+    const memberships = await db
+      .select()
+      .from(schema.kbExternalUserGroupsTable)
+      .where(eq(schema.kbExternalUserGroupsTable.connectorId, connector.id));
+    expect(
+      memberships.map((membership) => ({
+        groupId: membership.groupId,
+        email: membership.memberEmail,
+      })),
+    ).toEqual([{ groupId: "7", email: "new@example.com" }]);
+  });
+
+  test("atomic connectors do not commit a journal state after group failure", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const connector = await seedConnector(org.id);
+    await seedSyncState(connector.id, {
+      lastFullReconcileAt: new Date().toISOString(),
+      cursor: "before",
+    });
+    vi.mocked(getConnector).mockReturnValue(
+      makeFakeConnector({
+        syncGroupsThrows: true,
+        probe: {
+          dirtyContainerKeys: [],
+          dirtyGroupIds: ["7"],
+          authoritativeAudienceScope: true,
+          nextState: { cursor: "must-not-commit" },
+        },
+        requiresAtomicSecuritySync: true,
+      }),
+    );
+
+    const result = await permissionSyncService.executePass(connector.id);
+
+    expect(result.status).toBe("failed");
+    expect((await connectorState(connector.id))?.cursor).toBe("before");
   });
 
   test("a dirty delta reconciles ONLY the probed containers — no sweeps", async ({

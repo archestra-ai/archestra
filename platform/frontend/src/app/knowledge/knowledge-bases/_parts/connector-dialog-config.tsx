@@ -31,6 +31,7 @@ import { GithubConfigFields } from "./github-config-fields";
 import { GitlabConfigFields } from "./gitlab-config-fields";
 import { JiraConfigFields } from "./jira-config-fields";
 import { LinearConfigFields } from "./linear-config-fields";
+import { MFilesConfigFields, MFilesInlineFields } from "./mfiles-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { OneDriveConfigFields } from "./onedrive-config-fields";
 import { OutlineConfigFields } from "./outline-config-fields";
@@ -89,12 +90,14 @@ const CONNECTOR_DISPLAY_LABELS: Record<ConnectorType, string> = {
   salesforce: CONNECTOR_TYPE_LABELS.salesforce ?? "Salesforce",
   web_crawler: CONNECTOR_TYPE_LABELS.web_crawler,
   perforce: CONNECTOR_TYPE_LABELS.perforce,
+  mfiles: CONNECTOR_TYPE_LABELS.mfiles,
 };
 
 const CONNECTOR_DOC_ANCHORS: Partial<Record<ConnectorType, string>> = {
   gdrive: "google-drive",
   web_crawler: "web-crawler",
   perforce: "perforce-helix-core",
+  mfiles: "m-files",
 };
 
 export const CONNECTOR_OPTIONS: ConnectorOption[] = [
@@ -178,6 +181,11 @@ export const CONNECTOR_OPTIONS: ConnectorOption[] = [
     label: CONNECTOR_DISPLAY_LABELS.perforce,
     description: "Sync text files from Perforce Helix Core depots",
   },
+  {
+    type: "mfiles",
+    label: CONNECTOR_DISPLAY_LABELS.mfiles,
+    description: "Sync documents and permissions from an M-Files vault",
+  },
 ];
 
 const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
@@ -257,6 +265,10 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
       description:
         "Base URL of the P4 REST API, served by the built-in P4 web server (p4 webserver). Use https when the server has an SSL certificate configured.",
     },
+    // Rendered inside MFilesInlineFields: the VAF Add On install precedes
+    // everything in the connection workflow, so its section must sit above
+    // the URL field — outside the shared slot's reach.
+    mfiles: null,
   };
 
 const CREATE_ADVANCED_CONFIG_FIELDS: Record<
@@ -283,6 +295,7 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
   web_crawler: ({ form }) => <WebCrawlerConfigFields form={form} />,
   perforce: ({ form }) => <PerforceConfigFields form={form} />,
+  mfiles: ({ form }) => <MFilesConfigFields form={form} />,
 };
 
 const EDIT_ADVANCED_CONFIG_FIELDS: Record<
@@ -330,6 +343,7 @@ const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "github",
   "confluence",
   "jira",
+  "mfiles",
   "gdrive",
   "sharepoint",
   "salesforce",
@@ -446,13 +460,30 @@ export function getDefaultConnectorConfig(
       allowPrivateNetwork: false,
     },
     perforce: { type },
+    // Tuning knobs (batch size, object types, client auth method, extension
+    // method) are deliberately not seeded: leaving them absent lets the
+    // backend defaults govern instead of pinning today's values into every
+    // stored config.
+    // authMethod is deliberately absent: Login Account is the default. The
+    // two oauth fields are presets for admins who switch the method to
+    // Application Account (where the gate allows it).
+    mfiles: {
+      type,
+      oauthAuthConfig: "Technical Credentials",
+      oauthAuthConfigScope: "technical",
+    },
   };
 
   return { ...defaultConfigs[type] };
 }
 
 export function connectorNeedsEmail(type: ConnectorType): boolean {
-  return type === "jira" || type === "confluence" || type === "salesforce";
+  return (
+    type === "jira" ||
+    type === "confluence" ||
+    type === "salesforce" ||
+    type === "mfiles"
+  );
 }
 
 export function getConnectorCredentialConfig(params: {
@@ -479,6 +510,12 @@ export function getConnectorCredentialConfig(params: {
 
   const githubUsesApp =
     params.type === "github" && params.authMethod === "github_app";
+  // Absent authMethod means the legacy password-token mode, matching the
+  // backend default.
+  const mfilesUsesOAuth =
+    params.type === "mfiles" &&
+    (params.authMethod ?? "mfiles_password_token") ===
+      "oauth_client_credentials";
   const apiTokenLabels: Record<ConnectorType, string | undefined> = {
     servicenow: "Password",
     notion: "Integration Token",
@@ -498,6 +535,7 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Password + Security Token",
     web_crawler: undefined,
     perforce: "Login Ticket",
+    mfiles: mfilesUsesOAuth ? "Client Secret" : "Password",
   };
 
   const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> =
@@ -522,6 +560,9 @@ export function getConnectorCredentialConfig(params: {
       salesforce: "Your Salesforce password followed by your security token",
       web_crawler: undefined,
       perforce: "Ticket from p4 login -a -p",
+      mfiles: mfilesUsesOAuth
+        ? "Your Application Account client secret"
+        : "Your M-Files service account password",
     };
 
   const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
@@ -545,6 +586,9 @@ export function getConnectorCredentialConfig(params: {
     onedrive: "Leave empty to keep existing token",
     web_crawler: undefined,
     perforce: "Leave empty to keep existing credentials",
+    mfiles: mfilesUsesOAuth
+      ? "Leave empty to keep existing client secret"
+      : "Leave empty to keep existing password",
   };
 
   const apiTokenRequiredMessages: Record<ConnectorType, string | undefined> = {
@@ -568,11 +612,15 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Password and security token are required",
     web_crawler: undefined,
     perforce: "Login ticket is required",
+    mfiles: mfilesUsesOAuth
+      ? "Client secret is required"
+      : "Password is required",
   };
 
   const apiTokenHelpText = getApiTokenHelpText({
     type: params.type,
     mode: params.mode,
+    authMethod: params.authMethod,
     authMode: params.authMode,
   });
 
@@ -591,6 +639,7 @@ export function getConnectorCredentialConfig(params: {
 function getApiTokenHelpText(params: {
   type: ConnectorType;
   mode: "create" | "edit";
+  authMethod?: string;
   authMode?: string;
 }): ReactNode | undefined {
   if (params.type === "sharepoint") {
@@ -630,6 +679,18 @@ function getApiTokenHelpText(params: {
         A login ticket valid for all hosts, generated with{" "}
         <code>p4 login -a -p</code>. For long-lived access, use a service
         account whose group has an unlimited ticket timeout.
+      </p>
+    );
+  }
+
+  if (params.type === "mfiles") {
+    const usesOAuth =
+      (params.authMethod ?? "oauth_client_credentials") ===
+      "oauth_client_credentials";
+    if (usesOAuth) return undefined;
+    return (
+      <p className="text-[0.8rem] text-muted-foreground">
+        Exchanged for short-lived MFWS tokens; never sent with content requests.
       </p>
     );
   }
@@ -1143,6 +1204,7 @@ const INLINE_CONFIG_FIELDS: Record<
       />
     </>
   ),
+  mfiles: ({ form, mode }) => <MFilesInlineFields form={form} mode={mode} />,
 };
 
 export function ConnectorInlineConfigFields({

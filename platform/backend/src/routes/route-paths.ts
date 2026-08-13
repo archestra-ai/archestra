@@ -25,6 +25,21 @@ export const SKILL_MARKETPLACE_PREFIX = "/skills/m";
  */
 export const CONNECTION_SETUP_SCRIPT_PREFIX = "/api/connection-setups/script";
 
+/**
+ * VAF Add On install bootstrap — the parameterless script the connector
+ * form's `irm ... | iex` command fetches. Public: identical for every
+ * caller, no credentials or per-user state, run in the admin's own shell.
+ */
+export const MFILES_VAF_ADD_ON_SCRIPT_PATH = "/api/mfiles-vaf-add-on/script";
+
+/**
+ * VAF Add On package download — the pre-built `.mfappx` the backend proxies
+ * from the branch CI build when the development source-ref override is
+ * active. Public: the content is a public CI artifact of the open
+ * repository, and the installer fetches it without a session.
+ */
+export const MFILES_VAF_ADD_ON_PACKAGE_PATH = "/api/mfiles-vaf-add-on/package";
+
 export const ORGANIZATION_APPEARANCE_SETTINGS_PATH =
   "/api/organization/appearance-settings";
 export const PUBLIC_CONFIG_PATH = "/api/config/public";

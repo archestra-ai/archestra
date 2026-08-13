@@ -72,6 +72,13 @@ archestra:
     # Explicit so staging keeps the feature even if ARCHESTRA_BETA is ever
     # flipped off.
     ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
+    # BETA: the M-Files connector (off by default everywhere else). Explicit
+    # for the same reason as the auto-sync flag above.
+    ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED: "true"
+    # Serve the VAF Add On from main's CI build (proxied with the GitHub
+    # token the deploy workflow injects): no release carries the package yet.
+    # Remove both once the first release ships with the .mfappx asset.
+    ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF: "main"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"

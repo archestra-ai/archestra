@@ -727,6 +727,9 @@ export const RouteId = {
 
   // Connection Setup Routes
   CreateConnectionSetup: "createConnectionSetup",
+  GetMfilesVafAddOnScript: "getMfilesVafAddOnScript",
+  GetMfilesVafAddOnPackage: "getMfilesVafAddOnPackage",
+  GetMfilesVafAddOnDistribution: "getMfilesVafAddOnDistribution",
   GetConnectionSetupScript: "getConnectionSetupScript",
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",

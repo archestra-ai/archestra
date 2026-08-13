@@ -2765,6 +2765,20 @@ const config = {
     autoSyncPermissionsEnabled: betaFeatureEnabled(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
     ),
+    // BETA gate for the M-Files connector: hides the connector type in the
+    // frontend, rejects creating connectors of the type, and disables the VAF
+    // Add On distribution endpoints. Off by default; a blank value falls back
+    // to the ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+    mfilesConnectorEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED,
+    ),
+    // Gate for the M-Files Application Account (OAuth client-credentials)
+    // auth method. Deliberately NOT wired through betaFeatureEnabled: the
+    // method stays hidden until this flag is set explicitly, even on
+    // deployments running with the ARCHESTRA_BETA master switch on.
+    // Intentionally undocumented while the method is being validated.
+    mfilesOauthEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_OAUTH_ENABLED === "true",
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     /**
@@ -2869,6 +2883,29 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
+    /**
+     * Development override for where the Archestra VAF Add On install script
+     * gets the add-on from. Set to a git ref of archestra-ai/archestra (a
+     * pushed commit SHA, branch, or tag) to have the script compile the
+     * add-on from that source instead of downloading a release package, or
+     * to the special value `local` to use this backend checkout's HEAD
+     * commit. Unset (the default, and the right value for production), the
+     * script downloads the package of the release matching this platform
+     * version, falling back to the latest release.
+     */
+    mfilesVafAddOnSourceRef:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF?.trim() ||
+      null,
+    /**
+     * GitHub token used to download the source ref's CI-built add-on package
+     * (GitHub requires authentication for Actions artifact downloads even on
+     * public repositories). Only read when the source-ref override above is
+     * set; without it the install script compiles the add-on from source
+     * instead. Never sent to clients — the backend proxies the package.
+     */
+    mfilesVafAddOnGithubToken:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN?.trim() ||
+      null,
     // A document still `pending`/`processing` this long after its last touch has
     // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
     // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the

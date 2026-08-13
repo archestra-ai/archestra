@@ -12,6 +12,7 @@ import {
   ConnectorRunModel,
   KbContainerAclModel,
   KbDocumentModel,
+  KbExternalGroupModel,
   KbExternalUserGroupModel,
   KbMemberOverrideModel,
   KnowledgeBaseConnectorModel,
@@ -22,6 +23,7 @@ import type {
   Connector,
   ConnectorCredentials,
   InsertKbContainerAcl,
+  InsertKbExternalGroup,
   InsertKbExternalUserGroup,
   KnowledgeBaseConnector,
   PermissionProbeResult,
@@ -380,11 +382,10 @@ class PermissionSyncService {
         !Number.isFinite(lastFullAt) ||
         Date.now() - lastFullAt >=
           PERMISSION_SYNC_FULL_RECONCILE_INTERVAL_SECONDS * 1000;
-      // Delta passes VERIFY, never infer: every one re-resolves all stored
-      // container audiences (O(containers) upstream requests) and re-syncs
-      // group memberships, so any upstream permission change — however it was
-      // (or wasn't) audited — lands on the next pass. A connector that can
-      // probe but cannot refresh audiences has no delta mode.
+      // Delta passes verify the exact scope returned by the probe. Sources with
+      // an authoritative, gap-detecting journal may return only dirty objects
+      // and groups; other probes keep the conservative all-container refresh.
+      // A connector that can probe but cannot refresh audiences has no delta.
       const audienceRefreshUnsupported =
         !connectorImpl.refreshContainerAudiences;
       const mode: "full" | "delta" =
@@ -444,17 +445,24 @@ class PermissionSyncService {
       // ---- Phase 1: groups (completion-gated stale sweep). Not resumed
       // mid-way — small and dedupable; a restart re-marks and re-observes.
       //
-      // Per-step failure isolation: the group step and the document reconcile
-      // (Phase 2) are two independent steps of the one pass. A group-enumeration
-      // failure is logged + metered but MUST NOT abort Phase 2 — documents still
-      // reconcile against the previous group snapshot. On failure we skip the
-      // completion-gated revoked-membership delete, so the prior snapshot's rows
-      // (now flagged stale, but `findGroupTokensForUser` ignores the flag) stay
-      // resolvable until a later pass enumerates cleanly. ----
-      // Runs on EVERY pass, delta included: membership drift is verified by
-      // re-enumeration (diff-based, unchanged memberships cost zero writes),
-      // never inferred from audit events — see PermissionProbeResult.
-      if (connectorImpl.syncGroups) {
+      // Per-step failure isolation is retained for legacy connectors. Connectors
+      // that declare atomic security sync abort the pass if groups fail, so the
+      // journal cursor never commits past a security change. In both cases the
+      // completion-gated diff preserves the prior snapshot on interruption. ----
+      // Sources with an authoritative, gap-detecting journal enumerate only
+      // dirty groups on delta passes. Other sources retain the conservative
+      // full-membership verification behavior.
+      const authoritativeGroupScope =
+        mode === "delta" && probe?.authoritativeAudienceScope === true;
+      const dirtyGroupIds = [...new Set(probe?.dirtyGroupIds ?? [])];
+      const deletedGroupIds = [...new Set(probe?.deletedGroupIds ?? [])];
+      const affectedGroupIds = [
+        ...new Set([...dirtyGroupIds, ...deletedGroupIds]),
+      ];
+      const shouldSyncGroups =
+        connectorImpl.syncGroups &&
+        (!authoritativeGroupScope || affectedGroupIds.length > 0);
+      if (shouldSyncGroups && connectorImpl.syncGroups) {
         // Counted separately from `stats` so the persisted numbers stay
         // honest on failure: `membershipsUpserted` only ever reflects batches
         // that actually landed (a mid-pass throw once reported 75 upserted
@@ -468,10 +476,14 @@ class PermissionSyncService {
           // completes (completion-gated), so an interrupted run never drops a
           // membership it simply had not reached; on failure the previous
           // snapshot stays fully resolvable.
-          const current =
-            await KbExternalUserGroupModel.findMembershipSnapshotByConnector(
-              connectorId,
-            );
+          const current = authoritativeGroupScope
+            ? await KbExternalUserGroupModel.findMembershipSnapshotByGroups({
+                connectorId,
+                groupIds: affectedGroupIds,
+              })
+            : await KbExternalUserGroupModel.findMembershipSnapshotByConnector(
+                connectorId,
+              );
           const membershipKey = (groupId: string, accountId: string) =>
             `${groupId}\u0000${accountId}`;
           const currentByKey = new Map(
@@ -481,15 +493,34 @@ class PermissionSyncService {
             ]),
           );
           const seen = new Set<string>();
+          const seenGroupIds = new Set<string>();
           let pending: InsertKbExternalUserGroup[] = [];
+          const pendingGroups: InsertKbExternalGroup[] = [];
           for await (const group of connectorImpl.syncGroups({
             config: connector.config as Record<string, unknown>,
             credentials,
             cursor: null,
             readIngestedDocuments,
             refreshIdentities,
+            ...(authoritativeGroupScope
+              ? { scope: { containerKeys: [], groupIds: dirtyGroupIds } }
+              : {}),
           })) {
             groupsEnumerated += 1;
+            seenGroupIds.add(group.groupId);
+            pendingGroups.push({
+              organizationId: connector.organizationId,
+              connectorId,
+              connectorType: connector.connectorType,
+              groupId: group.groupId,
+              name: group.name ?? null,
+            });
+            if (group.membershipResolutionFailed) {
+              runLog.warn(
+                { groupId: group.groupId, groupName: group.name ?? null },
+                "Group membership could not be resolved; replacing it with an empty fail-closed membership",
+              );
+            }
             for (const member of group.members) {
               const key = membershipKey(group.groupId, member.accountId);
               seen.add(key);
@@ -532,6 +563,11 @@ class PermissionSyncService {
             await KbExternalUserGroupModel.upsertMany(pending);
             membershipsPersisted += pending.length;
           }
+          for (let i = 0; i < pendingGroups.length; i += this.batchSize) {
+            await KbExternalGroupModel.upsertMany(
+              pendingGroups.slice(i, i + this.batchSize),
+            );
+          }
           // Completion-gated diff delete of revoked memberships. Read off the
           // map's VALUES rather than by splitting its keys apart again: the
           // stored row already carries both fields, so the composite key stays
@@ -548,6 +584,28 @@ class PermissionSyncService {
               keys: revoked.slice(i, i + this.batchSize),
             });
             await yieldToEventLoop();
+          }
+          if (authoritativeGroupScope) {
+            // Deleted groups are absent by definition; dirty groups that were
+            // requested but not returned are also treated as deleted. The
+            // journal is authoritative and the connector has completed the
+            // scoped read, so retaining either would be fail-open.
+            const absent = affectedGroupIds.filter(
+              (groupId) => !seenGroupIds.has(groupId),
+            );
+            await KbExternalUserGroupModel.deleteByGroupIds({
+              connectorId,
+              groupIds: absent,
+            });
+            await KbExternalGroupModel.deleteByGroupIds({
+              connectorId,
+              groupIds: absent,
+            });
+          } else {
+            await KbExternalGroupModel.deleteAbsent({
+              connectorId,
+              seenGroupIds: [...seenGroupIds],
+            });
           }
           stats.groupsSynced = groupsEnumerated;
           stats.membershipsUpserted = membershipsPersisted;
@@ -574,6 +632,7 @@ class PermissionSyncService {
             "Permission sync group step failed; continuing to document reconcile with the previous group snapshot",
           );
           metrics.rag.reportPermissionSyncGroupFailure(connector.connectorType);
+          if (connectorImpl.requiresAtomicSecuritySync) throw error;
         }
       }
 
@@ -622,20 +681,20 @@ class PermissionSyncService {
 
       let deltaContainerKeys: string[] | null = null;
       if (mode === "delta" && probe) {
-        // ---- Audience verification, EVERY delta pass: re-resolve every
-        // stored container's audience — O(containers) upstream requests, zero
-        // document enumeration — and write only the ones that changed. This
-        // is what guarantees an upstream grant OR revocation lands on the
-        // next pass: audience drift is never inferred from audit events or
-        // cursor windows (both proved lossy — see PermissionProbeResult).
-        // Mapping edits materialize the same way, so their follow-up task
-        // needs no special flag. ----
+        // ---- Audience verification: authoritative journals re-resolve only
+        // dirty containers; conservative probes re-resolve every stored row.
+        // Both paths write only changed audiences and scan zero documents.
+        // Mapping edits materialize through the same refresh path. ----
         if (connectorImpl.refreshContainerAudiences) {
           await this.refreshStoredContainerAudiences({
             connector,
             connectorImpl,
             credentials,
             resolveMappedEmail,
+            readIngestedDocuments,
+            containerKeys: probe.authoritativeAudienceScope
+              ? probe.dirtyContainerKeys
+              : undefined,
             stats,
             runLog,
           });
@@ -662,11 +721,11 @@ class PermissionSyncService {
         }
 
         if (scopeKeys.size === 0) {
-          // No document-level drift since the recorded cursors and no
-          // documents awaiting adoption. Audiences and group memberships were
-          // still verified above — their writes (if any) already landed.
+          // No document-level drift since the recorded cursor and no documents
+          // awaiting adoption. The exact dirty audience/group scope, if any,
+          // already completed above.
           runLog.info(
-            "Delta pass verified audiences and memberships; no document-level drift to re-enumerate",
+            "Delta pass applied its authoritative security scope; no documents require reassignment",
           );
           await this.finishSuccessfulPass({
             connectorId,
@@ -860,11 +919,10 @@ class PermissionSyncService {
   }
 
   /**
-   * Audience-verification phase, run on every delta pass: re-resolve the
-   * audience of every STORED container row through the connector's
-   * `refreshContainerAudiences` and write only the rows whose audience
-   * actually changed. O(containers) upstream requests and container-row
-   * writes; documents and chunks are never touched — they reference the
+   * Audience-verification phase: re-resolve either the probe's authoritative
+   * dirty scope or every stored container for conservative probes, and write
+   * only rows whose audience changed. Documents and chunks are never touched;
+   * they reference the
    * container by token. Keys the connector does not yield back (it cannot
    * refresh them without an assignment reconcile) keep their stored audience
    * until the periodic full reconcile.
@@ -874,6 +932,8 @@ class PermissionSyncService {
     connectorImpl: Connector;
     credentials: ConnectorCredentials;
     resolveMappedEmail: ResolveMappedEmail;
+    readIngestedDocuments: ReadIngestedDocuments;
+    containerKeys?: string[];
     stats: PermissionSyncRunStats;
     runLog: pino.Logger;
   }): Promise<void> {
@@ -882,13 +942,14 @@ class PermissionSyncService {
       connectorImpl,
       credentials,
       resolveMappedEmail,
+      readIngestedDocuments,
       stats,
       runLog,
     } = params;
     if (!connectorImpl.refreshContainerAudiences) return;
-    const containerKeys = await KbContainerAclModel.findKeysByConnector(
-      connector.id,
-    );
+    const containerKeys =
+      params.containerKeys ??
+      (await KbContainerAclModel.findKeysByConnector(connector.id));
     if (containerKeys.length === 0) return;
 
     let refreshed = 0;
@@ -914,6 +975,7 @@ class PermissionSyncService {
       config: connector.config as Record<string, unknown>,
       credentials,
       containerKeys,
+      readIngestedDocuments,
       resolveMappedEmail,
     })) {
       refreshed += 1;

@@ -113,15 +113,21 @@ export function ConnectorUserGroupsTable({
           <div className="min-w-0">
             <div
               className="truncate text-sm font-medium"
-              title={row.original.groupId}
+              title={row.original.name ?? row.original.groupId}
             >
-              {row.original.groupId}
+              {row.original.name ?? row.original.groupId}
             </div>
             <div
               className="truncate text-xs text-muted-foreground"
-              title={row.original.token}
+              title={
+                row.original.name
+                  ? `Stable source ID: ${row.original.groupId}`
+                  : row.original.token
+              }
             >
-              {row.original.token}
+              {row.original.name
+                ? `ID ${row.original.groupId}`
+                : row.original.token}
             </div>
           </div>
         ),
@@ -267,6 +273,7 @@ function matchesFilter(group: ConnectorUserGroup, filter: GroupFilter) {
 function matchesSearch(group: ConnectorUserGroup, query: string) {
   if (!query) return true;
   if (
+    group.name?.toLowerCase().includes(query) ||
     group.groupId.toLowerCase().includes(query) ||
     group.token.toLowerCase().includes(query)
   ) {

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<application
+  type="server-application"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="http://www.m-files.com/schemas/appdef-server-v3.xsd">
+  <guid>c26bb1e2-62ca-4a75-8751-bcf0787b6f36</guid>
+  <name>Archestra VAF Add On</name>
+  <description>Exports gap-detecting object changes, revision-safe effective permissions, and group membership for the Archestra knowledge connector.</description>
+  <publisher>Archestra</publisher>
+  <version>1.0.0</version>
+  <copyright>Copyright Archestra</copyright>
+  <required-mfiles-version>25.3.0.0</required-mfiles-version>
+  <multi-server-compatible>true</multi-server-compatible>
+  <extension-objects>
+    <extension-object>
+      <name>ArchestraMFilesVAFAddOn</name>
+      <assembly>Archestra.MFiles.VAFAddOn.dll</assembly>
+      <class>Archestra.MFiles.VAFAddOn.VaultApplication</class>
+      <installation-method>Install</installation-method>
+      <uninstallation-method>Uninstall</uninstallation-method>
+      <initialization-method>Initialize</initialization-method>
+      <uninitialization-method>Uninitialize</uninitialization-method>
+      <start-operations-method>StartOperations</start-operations-method>
+    </extension-object>
+  </extension-objects>
+</application>

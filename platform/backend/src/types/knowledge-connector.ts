@@ -19,6 +19,7 @@ const LINEAR = z.literal("linear");
 const SALESFORCE = z.literal("salesforce");
 const WEB_CRAWLER = z.literal("web_crawler");
 const PERFORCE = z.literal("perforce");
+const MFILES = z.literal("mfiles");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -37,6 +38,7 @@ export const ConnectorTypeSchema = z.union([
   SALESFORCE,
   WEB_CRAWLER,
   PERFORCE,
+  MFILES,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -618,6 +620,73 @@ export const PerforceCheckpointSchema = z.object({
 });
 export type PerforceCheckpoint = z.infer<typeof PerforceCheckpointSchema>;
 
+// ===== M-Files Config & Checkpoint =====
+
+export const MFilesConfigSchema = z.object({
+  type: MFILES,
+  /** M-Files Classic Web base URL. The connector appends /REST itself. */
+  baseUrl: connectorUrlSchema,
+  /** Vault GUID, normally in {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx} form. */
+  vaultGuid: z
+    .string()
+    .regex(
+      /^\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}$/i,
+      {
+        message:
+          "Vault GUID must use {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx} format",
+      },
+    ),
+  /** Headless OAuth application accounts are preferred; absent means the legacy password-token mode. */
+  authMethod: z
+    .enum(["oauth_client_credentials", "mfiles_password_token"])
+    .optional(),
+  /** OAuth token endpoint owned by the configured identity provider. */
+  oauthTokenEndpoint: connectorUrlSchema.optional(),
+  /** Space-delimited OAuth scopes (for Entra ID this is normally `<resource>/.default`). */
+  oauthScope: z.string().min(1).optional(),
+  /** OAuth resource/audience for providers that use `resource` instead of `scope`. */
+  oauthResource: z.string().min(1).optional(),
+  /** Exact M-Files authentication provider name sent in X-AuthConfig. */
+  oauthAuthConfig: z.string().min(1).optional(),
+  /** Scope containing the authentication provider, sent in X-AuthConfigScope. */
+  oauthAuthConfigScope: z.string().min(1).optional(),
+  /** M-Files application-account username selected through X-ExtraAuthData. */
+  oauthAccountName: z.string().min(1).optional(),
+  /** Use the ID token only when the M-Files provider requires it. */
+  oauthUseIdToken: z.boolean().optional(),
+  /** How the OAuth client authenticates to the token endpoint. */
+  oauthClientAuthMethod: z
+    .enum(["client_secret_post", "client_secret_basic"])
+    .optional(),
+  /** Windows domain for domain-authenticated M-Files accounts. */
+  domain: z.string().optional(),
+  /** M-Files object types to ingest. Built-in Documents is type 0. */
+  objectTypeIds: z.array(z.number().int().nonnegative()).min(1).optional(),
+  /** Documents emitted per Archestra connector batch. */
+  batchSize: z.number().int().min(1).max(500).optional(),
+  /**
+   * VAF extension method that exposes effective ACLs and group membership.
+   * MFWS itself intentionally has no documented ACL/users/groups resources.
+   */
+  permissionExtensionMethod: z.string().min(1).optional(),
+});
+export type MFilesConfig = z.infer<typeof MFilesConfigSchema>;
+
+export const MFilesCheckpointSchema = z.object({
+  type: MFILES,
+  lastSyncedAt: z.string().optional(),
+  /** Durable add-on-journal cursor committed only after its page mutations. */
+  changeCursor: z.string().optional(),
+  /** Baseline state is retained across time-boxed continuation runs. */
+  baselineCursor: z.string().nullable().optional(),
+  baselineHeadCursor: z.string().optional(),
+  baselineGeneration: z.string().uuid().optional(),
+  addOnInstanceId: z.string().uuid().optional(),
+  addOnVersion: z.string().optional(),
+  configFingerprint: z.string().optional(),
+});
+export type MFilesCheckpoint = z.infer<typeof MFilesCheckpointSchema>;
+
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
   ConfluenceConfigSchema,
@@ -635,6 +704,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   SalesforceConfigSchema,
   WebCrawlerConfigSchema,
   PerforceConfigSchema,
+  MFilesConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -655,6 +725,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   SalesforceCheckpointSchema,
   WebCrawlerCheckpointSchema,
   PerforceCheckpointSchema,
+  MFilesCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 
@@ -682,6 +753,11 @@ export interface ConnectorDocument {
   content: string;
   sourceUrl?: string;
   metadata: Record<string, unknown>;
+  /**
+   * Metadata keys used only for sync bookkeeping. They are persisted but do
+   * not change the content hash or force re-chunking when their values rotate.
+   */
+  operationalMetadataKeys?: string[];
   updatedAt?: Date;
   /** Access control permissions extracted from the source system */
   permissions?: DocumentPermissions;
@@ -763,6 +839,20 @@ export interface ConnectorSyncBatch {
   recoveredSourceIds?: string[];
   checkpoint: ConnectorCheckpoint;
   hasMore: boolean;
+  /**
+   * Completion-gated object/file reconciliation. After every listed document
+   * in the batch ingests successfully, delete stored documents matching the
+   * connector-scoped metadata filter whose source id is not in `seenSourceIds`.
+   */
+  reconcileScopes?: Array<{
+    metadataFilter: Record<string, string>;
+    seenSourceIds: string[];
+  }>;
+  /** Completion-gated full-baseline sweep using a connector-owned metadata generation. */
+  completionSweep?: {
+    metadataKey: string;
+    generation: string;
+  };
 }
 
 // ===== Permission Sync Types =====
@@ -809,7 +899,7 @@ export interface PermissionSyncParams {
    * Delta-pass scoping: when set, `syncPermissionSnapshot` enumerates ONLY
    * these top-level containers (the probe's dirty set). Absent on full passes.
    */
-  scope?: { containerKeys: string[] };
+  scope?: { containerKeys: string[]; groupIds?: string[] };
   /**
    * True only on a MANUAL pass ("Sync Permissions Now"): cross-pass identity
    * caches are bypassed on read and rewritten, so an upstream email/profile
@@ -875,6 +965,12 @@ export interface PermissionProbeResult {
   fullRequired: boolean;
   /** Next probe cursors/fingerprints to persist on success. */
   nextState: PermissionSyncState;
+  /** The dirty container list comes from an authoritative, gap-detecting source. */
+  authoritativeAudienceScope?: boolean;
+  /** Authoritative group ids whose membership/name must be re-read. */
+  dirtyGroupIds?: string[];
+  /** Groups authoritatively removed upstream. */
+  deletedGroupIds?: string[];
 }
 
 /**
@@ -957,7 +1053,11 @@ export interface GroupMemberYield {
  */
 export interface GroupMembershipYield {
   groupId: string;
+  /** Human-readable source name. Authorization continues to use stable groupId. */
+  name?: string | null;
   members: GroupMemberYield[];
+  /** A failed expansion is an observed fail-closed empty group, not a clean empty group. */
+  membershipResolutionFailed?: boolean;
   cursor?: string;
 }
 
@@ -1058,6 +1158,9 @@ export interface Connector {
    */
   supportsPermissionSync: boolean;
 
+  /** Abort the security pass if either group or permission reconciliation fails. */
+  requiresAtomicSecuritySync?: boolean;
+
   /**
    * Yield the pass's permission snapshot — container audiences interleaved
    * with per-document container assignments — WITHOUT re-downloading content.
@@ -1104,6 +1207,8 @@ export interface Connector {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
     containerKeys: string[];
+    /** Read cached object-version metadata so the source can under-grant across revision races. */
+    readIngestedDocuments: ReadIngestedDocuments;
     resolveMappedEmail?: ResolveMappedEmail;
   }): AsyncGenerator<{
     containerKey: string;

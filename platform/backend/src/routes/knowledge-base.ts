@@ -62,6 +62,10 @@ import {
   restoreConnector,
   restoreKnowledgeBase,
 } from "@/knowledge-base/knowledge-source-deletion";
+import {
+  mfilesAuthMethodGateViolation,
+  mfilesConnectorGateViolation,
+} from "@/knowledge-base/mfiles-gates";
 import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedule";
 import logger from "@/logging";
 import {
@@ -72,6 +76,7 @@ import {
   GithubAppConfigModel,
   KbContainerAclModel,
   KbDocumentModel,
+  KbExternalGroupModel,
   KbExternalUserGroupModel,
   KbMemberOverrideModel,
   KnowledgeBaseConnectorModel,
@@ -803,6 +808,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       // SPDX-SnippetEnd
 
+      const mfilesViolation =
+        mfilesConnectorGateViolation(body.connectorType) ??
+        mfilesAuthMethodGateViolation({ nextConfig: body.config });
+      if (mfilesViolation) {
+        throw new ApiError(403, mfilesViolation);
+      }
+
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
       const validation = await connectorImpl.validateConfig(body.config);
@@ -1149,6 +1161,14 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           environmentId: body.environmentId,
         });
+      }
+
+      const mfilesAuthViolation = mfilesAuthMethodGateViolation({
+        nextConfig: body.config,
+        existingConfig: connector.config,
+      });
+      if (mfilesAuthViolation) {
+        throw new ApiError(403, mfilesAuthViolation);
       }
 
       // resolve the connector's auth shape after this update so credential
@@ -1715,6 +1735,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.object({
                 /** Upstream group identifier as the source system names it. */
                 groupId: z.string(),
+                /** Human-readable upstream group name, when exposed. */
+                name: z.string().nullable(),
                 /** The exact `group:` ACL token written on documents. */
                 token: z.string(),
                 /** Documents on this connector whose ACL grants the group. */
@@ -1761,21 +1783,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const [{ memberships, truncated }, totalMemberships, documentCounts] =
-        await Promise.all([
-          KbExternalUserGroupModel.findMembershipsWithUsersByConnector({
-            connectorId: id,
-            organizationId,
-            limit: MAX_USER_GROUP_MEMBERSHIPS,
-          }),
-          KbExternalUserGroupModel.countByConnector(id),
-          KbDocumentModel.getGroupTokenDocumentCounts(id),
-        ]);
+      const [
+        { memberships, truncated },
+        totalMemberships,
+        documentCounts,
+        groupCatalog,
+      ] = await Promise.all([
+        KbExternalUserGroupModel.findMembershipsWithUsersByConnector({
+          connectorId: id,
+          organizationId,
+          limit: MAX_USER_GROUP_MEMBERSHIPS,
+        }),
+        KbExternalUserGroupModel.countByConnector(id),
+        KbDocumentModel.getGroupTokenDocumentCounts(id),
+        KbExternalGroupModel.findByConnector(id),
+      ]);
 
       const groups = new Map<
         string,
         {
           groupId: string;
+          name: string | null;
           token: string;
           documentCount: number;
           lastSyncedAt: string | null;
@@ -1790,6 +1818,21 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       >();
 
+      for (const catalogGroup of groupCatalog) {
+        const token = buildGroupToken({
+          connectorType: connector.connectorType,
+          groupId: catalogGroup.groupId,
+        });
+        groups.set(token, {
+          groupId: catalogGroup.groupId,
+          name: catalogGroup.name,
+          token,
+          documentCount: 0,
+          lastSyncedAt: catalogGroup.updatedAt.toISOString(),
+          members: [],
+        });
+      }
+
       for (const membership of memberships) {
         const token = buildGroupToken({
           connectorType: connector.connectorType,
@@ -1799,6 +1842,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!group) {
           group = {
             groupId: membership.groupId,
+            name: null,
             token,
             documentCount: 0,
             lastSyncedAt: null,
@@ -1832,6 +1876,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             groupId: token.startsWith(tokenPrefix)
               ? token.slice(tokenPrefix.length)
               : token,
+            name: null,
             token,
             documentCount,
             lastSyncedAt: null,

@@ -567,6 +567,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },
+  kbExternalGroupsTable: {
+    audited: false,
+    reason:
+      "permission-sync source-group catalog; derived upstream data, not config",
+  },
   kbExternalUserGroupsTable: {
     audited: false,
     reason:

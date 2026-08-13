@@ -106,6 +106,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               chatopsTelegramEnabled: z.boolean(),
               /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
               kbAutoSyncPermissionsEnabled: z.boolean(),
+              kbMfilesConnectorEnabled: z.boolean(),
+              kbMfilesOauthEnabled: z.boolean(),
               /**
                * Individual ("connect my own Drive") auth for the Google Drive
                * knowledge connector. `redirectUri` is the exact string that
@@ -200,6 +202,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
+          kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
+          kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
           kbGoogleDriveOAuth: {
             configured: isGoogleDriveOAuthConfigured(),
             redirectUri: getGoogleDriveOAuthRedirectUri(),

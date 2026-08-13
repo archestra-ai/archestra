@@ -1,0 +1,113 @@
+name: Build M-Files VAF Add On
+
+# Builds archestra-m-files-vaf-add-on.mfappx with the official M-Files
+# VAF packaging (MSBuild target from the MFiles.ProjectTemplates project
+# shape; assemblies from the MIT-licensed MFiles.VAF NuGet package — no
+# M-Files installation involved) and attaches it to platform releases so the
+# connector form can offer a direct download.
+#
+# The Windows runner is expensive, so every automatic trigger is filtered to
+# the add-on's own sources: a pull request that touches them builds (a broken
+# add-on can then never reach main), and so does a push to main (which keeps a
+# successful main run available for deployments that point
+# ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF at `main` — the backend
+# resolves the package from the newest successful run of THIS workflow on that
+# branch). Documentation-only edits under the add-on directory are excluded;
+# they cannot change the package.
+#
+# To build a branch whose add-on sources are unchanged — testing a connector
+# change against a proxied CI package on a dev stack, say — dispatch it
+# explicitly: `gh workflow run build-m-files-vaf-add-on.yml --ref <branch>`.
+#
+# A run's `.mfappx` is downloadable from its Artifacts (zip-wrapped — GitHub
+# always archives artifacts; only release assets carry the raw file), and
+# artifacts expire on the repository's retention schedule, so a long stretch
+# with no add-on change eventually leaves the source-ref override with nothing
+# to resolve; it then falls back to building from source, and a dispatch
+# refreshes it. Released deployments do not depend on any of this: they take
+# the package from the release asset attached below.
+
+# The two path lists are duplicated on purpose: GitHub Actions does not
+# support YAML anchors, so they must be kept in sync by hand.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "integrations/m-files-vaf-add-on/**"
+      - "!integrations/m-files-vaf-add-on/**.md"
+      - ".github/workflows/build-m-files-vaf-add-on.yml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "integrations/m-files-vaf-add-on/**"
+      - "!integrations/m-files-vaf-add-on/**.md"
+      - ".github/workflows/build-m-files-vaf-add-on.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to (re)attach the package to (e.g. platform-v1.4.0). Leave empty to only build."
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: build-m-files-vaf-add-on-${{ github.ref }}-${{ github.event.release.tag_name || inputs.release_tag || 'build' }}
+  cancel-in-progress: true
+
+jobs:
+  build-m-files-vaf-add-on:
+    name: Build M-Files VAF Add On
+    # Pull-request and push events are already path-filtered above, and a
+    # dispatch is always deliberate. Release events fire for every
+    # release-please component, so the add-on attaches to platform releases
+    # only.
+    if: >-
+      github.event_name != 'release'
+      || startsWith(github.event.release.tag_name, 'platform-v')
+    runs-on: windows-latest
+    permissions:
+      contents: write # gh release upload
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build package
+        shell: pwsh
+        run: |
+          dotnet build integrations/m-files-vaf-add-on/Archestra.MFiles.VAFAddOn.csproj -c Release
+          $versioned = Get-Item integrations/m-files-vaf-add-on/bin/Release/archestra-m-files-vaf-add-on-*.mfappx
+          if (-not $versioned) { throw "No .mfappx produced by the build" }
+          # Stable-name copy: the connector form links to
+          # releases/latest/download/archestra-m-files-vaf-add-on.mfappx,
+          # which requires a version-independent asset name.
+          $stable = "integrations/m-files-vaf-add-on/bin/Release/archestra-m-files-vaf-add-on.mfappx"
+          Copy-Item $versioned.FullName $stable
+          "PACKAGE_PATH=$($versioned.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "STABLE_PACKAGE_PATH=$stable" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m-files-vaf-add-on
+          # The versioned and stable-named files are byte-identical, so the
+          # artifact carries just the stable name — the one the installer and
+          # docs reference — instead of a confusing duplicate.
+          path: ${{ env.STABLE_PACKAGE_PATH }}
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: |
+          gh release upload $env:RELEASE_TAG `
+            $env:PACKAGE_PATH `
+            $env:STABLE_PACKAGE_PATH `
+            --clobber --repo $env:GITHUB_REPOSITORY

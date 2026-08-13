@@ -8,7 +8,7 @@ lastUpdated: 2026-08-11
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions.
+A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, Salesforce, and M-Files. An agent assigned a Knowledge Base can query that data to answer questions.
 
 > **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
 
@@ -184,24 +184,25 @@ Auto-sync permissions mirrors the data source system's access control into Arche
 
 Auto-sync permissions works with the connectors marked *Supported* below. The others do not support it yet.
 
-| Connector    | Auto-sync permissions |
-| ------------ | --------------------- |
-| Confluence   | Supported             |
-| GitHub       | Supported             |
-| Jira         | Supported             |
-| Google Drive | Supported             |
-| Salesforce   | Supported             |
-| SharePoint   | Supported             |
-| Asana        | Not supported         |
-| Dropbox      | Not supported         |
-| GitLab       | Not supported         |
-| Linear       | Not supported         |
-| Notion       | Not supported         |
-| OneDrive     | Not supported         |
-| Outline      | Not supported         |
-| Perforce     | Not supported         |
-| ServiceNow   | Not supported         |
-| Web Crawler  | Not supported         |
+| Connector    | Auto-sync permissions         |
+| ------------ | ----------------------------- |
+| Confluence   | Supported                     |
+| GitHub       | Supported                     |
+| Jira         | Supported                     |
+| M-Files      | Supported with the VAF Add On |
+| Google Drive | Supported                     |
+| Salesforce   | Supported                     |
+| SharePoint   | Supported                     |
+| Asana        | Not supported                 |
+| Dropbox      | Not supported                 |
+| GitLab       | Not supported                 |
+| Linear       | Not supported                 |
+| Notion       | Not supported                 |
+| OneDrive     | Not supported                 |
+| Outline      | Not supported                 |
+| Perforce     | Not supported                 |
+| ServiceNow   | Not supported                 |
+| Web Crawler  | Not supported                 |
 
 **Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
 
@@ -615,6 +616,32 @@ Each depot path and extension combination is listed in its own REST API request.
 | Login Ticket  | An all-hosts ticket from `p4 login -a -p`                                                               |
 | File Types    | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                           |
 | Exclude Paths | Optional comma-separated depot paths skipped within the synced paths (e.g., `//depot/docs/generated`)  |
+
+### M-Files
+
+Sync versioned files and their source permissions from an M-Files vault.
+
+> **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED=true` (or the `ARCHESTRA_BETA` master switch) to show the connector type. See [Deployment](/docs/platform-deployment).
+
+**Indexed:** supported files attached to the configured M-Files object types. The default object type is `0` (documents). Text, Markdown, CSV, JSON, XML, HTML, YAML, Office documents, and PDFs are indexed; supported images are indexed when a multimodal embedding model is configured. Files larger than 25 MB are skipped.
+
+**Authentication:** a dedicated M-Files login account. Archestra exchanges its username and password for an explicit short-lived MFWS token, preserves Multi-Server Mode routing cookies, and retries once after re-authentication. Automatic permission sync also requires the Archestra VAF Add On and the **Change full control role**.
+
+Auto-sync permissions requires the companion schema-v2 Archestra VAF Add On in the vault. MFWS covers object/file transport but does not expose the complete ACL, identity, and durable change APIs required for safe deltas. The add-on supplies stable enumeration, a gap-detecting journal, exact latest-plus-cached-version permissions, and group membership. Missing/unknown add-on responses and unresolved audiences fail closed.
+
+| Field | Description |
+| --- | --- |
+| M-Files Web Service URL | Classic Web/MFWS base URL; `/REST` is appended automatically (for example, `https://mfiles.example.com/m-files`) |
+| Vault GUID | GUID of the vault to index |
+| Username | Dedicated M-Files login account for the connector |
+| Password | That account's password; exchanged for a short-lived MFWS token |
+| Windows Domain | Optional, under Advanced — only for domain-authenticated accounts |
+
+Three more settings exist on the connector config and are tuned through the API rather than the form: `objectTypeIds` (managed object types, default `0`), `batchSize` (documents per indexing batch, default `50`) and `permissionExtensionMethod` (the installed VAF extension-method name, default `ArchestraKnowledgePermissionSnapshot`). Leaving them unset keeps the backend defaults.
+
+The add-on performs authoritative, resumable object enumeration and journal-backed content/permission deltas. A clean pass performs no object or ACL reads. Journal gaps and add-on/configuration changes promote the run to a completion-gated full rebuild rather than accepting a partial result.
+
+For the M-Files object model, API choices, add-on contract, deployment guidance, and production roadmap, see [M-Files Connector Engineering Guide](/docs/platform-mfiles-connector).
 
 ## Environments
 

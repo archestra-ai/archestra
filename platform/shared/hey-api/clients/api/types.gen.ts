@@ -58371,6 +58371,7 @@ export type GetConnectorUserGroupsResponses = {
                 user: {
                     id: string;
                     name: string;
+                    email: string;
                 } | null;
                 resolvedVia: 'override' | 'email';
             }>;

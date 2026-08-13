@@ -15,7 +15,7 @@ const mockGetProject = vi.fn();
 const mockGetProjectsForWorkspace = vi.fn();
 const mockGetTasksForProject = vi.fn();
 const mockGetStoriesForTask = vi.fn();
-const mockGetProjectMembershipsForProject = vi.fn();
+const mockGetMemberships = vi.fn();
 const mockGetTeamsForWorkspace = vi.fn();
 const mockGetTeamMembershipsForTeam = vi.fn();
 const mockGetWorkspaceMembershipsForWorkspace = vi.fn();
@@ -39,8 +39,8 @@ vi.mock("asana", () => ({
   StoriesApi: class MockStoriesApi {
     getStoriesForTask = mockGetStoriesForTask;
   },
-  ProjectMembershipsApi: class MockProjectMembershipsApi {
-    getProjectMembershipsForProject = mockGetProjectMembershipsForProject;
+  MembershipsApi: class MockMembershipsApi {
+    getMemberships = mockGetMemberships;
   },
   TeamsApi: class MockTeamsApi {
     getTeamsForWorkspace = mockGetTeamsForWorkspace;
@@ -1459,8 +1459,8 @@ describe("AsanaConnector", () => {
         const entry = projects[gid];
         return Promise.resolve(page(entry?.tasks ?? []));
       });
-      mockGetProjectMembershipsForProject.mockImplementation((gid: string) => {
-        const entry = projects[gid];
+      mockGetMemberships.mockImplementation((opts: { parent?: string }) => {
+        const entry = projects[opts.parent ?? ""];
         if (entry?.membershipsError) {
           return Promise.reject(entry.membershipsError);
         }
@@ -1589,7 +1589,7 @@ describe("AsanaConnector", () => {
         },
       });
       // Membership pagination: the team lands on page two.
-      mockGetProjectMembershipsForProject
+      mockGetMemberships
         .mockResolvedValueOnce(
           page([userMembership("u-alice"), userMembership("u-hidden")], "off2"),
         )
@@ -1759,6 +1759,51 @@ describe("AsanaConnector", () => {
       ]);
     });
 
+    test("audience reads use the generic memberships API keyed by parent, without opt_fields", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [permTask("t1", { projects: ["111111"] })],
+          memberships: [userMembership("u-alice")],
+        },
+      });
+
+      await collectSnapshot(snapshotParams());
+
+      // The legacy project_memberships endpoint ignores member.* opt_fields
+      // and returns rows without a member object; the generic API carries
+      // member (user or team) in its default payload. Pin both properties.
+      expect(mockGetMemberships).toHaveBeenCalledWith(
+        expect.objectContaining({ parent: "111111" }),
+      );
+      expect(mockGetMemberships.mock.calls[0][0]).not.toHaveProperty(
+        "opt_fields",
+      );
+    });
+
+    test("membership rows without a member object fail-close the container with the failure flag", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [permTask("t1", { projects: ["111111"] })],
+          memberships: [{ gid: "row-1" }, { gid: "row-2" }],
+        },
+      });
+
+      const yields = await collectSnapshot(snapshotParams());
+      const [container] = containerYields(yields);
+
+      // Unreadable rows are an observed lookup failure, not "nobody has
+      // access" — the exact silent-empty failure the legacy endpoint caused.
+      expect(container.audienceResolutionFailed).toBe(true);
+      expect(container.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(documentYields(yields)).toHaveLength(1);
+    });
+
     test("an empty project emits a boundary container without resolving its audience", async () => {
       stubProjects({
         "111111": {
@@ -1779,7 +1824,7 @@ describe("AsanaConnector", () => {
           cursor: "project:111111",
         },
       ]);
-      expect(mockGetProjectMembershipsForProject).not.toHaveBeenCalled();
+      expect(mockGetMemberships).not.toHaveBeenCalled();
     });
 
     test("task followers become per-document exception users", async () => {

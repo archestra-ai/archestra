@@ -1,6 +1,6 @@
 import {
   ApiClient,
-  ProjectMembershipsApi,
+  MembershipsApi,
   ProjectsApi,
   StoriesApi,
   TasksApi,
@@ -69,7 +69,6 @@ const STORY_OPT_FIELDS = "gid,type,text,html_text,created_by.name,created_at";
 const PERMISSION_TASK_OPT_FIELDS = "gid,projects.gid,followers.gid";
 const PERMISSION_PROJECT_OPT_FIELDS =
   "gid,name,privacy_setting,team.gid,workspace.gid";
-const PROJECT_MEMBERSHIP_OPT_FIELDS = "member.gid,member.resource_type";
 const WORKSPACE_USER_OPT_FIELDS = "email,name";
 const WORKSPACE_MEMBERSHIP_OPT_FIELDS = "user.gid,user.name,is_guest,is_active";
 const TEAM_MEMBERSHIP_OPT_FIELDS = "user.gid,user.name,is_limited_access";
@@ -905,16 +904,25 @@ export class AsanaConnector extends BaseConnector {
       if (project.privacy_setting === "private_to_team" && project.team?.gid) {
         groups.add(teamGroupId(String(project.team.gid)));
       }
+      // The generic memberships API, NOT the legacy project_memberships
+      // endpoint: only this one returns TEAM members alongside users, and its
+      // default compact payload carries `member` — the legacy endpoint's
+      // opt_fields grammar silently ignores `member.gid`/`member.resource_type`
+      // and serves rows without a member object (proven against real Asana).
       const memberships = await this.paginateAll<AsanaProjectMembershipRecord>(
         (opts) =>
-          apis.projectMemberships.getProjectMembershipsForProject(projectGid, {
+          apis.memberships.getMemberships({
             ...opts,
-            opt_fields: PROJECT_MEMBERSHIP_OPT_FIELDS,
+            parent: projectGid,
           }),
       );
+      let skippedRows = 0;
       for (const membership of memberships) {
         const member = membership.member;
-        if (!member?.gid) continue;
+        if (!member?.gid) {
+          skippedRows += 1;
+          continue;
+        }
         if (member.resource_type === "team") {
           groups.add(teamGroupId(String(member.gid)));
           continue;
@@ -930,7 +938,20 @@ export class AsanaConnector extends BaseConnector {
           this.permDroppedPrincipals += 1;
         }
       }
-      audience = { users, groups };
+      if (skippedRows > 0) {
+        this.log.warn(
+          { projectGid, skippedRows },
+          "Asana membership rows without a member object were skipped",
+        );
+      }
+      // Membership rows existed but none were readable → an observed lookup
+      // failure, not an upstream "nobody has access": fail-close WITH the
+      // flag so admins can tell the two apart (this exact shape drift is how
+      // the legacy endpoint failed silently).
+      audience =
+        skippedRows > 0 && users.size === 0 && groups.size === 0
+          ? null
+          : { users, groups };
     } catch (error) {
       this.log.warn(
         { projectGid, error: extractErrorMessage(error) },
@@ -1373,7 +1394,7 @@ function taskToDocument(
 
 interface AsanaPermissionApis {
   projects: ProjectsApi;
-  projectMemberships: ProjectMembershipsApi;
+  memberships: MembershipsApi;
   tasks: TasksApi;
   teams: TeamsApi;
   teamMemberships: TeamMembershipsApi;
@@ -1388,7 +1409,7 @@ function createPermissionApis(
   const client = createAsanaClient(credentials);
   return {
     projects: new ProjectsApi(client),
-    projectMemberships: new ProjectMembershipsApi(client),
+    memberships: new MembershipsApi(client),
     tasks: new TasksApi(client),
     teams: new TeamsApi(client),
     teamMemberships: new TeamMembershipsApi(client),

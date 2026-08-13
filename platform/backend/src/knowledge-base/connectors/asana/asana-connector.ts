@@ -72,6 +72,15 @@ const PERMISSION_PROJECT_OPT_FIELDS =
 const WORKSPACE_USER_OPT_FIELDS = "email,name";
 const WORKSPACE_MEMBERSHIP_OPT_FIELDS = "user.gid,user.name,is_guest,is_active";
 const TEAM_MEMBERSHIP_OPT_FIELDS = "user.gid,user.name,is_limited_access";
+/**
+ * Synthetic roster-only group for users directly added to a synced project —
+ * most importantly workspace GUESTS, who are excluded from the
+ * workspace-members audience and often belong to no team, yet hold real
+ * grants. Rostering them makes them visible in the Users tab and manually
+ * assignable (OneDrive precedent). The id is never emitted into a container
+ * or document ACL, so the constant cannot collide across connectors.
+ */
+const DIRECT_GRANTS_GROUP_ID = "direct-grants";
 
 export class AsanaConnector extends BaseConnector {
   type = "asana" as const;
@@ -373,6 +382,48 @@ export class AsanaConnector extends BaseConnector {
         groupId: teamGroupId(team.gid),
         name: team.name ?? null,
         members,
+      };
+    }
+
+    // Direct project members (see DIRECT_GRANTS_GROUP_ID). A failed project
+    // enumeration throws — the pass keeps the previous group snapshot — while
+    // a single unreadable project is skipped: the audience phase owns
+    // fail-closing its containers.
+    const directMembers = new Map<string, GroupMemberYield>();
+    for (const project of await this.getPermissionProjects(apis, config)) {
+      let memberships: AsanaProjectMembershipRecord[];
+      try {
+        memberships = await this.paginateAll<AsanaProjectMembershipRecord>(
+          (opts) =>
+            apis.memberships.getMemberships({ ...opts, parent: project.gid }),
+        );
+      } catch (error) {
+        this.log.warn(
+          { projectGid: project.gid, error: extractErrorMessage(error) },
+          "Could not read a project's memberships for the direct-grants roster; skipping it this pass",
+        );
+        continue;
+      }
+      for (const membership of memberships) {
+        const member = membership.member;
+        if (!member?.gid || member.resource_type === "team") continue;
+        const gid = String(member.gid);
+        if (directMembers.has(gid)) continue;
+        directMembers.set(gid, {
+          accountId: gid,
+          displayName: member.name ?? users.get(gid)?.name ?? null,
+          email: users.get(gid)?.email ?? null,
+          accountType: "user",
+        });
+      }
+    }
+    if (directMembers.size > 0) {
+      yield {
+        groupId: DIRECT_GRANTS_GROUP_ID,
+        name: "Direct project members",
+        members: [...directMembers.values()].sort((a, b) =>
+          compareStrings(a.accountId, b.accountId),
+        ),
       };
     }
   }
@@ -1453,7 +1504,11 @@ interface AsanaPermissionTaskRecord {
 }
 
 interface AsanaProjectMembershipRecord {
-  member?: { gid?: string | null; resource_type?: string | null } | null;
+  member?: {
+    gid?: string | null;
+    resource_type?: string | null;
+    name?: string | null;
+  } | null;
 }
 
 interface AsanaWorkspaceMembershipRecord {

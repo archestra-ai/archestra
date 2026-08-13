@@ -1540,6 +1540,13 @@ describe("AsanaConnector", () => {
       mockGetWorkspace.mockResolvedValue({ data: { name: "Acme" } });
       mockGetTeamsForWorkspace.mockResolvedValue(page([]));
       mockGetWorkspaceMembershipsForWorkspace.mockResolvedValue(page([]));
+      // syncGroups walks the scoped projects for the direct-grants roster;
+      // default to a resolvable project with no members (tests override via
+      // stubProjects).
+      mockGetProject.mockImplementation((gid: string) =>
+        Promise.resolve({ data: permProject(gid) }),
+      );
+      mockGetMemberships.mockResolvedValue(page([]));
     });
 
     test("supportsPermissionSync is enabled", () => {
@@ -1990,6 +1997,57 @@ describe("AsanaConnector", () => {
       expect(
         yields.find((y) => y.groupId === "team:team-open")?.members,
       ).toHaveLength(1);
+    });
+
+    test("syncGroups rosters direct project members — guests included — under the synthetic direct-grants group", async () => {
+      stubWorkspaceUsers([
+        { gid: "u-alice", email: "alice@example.com", name: "Alice" },
+        { gid: "u-guest", email: "guest@example.com", name: "Guest" },
+      ]);
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          memberships: [
+            userMembership("u-alice"),
+            userMembership("u-guest"),
+            teamMembership("team-eng"),
+          ],
+        },
+      });
+
+      const yields = await collectGroups(snapshotParams());
+      const direct = yields.find((y) => y.groupId === "direct-grants");
+
+      expect(direct).toEqual({
+        groupId: "direct-grants",
+        name: "Direct project members",
+        members: [
+          expect.objectContaining({
+            accountId: "u-alice",
+            email: "alice@example.com",
+          }),
+          expect.objectContaining({
+            accountId: "u-guest",
+            email: "guest@example.com",
+          }),
+        ],
+      });
+    });
+
+    test("an unreadable project is skipped by the direct-grants roster without aborting the group phase", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          membershipsError: Object.assign(new Error("boom"), { status: 500 }),
+        },
+      });
+
+      const yields = await collectGroups(snapshotParams());
+
+      expect(yields.find((y) => y.groupId === "direct-grants")).toBeUndefined();
+      expect(
+        yields.find((y) => y.groupId === `workspace-members:${WS}`),
+      ).toBeDefined();
     });
 
     test("a transient team roster failure aborts the group phase instead of truncating", async () => {

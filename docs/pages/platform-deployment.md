@@ -556,6 +556,14 @@ The [Knowledge Base](/docs/platform-knowledge) enterprise feature requires the [
 
 If pgvector is not installed or the database user lacks permissions, the Knowledge Base migration will fail. This does not affect other Archestra features.
 
+##### pg_search Extension (Optional BM25 Ranking)
+
+With the [ParadeDB pg_search](https://github.com/paradedb/paradedb) extension installed, the keyword leg of hybrid search ranks with BM25. Without it, ranking uses PostgreSQL `ts_rank`. The extension is optional — no Archestra feature requires it, and Archestra does not bundle it (pg_search is AGPL-3.0 licensed; installing it is the operator's choice).
+
+pg_search is not available on AWS RDS, Google Cloud SQL, or Azure Database for PostgreSQL. On self-managed PostgreSQL 15+, install the [prebuilt package](https://docs.paradedb.com/deploy/self-hosted/extension), add `pg_search` to `shared_preload_libraries`, and restart PostgreSQL. If the extension is present when migrations run, Archestra creates the BM25 index automatically. If migrations ran before the extension was installed, run the statements from `backend/src/database/migrations/0414_kb_bm25_index.sql` manually.
+
+Archestra detects the extension and index at runtime. Queries over connectors with a non-English keyword search language keep `ts_rank` ranking.
+
 #### SSRF Protection
 
 MCP server pods are protected from SSRF automatically: each pod's egress is confined to DNS and the public internet, with private and cloud-metadata ranges blocked. This matters most when MCP servers run untrusted code. To tighten a server to a specific allow-list — or deny its egress entirely — set its environment's network policy. See [SSRF Protection for MCP Server Pods](#ssrf-protection-for-mcp-server-pods).
@@ -1630,6 +1638,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_BM25_RANKING_ENABLED`** - Rank keyword results with BM25 where the optional [pg_search extension](#pg_search-extension-optional-bm25-ranking) and its index exist.
+  - Default: `true` (inert without the extension — every other deployment keeps `ts_rank`)
+  - Set to `false` to force `ts_rank` ranking even where the index exists.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_SEARCH_STATEMENT_TIMEOUT_MILLIS`** - Per-statement timeout for the knowledge search lanes (vector and keyword), in milliseconds.
   - Default: `8000`

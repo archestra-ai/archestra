@@ -2831,6 +2831,17 @@ const config = {
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     /**
+     * BM25 ranking for the keyword leg of hybrid search, via the ParadeDB
+     * pg_search extension (issue #7158). Opt-out: when left on, BM25 is used
+     * only where the extension and its kb_chunks index are actually present
+     * (probed at runtime, cached — see knowledge-base/bm25-capability.ts) and
+     * every other deployment keeps ts_rank, so the flag is inert without
+     * pg_search. Set to "false" to force ts_rank even where the index exists —
+     * the A/B lever for the retrieval eval harness (issue #7162).
+     */
+    bm25RankingEnabled:
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_BM25_RANKING_ENABLED !== "false",
+    /**
      * Verifiable citations (issue #7161): in the internal chat, check the
      * verbatim quotes the model tags with a chunk ref against the chunks
      * `query_knowledge_sources` returned, and log + meter any quote that matches

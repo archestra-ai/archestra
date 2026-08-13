@@ -1,6 +1,7 @@
 import {
   addNomicTaskPrefix,
   buildChunkRef,
+  DEFAULT_TEXT_SEARCH_LANGUAGE,
   type TextSearchLanguage,
 } from "@archestra/shared";
 import config from "@/config";
@@ -10,6 +11,7 @@ import { KbChunkModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import * as metrics from "@/observability/metrics";
 import type { AclEntry } from "@/types";
+import { bm25Capability } from "./bm25-capability";
 import { expandChunkContext } from "./context-expansion";
 import { callEmbedding, getEmbeddingDiscriminator } from "./embedding-clients";
 import {
@@ -95,12 +97,24 @@ class QueryService {
 
     // Resolved once and passed down: the keyword search needs the languages as
     // bound parameters to keep its tsquery index-eligible (see fullTextSearch).
-    const [expandedQueries, searchLanguages] = await Promise.all([
+    const [expandedQueries, searchLanguages, bm25Ready] = await Promise.all([
       expandQuery({ queryText, organizationId, connectorId }),
       hybridEnabled
         ? KbChunkModel.getTextSearchLanguages(connectorIds)
         : Promise.resolve([]),
+      hybridEnabled ? bm25Capability.isReady() : Promise.resolve(false),
     ]);
+    // BM25 only where it cannot regress language handling: the pg_search index
+    // stems with the default (English) configuration, while ts_rank follows
+    // each connector's fts_language. A query touching any non-English
+    // connector therefore stays on ts_rank; per-language BM25 (tokenizer
+    // aliases) is future work. TODO(prototype): revisit once the eval harness
+    // (issue #7162) can measure the tradeoff.
+    const bm25Active =
+      bm25Ready &&
+      searchLanguages.every(
+        (language) => language === DEFAULT_TEXT_SEARCH_LANGUAGE,
+      );
 
     const perQueryResults = await Promise.all(
       expandedQueries.map((eq) =>
@@ -116,6 +130,7 @@ class QueryService {
           type: eq.type,
           hybridEnabled,
           searchLanguages,
+          bm25Active,
         }),
       ),
     );
@@ -250,6 +265,8 @@ class QueryService {
     type: "semantic" | "keyword";
     hybridEnabled: boolean;
     searchLanguages: TextSearchLanguage[];
+    /** Rank the keyword lane with pg_search BM25 instead of ts_rank. */
+    bm25Active: boolean;
   }): Promise<SingleQuerySearchResult> {
     const {
       queryText,
@@ -263,6 +280,7 @@ class QueryService {
       type,
       hybridEnabled,
       searchLanguages,
+      bm25Active,
     } = params;
 
     // queryText is user content — payloads only at debug.
@@ -345,6 +363,7 @@ class QueryService {
               connectorIds,
               queryText,
               languages: searchLanguages,
+              ranking: bm25Active ? "bm25" : "ts_rank",
               limit,
               userAcl,
               bypassAcl,

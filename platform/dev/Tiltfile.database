@@ -1,58 +1,72 @@
 # Database resources
 load('ext://helm_remote', 'helm_remote')
+load('ext://namespace', 'namespace_create', 'namespace_inject')
 
 # Env-driven so a parallel Tilt session (separate worktree) doesn't collide.
 pg_namespace = os.getenv('ARCHESTRA_K8S_NAMESPACE', 'archestra-dev')
 pg_host_port = os.getenv('ARCHESTRA_POSTGRES_HOST_PORT', '5432')
 pg_metrics_host_port = os.getenv('ARCHESTRA_POSTGRES_METRICS_HOST_PORT', '9187')
 
-# PostgreSQL database for local development
-# https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
-helm_remote(
-  'postgresql',
-  repo_url='https://charts.bitnami.com/bitnami',
-  namespace=pg_namespace,
-  create_namespace=True,
-  set=[
-    'auth.database=archestra_dev',
-    'auth.username=archestra',
-    'auth.password=archestra_dev_password',
-    'auth.postgresPassword=archestra_dev_password',
+# ARCHESTRA_DEV_PG_SEARCH=true swaps the Bitnami Postgres for the ParadeDB
+# image (pg_search + pgvector) so the BM25 keyword-ranking path can run in dev
+# (issue #7158). Opt-in: the default dev database has no pg_search and the
+# keyword lane ranks with ts_rank. Note the two variants keep separate PVCs,
+# so toggling does not migrate data — expect an empty database on first start.
+use_paradedb = os.getenv('ARCHESTRA_DEV_PG_SEARCH', '') == 'true'
 
-    # NOTE: Bitnami is archiving their image.. see these github comments for details
-    # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
-    #
-    # https://github.com/coder/coder/issues/19869#issuecomment-3305875979
-    # https://github.com/bitnami/containers/issues/83267
-    'image.repository=bitnamisecure/postgresql',
-    'image.tag=latest',
-    'global.security.allowInsecureImages=true',
+if use_paradedb:
+  namespace_create(pg_namespace)
+  k8s_yaml(namespace_inject(read_file('k8s/postgresql-paradedb.yaml'), pg_namespace))
+  # No postgres_exporter sidecar in this variant, so only forward 5432.
+  k8s_resource('postgresql', port_forwards=[pg_host_port + ':5432'], labels=['database'])
+else:
+  # PostgreSQL database for local development
+  # https://dev.to/flodev/use-tilt-to-provide-easy-to-setup-development-environments-4n9d
+  helm_remote(
+    'postgresql',
+    repo_url='https://charts.bitnami.com/bitnami',
+    namespace=pg_namespace,
+    create_namespace=True,
+    set=[
+      'auth.database=archestra_dev',
+      'auth.username=archestra',
+      'auth.password=archestra_dev_password',
+      'auth.postgresPassword=archestra_dev_password',
 
-    # Enable postgres_exporter sidecar for Prometheus metrics (port 9187)
-    'metrics.enabled=true',
-    'metrics.service.ports.metrics=9187',
+      # NOTE: Bitnami is archiving their image.. see these github comments for details
+      # (this is essentially why we need to override image.repository and image.tag and global.security.allowInsecureImages)
+      #
+      # https://github.com/coder/coder/issues/19869#issuecomment-3305875979
+      # https://github.com/bitnami/containers/issues/83267
+      'image.repository=bitnamisecure/postgresql',
+      'image.tag=latest',
+      'global.security.allowInsecureImages=true',
 
-    # pgvector work is memory-hungry: a knowledge-base sync inserts thousands of
-    # embedding vectors in bursts, and HNSW index maintenance on those inserts
-    # spiked Postgres past the "small" preset's 768Mi limit and OOM-killed it
-    # (exit 137, repeated restarts). "large" (~3Gi limit) gives the headroom.
-    # Preset ladder: https://github.com/bitnami/charts/blob/main/bitnami/common/templates/_resources.tpl#L24C4-L24C9
-    'primary.resourcesPreset=large',
+      # Enable postgres_exporter sidecar for Prometheus metrics (port 9187)
+      'metrics.enabled=true',
+      'metrics.service.ports.metrics=9187',
 
-    # Increase probe timeout to accommodate slower responses
-    'primary.livenessProbe.timeoutSeconds=10',
-    'primary.readinessProbe.timeoutSeconds=10',
-    'primary.startupProbe.timeoutSeconds=10',
+      # pgvector work is memory-hungry: a knowledge-base sync inserts thousands of
+      # embedding vectors in bursts, and HNSW index maintenance on those inserts
+      # spiked Postgres past the "small" preset's 768Mi limit and OOM-killed it
+      # (exit 137, repeated restarts). "large" (~3Gi limit) gives the headroom.
+      # Preset ladder: https://github.com/bitnami/charts/blob/main/bitnami/common/templates/_resources.tpl#L24C4-L24C9
+      'primary.resourcesPreset=large',
 
-    # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
-    # Must run as the postgres superuser (not the default auth.username).
-    'primary.initdb.user=postgres',
-    'primary.initdb.password=archestra_dev_password',  # matches auth.postgresPassword
-    'primary.initdb.scripts.grant-superuser\\.sql=ALTER USER archestra WITH SUPERUSER;',
-  ]
-)
+      # Increase probe timeout to accommodate slower responses
+      'primary.livenessProbe.timeoutSeconds=10',
+      'primary.readinessProbe.timeoutSeconds=10',
+      'primary.startupProbe.timeoutSeconds=10',
 
-k8s_resource('postgresql', port_forwards=[pg_host_port + ':5432', pg_metrics_host_port + ':9187'], labels=['database'])
+      # Grant superuser to the archestra user so migrations can create extensions (e.g., pgvector).
+      # Must run as the postgres superuser (not the default auth.username).
+      'primary.initdb.user=postgres',
+      'primary.initdb.password=archestra_dev_password',  # matches auth.postgresPassword
+      'primary.initdb.scripts.grant-superuser\\.sql=ALTER USER archestra WITH SUPERUSER;',
+    ]
+  )
+
+  k8s_resource('postgresql', port_forwards=[pg_host_port + ':5432', pg_metrics_host_port + ':9187'], labels=['database'])
 
 # Database cleanup button (manual trigger only, for development)
 local_resource(

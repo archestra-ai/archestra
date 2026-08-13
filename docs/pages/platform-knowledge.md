@@ -88,6 +88,12 @@ The keyword index stems words so that different forms of one word match. Stemmin
 
 Set the language on each connector under **Advanced > Keyword Search Language**, to match the language its documents are written in. Choose **Simple** to turn stemming off, which suits source code and mixed-language sources. One deployment can index an English wiki and a German one correctly at the same time. The setting applies on the connector's next sync.
 
+### BM25 Ranking
+
+Keyword results rank with PostgreSQL `ts_rank` by default. With the optional [ParadeDB pg_search](https://github.com/paradedb/paradedb) extension installed, they rank with BM25 instead. BM25 normalizes for document length — a short runbook precisely about your query outranks a long handbook that mentions it often.
+
+Archestra detects the extension automatically; nothing needs configuring beyond installing it. Queries over connectors with a non-English keyword language keep `ts_rank`. See [Deployment](/docs/platform-deployment#pg_search-extension-optional-bm25-ranking) for installation.
+
 ### Tuning
 
 These settings are deployment-wide. See [Deployment](/docs/platform-deployment#knowledge-base-configuration) for the full reference.
@@ -95,6 +101,7 @@ These settings are deployment-wide. See [Deployment](/docs/platform-deployment#k
 | Setting | Default | Controls |
 | --- | --- | --- |
 | `ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED` | `true` | Whether keyword search runs alongside vector search |
+| `ARCHESTRA_KNOWLEDGE_BASE_BM25_RANKING_ENABLED` | `true` | Whether keyword results rank with BM25 where pg_search is installed |
 | `ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS` | `512` | Size of one chunk. Smaller is more precise, larger carries more context |
 | `ARCHESTRA_KNOWLEDGE_BASE_CONTEXT_EXPANSION_RADIUS` | `1` | How many neighbouring chunks are stitched onto a hit |
 | `ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED` | `false` | Whether documents are summarized into their chunks at ingest |

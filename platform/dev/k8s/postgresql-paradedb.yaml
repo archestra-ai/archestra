@@ -1,0 +1,86 @@
+# Opt-in dev Postgres with the ParadeDB pg_search extension (issue #7158).
+# Used instead of the Bitnami chart when ARCHESTRA_DEV_PG_SEARCH=true — see
+# Tiltfile.database. The paradedb/paradedb image bundles pg_search + pgvector
+# (pg_search >= 0.25 depends on pgvector) and follows the official postgres
+# image contract: POSTGRES_USER is created as a superuser, so migrations can
+# CREATE EXTENSION without the Bitnami grant-superuser initdb script.
+#
+# TODO(prototype): no metrics exporter sidecar in this variant — the
+# postgres_exporter wiring exists only in the Bitnami chart values.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+spec:
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: postgresql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+spec:
+  serviceName: postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  template:
+    metadata:
+      labels:
+        app: postgresql
+    spec:
+      containers:
+        - name: postgresql
+          image: paradedb/paradedb:0.25.2-pg18
+          ports:
+            - containerPort: 5432
+              name: tcp-postgresql
+          env:
+            - name: POSTGRES_USER
+              value: archestra
+            - name: POSTGRES_PASSWORD
+              value: archestra_dev_password
+            - name: POSTGRES_DB
+              value: archestra_dev
+          # Sized like the Bitnami "large" preset the standard dev database
+          # uses: embedding bursts + index maintenance OOM-killed smaller pods.
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              memory: 3Gi
+          readinessProbe:
+            exec:
+              command:
+                ["sh", "-c", "pg_isready -U archestra -d archestra_dev"]
+            initialDelaySeconds: 5
+            timeoutSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                ["sh", "-c", "pg_isready -U archestra -d archestra_dev"]
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+          volumeMounts:
+            # Mounted at the parent so the image's own PGDATA default applies
+            # (PG18 images keep the data dir under /var/lib/postgresql).
+            - name: data
+              mountPath: /var/lib/postgresql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 8Gi

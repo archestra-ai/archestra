@@ -21,6 +21,13 @@ export interface VectorSearchResult {
   score: number;
 }
 
+/**
+ * Name of the ParadeDB BM25 index on kb_chunks. Created (conditionally) by
+ * migration SQL, probed at runtime by `probeBm25Support` — the literal in the
+ * migration must match this constant.
+ */
+export const KB_CHUNKS_BM25_INDEX = "kb_chunks_bm25_idx";
+
 class KbChunkModel {
   static async findByDocument(documentId: string): Promise<KbChunk[]> {
     return await db
@@ -219,14 +226,49 @@ class KbChunkModel {
     );
   }
 
+  /**
+   * Whether this database can serve BM25 keyword ranking: the pg_search
+   * extension is installed AND the kb_chunks BM25 index exists. Plain catalog
+   * reads, so it answers (negatively) on any PostgreSQL, including PGlite.
+   */
+  static async probeBm25Support(): Promise<{
+    extensionInstalled: boolean;
+    indexPresent: boolean;
+  }> {
+    const result = await db.execute(sql`
+      SELECT
+        EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_search')
+          AS "extensionInstalled",
+        EXISTS (
+          SELECT 1 FROM pg_class idx
+          WHERE idx.relname = ${KB_CHUNKS_BM25_INDEX} AND idx.relkind = 'i'
+        ) AS "indexPresent"
+    `);
+    const row = result.rows[0] as
+      | { extensionInstalled: boolean; indexPresent: boolean }
+      | undefined;
+    return {
+      extensionInstalled: row?.extensionInstalled === true,
+      indexPresent: row?.indexPresent === true,
+    };
+  }
+
   static async fullTextSearch(params: {
     connectorIds: string[];
     queryText: string;
     /**
      * Text-search configurations to parse the query under, from
      * {@link getTextSearchLanguages}. Empty falls back to the column default.
+     * Only the ts_rank path uses these; the BM25 index has one fixed
+     * (English) tokenizer and the caller routes non-English corpora away.
      */
     languages?: TextSearchLanguage[];
+    /**
+     * Which engine ranks the keyword lane. "bm25" requires the pg_search
+     * extension and its kb_chunks index — callers gate on
+     * `bm25Capability.isReady()`; "ts_rank" (default) is plain PostgreSQL.
+     */
+    ranking?: "ts_rank" | "bm25";
     userAcl: AclEntry[];
     bypassAcl?: boolean;
     /** Defense-in-depth env isolation: require the connector to be in this env. */
@@ -239,6 +281,23 @@ class KbChunkModel {
 
     const terms = queryText.split(/\s+/).filter(Boolean);
     if (terms.length === 0) return [];
+
+    if (params.ranking === "bm25") {
+      // Same AND-first, OR-fallback contract as the ts_rank path below, in
+      // pg_search operators: `&&&` requires every token, `|||` matches any.
+      // Ranking is BM25 (pdb.score) in both passes, so the fallback only
+      // widens the match set — the loose precision is absorbed downstream by
+      // RRF and the reranker, exactly as for the ts_rank OR fallback.
+      const andRows = await KbChunkModel.runBm25Statement({
+        ...params,
+        matchAllTerms: true,
+      });
+      if (andRows.length > 0 || terms.length <= 1) return andRows;
+      return KbChunkModel.runBm25Statement({
+        ...params,
+        matchAllTerms: false,
+      });
+    }
 
     // AND-first, OR-fallback. The query text goes to websearch_to_tsquery
     // as written, whose natural semantics AND the plain terms — a selective
@@ -486,6 +545,88 @@ class KbChunkModel {
         ${envFilter}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
       ORDER BY score DESC
+      LIMIT ${limit}
+    `);
+
+    return rows.rows as unknown as VectorSearchResult[];
+  }
+
+  /**
+   * The BM25 keyword statement (pg_search). Matches over the same text the
+   * generated tsvector folds — content, contextual header, keyword metadata
+   * suffix — and ranks with `pdb.score`, i.e. real BM25: length-normalized,
+   * term-saturating, IDF-weighted (issue #7158).
+   *
+   * Semantics note: `&&&` requires every token within ONE of the three
+   * fields, while the tsvector path matches terms anywhere across their
+   * concatenation. A query whose terms straddle fields (say, one term only in
+   * the metadata suffix) can miss the AND pass here and be caught by the
+   * `|||` fallback with looser precision. TODO(prototype): measure whether
+   * that divergence matters once the eval harness (issue #7162) exists.
+   */
+  private static async runBm25Statement(params: {
+    connectorIds: string[];
+    queryText: string;
+    /** `true` = every token must match (`&&&`); `false` = any token (`|||`). */
+    matchAllTerms: boolean;
+    userAcl: AclEntry[];
+    bypassAcl?: boolean;
+    environmentId?: string | null;
+    limit?: number;
+  }): Promise<VectorSearchResult[]> {
+    const {
+      connectorIds,
+      queryText,
+      matchAllTerms,
+      userAcl,
+      bypassAcl = false,
+      environmentId,
+      limit = 10,
+    } = params;
+    const ids = sql.join(
+      connectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const aclEntries = bypassAcl
+      ? null
+      : sql.join(
+          userAcl.map((entry) => sql`${entry}`),
+          sql`, `,
+        );
+
+    const envFilter =
+      environmentId !== undefined
+        ? sql`AND kbc.environment_id IS NOT DISTINCT FROM ${environmentId}`
+        : sql``;
+
+    // The raw query text binds directly: pg_search's match operators tokenize
+    // it with the index's tokenizer, so unlike pdb.parse there is no query
+    // syntax for user input to break.
+    const matchOperator = matchAllTerms ? sql.raw("&&&") : sql.raw("|||");
+    const matchPredicate = sql`(
+      c.content ${matchOperator} ${queryText}
+      OR c.contextual_header ${matchOperator} ${queryText}
+      OR c.metadata_suffix_keyword ${matchOperator} ${queryText}
+    )`;
+
+    const rows = await executeWithSearchTimeout(sql`
+      SELECT
+        c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
+        d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
+        kbc.connector_type AS "connectorType",
+        pdb.score(c.id) AS score
+      FROM kb_chunks c
+      JOIN kb_documents d ON d.id = c.document_id
+      LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
+      WHERE d.connector_id IN (${ids})
+        -- Mirrors the same guard in vectorSearch: retrieval is a security
+        -- surface, so never serve chunks from a soft-deleted connector even if
+        -- a stale connectorId reaches this far.
+        AND kbc.deleted_at IS NULL
+        AND ${matchPredicate}
+        ${envFilter}
+        ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}
+      ORDER BY score DESC, c.id ASC
       LIMIT ${limit}
     `);
 

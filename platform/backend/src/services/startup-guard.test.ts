@@ -344,8 +344,9 @@ describe("renderStartupGuardScript", () => {
 
   test("always offers a reconfigure entry under the rows; the down prompt routes [C] into the same menu", () => {
     const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
-    // the persistent [C] entry, present on every launch
-    expect(script).toContain("To reconfigure your");
+    // the persistent entry, present on every launch, offers both keys
+    expect(script).toContain("To skip press [Space]");
+    expect(script).toContain("to reconfigure your");
     expect(script).toContain("press [C]");
     expect(script).toContain("offer_reconfigure_tail");
     expect(script).toContain("reconfigure_menu");
@@ -363,6 +364,25 @@ describe("renderStartupGuardScript", () => {
     // the menu numbers every remote and disconnects the chosen one in place
     expect(script).toContain("Press 1-");
     expect(script).toContain("menu_disconnect_row");
+  });
+
+  test("keeps a skip entry live the whole run: Space in the hint, the retry wait, and between animation frames", () => {
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
+    // the persistent hint names the key
+    expect(script).toContain("To skip press [Space]");
+    // the retry ladder answers it directly
+    expect(script).toContain("' ') SKIP_NOW=1; break ;;");
+    // animation frames poll the tty on bash >= 4, so the key lands
+    // mid-probe; 3.2 keeps plain sleep frames (no fractional read -t) and
+    // honors the buffered key at the closing beat instead. IFS= keeps the
+    // read space from collapsing to '' — Enter — on every read that must
+    // hear it.
+    expect(script).toContain('IFS= read -rs -n 1 -t "$FRAME_SLEEP" key');
+    expect(script).toContain('sleep "$FRAME_SLEEP"');
+    // skipping goes straight to finish_guard: no disconnect, no skip file
+    expect(script).toContain(
+      'if [ "$SKIP_NOW" = "1" ]; then\n  finish_guard\nfi',
+    );
   });
 
   test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line (Y/n) offer", () => {
@@ -708,6 +728,51 @@ describe("renderStartupGuardScript", () => {
     expect(existsSync(guardHome.guardFile)).toBe(true);
   });
 
+  test("interactive, all healthy, Space skips straight to launch touching nothing", async () => {
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: '{"mcp":"ok","llm":"ok"}',
+      keys: " ",
+    });
+    expect(output).toContain("To skip press [Space]");
+    // nothing is disconnected, nothing remembered, the guard stays installed
+    expect(await readClaudeLog(guardHome)).toBe("");
+    expect(output).not.toContain("Disconnected");
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+  });
+
+  test("interactive, platform unreachable, Space during the wait: launches at once, disconnecting and remembering nothing", async () => {
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 7,
+      keys: " ",
+    });
+    expect(await readClaudeLog(guardHome)).toBe("");
+    expect(output).not.toContain("Disconnected");
+    expect(output).not.toContain("Failed to connect");
+    // no "Skipped — still configured" summary either: Space exits silently
+    expect(output).not.toContain("Skipped");
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+  });
+
+  test("interactive, a remote down, Space never disconnects — the skip key cannot read as the (Y/n) Enter-default", async () => {
+    // Space must skip whether it lands mid-probe (bash >= 4 frame polling)
+    // or, buffered, at the down prompt (bash 3.2): default IFS would strip
+    // the read space to '' — Enter — and Enter at that prompt DISCONNECTS.
+    const { guardHome } = await runGuardInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: '{"mcp":"down","llm":"ok"}',
+      keys: " ",
+    });
+    expect(await readClaudeLog(guardHome)).toBe("");
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+    expect(existsSync(guardHome.guardFile)).toBe(true);
+  });
+
   test("interactive, all healthy, [C] opens the menu; a number disconnects that (healthy) remote in place", async () => {
     // everything is reachable, but the user still opens the reconfigure menu
     // and removes the LLM proxy — row 1 — then leaves with Enter. NOTE: the
@@ -721,7 +786,7 @@ describe("renderStartupGuardScript", () => {
       keys: "c1\r",
     });
     expect(output).toContain(
-      "To reconfigure your Archestra connection press [C]",
+      "To skip press [Space] · to reconfigure your Archestra connection press [C]",
     );
     // the numbered menu opened (the number glyph carries its own color, so
     // assert the footer that names the range instead of the split "[1] …")

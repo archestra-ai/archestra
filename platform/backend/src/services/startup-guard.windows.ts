@@ -27,6 +27,10 @@ import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
  *   disconnect (Y/n) offer on its own line below the row, `y`/`n` live
  *   throughout; after the whole turn, ONE "Disconnect … from <promptName> now?
  *   (Y/n)" prompt covers every down remote;
+ * - keeps a skip entry live the whole run: Space — polled between animation
+ *   frames and during the retry wait ([Console]::KeyAvailable is naturally
+ *   non-blocking here) — ends the pre-loader immediately and lets the client
+ *   start, disconnecting and remembering nothing;
  * - disconnect = the exact reverse of connect (mcp remove, the client's own
  *   proxy-config strip with a one-time backup, marketplace remove — all from
  *   the client descriptor), recorded in a skip file so later launches don't
@@ -511,7 +515,7 @@ function Invoke-ArchReconfigureMenu {
 # (cursor at the block's base) and stays on screen the whole run; legacy
 # consoles draw it in the closing tail instead. One line below the block.
 function Show-ArchReconfigureHint {
-  $text = '  To reconfigure your ' + $AppName + ' connection press [C]'
+  $text = '  To skip press [Space] · to reconfigure your ' + $AppName + ' connection press [C]'
   if ($UseVt) {
     Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K")
     Write-Arch $text DarkGray -NoNewline
@@ -539,11 +543,16 @@ function Clear-ArchReconfigureHint {
 function Show-ArchReconfigureOffer {
   if (-not $UseVt) { Show-ArchReconfigureHint }
   $key = ''
-  $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
-  while ([DateTime]::UtcNow -lt $deadline) {
-    $key = Read-ArchKey
-    if ($key) { break }
-    Start-Sleep -Milliseconds 40
+  if ($null -ne $Script:PendingKey) {
+    # a key typed ahead during the probes counts as the pressed key
+    $key = $Script:PendingKey; $Script:PendingKey = $null
+  } else {
+    $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
+    while ([DateTime]::UtcNow -lt $deadline) {
+      $key = Read-ArchKey
+      if ($key) { break }
+      Start-Sleep -Milliseconds 40
+    }
   }
   Clear-ArchReconfigureHint
   if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
@@ -574,11 +583,18 @@ function Show-ArchDownSummaryPrompt($downRemotes) {
     try { [Console]::SetCursorPosition(0, $baseTop) } catch { }
   }
   $choice = 'n'
-  try {
-    $k = [Console]::ReadKey($true)
-    if ($k.Key -eq 'Enter' -or $k.KeyChar -eq 'y' -or $k.KeyChar -eq 'Y') { $choice = 'y' }
-    elseif ($k.KeyChar -eq 'c' -or $k.KeyChar -eq 'C') { $choice = 'c' }
-  } catch { }
+  if ($null -ne $Script:PendingKey) {
+    # a key typed ahead during the probes answers this prompt
+    $pk = $Script:PendingKey; $Script:PendingKey = $null
+    if ($pk -eq "\`r" -or $pk -eq 'y' -or $pk -eq 'Y') { $choice = 'y' }
+    elseif ($pk -eq 'c' -or $pk -eq 'C') { $choice = 'c' }
+  } else {
+    try {
+      $k = [Console]::ReadKey($true)
+      if ($k.Key -eq 'Enter' -or $k.KeyChar -eq 'y' -or $k.KeyChar -eq 'Y') { $choice = 'y' }
+      elseif ($k.KeyChar -eq 'c' -or $k.KeyChar -eq 'C') { $choice = 'c' }
+    } catch { }
+  }
   if ($UseVt) {
     Write-Host -NoNewline ("$Esc" + '7' + "$Esc[1B\`r$Esc[2K$Esc[1B\`r$Esc[2K$Esc" + '8')
   } else {
@@ -651,7 +667,14 @@ function Clear-ArchWaitPrompt {
 # only once the prompt is actually on screen.
 $Script:SkipAll = $false
 $Script:DiscAll = $false
+$Script:SkipNow = $false
 $Script:OpenMenu = $false
+# A key the probe frames had to consume that belongs to a LATER prompt (a
+# typed-ahead y for the down prompt, the 1 after a [C]). The next prompt
+# answers it before reading the console again; polling stops the moment it
+# is set, so every later key stays buffered for that prompt.
+$Script:PendingKey = $null
+$Script:FramePolling = $true
 $Script:LastWaitNote = ''
 function Wait-ArchHealth {
   if (Invoke-ArchHealthFetch) { $Script:HealthState = 'ok'; return }
@@ -664,6 +687,7 @@ function Wait-ArchHealth {
     $key = Read-ArchKey
     if ($key -eq 'y' -or $key -eq 'Y') { $Script:DiscAll = $true; break }
     if ($key -eq 'n' -or $key -eq 'N') { $Script:SkipAll = $true; break }
+    if ($key -eq ' ') { $Script:SkipNow = $true; break }
     if ($key -eq 'c' -or $key -eq 'C') { $Script:OpenMenu = $true; break }
     if ($key -eq "\`r" -and $Script:WaitPromptShown) { $Script:DiscAll = $true; break }
     $now = [DateTime]::UtcNow
@@ -725,6 +749,9 @@ if ($HealthUrl) {
   Show-ArchSpinStart $ActiveRemotes[0].Label ''
   Wait-ArchHealth
 }
+# Space means "get out of the way": end the pre-loader at once, disconnect and
+# remember nothing — the alternate screen closes over the half-drawn rows.
+if ($Script:SkipNow) { Exit-ArchGuard }
 if ($Script:OpenMenu) {
   if ($UseVt) { Write-Host -NoNewline ("$Esc[" + $ActiveRemotes.Count + 'B' + "\`r") }
   Clear-ArchReconfigureHint
@@ -750,14 +777,32 @@ foreach ($r in $ActiveRemotes) {
   Show-ArchSpinStart $r.Label ''
   for ($pad = 0; $pad -lt $MinCheckFrames; $pad++) {
     Start-Sleep -Milliseconds $FrameSleepMs
+    if ($Script:FramePolling) {
+      # harvest Space/[C] between frames, so skip lands mid-animation and a
+      # [C] pressed here still opens the menu after the turn. Any other key
+      # belongs to a prompt that has not appeared yet — consuming it here
+      # would make that prompt hang — so it ends the polling and is kept
+      # in PendingKey for the next prompt to answer first.
+      $key = Read-ArchKey
+      if ($key -eq ' ') { $Script:SkipNow = $true; break }
+      if ($key -eq 'c' -or $key -eq 'C') { $Script:OpenMenu = $true; $Script:FramePolling = $false }
+      elseif ($key) { $Script:PendingKey = $key; $Script:FramePolling = $false }
+    }
     Show-ArchSpinTick
   }
+  if ($Script:SkipNow) { break }
   if (Test-ArchResourceDown $r) { Show-ArchDown $r; $DownRemotes += $r }
   else { Show-ArchOk $r.Label }
 }
+if ($Script:SkipNow) { Exit-ArchGuard }
 if ($DownRemotes.Count -gt 0) {
   if ($UseVt) { Clear-ArchReconfigureHint }
   Show-ArchDownSummaryPrompt $DownRemotes
+} elseif ($Script:OpenMenu) {
+  # a [C] harvested between frames — the same menu the closing beat's
+  # buffered read used to catch before the frames consumed the keys
+  Clear-ArchReconfigureHint
+  Invoke-ArchReconfigureMenu
 } else {
   Show-ArchReconfigureOffer
 }

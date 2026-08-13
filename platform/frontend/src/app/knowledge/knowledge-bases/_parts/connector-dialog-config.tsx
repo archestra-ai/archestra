@@ -348,6 +348,7 @@ const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "sharepoint",
   "salesforce",
   "onedrive",
+  "notion",
 ]);
 
 export function connectorSupportsAutoSync(type: ConnectorType): boolean {
@@ -414,6 +415,37 @@ export function getPermissionSyncCredentialNote(
 
 const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR =
   "atlassian-organization-admin-api-key";
+
+/**
+ * Rendered under the visibility selector on the Notion create/edit forms when
+ * Auto-sync permissions is selected. Notion's public API cannot report who
+ * can see an individual page, so support is deliberately coarse ("Limited"
+ * in the docs): the admin must know the audience model and scope what the
+ * integration can see.
+ */
+export function NotionAutoSyncPermissionsNote() {
+  return (
+    <p className="text-sm text-muted-foreground">
+      Notion&apos;s API cannot report who can see each page, so auto-sync makes
+      every synced page visible to all workspace members matched by email, and
+      never to guests. Share only workspace-appropriate teamspaces and pages
+      with the integration, and grant it the &quot;read user information
+      including email addresses&quot; capability.{" "}
+      <ExternalDocsLink
+        href={getFrontendDocsUrl(
+          DocsPage.PlatformKnowledge,
+          NOTION_AUTO_SYNC_DOC_ANCHOR,
+        )}
+        className="underline"
+        showIcon={false}
+      >
+        Learn more
+      </ExternalDocsLink>
+    </p>
+  );
+}
+
+const NOTION_AUTO_SYNC_DOC_ANCHOR = "notion-auto-sync-permissions";
 // SPDX-SnippetEnd
 
 export function getConnectorUrlConfig(
@@ -542,7 +574,7 @@ export function getConnectorCredentialConfig(params: {
   const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> =
     {
       servicenow: "Your ServiceNow password",
-      notion: "secret_...",
+      notion: "ntn_...",
       sharepoint: "Your Azure AD client secret",
       gdrive: gdriveUsesOAuth
         ? undefined
@@ -699,8 +731,16 @@ function getApiTokenHelpText(params: {
   if (params.type === "notion") {
     return (
       <p className="text-[0.8rem] text-muted-foreground">
-        Your Notion integration token (starts with <code>secret_</code>). Create
-        one at notion.so/my-integrations.
+        Your Notion internal integration secret (starts with <code>ntn_</code>,
+        older <code>secret_</code> tokens keep working). Create one in the{" "}
+        <ExternalDocsLink
+          href="https://app.notion.com/developers/connections"
+          className="underline"
+          showIcon={false}
+        >
+          Notion Developer portal
+        </ExternalDocsLink>
+        .
       </p>
     );
   }

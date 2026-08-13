@@ -61,6 +61,7 @@ import {
   getConnectorUrlConfig,
   getDefaultConnectorConfig,
   getPermissionSyncCredentialNote,
+  NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
@@ -437,6 +438,11 @@ export function CreateConnectorDialog({
                   supportsAutoSync={connectorSupportsAutoSync(connectorType)}
                   autoSyncPermissionAction="create"
                 />
+
+                {visibility === "auto-sync-permissions" &&
+                  connectorType === "notion" && (
+                    <NotionAutoSyncPermissionsNote />
+                  )}
 
                 <div className="border-t" />
 

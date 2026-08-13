@@ -11,6 +11,7 @@ import {
   buildContainerToken,
   buildGroupToken,
 } from "@/knowledge-base/acl-tokens";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   ConnectorRunModel,
   GithubAppConfigModel,
@@ -23,6 +24,7 @@ import {
   KnowledgeBaseModel,
   TaskModel,
 } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -51,6 +53,8 @@ describe("knowledge base routes", () => {
         }
       ).organizationId = organizationId;
     });
+
+    registerAuditLogHook(app);
 
     const { default: knowledgeBaseRoutes } = await import("./knowledge-base");
     await app.register(knowledgeBaseRoutes);
@@ -3492,6 +3496,89 @@ describe("knowledge base routes", () => {
       });
       expect(deleteResponse.statusCode).toBe(200);
       expect(await refreshTasks()).toHaveLength(2);
+    });
+
+    test("mapping writes a connector.updated audit row whose snapshot diffs the override", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: alice.id },
+      });
+      expect(response.statusCode).toBe(200);
+      // The audit row is written fire-and-forget after the response.
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "connector",
+        limit: 20,
+        offset: 0,
+      });
+      const row = data.find(
+        (r) => r.resourceId === connector.id && r.httpMethod === "PUT",
+      );
+      expect(row?.action).toBe("connector.updated");
+      expect(row?.outcome).toBe("success");
+      expect(row?.before?.memberOverrides).toEqual([]);
+      expect(row?.after?.memberOverrides).toEqual([
+        `acc-hidden -> alice@example.com (${alice.id})`,
+      ]);
+    });
+
+    test("unmapping writes connector.updated (not connector.deleted) with the override removed", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+      await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: alice.id },
+      });
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}/member-overrides/acc-hidden`,
+      });
+      expect(deleteResponse.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "connector",
+        limit: 20,
+        offset: 0,
+      });
+      const row = data.find(
+        (r) => r.resourceId === connector.id && r.httpMethod === "DELETE",
+      );
+      // The mapping DELETE must read as a connector update (the connector
+      // survives), with the removed mapping visible in the diff.
+      expect(row?.action).toBe("connector.updated");
+      expect(row?.outcome).toBe("success");
+      expect(row?.before?.memberOverrides).toEqual([
+        `acc-hidden -> alice@example.com (${alice.id})`,
+      ]);
+      expect(row?.after?.memberOverrides).toEqual([]);
     });
   });
 

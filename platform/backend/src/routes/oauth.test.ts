@@ -587,6 +587,66 @@ describe("OAuth helper functions", () => {
       globalThis.fetch = originalFetch;
     });
 
+    test("falls back to root protected resource metadata when the path-aware document is missing", async () => {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (
+          url ===
+          "https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+        ) {
+          return { ok: false, status: 404 };
+        }
+        if (
+          url === "https://mcp.example.com/.well-known/oauth-protected-resource"
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              resource: "https://mcp.example.com",
+              authorization_servers: ["https://auth.example.com"],
+            }),
+          };
+        }
+        if (
+          url ===
+          "https://auth.example.com/.well-known/oauth-authorization-server"
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              authorization_endpoint:
+                "https://auth.example.com/oauth2/authorize",
+              token_endpoint: "https://auth.example.com/oauth2/token",
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as Mock;
+
+      globalThis.fetch = fetchMock;
+
+      const endpoints = await discoverOAuthEndpoints({
+        server_url: "https://mcp.example.com/mcp",
+        supports_resource_metadata: true,
+      });
+
+      expect(endpoints.authorizationEndpoint).toBe(
+        "https://auth.example.com/oauth2/authorize",
+      );
+      expect(endpoints.tokenEndpoint).toBe(
+        "https://auth.example.com/oauth2/token",
+      );
+      // The path-aware document is tried first; the root document is the fallback
+      // that hands discovery over to the advertised authorization server.
+      expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+        "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+        "https://mcp.example.com/.well-known/oauth-protected-resource",
+        "https://auth.example.com/.well-known/oauth-authorization-server",
+      ]);
+
+      globalThis.fetch = originalFetch;
+    });
+
     test("falls back to explicit endpoints when discovery fails", async () => {
       globalThis.fetch = vi.fn().mockRejectedValue(new Error("404")) as Mock;
 

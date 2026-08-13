@@ -377,6 +377,7 @@ class ConnectorSyncService {
           currentConnector.visibility === "auto-sync-permissions";
 
         const ingestedDocumentIds: string[] = [];
+        const failedSourceIds = new Set<string>();
         for (const doc of batch.documents) {
           documentsProcessed++;
           try {
@@ -388,8 +389,8 @@ class ConnectorSyncService {
               ftsLanguage: connector.ftsLanguage,
               acl: documentAcl,
               // Auto-sync connectors: the permission-sync pass owns per-doc ACLs.
-              // Content-sync must never author them — create fail-closed ([]) and
-              // leave the existing ACL untouched on re-ingest.
+              // New and changed source revisions are locked fail-closed until
+              // that pass evaluates the matching upstream revision.
               isAutoSync,
               log: runLog,
             });
@@ -401,6 +402,7 @@ class ConnectorSyncService {
             }
           } catch (docError) {
             itemErrors++;
+            failedSourceIds.add(doc.id);
             runLog.warn(
               {
                 documentId: doc.id,
@@ -420,6 +422,35 @@ class ConnectorSyncService {
               documentIds: ingestedDocumentIds,
               connectorRunId: run.id,
             },
+          });
+        }
+
+        // A scoped reconciliation is authoritative only when every current
+        // source id in that scope was durably ingested/enqueued. Advancing the
+        // cursor after a failed item and then deleting against a partial seen
+        // set would turn a transient extraction/database failure into data
+        // loss. Throw before reconciliation/checkpoint so the source page is
+        // replayed at least once.
+        for (const scope of batch.reconcileScopes ?? []) {
+          const failed = scope.seenSourceIds.find((sourceId) =>
+            failedSourceIds.has(sourceId),
+          );
+          if (failed) {
+            throw new Error(
+              `Cannot reconcile source scope after failed document ${failed}`,
+            );
+          }
+          await KbDocumentModel.deleteMissingFromMetadataScope({
+            connectorId,
+            metadataFilter: scope.metadataFilter,
+            seenSourceIds: scope.seenSourceIds,
+          });
+        }
+        if (batch.completionSweep) {
+          await KbDocumentModel.deleteOutsideMetadataGeneration({
+            connectorId,
+            metadataKey: batch.completionSweep.metadataKey,
+            generation: batch.completionSweep.generation,
           });
         }
 
@@ -863,16 +894,20 @@ class ConnectorSyncService {
     const title = stripNullBytes(doc.title);
 
     // Include media data in hash so unchanged images are properly skipped.
+    const hashMetadata = metadataForContentHash(
+      doc.metadata,
+      doc.operationalMetadataKeys,
+    );
     const hashInput = doc.mediaContent
       ? `${doc.mediaContent.mimeType}:${doc.mediaContent.data}` +
-        (doc.metadata
+        (hashMetadata
           ? "\n" +
-            JSON.stringify(doc.metadata, Object.keys(doc.metadata).sort())
+            JSON.stringify(hashMetadata, Object.keys(hashMetadata).sort())
           : "")
-      : doc.metadata
+      : hashMetadata
         ? content +
           "\n" +
-          JSON.stringify(doc.metadata, Object.keys(doc.metadata).sort())
+          JSON.stringify(hashMetadata, Object.keys(hashMetadata).sort())
         : content;
     const contentHash = createHash("sha256").update(hashInput).digest("hex");
 
@@ -883,12 +918,8 @@ class ConnectorSyncService {
     });
 
     if (existing) {
-      // Auto-sync connectors: the permission-sync pass is the SOLE author of
-      // kb_documents.acl. Content-sync must not write it on re-ingest — doing so
-      // would clobber a concurrent pass's fresh ACL (a lost update). So the doc
-      // row's acl is left untouched for auto-sync (see the content-changed branch
-      // below), and re-created chunks inherit the doc's CURRENT acl. Other
-      // visibilities keep authoring the connector-level ACL.
+      // Auto-sync connectors preserve the permission-pass-owned ACL only while
+      // the source payload and its security-relevant revision are unchanged.
       const effectiveAcl = isAutoSync ? (existing.acl as AclEntry[]) : acl;
 
       // Same content hash → skip (unchanged)
@@ -926,6 +957,21 @@ class ConnectorSyncService {
           return { ingested: true, documentId: existing.id };
         }
 
+        // Baseline generations and source revisions are operational metadata,
+        // not content. Keep them current without re-chunking unchanged text.
+        if (
+          JSON.stringify(existing.metadata ?? {}) !==
+            JSON.stringify(doc.metadata ?? {}) ||
+          existing.title !== title ||
+          existing.sourceUrl !== (doc.sourceUrl ?? null)
+        ) {
+          await KbDocumentModel.update(existing.id, {
+            title,
+            sourceUrl: doc.sourceUrl ?? null,
+            metadata: doc.metadata,
+          });
+        }
+
         log.debug(
           {
             documentId: doc.id,
@@ -936,23 +982,22 @@ class ConnectorSyncService {
         return { ingested: false, documentId: null };
       }
 
-      // Content has changed — update existing document. For auto-sync connectors
-      // omit `acl` from the update so the permission-pass-owned value is never
-      // clobbered; the returned row then carries the doc's current (fresh) acl,
-      // which the re-created chunks inherit so a re-chunk never drops the doc to
-      // fail-closed. Non-auto-sync writes the connector-level acl as before.
-      const updated = await KbDocumentModel.update(existing.id, {
+      // Content or security-relevant source metadata changed. Auto-sync locks
+      // the new revision until permission sync evaluates it; other visibility
+      // modes keep the connector-level ACL.
+      await KbDocumentModel.update(existing.id, {
         title,
         content,
         contentHash,
         sourceUrl: doc.sourceUrl ?? null,
-        ...(isAutoSync ? {} : { acl }),
+        // A changed payload must never inherit a permission result evaluated
+        // for its older M-Files revision. Lock first; the permission pass
+        // unlocks only after evaluating cached+latest source revisions.
+        acl: isAutoSync ? [] : acl,
         metadata: doc.metadata,
         embeddingStatus: "pending",
       });
-      const chunkAcl = isAutoSync
-        ? ((updated?.acl as AclEntry[] | undefined) ?? effectiveAcl)
-        : acl;
+      const chunkAcl = isAutoSync ? [] : acl;
 
       // Re-chunk: content changed, so replace stale chunks
       await KbChunkModel.deleteByDocument(existing.id);
@@ -1197,4 +1242,15 @@ function describeEmptySync(params: {
  */
 function stripNullBytes(text: string): string {
   return text.includes("\u0000") ? text.replaceAll("\u0000", "") : text;
+}
+
+function metadataForContentHash(
+  metadata: Record<string, unknown> | undefined,
+  operationalKeys: string[] | undefined,
+): Record<string, unknown> | undefined {
+  if (!metadata || !operationalKeys?.length) return metadata;
+  const ignored = new Set(operationalKeys);
+  return Object.fromEntries(
+    Object.entries(metadata).filter(([key]) => !ignored.has(key)),
+  );
 }

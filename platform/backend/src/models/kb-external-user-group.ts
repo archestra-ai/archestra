@@ -46,6 +46,55 @@ class KbExternalUserGroupModel {
       .where(eq(t.connectorId, connectorId));
   }
 
+  static async findMembershipSnapshotByGroups(params: {
+    connectorId: string;
+    groupIds: string[];
+  }): Promise<
+    {
+      groupId: string;
+      externalAccountId: string;
+      memberEmail: string | null;
+      displayName: string | null;
+      accountType: string | null;
+    }[]
+  > {
+    if (params.groupIds.length === 0) return [];
+    const t = schema.kbExternalUserGroupsTable;
+    return await db
+      .select({
+        groupId: t.groupId,
+        externalAccountId: t.externalAccountId,
+        memberEmail: t.memberEmail,
+        displayName: t.displayName,
+        accountType: t.accountType,
+      })
+      .from(t)
+      .where(
+        and(
+          eq(t.connectorId, params.connectorId),
+          inArray(t.groupId, params.groupIds),
+        ),
+      );
+  }
+
+  static async deleteByGroupIds(params: {
+    connectorId: string;
+    groupIds: string[];
+  }): Promise<number> {
+    if (params.groupIds.length === 0) return 0;
+    const t = schema.kbExternalUserGroupsTable;
+    const result = await db
+      .delete(t)
+      .where(
+        and(
+          eq(t.connectorId, params.connectorId),
+          inArray(t.groupId, params.groupIds),
+        ),
+      )
+      .returning({ id: t.id });
+    return result.length;
+  }
+
   /**
    * Upsert a batch of new or CHANGED memberships (the pass diffs first, so
    * unchanged rows never reach this). A re-upsert refreshes the email/display

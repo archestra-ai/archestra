@@ -25,6 +25,8 @@ import {
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   METRICS_PATH,
+  MFILES_VAF_ADD_ON_PACKAGE_PATH,
+  MFILES_VAF_ADD_ON_SCRIPT_PATH,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   PUBLIC_CONFIG_PATH,
   READY_PATH,
@@ -181,6 +183,10 @@ export class Authnz {
       // Public connection-setup script endpoint: one-time token in URL, no session
       (method === "GET" &&
         url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||
+      // Public Archestra VAF Add On install bootstrap and package proxy:
+      // parameterless, credential-free, fetched by irm without a session
+      (method === "GET" && url === MFILES_VAF_ADD_ON_SCRIPT_PATH) ||
+      (method === "GET" && url === MFILES_VAF_ADD_ON_PACKAGE_PATH) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
       url.startsWith(config.a2aV2Gateway.endpoint) ||

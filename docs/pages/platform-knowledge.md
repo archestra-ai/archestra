@@ -3,12 +3,12 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-11
+lastUpdated: 2026-08-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions.
+A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, Salesforce, and M-Files. An agent assigned a Knowledge Base can query that data to answer questions.
 
 > **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
 
@@ -184,24 +184,25 @@ Auto-sync permissions mirrors the data source system's access control into Arche
 
 Auto-sync permissions works with the connectors marked *Supported* below. The others do not support it yet.
 
-| Connector    | Auto-sync permissions |
-| ------------ | --------------------- |
-| Confluence   | Supported             |
-| GitHub       | Supported             |
-| Jira         | Supported             |
-| Google Drive | Supported             |
-| Salesforce   | Supported             |
-| SharePoint   | Supported             |
-| Asana        | Not supported         |
-| Dropbox      | Not supported         |
-| GitLab       | Not supported         |
-| Linear       | Not supported         |
-| Notion       | Not supported         |
-| OneDrive     | Not supported         |
-| Outline      | Not supported         |
-| Perforce     | Not supported         |
-| ServiceNow   | Not supported         |
-| Web Crawler  | Not supported         |
+| Connector    | Auto-sync permissions         |
+| ------------ | ----------------------------- |
+| Confluence   | Supported                     |
+| GitHub       | Supported                     |
+| Jira         | Supported                     |
+| M-Files      | Supported with the VAF Add On |
+| Google Drive | Supported                     |
+| Salesforce   | Supported                     |
+| SharePoint   | Supported                     |
+| Asana        | Not supported                 |
+| Dropbox      | Not supported                 |
+| GitLab       | Not supported                 |
+| Linear       | Not supported                 |
+| Notion       | Not supported                 |
+| OneDrive     | Not supported                 |
+| Outline      | Not supported                 |
+| Perforce     | Not supported                 |
+| ServiceNow   | Not supported                 |
+| Web Crawler  | Not supported                 |
 
 **Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
 
@@ -615,6 +616,37 @@ Each depot path and extension combination is listed in its own REST API request.
 | Login Ticket  | An all-hosts ticket from `p4 login -a -p`                                                               |
 | File Types    | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                           |
 | Exclude Paths | Optional comma-separated depot paths skipped within the synced paths (e.g., `//depot/docs/generated`)  |
+
+### M-Files
+
+Sync versioned files and their source permissions from an M-Files vault.
+
+> **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED=true` (or the `ARCHESTRA_BETA` master switch) to show the connector type. See [Deployment](/docs/platform-deployment).
+
+**Indexed:** supported files attached to the configured M-Files object types. The default object type is `0` (documents). Text, Markdown, CSV, JSON, XML, HTML, YAML, Office documents, and PDFs are indexed; supported images are indexed when a multimodal embedding model is configured. Files larger than 25 MB are skipped.
+
+**Authentication:** a dedicated M-Files login account. Archestra exchanges its username and password for an explicit short-lived MFWS token, preserves Multi-Server Mode routing cookies, and retries once after re-authentication.
+
+| Field | Description |
+| --- | --- |
+| M-Files Web Service URL | Classic Web/MFWS base URL; `/REST` is appended automatically (for example, `https://mfiles.example.com/m-files`) |
+| Vault GUID | GUID of the vault to index |
+| Username | Dedicated M-Files login account for the connector |
+| Password | That account's password; exchanged for a short-lived MFWS token |
+| Windows Domain | Optional, under Advanced — only for domain-authenticated accounts |
+
+Three more settings exist on the connector config and are tuned through the API rather than the form: `objectTypeIds` (managed object types, default `0`), `batchSize` (documents per indexing batch, default `50`) and `permissionExtensionMethod` (the installed VAF extension-method name, default `ArchestraKnowledgePermissionSnapshot`). Leaving them unset keeps the backend defaults.
+
+#### M-Files VAF Add On
+
+The Archestra VAF Add On is a vault application for M-Files Server. Syncing requires it. MFWS does not expose change tracking, exact permission reads, or group membership — the add-on supplies them from inside the vault. File content never flows through it. Every call requires the **Change full control role**, enforced by M-Files itself. Unreadable permissions fail closed.
+
+Install it once per connected vault, from the connector form:
+
+- **Installation script** — copy the one-line command and run it in PowerShell on the M-Files server as a system administrator. It downloads the add-on, installs it into the vault you choose, and restarts the vault.
+- **Manual installation** — download the `.mfappx` package and install it in M-Files Admin: right-click the vault, then Applications, then Install.
+
+Pre-built packages are published as `m-files-vaf-add-on-v<version>` [releases on GitHub](https://github.com/archestra-ai/archestra/releases). The source lives in [`integrations/m-files-vaf-add-on`](https://github.com/archestra-ai/archestra/tree/main/integrations/m-files-vaf-add-on); its README covers building from source and the add-on contract. For development deployments, two variables override where the install script gets the package — see [Deployment](/docs/platform-deployment).
 
 ## Environments
 

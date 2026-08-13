@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { connectorSupportsAutoSync } from "./connector-dialog-config";
 import { CreateConnectorDialog } from "./create-connector-dialog";
 
 // Radix Popper / floating-ui needs ResizeObserver as a real constructor
@@ -54,6 +55,17 @@ const mockMutateAsync = vi.fn();
 vi.mock("next/navigation");
 
 const mockStartGoogleDriveOAuth = vi.fn();
+const MOCK_VAF_ADD_ON_DOWNLOAD_URL =
+  "https://github.com/archestra-ai/archestra/releases/download/m-files-vaf-add-on-v1.0.0/archestra-m-files-vaf-add-on-1.0.0.mfappx";
+
+// Both M-Files gates open by default: the suite exercises the M-Files form,
+// including its Application Account (OAuth) fields. The gate tests flip
+// individual flags through mockUseFeature.
+const mockUseFeature = vi.fn((_key: string): boolean => true);
+vi.mock("@/lib/config/config.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
+  useFeature: (key: string) => mockUseFeature(key),
+}));
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useCreateConnector: () => ({
@@ -62,6 +74,10 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
   }),
   useStartGoogleDriveOAuth: () => ({
     mutate: mockStartGoogleDriveOAuth,
+    isPending: false,
+  }),
+  useMfilesVafAddOnDistribution: () => ({
+    data: { packageDownloadUrl: MOCK_VAF_ADD_ON_DOWNLOAD_URL },
     isPending: false,
   }),
 }));
@@ -109,6 +125,7 @@ async function renderGithubConfigureStep() {
 describe("CreateConnectorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseFeature.mockImplementation(() => true);
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
@@ -711,6 +728,346 @@ describe("CreateConnectorDialog", () => {
         excludePaths: ["//depot/docs/generated", "//depot/docs/vendor"],
         fileTypes: [".md", ".yaml"],
       });
+    });
+  });
+
+  describe("M-Files-specific flow", () => {
+    async function renderMFilesConfigureStep() {
+      const user = userEvent.setup();
+      const result = renderDialog();
+      // The M-Files tile appears only after the beta flag arrives with the
+      // config query, so the first lookup must await it.
+      await user.click(await screen.findByText("M-Files"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+      return { ...result, user };
+    }
+
+    it("hides the M-Files type while the connector gate is off", async () => {
+      mockUseFeature.mockImplementation(
+        (key) => key !== "kbMfilesConnectorEnabled",
+      );
+      renderDialog();
+      expect(await screen.findByText("Jira")).toBeInTheDocument();
+      expect(screen.queryByText("M-Files")).toBeNull();
+    });
+
+    it("hides the Authentication Method selector while the OAuth gate is off", async () => {
+      mockUseFeature.mockImplementation(
+        (key) => key !== "kbMfilesOauthEnabled",
+      );
+      await renderMFilesConfigureStep();
+      expect(screen.queryByText("Authentication Method")).toBeNull();
+      // Only the Login Account path remains.
+      expect(screen.getByLabelText(/^Username$/)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^OAuth Token Endpoint$/)).toBeNull();
+    });
+
+    it("shows every required field without expanding Advanced", async () => {
+      const { user } = await renderMFilesConfigureStep();
+
+      expect(
+        screen.getByLabelText(/^M-Files Web Service URL$/),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Vault GUID$/)).toBeInTheDocument();
+      expect(
+        screen.getByRole("combobox", { name: "Authentication Method" }),
+      ).toBeInTheDocument();
+      // Login Account is the default; its credential fields are on the main
+      // form.
+      expect(screen.getByLabelText(/^Username$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Password$/)).toBeInTheDocument();
+
+      // Switching to Application Account surfaces every OAuth field on the
+      // main form — a collapsed Advanced section must never hide a field
+      // that can fail validation.
+      await user.click(
+        screen.getByRole("combobox", { name: "Authentication Method" }),
+      );
+      await user.click(
+        screen.getByRole("option", { name: "Application Account" }),
+      );
+      expect(
+        screen.getByLabelText(/^OAuth Token Endpoint$/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/^Authentication Configuration Name$/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/^Authentication Configuration Scope$/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/^Application Account Username$/),
+      ).toBeInTheDocument();
+      // Entra ID client credentials effectively require a scope, so the
+      // scope/resource pair must not hide in Advanced.
+      expect(screen.getByLabelText(/^Token Audience$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Client ID$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Client Secret$/)).toBeInTheDocument();
+      expect(connectorSupportsAutoSync("mfiles")).toBe(true);
+    });
+
+    it("shows the static parameterless VAF Add On install command", async () => {
+      await renderMFilesConfigureStep();
+
+      // The add-on is a hard prerequisite — the connection test and every
+      // sync preflight it — so its install panel must be visible without
+      // expanding Advanced. The command is one static line: the backend's
+      // script route carries the server-resolved package source, and the
+      // installer picks the vault interactively, so nothing from the form
+      // ever rides in the command.
+      expect(screen.getByText(/^Archestra VAF Add On$/)).toBeInTheDocument();
+      const command = () =>
+        screen.getByText(/mfiles-vaf-add-on\/script/).textContent ?? "";
+      expect(command()).toBe(
+        `irm '${window.location.origin}/api/mfiles-vaf-add-on/script' | iex`,
+      );
+
+      fireEvent.change(screen.getByLabelText(/^M-Files Web Service URL$/), {
+        target: { value: "https://mfiles.example.com/m-files" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Vault GUID$/), {
+        target: { value: "C840BE1A-5B47-4AC0-8EF7-835C166C8E24" },
+      });
+      expect(command()).toBe(
+        `irm '${window.location.origin}/api/mfiles-vaf-add-on/script' | iex`,
+      );
+
+      // Manual paths live in the docs — a single link, no duplicates. Other
+      // fields carry their own "Learn more" links, so match on the target.
+      const docsLinks = screen
+        .getAllByRole("link", { name: /Learn more/ })
+        .filter(
+          (link) =>
+            link.getAttribute("href") ===
+            "https://archestra.ai/docs/platform-knowledge#m-files-vaf-add-on",
+        );
+      expect(docsLinks).toHaveLength(1);
+      // The manual path is the mutually exclusive alternative tab: the
+      // script tab is pre-selected, and selecting Manual installation swaps
+      // in a download of the newest released package.
+      expect(
+        screen.queryByRole("link", { name: /Download \.mfappx/ }),
+      ).not.toBeInTheDocument();
+      const manualTab = screen.getByRole("tab", {
+        name: /Manual installation/,
+      });
+      fireEvent.mouseDown(manualTab);
+      fireEvent.click(manualTab);
+      const downloadLink = screen.getByRole("link", {
+        name: /Download \.mfappx/,
+      });
+      expect(downloadLink).toHaveAttribute(
+        "href",
+        MOCK_VAF_ADD_ON_DOWNLOAD_URL,
+      );
+    });
+
+    it("copying the add-on command does not submit the form", async () => {
+      const { user } = await renderMFilesConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^M-Files Web Service URL$/), {
+        target: { value: "https://mfiles.example.com/m-files" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Vault GUID$/), {
+        target: { value: "{C840BE1A-5B47-4AC0-8EF7-835C166C8E24}" },
+      });
+
+      // A button inside a form defaults to type="submit"; the copy button
+      // must not trigger validation of unrelated required fields.
+      await user.click(
+        screen.getByRole("button", { name: /Copy to clipboard/ }),
+      );
+      expect(mockMutateAsync).not.toHaveBeenCalled();
+      expect(
+        screen.queryByText("OAuth token endpoint is required"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("flows in workflow order: add-on prerequisite, then the vault it printed, then URL, then authentication", async () => {
+      await renderMFilesConfigureStep();
+
+      const addOn = screen.getByText(/^Archestra VAF Add On$/);
+      const url = screen.getByLabelText(/^M-Files Web Service URL$/);
+      const vaultGuid = screen.getByLabelText(/^Vault GUID$/);
+      const auth = screen.getByRole("combobox", {
+        name: "Authentication Method",
+      });
+      const secret = screen.getByLabelText(/^Password$/);
+      const follows = (earlier: Element, later: Element) =>
+        Boolean(
+          earlier.compareDocumentPosition(later) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+      expect(follows(addOn, vaultGuid)).toBe(true);
+      expect(follows(vaultGuid, url)).toBe(true);
+      expect(follows(url, auth)).toBe(true);
+      expect(follows(auth, secret)).toBe(true);
+    });
+
+    it("submits typed M-Files config", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const { user } = await renderMFilesConfigureStep();
+
+      // Login Account is the default; this flow exercises the OAuth path.
+      await user.click(
+        screen.getByRole("combobox", { name: "Authentication Method" }),
+      );
+      await user.click(
+        screen.getByRole("option", { name: "Application Account" }),
+      );
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Engineering M-Files" },
+      });
+      fireEvent.change(screen.getByLabelText(/^M-Files Web Service URL$/), {
+        target: { value: "https://mfiles.example.com/m-files" },
+      });
+      // Bare GUID paste — the submit transform must brace-wrap it into the
+      // format the backend requires.
+      fireEvent.change(screen.getByLabelText(/^Vault GUID$/), {
+        target: { value: "C840BE1A-5B47-4AC0-8EF7-835C166C8E24" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Client ID$/), {
+        target: { value: "00000000-0000-0000-0000-000000000042" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Client Secret$/), {
+        target: { value: "oauth-client-secret" },
+      });
+      fireEvent.change(screen.getByLabelText(/^OAuth Token Endpoint$/), {
+        target: {
+          value: "https://login.microsoftonline.com/tenant/oauth2/v2.0/token",
+        },
+      });
+      fireEvent.change(
+        screen.getByLabelText(/^Authentication Configuration Name$/),
+        { target: { value: "Entra ID" } },
+      );
+      fireEvent.change(
+        screen.getByLabelText(/^Authentication Configuration Scope$/),
+        { target: { value: "technical" } },
+      );
+      fireEvent.change(
+        screen.getByLabelText(/^Application Account Username$/),
+        {
+          target: { value: String.raw`integration\archestra` },
+        },
+      );
+      fireEvent.change(screen.getByLabelText(/^Token Audience$/), {
+        target: { value: "api://m-files/.default" },
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      });
+      expect(mockMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Engineering M-Files",
+          connectorType: "mfiles",
+          visibility: "org-wide",
+          credentials: {
+            email: "00000000-0000-0000-0000-000000000042",
+            apiToken: "oauth-client-secret",
+          },
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{C840BE1A-5B47-4AC0-8EF7-835C166C8E24}",
+            authMethod: "oauth_client_credentials",
+            oauthTokenEndpoint:
+              "https://login.microsoftonline.com/tenant/oauth2/v2.0/token",
+            oauthAuthConfig: "Entra ID",
+            oauthAuthConfigScope: "technical",
+            oauthAccountName: String.raw`integration\archestra`,
+            oauthScope: "api://m-files/.default",
+          },
+        }),
+      );
+    });
+
+    it("submits a Login Account connector with username/password credentials", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const { user } = await renderMFilesConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Vault Docs" },
+      });
+      fireEvent.change(screen.getByLabelText(/^M-Files Web Service URL$/), {
+        target: { value: "https://mfiles.example.com/m-files" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Vault GUID$/), {
+        target: { value: "{C840BE1A-5B47-4AC0-8EF7-835C166C8E24}" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Username$/), {
+        target: { value: "svc-archestra" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Password$/), {
+        target: { value: "vault-password" },
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      });
+      expect(mockMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Vault Docs",
+          connectorType: "mfiles",
+          credentials: {
+            email: "svc-archestra",
+            apiToken: "vault-password",
+          },
+          // No authMethod and no OAuth fields: the default Login Account
+          // submit strips the seeded OAuth presets.
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{C840BE1A-5B47-4AC0-8EF7-835C166C8E24}",
+          },
+        }),
+      );
+    });
+
+    it("switches to Application Account credentials", async () => {
+      const { user } = await renderMFilesConfigureStep();
+
+      // The optional Windows domain of the default Login Account path lives
+      // in Advanced with the other tuning.
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await waitFor(() => {
+        expect(
+          screen.getByLabelText(/^Windows Domain \(optional\)$/),
+        ).toBeInTheDocument();
+      });
+
+      // The authentication method lives on the main form: switching it must
+      // not require opening Advanced.
+      await user.click(
+        screen.getByRole("combobox", { name: "Authentication Method" }),
+      );
+      await user.click(
+        screen.getByRole("option", {
+          name: "Application Account",
+        }),
+      );
+
+      expect(screen.getByLabelText(/^Client ID$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Client Secret$/)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/^OAuth Token Endpoint$/),
+      ).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^Password$/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText(/^Windows Domain \(optional\)$/),
+      ).not.toBeInTheDocument();
     });
   });
 });

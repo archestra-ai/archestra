@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-08-04
+lastUpdated: 2026-08-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -67,7 +67,7 @@ For Claude Code, Codex, and Copilot CLI, the script installs a startup guard —
 
 A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote — "Disconnect MCP gateway (name) from Codex now? (Y/n)", naming your client, or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the exact reverse of the connect steps; `n` keeps them. The guard reads the client's config back to confirm each removal landed. A removal it cannot confirm gets a ✗ line with the command to run by hand, and the guard stays installed to try again. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with the CLI starting; the guard never blocks a launch. Non-interactive runs, `codex exec` or `claude -p` for example, only get a warning on stderr.
 
-Under the checks the guard always shows a reconfigure entry: "To reconfigure your Archestra connection press [C]". When everything is healthy it waits about a second and a half for that key, then starts the CLI. Press `C` and the rows turn into a numbered menu — one per remote — so you can disconnect any of them, reachable or not, by pressing its number. The row lands on a check, later launches skip it, and removing the last connected remote uninstalls the guard. Press `Esc` to leave the menu and start the CLI.
+Under the checks the guard always shows its two keys: "To skip press [Space] · to reconfigure your Archestra connection press [C]". Press `Space` at any point to skip the rest of the checks and start the CLI at once — nothing is disconnected or remembered. When everything is healthy the guard waits about a second and a half for a key, then starts the CLI. Press `C` and the rows turn into a numbered menu — one per remote — so you can disconnect any of them, reachable or not, by pressing its number. The row lands on a check, later launches skip it, and removing the last connected remote uninstalls the guard. Press `Esc` to leave the menu and start the CLI.
 
 The guard lives under `~/.archestra/`, hooked in by a marked wrapper block in your shell profile — on Windows, in each PowerShell edition's `profile.ps1`. Each client has its own file and its own disable variable:
 

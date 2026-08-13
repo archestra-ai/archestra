@@ -30,6 +30,7 @@ const {
   unassignConnectorFromKnowledgeBase,
   getConnectorKnowledgeBases,
   startGoogleDriveConnectorOAuth,
+  getMfilesVafAddOnDistribution,
 } = archestraApiSdk;
 
 type ConnectorsQuery = NonNullable<
@@ -705,5 +706,26 @@ function withinRunChainGrace(
     if (!ts) return false;
     const time = new Date(ts).getTime();
     return Number.isFinite(time) && now - time < RUN_CHAIN_GRACE_MS;
+  });
+}
+
+/**
+ * How the Archestra VAF Add On is distributed to this installation — probed
+ * once per connector form open (the server verifies each candidate against
+ * GitHub and caches). `packageDownloadUrl` null means no pre-built package
+ * exists and the install command compiles from source; the form then simply
+ * offers no download link. Errors resolve to null for the same graceful
+ * degradation — the link is a convenience, never a blocker.
+ */
+export function useMfilesVafAddOnDistribution() {
+  return useQuery({
+    queryKey: ["mfiles-vaf-add-on-distribution"],
+    queryFn: async () => {
+      const { data, error } = await getMfilesVafAddOnDistribution();
+      if (error || !data) return { packageDownloadUrl: null };
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }

@@ -38,6 +38,11 @@ describe("knowledge-management tool execution", () => {
       organizationId: org.id,
       userId: user.id,
     };
+    // config is a shared singleton: reset the M-Files gates to their shipped
+    // default (both off) so the gate tests below start from a known state and
+    // cannot leak into each other.
+    config.kb.mfilesConnectorEnabled = false;
+    config.kb.mfilesOauthEnabled = false;
   });
 
   // --- Query Knowledge Sources ---
@@ -823,6 +828,96 @@ describe("knowledge-management tool execution", () => {
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
         "At least one team must be selected for team-scoped connectors",
+      );
+    });
+
+    test("create_knowledge_connector rejects M-Files while its beta gate is off", async () => {
+      config.kb.mfilesConnectorEnabled = false;
+      const result = await executeArchestraTool(
+        t("create_knowledge_connector"),
+        {
+          name: "M-Files Vault",
+          connector_type: "mfiles",
+          config: {
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+          },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "The M-Files connector is not enabled",
+      );
+    });
+
+    test("create_knowledge_connector rejects the Application Account method while its gate is off", async () => {
+      config.kb.mfilesConnectorEnabled = true;
+      config.kb.mfilesOauthEnabled = false;
+      const result = await executeArchestraTool(
+        t("create_knowledge_connector"),
+        {
+          name: "M-Files Vault",
+          connector_type: "mfiles",
+          config: {
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+            authMethod: "oauth_client_credentials",
+            oauthTokenEndpoint: "https://login.example.com/oauth2/v2.0/token",
+            oauthAuthConfig: "Entra ID",
+          },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Application Account authentication method is not enabled",
+      );
+    });
+
+    test("update_knowledge_connector rejects switching to the Application Account method while its gate is off", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      config.kb.mfilesConnectorEnabled = true;
+      config.kb.mfilesOauthEnabled = false;
+      const organizationId = mockContext.organizationId!;
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "mfiles",
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+            authMethod: "mfiles_password_token",
+          },
+        },
+      );
+
+      const result = await executeArchestraTool(
+        t("update_knowledge_connector"),
+        {
+          id: connector.id,
+          config: {
+            type: "mfiles",
+            baseUrl: "https://mfiles.example.com/m-files",
+            vaultGuid: "{11111111-2222-3333-4444-555555555555}",
+            authMethod: "oauth_client_credentials",
+            oauthTokenEndpoint: "https://login.example.com/oauth2/v2.0/token",
+            oauthAuthConfig: "Entra ID",
+          },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "Application Account authentication method is not enabled",
       );
     });
 

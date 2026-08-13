@@ -773,7 +773,7 @@ describe("ConnectorDetailPage", () => {
         screen.getAllByText(
           (_, el) =>
             el?.tagName === "DIV" &&
-            el.textContent === "40 documents awaiting permission sync",
+            el.textContent === "40 documents with no resolvable readers",
         )[0],
       ).toBeInTheDocument();
       // The permissions row mirrors the content row's Last/cadence items.

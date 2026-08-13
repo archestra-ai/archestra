@@ -1614,6 +1614,14 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS`** - How often the owning worker renews a run's lease.
   - Default: `90` (seconds)
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF`** - Development override for where the Archestra VAF Add On install script gets the add-on.
+  - Default: unset (the script uses the pre-built package of the newest `m-files-vaf-add-on-v*` release)
+  - Set a git ref of `archestra-ai/archestra` (a pushed commit SHA, branch, or tag) to have the script install that ref's CI-built package, or compile from that ref's source when no CI build exists. The special value `local` uses the backend checkout's HEAD commit. Leave unset in production.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN`** - GitHub token used to fetch the source ref's CI-built add-on package.
+  - Default: unset
+  - GitHub requires authentication for Actions artifact downloads, even on public repositories. Only read when the source-ref override is set; without a token the install script compiles the add-on from source. The backend proxies the package — the token never reaches clients.
+
 - **`ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS`** - How long a document may sit un-embedded before the recovery sweep re-enqueues it.
   - Default: `900` (15 minutes)
   - An embedding job that fails permanently leaves its documents stuck. This window is the worst-case wait before the sweep re-embeds them. It bounds recovery from a stalled or failed embedding. Keep it above an embedding job's full retry span, about 8 minutes. Otherwise a slow-but-live job is reset while it still runs, which repeats work. Lower it to recover faster; raise it to be more conservative.
@@ -1647,6 +1655,9 @@ Permission sync for connectors using [auto-sync permissions](/docs/platform-know
 - **`ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED`** - Beta gate for the whole auto-sync-permissions feature: the connector visibility option, its permission passes, and the Users and Groups tabs.
   - Default: `false`
   - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing auto-sync connectors go dormant while it is off — no passes run and the Permissions APIs return 403.
+- **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`** - Beta gate for the [M-Files connector](/docs/platform-knowledge#m-files): the connector type in the create dialog, creating connectors of the type, and the VAF Add On distribution endpoints.
+  - Default: `false`
+  - A blank value falls back to the `ARCHESTRA_BETA` master switch. Existing M-Files connectors keep syncing while it is off.
 - **`ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT`** - Concurrency cap for the runtime-isolated permission-sync worker lane.
   - Default: `1`
   - This lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so permission sync never competes with content sync for slots.

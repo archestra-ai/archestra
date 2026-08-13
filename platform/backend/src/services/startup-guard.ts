@@ -45,6 +45,14 @@ import type { SetupScriptContext } from "./connection-setup-script";
  *   after the whole turn, ONE "Disconnect … from Claude? (Y/n)" prompt covers
  *   every down remote. Everything draws on the alternate screen, so the
  *   terminal is clean again after claude exits;
+ * - keeps a skip entry live the whole run: Space — polled between animation
+ *   frames (bash ≥ 4) and during the retry wait — ends the pre-loader
+ *   immediately and lets the client start, disconnecting and remembering
+ *   nothing. Reads that must hear it carry an IFS= prefix (default IFS
+ *   strips a read space into '', colliding with Enter — and Enter at the
+ *   down prompt means disconnect). Bash 3.2 cannot poll between frames (no
+ *   fractional read -t); there the pressed key stays buffered and lands at
+ *   the closing beat;
  * - disconnecting runs the exact reverse of the connect steps and records the
  *   remote in a skip file so later launches don't re-check it. Once nothing
  *   connected is left to check, the guard uninstalls itself entirely (script,
@@ -432,6 +440,10 @@ fi
 # macOS system bash 3.2 falls back to 1s ticks.
 TICK=1
 if [ "\${BASH_VERSINFO[0]:-3}" -ge 4 ]; then TICK=0.25; fi
+# Animation frames double as key polls (for Space/[C]) only with that same
+# fractional read -t; 3.2 keeps plain sleep frames (see frame_tick).
+FRAME_KEYS=0
+if [ "\${BASH_VERSINFO[0]:-3}" -ge 4 ]; then FRAME_KEYS=1; fi
 # The [C] window on the all-healthy pass. Fractional read -t needs bash 4;
 # 3.2 rounds it up to a whole second.
 RECONFIG_WAIT=2
@@ -464,6 +476,36 @@ spin_tick() {
     return 0
   fi
   printf '%s.%s' "$C_DIM" "$C_RESET"
+}
+
+# Frame pacing that can hear the skip key: on bash ≥ 4 each animation frame
+# is a fractional read on the tty, so Space (and [C]) land the moment they
+# are pressed. The IFS= prefix is load-bearing: default IFS strips a read
+# space into '', indistinguishable from Enter. System bash 3.2 has no
+# sub-second read -t and keeps plain sleep — there a pressed key stays
+# buffered (echo is off) and is honored at the closing beat instead.
+#
+# Any OTHER key pressed mid-probe belongs to a prompt that has not appeared
+# yet (a typed-ahead y for the down prompt, the 1 after a [C]); consuming it
+# here would make that prompt hang. So the first such key ends the polling —
+# it is kept in PENDING_KEY for the next prompt to read first, and every key
+# after it stays buffered in the tty, exactly as before frames read keys.
+SKIP_NOW=0
+PENDING_KEY=''
+PENDING_KEY_SET=0
+frame_tick() { # one animation frame; harvests Space/[C] pressed mid-probe
+  if [ "$FRAME_KEYS" = "1" ]; then
+    key=''
+    IFS= read -rs -n 1 -t "$FRAME_SLEEP" key </dev/tty 2>/dev/null || return 0
+    case "$key" in
+      ' ') SKIP_NOW=1 ;;
+      c|C) OPEN_MENU=1; FRAME_KEYS=0 ;;
+      *) PENDING_KEY="$key"; PENDING_KEY_SET=1; FRAME_KEYS=0 ;;
+    esac
+  else
+    sleep "$FRAME_SLEEP"
+  fi
+  return 0
 }
 
 # Status glyphs stay in the narrow ranges (○ ✓ ✗) so every row's icon and
@@ -698,7 +740,7 @@ reconfigure_menu() {
 # healthy pass's closing beat — so [C] is always offered, never just at the
 # end. Drawn one line below the block via save/restore, so the rows above
 # keep animating without touching it.
-RECONFIG_HINT_TEXT="  To reconfigure your $APP_NAME connection press [C]"
+RECONFIG_HINT_TEXT="  To skip press [Space] · to reconfigure your $APP_NAME connection press [C]"
 draw_reconfigure_hint() { printf '\\033[s\\n\\r\\033[2K%s%s%s\\033[u' "$C_DIM" "$RECONFIG_HINT_TEXT" "$C_RESET"; }
 clear_reconfigure_hint() { printf '\\033[s\\n\\r\\033[2K\\033[u'; }
 
@@ -707,8 +749,13 @@ clear_reconfigure_hint() { printf '\\033[s\\n\\r\\033[2K\\033[u'; }
 # while the probes ran was buffered (echo is off, so it left no smudge) and is
 # read here.
 offer_reconfigure_tail() {
-  key=''
-  read -rs -n 1 -t "$RECONFIG_WAIT" key </dev/tty 2>/dev/null || key=''
+  if [ "$PENDING_KEY_SET" = "1" ]; then
+    # a key typed ahead during the probes counts as the pressed key
+    key="$PENDING_KEY"; PENDING_KEY_SET=0
+  else
+    key=''
+    IFS= read -rs -n 1 -t "$RECONFIG_WAIT" key </dev/tty 2>/dev/null || key=''
+  fi
   clear_reconfigure_hint
   case "$key" in
     c|C) reconfigure_menu ;;
@@ -729,8 +776,15 @@ prompt_down_all() {
     down_prompt="Disconnect all $DOWN_COUNT unreachable resources from ${client.promptName} now? (Y/n)"
   fi
   printf '\\033[s\\n\\r\\033[2K%s\\n\\r\\033[2K%s  or press [C] to reconfigure your %s connection%s\\033[u' "$down_prompt" "$C_DIM" "$APP_NAME" "$C_RESET"
-  key=''
-  read -rs -n 1 key </dev/tty 2>/dev/null || key='n'
+  if [ "$PENDING_KEY_SET" = "1" ]; then
+    # a key typed ahead during the probes answers this prompt
+    key="$PENDING_KEY"; PENDING_KEY_SET=0
+  else
+    key=''
+    # IFS= keeps a pressed Space as ' ': without it Space reads as '' —
+    # Enter — and the advertised skip key would accept the disconnect
+    IFS= read -rs -n 1 key </dev/tty 2>/dev/null || key='n'
+  fi
   printf '\\033[s\\n\\r\\033[2K\\n\\r\\033[2K\\033[u'
   case "$key" in
     c|C)
@@ -795,11 +849,12 @@ wait_for_health() {
   while :; do
     key=''
     got_key=0
-    read -rs -n 1 -t "$TICK" key </dev/tty 2>/dev/null && got_key=1
+    IFS= read -rs -n 1 -t "$TICK" key </dev/tty 2>/dev/null && got_key=1
     if [ "$got_key" = "1" ]; then
       case "$key" in
         y|Y) DISC_ALL=1; break ;;
         n|N) SKIP_ALL=1; break ;;
+        ' ') SKIP_NOW=1; break ;;
         c|C) OPEN_MENU=1; break ;;
         '') [ "$WAIT_PROMPT_SHOWN" = "1" ] && { DISC_ALL=1; break; } ;;
       esac
@@ -873,6 +928,11 @@ if [ -n "$HEALTH_URL" ]; then
   spin_start "\${GUARD_LABELS[$FIRST_ACTIVE]}"
   wait_for_health || true
 fi
+# Space means "get out of the way": end the pre-loader at once, disconnect and
+# remember nothing — the alternate screen closes over the half-drawn rows.
+if [ "$SKIP_NOW" = "1" ]; then
+  finish_guard
+fi
 if [ "$OPEN_MENU" = "1" ]; then
   printf '\\033[%dB\\r' "$ACTIVE_TOTAL"
   clear_reconfigure_hint
@@ -903,7 +963,8 @@ while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
   spin_start "\${GUARD_LABELS[$i]}"
   pad=0
   while [ "$pad" -lt "$MIN_CHECK_FRAMES" ]; do
-    sleep "$FRAME_SLEEP"
+    frame_tick
+    [ "$SKIP_NOW" = "1" ] && break 2
     spin_tick
     pad=$((pad + 1))
   done
@@ -916,9 +977,17 @@ while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
   fi
   i=$((i+1))
 done
+if [ "$SKIP_NOW" = "1" ]; then
+  finish_guard
+fi
 if [ "$DOWN_COUNT" -gt 0 ]; then
   clear_reconfigure_hint
   prompt_down_all
+elif [ "$OPEN_MENU" = "1" ]; then
+  # a [C] harvested by frame_tick mid-probe — the same menu the closing
+  # beat's buffered read used to catch before frames read the tty
+  clear_reconfigure_hint
+  reconfigure_menu
 else
   offer_reconfigure_tail
 fi

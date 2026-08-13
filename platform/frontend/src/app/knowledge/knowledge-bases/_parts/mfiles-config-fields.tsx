@@ -258,8 +258,7 @@ export function MFilesConfigFields({ form }: { form: ConnectorForm }) {
  * runs the installer with the server-resolved package source, and the
  * installer asks for the vault interactively — so nothing from this form
  * ever rides in the command. Manual installation is the mutually exclusive
- * alternative tab, offering the package built for this installation's
- * release when one exists.
+ * alternative tab, offering the newest released package when one exists.
  */
 function MFilesVafAddOnSection() {
   // The add-on is this platform's own component, so a white-labeled

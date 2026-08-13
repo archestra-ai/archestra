@@ -1615,7 +1615,7 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `90` (seconds)
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF`** - Development override for where the Archestra VAF Add On install script gets the add-on.
-  - Default: unset (the script uses the pre-built package of the release matching the platform version)
+  - Default: unset (the script uses the pre-built package of the newest `m-files-vaf-add-on-v*` release)
   - Set a git ref of `archestra-ai/archestra` (a pushed commit SHA, branch, or tag) to have the script install that ref's CI-built package, or compile from that ref's source when no CI build exists. The special value `local` uses the backend checkout's HEAD commit. Leave unset in production.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_GITHUB_TOKEN`** - GitHub token used to fetch the source ref's CI-built add-on package.

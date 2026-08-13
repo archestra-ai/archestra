@@ -28,9 +28,8 @@ import {
  * The bootstrap and the form's download link install the same package,
  * decided server-side by `resolveVafAddOnDistribution`: the development
  * source-ref override first (branch CI build proxied by the package route,
- * or a source build), then the release matching this installation's
- * version, then the newest release that actually carries the package —
- * never a URL that is known to 404.
+ * or a source build), then the newest release that actually carries the
+ * package — never a URL that is known to 404.
  */
 const mfilesVafAddOnRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -240,12 +239,13 @@ function githubHeaders(): Record<string, string> {
  *    With a CI build of that ref available (and the GitHub token needed to
  *    fetch it), both the command and the link go through the backend package
  *    proxy; otherwise the command compiles from the ref's source.
- * 2. The release matching this installation's version, when it carries the
- *    package.
- * 3. The newest release that carries the package — never a bare
- *    `releases/latest` URL, which 404s while the latest release predates the
- *    add-on CI.
- * 4. Installer defaults, no download link.
+ * 2. The newest release that carries the package. The add-on publishes on
+ *    its own `m-files-vaf-add-on-v*` release track: this repository's
+ *    releases are immutable, so the package can never be attached to the
+ *    platform release, which publishes before the add-on build runs.
+ *    Compatibility is negotiated by the extension protocol's schema version,
+ *    not by pairing release versions.
+ * 3. Installer defaults, no download link.
  */
 async function resolveVafAddOnDistribution(): Promise<VafAddOnDistribution> {
   const override = config.kb.mfilesVafAddOnSourceRef;
@@ -261,11 +261,9 @@ async function resolveVafAddOnDistribution(): Promise<VafAddOnDistribution> {
     }
   }
 
-  const pin = await resolveVafAddOnReleasePin();
-  if (pin) return { install: pin, downloadUrl: pin.packageUrl };
-
-  const newest = await resolveNewestReleaseAssetUrl();
-  return { install: null, downloadUrl: newest };
+  const release = await resolveNewestReleaseAsset();
+  if (release) return { install: release, downloadUrl: release.packageUrl };
+  return { install: null, downloadUrl: null };
 }
 
 /**
@@ -389,65 +387,28 @@ async function fetchCiPackageBytes(): Promise<Buffer | null> {
 }
 
 /**
- * Pins the installer to the release matching this installation's version, so
- * the pre-built package (and the build-from-source fallback ref) correspond
- * to the platform actually running rather than whatever is latest. Null —
- * when the version is not a released semver or its release doesn't carry the
- * add-on asset (e.g. dev builds, versions predating the add-on). Definitive
- * GitHub answers are cached; transient failures are not, so the next probe
- * retries.
+ * The add-on package on the newest release that actually carries it, as an
+ * install source: the verified asset URL, plus the release tag as the
+ * build-from-source fallback ref (add-on release tags are ordinary git tags
+ * on main commits). A scan is the only safe lookup — `releases/latest` is
+ * the platform release, which cannot carry the package — so a link is only
+ * offered when the asset is verified to exist. Definitive GitHub answers are
+ * cached; transient failures are not, so the next probe retries.
  */
-async function resolveVafAddOnReleasePin(): Promise<{
+async function resolveNewestReleaseAsset(): Promise<{
   packageUrl: string;
   ref: string;
 } | null> {
-  const version = config.api.version;
-  if (!/^\d+\.\d+\.\d+$/.test(version)) return null;
-  const tag = `platform-v${version}`;
-
-  const cacheKey = `${CacheKey.MfilesVafAddOnReleasePin}-${tag}` as const;
+  // `-install`: the previous shape cached under `-newest` was a bare URL
+  // string, indistinguishable from "none"-style sentinels for this shape.
+  const cacheKey =
+    `${CacheKey.MfilesVafAddOnReleasePin}-newest-install` as const;
   const cached = await cacheManager.get<
     { packageUrl: string; ref: string } | "none"
   >(cacheKey);
   if (cached) return cached === "none" ? null : cached;
 
-  let pin: { packageUrl: string; ref: string } | null = null;
-  try {
-    const response = await fetch(`${GITHUB_API_BASE}/releases/tags/${tag}`, {
-      headers: githubHeaders(),
-      signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
-    });
-    if (!response.ok && response.status !== 404) return null;
-    if (response.ok) {
-      const release = (await response.json()) as {
-        assets?: Array<{ name: string }>;
-      };
-      if (release.assets?.some((a) => a.name === VAF_ADD_ON_ASSET_NAME)) {
-        pin = {
-          packageUrl: `https://github.com/${GITHUB_REPO}/releases/download/${tag}/${VAF_ADD_ON_ASSET_NAME}`,
-          ref: tag,
-        };
-      }
-    }
-    await cacheManager.set(cacheKey, pin ?? "none", RELEASE_PIN_TTL_MS);
-  } catch {
-    return null;
-  }
-  return pin;
-}
-
-/**
- * Download URL of the add-on package on the newest release that actually
- * carries it. The scan exists because `releases/latest/download/...` 404s
- * for as long as the latest release predates the add-on CI — a link is only
- * offered when the asset is verified to exist.
- */
-async function resolveNewestReleaseAssetUrl(): Promise<string | null> {
-  const cacheKey = `${CacheKey.MfilesVafAddOnReleasePin}-newest` as const;
-  const cached = await cacheManager.get<string | "none">(cacheKey);
-  if (cached) return cached === "none" ? null : cached;
-
-  let url: string | null = null;
+  let source: { packageUrl: string; ref: string } | null = null;
   try {
     const response = await fetch(`${GITHUB_API_BASE}/releases?per_page=30`, {
       headers: githubHeaders(),
@@ -455,20 +416,24 @@ async function resolveNewestReleaseAssetUrl(): Promise<string | null> {
     });
     if (!response.ok) return null;
     const releases = (await response.json()) as Array<{
+      tag_name?: string;
       assets?: Array<{ name: string; browser_download_url: string }>;
     }>;
     for (const release of releases) {
       const asset = release.assets?.find(
         (a) => a.name === VAF_ADD_ON_ASSET_NAME,
       );
-      if (asset) {
-        url = asset.browser_download_url;
+      if (asset && release.tag_name) {
+        source = {
+          packageUrl: asset.browser_download_url,
+          ref: release.tag_name,
+        };
         break;
       }
     }
-    await cacheManager.set(cacheKey, url ?? "none", RELEASE_PIN_TTL_MS);
+    await cacheManager.set(cacheKey, source ?? "none", RELEASE_PIN_TTL_MS);
   } catch {
     return null;
   }
-  return url;
+  return source;
 }

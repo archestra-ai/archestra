@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
 import { vi } from "vitest";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -20,14 +19,16 @@ vi.mock("@/config", async () =>
 );
 
 const ASSET_NAME = "archestra-m-files-vaf-add-on.mfappx";
+const ADD_ON_TAG = "m-files-vaf-add-on-v1.0.0";
+const ADD_ON_ASSET_URL = `https://github.com/archestra-ai/archestra/releases/download/${ADD_ON_TAG}/${ASSET_NAME}`;
 
 /**
- * GitHub releases stub: `tagAssets` answers the version-tag lookup (null =
- * 404), `listed` is the releases list (newest first) for the fallback scan.
+ * GitHub releases stub: `listed` is the releases list (newest first) the
+ * resolver scans for the add-on asset.
  */
 function stubGitHubReleases(params: {
-  tagAssets: Array<{ name: string }> | null;
   listed: Array<{
+    tag_name: string;
     assets: Array<{ name: string; browser_download_url: string }>;
   }>;
 }) {
@@ -35,11 +36,6 @@ function stubGitHubReleases(params: {
     "fetch",
     vi.fn(async (input: string | URL) => {
       const url = String(input);
-      if (url.includes("/releases/tags/")) {
-        return params.tagAssets
-          ? Response.json({ assets: params.tagAssets })
-          : new Response("Not Found", { status: 404 });
-      }
       if (url.includes("/releases?")) {
         return Response.json(params.listed);
       }
@@ -52,7 +48,7 @@ describe("GET /api/mfiles-vaf-add-on/distribution", () => {
   let app: FastifyInstanceWithZod;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    stubGitHubReleases({ tagAssets: null, listed: [] });
+    stubGitHubReleases({ listed: [] });
     const organization = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, organization.id);
@@ -82,33 +78,24 @@ describe("GET /api/mfiles-vaf-add-on/distribution", () => {
     });
   }
 
-  test("prefers this installation's release when it carries the package", async () => {
+  test("resolves the newest release that actually carries the package", async () => {
     stubGitHubReleases({
-      tagAssets: [{ name: ASSET_NAME }],
-      listed: [],
-    });
-    const response = await probe();
-    expect(response.statusCode).toBe(200);
-    const tag = `platform-v${config.api.version}`;
-    expect(response.json()).toEqual({
-      packageDownloadUrl: `https://github.com/archestra-ai/archestra/releases/download/${tag}/${ASSET_NAME}`,
-    });
-  });
-
-  test("falls back to the newest release that actually carries the package", async () => {
-    const pinnedUrl = `https://github.com/archestra-ai/archestra/releases/download/platform-v0.9.9/${ASSET_NAME}`;
-    stubGitHubReleases({
-      tagAssets: null,
       listed: [
-        // Newest release predates the add-on CI — must be skipped, not
-        // blindly linked (releases/latest/download would 404).
-        { assets: [] },
-        { assets: [{ name: ASSET_NAME, browser_download_url: pinnedUrl }] },
+        // Newest release is the platform's, which never carries the add-on
+        // (releases are immutable, the package publishes on its own track) —
+        // must be skipped, not blindly linked.
+        { tag_name: "platform-v1.3.35", assets: [] },
+        {
+          tag_name: ADD_ON_TAG,
+          assets: [
+            { name: ASSET_NAME, browser_download_url: ADD_ON_ASSET_URL },
+          ],
+        },
       ],
     });
     const response = await probe();
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ packageDownloadUrl: pinnedUrl });
+    expect(response.json()).toEqual({ packageDownloadUrl: ADD_ON_ASSET_URL });
   });
 
   test("resolves null when no release carries the package", async () => {
@@ -121,19 +108,25 @@ describe("GET /api/mfiles-vaf-add-on/distribution", () => {
     return app.inject({ method: "GET", url: "/api/mfiles-vaf-add-on/script" });
   }
 
-  test("script bootstrap pins this installation's release", async () => {
-    stubGitHubReleases({ tagAssets: [{ name: ASSET_NAME }], listed: [] });
+  test("script bootstrap installs the released package, ref'd to its tag", async () => {
+    stubGitHubReleases({
+      listed: [
+        {
+          tag_name: ADD_ON_TAG,
+          assets: [
+            { name: ASSET_NAME, browser_download_url: ADD_ON_ASSET_URL },
+          ],
+        },
+      ],
+    });
     const response = await fetchBootstrap();
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("text/plain");
-    const tag = `platform-v${config.api.version}`;
     expect(response.body).toContain(
       "Invoke-RestMethod 'http://localhost:3000/scripts/install-m-files-vaf-add-on.ps1'",
     );
-    expect(response.body).toContain(
-      `PackageUrl = 'https://github.com/archestra-ai/archestra/releases/download/${tag}/${ASSET_NAME}'`,
-    );
-    expect(response.body).toContain(`Ref = '${tag}'`);
+    expect(response.body).toContain(`PackageUrl = '${ADD_ON_ASSET_URL}'`);
+    expect(response.body).toContain(`Ref = '${ADD_ON_TAG}'`);
   });
 
   test("script bootstrap runs installer defaults when nothing resolves", async () => {

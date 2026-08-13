@@ -580,7 +580,7 @@ export const AUDIT_DECISIONS = {
   kbMemberOverridesTable: {
     audited: false,
     reason:
-      "admin member mapping mutated only via /api/connectors/:id/member-overrides, audited at the route level as connector.updated",
+      "admin member mapping mutated only via /api/connectors/:id/member-overrides, audited at the route level as connector.updated; the connector audit snapshot carries the mapping list so upsert/delete diffs",
   },
   llmProviderApiKeyModelsTable: {
     audited: false,

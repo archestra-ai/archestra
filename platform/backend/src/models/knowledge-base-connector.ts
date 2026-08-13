@@ -932,6 +932,34 @@ class KnowledgeBaseConnectorModel {
       .map((r) => `${r.name} (${r.id})`)
       .sort((a, b) => a.localeCompare(b));
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Admin member-override mappings (kb_member_overrides is audited:false).
+    // Without them here, the member-override routes' connector.updated rows
+    // would record identical before/after snapshots — the mapping itself,
+    // who an upstream account resolves to, would never reach the audit log.
+    const overrideRows = await db
+      .select({
+        externalAccountId: schema.kbMemberOverridesTable.externalAccountId,
+        userId: schema.kbMemberOverridesTable.userId,
+        email: schema.usersTable.email,
+      })
+      .from(schema.kbMemberOverridesTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.usersTable.id, schema.kbMemberOverridesTable.userId),
+      )
+      .where(eq(schema.kbMemberOverridesTable.connectorId, id));
+
+    const memberOverrides = overrideRows
+      .map(
+        (o) =>
+          `${o.externalAccountId} -> ${o.email ?? "unknown"} (${o.userId})`,
+      )
+      .sort((a, b) => a.localeCompare(b));
+    // SPDX-SnippetEnd
+
     const configKeys =
       row.config && typeof row.config === "object" && !Array.isArray(row.config)
         ? Object.keys(row.config as Record<string, unknown>).sort()
@@ -953,6 +981,7 @@ class KnowledgeBaseConnectorModel {
         ? String(row.lastSyncError).slice(0, 500)
         : null,
       knowledgeBases,
+      memberOverrides,
       configKeys,
       permissionSyncIntervalSeconds: row.permissionSyncIntervalSeconds ?? null,
       environmentId: row.environmentId ?? null,

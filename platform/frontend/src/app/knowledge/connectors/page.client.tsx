@@ -6,7 +6,6 @@ import {
   type ConnectorType,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
 import { ArchiveRestore, Database, Pencil, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -15,7 +14,7 @@ import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layou
 import { ConnectorAccessBadge } from "@/app/knowledge/connectors/_parts/connector-access-badge";
 import { GoogleDriveOAuthResultToast } from "@/app/knowledge/connectors/_parts/gdrive-connection-card";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
-import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
+import { ConnectorStatusCell } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import { CreateConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/create-connector-dialog";
 import { EditConnectorDialog } from "@/app/knowledge/knowledge-bases/_parts/edit-connector-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -46,7 +45,6 @@ import {
   useRestoreConnector,
 } from "@/lib/knowledge/connector.query";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
-import { formatDate } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 
@@ -209,29 +207,12 @@ function ConnectorsList() {
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) => {
-        return (
-          <div className="flex items-center gap-2">
-            {row.original.lastSyncAt ? (
-              <>
-                <ConnectorStatusBadge status={row.original.lastSyncStatus} />
-                <span
-                  className="text-xs text-muted-foreground whitespace-nowrap"
-                  title={formatDate({ date: row.original.lastSyncAt })}
-                >
-                  {formatDistanceToNow(new Date(row.original.lastSyncAt), {
-                    addSuffix: true,
-                  })}
-                </span>
-              </>
-            ) : (
-              <span className="text-xs text-muted-foreground">
-                Never synced
-              </span>
-            )}
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <ConnectorStatusCell
+          lastSyncAt={row.original.lastSyncAt}
+          lastSyncStatus={row.original.lastSyncStatus}
+        />
+      ),
     },
     {
       id: "accessibleTo",

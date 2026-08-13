@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ConnectorSyncBatch } from "@/types";
+import type { ConnectorSyncBatch, ReadIngestedDocuments } from "@/types";
 import { NotionConnector } from "./notion-connector";
 
 // Helper to build a mock Notion page object
@@ -1017,6 +1017,288 @@ describe("NotionConnector", () => {
 
       await expect(generator.next()).rejects.toThrow(
         "Invalid Notion configuration",
+      );
+    });
+  });
+
+  describe("permission sync", () => {
+    async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
+      const items: T[] = [];
+      for await (const item of gen) {
+        items.push(item);
+      }
+      return items;
+    }
+
+    function makeUser(
+      id: string,
+      opts?: { name?: string | null; email?: string | null; bot?: boolean },
+    ) {
+      return {
+        object: "user",
+        id,
+        name: opts?.name ?? null,
+        avatar_url: null,
+        ...(opts?.bot
+          ? { type: "bot", bot: {} }
+          : {
+              type: "person",
+              person: opts?.email != null ? { email: opts.email } : {},
+            }),
+      };
+    }
+
+    function makeUsersResponse(
+      users: ReturnType<typeof makeUser>[],
+      opts?: { hasMore?: boolean; nextCursor?: string },
+    ) {
+      return {
+        ok: true,
+        json: async () => ({
+          object: "list",
+          type: "user",
+          results: users,
+          has_more: opts?.hasMore ?? false,
+          next_cursor: opts?.nextCursor ?? null,
+        }),
+      } as unknown as Response;
+    }
+
+    function makeParams(
+      overrides?: Partial<{
+        cursor: string | null;
+        scope: { containerKeys: string[] };
+        readIngestedDocuments: ReadIngestedDocuments;
+      }>,
+    ) {
+      return {
+        config: {},
+        credentials,
+        cursor: overrides?.cursor ?? null,
+        readIngestedDocuments:
+          overrides?.readIngestedDocuments ??
+          vi.fn().mockResolvedValue({ documents: [], nextAfterId: null }),
+        ...(overrides?.scope ? { scope: overrides.scope } : {}),
+      };
+    }
+
+    // The bot user behind the token; carries the workspace identity that
+    // scopes the members group id.
+    function makeBotMeResponse(opts?: {
+      workspaceId?: string | null;
+      workspaceName?: string | null;
+    }) {
+      return {
+        ok: true,
+        json: async () => ({
+          object: "user",
+          id: "bot-self-id",
+          name: "Test Integration",
+          type: "bot",
+          bot: {
+            ...(opts?.workspaceId === null
+              ? {}
+              : { workspace_id: opts?.workspaceId ?? "ws-abc123" }),
+            workspace_name: opts?.workspaceName ?? "Acme Inc",
+          },
+        }),
+      } as unknown as Response;
+    }
+
+    function spyFetch(connector: NotionConnector) {
+      return vi.spyOn(
+        connector as unknown as {
+          fetchWithRetry: (...args: unknown[]) => unknown;
+        },
+        "fetchWithRetry",
+      );
+    }
+
+    it("supportsPermissionSync is true", () => {
+      expect(new NotionConnector().supportsPermissionSync).toBe(true);
+    });
+
+    it("syncPermissionSnapshot yields the workspace container then every ingested doc's assignment", async () => {
+      const connector = new NotionConnector();
+      spyFetch(connector).mockResolvedValueOnce(makeBotMeResponse());
+      const readIngestedDocuments = vi.fn().mockResolvedValue({
+        documents: [
+          { sourceId: "page-1", metadata: {} },
+          { sourceId: "page-2", metadata: {} },
+        ],
+        nextAfterId: null,
+      });
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(makeParams({ readIngestedDocuments })),
+      );
+
+      expect(yields[0]).toEqual({
+        kind: "container",
+        containerKey: "workspace",
+        // Group id carries the workspace id: two Notion connectors bound to
+        // different workspaces must never share a group token.
+        permissions: { groups: ["workspace-members-ws-abc123"] },
+        cursor: "workspace",
+      });
+      expect(yields.slice(1)).toEqual([
+        {
+          kind: "document",
+          sourceId: "page-1",
+          containerKey: "workspace",
+          cursor: "workspace",
+        },
+        {
+          kind: "document",
+          sourceId: "page-2",
+          containerKey: "workspace",
+          cursor: "workspace",
+        },
+      ]);
+      // The whole corpus belongs to the one container — no metadata filter.
+      expect(readIngestedDocuments).toHaveBeenCalledWith(
+        expect.not.objectContaining({ metadataFilter: expect.anything() }),
+      );
+    });
+
+    it("syncPermissionSnapshot paginates the ingested-document read-back", async () => {
+      const connector = new NotionConnector();
+      spyFetch(connector).mockResolvedValueOnce(makeBotMeResponse());
+      const fullPage = Array.from({ length: 200 }, (_, i) => ({
+        sourceId: `page-${i}`,
+        metadata: {},
+      }));
+      const readIngestedDocuments = vi
+        .fn()
+        .mockResolvedValueOnce({ documents: fullPage, nextAfterId: "row-200" })
+        .mockResolvedValueOnce({
+          documents: [{ sourceId: "page-last", metadata: {} }],
+          nextAfterId: null,
+        });
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(makeParams({ readIngestedDocuments })),
+      );
+
+      expect(yields).toHaveLength(1 + 200 + 1);
+      expect(readIngestedDocuments).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ afterId: null }),
+      );
+      expect(readIngestedDocuments).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ afterId: "row-200" }),
+      );
+    });
+
+    it("syncPermissionSnapshot respects a delta scope that excludes the workspace container", async () => {
+      const connector = new NotionConnector();
+      const fetchMock = spyFetch(connector);
+      const readIngestedDocuments = vi.fn<ReadIngestedDocuments>();
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({
+            readIngestedDocuments,
+            scope: { containerKeys: ["something-else"] },
+          }),
+        ),
+      );
+
+      expect(yields).toEqual([]);
+      expect(readIngestedDocuments).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("syncGroups yields one workspace-scoped members group rostered from the paginated user listing", async () => {
+      const connector = new NotionConnector();
+      const fetchMock = spyFetch(connector);
+      fetchMock.mockResolvedValueOnce(makeBotMeResponse());
+      fetchMock.mockResolvedValueOnce(
+        makeUsersResponse(
+          [makeUser("user-1", { name: "Ada", email: "ada@example.com" })],
+          { hasMore: true, nextCursor: "cursor-2" },
+        ),
+      );
+      fetchMock.mockResolvedValueOnce(
+        makeUsersResponse([
+          makeUser("user-2", { name: "No Email Person" }),
+          makeUser("bot-1", { name: "Integration Bot", bot: true }),
+        ]),
+      );
+
+      const yields = await collect(connector.syncGroups(makeParams()));
+
+      expect(yields).toHaveLength(1);
+      expect(yields[0].groupId).toBe("workspace-members-ws-abc123");
+      // The group is named after the workspace so several Notion connectors
+      // stay tellable apart: the details page renders this row as a
+      // Workspace, so the display name is the plain workspace name.
+      expect(yields[0].name).toBe("Acme Inc");
+      expect(yields[0].members).toEqual([
+        {
+          accountId: "user-1",
+          displayName: "Ada",
+          email: "ada@example.com",
+          accountType: "person",
+        },
+        {
+          accountId: "user-2",
+          displayName: "No Email Person",
+          email: null,
+          accountType: "person",
+        },
+        {
+          accountId: "bot-1",
+          displayName: "Integration Bot",
+          email: null,
+          accountType: "bot",
+        },
+      ]);
+
+      const paginatedCallUrl = (
+        fetchMock.mock.calls[2] as unknown[]
+      )[0] as string;
+      expect(paginatedCallUrl).toContain("start_cursor=cursor-2");
+    });
+
+    it("syncGroups throws on an upstream failure instead of yielding a partial roster", async () => {
+      const connector = new NotionConnector();
+      const fetchMock = spyFetch(connector);
+      fetchMock.mockResolvedValueOnce(makeBotMeResponse());
+      fetchMock.mockResolvedValueOnce(
+        makeUsersResponse([makeUser("user-1", { email: "ada@example.com" })], {
+          hasMore: true,
+          nextCursor: "cursor-2",
+        }),
+      );
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        text: async () => "upstream down",
+      } as unknown as Response);
+
+      const gen = connector.syncGroups(makeParams());
+      await expect(collect(gen)).rejects.toThrow(
+        "Notion user listing failed with HTTP 503",
+      );
+    });
+
+    it("syncGroups fails when the bot user carries no workspace id instead of falling back to a collidable group id", async () => {
+      const connector = new NotionConnector();
+      spyFetch(connector).mockResolvedValueOnce(
+        makeBotMeResponse({ workspaceId: null }),
+      );
+
+      const gen = connector.syncGroups(makeParams());
+      await expect(collect(gen)).rejects.toThrow("no workspace id");
+    });
+
+    it("scopeKeyForDocument places every document in the workspace container", () => {
+      const connector = new NotionConnector();
+      expect(connector.scopeKeyForDocument({})).toBe("workspace");
+      expect(connector.scopeKeyForDocument({ notionPageId: "page-1" })).toBe(
+        "workspace",
       );
     });
   });

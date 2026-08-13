@@ -12,15 +12,30 @@ import {
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { CollapsedBadgeList } from "./collapsed-badge-list";
+import {
+  capitalizeNoun,
+  GROUP_ROSTER_NOUN,
+  type RosterNoun,
+} from "./roster-noun";
 
 /**
  * Human-readable rendering of a document's ACL. Every entry kind the backend
  * writes is covered: `org:*`, `team:<id>` (resolved to the team name),
- * `user_email:<email>`, `group:<connectorType>_<groupId>`, and the empty ACL
+ * `user_email:<email>`, `group:<connectorType>_<groupId>` (resolved to the
+ * roster's display name when the caller knows it), and the empty ACL
  * (fail-closed — nobody can retrieve the document until a permission sync tags
  * it). Raw tokens stay available on hover for correlation with the Groups tab.
  */
-export function AclBadges({ acl }: { acl: string[] }) {
+export function AclBadges({
+  acl,
+  groupNamesByToken,
+  noun = GROUP_ROSTER_NOUN,
+}: {
+  acl: string[];
+  /** Full ACL token (`group:<connectorType>_<groupId>`) to its display name. */
+  groupNamesByToken?: Map<string, string>;
+  noun?: RosterNoun;
+}) {
   const { data: teams } = useTeams();
   const { data: orgMembers } = useOrganizationMembers();
 
@@ -47,7 +62,7 @@ export function AclBadges({ acl }: { acl: string[] }) {
     <CollapsedBadgeList
       items={acl.map((entry) => ({
         id: entry,
-        label: formatAclEntry(entry, teams, orgMembers),
+        label: formatAclEntry({ entry, teams, groupNamesByToken, noun, orgMembers }),
         // The raw token, for correlation with the Groups tab.
         title: entry,
       }))}
@@ -55,11 +70,19 @@ export function AclBadges({ acl }: { acl: string[] }) {
   );
 }
 
-function formatAclEntry(
-  entry: string,
-  teams: { id: string; name: string }[] | undefined,
-  orgMembers: { name: string; email: string }[] | undefined,
-): string {
+function formatAclEntry({
+  entry,
+  teams,
+  groupNamesByToken,
+  noun,
+  orgMembers,
+}: {
+  entry: string;
+  teams: { id: string; name: string }[] | undefined;
+  groupNamesByToken: Map<string, string> | undefined;
+  noun: RosterNoun;
+  orgMembers: { name: string; email: string }[] | undefined;
+}): string {
   if (entry === "org:*") {
     return "Everyone in org";
   }
@@ -79,7 +102,10 @@ function formatAclEntry(
     return user ? `${email} · ${user.name}` : email;
   }
   if (entry.startsWith("group:")) {
-    return `Group: ${entry.slice("group:".length)}`;
+    // The roster's display name where it is known; the connector-qualified
+    // group id otherwise. Either way the raw token stays on hover.
+    const label = groupNamesByToken?.get(entry) ?? entry.slice("group:".length);
+    return `${capitalizeNoun(noun.singular)}: ${label}`;
   }
   return entry;
 }

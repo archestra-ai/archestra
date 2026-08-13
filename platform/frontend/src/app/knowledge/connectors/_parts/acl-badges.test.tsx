@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { AclBadges } from "./acl-badges";
+import { WORKSPACE_ROSTER_NOUN } from "./roster-noun";
 
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/organization.query");
@@ -70,6 +71,26 @@ describe("AclBadges", () => {
     expect(screen.getByText("b@example.com")).toBeInTheDocument();
     expect(screen.getByText("Group: jira_engineers")).toBeInTheDocument();
     expect(screen.getByText("Group: jira_admins")).toBeInTheDocument();
+  });
+
+  it("names group grants after the roster row, in the connector's own noun", () => {
+    render(
+      <AclBadges
+        acl={[
+          "group:notion_workspace-members-ws-1",
+          "group:notion_workspace-members-ws-unsynced",
+        ]}
+        groupNamesByToken={
+          new Map([["group:notion_workspace-members-ws-1", "Acme Inc"]])
+        }
+        noun={WORKSPACE_ROSTER_NOUN}
+      />,
+    );
+    expect(screen.getByText("Workspace: Acme Inc")).toBeInTheDocument();
+    // A grant with no roster row yet still shows its group id — never nothing.
+    expect(
+      screen.getByText("Workspace: notion_workspace-members-ws-unsynced"),
+    ).toBeInTheDocument();
   });
 
   it("collapses very large ACLs into +N more with every entry in the tooltip", () => {

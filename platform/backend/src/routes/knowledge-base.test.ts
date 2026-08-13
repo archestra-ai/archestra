@@ -1082,24 +1082,25 @@ describe("knowledge base routes", () => {
     });
 
     test("rejects auto-sync-permissions for a connector type that does not support it", async () => {
-      // notion is not a permission-sync connector (Stage 1: jira/confluence/github;
-      // Stage 2: gdrive/salesforce/sharepoint) — so this must 400.
+      // dropbox is not a permission-sync connector (Stage 1: jira/confluence/
+      // github; Stage 2: gdrive/salesforce/sharepoint/mfiles/onedrive/notion)
+      // — so this must 400.
       const response = await app.inject({
         method: "POST",
         url: "/api/connectors",
         payload: {
-          name: "Auto-sync Notion",
-          connectorType: "notion",
+          name: "Auto-sync Dropbox",
+          connectorType: "dropbox",
           visibility: "auto-sync-permissions",
           teamIds: [],
-          config: { type: "notion" },
+          config: { type: "dropbox" },
           credentials: { apiToken: "token" },
         },
       });
 
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain(
-        "Auto-sync permissions is not supported for notion connectors",
+        "Auto-sync permissions is not supported for dropbox connectors",
       );
     });
 
@@ -2797,13 +2798,13 @@ describe("knowledge base routes", () => {
       makeKnowledgeBaseConnector,
     }) => {
       const kb = await makeKnowledgeBase(organizationId);
-      // notion is not a permission-sync connector, but a stored row can still
-      // carry the auto-sync visibility; the trigger must reject it.
+      // dropbox is not a permission-sync connector, but a stored row can
+      // still carry the auto-sync visibility; the trigger must reject it.
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
         {
-          connectorType: "notion",
+          connectorType: "dropbox",
           visibility: "auto-sync-permissions",
         },
       );

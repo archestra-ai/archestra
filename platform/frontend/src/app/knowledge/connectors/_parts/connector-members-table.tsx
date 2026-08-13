@@ -43,6 +43,11 @@ import {
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { CollapsedBadgeList } from "./collapsed-badge-list";
 import { MembershipTruncationNotice } from "./connector-membership-truncation-notice";
+import {
+  capitalizeNoun,
+  GROUP_ROSTER_NOUN,
+  type RosterNoun,
+} from "./roster-noun";
 
 /** One distinct upstream human account, with every group it appears in. */
 interface ConnectorMember extends ConnectorUserGroupMember {
@@ -64,8 +69,10 @@ type MemberFilter = "all" | "automatic" | "manual" | "unassigned";
  */
 export function ConnectorMembersTable({
   connectorId,
+  noun = GROUP_ROSTER_NOUN,
 }: {
   connectorId: string;
+  noun?: RosterNoun;
 }) {
   const appName = useAppName();
   const { data: userGroups, isPending } = useConnectorUserGroups({
@@ -250,7 +257,7 @@ export function ConnectorMembersTable({
       },
       {
         id: "groups",
-        header: "Groups",
+        header: capitalizeNoun(noun.plural),
         // Wider than the even share the unsized columns get: two group
         // badges plus the "+N more" badge fit on two lines.
         size: 280,
@@ -291,7 +298,7 @@ export function ConnectorMembersTable({
         },
       },
     ],
-    [appName, openAssignDialog, groupLabel],
+    [appName, openAssignDialog, groupLabel, noun],
   );
 
   return (
@@ -301,7 +308,7 @@ export function ConnectorMembersTable({
           <SearchInput
             value={search}
             syncQueryParams={false}
-            placeholder="Search by ID, email, name, or group"
+            placeholder={`Search by ID, email, name, or ${noun.singular}`}
             onSearchChange={setSearch}
           />
           <Select
@@ -324,12 +331,12 @@ export function ConnectorMembersTable({
           <Select value={groupFilter} onValueChange={setGroupFilter}>
             <SelectTrigger
               className="h-9 w-full text-sm sm:w-[200px]"
-              aria-label="Filter by group"
+              aria-label={`Filter by ${noun.singular}`}
             >
-              <SelectValue placeholder="All groups" />
+              <SelectValue placeholder={`All ${noun.plural}`} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All groups</SelectItem>
+              <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
               {groupIds.map((groupId) => (
                 <SelectItem key={groupId} value={groupId}>
                   {groupLabel(groupId)}

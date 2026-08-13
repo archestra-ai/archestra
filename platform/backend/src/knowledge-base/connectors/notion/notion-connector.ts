@@ -1,3 +1,4 @@
+import { NOTION_WORKSPACE_MEMBERS_GROUP_ID_PREFIX } from "@archestra/shared";
 import type {
   BlockObjectResponse,
   ListBlockChildrenResponse,
@@ -9,12 +10,17 @@ import type {
   RichTextItemResponse,
 } from "@notionhq/client/build/src/api-endpoints/common";
 import type { SearchResponse } from "@notionhq/client/build/src/api-endpoints/search";
+import type { ListUsersResponse } from "@notionhq/client/build/src/api-endpoints/users";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
+  GroupMembershipYield,
+  GroupMemberYield,
   NotionCheckpoint,
   NotionConfig,
+  PermissionSnapshotYield,
+  PermissionSyncParams,
 } from "@/types";
 import { NotionConfigSchema } from "@/types";
 import {
@@ -27,6 +33,13 @@ const NOTION_API_BASE = "https://api.notion.com/v1";
 const NOTION_API_VERSION = "2022-06-28";
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_BLOCK_DEPTH = 3;
+// The single top-level permission container: Notion's public API cannot say
+// who can see an individual page, so the whole synced corpus shares one
+// workspace-wide audience (see syncPermissionSnapshot). The key needs no
+// workspace qualifier — container tokens embed the connector id.
+const NOTION_WORKSPACE_CONTAINER_KEY = "workspace";
+const NOTION_READBACK_PAGE_SIZE = 200;
+const NOTION_USERS_PAGE_SIZE = 100;
 // Subtract 5 min from syncFrom to guard against clock skew between Notion
 // servers and our system, so we never skip a page that was edited right
 // around the checkpoint boundary.
@@ -48,6 +61,7 @@ type NotionDatabaseQueryResponse = {
 
 export class NotionConnector extends BaseConnector {
   type = "notion" as const;
+  supportsPermissionSync = true;
 
   async validateConfig(
     config: Record<string, unknown>,
@@ -137,6 +151,131 @@ export class NotionConnector extends BaseConnector {
       syncFrom,
       batchSize,
     );
+  }
+
+  // ===== Permission sync hooks =====
+
+  /**
+   * Workspace-scoped snapshot — deliberately coarse ("Limited" support in the
+   * docs). Notion's public API cannot report who can see an individual page
+   * (no sharing/permissions endpoint, no teamspace API), so per-page
+   * audiences are unknowable here. The whole synced corpus is one `workspace`
+   * container whose audience is the synthetic workspace-members group
+   * rostered by `syncGroups`: every ingested page becomes visible to every
+   * workspace member matched by email. That over-grants pages that are
+   * private or teamspace-restricted upstream — the connector docs tell admins
+   * to share only workspace-appropriate content with the integration. Guests
+   * never appear in Notion's user listing, so they never gain access.
+   * Already-ingested documents are assigned via read-back (like GitHub);
+   * upstream calls are O(members), never O(documents).
+   */
+  async *syncPermissionSnapshot(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<PermissionSnapshotYield> {
+    if (
+      params.scope &&
+      !params.scope.containerKeys.includes(NOTION_WORKSPACE_CONTAINER_KEY)
+    ) {
+      return;
+    }
+
+    const workspace = await this.fetchWorkspaceIdentity(params.credentials);
+
+    // A single container makes the resume cursor trivial: re-enumerating it
+    // after an interruption is idempotent (same audience, same assignments).
+    yield {
+      kind: "container",
+      containerKey: NOTION_WORKSPACE_CONTAINER_KEY,
+      permissions: { groups: [workspaceMembersGroupId(workspace.id)] },
+      cursor: NOTION_WORKSPACE_CONTAINER_KEY,
+    };
+
+    let afterId: string | null = null;
+    for (;;) {
+      const { documents, nextAfterId } = await params.readIngestedDocuments({
+        afterId,
+        limit: NOTION_READBACK_PAGE_SIZE,
+      });
+      for (const doc of documents) {
+        yield {
+          kind: "document",
+          sourceId: doc.sourceId,
+          containerKey: NOTION_WORKSPACE_CONTAINER_KEY,
+          cursor: NOTION_WORKSPACE_CONTAINER_KEY,
+        };
+      }
+      if (documents.length < NOTION_READBACK_PAGE_SIZE) break;
+      afterId = nextAfterId;
+    }
+  }
+
+  /**
+   * One synthetic group: the workspace member roster from `GET /v1/users`.
+   * Emails appear only when the integration has the "read user information
+   * including email addresses" capability — members without one are yielded
+   * with `email: null` (fail-closed, admin-assignable), and bots carry
+   * accountType "bot" so admin stats separate them from unresolvable humans.
+   * A mid-pagination failure throws instead of yielding the partial roster:
+   * a group yield is an authoritative complete membership, and a truncated
+   * one would revoke every member in the unfetched tail.
+   */
+  async *syncGroups(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<GroupMembershipYield> {
+    const workspace = await this.fetchWorkspaceIdentity(params.credentials);
+    const members: GroupMemberYield[] = [];
+    let cursor: string | undefined;
+    let hasMore = true;
+
+    while (hasMore) {
+      await this.rateLimit();
+
+      const url = cursor
+        ? `${NOTION_API_BASE}/users?page_size=${NOTION_USERS_PAGE_SIZE}&start_cursor=${encodeURIComponent(cursor)}`
+        : `${NOTION_API_BASE}/users?page_size=${NOTION_USERS_PAGE_SIZE}`;
+      const response = await this.fetchWithRetry(url, {
+        headers: buildHeaders(params.credentials),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(
+          `Notion user listing failed with HTTP ${response.status}: ${body.slice(0, 200)}`,
+        );
+      }
+
+      const result = (await response.json()) as ListUsersResponse;
+      for (const user of result.results) {
+        members.push({
+          accountId: user.id,
+          displayName: user.name ?? null,
+          email: user.type === "person" ? (user.person.email ?? null) : null,
+          accountType: user.type,
+        });
+      }
+
+      cursor = result.next_cursor ?? undefined;
+      hasMore = result.has_more === true && !!cursor;
+    }
+
+    const groupId = workspaceMembersGroupId(workspace.id);
+    yield {
+      groupId,
+      // The connector details page renders this roster row as a WORKSPACE
+      // (its tabs say Workspaces, not Groups), so the display name is the
+      // plain workspace name; a null name falls back to the group id in the
+      // UI.
+      name: workspace.name,
+      members,
+      cursor: groupId,
+    };
+  }
+
+  /**
+   * Every Notion document is covered by the single workspace container's
+   * enumeration, whatever its metadata says.
+   */
+  scopeKeyForDocument(_metadata: Record<string, unknown>): string | null {
+    return NOTION_WORKSPACE_CONTAINER_KEY;
   }
 
   // ===== Private methods =====
@@ -539,9 +678,58 @@ export class NotionConnector extends BaseConnector {
 
     return parts.join("\n");
   }
+
+  /**
+   * The workspace this integration token is bound to, read from the token's
+   * own bot user. `workspace_id` scopes the members group id (see the
+   * group-id prefix comment); a response without one fails the pass rather
+   * than falling back to an id that could collide across workspaces.
+   */
+  private async fetchWorkspaceIdentity(
+    credentials: ConnectorCredentials,
+  ): Promise<{ id: string; name: string | null }> {
+    await this.rateLimit();
+    const response = await this.fetchWithRetry(`${NOTION_API_BASE}/users/me`, {
+      headers: buildHeaders(credentials),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(
+        `Notion bot lookup failed with HTTP ${response.status}: ${body.slice(0, 200)}`,
+      );
+    }
+
+    const me = (await response.json()) as {
+      bot?: { workspace_id?: string; workspace_name?: string | null };
+    };
+    const workspaceId = me.bot?.workspace_id;
+    if (!workspaceId) {
+      throw new Error(
+        "Notion bot lookup returned no workspace id; cannot scope the workspace-members group",
+      );
+    }
+    return { id: workspaceId, name: me.bot?.workspace_name ?? null };
+  }
 }
 
 // ===== Module-level helpers =====
+
+/**
+ * The synthetic group id rostered by syncGroups, which must byte-match the id
+ * the container audience references (the platform builds `group:notion_<id>`
+ * tokens from both sides). The workspace id is REQUIRED for safety, not
+ * decoration: query-time container-audience overlap matches raw token strings
+ * across all of a user's connectors, so a constant id would let a member
+ * rostered by one Notion workspace's connector match the workspace container
+ * of a DIFFERENT workspace's connector (cross-workspace over-grant). An
+ * integration token is bound to exactly one workspace, so the id is stable for
+ * a connector's lifetime unless the token is swapped to another workspace — in
+ * which case a new group id (and fail-close of the old audience) is exactly
+ * right.
+ */
+function workspaceMembersGroupId(workspaceId: string): string {
+  return `${NOTION_WORKSPACE_MEMBERS_GROUP_ID_PREFIX}${workspaceId}`;
+}
 
 function isFullPageObject(item: {
   object: string;

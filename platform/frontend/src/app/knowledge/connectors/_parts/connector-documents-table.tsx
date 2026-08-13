@@ -33,6 +33,7 @@ import {
   useDeleteConnectorDocument,
 } from "@/lib/knowledge/kb-document.query";
 import { formatDate } from "@/lib/utils";
+import { GROUP_ROSTER_NOUN, type RosterNoun } from "./roster-noun";
 
 type PaginationMeta =
   archestraApiTypes.GetConnectorDocumentsResponses["200"]["pagination"];
@@ -43,10 +44,12 @@ const MAX_PREVIEW_CHARS = 20_000;
 export function ConnectorDocumentsTable({
   connectorId,
   showGroupFilter = false,
+  noun = GROUP_ROSTER_NOUN,
 }: {
   connectorId: string;
   /** Auto-sync connectors only: filter documents by upstream group. */
   showGroupFilter?: boolean;
+  noun?: RosterNoun;
 }) {
   const {
     searchParams,
@@ -64,8 +67,30 @@ export function ConnectorDocumentsTable({
     connectorId,
     enabled: showGroupFilter,
   });
-  const groupIds = useMemo(
-    () => [...new Set((userGroups?.groups ?? []).map((g) => g.groupId))].sort(),
+  // Rows are named upstream (a Notion workspace, a Jira group); the group id
+  // is only the authorization identity. Filter options and Access badges both
+  // show the name, so this tab reads the same as the roster tab.
+  const groupOptions = useMemo(
+    () =>
+      [
+        ...new Map(
+          (userGroups?.groups ?? []).map((group) => [
+            group.groupId,
+            group.name ?? group.groupId,
+          ]),
+        ),
+      ]
+        .map(([groupId, label]) => ({ groupId, label }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [userGroups?.groups],
+  );
+  const groupNamesByToken = useMemo(
+    () =>
+      new Map(
+        (userGroups?.groups ?? []).flatMap((group) =>
+          group.name ? [[group.token, group.name] as const] : [],
+        ),
+      ),
     [userGroups?.groups],
   );
 
@@ -169,7 +194,13 @@ export function ConnectorDocumentsTable({
         header: "Access",
         size: 340,
         minSize: 240,
-        cell: ({ row }) => <AclBadges acl={row.original.acl} />,
+        cell: ({ row }) => (
+          <AclBadges
+            acl={row.original.acl}
+            groupNamesByToken={groupNamesByToken}
+            noun={noun}
+          />
+        ),
       },
       {
         id: "updatedAt",
@@ -211,7 +242,7 @@ export function ConnectorDocumentsTable({
         },
       },
     ],
-    [openPreviewDialog],
+    [openPreviewDialog, groupNamesByToken, noun],
   );
 
   return (
@@ -240,15 +271,15 @@ export function ConnectorDocumentsTable({
           >
             <SelectTrigger
               className="h-9 w-full text-sm sm:w-[200px]"
-              aria-label="Filter by group"
+              aria-label={`Filter by ${noun.singular}`}
             >
-              <SelectValue placeholder="All groups" />
+              <SelectValue placeholder={`All ${noun.plural}`} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All groups</SelectItem>
-              {groupIds.map((groupId) => (
+              <SelectItem value="all">{`All ${noun.plural}`}</SelectItem>
+              {groupOptions.map(({ groupId, label }) => (
                 <SelectItem key={groupId} value={groupId}>
-                  {groupId}
+                  {label}
                 </SelectItem>
               ))}
             </SelectContent>

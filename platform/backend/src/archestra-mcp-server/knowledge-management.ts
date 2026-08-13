@@ -36,6 +36,10 @@ import {
   deleteConnector,
   deleteKnowledgeBase,
 } from "@/knowledge-base/knowledge-source-deletion";
+import {
+  mfilesAuthMethodGateViolation,
+  mfilesConnectorGateViolation,
+} from "@/knowledge-base/mfiles-gates";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -887,6 +891,17 @@ async function handleCreateKnowledgeConnector(params: {
       }
     }
 
+    // Same M-Files beta gates as the REST create route — this tool is a second
+    // shipped creation path, so a gate skipped here is no gate at all.
+    const mfilesViolation =
+      mfilesConnectorGateViolation(args.connector_type) ??
+      mfilesAuthMethodGateViolation({
+        nextConfig: { type: args.connector_type, ...args.config },
+      });
+    if (mfilesViolation) {
+      return errorResult(mfilesViolation);
+    }
+
     // Environment isolation: a connector created through a gateway belongs to the
     // gateway's environment, so the creator can actually use it afterwards.
     const agentEnvironmentId = await AgentModel.findEnvironmentId(
@@ -1103,6 +1118,16 @@ async function handleUpdateKnowledgeConnector(params: {
         }
       }
     }
+    // Same Application Account gate as the REST update route, grandfathering a
+    // connector that already uses the method.
+    const mfilesAuthViolation = mfilesAuthMethodGateViolation({
+      nextConfig: updates.config,
+      existingConfig: existingConnector.config,
+    });
+    if (mfilesAuthViolation) {
+      return errorResult(mfilesAuthViolation);
+    }
+
     const connector = await KnowledgeBaseConnectorModel.update(
       args.id,
       updates,

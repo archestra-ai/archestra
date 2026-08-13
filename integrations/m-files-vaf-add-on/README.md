@@ -23,7 +23,7 @@ The public architecture and operations guide is [M-Files Connector Engineering G
 
 ## Build
 
-A pre-built `Archestra.MFiles.VAFAddOn.mfappx` is attached to every
+A pre-built `archestra-m-files-vaf-add-on.mfappx` is attached to every
 platform release by `.github/workflows/build-m-files-vaf-add-on.yml`: a
 plain `dotnet build -c Release` of this project on a Windows runner, using
 the official M-Files VAF project packaging (the MSBuild target below zips
@@ -56,7 +56,7 @@ To select a side-by-side version explicitly:
 The builder invokes the installed .NET Framework compiler and exact M-Files assemblies, then produces:
 
 ```text
-bin/Release/net472/Archestra.MFiles.VAFAddOn.mfappx
+bin/Release/net472/archestra-m-files-vaf-add-on.mfappx
 ```
 
 The package includes the application assembly, `appdef.xml`, M-Files VAF/configuration/COM interop assemblies, and Newtonsoft.Json. The SDK-style project remains available for IDE/static analysis.

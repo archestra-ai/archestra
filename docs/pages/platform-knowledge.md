@@ -621,6 +621,8 @@ Each depot path and extension combination is listed in its own REST API request.
 
 Sync versioned files and their source permissions from an M-Files vault.
 
+> **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED=true` (or the `ARCHESTRA_BETA` master switch) to show the connector type. See [Deployment](/docs/platform-deployment).
+
 **Indexed:** supported files attached to the configured M-Files object types. The default object type is `0` (documents). Text, Markdown, CSV, JSON, XML, HTML, YAML, Office documents, and PDFs are indexed; supported images are indexed when a multimodal embedding model is configured. Files larger than 25 MB are skipped.
 
 **Authentication:** a dedicated M-Files login account. Archestra exchanges its username and password for an explicit short-lived MFWS token, preserves Multi-Server Mode routing cookies, and retries once after re-authentication. Automatic permission sync also requires the Archestra VAF Add On and the **Change full control role**.
@@ -631,10 +633,11 @@ Auto-sync permissions requires the companion schema-v2 Archestra VAF Add On in t
 | --- | --- |
 | M-Files Web Service URL | Classic Web/MFWS base URL; `/REST` is appended automatically (for example, `https://mfiles.example.com/m-files`) |
 | Vault GUID | GUID of the vault to index |
-| Username / Password / Domain | Dedicated M-Files login account for the connector |
-| Object Type IDs | Comma-separated managed object type IDs (default: `0`) |
-| Batch Size | Documents committed per indexing batch (default: `50`) |
-| Permission Extension Method | Installed VAF extension-method name (default: `ArchestraKnowledgePermissionSnapshot`) |
+| Username | Dedicated M-Files login account for the connector |
+| Password | That account's password; exchanged for a short-lived MFWS token |
+| Windows Domain | Optional, under Advanced — only for domain-authenticated accounts |
+
+Three more settings exist on the connector config and are tuned through the API rather than the form: `objectTypeIds` (managed object types, default `0`), `batchSize` (documents per indexing batch, default `50`) and `permissionExtensionMethod` (the installed VAF extension-method name, default `ArchestraKnowledgePermissionSnapshot`). Leaving them unset keeps the backend defaults.
 
 The add-on performs authoritative, resumable object enumeration and journal-backed content/permission deltas. A clean pass performs no object or ACL reads. Journal gaps and add-on/configuration changes promote the run to a completion-gated full rebuild rather than accepting a partial result.
 

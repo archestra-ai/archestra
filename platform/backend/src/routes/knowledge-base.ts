@@ -62,6 +62,10 @@ import {
   restoreConnector,
   restoreKnowledgeBase,
 } from "@/knowledge-base/knowledge-source-deletion";
+import {
+  mfilesAuthMethodGateViolation,
+  mfilesConnectorGateViolation,
+} from "@/knowledge-base/mfiles-gates";
 import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedule";
 import logger from "@/logging";
 import {
@@ -804,16 +808,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       // SPDX-SnippetEnd
 
-      if (
-        body.connectorType === "mfiles" &&
-        !config.kb.mfilesConnectorEnabled
-      ) {
-        throw new ApiError(
-          403,
-          "The M-Files connector is not enabled on this deployment",
-        );
+      const mfilesViolation =
+        mfilesConnectorGateViolation(body.connectorType) ??
+        mfilesAuthMethodGateViolation({ nextConfig: body.config });
+      if (mfilesViolation) {
+        throw new ApiError(403, mfilesViolation);
       }
-      assertMfilesAuthMethodEnabled(body.config);
 
       // Validate connector config
       const connectorImpl = getConnector(body.connectorType);
@@ -1163,7 +1163,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      assertMfilesAuthMethodEnabled(body.config, connector.config);
+      const mfilesAuthViolation = mfilesAuthMethodGateViolation({
+        nextConfig: body.config,
+        existingConfig: connector.config,
+      });
+      if (mfilesAuthViolation) {
+        throw new ApiError(403, mfilesAuthViolation);
+      }
 
       // resolve the connector's auth shape after this update so credential
       // storage stays consistent across App <-> inline-secret transitions
@@ -2707,31 +2713,6 @@ function appendQuery(url: string, params: Record<string, string>): string {
     parsed.searchParams.set(key, value);
   }
   return parsed.toString();
-}
-
-/**
- * The M-Files Application Account (OAuth client-credentials) auth method is
- * gated separately from the connector type and is off by default.
- * `existingConfig` grandfathers a connector already using the method, so
- * unrelated edits keep working if the flag is turned off after creation.
- */
-function assertMfilesAuthMethodEnabled(
-  nextConfig: ConnectorConfig | undefined,
-  existingConfig?: ConnectorConfig,
-): void {
-  if (config.kb.mfilesOauthEnabled) return;
-  if (nextConfig?.type !== "mfiles") return;
-  if (nextConfig.authMethod !== "oauth_client_credentials") return;
-  if (
-    existingConfig?.type === "mfiles" &&
-    existingConfig.authMethod === "oauth_client_credentials"
-  ) {
-    return;
-  }
-  throw new ApiError(
-    403,
-    "The M-Files Application Account authentication method is not enabled on this deployment",
-  );
 }
 
 async function findConnectorOrThrow(params: {

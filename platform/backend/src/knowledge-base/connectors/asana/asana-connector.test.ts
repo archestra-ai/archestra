@@ -1,14 +1,25 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { ConnectorSyncBatch } from "@/types";
+import type {
+  ConnectorSyncBatch,
+  GroupMembershipYield,
+  PermissionSnapshotYield,
+  PermissionSyncParams,
+} from "@/types";
 import { AsanaConnector, extractAsanaHtml } from "./asana-connector";
 
 // Mock asana SDK
 const mockGetUser = vi.fn();
+const mockGetUsers = vi.fn();
 const mockGetProject = vi.fn();
 const mockGetProjectsForWorkspace = vi.fn();
 const mockGetTasksForProject = vi.fn();
 const mockGetStoriesForTask = vi.fn();
+const mockGetProjectMembershipsForProject = vi.fn();
+const mockGetTeamsForWorkspace = vi.fn();
+const mockGetTeamMembershipsForTeam = vi.fn();
+const mockGetWorkspaceMembershipsForWorkspace = vi.fn();
+const mockGetWorkspace = vi.fn();
 
 vi.mock("asana", () => ({
   ApiClient: class MockApiClient {
@@ -16,6 +27,7 @@ vi.mock("asana", () => ({
   },
   UsersApi: class MockUsersApi {
     getUser = mockGetUser;
+    getUsers = mockGetUsers;
   },
   ProjectsApi: class MockProjectsApi {
     getProject = mockGetProject;
@@ -26,6 +38,22 @@ vi.mock("asana", () => ({
   },
   StoriesApi: class MockStoriesApi {
     getStoriesForTask = mockGetStoriesForTask;
+  },
+  ProjectMembershipsApi: class MockProjectMembershipsApi {
+    getProjectMembershipsForProject = mockGetProjectMembershipsForProject;
+  },
+  TeamsApi: class MockTeamsApi {
+    getTeamsForWorkspace = mockGetTeamsForWorkspace;
+  },
+  TeamMembershipsApi: class MockTeamMembershipsApi {
+    getTeamMembershipsForTeam = mockGetTeamMembershipsForTeam;
+  },
+  WorkspaceMembershipsApi: class MockWorkspaceMembershipsApi {
+    getWorkspaceMembershipsForWorkspace =
+      mockGetWorkspaceMembershipsForWorkspace;
+  },
+  WorkspacesApi: class MockWorkspacesApi {
+    getWorkspace = mockGetWorkspace;
   },
 }));
 
@@ -1358,6 +1386,585 @@ describe("AsanaConnector", () => {
 
       expect(batches[0].documents[0].content).toContain(
         "plain-only comment body",
+      );
+    });
+  });
+
+  describe("permission sync", () => {
+    const WS = "1234567890";
+
+    /** Collection-shaped response page (see extractCollectionData/NextOffset). */
+    function page<T>(data: T[], nextOffset?: string) {
+      return {
+        data,
+        ...(nextOffset ? { next_page: { offset: nextOffset } } : {}),
+      };
+    }
+
+    function permProject(
+      gid: string,
+      opts?: {
+        privacy?: string;
+        teamGid?: string;
+        name?: string;
+        workspaceGid?: string;
+      },
+    ) {
+      return {
+        gid,
+        name: opts?.name ?? `Project ${gid}`,
+        privacy_setting: opts?.privacy ?? "private",
+        team: opts?.teamGid ? { gid: opts.teamGid } : null,
+        workspace: { gid: opts?.workspaceGid ?? WS },
+      };
+    }
+
+    function permTask(
+      gid: string,
+      opts?: { projects?: string[]; followers?: string[] },
+    ) {
+      return {
+        gid,
+        projects: (opts?.projects ?? []).map((p) => ({ gid: p })),
+        followers: (opts?.followers ?? []).map((f) => ({ gid: f })),
+      };
+    }
+
+    function userMembership(gid: string) {
+      return { member: { gid, resource_type: "user" } };
+    }
+
+    function teamMembership(gid: string) {
+      return { member: { gid, resource_type: "team" } };
+    }
+
+    /** Route getProject/getTasksForProject/memberships by project gid. */
+    function stubProjects(
+      projects: Record<
+        string,
+        {
+          project: ReturnType<typeof permProject>;
+          tasks?: ReturnType<typeof permTask>[];
+          memberships?: unknown[];
+          membershipsError?: unknown;
+        }
+      >,
+    ) {
+      mockGetProject.mockImplementation((gid: string) => {
+        const entry = projects[gid];
+        if (!entry) return Promise.reject(new Error(`no project ${gid}`));
+        return Promise.resolve({ data: entry.project });
+      });
+      mockGetTasksForProject.mockImplementation((gid: string) => {
+        const entry = projects[gid];
+        return Promise.resolve(page(entry?.tasks ?? []));
+      });
+      mockGetProjectMembershipsForProject.mockImplementation((gid: string) => {
+        const entry = projects[gid];
+        if (entry?.membershipsError) {
+          return Promise.reject(entry.membershipsError);
+        }
+        return Promise.resolve(page(entry?.memberships ?? []));
+      });
+    }
+
+    function stubWorkspaceUsers(
+      users: Array<{ gid: string; email?: string | null; name?: string }>,
+    ) {
+      mockGetUsers.mockResolvedValue(
+        page(
+          users.map((u) => ({
+            gid: u.gid,
+            email: u.email ?? null,
+            name: u.name ?? `User ${u.gid}`,
+          })),
+        ),
+      );
+    }
+
+    function snapshotParams(
+      overrides?: Partial<PermissionSyncParams>,
+    ): PermissionSyncParams {
+      return {
+        config: validConfig,
+        credentials,
+        cursor: null,
+        readIngestedDocuments: async () => ({
+          documents: [],
+          nextAfterId: null,
+        }),
+        ...overrides,
+      };
+    }
+
+    async function collectSnapshot(params: PermissionSyncParams) {
+      const yields: PermissionSnapshotYield[] = [];
+      for await (const item of connector.syncPermissionSnapshot(params)) {
+        yields.push(item);
+      }
+      return yields;
+    }
+
+    async function collectGroups(params: PermissionSyncParams) {
+      const yields: GroupMembershipYield[] = [];
+      for await (const item of connector.syncGroups(params)) {
+        yields.push(item);
+      }
+      return yields;
+    }
+
+    function containerYields(yields: PermissionSnapshotYield[]) {
+      return yields.filter(
+        (y): y is Extract<PermissionSnapshotYield, { kind: "container" }> =>
+          y.kind === "container",
+      );
+    }
+
+    function documentYields(yields: PermissionSnapshotYield[]) {
+      return yields.filter(
+        (y): y is Extract<PermissionSnapshotYield, { kind: "document" }> =>
+          y.kind === "document",
+      );
+    }
+
+    beforeEach(() => {
+      vi.spyOn(
+        connector as unknown as RateLimitedConnector,
+        "rateLimit",
+      ).mockResolvedValue(undefined);
+      stubWorkspaceUsers([
+        { gid: "u-alice", email: "alice@example.com", name: "Alice" },
+        { gid: "u-bob", email: "bob@example.com", name: "Bob" },
+        { gid: "u-hidden", email: null, name: "Hidden" },
+      ]);
+      mockGetWorkspace.mockResolvedValue({ data: { name: "Acme" } });
+      mockGetTeamsForWorkspace.mockResolvedValue(page([]));
+      mockGetWorkspaceMembershipsForWorkspace.mockResolvedValue(page([]));
+    });
+
+    test("supportsPermissionSync is enabled", () => {
+      expect(connector.supportsPermissionSync).toBe(true);
+    });
+
+    test("public_to_workspace project grants the workspace-members group plus explicit members", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111", { privacy: "public_to_workspace" }),
+          tasks: [permTask("t1", { projects: ["111111"] })],
+          memberships: [userMembership("u-alice")],
+        },
+      });
+
+      const yields = await collectSnapshot(snapshotParams());
+      const containers = containerYields(yields);
+      const documents = documentYields(yields);
+
+      expect(containers).toHaveLength(1);
+      expect(containers[0]).toMatchObject({
+        containerKey: "project:111111",
+        cursor: "project:111111",
+        permissions: {
+          isPublic: false,
+          users: ["alice@example.com"],
+          groups: [`workspace-members:${WS}`],
+        },
+      });
+      expect(containers[0].audienceResolutionFailed ?? false).toBe(false);
+      expect(documents).toEqual([
+        {
+          kind: "document",
+          sourceId: "task-t1",
+          containerKey: "project:111111",
+          cursor: "project:111111",
+        },
+      ]);
+    });
+
+    test("private project grants direct users and member teams; hidden-email member is dropped fail-closed", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [permTask("t1", { projects: ["111111"] })],
+          memberships: [],
+        },
+      });
+      // Membership pagination: the team lands on page two.
+      mockGetProjectMembershipsForProject
+        .mockResolvedValueOnce(
+          page([userMembership("u-alice"), userMembership("u-hidden")], "off2"),
+        )
+        .mockResolvedValueOnce(page([teamMembership("team-eng")]));
+
+      const yields = await collectSnapshot(snapshotParams());
+      const [container] = containerYields(yields);
+
+      expect(container.permissions).toEqual({
+        isPublic: false,
+        users: ["alice@example.com"],
+        groups: ["team:team-eng"],
+      });
+      expect(container.audienceResolutionFailed ?? false).toBe(false);
+    });
+
+    test("hidden-email direct member resolves through the admin mapping", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [permTask("t1", { projects: ["111111"] })],
+          memberships: [userMembership("u-hidden")],
+        },
+      });
+
+      const yields = await collectSnapshot(
+        snapshotParams({
+          resolveMappedEmail: (accountId) =>
+            accountId === "u-hidden" ? "mapped@example.com" : null,
+        }),
+      );
+
+      expect(containerYields(yields)[0].permissions.users).toEqual([
+        "mapped@example.com",
+      ]);
+    });
+
+    test("deprecated private_to_team grants the project's own team", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111", {
+            privacy: "private_to_team",
+            teamGid: "team-legacy",
+          }),
+          tasks: [permTask("t1", { projects: ["111111"] })],
+          memberships: [],
+        },
+      });
+
+      const yields = await collectSnapshot(snapshotParams());
+      expect(containerYields(yields)[0].permissions.groups).toEqual([
+        "team:team-legacy",
+      ]);
+    });
+
+    test("multi-homed task gets a nested union container and is assigned exactly once", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [
+            permTask("t1", { projects: ["111111", "222222"] }),
+            permTask("t2", { projects: ["111111"] }),
+          ],
+          memberships: [userMembership("u-alice")],
+        },
+        "222222": {
+          project: permProject("222222"),
+          tasks: [
+            permTask("t1", { projects: ["111111", "222222"] }),
+            permTask("t3", { projects: ["222222"] }),
+          ],
+          memberships: [userMembership("u-bob")],
+        },
+      });
+
+      const yields = await collectSnapshot(
+        snapshotParams({
+          config: { workspaceGid: WS, projectGids: ["111111", "222222"] },
+        }),
+      );
+
+      const containers = containerYields(yields);
+      expect(containers.map((c) => c.containerKey)).toEqual([
+        "project:111111",
+        "project:111111/multi:222222",
+        "project:222222",
+      ]);
+      const union = containers[1];
+      expect(union.permissions.users).toEqual([
+        "alice@example.com",
+        "bob@example.com",
+      ]);
+      expect(union.cursor).toBe("project:111111");
+
+      const documents = documentYields(yields);
+      expect(documents).toEqual([
+        expect.objectContaining({
+          sourceId: "task-t1",
+          containerKey: "project:111111/multi:222222",
+        }),
+        expect.objectContaining({
+          sourceId: "task-t2",
+          containerKey: "project:111111",
+        }),
+        expect.objectContaining({
+          sourceId: "task-t3",
+          containerKey: "project:222222",
+        }),
+      ]);
+    });
+
+    test("multi-home into an out-of-scope project contributes audience without a top-level container", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [permTask("t1", { projects: ["111111", "999999"] })],
+          memberships: [userMembership("u-alice")],
+        },
+        "999999": {
+          project: permProject("999999"),
+          memberships: [userMembership("u-bob")],
+        },
+      });
+
+      const yields = await collectSnapshot(snapshotParams());
+      const containers = containerYields(yields);
+
+      expect(containers.map((c) => c.containerKey)).toEqual([
+        "project:111111",
+        "project:111111/multi:999999",
+      ]);
+      expect(containers[1].permissions.users).toEqual([
+        "alice@example.com",
+        "bob@example.com",
+      ]);
+      // The out-of-scope project is an audience source only — its tasks were
+      // never enumerated.
+      expect(mockGetTasksForProject).not.toHaveBeenCalledWith(
+        "999999",
+        expect.anything(),
+      );
+    });
+
+    test("an unreadable project audience fail-closes the container but keeps its documents assigned", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [permTask("t1", { projects: ["111111"] })],
+          membershipsError: Object.assign(new Error("boom"), { status: 500 }),
+        },
+      });
+
+      const yields = await collectSnapshot(snapshotParams());
+      const [container] = containerYields(yields);
+
+      expect(container.audienceResolutionFailed).toBe(true);
+      expect(container.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(documentYields(yields)).toEqual([
+        expect.objectContaining({
+          sourceId: "task-t1",
+          containerKey: "project:111111",
+        }),
+      ]);
+    });
+
+    test("an empty project emits a boundary container without resolving its audience", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [],
+          memberships: [userMembership("u-alice")],
+        },
+      });
+
+      const yields = await collectSnapshot(snapshotParams());
+
+      expect(yields).toEqual([
+        {
+          kind: "container",
+          containerKey: "project:111111",
+          permissions: { isPublic: false, users: [], groups: [] },
+          audienceResolutionFailed: false,
+          cursor: "project:111111",
+        },
+      ]);
+      expect(mockGetProjectMembershipsForProject).not.toHaveBeenCalled();
+    });
+
+    test("task followers become per-document exception users", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [
+            permTask("t1", {
+              projects: ["111111"],
+              followers: ["u-bob", "u-hidden"],
+            }),
+          ],
+          memberships: [userMembership("u-alice")],
+        },
+      });
+
+      const yields = await collectSnapshot(snapshotParams());
+      expect(documentYields(yields)[0].exceptionUsers).toEqual([
+        "bob@example.com",
+      ]);
+    });
+
+    test("resume cursor skips completed top-level containers", async () => {
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [permTask("t1", { projects: ["111111"] })],
+          memberships: [],
+        },
+        "222222": {
+          project: permProject("222222"),
+          tasks: [permTask("t2", { projects: ["222222"] })],
+          memberships: [],
+        },
+      });
+
+      const yields = await collectSnapshot(
+        snapshotParams({
+          config: { workspaceGid: WS, projectGids: ["111111", "222222"] },
+          cursor: "project:222222",
+        }),
+      );
+
+      expect(containerYields(yields).map((c) => c.containerKey)).toEqual([
+        "project:222222",
+      ]);
+      expect(mockGetTasksForProject).not.toHaveBeenCalledWith(
+        "111111",
+        expect.anything(),
+      );
+    });
+
+    test("a failed workspace-user walk degrades direct grants but keeps group audiences", async () => {
+      mockGetUsers.mockRejectedValue(new Error("users down"));
+      stubProjects({
+        "111111": {
+          project: permProject("111111"),
+          tasks: [permTask("t1", { projects: ["111111"] })],
+          memberships: [teamMembership("team-eng"), userMembership("u-alice")],
+        },
+      });
+
+      const yields = await collectSnapshot(snapshotParams());
+      const [container] = containerYields(yields);
+
+      expect(container.permissions.groups).toEqual(["team:team-eng"]);
+      expect(container.permissions.users).toEqual([]);
+      expect(container.audienceResolutionFailed ?? false).toBe(false);
+      // One walk attempt per pass, not one per principal.
+      expect(mockGetUsers).toHaveBeenCalledTimes(1);
+    });
+
+    test("syncGroups yields the workspace-members roster without guests or deactivated users", async () => {
+      stubWorkspaceUsers([
+        { gid: "u-alice", email: "alice@example.com", name: "Alice" },
+        { gid: "u-bob", email: "bob@example.com", name: "Bob" },
+        { gid: "u-guest", email: "guest@example.com", name: "Guest" },
+        { gid: "u-gone", email: "gone@example.com", name: "Gone" },
+      ]);
+      mockGetWorkspaceMembershipsForWorkspace.mockResolvedValue(
+        page([
+          { user: { gid: "u-alice", name: "Alice" } },
+          { user: { gid: "u-bob", name: "Bob" }, is_guest: false },
+          { user: { gid: "u-guest", name: "Guest" }, is_guest: true },
+          { user: { gid: "u-gone", name: "Gone" }, is_active: false },
+        ]),
+      );
+
+      const yields = await collectGroups(snapshotParams());
+
+      expect(yields[0]).toEqual({
+        groupId: `workspace-members:${WS}`,
+        name: "Acme workspace members",
+        members: [
+          {
+            accountId: "u-alice",
+            displayName: "Alice",
+            email: "alice@example.com",
+            accountType: "user",
+          },
+          {
+            accountId: "u-bob",
+            displayName: "Bob",
+            email: "bob@example.com",
+            accountType: "user",
+          },
+        ],
+      });
+    });
+
+    test("syncGroups team rosters exclude limited-access members and byte-match audience group ids", async () => {
+      mockGetTeamsForWorkspace.mockResolvedValue(
+        page([{ gid: "team-eng", name: "Engineering" }]),
+      );
+      mockGetTeamMembershipsForTeam.mockResolvedValue(
+        page([
+          { user: { gid: "u-alice", name: "Alice" } },
+          { user: { gid: "u-bob", name: "Bob" }, is_limited_access: true },
+        ]),
+      );
+
+      const yields = await collectGroups(snapshotParams());
+      const teamYield = yields.find((y) => y.groupId === "team:team-eng");
+
+      expect(teamYield).toEqual({
+        groupId: "team:team-eng",
+        name: "Engineering",
+        members: [
+          {
+            accountId: "u-alice",
+            displayName: "Alice",
+            email: "alice@example.com",
+            accountType: "user",
+          },
+        ],
+      });
+    });
+
+    test("a 403 team roster yields an observed fail-closed empty group and later teams still sync", async () => {
+      mockGetTeamsForWorkspace.mockResolvedValue(
+        page([
+          { gid: "team-locked", name: "Locked" },
+          { gid: "team-open", name: "Open" },
+        ]),
+      );
+      mockGetTeamMembershipsForTeam.mockImplementation((teamGid: string) => {
+        if (teamGid === "team-locked") {
+          return Promise.reject(
+            Object.assign(new Error("Forbidden"), { status: 403 }),
+          );
+        }
+        return Promise.resolve(page([{ user: { gid: "u-bob", name: "Bob" } }]));
+      });
+
+      const yields = await collectGroups(snapshotParams());
+
+      expect(yields.find((y) => y.groupId === "team:team-locked")).toEqual({
+        groupId: "team:team-locked",
+        name: "Locked",
+        members: [],
+        membershipResolutionFailed: true,
+      });
+      expect(
+        yields.find((y) => y.groupId === "team:team-open")?.members,
+      ).toHaveLength(1);
+    });
+
+    test("a transient team roster failure aborts the group phase instead of truncating", async () => {
+      mockGetTeamsForWorkspace.mockResolvedValue(
+        page([{ gid: "team-eng", name: "Engineering" }]),
+      );
+      mockGetTeamMembershipsForTeam.mockRejectedValue(
+        Object.assign(new Error("upstream 502"), { status: 502 }),
+      );
+
+      await expect(collectGroups(snapshotParams())).rejects.toThrow(
+        "upstream 502",
+      );
+    });
+
+    test("a failed workspace-user walk aborts syncGroups so resolved emails are never overwritten with nulls", async () => {
+      mockGetUsers.mockRejectedValue(new Error("users down"));
+
+      await expect(collectGroups(snapshotParams())).rejects.toThrow(
+        "users down",
       );
     });
   });

@@ -108,10 +108,11 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       // is independent of a local .env that points the frontend origin at a
       // tunnel domain.
       const browserBaseUrl = config.frontendBaseUrl;
-      const expectedIssuer = browserBaseUrl.endsWith("/")
-        ? browserBaseUrl
-        : `${browserBaseUrl}/`;
-      expect(body.issuer).toBe(expectedIssuer);
+      expect(body.issuer).toBe(browserBaseUrl);
+      // RFC 9207 regression: better-auth strips any trailing slash from the
+      // `iss` authorization-response parameter, so a slashed metadata issuer
+      // makes strict clients abort with an issuer mismatch.
+      expect(body.issuer).not.toMatch(/\/$/);
       expect(body.authorization_endpoint).toBe(
         `${browserBaseUrl}/api/auth/oauth2/authorize`,
       );
@@ -174,10 +175,8 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       // the test is independent of a local .env that points the frontend origin
       // at a tunnel domain.
       const browserBaseUrl = config.frontendBaseUrl;
-      const expectedIssuer = browserBaseUrl.endsWith("/")
-        ? browserBaseUrl
-        : `${browserBaseUrl}/`;
-      expect(body.issuer).toBe(expectedIssuer);
+      expect(body.issuer).toBe(browserBaseUrl);
+      expect(body.issuer).not.toMatch(/\/$/);
       expect(body.authorization_endpoint).toBe(
         `${browserBaseUrl}/api/auth/oauth2/authorize`,
       );

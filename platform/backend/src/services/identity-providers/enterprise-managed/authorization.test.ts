@@ -204,6 +204,16 @@ describe("exchangeIdentityAssertionForAccessToken", () => {
     expect(storedToken?.referenceId).toBe(
       `${MCP_RESOURCE_REFERENCE_PREFIX}${agent.id}`,
     );
+
+    // The issuer identifier clients copy into the assertion audience is
+    // slash-free (it must byte-match the advertised metadata issuer and the
+    // RFC 9207 `iss` parameter), but assertions minted against the previously
+    // advertised slashed issuer must stay valid during the transition.
+    const issuer = buildOAuthIssuer();
+    expect(issuer).not.toMatch(/\/$/);
+    expect(mockValidateJwt).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: [issuer, `${issuer}/`] }),
+    );
   });
 
   test("uses the organization MCP OAuth token lifetime for issued access tokens", async ({

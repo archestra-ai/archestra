@@ -83,8 +83,26 @@ if (devAutoAuthenticateEmail) {
   );
 }
 
-const frontendBaseUrl =
-  process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
+/**
+ * Parse `ARCHESTRA_FRONTEND_URL` into the canonical frontend base URL.
+ *
+ * Trailing slashes are stripped: every consumer appends its own path
+ * (`${frontendBaseUrl}/settings`), and the OAuth issuer identifier is this
+ * exact string — RFC 8414 requires the metadata issuer to be byte-identical
+ * to the URL clients resolved the well-known document from, and better-auth
+ * derives the RFC 9207 `iss` authorization-response parameter from it with
+ * any trailing slash stripped. A slashed value here would re-introduce the
+ * issuer mismatch that makes strict clients abort authorization.
+ * @public — exported for testability
+ */
+export function parseFrontendBaseUrl(rawValue: string | undefined): string {
+  const trimmed = rawValue?.trim();
+  return (trimmed || "http://localhost:3000").replace(/\/+$/, "");
+}
+
+const frontendBaseUrl = parseFrontendBaseUrl(
+  process.env.ARCHESTRA_FRONTEND_URL,
+);
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 

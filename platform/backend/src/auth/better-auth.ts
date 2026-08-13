@@ -89,11 +89,15 @@ const {
  */
 export const JWT_PLUGIN_OPTIONS = {
   jwt: {
-    // Pydantic's AnyHttpUrl (used by MCP/Open WebUI OAuthMetadata model)
-    // normalizes URLs by appending a trailing slash when the path is empty.
-    // The JWT iss claim must match the normalized issuer from the well-known
-    // metadata to pass authlib's claim validation.
-    issuer: `${frontendBaseUrl}/`,
+    // The issuer identifier for tokens we sign. Deliberately slash-free: the
+    // oauth-provider plugin derives the RFC 9207 `iss` authorization-response
+    // parameter from this value with any trailing slash stripped, and strict
+    // clients (Claude Code, MCP TS SDK) abort authorization unless that
+    // parameter byte-matches the issuer in
+    // /.well-known/oauth-authorization-server (served by oauth-server.ts) —
+    // so all three must stay the exact same slash-free string
+    // (frontendBaseUrl is normalized in config).
+    issuer: frontendBaseUrl,
   },
   jwks: {
     keyPairConfig: { alg: "RS256", modulusLength: 2048 },

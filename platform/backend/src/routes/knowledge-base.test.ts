@@ -3107,7 +3107,7 @@ describe("knowledge base routes", () => {
           displayName: "Alice A",
           email: "alice@example.com",
           accountType: null,
-          user: { id: alice.id, name: alice.name },
+          user: { id: alice.id, name: alice.name, email: alice.email },
           resolvedVia: "email",
         },
         {
@@ -3318,7 +3318,7 @@ describe("knowledge base routes", () => {
           displayName: "Hidden H",
           email: null,
           accountType: null,
-          user: { id: alice.id, name: alice.name },
+          user: { id: alice.id, name: alice.name, email: alice.email },
           resolvedVia: "override",
         },
       ]);
@@ -3364,7 +3364,7 @@ describe("knowledge base routes", () => {
         url: `/api/connectors/${connector.id}/user-groups`,
       });
       expect(response.json().groups[0].members[0]).toMatchObject({
-        user: { id: alice.id, name: alice.name },
+        user: { id: alice.id, name: alice.name, email: alice.email },
         resolvedVia: "email",
       });
     });

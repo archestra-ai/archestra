@@ -41,7 +41,7 @@ function mockGroups() {
               displayName: "Alice A",
               email: "alice@example.com",
               accountType: "atlassian",
-              user: { id: "user-1", name: "Alice" },
+              user: { id: "user-1", name: "Alice", email: "alice@example.com" },
             },
             {
               accountId: "acc-bob",
@@ -57,6 +57,16 @@ function mockGroups() {
               email: null,
               accountType: null,
               user: null,
+            },
+            // Email hidden upstream but manually assigned: reads as the
+            // mapped org user, exactly like an email-matched member.
+            {
+              accountId: "acc-erin",
+              displayName: "Erin E",
+              email: null,
+              accountType: null,
+              user: { id: "user-2", name: "Erin", email: "erin@example.com" },
+              resolvedVia: "override",
             },
             // Add-on/bot account: no email BY NATURE — labeled as an app,
             // not counted as an unresolved human.
@@ -96,16 +106,19 @@ describe("ConnectorUserGroupsTable", () => {
     expect(screen.getByText("engineers")).toBeInTheDocument();
     expect(screen.getByText("group:jira_engineers")).toBeInTheDocument();
     expect(screen.getByText("128")).toBeInTheDocument();
-    // 3 human members of which only alice resolves; the bot is an app
-    // account and stays out of the counts entirely.
+    // 4 human members of which alice (email) and erin (override) resolve;
+    // the bot is an app account and stays out of the counts entirely.
     const rows = screen.getAllByRole("row");
-    expect(rows[2]).toHaveTextContent("1/3 assigned");
+    expect(rows[2]).toHaveTextContent("2/4 assigned");
     // The Members badges carry the member detail: resolved members with
     // their org user, unresolved with the reason, overflow in the tooltip.
     expect(screen.getByText("alice@example.com · Alice")).toBeInTheDocument();
     expect(screen.getByText("bob@example.com")).toBeInTheDocument();
-    expect(screen.getByText("+1 more")).toBeInTheDocument();
+    expect(screen.getByText("+2 more")).toBeInTheDocument();
     expect(screen.getByText("Dave D · email hidden")).toBeInTheDocument();
+    // The manually assigned member shows the mapped user's identity, not
+    // "email hidden".
+    expect(screen.getByText("erin@example.com · Erin")).toBeInTheDocument();
     // App/bot accounts never appear — they cannot sign in.
     expect(
       screen.queryByText("Automation for Jira · app"),
@@ -129,7 +142,11 @@ describe("ConnectorUserGroupsTable", () => {
                 displayName: "Alice A",
                 email: "alice@example.com",
                 accountType: "atlassian",
-                user: { id: "user-1", name: "Alice" },
+                user: {
+                  id: "user-1",
+                  name: "Alice",
+                  email: "alice@example.com",
+                },
               },
             ],
           },
@@ -209,7 +226,46 @@ describe("ConnectorUserGroupsTable", () => {
     await userEvent.click(
       screen.getByRole("combobox", { name: "Filter by member" }),
     );
+    // Resolved members are offered as the org user they resolve to — the
+    // manual assignment (Erin) exactly like the email match (Alice) — and
+    // never as their upstream identity; unresolved accounts keep it.
+    expect(
+      screen.getByRole("option", { name: "Alice (alice@example.com)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Erin (erin@example.com)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "Alice A" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "Erin E" }),
+    ).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole("option", { name: "Bob B" }));
+    expect(screen.getByText("engineers")).toBeInTheDocument();
+    expect(screen.queryByText("ghosts")).not.toBeInTheDocument();
+  });
+
+  it("maps an org-user filter selection back to the upstream accounts that resolve to them", async () => {
+    window.HTMLElement.prototype.hasPointerCapture = vi.fn();
+    window.HTMLElement.prototype.setPointerCapture = vi.fn();
+    window.HTMLElement.prototype.releasePointerCapture = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    const { userEvent } = await import("@testing-library/user-event").then(
+      (m) => ({ userEvent: m.default.setup() }),
+    );
+    mockGroups();
+
+    render(<ConnectorUserGroupsTable connectorId="connector-1" />);
+
+    // Erin's upstream account (hidden email, manually assigned) is only in
+    // "engineers": picking her org user finds it.
+    await userEvent.click(
+      screen.getByRole("combobox", { name: "Filter by member" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: "Erin (erin@example.com)" }),
+    );
     expect(screen.getByText("engineers")).toBeInTheDocument();
     expect(screen.queryByText("ghosts")).not.toBeInTheDocument();
   });

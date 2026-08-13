@@ -3,11 +3,13 @@
 
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { AclBadges } from "./acl-badges";
 import { WORKSPACE_ROSTER_NOUN } from "./roster-noun";
 
 vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => (
@@ -26,6 +28,9 @@ describe("AclBadges", () => {
     vi.mocked(useTeams).mockReturnValue({
       data: [{ id: "team-1", name: "Platform Team" }],
     } as unknown as ReturnType<typeof useTeams>);
+    vi.mocked(useOrganizationMembers).mockReturnValue({
+      data: [{ id: "user-1", name: "Alice", email: "a@example.com" }],
+    } as unknown as ReturnType<typeof useOrganizationMembers>);
   });
 
   it("renders an empty ACL as a locked warning", () => {
@@ -56,9 +61,13 @@ describe("AclBadges", () => {
       />,
     );
     expect(screen.getByText("Everyone in org")).toBeInTheDocument();
-    expect(screen.getByText("a@example.com")).toBeInTheDocument();
+    // A user grant that matches an org member reads as that user (a manual
+    // member mapping materializes the mapped user's email here, so it
+    // resolves identically).
+    expect(screen.getByText("a@example.com · Alice")).toBeInTheDocument();
     expect(screen.getByText("+3 more")).toBeInTheDocument();
-    // Hidden entries stay discoverable in the overflow tooltip.
+    // Hidden entries stay discoverable in the overflow tooltip; an email
+    // matching no org member degrades to the raw address.
     expect(screen.getByText("b@example.com")).toBeInTheDocument();
     expect(screen.getByText("Group: jira_engineers")).toBeInTheDocument();
     expect(screen.getByText("Group: jira_admins")).toBeInTheDocument();

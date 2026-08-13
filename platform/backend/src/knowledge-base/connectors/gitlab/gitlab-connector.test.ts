@@ -921,4 +921,446 @@ describe("GitlabConnector", () => {
       expect(result).toEqual({ valid: true });
     });
   });
+
+  describe("permission sync", () => {
+    const GROUP_ID = "gitlab.com//my-group/my-project";
+    const CONTAINER_KEY = "project:my-group/my-project";
+
+    function membersAllHandler(
+      rosters: Record<number, unknown[] | { status: number }>,
+    ) {
+      return http.get(
+        `${GL}/api/v4/projects/:projectId/members/all`,
+        ({ params }) => {
+          const roster = rosters[Number(params.projectId)];
+          if (!roster) return HttpResponse.json([]);
+          if (!Array.isArray(roster)) {
+            return HttpResponse.json(
+              { message: "error" },
+              { status: roster.status },
+            );
+          }
+          return HttpResponse.json(roster);
+        },
+      );
+    }
+
+    function usersShowHandler(profiles: Record<number, unknown>) {
+      return http.get(`${GL}/api/v4/users/:userId`, ({ params }) => {
+        const profile = profiles[Number(params.userId)];
+        if (!profile) {
+          return HttpResponse.json(
+            { message: "404 Not Found" },
+            { status: 404 },
+          );
+        }
+        return HttpResponse.json(profile as Record<string, unknown>);
+      });
+    }
+
+    /** readIngestedDocuments stub over a fixed per-project corpus. */
+    function readbackOf(docsByProject: Record<string, string[]>) {
+      const calls: Array<Record<string, string> | undefined> = [];
+      const readIngestedDocuments = async (args: {
+        metadataFilter?: Record<string, string>;
+        afterId?: string | null;
+        limit: number;
+      }) => {
+        calls.push(args.metadataFilter);
+        const sourceIds =
+          docsByProject[args.metadataFilter?.project ?? ""] ?? [];
+        return {
+          documents: sourceIds.map((sourceId) => ({
+            sourceId,
+            metadata: null,
+          })),
+          nextAfterId: null,
+        };
+      };
+      return { readIngestedDocuments, calls };
+    }
+
+    async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
+      const out: T[] = [];
+      for await (const item of gen) out.push(item);
+      return out;
+    }
+
+    test("supportsPermissionSync is true", () => {
+      expect(connector.supportsPermissionSync).toBe(true);
+    });
+
+    // Pins the metadata-field contract with content-sync: every document kind
+    // writes `metadata.project` = path_with_namespace, which is the container
+    // key's id part.
+    test("scopeKeyForDocument maps metadata.project to the container key", () => {
+      expect(
+        connector.scopeKeyForDocument({ project: "my-group/my-project" }),
+      ).toBe(CONTAINER_KEY);
+      expect(connector.scopeKeyForDocument({})).toBeNull();
+      expect(connector.scopeKeyForDocument({ project: "" })).toBeNull();
+      expect(connector.scopeKeyForDocument({ project: 42 })).toBeNull();
+    });
+
+    test("snapshot yields sorted containers with the roster-group audience and read-back document assignments", async () => {
+      const projectB = {
+        id: 43,
+        name: "beta",
+        path_with_namespace: "my-group/beta",
+        web_url: `${GL}/my-group/beta`,
+        visibility: "public",
+      };
+      server.use(
+        projectShowHandler({ ...mockProject, visibility: "private" }),
+        http.get(`${GL}/api/v4/projects/43`, () => HttpResponse.json(projectB)),
+      );
+      const { readIngestedDocuments, calls } = readbackOf({
+        "my-group/my-project": ["my-group/my-project#issue-1"],
+        "my-group/beta": ["my-group/beta#mr-2", "my-group/beta#file:README.md"],
+      });
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot({
+          config: { ...validConfig, projectIds: [42, 43] },
+          credentials,
+          cursor: null,
+          readIngestedDocuments,
+        }),
+      );
+
+      // beta sorts before my-project; each container precedes its documents
+      // and every yield's cursor is the current container key.
+      expect(yields).toEqual([
+        {
+          kind: "container",
+          containerKey: "project:my-group/beta",
+          permissions: {
+            isPublic: true,
+            users: [],
+            groups: ["gitlab.com//my-group/beta"],
+          },
+          audienceResolutionFailed: false,
+          cursor: "project:my-group/beta",
+        },
+        {
+          kind: "document",
+          sourceId: "my-group/beta#mr-2",
+          containerKey: "project:my-group/beta",
+          cursor: "project:my-group/beta",
+        },
+        {
+          kind: "document",
+          sourceId: "my-group/beta#file:README.md",
+          containerKey: "project:my-group/beta",
+          cursor: "project:my-group/beta",
+        },
+        {
+          kind: "container",
+          containerKey: CONTAINER_KEY,
+          permissions: { isPublic: false, users: [], groups: [GROUP_ID] },
+          audienceResolutionFailed: false,
+          cursor: CONTAINER_KEY,
+        },
+        {
+          kind: "document",
+          sourceId: "my-group/my-project#issue-1",
+          containerKey: CONTAINER_KEY,
+          cursor: CONTAINER_KEY,
+        },
+      ]);
+      expect(calls).toEqual([
+        { project: "my-group/beta" },
+        { project: "my-group/my-project" },
+      ]);
+    });
+
+    test("internal visibility is org-public; missing visibility fail-closes to private", async () => {
+      server.use(
+        projectShowHandler({ ...mockProject, visibility: "internal" }),
+      );
+      const { readIngestedDocuments } = readbackOf({});
+      const [container] = await collect(
+        connector.syncPermissionSnapshot({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments,
+        }),
+      );
+      expect(container).toMatchObject({
+        kind: "container",
+        permissions: { isPublic: true },
+      });
+
+      server.use(projectShowHandler(mockProject)); // no visibility field
+      const [failClosed] = await collect(
+        connector.syncPermissionSnapshot({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments,
+        }),
+      );
+      expect(failClosed).toMatchObject({
+        kind: "container",
+        permissions: { isPublic: false },
+      });
+    });
+
+    test("resume cursor skips completed containers; scope restricts enumeration", async () => {
+      const projectB = {
+        id: 43,
+        name: "beta",
+        path_with_namespace: "my-group/beta",
+        web_url: `${GL}/my-group/beta`,
+        visibility: "private",
+      };
+      server.use(
+        projectShowHandler({ ...mockProject, visibility: "private" }),
+        http.get(`${GL}/api/v4/projects/43`, () => HttpResponse.json(projectB)),
+      );
+      const { readIngestedDocuments } = readbackOf({});
+
+      const resumed = await collect(
+        connector.syncPermissionSnapshot({
+          config: { ...validConfig, projectIds: [42, 43] },
+          credentials,
+          cursor: CONTAINER_KEY,
+          readIngestedDocuments,
+        }),
+      );
+      // beta < the cursor key, so only the cursor container re-enumerates.
+      expect(resumed.map((y) => y.containerKey)).toEqual([CONTAINER_KEY]);
+
+      const scoped = await collect(
+        connector.syncPermissionSnapshot({
+          config: { ...validConfig, projectIds: [42, 43] },
+          credentials,
+          cursor: null,
+          readIngestedDocuments,
+          scope: { containerKeys: ["project:my-group/beta"] },
+        }),
+      );
+      expect(scoped.map((y) => y.containerKey)).toEqual([
+        "project:my-group/beta",
+      ]);
+    });
+
+    test("syncGroups rosters Reporter+ active members with resolved emails", async () => {
+      server.use(
+        projectShowHandler({ ...mockProject, visibility: "private" }),
+        membersAllHandler({
+          42: [
+            // Guest: below Reporter, excluded (cannot read ingested content).
+            {
+              id: 1,
+              username: "guest",
+              name: "Guest",
+              access_level: 10,
+              state: "active",
+            },
+            // Blocked: cannot sign in upstream, excluded.
+            {
+              id: 2,
+              username: "blocked-dev",
+              name: "Blocked",
+              access_level: 30,
+              state: "blocked",
+            },
+            // Email already on the member row (admin/enterprise case): no
+            // profile request needed.
+            {
+              id: 3,
+              username: "alice",
+              name: "Alice",
+              access_level: 30,
+              state: "active",
+              email: "alice@example.com",
+            },
+            // Email resolved from the public profile.
+            {
+              id: 4,
+              username: "bob",
+              name: "Bob",
+              access_level: 20,
+              state: "active",
+            },
+            // No public email anywhere: recorded with email null.
+            {
+              id: 5,
+              username: "carol",
+              name: "Carol",
+              access_level: 50,
+              state: "active",
+            },
+            // Project access-token bot account.
+            {
+              id: 6,
+              username: "project_bot_abc123",
+              name: "Token bot",
+              access_level: 40,
+              state: "active",
+            },
+          ],
+        }),
+        usersShowHandler({
+          4: {
+            id: 4,
+            username: "bob",
+            name: "Bob",
+            public_email: "bob@example.com",
+          },
+          5: { id: 5, username: "carol", name: "Carol", public_email: "" },
+          6: {
+            id: 6,
+            username: "project_bot_abc123",
+            name: "Token bot",
+            bot: true,
+          },
+        }),
+      );
+
+      const groups = await collect(
+        connector.syncGroups({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: readbackOf({}).readIngestedDocuments,
+        }),
+      );
+
+      expect(groups).toEqual([
+        {
+          groupId: GROUP_ID,
+          name: "my-group/my-project members",
+          members: [
+            {
+              accountId: "alice",
+              displayName: "Alice",
+              email: "alice@example.com",
+              accountType: null,
+            },
+            {
+              accountId: "bob",
+              displayName: "Bob",
+              email: "bob@example.com",
+              accountType: null,
+            },
+            {
+              accountId: "carol",
+              displayName: "Carol",
+              email: null,
+              accountType: null,
+            },
+            {
+              accountId: "project_bot_abc123",
+              displayName: "Token bot",
+              email: null,
+              accountType: "bot",
+            },
+          ],
+          cursor: GROUP_ID,
+        },
+      ]);
+    });
+
+    test("an unreadable member list yields a fail-closed roster and the pass continues", async () => {
+      const projectB = {
+        id: 43,
+        name: "beta",
+        path_with_namespace: "my-group/beta",
+        web_url: `${GL}/my-group/beta`,
+        visibility: "private",
+      };
+      server.use(
+        projectShowHandler({ ...mockProject, visibility: "private" }),
+        http.get(`${GL}/api/v4/projects/43`, () => HttpResponse.json(projectB)),
+        membersAllHandler({
+          43: { status: 500 },
+          42: [
+            {
+              id: 3,
+              username: "alice",
+              name: "Alice",
+              access_level: 30,
+              state: "active",
+              email: "alice@example.com",
+            },
+          ],
+        }),
+      );
+
+      const groups = await collect(
+        connector.syncGroups({
+          config: { ...validConfig, projectIds: [42, 43] },
+          credentials,
+          cursor: null,
+          readIngestedDocuments: readbackOf({}).readIngestedDocuments,
+        }),
+      );
+
+      expect(groups).toEqual([
+        {
+          groupId: "gitlab.com//my-group/beta",
+          name: "my-group/beta members",
+          members: [],
+          membershipResolutionFailed: true,
+          cursor: "gitlab.com//my-group/beta",
+        },
+        {
+          groupId: GROUP_ID,
+          name: "my-group/my-project members",
+          members: [
+            {
+              accountId: "alice",
+              displayName: "Alice",
+              email: "alice@example.com",
+              accountType: null,
+            },
+          ],
+          cursor: GROUP_ID,
+        },
+      ]);
+    });
+
+    // Group tokens are namespaced by connector TYPE only, so the id must stay
+    // globally distinctive across self-hosted instances: the instance host
+    // (with port and any relative-URL subpath) leads the id.
+    test("group ids embed the instance host so self-hosted instances never collide", async () => {
+      const HOST = "https://gitlab.example.com:8443";
+      server.use(
+        http.get(`${HOST}/api/v4/projects/42`, () =>
+          HttpResponse.json({ ...mockProject, visibility: "private" }),
+        ),
+        http.get(`${HOST}/api/v4/projects/:projectId/members/all`, () =>
+          HttpResponse.json([]),
+        ),
+      );
+      const config = { gitlabUrl: `${HOST}/`, projectIds: [42] };
+
+      const [container] = await collect(
+        connector.syncPermissionSnapshot({
+          config,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: readbackOf({}).readIngestedDocuments,
+        }),
+      );
+      const groups = await collect(
+        connector.syncGroups({
+          config,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: readbackOf({}).readIngestedDocuments,
+        }),
+      );
+
+      const expectedId = "gitlab.example.com:8443//my-group/my-project";
+      expect(container).toMatchObject({
+        kind: "container",
+        permissions: { groups: [expectedId] },
+      });
+      expect(groups[0].groupId).toBe(expectedId);
+    });
+  });
 });

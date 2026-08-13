@@ -79,9 +79,6 @@ export function ConnectorMembersTable({
     connectorId,
     enabled: true,
   });
-  // The snapshot's resolved user carries only {id, name}; the org member
-  // list supplies the email shown under the resolved name.
-  const { data: orgMembers } = useOrganizationMembers();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<MemberFilter>("all");
   const [groupFilter, setGroupFilter] = useState<string>("all");
@@ -104,11 +101,6 @@ export function ConnectorMembersTable({
     open: openAssignDialog,
     close: closeAssignDialog,
   } = useDialogUrlParam({ paramName: "member", entityFromUrl: memberFromUrl });
-
-  const orgEmailById = useMemo(
-    () => new Map((orgMembers ?? []).map((user) => [user.id, user.email])),
-    [orgMembers],
-  );
 
   const groupIds = useMemo(
     () =>
@@ -208,18 +200,17 @@ export function ConnectorMembersTable({
             // "no user" signal; the fix lives in the Actions column.
             return <span className="text-sm text-muted-foreground">-</span>;
           }
-          const email = orgEmailById.get(user.id);
           return (
             <div className="min-w-0">
               <div className="truncate text-sm font-medium" title={user.name}>
                 {user.name}
               </div>
-              {email && (
+              {user.email && (
                 <div
                   className="truncate text-xs text-muted-foreground"
-                  title={email}
+                  title={user.email}
                 >
-                  {email}
+                  {user.email}
                 </div>
               )}
             </div>
@@ -307,7 +298,7 @@ export function ConnectorMembersTable({
         },
       },
     ],
-    [appName, orgEmailById, openAssignDialog, groupLabel, noun],
+    [appName, openAssignDialog, groupLabel, noun],
   );
 
   return (
@@ -429,6 +420,7 @@ function matchesSearch(member: ConnectorMember, query: string) {
     member.displayName?.toLowerCase().includes(query) ||
     member.email?.toLowerCase().includes(query) ||
     member.user?.name.toLowerCase().includes(query) ||
+    member.user?.email.toLowerCase().includes(query) ||
     member.groups.some((group) => group.toLowerCase().includes(query))
   );
 }

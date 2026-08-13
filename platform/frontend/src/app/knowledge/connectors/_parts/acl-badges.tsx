@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { CollapsedBadgeList } from "./collapsed-badge-list";
 import {
@@ -36,6 +37,7 @@ export function AclBadges({
   noun?: RosterNoun;
 }) {
   const { data: teams } = useTeams();
+  const { data: orgMembers } = useOrganizationMembers();
 
   if (acl.length === 0) {
     return (
@@ -60,7 +62,13 @@ export function AclBadges({
     <CollapsedBadgeList
       items={acl.map((entry) => ({
         id: entry,
-        label: formatAclEntry({ entry, teams, groupNamesByToken, noun }),
+        label: formatAclEntry({
+          entry,
+          teams,
+          groupNamesByToken,
+          noun,
+          orgMembers,
+        }),
         // The raw token, for correlation with the Groups tab.
         title: entry,
       }))}
@@ -73,11 +81,13 @@ function formatAclEntry({
   teams,
   groupNamesByToken,
   noun,
+  orgMembers,
 }: {
   entry: string;
   teams: { id: string; name: string }[] | undefined;
   groupNamesByToken: Map<string, string> | undefined;
   noun: RosterNoun;
+  orgMembers: { name: string; email: string }[] | undefined;
 }): string {
   if (entry === "org:*") {
     return "Everyone in org";
@@ -88,7 +98,14 @@ function formatAclEntry({
     return `Team: ${team?.name ?? teamId}`;
   }
   if (entry.startsWith("user_email:")) {
-    return entry.slice("user_email:".length);
+    // A user grant reads as the org user it resolves to — a manually mapped
+    // account materializes the mapped user's email here, so the resolved
+    // name applies to it exactly as to an email-matched one.
+    const email = entry.slice("user_email:".length);
+    const user = orgMembers?.find(
+      (member) => member.email.toLowerCase() === email.toLowerCase(),
+    );
+    return user ? `${email} · ${user.name}` : email;
   }
   if (entry.startsWith("group:")) {
     // The roster's display name where it is known; the connector-qualified

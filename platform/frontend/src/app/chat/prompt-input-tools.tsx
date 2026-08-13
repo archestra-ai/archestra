@@ -535,8 +535,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4}>
             <span>
-              Attachments are stored unencrypted, so incognito chats can't use
-              them
+              Attachments are stored unencrypted, so locked chats can't use them
             </span>
           </TooltipContent>
         </Tooltip>
@@ -603,7 +602,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               variant="ghost"
               size="sm"
               aria-pressed={incognito}
-              aria-label="Incognito chat"
+              aria-label="Locked chat"
               className={cn(
                 "h-8 px-2",
                 incognito &&
@@ -616,7 +615,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4}>
             <span className="flex items-center gap-1.5">
-              Incognito chat <Kbd>{altKey}</Kbd>
+              Locked chat <Kbd>{altKey}</Kbd>
               <Kbd>{SHORTCUT_NEW_INCOGNITO_CHAT.label}</Kbd>
             </span>
           </TooltipContent>

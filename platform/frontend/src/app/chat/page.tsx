@@ -3001,7 +3001,7 @@ export function ChatPageContent({
               This chat can&apos;t be unlocked
             </CardTitle>
             <CardDescription className="max-w-md text-sm leading-relaxed">
-              This is an incognito chat. Its encryption key existed only in the
+              This is a locked chat. Its encryption key existed only in the
               browser that created it and wasn&apos;t found here — clearing
               browser data or switching browsers removes the key. {appName}{" "}
               cannot decrypt the messages.

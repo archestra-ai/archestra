@@ -65,6 +65,7 @@ import {
   McpServerCard,
 } from "./mcp-server-card";
 import { McpServerTable } from "./mcp-server-table";
+import { RegistryEmptyState } from "./registry-empty-state";
 import {
   emptyRegistryFilters,
   type FilterGroup,
@@ -1081,28 +1082,24 @@ export function InternalMCPCatalog({
             )}
           </div>
         ) : (
-          personalItems.length === 0 && (
+          personalItems.length === 0 &&
+          (hasActiveFilters ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              {hasActiveFilters ? (
-                <>
-                  <Search className="mb-4 h-10 w-10 text-muted-foreground" />
-                  <p className="text-muted-foreground">
-                    No MCP servers match your filters. Try adjusting your
-                    search.
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="mt-4"
-                    onClick={handleClearFilters}
-                  >
-                    Clear filters
-                  </Button>
-                </>
-              ) : (
-                <p className="text-muted-foreground">No MCP servers found.</p>
-              )}
+              <Search className="mb-4 h-10 w-10 text-muted-foreground" />
+              <p className="text-muted-foreground">
+                No MCP servers match your filters. Try adjusting your search.
+              </p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={handleClearFilters}
+              >
+                Clear filters
+              </Button>
             </div>
-          )
+          ) : (
+            <RegistryEmptyState />
+          ))
         )}
       </div>
 

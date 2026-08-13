@@ -23,8 +23,13 @@ The public architecture and operations guide is [M-Files Connector Engineering G
 
 ## Build
 
-A pre-built `archestra-m-files-vaf-add-on.mfappx` is attached to every
-platform release by `.github/workflows/build-m-files-vaf-add-on.yml`: a
+A pre-built `archestra-m-files-vaf-add-on.mfappx` is published as its own
+`m-files-vaf-add-on-v<version>` release by
+`.github/workflows/build-m-files-vaf-add-on.yml` whenever a change to this
+directory reaches `main` (platform releases are immutable once published, so
+the package cannot be attached to them; a source change therefore requires a
+`<Version>` bump in the `.csproj`, which the workflow's pull-request build
+enforces). The build is a
 plain `dotnet build -c Release` of this project on a Windows runner, using
 the official M-Files VAF project packaging (the MSBuild target below zips
 the build output into the `.mfappx`, exactly as the `MFiles.ProjectTemplates`

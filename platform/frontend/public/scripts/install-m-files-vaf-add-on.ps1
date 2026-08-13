@@ -6,11 +6,12 @@ Builds and installs the Archestra VAF Add On on this machine.
 Run this on the Windows machine that hosts M-Files Server (or Server Tools),
 as a user who is an M-Files system administrator. The script:
 
-  1. downloads the pre-built archestra-m-files-vaf-add-on.mfappx from
-     the latest Archestra release (override with -PackageUrl or a local file
-     via -PackagePath); with -BuildFromSource, or when the download is
-     unavailable, it instead fetches the add-on source and compiles the
-     package against the M-Files assemblies installed on this machine;
+  1. downloads the pre-built archestra-m-files-vaf-add-on.mfappx from the
+     URL the platform resolved (-PackageUrl, normally the newest add-on
+     release; or a local file via -PackagePath); with -BuildFromSource, with
+     no package source given, or when the download is unavailable, it
+     instead fetches the add-on source and compiles the package against the
+     M-Files assemblies installed on this machine;
   2. installs the package into the chosen vault over the M-Files COM API and
      restarts the vault. The logged-on Windows user is the only credential
      the script needs.
@@ -30,8 +31,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install-m-files-vaf-add-on
 param(
     # Pre-built add-on package to install; skips download and build entirely.
     [string]$PackagePath,
-    # Where the pre-built package is downloaded from.
-    [string]$PackageUrl = "https://github.com/archestra-ai/archestra/releases/latest/download/archestra-m-files-vaf-add-on.mfappx",
+    # Where the pre-built package is downloaded from. The platform's install
+    # bootstrap passes the URL it verified; there is no default because no
+    # fixed URL is guaranteed to exist (releases/latest is the platform
+    # release, which does not carry the add-on package).
+    [string]$PackageUrl,
     # Compile on this machine against the installed M-Files assemblies
     # instead of using the pre-built package (also the automatic fallback
     # when the download is unavailable).
@@ -120,7 +124,8 @@ $resolvedPackagePath = $null
 if (-not [string]::IsNullOrWhiteSpace($PackagePath)) {
     if (-not (Test-Path $PackagePath)) { throw "Package not found: $PackagePath" }
     $resolvedPackagePath = (Resolve-Path $PackagePath).Path
-} elseif (-not $BuildFromSource -and [string]::IsNullOrWhiteSpace($SourceDirectory)) {
+} elseif (-not $BuildFromSource -and [string]::IsNullOrWhiteSpace($SourceDirectory) -and
+    -not [string]::IsNullOrWhiteSpace($PackageUrl)) {
     $downloadTarget = Join-Path $env:TEMP "archestra-m-files-vaf-add-on.mfappx"
     try {
         Write-Step "Downloading pre-built add-on package from $PackageUrl"

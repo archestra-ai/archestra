@@ -472,7 +472,7 @@ jobs:
       # ephemeral Linux runners need a restored cache.
       - name: Cache cargo registry and target
         if: runner.os == 'Linux'
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: platform/archestra-rs
 
@@ -497,7 +497,7 @@ jobs:
       # download against its pinned manifest and picks the right platform
       # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
+        uses: taiki-e/install-action@91ddec75689c4c78665b598d188dc821c5a43e5c # v2.85.9
         with:
           tool: cargo-deny@0.20.2
 
@@ -530,7 +530,7 @@ jobs:
       # See the cache note in platform-rust-checks.
       - name: Cache cargo registry and target
         if: runner.os == 'Linux'
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: ai-labs
 
@@ -599,7 +599,7 @@ jobs:
       # restore the entry maintained by the warm-backend-build-cache job on
       # main pushes (Actions caches only flow down from the default branch).
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests

@@ -1,11 +1,29 @@
-import { ApiClient, ProjectsApi, StoriesApi, TasksApi, UsersApi } from "asana";
+import {
+  ApiClient,
+  MembershipsApi,
+  ProjectsApi,
+  StoriesApi,
+  TasksApi,
+  TeamMembershipsApi,
+  TeamsApi,
+  UsersApi,
+  WorkspaceMembershipsApi,
+  WorkspacesApi,
+} from "asana";
 import * as cheerio from "cheerio";
+import * as metrics from "@/observability/metrics";
 import type {
   AsanaCheckpoint,
   AsanaConfig,
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
+  DocumentPermissions,
+  GroupMembershipYield,
+  GroupMemberYield,
+  PermissionSnapshotYield,
+  PermissionSyncParams,
+  ResolveMappedEmail,
 } from "@/types";
 import { AsanaConfigSchema } from "@/types";
 import {
@@ -47,8 +65,38 @@ const TASK_OPT_FIELDS = [
 const PROJECT_OPT_FIELDS_WITH_WORKSPACE = "gid,name,workspace.gid";
 const STORY_OPT_FIELDS = "gid,type,text,html_text,created_by.name,created_at";
 
+// ----- Permission-sync opt_fields (ids and flags only, never content) -----
+const PERMISSION_TASK_OPT_FIELDS = "gid,projects.gid,followers.gid";
+const PERMISSION_PROJECT_OPT_FIELDS =
+  "gid,name,privacy_setting,team.gid,workspace.gid";
+const WORKSPACE_USER_OPT_FIELDS = "email,name";
+const WORKSPACE_MEMBERSHIP_OPT_FIELDS = "user.gid,user.name,is_guest,is_active";
+const TEAM_MEMBERSHIP_OPT_FIELDS = "user.gid,user.name,is_limited_access";
+/**
+ * Synthetic roster-only group for users directly added to a synced project —
+ * most importantly workspace GUESTS, who are excluded from the
+ * workspace-members audience and often belong to no team, yet hold real
+ * grants. Rostering them makes them visible in the Users tab and manually
+ * assignable (OneDrive precedent). The id is never emitted into a container
+ * or document ACL, so the constant cannot collide across connectors.
+ */
+const DIRECT_GRANTS_GROUP_ID = "direct-grants";
+
 export class AsanaConnector extends BaseConnector {
   type = "asana" as const;
+  supportsPermissionSync = true;
+
+  // ----- Per-pass permission-sync state (armed by initPermissionPass) -----
+  /** Project gid → resolved audience (null = lookup failed, fail-closed). */
+  private permAudienceByProjectGid = new Map<
+    string,
+    AsanaProjectAudience | null
+  >();
+  /** Workspace user gid → email/name, one walk per pass. */
+  private permWorkspaceUsers: Map<string, AsanaWorkspaceUserInfo> | null = null;
+  private permWorkspaceUsersFailed = false;
+  private permDroppedPrincipals = 0;
+  private permResolveMappedEmail: ResolveMappedEmail | null = null;
 
   async validateConfig(
     config: Record<string, unknown>,
@@ -155,6 +203,228 @@ export class AsanaConnector extends BaseConnector {
         seenTaskGids,
         isLastProject,
       });
+    }
+  }
+
+  // ===== Permission sync =====
+  //
+  // Projection of Asana's sharing model onto the container-ACL system:
+  //
+  // - CONTAINER = an Asana project (`project:<gid>`), the audience-sharing
+  //   unit. `public_to_workspace` projects grant the synthetic
+  //   workspace-members group; every project additionally grants its explicit
+  //   memberships — users by email, teams as `team:<gid>` groups. All Asana
+  //   access levels (admin/editor/commenter/viewer) can read, so there is no
+  //   level filtering. The deprecated `private_to_team` privacy value still
+  //   grants the project's own team.
+  // - MULTI-HOMED tasks (several home projects) are readable by anyone who
+  //   can see ANY home project. They are assigned once, under their
+  //   lowest-keyed scoped project, to a nested union container
+  //   `project:<gid>/multi:<others>` whose audience unions every home
+  //   project's audience (out-of-scope home projects contribute audience but
+  //   never become top-level containers).
+  // - Task COLLABORATORS (followers) can read a task regardless of project
+  //   membership → per-document `exceptionUsers`.
+  // - Asana gids are globally unique, so `team:<gid>` and
+  //   `workspace-members:<workspaceGid>` ids cannot collide across two Asana
+  //   connectors of different workspaces (group tokens are namespaced by
+  //   connector TYPE only).
+  // - Tasks the walk no longer sees (deleted, or removed from every synced
+  //   project and therefore private to collaborators) are fail-closed by the
+  //   pass's sweeps.
+  // - No change probe: every pass is a full reconcile (GitHub precedent). The
+  //   walk re-enumerates task ids/flags per project, never task content.
+
+  /**
+   * Snapshot generator (see the model comment above). Ordering contract:
+   * top-level container keys ascend in plain string order, a container yield
+   * precedes its documents, and `cursor` is always the current top-level key.
+   */
+  async *syncPermissionSnapshot(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<PermissionSnapshotYield> {
+    const config = parseAsanaConfig(params.config);
+    if (!config) {
+      throw new Error("Invalid Asana configuration for permission sync");
+    }
+    this.initPermissionPass(params);
+    const apis = createPermissionApis(params.credentials);
+
+    const projects = await this.getPermissionProjects(apis, config);
+    const scope = params.scope ? new Set(params.scope.containerKeys) : null;
+    // Multi-homed dedup across the whole pass: each task is assigned exactly
+    // once, under its lowest-keyed scoped project — the same walk order and
+    // dedup rule as the content sync.
+    const seenTaskGids = new Set<string>();
+
+    for (const project of projects) {
+      const containerKey = projectContainerKey(project.gid);
+      if (scope && !scope.has(containerKey)) continue;
+      if (params.cursor && containerKey < params.cursor) continue;
+      yield* this.syncProjectPermissionSnapshot({
+        apis,
+        config,
+        project,
+        seenTaskGids,
+      });
+    }
+    this.reportDroppedPermissionPrincipals();
+  }
+
+  /**
+   * Group rosters: the synthetic workspace-members group (audience of
+   * `public_to_workspace` projects — guests and deactivated users excluded,
+   * view-only members included) and every team visible to the credential.
+   * Limited-access team members are excluded: Asana grants them only the
+   * projects they are explicitly added to, which the project-membership path
+   * already covers. Organization guests who are real team members remain
+   * included. A team attached to a project but invisible to the credential is
+   * never yielded, so its grant stays fail-closed.
+   *
+   * Failure semantics: a failed roster walk THROWS — the pass isolates the
+   * group phase and the previous membership snapshot stays in force (a
+   * truncated roster would silently revoke its tail; a null-email roster
+   * would overwrite resolved emails fail-closed). Only a 403/404 on a single
+   * team's roster yields that team as an observed fail-closed empty group.
+   */
+  async *syncGroups(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<GroupMembershipYield> {
+    const config = parseAsanaConfig(params.config);
+    if (!config) {
+      throw new Error("Invalid Asana configuration for group sync");
+    }
+    this.initPermissionPass(params);
+    const apis = createPermissionApis(params.credentials);
+
+    const users = await this.getWorkspaceUsers(apis, config, {
+      required: true,
+    });
+
+    const workspaceName = await this.fetchWorkspaceName(apis, config);
+    const memberships = await this.paginateAll<AsanaWorkspaceMembershipRecord>(
+      (opts) =>
+        apis.workspaceMemberships.getWorkspaceMembershipsForWorkspace(
+          config.workspaceGid,
+          { ...opts, opt_fields: WORKSPACE_MEMBERSHIP_OPT_FIELDS },
+        ),
+    );
+    const workspaceMembers: GroupMemberYield[] = [];
+    for (const membership of memberships) {
+      const userGid = membership.user?.gid ? String(membership.user.gid) : null;
+      if (!userGid) continue;
+      // Guests only ever see what they are explicitly added to — they are
+      // granted through project memberships, never the workspace audience.
+      if (membership.is_guest === true) continue;
+      if (membership.is_active === false) continue;
+      workspaceMembers.push({
+        accountId: userGid,
+        displayName: membership.user?.name ?? users.get(userGid)?.name ?? null,
+        email: users.get(userGid)?.email ?? null,
+        accountType: "user",
+      });
+    }
+    yield {
+      groupId: workspaceMembersGroupId(config.workspaceGid),
+      name: `${workspaceName} workspace members`,
+      members: workspaceMembers,
+    };
+
+    const teams = await this.paginateAll<AsanaTeamRecord>((opts) =>
+      apis.teams.getTeamsForWorkspace(config.workspaceGid, {
+        ...opts,
+        opt_fields: "name",
+      }),
+    );
+    for (const team of [...teams].sort((a, b) =>
+      compareStrings(a.gid, b.gid),
+    )) {
+      let roster: AsanaTeamMembershipRecord[];
+      try {
+        roster = await this.paginateAll<AsanaTeamMembershipRecord>((opts) =>
+          apis.teamMemberships.getTeamMembershipsForTeam(team.gid, {
+            ...opts,
+            opt_fields: TEAM_MEMBERSHIP_OPT_FIELDS,
+          }),
+        );
+      } catch (error) {
+        if (isPermissionDeniedError(error)) {
+          this.log.warn(
+            { teamGid: team.gid, error: extractErrorMessage(error) },
+            "Asana team roster unreadable; recording an observed fail-closed empty roster",
+          );
+          yield {
+            groupId: teamGroupId(team.gid),
+            name: team.name ?? null,
+            members: [],
+            membershipResolutionFailed: true,
+          };
+          continue;
+        }
+        throw error;
+      }
+      const members: GroupMemberYield[] = [];
+      for (const membership of roster) {
+        const userGid = membership.user?.gid
+          ? String(membership.user.gid)
+          : null;
+        if (!userGid) continue;
+        if (membership.is_limited_access === true) continue;
+        members.push({
+          accountId: userGid,
+          displayName:
+            membership.user?.name ?? users.get(userGid)?.name ?? null,
+          email: users.get(userGid)?.email ?? null,
+          accountType: "user",
+        });
+      }
+      yield {
+        groupId: teamGroupId(team.gid),
+        name: team.name ?? null,
+        members,
+      };
+    }
+
+    // Direct project members (see DIRECT_GRANTS_GROUP_ID). A failed project
+    // enumeration throws — the pass keeps the previous group snapshot — while
+    // a single unreadable project is skipped: the audience phase owns
+    // fail-closing its containers.
+    const directMembers = new Map<string, GroupMemberYield>();
+    for (const project of await this.getPermissionProjects(apis, config)) {
+      let memberships: AsanaProjectMembershipRecord[];
+      try {
+        memberships = await this.paginateAll<AsanaProjectMembershipRecord>(
+          (opts) =>
+            apis.memberships.getMemberships({ ...opts, parent: project.gid }),
+        );
+      } catch (error) {
+        this.log.warn(
+          { projectGid: project.gid, error: extractErrorMessage(error) },
+          "Could not read a project's memberships for the direct-grants roster; skipping it this pass",
+        );
+        continue;
+      }
+      for (const membership of memberships) {
+        const member = membership.member;
+        if (!member?.gid || member.resource_type === "team") continue;
+        const gid = String(member.gid);
+        if (directMembers.has(gid)) continue;
+        directMembers.set(gid, {
+          accountId: gid,
+          displayName: member.name ?? users.get(gid)?.name ?? null,
+          email: users.get(gid)?.email ?? null,
+          accountType: "user",
+        });
+      }
+    }
+    if (directMembers.size > 0) {
+      yield {
+        groupId: DIRECT_GRANTS_GROUP_ID,
+        name: "Direct project members",
+        members: [...directMembers.values()].sort((a, b) =>
+          compareStrings(a.accountId, b.accountId),
+        ),
+      };
     }
   }
 
@@ -469,6 +739,441 @@ export class AsanaConnector extends BaseConnector {
       }
     }
   }
+
+  // ----- Permission-sync helpers -----
+
+  private initPermissionPass(params: PermissionSyncParams): void {
+    this.permAudienceByProjectGid = new Map();
+    this.permWorkspaceUsers = null;
+    this.permWorkspaceUsersFailed = false;
+    this.permDroppedPrincipals = 0;
+    this.permResolveMappedEmail = params.resolveMappedEmail ?? null;
+  }
+
+  /**
+   * Projects whose tasks the content sync ingests, with permission fields,
+   * sorted by container key so the resume cursor is monotonic. Mirrors
+   * `getProjects`: configured gids are validated against the workspace, else
+   * every project the credential can see in the workspace.
+   */
+  private async getPermissionProjects(
+    apis: AsanaPermissionApis,
+    config: AsanaConfig,
+  ): Promise<AsanaPermissionProject[]> {
+    const projects: AsanaPermissionProject[] = [];
+    if (config.projectGids && config.projectGids.length > 0) {
+      for (const gid of config.projectGids) {
+        const project = await this.fetchPermissionProject(apis, gid);
+        const projectWorkspaceGid = project.workspace?.gid
+          ? String(project.workspace.gid)
+          : undefined;
+        if (
+          projectWorkspaceGid &&
+          projectWorkspaceGid !== config.workspaceGid
+        ) {
+          throw new Error(
+            `Asana project ${gid} belongs to workspace ${projectWorkspaceGid}, ` +
+              `which does not match the configured workspace ${config.workspaceGid}. ` +
+              `Either remove the project from projectGids or change workspaceGid.`,
+          );
+        }
+        projects.push(project);
+      }
+    } else {
+      const listed = await this.paginateAll<AsanaPermissionProject>((opts) =>
+        apis.projects.getProjectsForWorkspace(config.workspaceGid, {
+          ...opts,
+          opt_fields: PERMISSION_PROJECT_OPT_FIELDS,
+        }),
+      );
+      projects.push(...listed);
+    }
+    return projects.sort((a, b) =>
+      compareStrings(projectContainerKey(a.gid), projectContainerKey(b.gid)),
+    );
+  }
+
+  private async fetchPermissionProject(
+    apis: AsanaPermissionApis,
+    projectGid: string,
+  ): Promise<AsanaPermissionProject> {
+    await this.rateLimit();
+    const result = await this.callWithRetry(() =>
+      apis.projects.getProject(projectGid, {
+        opt_fields: PERMISSION_PROJECT_OPT_FIELDS,
+      }),
+    );
+    const data = unwrapSingle<AsanaPermissionProject>(result);
+    if (!data?.gid) {
+      throw new Error(
+        `Asana getProject(${projectGid}) returned no usable data`,
+      );
+    }
+    return data;
+  }
+
+  private async *syncProjectPermissionSnapshot(params: {
+    apis: AsanaPermissionApis;
+    config: AsanaConfig;
+    project: AsanaPermissionProject;
+    seenTaskGids: Set<string>;
+  }): AsyncGenerator<PermissionSnapshotYield> {
+    const { apis, config, project, seenTaskGids } = params;
+    const containerKey = projectContainerKey(project.gid);
+
+    // Buffer this project's NEW task rows first: the container yield must
+    // carry the audience and precede its documents, and a project whose tasks
+    // were all claimed by earlier projects still needs its boundary container
+    // for the pass's fail-close set-diff. Ids and flags only, never content.
+    const tasks: AsanaPermissionTaskRecord[] = [];
+    let offset: string | undefined;
+    let hasMore = true;
+    while (hasMore) {
+      await this.rateLimit();
+      const result = await this.callWithRetry(() =>
+        apis.tasks.getTasksForProject(project.gid, {
+          limit: BATCH_SIZE,
+          ...(offset ? { offset } : {}),
+          opt_fields: PERMISSION_TASK_OPT_FIELDS,
+        }),
+      );
+      for (const task of extractCollectionData<AsanaPermissionTask>(result)) {
+        if (!task.gid || seenTaskGids.has(task.gid)) continue;
+        seenTaskGids.add(task.gid);
+        tasks.push({
+          gid: task.gid,
+          projectGids: (task.projects ?? [])
+            .map((p) => (p?.gid ? String(p.gid) : null))
+            .filter((gid): gid is string => gid !== null),
+          followerGids: (task.followers ?? [])
+            .map((f) => (f?.gid ? String(f.gid) : null))
+            .filter((gid): gid is string => gid !== null),
+        });
+      }
+      const nextOffset = extractNextOffset(result);
+      hasMore = nextOffset !== null;
+      offset = nextOffset ?? undefined;
+    }
+
+    if (tasks.length === 0) {
+      // An empty-corpus project emits a fail-closed boundary container
+      // WITHOUT resolving its audience — nothing references it, the pass only
+      // needs the enumeration boundary to fail-close leftover documents.
+      yield {
+        kind: "container",
+        containerKey,
+        permissions: emptyPermissions(),
+        audienceResolutionFailed: false,
+        cursor: containerKey,
+      };
+      return;
+    }
+
+    const audience = await this.resolveProjectAudience(
+      apis,
+      config,
+      project.gid,
+      project,
+    );
+    yield {
+      kind: "container",
+      containerKey,
+      permissions: audience
+        ? audienceToPermissions(audience)
+        : emptyPermissions(),
+      audienceResolutionFailed: audience === null,
+      cursor: containerKey,
+    };
+
+    const emittedUnionKeys = new Set<string>();
+    for (const task of tasks) {
+      const exceptionUsers = await this.resolveExceptionEmails(
+        apis,
+        config,
+        task.followerGids,
+      );
+      const otherProjectGids = [...new Set(task.projectGids)]
+        .filter((gid) => gid !== project.gid)
+        .sort(compareStrings);
+      let taskContainerKey = containerKey;
+      if (otherProjectGids.length > 0) {
+        // Multi-homed: readable through ANY home project, so the task's
+        // container is the union of every home project's audience.
+        taskContainerKey = `${containerKey}/multi:${otherProjectGids.join("+")}`;
+        if (!emittedUnionKeys.has(taskContainerKey)) {
+          emittedUnionKeys.add(taskContainerKey);
+          const union = await this.resolveUnionAudience(apis, config, [
+            project.gid,
+            ...otherProjectGids,
+          ]);
+          yield {
+            kind: "container",
+            containerKey: taskContainerKey,
+            permissions: union.permissions,
+            audienceResolutionFailed: union.resolutionFailed,
+            cursor: containerKey,
+          };
+        }
+      }
+      yield {
+        kind: "document",
+        sourceId: `task-${task.gid}`,
+        containerKey: taskContainerKey,
+        ...(exceptionUsers.length > 0 ? { exceptionUsers } : {}),
+        cursor: containerKey,
+      };
+    }
+  }
+
+  /**
+   * A project's read audience — every Asana access level can read, so no
+   * level filtering. Cached per pass; null = the lookup failed and the
+   * caller fail-closes. Membership enumeration runs for public projects too:
+   * guests are granted only through explicit memberships, never the
+   * workspace audience.
+   */
+  private async resolveProjectAudience(
+    apis: AsanaPermissionApis,
+    config: AsanaConfig,
+    projectGid: string,
+    known?: AsanaPermissionProject,
+  ): Promise<AsanaProjectAudience | null> {
+    const cached = this.permAudienceByProjectGid.get(projectGid);
+    if (cached !== undefined) return cached;
+
+    let audience: AsanaProjectAudience | null = null;
+    try {
+      const project =
+        known ?? (await this.fetchPermissionProject(apis, projectGid));
+      const users = new Set<string>();
+      const groups = new Set<string>();
+      if (project.privacy_setting === "public_to_workspace") {
+        groups.add(workspaceMembersGroupId(config.workspaceGid));
+      }
+      // Deprecated privacy value predating team project-memberships: the
+      // project is shared with its own team without a membership row.
+      if (project.privacy_setting === "private_to_team" && project.team?.gid) {
+        groups.add(teamGroupId(String(project.team.gid)));
+      }
+      // The generic memberships API, NOT the legacy project_memberships
+      // endpoint: only this one returns TEAM members alongside users, and its
+      // default compact payload carries `member` — the legacy endpoint's
+      // opt_fields grammar silently ignores `member.gid`/`member.resource_type`
+      // and serves rows without a member object (proven against real Asana).
+      const memberships = await this.paginateAll<AsanaProjectMembershipRecord>(
+        (opts) =>
+          apis.memberships.getMemberships({
+            ...opts,
+            parent: projectGid,
+          }),
+      );
+      let skippedRows = 0;
+      for (const membership of memberships) {
+        const member = membership.member;
+        if (!member?.gid) {
+          skippedRows += 1;
+          continue;
+        }
+        if (member.resource_type === "team") {
+          groups.add(teamGroupId(String(member.gid)));
+          continue;
+        }
+        const email = await this.resolvePrincipalEmail(
+          apis,
+          config,
+          String(member.gid),
+        );
+        if (email) {
+          users.add(email);
+        } else {
+          this.permDroppedPrincipals += 1;
+        }
+      }
+      if (skippedRows > 0) {
+        this.log.warn(
+          { projectGid, skippedRows },
+          "Asana membership rows without a member object were skipped",
+        );
+      }
+      // Membership rows existed but none were readable → an observed lookup
+      // failure, not an upstream "nobody has access": fail-close WITH the
+      // flag so admins can tell the two apart (this exact shape drift is how
+      // the legacy endpoint failed silently).
+      audience =
+        skippedRows > 0 && users.size === 0 && groups.size === 0
+          ? null
+          : { users, groups };
+    } catch (error) {
+      this.log.warn(
+        { projectGid, error: extractErrorMessage(error) },
+        "Could not resolve an Asana project audience; its documents fail-close this pass",
+      );
+      audience = null;
+    }
+    this.permAudienceByProjectGid.set(projectGid, audience);
+    return audience;
+  }
+
+  /**
+   * Union audience of a multi-homed task's home projects.
+   * `resolutionFailed` only when EVERY lookup failed (the audience is empty
+   * because of failures); a partial failure under-grants — the fail-closed
+   * direction — and each failed project is logged by
+   * `resolveProjectAudience`.
+   */
+  private async resolveUnionAudience(
+    apis: AsanaPermissionApis,
+    config: AsanaConfig,
+    projectGids: string[],
+  ): Promise<{ permissions: DocumentPermissions; resolutionFailed: boolean }> {
+    const users = new Set<string>();
+    const groups = new Set<string>();
+    let anyResolved = false;
+    let anyFailed = false;
+    for (const gid of projectGids) {
+      const audience = await this.resolveProjectAudience(apis, config, gid);
+      if (!audience) {
+        anyFailed = true;
+        continue;
+      }
+      anyResolved = true;
+      for (const user of audience.users) users.add(user);
+      for (const group of audience.groups) groups.add(group);
+    }
+    return {
+      permissions: {
+        isPublic: false,
+        users: [...users].sort(),
+        groups: [...groups].sort(),
+      },
+      resolutionFailed: anyFailed && !anyResolved,
+    };
+  }
+
+  /** Follower emails for per-document exception grants (sorted, deduped). */
+  private async resolveExceptionEmails(
+    apis: AsanaPermissionApis,
+    config: AsanaConfig,
+    userGids: string[],
+  ): Promise<string[]> {
+    const emails = new Set<string>();
+    for (const gid of new Set(userGids)) {
+      const email = await this.resolvePrincipalEmail(apis, config, gid);
+      if (email) {
+        emails.add(email);
+      } else {
+        this.permDroppedPrincipals += 1;
+      }
+    }
+    return [...emails].sort();
+  }
+
+  /**
+   * Upstream email first (the workspace user walk exposes emails to any
+   * workspace member), the admin's manual member mapping as fallback —
+   * matches the Jira/OneDrive exception-grant precedence.
+   */
+  private async resolvePrincipalEmail(
+    apis: AsanaPermissionApis,
+    config: AsanaConfig,
+    userGid: string,
+  ): Promise<string | null> {
+    const users = await this.getWorkspaceUsers(apis, config, {
+      required: false,
+    });
+    const upstream = users.get(userGid)?.email ?? null;
+    return upstream ?? this.permResolveMappedEmail?.(userGid) ?? null;
+  }
+
+  /**
+   * One workspace user walk per pass resolves every member/follower email
+   * (guests included — they matter for team rosters and direct grants). When
+   * `required`, a failed walk throws (group rosters must never replace
+   * resolved emails with nulls); otherwise the failure is remembered and
+   * direct grants fall back to the admin mapping or fail-closed while
+   * group-based audiences stay usable.
+   */
+  private async getWorkspaceUsers(
+    apis: AsanaPermissionApis,
+    config: AsanaConfig,
+    { required }: { required: boolean },
+  ): Promise<Map<string, AsanaWorkspaceUserInfo>> {
+    if (this.permWorkspaceUsers) return this.permWorkspaceUsers;
+    if (this.permWorkspaceUsersFailed && !required) {
+      return new Map();
+    }
+    try {
+      const users = await this.paginateAll<AsanaWorkspaceUser>((opts) =>
+        apis.users.getUsers({
+          ...opts,
+          workspace: config.workspaceGid,
+          opt_fields: WORKSPACE_USER_OPT_FIELDS,
+        }),
+      );
+      const map = new Map<string, AsanaWorkspaceUserInfo>();
+      for (const user of users) {
+        if (!user.gid) continue;
+        map.set(String(user.gid), {
+          email: user.email ?? null,
+          name: user.name ?? null,
+        });
+      }
+      this.permWorkspaceUsers = map;
+      return map;
+    } catch (error) {
+      this.permWorkspaceUsersFailed = true;
+      this.log.warn(
+        {
+          workspaceGid: config.workspaceGid,
+          error: extractErrorMessage(error),
+        },
+        "Could not enumerate Asana workspace users; direct grants resolve via the admin mapping only this pass",
+      );
+      if (required) throw error;
+      return new Map();
+    }
+  }
+
+  private async fetchWorkspaceName(
+    apis: AsanaPermissionApis,
+    config: AsanaConfig,
+  ): Promise<string> {
+    try {
+      await this.rateLimit();
+      const result = await this.callWithRetry(() =>
+        apis.workspaces.getWorkspace(config.workspaceGid, {
+          opt_fields: "name",
+        }),
+      );
+      const data = unwrapSingle<{ name?: string | null }>(result);
+      if (data?.name) return String(data.name);
+    } catch (error) {
+      this.log.warn(
+        {
+          workspaceGid: config.workspaceGid,
+          error: extractErrorMessage(error),
+        },
+        "Could not read the Asana workspace name; using the gid",
+      );
+    }
+    return `Workspace ${config.workspaceGid}`;
+  }
+
+  /** Surface principals dropped this pass (fail-closed under-grant). */
+  private reportDroppedPermissionPrincipals(): void {
+    if (this.permDroppedPrincipals <= 0) return;
+    const count = this.permDroppedPrincipals;
+    this.permDroppedPrincipals = 0;
+    this.log.debug(
+      { count, connectorType: this.type },
+      "Dropped Asana principals that could not be resolved (fail-closed)",
+    );
+    metrics.rag.reportPermissionSyncDroppedPrincipals({
+      connectorType: this.type,
+      reason: "no_email",
+      count,
+    });
+  }
 }
 
 // ===== Module-level helpers =====
@@ -734,4 +1439,138 @@ function taskToDocument(
     },
     updatedAt: task.modified_at ? new Date(task.modified_at) : undefined,
   };
+}
+
+// ===== Permission-sync module helpers =====
+
+interface AsanaPermissionApis {
+  projects: ProjectsApi;
+  memberships: MembershipsApi;
+  tasks: TasksApi;
+  teams: TeamsApi;
+  teamMemberships: TeamMembershipsApi;
+  workspaceMemberships: WorkspaceMembershipsApi;
+  workspaces: WorkspacesApi;
+  users: UsersApi;
+}
+
+function createPermissionApis(
+  credentials: ConnectorCredentials,
+): AsanaPermissionApis {
+  const client = createAsanaClient(credentials);
+  return {
+    projects: new ProjectsApi(client),
+    memberships: new MembershipsApi(client),
+    tasks: new TasksApi(client),
+    teams: new TeamsApi(client),
+    teamMemberships: new TeamMembershipsApi(client),
+    workspaceMemberships: new WorkspaceMembershipsApi(client),
+    workspaces: new WorkspacesApi(client),
+    users: new UsersApi(client),
+  };
+}
+
+interface AsanaProjectAudience {
+  users: Set<string>;
+  groups: Set<string>;
+}
+
+interface AsanaWorkspaceUserInfo {
+  email: string | null;
+  name: string | null;
+}
+
+// Partial Asana API response shapes for the permission pass (same convention
+// as the content-sync shapes above: only fields we actually read).
+
+interface AsanaPermissionProject {
+  gid: string;
+  name?: string | null;
+  privacy_setting?: string | null;
+  team?: { gid?: string | null } | null;
+  workspace?: { gid?: string | null } | null;
+}
+
+interface AsanaPermissionTask {
+  gid?: string;
+  projects?: Array<{ gid?: string | null } | null> | null;
+  followers?: Array<{ gid?: string | null } | null> | null;
+}
+
+interface AsanaPermissionTaskRecord {
+  gid: string;
+  projectGids: string[];
+  followerGids: string[];
+}
+
+interface AsanaProjectMembershipRecord {
+  member?: {
+    gid?: string | null;
+    resource_type?: string | null;
+    name?: string | null;
+  } | null;
+}
+
+interface AsanaWorkspaceMembershipRecord {
+  user?: { gid?: string | null; name?: string | null } | null;
+  is_guest?: boolean;
+  is_active?: boolean;
+}
+
+interface AsanaTeamRecord {
+  gid: string;
+  name?: string | null;
+}
+
+interface AsanaTeamMembershipRecord {
+  user?: { gid?: string | null; name?: string | null } | null;
+  is_limited_access?: boolean;
+}
+
+interface AsanaWorkspaceUser {
+  gid?: string;
+  email?: string | null;
+  name?: string | null;
+}
+
+function projectContainerKey(projectGid: string): string {
+  return `project:${projectGid}`;
+}
+
+/** Asana gids are globally unique → distinct across connectors of one type. */
+function teamGroupId(teamGid: string): string {
+  return `team:${teamGid}`;
+}
+
+function workspaceMembersGroupId(workspaceGid: string): string {
+  return `workspace-members:${workspaceGid}`;
+}
+
+function emptyPermissions(): DocumentPermissions {
+  return { isPublic: false, users: [], groups: [] };
+}
+
+function audienceToPermissions(
+  audience: AsanaProjectAudience,
+): DocumentPermissions {
+  return {
+    isPublic: false,
+    users: [...audience.users].sort(),
+    groups: [...audience.groups].sort(),
+  };
+}
+
+/** Byte-order comparator matching the pass's plain `<` cursor comparisons. */
+function compareStrings(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+/** 403/404 from Asana: the credential cannot read the resource. */
+function isPermissionDeniedError(err: unknown): boolean {
+  if (!isRecord(err)) return false;
+  const e = err as SuperagentErrorLike;
+  const status = e.status ?? e.response?.status;
+  return status === 403 || status === 404;
 }

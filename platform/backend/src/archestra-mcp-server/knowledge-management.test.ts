@@ -883,10 +883,11 @@ describe("knowledge-management tool execution", () => {
     }) => {
       config.kb.mfilesConnectorEnabled = true;
       config.kb.mfilesOauthEnabled = false;
-      const kb = await makeKnowledgeBase(mockContext.organizationId);
+      const organizationId = mockContext.organizationId!;
+      const kb = await makeKnowledgeBase(organizationId);
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
-        mockContext.organizationId,
+        organizationId,
         {
           connectorType: "mfiles",
           config: {

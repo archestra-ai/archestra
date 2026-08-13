@@ -14,8 +14,24 @@ name: Build M-Files VAF Add On
 # carry the raw file).
 # Re-labelling (remove + re-add) rebuilds after new commits; while the label
 # stays on, every push rebuilds.
+#
+# On main the build runs only when the add-on's own sources change, so the
+# expensive runner is not spent on unrelated commits. That keeps a successful
+# main run available for deployments that point
+# ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF at `main`: the backend
+# resolves the package from the newest successful run of THIS workflow on that
+# branch. Artifacts expire on the repository's retention schedule, so a long
+# stretch with no add-on change eventually leaves that override with nothing to
+# resolve — it then falls back to building from source, and `workflow_dispatch`
+# refreshes it. Released deployments do not depend on any of this: they take
+# the package from the release asset attached below.
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "integrations/m-files-vaf-add-on/**"
+      - ".github/workflows/build-m-files-vaf-add-on.yml"
   pull_request:
     types: [opened, synchronize, reopened, labeled]
   release:
@@ -36,12 +52,14 @@ concurrency:
 jobs:
   build-m-files-vaf-add-on:
     name: Build M-Files VAF Add On
-    # PRs build only when the opt-in label is present; workflow_dispatch always
+    # PRs build only when the opt-in label is present; pushes to main are
+    # already path-filtered to the add-on's sources; workflow_dispatch always
     # builds; release events fire for every release-please component, so the
     # add-on attaches to platform releases only.
     if: >-
       (github.event_name == 'pull_request' &&
         contains(github.event.pull_request.labels.*.name, 'build-m-files-vaf-add-on'))
+      || github.event_name == 'push'
       || github.event_name == 'workflow_dispatch'
       || (github.event_name == 'release' &&
         startsWith(github.event.release.tag_name, 'platform-v'))

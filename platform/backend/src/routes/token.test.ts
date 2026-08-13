@@ -7,7 +7,9 @@ import {
   TeamModel,
   TeamTokenModel,
 } from "@/models";
+import tokenRoutes from "@/routes/token";
 import { beforeEach, describe, expect, test } from "@/test";
+import { useRouteTestApp } from "@/test/route-test-app";
 
 // Mock the hasPermission function
 vi.mock("@/auth");
@@ -513,5 +515,53 @@ describe("Token Route Authorization", () => {
           .length,
       ).toBe(0);
     });
+  });
+});
+
+describe("POST /api/tokens/:tokenId/rotate — HTTP layer", () => {
+  const ctx = useRouteTestApp(tokenRoutes);
+
+  test("rotates when the client sends Content-Type: application/json with a truly empty body", async () => {
+    setupPermissions({ ac: ["update"] });
+    const { token } = await TeamTokenModel.createOrganizationToken();
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/tokens/${token.id}/rotate`,
+      headers: { "content-type": "application/json" },
+      payload: "",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toHaveProperty("value");
+    expect(body.value).not.toBe(token.tokenStart);
+  });
+
+  test("rotates when the client sends no body at all", async () => {
+    setupPermissions({ ac: ["update"] });
+    const { token } = await TeamTokenModel.createOrganizationToken();
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/tokens/${token.id}/rotate`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toHaveProperty("value");
+  });
+
+  test("still rejects a malformed JSON body", async () => {
+    setupPermissions({ ac: ["update"] });
+    const { token } = await TeamTokenModel.createOrganizationToken();
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: `/api/tokens/${token.id}/rotate`,
+      headers: { "content-type": "application/json" },
+      payload: "{not valid json",
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 });

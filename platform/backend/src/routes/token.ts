@@ -53,6 +53,30 @@ async function checkTokenAccess(
 }
 
 const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  // The rotate route below takes no request body, but some HTTP clients
+  // (Postman, curl -H, some fetch wrappers) attach `Content-Type:
+  // application/json` to every POST regardless of payload. Fastify's default
+  // JSON parser 400s on an empty body under that content type
+  // (FST_ERR_CTP_EMPTY_JSON_BODY) before the route schema even runs, so
+  // those callers get rejected. Treat an empty body as `undefined` instead.
+  fastify.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (_request, body, done) => {
+      if (body === "") {
+        done(null, undefined);
+        return;
+      }
+      try {
+        done(null, JSON.parse(body as string));
+      } catch (error) {
+        const parseError = error as Error & { statusCode?: number };
+        parseError.statusCode = 400;
+        done(parseError, undefined);
+      }
+    },
+  );
+
   /**
    * Get tokens visible to the user based on their permissions:
    * - ac:update: can see org-wide token

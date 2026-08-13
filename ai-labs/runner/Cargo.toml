@@ -32,7 +32,7 @@ regex = "1"
 tokio-postgres = { version = "0.7", default-features = false, features = ["runtime"] }
 bytes = "1"
 base64 = "0.23"
-sha2 = "0.10"
+sha2 = "0.11"
 thiserror = "2"
 futures = "0.3"
 tokio-util = "0.7"

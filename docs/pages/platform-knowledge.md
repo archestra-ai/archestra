@@ -188,6 +188,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 | ------------ | ----------------------------------------------------------------------------------------------------------- |
 | Asana        | Supported                                                                                                 |
 | Confluence   | Supported                                                                                                 |
+| Dropbox      | Supported                                                                                                 |
 | GitHub       | Supported                                                                                                 |
 | GitLab       | Supported                                                                                                 |
 | Jira         | Supported                                                                                                 |
@@ -197,7 +198,6 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 | OneDrive     | Supported                                                                                                 |
 | Salesforce   | Supported                                                                                                 |
 | SharePoint   | Supported                                                                                                 |
-| Dropbox      | Not supported                                                                                             |
 | Linear       | Not supported                                                                                             |
 | Outline      | Not supported                                                                                             |
 | Perforce     | Not supported                                                                                             |
@@ -212,6 +212,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 - **SharePoint** returns SharePoint user logins directly. Expanding a Microsoft 365 group or a SharePoint site group to its members needs the extra app permissions listed under [SharePoint](#sharepoint).
 - **OneDrive** resolves user grants and drive owners to emails through the `User.Read.All` app permission. Without it, those accounts stay unresolvable. See [OneDrive](#onedrive).
 - **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
+- **Dropbox** returns member emails directly in shared-folder member lists. Group member rosters expand when the access token is a Business **team access token** (`groups.read` + `members.read` team scopes); with a member token, granted groups appear in the Groups tab with no members — assign them manually. See [Dropbox](#dropbox).
 - **Notion** returns member emails only when the integration has the **"read user information including email addresses"** capability. Guests are never listed.
 - **Asana** returns workspace members' emails through the same personal access token the connector already uses. No extra credential is needed, but the token's user must be able to see the synced projects and their members.
 
@@ -537,14 +538,20 @@ The connector sees only what someone has shared with the service account's email
 
 Sync text and source files from a Dropbox account or team folder.
 
-**Indexed:** text-based files from a Dropbox account or team folder. Supported extensions: `.md`, `.txt`, `.ts`, `.js`, `.py`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.csv`, `.xml`, `.sh`, `.toml`, `.ini`, `.conf`.
+**Indexed:** files from a Dropbox account or team folder — text and source files (`.md`, `.txt`, `.ts`, `.js`, `.py`, `.json`, `.yaml`, `.yml`, `.html`, `.css`, `.csv`, `.xml`, `.sh`, `.toml`, `.ini`, `.conf`), documents (`.pdf`, `.docx`, `.pptx`, `.xlsx` — every sheet of a workbook, not just the first), and images (`.png`, `.jpg`, `.gif`, `.webp`) when the configured embedding model accepts image input. Files the connector cannot extract are reported as skipped on the run.
 
-**Authentication:** a Dropbox access token. Generate one from the [Dropbox App Console](https://www.dropbox.com/developers/apps) by creating an app with the `files.content.read` permission.
+**Authentication:** a Dropbox access token. Generate one from the [Dropbox App Console](https://www.dropbox.com/developers/apps) by creating an app with the `files.content.read` permission. Auto-sync permissions also needs `sharing.read`. The token can be a member token or a Dropbox Business team token. With a team token, the connector acts as the admin who generated it. On a Business team with a team space, the connector syncs from the team root automatically — the team space and the member folder are both visible.
 
 | Field      | Description                                                                                              |
 | ---------- | -------------------------------------------------------------------------------------------------------- |
 | Root Path  | Folder path to scope the sync (e.g., `/team-docs`). Leave blank to sync the entire account.              |
 | File Types | Comma-separated file extensions to include (e.g., `.md, .txt`). Leave blank to sync all supported types. |
+
+**Auto-sync permissions.** Each shared folder is one permission scope — a file belongs to its nearest containing shared folder. Files outside every shared folder are visible only to the token's account. Shared-folder members resolve to their emails directly; pending invitees are excluded until they accept. A file shared with extra people directly carries those people as additional grants.
+
+Grants to Dropbox groups carry the group's identity. Reading a group's member roster is a Business team API. Dropbox serves it only to team access tokens — a member token cannot read it, whatever scopes the app holds. To expand groups, give the connector a team access token as its one Access Token. In the [App Console](https://www.dropbox.com/developers/apps), add the `groups.read` and `members.read` team scopes next to the app's files and sharing scopes. Then generate a new access token as a team admin — an app with team scopes issues team tokens. The connector detects the team token and syncs content as the admin who generated it. Granted groups — including the automatic "Everyone at ..." team group — then expand to their active members. With a member token, granted groups appear in the **Groups** tab with no members; assign their users manually from the **Users** tab. Direct grantees appear there too, under the synthetic `direct-grants` group.
+
+Shared links are not reflected. A file shared only by link stays visible to the audiences above, nobody more.
 
 ### Linear
 

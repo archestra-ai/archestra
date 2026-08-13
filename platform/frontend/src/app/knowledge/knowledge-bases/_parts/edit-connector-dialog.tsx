@@ -42,6 +42,7 @@ import {
   getConnectorDocsUrl,
   getConnectorTypeLabel,
   getConnectorUrlConfig,
+  getPermissionSyncCredentialNote,
   NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
@@ -167,6 +168,8 @@ export function EditConnectorDialog({
     authMethod,
     authMode,
   });
+  const permissionSyncCredentialNote =
+    getPermissionSyncCredentialNote(connectorType);
 
   const handleSubmit = async (values: EditConnectorFormValues) => {
     // Any single credential field can be updated alone — the backend merges
@@ -396,6 +399,12 @@ export function EditConnectorDialog({
                     Leave empty to keep existing credentials unchanged.
                   </FormDescription>
                   {apiTokenHelpText}
+                  {visibility === "auto-sync-permissions" &&
+                    permissionSyncCredentialNote && (
+                      <FormDescription>
+                        {permissionSyncCredentialNote}
+                      </FormDescription>
+                    )}
                   <FormMessage />
                 </FormItem>
               )}

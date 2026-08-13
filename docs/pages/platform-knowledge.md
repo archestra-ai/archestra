@@ -191,6 +191,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 | Jira         | Supported                     |
 | M-Files      | Supported with the VAF Add On |
 | Google Drive | Supported                     |
+| OneDrive     | Supported                     |
 | Salesforce   | Supported                     |
 | SharePoint   | Supported                     |
 | Asana        | Not supported                 |
@@ -198,7 +199,6 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 | GitLab       | Not supported                 |
 | Linear       | Not supported                 |
 | Notion       | Not supported                 |
-| OneDrive     | Not supported                 |
 | Outline      | Not supported                 |
 | Perforce     | Not supported                 |
 | ServiceNow   | Not supported                 |
@@ -209,6 +209,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. The ot
 - **Jira and Confluence Cloud** only return another user's email through the product REST API when that user's Atlassian profile has email visibility set to **"Anyone"**. Add an Atlassian **organization admin API key** to the connector credentials to read managed accounts' emails.
 - **GitHub** only exposes an email the user has made **public on their profile**; no token scope reveals a private email.
 - **SharePoint** returns SharePoint user logins directly. Expanding a Microsoft 365 group or a SharePoint site group to its members needs the extra app permissions listed under [SharePoint](#sharepoint).
+- **OneDrive** resolves user grants and drive owners to emails through the `User.Read.All` app permission. Without it, those accounts stay unresolvable. See [OneDrive](#onedrive).
 - **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
 
 **Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
@@ -426,6 +427,20 @@ To configure the connector:
 - `User IDs` should be user principal names (UPNs, e.g. `user@company.com`) or Azure AD object IDs for the users whose drives you want to sync
 
 Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
+
+**Auto-sync permissions.** Each configured user's drive is one permission scope, and an item (file or folder) that breaks permission inheritance becomes its own scope — a document inherits its nearest such ancestor. The drive's owner is always part of its audience. Anonymous sharing links map to everyone in your Archestra organization; "people in your organization" links expand to the tenant's active users.
+
+Grants to Microsoft 365 / Entra groups carry the group's identity, and each permission sync also snapshots those groups' member rosters — so the connector's **Users** and **Groups** tabs show every member with their assignment status, and an account whose email is hidden upstream can be assigned manually from the Users tab. Direct grantees appear there too, under the synthetic `direct-grants` group. SharePoint site groups granted on a personal drive are listed in the Groups tab but resolve no members; assign their users manually if you need them.
+
+`Files.Read.All` covers drive and item grants. Three more application permissions unlock more, progressively:
+
+| Extra permission | Unlocks |
+| ---------------- | ------- |
+| `User.Read.All` | User and owner grants expand to emails, and organization-wide links expand to the tenant's active users. |
+| `GroupMember.Read.All` | Microsoft 365 / Entra group member rosters (the Users and Groups tabs, and group-based document access). |
+| `Sites.FullControl.All` | Permission sync switches to cheaper sharing-aware delta runs. |
+
+Each tier is detected at runtime: without it, that kind of grant or roster drops (fail-closed) and the rest of the sync proceeds.
 
 #### Known Limitations
 

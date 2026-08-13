@@ -6,34 +6,42 @@ name: Build M-Files VAF Add On
 # M-Files installation involved) and attaches it to platform releases so the
 # connector form can offer a direct download.
 #
-# On a pull request the build is opt-in behind the `build-m-files-vaf-add-on`
-# label — the Windows runner is expensive and the package only matters when
-# someone wants to install and test the add-on before merging. Add the label
-# to build; the `.mfappx` is then downloadable from the run's Artifacts
-# (zip-wrapped — GitHub always archives artifacts; only release assets
-# carry the raw file).
-# Re-labelling (remove + re-add) rebuilds after new commits; while the label
-# stays on, every push rebuilds.
-#
-# On main the build runs only when the add-on's own sources change, so the
-# expensive runner is not spent on unrelated commits. That keeps a successful
-# main run available for deployments that point
-# ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF at `main`: the backend
+# The Windows runner is expensive, so every automatic trigger is filtered to
+# the add-on's own sources: a pull request that touches them builds (a broken
+# add-on can then never reach main), and so does a push to main (which keeps a
+# successful main run available for deployments that point
+# ARCHESTRA_KNOWLEDGE_BASE_MFILES_VAF_ADD_ON_SOURCE_REF at `main` — the backend
 # resolves the package from the newest successful run of THIS workflow on that
-# branch. Artifacts expire on the repository's retention schedule, so a long
-# stretch with no add-on change eventually leaves that override with nothing to
-# resolve — it then falls back to building from source, and `workflow_dispatch`
+# branch). Documentation-only edits under the add-on directory are excluded;
+# they cannot change the package.
+#
+# To build a branch whose add-on sources are unchanged — testing a connector
+# change against a proxied CI package on a dev stack, say — dispatch it
+# explicitly: `gh workflow run build-m-files-vaf-add-on.yml --ref <branch>`.
+#
+# A run's `.mfappx` is downloadable from its Artifacts (zip-wrapped — GitHub
+# always archives artifacts; only release assets carry the raw file), and
+# artifacts expire on the repository's retention schedule, so a long stretch
+# with no add-on change eventually leaves the source-ref override with nothing
+# to resolve; it then falls back to building from source, and a dispatch
 # refreshes it. Released deployments do not depend on any of this: they take
 # the package from the release asset attached below.
 
+# The two path lists are duplicated on purpose: GitHub Actions does not
+# support YAML anchors, so they must be kept in sync by hand.
 on:
   push:
     branches: [main]
     paths:
       - "integrations/m-files-vaf-add-on/**"
+      - "!integrations/m-files-vaf-add-on/**.md"
       - ".github/workflows/build-m-files-vaf-add-on.yml"
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
+    paths:
+      - "integrations/m-files-vaf-add-on/**"
+      - "!integrations/m-files-vaf-add-on/**.md"
+      - ".github/workflows/build-m-files-vaf-add-on.yml"
   release:
     types: [published]
   workflow_dispatch:
@@ -52,17 +60,13 @@ concurrency:
 jobs:
   build-m-files-vaf-add-on:
     name: Build M-Files VAF Add On
-    # PRs build only when the opt-in label is present; pushes to main are
-    # already path-filtered to the add-on's sources; workflow_dispatch always
-    # builds; release events fire for every release-please component, so the
-    # add-on attaches to platform releases only.
+    # Pull-request and push events are already path-filtered above, and a
+    # dispatch is always deliberate. Release events fire for every
+    # release-please component, so the add-on attaches to platform releases
+    # only.
     if: >-
-      (github.event_name == 'pull_request' &&
-        contains(github.event.pull_request.labels.*.name, 'build-m-files-vaf-add-on'))
-      || github.event_name == 'push'
-      || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'release' &&
-        startsWith(github.event.release.tag_name, 'platform-v'))
+      github.event_name != 'release'
+      || startsWith(github.event.release.tag_name, 'platform-v')
     runs-on: windows-latest
     permissions:
       contents: write # gh release upload

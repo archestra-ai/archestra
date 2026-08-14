@@ -230,6 +230,11 @@ export class DropboxConnector extends BaseConnector {
     }
     this.initPermissionPass(params.resolveMappedEmail);
 
+    // Delta scope: there is a single top-level container, so a scope that
+    // excludes it means nothing here is dirty this pass.
+    const scope = params.scope ? new Set(params.scope.containerKeys) : null;
+    if (scope && !scope.has(TOP_CONTAINER_KEY)) return;
+
     const docIds = await readAllIngestedSourceIds(params.readIngestedDocuments);
 
     if (docIds.length === 0) {
@@ -419,6 +424,8 @@ export class DropboxConnector extends BaseConnector {
     if (direct.size > 0) {
       yield {
         groupId: DIRECT_GRANTS_GROUP_ID,
+        // No display name: the synthetic id IS the label everywhere.
+        name: null,
         members: [...direct.values()].sort((a, b) =>
           a.accountId.localeCompare(b.accountId),
         ),

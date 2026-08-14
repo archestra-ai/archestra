@@ -964,6 +964,17 @@ describe("DropboxConnector", () => {
   }
 
   describe("syncPermissionSnapshot", () => {
+    it("yields nothing when the delta scope excludes the top-level container", async () => {
+      const connector = new DropboxConnector();
+      const yields = await collectYields(
+        connector.syncPermissionSnapshot({
+          ...makeSnapshotParams(),
+          scope: { containerKeys: ["sf:elsewhere"] },
+        }),
+      );
+      expect(yields).toEqual([]);
+    });
+
     it("assigns unshared files to the account container with the token account's audience", async () => {
       stubAccount();
       stubWalk([makeCorpusFile("id:f1"), makeCorpusFile("id:f2")]);
@@ -1212,6 +1223,7 @@ describe("DropboxConnector", () => {
         },
         {
           groupId: "direct-grants",
+          name: null,
           members: [
             expect.objectContaining({
               accountId: "dbid:alice",
@@ -1247,6 +1259,7 @@ describe("DropboxConnector", () => {
       expect(yields).toEqual([
         {
           groupId: "direct-grants",
+          name: null,
           members: [expect.objectContaining({ accountId: "dbid:owner" })],
         },
       ]);
@@ -1275,6 +1288,7 @@ describe("DropboxConnector", () => {
       expect(yields).toEqual([
         {
           groupId: "direct-grants",
+          name: null,
           members: [expect.objectContaining({ accountId: "dbid:owner" })],
         },
       ]);

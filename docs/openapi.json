@@ -220909,6 +220909,9 @@
                                       "includeBusinessApps": {
                                         "type": "boolean"
                                       },
+                                      "includeKnowledgeArticles": {
+                                        "type": "boolean"
+                                      },
                                       "states": {
                                         "type": "array",
                                         "items": {
@@ -220919,6 +220922,15 @@
                                         "type": "array",
                                         "items": {
                                           "type": "string"
+                                        }
+                                      },
+                                      "roleAudiences": {
+                                        "type": "object",
+                                        "additionalProperties": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
                                         }
                                       },
                                       "batchSize": {
@@ -222320,6 +222332,9 @@
                           "includeBusinessApps": {
                             "type": "boolean"
                           },
+                          "includeKnowledgeArticles": {
+                            "type": "boolean"
+                          },
                           "states": {
                             "type": "array",
                             "items": {
@@ -222330,6 +222345,15 @@
                             "type": "array",
                             "items": {
                               "type": "string"
+                            }
+                          },
+                          "roleAudiences": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "batchSize": {
@@ -223355,6 +223379,9 @@
                             "includeBusinessApps": {
                               "type": "boolean"
                             },
+                            "includeKnowledgeArticles": {
+                              "type": "boolean"
+                            },
                             "states": {
                               "type": "array",
                               "items": {
@@ -223365,6 +223392,15 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "roleAudiences": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             },
                             "batchSize": {
@@ -224704,6 +224740,9 @@
                             "includeBusinessApps": {
                               "type": "boolean"
                             },
+                            "includeKnowledgeArticles": {
+                              "type": "boolean"
+                            },
                             "states": {
                               "type": "array",
                               "items": {
@@ -224714,6 +224753,15 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "roleAudiences": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             },
                             "batchSize": {
@@ -225935,6 +225983,9 @@
                           "includeBusinessApps": {
                             "type": "boolean"
                           },
+                          "includeKnowledgeArticles": {
+                            "type": "boolean"
+                          },
                           "states": {
                             "type": "array",
                             "items": {
@@ -225945,6 +225996,15 @@
                             "type": "array",
                             "items": {
                               "type": "string"
+                            }
+                          },
+                          "roleAudiences": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
                             }
                           },
                           "batchSize": {
@@ -226968,6 +227028,9 @@
                             "includeBusinessApps": {
                               "type": "boolean"
                             },
+                            "includeKnowledgeArticles": {
+                              "type": "boolean"
+                            },
                             "states": {
                               "type": "array",
                               "items": {
@@ -226978,6 +227041,15 @@
                               "type": "array",
                               "items": {
                                 "type": "string"
+                              }
+                            },
+                            "roleAudiences": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
                               }
                             },
                             "batchSize": {

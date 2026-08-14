@@ -56149,8 +56149,12 @@ export type GetConnectorsResponses = {
                 includeChangeRequests?: boolean;
                 includeProblems?: boolean;
                 includeBusinessApps?: boolean;
+                includeKnowledgeArticles?: boolean;
                 states?: Array<string>;
                 assignmentGroups?: Array<string>;
+                roleAudiences?: {
+                    [key: string]: Array<string>;
+                };
                 batchSize?: number;
                 syncDataForLastMonths?: number;
             } | {
@@ -56351,8 +56355,12 @@ export type CreateConnectorData = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {
@@ -56611,8 +56619,12 @@ export type CreateConnectorResponses = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {
@@ -56961,8 +56973,12 @@ export type GetConnectorResponses = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {
@@ -57147,8 +57163,12 @@ export type UpdateConnectorData = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {
@@ -57408,8 +57428,12 @@ export type UpdateConnectorResponses = {
             includeChangeRequests?: boolean;
             includeProblems?: boolean;
             includeBusinessApps?: boolean;
+            includeKnowledgeArticles?: boolean;
             states?: Array<string>;
             assignmentGroups?: Array<string>;
+            roleAudiences?: {
+                [key: string]: Array<string>;
+            };
             batchSize?: number;
             syncDataForLastMonths?: number;
         } | {

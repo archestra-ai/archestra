@@ -185,4 +185,35 @@ describe("transformConfigArrayFields", () => {
     expect(result.isCloud).toBe(true);
     expect(result.repos).toEqual(["repo1", "repo2"]);
   });
+
+  it("converts ServiceNow role audiences and drops empty entries", () => {
+    const config = {
+      type: "servicenow",
+      instanceUrl: "https://example.service-now.com",
+      roleAudiences: {
+        incident: "itil, sn_incident_read",
+        problem: "",
+        change_request: ["itil"],
+      },
+    };
+
+    const result = transformConfigArrayFields(config);
+
+    expect(result.roleAudiences).toEqual({
+      incident: ["itil", "sn_incident_read"],
+      change_request: ["itil"],
+    });
+  });
+
+  it("drops an all-empty ServiceNow role audience map", () => {
+    const config = {
+      type: "servicenow",
+      instanceUrl: "https://example.service-now.com",
+      roleAudiences: { incident: "", problem: " " },
+    };
+
+    const result = transformConfigArrayFields(config);
+
+    expect(result.roleAudiences).toBeUndefined();
+  });
 });

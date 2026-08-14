@@ -351,6 +351,7 @@ const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "onedrive",
   "notion",
   "asana",
+  "dropbox",
 ]);
 
 export function connectorSupportsAutoSync(type: ConnectorType): boolean {
@@ -414,6 +415,8 @@ export function getPermissionSyncCredentialNote(
       return "Auto-sync permissions matches project members by their public GitLab profile email. A non-admin token cannot read a private email, so members without a public profile email are recorded but stay unresolvable.";
     case "asana":
       return "Auto-sync permissions reads projects, memberships, teams, and member emails as this Personal Access Token's user. Use a token from a user who can see every synced project — typically a workspace admin or a dedicated service user — because audiences the token cannot read stay fail-closed.";
+    case "dropbox":
+      return "The access token needs team scopes to expand group members — with a regular member token, granted groups sync empty for manual assignment.";
     default:
       return null;
   }

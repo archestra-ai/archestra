@@ -4,7 +4,7 @@ ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903
 # Go toolchain is sourced from the official golang:alpine image because Alpine's
 # community repo lags upstream Go patch releases. Stays binary-compatible since
 # both images share the Alpine base.
-ARG GOLANG_IMAGE=golang:1.25.11-alpine@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931
+ARG GOLANG_IMAGE=golang:1.25.13-alpine@sha256:844b27705f54e73773e0f9bc3c780633b9d7f4b4831bf35cdad02a81a4c80bd0
 
 FROM ${GOLANG_IMAGE} AS go-bin
 
@@ -123,9 +123,10 @@ RUN apk add --no-cache \
    # CVE-2026-6276, CVE-2026-5773: curl/libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
    # The base image ships 8.19.0-r0; the explicit `apk add curl` above installs it, so
    # curl/libcurl must be listed here to be upgraded to the fixed version.
-   # Go runtime is copied from the golang:1.25.11-alpine image below to pick up the
-   # Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811) and
-   # 1.25.11 (CVE-2026-42504) that Alpine's apk index has not yet shipped.
+   # Go runtime is copied from the golang:1.25.13-alpine image below to pick up the
+   # Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811),
+   # 1.25.11 (CVE-2026-42504), and the CRITICAL fixed in 1.25.13 (CVE-2026-39821)
+   # that Alpine's apk index has not yet shipped.
    apk upgrade --no-cache nodejs bind openssl zlib expat curl libcurl
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)

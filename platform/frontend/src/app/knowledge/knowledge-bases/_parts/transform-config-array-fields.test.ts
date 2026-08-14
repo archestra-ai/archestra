@@ -149,6 +149,34 @@ describe("transformConfigArrayFields", () => {
     });
   });
 
+  it("drops empty Perforce permission-sync fields and keeps filled ones", () => {
+    expect(
+      transformConfigArrayFields({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: "//depot/docs",
+        p4Port: "",
+        adminUsername: "",
+      }),
+    ).toEqual({
+      type: "perforce",
+      serverUrl: "https://perforce.example.com:8080",
+      depotPaths: ["//depot/docs"],
+    });
+
+    expect(
+      transformConfigArrayFields({
+        type: "perforce",
+        p4Port: "ssl:perforce.example.com:1666",
+        adminUsername: "p4admin",
+      }),
+    ).toEqual({
+      type: "perforce",
+      p4Port: "ssl:perforce.example.com:1666",
+      adminUsername: "p4admin",
+    });
+  });
+
   it("trims whitespace and filters empty entries", () => {
     const config = {
       repos: " repo1 ,, repo2 , , repo3 ",

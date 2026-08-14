@@ -65,6 +65,7 @@ import {
   NotionAutoSyncPermissionsNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PerforcePermissionSyncFields } from "./perforce-config-fields";
 import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { TextSearchLanguagePicker } from "./text-search-language-picker";
@@ -110,6 +111,8 @@ export function CreateConnectorDialog({
 
   // M-Files is in beta: deployments that haven't opted in never see the type.
   const mfilesEnabled = useFeature("kbMfilesConnectorEnabled") ?? false;
+  // Perforce permission sync needs the K8s orchestrator (in-cluster p4 pod).
+  const orchestratorK8sRuntime = useFeature("orchestratorK8sRuntime") ?? false;
 
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -127,7 +130,7 @@ export function CreateConnectorDialog({
     autoSyncBeta &&
     knowledgeBaseEnterprise &&
     hasAutoSyncCreate &&
-    connectorSupportsAutoSync(type)
+    connectorSupportsAutoSync(type, orchestratorK8sRuntime)
       ? "auto-sync-permissions"
       : "org-wide";
   // SPDX-SnippetEnd
@@ -453,7 +456,10 @@ export function CreateConnectorDialog({
                   teamIds={teamIds}
                   onTeamIdsChange={setTeamIds}
                   showTeamRequired
-                  supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+                  supportsAutoSync={connectorSupportsAutoSync(
+                    connectorType,
+                    orchestratorK8sRuntime,
+                  )}
                   autoSyncPermissionAction="create"
                 />
 
@@ -555,6 +561,11 @@ export function CreateConnectorDialog({
                         </FormItem>
                       )}
                     />
+                  )}
+
+                {visibility === "auto-sync-permissions" &&
+                  connectorType === "perforce" && (
+                    <PerforcePermissionSyncFields form={form} mode="create" />
                   )}
 
                 <Collapsible>

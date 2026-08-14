@@ -731,7 +731,7 @@ describe("CreateConnectorDialog", () => {
     it("supports auto-sync permissions and offers the article and role-audience config", async () => {
       const { user } = await renderServiceNowConfigureStep();
 
-      expect(connectorSupportsAutoSync("servicenow")).toBe(true);
+      expect(connectorSupportsAutoSync("servicenow", false)).toBe(true);
 
       await user.click(screen.getByRole("button", { name: /Advanced/ }));
       await waitFor(() => {
@@ -766,6 +766,22 @@ describe("CreateConnectorDialog", () => {
       expect(screen.getByLabelText(/^Depot Paths$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Username$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Login Ticket$/)).toBeInTheDocument();
+      // The permission-sync section belongs to the auto-sync-permissions
+      // visibility only — the default org-wide selection must not show it.
+      expect(screen.queryByLabelText(/^P4 Port$/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText(/^Admin Username$/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByLabelText(/^Admin Password$/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("supports auto-sync permissions only when the K8s orchestrator feature is on", () => {
+      // Perforce permission sync runs from an in-cluster pod; without the
+      // orchestrator the type must behave as a non-perm-sync connector.
+      expect(connectorSupportsAutoSync("perforce", true)).toBe(true);
+      expect(connectorSupportsAutoSync("perforce", false)).toBe(false);
     });
 
     it("submits perforce payload with transformed depot paths and file types", async () => {
@@ -900,7 +916,7 @@ describe("CreateConnectorDialog", () => {
       expect(screen.getByLabelText(/^Token Audience$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Client ID$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Client Secret$/)).toBeInTheDocument();
-      expect(connectorSupportsAutoSync("mfiles")).toBe(true);
+      expect(connectorSupportsAutoSync("mfiles", false)).toBe(true);
     });
 
     it("shows the static parameterless VAF Add On install command", async () => {

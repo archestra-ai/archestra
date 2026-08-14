@@ -1086,23 +1086,25 @@ describe("knowledge base routes", () => {
     });
 
     test("rejects auto-sync-permissions for a connector type that does not support it", async () => {
-      // linear is not a permission-sync connector — so this must 400.
+      // A crawled site has no upstream ACL to mirror, so web_crawler is the
+      // stable stand-in here: connectors gaining permission sync one by one
+      // never turn this case green by accident.
       const response = await app.inject({
         method: "POST",
         url: "/api/connectors",
         payload: {
-          name: "Auto-sync Linear",
-          connectorType: "linear",
+          name: "Auto-sync Web Crawler",
+          connectorType: "web_crawler",
           visibility: "auto-sync-permissions",
           teamIds: [],
-          config: { type: "linear" },
+          config: { type: "web_crawler", startUrl: "https://example.com" },
           credentials: { apiToken: "token" },
         },
       });
 
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain(
-        "Auto-sync permissions is not supported for linear connectors",
+        "Auto-sync permissions is not supported for web_crawler connectors",
       );
     });
 
@@ -2800,13 +2802,13 @@ describe("knowledge base routes", () => {
       makeKnowledgeBaseConnector,
     }) => {
       const kb = await makeKnowledgeBase(organizationId);
-      // linear is not a permission-sync connector, but a stored row can
+      // web_crawler is not a permission-sync connector, but a stored row can
       // still carry the auto-sync visibility; the trigger must reject it.
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
         {
-          connectorType: "linear",
+          connectorType: "web_crawler",
           visibility: "auto-sync-permissions",
         },
       );

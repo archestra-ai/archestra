@@ -196,10 +196,10 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 | Google Drive | Supported                                                                                                 |
 | Notion       | Limited: every synced page is visible to all workspace members ([details](#notion-auto-sync-permissions)) |
 | OneDrive     | Supported                                                                                                 |
+| Outline      | Supported                                                                                                 |
 | Salesforce   | Supported                                                                                                 |
 | SharePoint   | Supported                                                                                                 |
 | Linear       | Not supported                                                                                             |
-| Outline      | Not supported                                                                                             |
 | Perforce     | Not supported                                                                                             |
 | ServiceNow   | Not supported                                                                                             |
 | Web Crawler  | Not supported                                                                                             |
@@ -215,6 +215,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 - **Dropbox** returns member emails directly in shared-folder member lists. Group member rosters expand when the access token is a Business **team access token** (`groups.read` + `members.read` team scopes); with a member token, granted groups appear in the Groups tab with no members — assign them manually. See [Dropbox](#dropbox).
 - **Notion** returns member emails only when the integration has the **"read user information including email addresses"** capability. Guests are never listed.
 - **Asana** returns workspace members' emails through the same personal access token the connector already uses. No extra credential is needed, but the token's user must be able to see the synced projects and their members.
+- **Outline** returns member emails only when listing workspace users, never inside collection or group membership listings. The connector reads every member's email from that user list, so an API key that cannot list workspace users leaves all members unresolvable. See [Outline](#outline).
 
 **Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators, GitLab project members. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
 
@@ -585,6 +586,14 @@ Sync published documents from an [Outline](https://www.getoutline.com/) workspac
 | Instance URL   | The base URL of your Outline workspace (e.g. `https://app.getoutline.com` or your self-hosted URL).    |
 | API Key        | Your Outline API key (starts with `ol_api_`).                                                          |
 | Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
+
+**Auto-sync permissions.** Each collection is one permission scope. A collection's audience is its individual members, its granted groups, and — when the collection has workspace-wide default access — every active workspace member except guests. Guests only see collections they are explicitly added to, directly or through a group.
+
+Each permission sync also snapshots group member rosters, so the connector's **Users** and **Groups** tabs show every member with their assignment status. Members granted a collection individually appear there too, under the synthetic `direct-grants` group. Workspace-wide default access appears as a group named after your workspace, holding every active non-guest member.
+
+Published share links are the only public surface. A published document share maps that document — and its child documents, when the share includes them — to everyone in your Archestra organization. A published collection share does the same for the whole collection.
+
+A collection whose permissions cannot be read hides its documents from everyone until a later sync reads them. Documents an Outline user can only reach through a direct per-document share (not a public link) are not carried over; they stay limited to the collection's audience.
 
 ### Salesforce
 

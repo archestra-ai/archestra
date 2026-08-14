@@ -87,6 +87,11 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     # Pinned to 0.53.0 for the same go-git 5.19.2 floor reason as x/net above.
     go get golang.org/x/crypto@v0.53.0 && \
+    # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
+    # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
+    # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs
+    # an explicit requirement rather than a bump of any single dependency.
+    go get golang.org/x/mod@v0.40.0 && \
     go get github.com/moby/go-archive@v0.2.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.0 && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
@@ -111,6 +116,9 @@ RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kuberne
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
     go get golang.org/x/net@v0.56.0 && \
+    # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
+    # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
+    go get golang.org/x/mod@v0.40.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
     -o /kubectl-binary ./cmd/kubectl

@@ -353,6 +353,7 @@ const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "asana",
   "dropbox",
   "linear",
+  "outline",
 ]);
 
 export function connectorSupportsAutoSync(type: ConnectorType): boolean {
@@ -418,6 +419,8 @@ export function getPermissionSyncCredentialNote(
       return "Auto-sync permissions reads projects, memberships, teams, and member emails as this Personal Access Token's user. Use a token from a user who can see every synced project — typically a workspace admin or a dedicated service user — because audiences the token cannot read stay fail-closed.";
     case "dropbox":
       return "The access token needs team scopes to expand group members — with a regular member token, granted groups sync empty for manual assignment.";
+    case "outline":
+      return "Auto-sync permissions reads collection members, groups, and public share links through this API key. Use a workspace admin's API key: a member key may not see every share link or roster, and anything it cannot see stays unshared.";
     default:
       return null;
   }

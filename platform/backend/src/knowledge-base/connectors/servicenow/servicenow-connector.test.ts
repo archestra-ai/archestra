@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { ConnectorSyncBatch } from "@/types";
+import type { ConnectorSyncBatch, PermissionSyncParams } from "@/types";
 import { ServiceNowConnector } from "./servicenow-connector";
 
 // Mock global fetch. The config's `unstubGlobals` removes stubs after every
@@ -1001,6 +1001,852 @@ describe("ServiceNowConnector", () => {
 
       expect(result).toBe(15);
       expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("permission sync", () => {
+    const HOST = "myinstance.service-now.com";
+
+    type SnRoute = (query: string) => unknown[] | { status: number };
+
+    /** Route-table fetch stub: table name → rows (or an HTTP error). */
+    function installPermissionFetch(routes: Record<string, SnRoute>) {
+      mockFetch.mockImplementation(async (input: unknown) => {
+        const url = new URL(String(input));
+        const match = url.pathname.match(/\/api\/now\/table\/([^/?]+)/);
+        const table = match?.[1] ?? "";
+        const rawQuery = url.searchParams.get("sysparm_query") ?? "";
+        const query = rawQuery.replace(/\^?ORDERBYsys_id$/, "");
+        const route = routes[table];
+        if (!route) {
+          return {
+            ok: false,
+            status: 404,
+            text: async () => `no route for table ${table}`,
+          };
+        }
+        const result = route(query);
+        if (!Array.isArray(result)) {
+          return {
+            ok: false,
+            status: result.status,
+            text: async () => "error",
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ result }),
+          headers: new Headers(),
+        };
+      });
+    }
+
+    function makeReadback(
+      docs: { sourceId: string; metadata: Record<string, unknown> }[],
+    ) {
+      return vi.fn(
+        async (opts: {
+          metadataFilter?: Record<string, string>;
+          afterId?: string | null;
+          limit: number;
+        }) => ({
+          documents: docs.filter((doc) =>
+            Object.entries(opts.metadataFilter ?? {}).every(
+              ([key, value]) => doc.metadata[key] === value,
+            ),
+          ),
+          nextAfterId: null,
+        }),
+      );
+    }
+
+    function makeParams(overrides?: {
+      config?: Record<string, unknown>;
+      docs?: { sourceId: string; metadata: Record<string, unknown> }[];
+      cursor?: string | null;
+      resolveMappedEmail?: (accountId: string) => string | null;
+    }) {
+      return {
+        config: { ...validConfig, ...overrides?.config },
+        credentials,
+        cursor: overrides?.cursor ?? null,
+        readIngestedDocuments: makeReadback(overrides?.docs ?? []),
+        resolveMappedEmail: overrides?.resolveMappedEmail,
+      } as unknown as PermissionSyncParams;
+    }
+
+    async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
+      const items: T[] = [];
+      for await (const item of gen) items.push(item);
+      return items;
+    }
+
+    const ref = (value: string) => ({ value, link: "https://x" });
+    const userRow = (sysId: string, email: string, active = "true") => ({
+      sys_id: sysId,
+      email,
+      name: `Name ${sysId}`,
+      active,
+    });
+
+    const incidentDocs = [
+      { sourceId: "I1", metadata: { kind: "incident", sysId: "I1" } },
+      { sourceId: "I2", metadata: { kind: "incident", sysId: "I2" } },
+    ];
+
+    const incidentParticipantRoutes: Record<string, SnRoute> = {
+      incident: () => [
+        {
+          sys_id: "I1",
+          assignment_group: ref("G1"),
+          assigned_to: ref("U2"),
+          caller_id: ref("U1"),
+          opened_by: "",
+        },
+        {
+          sys_id: "I2",
+          assignment_group: "",
+          assigned_to: "",
+          caller_id: "",
+          opened_by: ref("U3"),
+        },
+      ],
+      sys_user: () => [
+        userRow("U1", "u1@example.com"),
+        userRow("U2", "u2@example.com"),
+        userRow("U3", "u3@example.com"),
+      ],
+    };
+
+    test("assigns records to per-group containers with participant exception users", async () => {
+      installPermissionFetch(incidentParticipantRoutes);
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(makeParams({ docs: incidentDocs })),
+      );
+
+      expect(yields).toEqual([
+        {
+          kind: "container",
+          containerKey: "table:incident",
+          permissions: { isPublic: false, users: [], groups: [] },
+          audienceResolutionFailed: false,
+          cursor: "table:incident",
+        },
+        {
+          kind: "container",
+          containerKey: "table:incident/groups:G1",
+          permissions: {
+            isPublic: false,
+            users: [],
+            groups: [`${HOST}/group/G1`],
+          },
+          audienceResolutionFailed: false,
+          cursor: "table:incident",
+        },
+        {
+          kind: "document",
+          sourceId: "I1",
+          containerKey: "table:incident/groups:G1",
+          exceptionUsers: ["u1@example.com", "u2@example.com"],
+          cursor: "table:incident",
+        },
+        {
+          kind: "document",
+          sourceId: "I2",
+          containerKey: "table:incident",
+          exceptionUsers: ["u3@example.com"],
+          cursor: "table:incident",
+        },
+      ]);
+    });
+
+    test("declared role audiences join the table and group containers", async () => {
+      installPermissionFetch(incidentParticipantRoutes);
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({
+            config: { roleAudiences: { incident: ["itil"] } },
+            docs: incidentDocs,
+          }),
+        ),
+      );
+
+      const containers = yields.filter((y) => y.kind === "container");
+      expect(containers[0].permissions.groups).toEqual([`${HOST}/role/itil`]);
+      expect(containers[1].permissions.groups).toEqual([
+        `${HOST}/group/G1`,
+        `${HOST}/role/itil`,
+      ]);
+    });
+
+    test("participants without a resolvable email are dropped fail-closed", async () => {
+      installPermissionFetch({
+        ...incidentParticipantRoutes,
+        sys_user: () => [
+          userRow("U1", ""),
+          userRow("U2", "u2@example.com", "false"),
+          userRow("U3", "u3@example.com"),
+        ],
+      });
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(makeParams({ docs: incidentDocs })),
+      );
+
+      const docs = yields.filter((y) => y.kind === "document");
+      // U1 hides its email, U2 is inactive: neither may ride as an exception.
+      expect(docs[0].exceptionUsers).toEqual([]);
+      expect(docs[1].exceptionUsers).toEqual(["u3@example.com"]);
+    });
+
+    test("an empty corpus yields only the boundary container", async () => {
+      installPermissionFetch(incidentParticipantRoutes);
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(makeParams({ docs: [] })),
+      );
+
+      expect(yields).toEqual([
+        {
+          kind: "container",
+          containerKey: "table:incident",
+          permissions: { isPublic: false, users: [], groups: [] },
+          audienceResolutionFailed: false,
+          cursor: "table:incident",
+        },
+      ]);
+    });
+
+    test("resumes after the cursor container (kb keys sort before table keys)", async () => {
+      installPermissionFetch(incidentParticipantRoutes);
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({
+            config: { includeChanges: true },
+            docs: incidentDocs,
+            cursor: "table:incident",
+          }),
+        ),
+      );
+
+      // change_request < incident: strictly-below keys are skipped, the
+      // cursor container re-enumerates.
+      expect(
+        yields.filter((y) => y.kind === "container").map((y) => y.containerKey),
+      ).toEqual(["table:incident", "table:incident/groups:G1"]);
+    });
+
+    const kbConfig = {
+      includeIncidents: false,
+      includeKnowledgeArticles: true,
+    };
+    const articleDocs = [
+      {
+        sourceId: "A1",
+        metadata: { kind: "kb_knowledge", sysId: "A1", knowledgeBaseId: "KB1" },
+      },
+      {
+        sourceId: "A2",
+        metadata: { kind: "kb_knowledge", sysId: "A2", knowledgeBaseId: "KB1" },
+      },
+    ];
+
+    function kbRoutes(
+      overrides?: Record<string, SnRoute>,
+    ): Record<string, SnRoute> {
+      return {
+        sys_properties: () => [
+          {
+            name: "glide.knowman.apply_article_read_criteria",
+            value: "true",
+          },
+          {
+            name: "glide.knowman.block_access_with_no_user_criteria",
+            value: "false",
+          },
+        ],
+        kb_uc_can_read_mtom: (query) =>
+          query.includes("KB1")
+            ? [{ kb_knowledge_base: ref("KB1"), user_criteria: ref("C1") }]
+            : [],
+        kb_uc_cannot_read_mtom: () => [],
+        user_criteria: () => [
+          {
+            sys_id: "C1",
+            name: "KB readers",
+            active: "true",
+            advanced: "false",
+            user: "U1,U2",
+            group: "",
+            role: "",
+            company: "",
+            department: "",
+            location: "",
+            match_all: "false",
+          },
+        ],
+        sys_user: () => [
+          userRow("U1", "u1@example.com"),
+          userRow("U2", "u2@example.com"),
+          userRow("U3", "u3@example.com"),
+        ],
+        ...overrides,
+      };
+    }
+
+    test("knowledge bases audience through criteria groups", async () => {
+      installPermissionFetch(kbRoutes());
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({ config: kbConfig, docs: articleDocs }),
+        ),
+      );
+
+      expect(yields).toEqual([
+        {
+          kind: "container",
+          containerKey: "kb:KB1",
+          permissions: {
+            isPublic: false,
+            users: [],
+            groups: [`${HOST}/criteria/C1`],
+          },
+          audienceResolutionFailed: false,
+          cursor: "kb:KB1",
+        },
+        {
+          kind: "document",
+          sourceId: "A1",
+          containerKey: "kb:KB1",
+          cursor: "kb:KB1",
+        },
+        {
+          kind: "document",
+          sourceId: "A2",
+          containerKey: "kb:KB1",
+          cursor: "kb:KB1",
+        },
+      ]);
+    });
+
+    test("deny criteria materialize the concrete allow-minus-deny user set", async () => {
+      installPermissionFetch(
+        kbRoutes({
+          kb_uc_cannot_read_mtom: (query) =>
+            query.includes("KB1")
+              ? [{ kb_knowledge_base: ref("KB1"), user_criteria: ref("C2") }]
+              : [],
+          user_criteria: () => [
+            {
+              sys_id: "C1",
+              name: "KB readers",
+              active: "true",
+              advanced: "false",
+              user: "U1,U2",
+              group: "",
+              role: "",
+              company: "",
+              department: "",
+              location: "",
+              match_all: "false",
+            },
+            {
+              sys_id: "C2",
+              name: "KB denied",
+              active: "true",
+              advanced: "false",
+              user: "U2",
+              group: "",
+              role: "",
+              company: "",
+              department: "",
+              location: "",
+              match_all: "false",
+            },
+          ],
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({ config: kbConfig, docs: articleDocs }),
+        ),
+      );
+
+      expect(yields[0]).toMatchObject({
+        kind: "container",
+        containerKey: "kb:KB1",
+        permissions: { isPublic: false, users: ["u1@example.com"], groups: [] },
+        audienceResolutionFailed: false,
+      });
+    });
+
+    test("a script-based deny criteria fails the container closed", async () => {
+      installPermissionFetch(
+        kbRoutes({
+          kb_uc_cannot_read_mtom: (query) =>
+            query.includes("KB1")
+              ? [{ kb_knowledge_base: ref("KB1"), user_criteria: ref("C2") }]
+              : [],
+          user_criteria: () => [
+            {
+              sys_id: "C2",
+              name: "Scripted deny",
+              active: "true",
+              advanced: "true",
+              user: "",
+              group: "",
+              role: "",
+              company: "",
+              department: "",
+              location: "",
+              match_all: "false",
+            },
+          ],
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({ config: kbConfig, docs: articleDocs }),
+        ),
+      );
+
+      expect(yields[0]).toMatchObject({
+        kind: "container",
+        containerKey: "kb:KB1",
+        permissions: { isPublic: false, users: [], groups: [] },
+        audienceResolutionFailed: true,
+      });
+    });
+
+    test("a criteria-less knowledge base is org-public when the instance allows it", async () => {
+      installPermissionFetch(kbRoutes({ kb_uc_can_read_mtom: () => [] }));
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({ config: kbConfig, docs: articleDocs }),
+        ),
+      );
+
+      expect(yields[0]).toMatchObject({
+        kind: "container",
+        containerKey: "kb:KB1",
+        permissions: { isPublic: true },
+        audienceResolutionFailed: false,
+      });
+    });
+
+    test("a criteria-less knowledge base is hidden when the instance blocks it", async () => {
+      installPermissionFetch(
+        kbRoutes({
+          kb_uc_can_read_mtom: () => [],
+          sys_properties: () => [
+            {
+              name: "glide.knowman.block_access_with_no_user_criteria",
+              value: "true",
+            },
+          ],
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({ config: kbConfig, docs: articleDocs }),
+        ),
+      );
+
+      // Genuinely nobody — blocked upstream, not a resolution failure.
+      expect(yields[0]).toMatchObject({
+        permissions: { isPublic: false, users: [], groups: [] },
+        audienceResolutionFailed: false,
+      });
+    });
+
+    test("unreadable glide.knowman properties fail criteria-less KBs closed", async () => {
+      installPermissionFetch(
+        kbRoutes({
+          kb_uc_can_read_mtom: () => [],
+          sys_properties: () => ({ status: 403 }),
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({ config: kbConfig, docs: articleDocs }),
+        ),
+      );
+
+      expect(yields[0]).toMatchObject({
+        permissions: { isPublic: false, users: [], groups: [] },
+        audienceResolutionFailed: true,
+      });
+    });
+
+    test("article-level can-read criteria override the KB audience in a nested container", async () => {
+      installPermissionFetch(
+        kbRoutes({
+          kb_uc_can_read_mtom: (query) => {
+            if (query.includes("KB1")) {
+              return [
+                { kb_knowledge_base: ref("KB1"), user_criteria: ref("C1") },
+              ];
+            }
+            if (query.includes("A1")) {
+              return [
+                { kb_knowledge_base: ref("A1"), user_criteria: ref("C3") },
+              ];
+            }
+            return [];
+          },
+          user_criteria: (query) => {
+            const rows = [
+              {
+                sys_id: "C1",
+                name: "KB readers",
+                active: "true",
+                advanced: "false",
+                user: "U1,U2",
+                group: "",
+                role: "",
+                company: "",
+                department: "",
+                location: "",
+                match_all: "false",
+              },
+              {
+                sys_id: "C3",
+                name: "Article readers",
+                active: "true",
+                advanced: "false",
+                user: "U3",
+                group: "",
+                role: "",
+                company: "",
+                department: "",
+                location: "",
+                match_all: "false",
+              },
+            ];
+            return rows.filter((row) => query.includes(row.sys_id));
+          },
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({ config: kbConfig, docs: articleDocs }),
+        ),
+      );
+
+      expect(yields).toEqual([
+        {
+          kind: "container",
+          containerKey: "kb:KB1",
+          permissions: {
+            isPublic: false,
+            users: [],
+            groups: [`${HOST}/criteria/C1`],
+          },
+          audienceResolutionFailed: false,
+          cursor: "kb:KB1",
+        },
+        {
+          kind: "container",
+          containerKey: "kb:KB1/article:A1",
+          permissions: {
+            isPublic: false,
+            users: ["u3@example.com"],
+            groups: [],
+          },
+          audienceResolutionFailed: false,
+          cursor: "kb:KB1",
+        },
+        {
+          kind: "document",
+          sourceId: "A1",
+          containerKey: "kb:KB1/article:A1",
+          cursor: "kb:KB1",
+        },
+        {
+          kind: "document",
+          sourceId: "A2",
+          containerKey: "kb:KB1",
+          cursor: "kb:KB1",
+        },
+      ]);
+    });
+
+    test("an unreadable criteria surface fails the whole knowledge base closed", async () => {
+      installPermissionFetch(
+        kbRoutes({ kb_uc_can_read_mtom: () => ({ status: 403 }) }),
+      );
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({ config: kbConfig, docs: articleDocs }),
+        ),
+      );
+
+      expect(yields[0]).toMatchObject({
+        kind: "container",
+        containerKey: "kb:KB1",
+        permissions: { isPublic: false, users: [], groups: [] },
+        audienceResolutionFailed: true,
+      });
+      expect(
+        yields.filter((y) => y.kind === "document").map((y) => y.containerKey),
+      ).toEqual(["kb:KB1", "kb:KB1"]);
+    });
+
+    test("syncGroups rosters record groups, role audiences, criteria, and direct grants", async () => {
+      installPermissionFetch({
+        ...incidentParticipantRoutes,
+        sys_user_group: () => [{ sys_id: "G1", name: "Service Desk" }],
+        sys_user_grmember: () => [{ user: ref("U1"), group: ref("G1") }],
+        sys_user_has_role: () => [{ user: ref("U2") }],
+      });
+
+      const yields = await collect(
+        connector.syncGroups(
+          makeParams({
+            config: { roleAudiences: { incident: ["itil"] } },
+            docs: incidentDocs,
+          }),
+        ),
+      );
+
+      expect(yields).toEqual([
+        {
+          groupId: `${HOST}/group/G1`,
+          name: "Service Desk",
+          members: [
+            {
+              accountId: "U1",
+              displayName: "Name U1",
+              email: "u1@example.com",
+            },
+          ],
+          membershipResolutionFailed: undefined,
+          cursor: `${HOST}/group/G1`,
+        },
+        {
+          groupId: `${HOST}/role/itil`,
+          name: "Role: itil",
+          members: [
+            {
+              accountId: "U2",
+              displayName: "Name U2",
+              email: "u2@example.com",
+            },
+          ],
+          membershipResolutionFailed: undefined,
+          cursor: `${HOST}/role/itil`,
+        },
+        {
+          groupId: "direct-grants",
+          members: [
+            {
+              accountId: "U1",
+              displayName: "Name U1",
+              email: "u1@example.com",
+            },
+            {
+              accountId: "U2",
+              displayName: "Name U2",
+              email: "u2@example.com",
+            },
+            {
+              accountId: "U3",
+              displayName: "Name U3",
+              email: "u3@example.com",
+            },
+          ],
+        },
+      ]);
+    });
+
+    test("a principal referenced by user_name resolves against user_name", async () => {
+      // Some ServiceNow fields carry the account's user_name, not a sys_id.
+      installPermissionFetch({
+        incident: () => [
+          {
+            sys_id: "I1",
+            assignment_group: "",
+            assigned_to: "",
+            caller_id: "glide.maint",
+            opened_by: "",
+          },
+        ],
+        sys_user: (query) =>
+          query.startsWith("user_nameIN")
+            ? [
+                {
+                  sys_id: "U_MAINT",
+                  user_name: "glide.maint",
+                  email: "maint@example.com",
+                  name: "System Maintenance",
+                  active: "true",
+                },
+              ]
+            : [],
+      });
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot(
+          makeParams({ docs: [incidentDocs[0]] }),
+        ),
+      );
+
+      const doc = yields.find((y) => y.kind === "document");
+      expect(doc?.exceptionUsers).toEqual(["maint@example.com"]);
+    });
+
+    test("an unresolvable principal keeps the display name its record carried", async () => {
+      // sys_user is unreadable (row-level ACL), so the only label these
+      // principals will ever have is the display value on the reference.
+      const named = (value: string, display: string) => ({
+        display_value: display,
+        value,
+        link: "https://x",
+      });
+      installPermissionFetch({
+        incident: () => [
+          {
+            sys_id: named("I1", "INC0001"),
+            assignment_group: named("G1", "Service Desk"),
+            assigned_to: named("U2", "Bob Builder"),
+            caller_id: named("U1", "Alice Adams"),
+            opened_by: "",
+          },
+        ],
+        sys_user: () => [],
+        sys_user_group: () => [{ sys_id: "G1", name: "Service Desk" }],
+        sys_user_grmember: () => [
+          {
+            user: named("U1", "Alice Adams"),
+            group: named("G1", "Service Desk"),
+          },
+        ],
+      });
+
+      const yields = await collect(
+        connector.syncGroups(makeParams({ docs: [incidentDocs[0]] })),
+      );
+
+      expect(yields[0].members).toEqual([
+        { accountId: "U1", displayName: "Alice Adams", email: null },
+      ]);
+      const direct = yields.find((y) => y.groupId === "direct-grants");
+      expect(direct?.members).toEqual([
+        { accountId: "U1", displayName: "Alice Adams", email: null },
+        { accountId: "U2", displayName: "Bob Builder", email: null },
+      ]);
+    });
+
+    test("an unreadable criteria surface does not abort the other group rosters", async () => {
+      installPermissionFetch({
+        ...incidentParticipantRoutes,
+        sys_user_group: () => [{ sys_id: "G1", name: "Service Desk" }],
+        sys_user_grmember: () => [{ user: ref("U1"), group: ref("G1") }],
+        sys_user_has_role: () => [{ user: ref("U2") }],
+        sys_properties: () => [],
+        kb_uc_can_read_mtom: () => ({ status: 403 }),
+        kb_uc_cannot_read_mtom: () => ({ status: 403 }),
+      });
+
+      const yields = await collect(
+        connector.syncGroups(
+          makeParams({
+            config: {
+              includeKnowledgeArticles: true,
+              roleAudiences: { incident: ["itil"] },
+            },
+            docs: [...incidentDocs, ...articleDocs],
+          }),
+        ),
+      );
+
+      // Criteria groups are lost (their KBs fail closed on the snapshot
+      // side), but the record groups, role audiences, and direct grants
+      // still roster.
+      expect(yields.map((y) => y.groupId)).toEqual([
+        `${HOST}/group/G1`,
+        `${HOST}/role/itil`,
+        "direct-grants",
+      ]);
+      expect(yields[0].members).toHaveLength(1);
+      expect(yields[1].members).toHaveLength(1);
+    });
+
+    test("a match_all criteria group rosters the dimension intersection", async () => {
+      installPermissionFetch(
+        kbRoutes({
+          user_criteria: () => [
+            {
+              sys_id: "C1",
+              name: "Both",
+              active: "true",
+              advanced: "false",
+              user: "U1,U2",
+              group: "G9",
+              role: "",
+              company: "",
+              department: "",
+              location: "",
+              match_all: "true",
+            },
+          ],
+          sys_user_grmember: () => [
+            { user: ref("U2"), group: ref("G9") },
+            { user: ref("U3"), group: ref("G9") },
+          ],
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncGroups(
+          makeParams({ config: kbConfig, docs: articleDocs }),
+        ),
+      );
+
+      // U1 is only in the users list, U3 only in the group: match_all keeps U2.
+      expect(yields).toEqual([
+        {
+          groupId: `${HOST}/criteria/C1`,
+          name: "Both",
+          members: [
+            {
+              accountId: "U2",
+              displayName: "Name U2",
+              email: "u2@example.com",
+            },
+          ],
+          membershipResolutionFailed: undefined,
+          cursor: `${HOST}/criteria/C1`,
+        },
+      ]);
+    });
+
+    test("scopeKeyForDocument maps metadata to its top-level container", () => {
+      expect(
+        connector.scopeKeyForDocument({ kind: "incident", sysId: "I1" }),
+      ).toBe("table:incident");
+      expect(
+        connector.scopeKeyForDocument({
+          kind: "kb_knowledge",
+          knowledgeBaseId: "KB1",
+        }),
+      ).toBe("kb:KB1");
+      expect(
+        connector.scopeKeyForDocument({ kind: "kb_knowledge" }),
+      ).toBeNull();
+      expect(connector.scopeKeyForDocument({})).toBeNull();
     });
   });
 });

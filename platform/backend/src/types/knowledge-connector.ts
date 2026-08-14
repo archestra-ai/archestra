@@ -231,8 +231,17 @@ export const ServiceNowConfigSchema = z.object({
   includeChangeRequests: z.boolean().optional(),
   includeProblems: z.boolean().optional(),
   includeBusinessApps: z.boolean().optional(),
+  includeKnowledgeArticles: z.boolean().optional(),
   states: z.array(z.string()).optional(),
   assignmentGroups: z.array(z.string()).optional(),
+  /**
+   * Auto-sync permissions: per-table extra audience of ServiceNow role names
+   * (e.g. `{ "incident": ["itil"] }`) granted read on every synced record of
+   * that table, rostered from `sys_user_has_role`. Without an entry a table's
+   * records are visible only to their participants (assignment-group members
+   * and the referenced users).
+   */
+  roleAudiences: z.record(z.string(), z.array(z.string())).optional(),
   batchSize: z.number().optional(),
   syncDataForLastMonths: z.number().min(1).max(12).optional(),
 });

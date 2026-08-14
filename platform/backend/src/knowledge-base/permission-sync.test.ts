@@ -15,6 +15,7 @@ const { getConnector } = vi.hoisted(() => ({ getConnector: vi.fn() }));
 vi.mock("@/knowledge-base/connectors/registry", () => ({ getConnector }));
 vi.mock("@/knowledge-base/connector-credentials", () => ({
   resolveConnectorCredentials: vi.fn().mockResolvedValue({}),
+  resolveConnectorCredentialVersion: vi.fn().mockResolvedValue(""),
 }));
 vi.mock("@/cache-manager");
 
@@ -970,7 +971,9 @@ describe("permission-sync pass (containers / epoch / resume / groups)", () => {
     // First batch lands, second throws mid-persist.
     const upsertSpy = vi
       .spyOn(KbExternalUserGroupModel, "upsertMany")
-      .mockResolvedValueOnce(undefined)
+      // `true` = the fenced write landed; the pass reads that to tell a
+      // reclaimed run apart from a successful one.
+      .mockResolvedValueOnce(true)
       .mockRejectedValueOnce(new Error("schema drift"));
 
     const result = await permissionSyncService.executePass(connector.id);
@@ -1898,5 +1901,30 @@ describe("permission-sync pass (containers / epoch / resume / groups)", () => {
       .where(eq(schema.connectorRunsTable.id, result.runId));
     expect(run?.status).toBe("success");
     expect(run?.runType).toBe("permission");
+  });
+});
+
+describe("a disabled connector runs no permission pass", () => {
+  test("skips without claiming a run", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+      connectorType: "perforce",
+      visibility: "auto-sync-permissions",
+      enabled: false,
+    });
+
+    const result = await permissionSyncService.executePass(connector.id);
+
+    // A task enqueued before the connector was switched off still arrives
+    // afterwards; a pass would cost a pod, a token and an egress rule.
+    expect(result.status).toBe("skipped");
+    expect(
+      await ConnectorRunModel.findByConnector({ connectorId: connector.id }),
+    ).toHaveLength(0);
   });
 });

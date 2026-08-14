@@ -34,6 +34,13 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 60,
     payload: {},
   },
+  // Converges the Perforce permission-sync shims on the connectors that want
+  // one. Every surface that changes that answer already reconciles inside its
+  // own request, so this is the backstop for the calls those lose to a crash
+  // or a network partition — not the mechanism. Hence 5 minutes: a pod nobody
+  // claims is worth removing promptly, not urgently, and the work is one list
+  // call plus a couple per Perforce connector.
+  { taskType: "p4_shim_reconcile", intervalSeconds: 300, payload: {} },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
   // Enterprise data-retention sweep over interactions, mcp_tool_calls, and
   // conversations. A fast no-op while every retention window is disabled.

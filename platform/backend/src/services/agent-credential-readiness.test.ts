@@ -6,15 +6,21 @@ import {
 import { expect, test } from "@/test";
 import type { MissingCredentialBehavior } from "@/types/agent";
 
-type TestContext = Parameters<Parameters<typeof test>[1]>[0];
-type SetupFixtures = Pick<
-  TestContext,
-  | "makeUser"
-  | "makeAgent"
-  | "makeInternalMcpCatalog"
-  | "makeTool"
-  | "makeAgentTool"
->;
+/** Structural view of the fixtures this file's setup helper needs. */
+type SetupFixtures = {
+  makeUser: () => Promise<{ id: string }>;
+  makeAgent: (overrides: {
+    agentType: "agent";
+    scope: "org";
+    missingCredentialBehavior: MissingCredentialBehavior;
+    accessAllTools: boolean;
+  }) => Promise<{ id: string }>;
+  makeInternalMcpCatalog: (overrides: {
+    name: string;
+  }) => Promise<{ id: string; name: string }>;
+  makeTool: (overrides: { catalogId: string }) => Promise<{ id: string }>;
+  makeAgentTool: (agentId: string, toolId: string) => Promise<unknown>;
+};
 
 /**
  * An agent with one tool from one MCP server, plus a caller who does not have

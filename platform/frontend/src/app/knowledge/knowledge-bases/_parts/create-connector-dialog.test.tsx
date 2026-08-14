@@ -62,9 +62,19 @@ const MOCK_VAF_ADD_ON_DOWNLOAD_URL =
 // including its Application Account (OAuth) fields. The gate tests flip
 // individual flags through mockUseFeature.
 const mockUseFeature = vi.fn((_key: string): boolean => true);
+// Enterprise + auto-sync permission default OFF so the historical org-wide
+// default holds across the suite; the auto-sync-default tests flip them.
+const mockUseEnterpriseFeature = vi.fn((_key: string): boolean => false);
 vi.mock("@/lib/config/config.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/config/config.query")>()),
   useFeature: (key: string) => mockUseFeature(key),
+  useEnterpriseFeature: (key: string) => mockUseEnterpriseFeature(key),
+}));
+
+const mockHasPermissions = vi.fn((): { data: boolean } => ({ data: false }));
+vi.mock("@/lib/auth/auth.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/auth.query")>()),
+  useHasPermissions: () => mockHasPermissions(),
 }));
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
@@ -650,6 +660,91 @@ describe("CreateConnectorDialog", () => {
         loginUrl: "https://login.salesforce.com",
         objects: ["Account", "Contact", "Opportunity"],
       });
+    });
+  });
+
+  describe("auto-sync default visibility", () => {
+    beforeEach(() => {
+      mockUseEnterpriseFeature.mockReturnValue(true);
+      mockHasPermissions.mockReturnValue({ data: true });
+    });
+    afterEach(() => {
+      mockUseEnterpriseFeature.mockReturnValue(false);
+      mockHasPermissions.mockReturnValue({ data: false });
+    });
+
+    const AUTO_SYNC_DESCRIPTION =
+      "Sync access from the source system's own permissions";
+    const ORG_WIDE_DESCRIPTION =
+      "Anyone in your org can access this knowledge source";
+
+    it("defaults a supported type to auto-sync permissions and lists it first", async () => {
+      const { user } = await renderConfigureStep(); // Jira supports auto-sync
+
+      // The collapsed selector shows the default selection.
+      expect(screen.getByText(AUTO_SYNC_DESCRIPTION)).toBeInTheDocument();
+
+      // Expanded, the enabled auto-sync option leads the list.
+      await user.click(screen.getByText(AUTO_SYNC_DESCRIPTION));
+      const autoSync = screen.getByText("Auto-sync permissions");
+      const orgWide = screen.getByText("Organization");
+      expect(
+        autoSync.compareDocumentPosition(orgWide) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("keeps org-wide for a type without permission-sync support", async () => {
+      const user = userEvent.setup();
+      renderDialog();
+      await user.click(screen.getByText("Web Crawler"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(ORG_WIDE_DESCRIPTION)).toBeInTheDocument();
+    });
+
+    it("keeps org-wide when the auto-sync feature flag is off", async () => {
+      mockUseFeature.mockImplementation(
+        (key) => key !== "kbAutoSyncPermissionsEnabled",
+      );
+
+      await renderConfigureStep();
+      expect(screen.getByText(ORG_WIDE_DESCRIPTION)).toBeInTheDocument();
+
+      mockUseFeature.mockImplementation(() => true);
+    });
+  });
+
+  describe("ServiceNow-specific flow", () => {
+    async function renderServiceNowConfigureStep() {
+      const user = userEvent.setup();
+      const result = renderDialog();
+      await user.click(screen.getByText("ServiceNow"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+      return { ...result, user };
+    }
+
+    it("supports auto-sync permissions and offers the article and role-audience config", async () => {
+      const { user } = await renderServiceNowConfigureStep();
+
+      expect(connectorSupportsAutoSync("servicenow")).toBe(true);
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await waitFor(() => {
+        expect(
+          screen.getByLabelText(/Include Knowledge Articles/),
+        ).toBeInTheDocument();
+      });
+      // One role-audience input per synced table, keyed by table label.
+      expect(screen.getByText(/Role audiences/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Incidents$/)).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/^Business Applications$/),
+      ).toBeInTheDocument();
     });
   });
 

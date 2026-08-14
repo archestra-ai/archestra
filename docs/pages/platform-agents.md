@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-08-05
+lastUpdated: 2026-08-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,6 +16,7 @@ An agent can include:
 - suggested prompts for common tasks in chat
 - a **Tools & Knowledge Sources** setting: **Auto** (every tool and knowledge source the chatting user can access, minus an exclusion list) or **Custom** (only assigned tools and sources)
 - optional **Load tools when needed** mode for keeping MCP `tools/list` small
+- a **When someone is missing a tool connection** setting for teammates who have not connected one of the agent's MCP servers
 - a **Subagents** setting: **Auto** (delegate to any agent the chatting user can access, minus a disabled list) or **Custom** (only assigned delegation targets)
 - one or more assigned knowledge sources
 
@@ -51,6 +52,26 @@ Built-in tools are excluded by default. When an agent is created in **Auto** mod
 Only `search_tools` and `run_tool` can never be excluded; everything else can. Agent delegation tools sit outside the exclusion list — manage them through delegation itself — and the built-in server cannot be excluded as a whole, only tool by tool.
 
 Exclusions are stored per agent and have no effect in **Custom** mode. Cloning an agent copies them. Agent export does not carry them — server and tool IDs are not portable across organizations — so an imported agent starts with no exclusions and they must be re-created. Exclusions track the specific tool record: if an MCP server renames a tool, the renamed tool counts as new and is no longer excluded.
+
+## Missing Tool Connections
+
+An agent's tools can come from MCP servers that each person connects with their own account. Share that agent, and a teammate may have no connection to one of those servers. By default they still start the chat. They find out only when a tool from that server runs.
+
+**When someone is missing a tool connection** sits in **Custom** mode, under Tools & Knowledge Sources.
+
+![The missing tool connection setting in the agent dialog](/docs/automated_screenshots/platform-agents_missing-tool-connections.webp)
+
+- **Let them continue** — nothing is shown up front. This is the default.
+- **Let them continue, with a warning** — the chat names the servers they have not connected.
+- **Stop them from using the agent** — the agent is greyed out in the chat picker, and the chat refuses to start.
+
+A server counts as connected when the person's own connection covers it, when a team or organization connection does, or when the server uses one shared account. Servers that need no credentials never count as missing.
+
+The setting does nothing in **Auto** mode. There, each caller's tools come from what that caller can already reach.
+
+### Use Case
+
+The Platform team shares a **Release Reporter** agent with everyone. Its tools read build data from an MCP server that each person connects themselves. Set the agent to **Stop them from using the agent**. A teammate in Support who never connected that server sees the agent greyed out with the reason — instead of a failed tool call three messages in.
 
 ## Invocation Paths
 

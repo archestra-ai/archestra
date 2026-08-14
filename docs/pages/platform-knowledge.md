@@ -185,7 +185,7 @@ Auto-sync permissions mirrors the data source system's access control into Arche
 Auto-sync permissions works with the connectors marked *Supported* below. *Limited* means the source's access control is mirrored with a coarser audience model — the row says which. The others do not support it yet.
 
 | Connector    | Auto-sync permissions                                                                                     |
-| ------------ | ----------------------------------------------------------------------------------------------------------- |
+| ------------ | --------------------------------------------------------------------------------------------------------- |
 | Asana        | Supported                                                                                                 |
 | Confluence   | Supported                                                                                                 |
 | Dropbox      | Supported                                                                                                 |
@@ -198,10 +198,10 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 | Notion       | Limited: every synced page is visible to all workspace members ([details](#notion-auto-sync-permissions)) |
 | OneDrive     | Supported                                                                                                 |
 | Outline      | Supported                                                                                                 |
+| Perforce     | Supported with the Kubernetes orchestrator ([details](#perforce-helix-core))                              |
 | Salesforce   | Supported                                                                                                 |
 | ServiceNow   | Supported ([details](#servicenow-auto-sync-permissions))                                                  |
 | SharePoint   | Supported                                                                                                 |
-| Perforce     | Not supported                                                                                             |
 | Web Crawler  | Not supported                                                                                             |
 
 **Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
@@ -218,10 +218,13 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 - **Asana** returns workspace members' emails through the same personal access token the connector already uses. No extra credential is needed, but the token's user must be able to see the synced projects and their members.
 - **Outline** returns member emails only when listing workspace users, never inside collection or group membership listings. The connector reads every member's email from that user list, so an API key that cannot list workspace users leaves all members unresolvable. See [Outline](#outline).
 - **ServiceNow** reads user emails from the `sys_user` table with the same credential the connector uses. A user whose email field is empty stays unresolvable.
+- **Perforce** reads each account's `Email` field from its user spec, through the connector's admin user. Accounts without one stay unresolvable. See [Perforce](#perforce-helix-core).
 
 **Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators, GitLab project members. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
 
 **Manual user assignment.** When an account's email stays hidden, assign it to an Archestra user from the Users tab.
+
+**Editing a connector.** Saving new settings or credentials stops the permission sync running against the old ones — that run ends as **Superseded**. A replacement run starts straight away, so you don't wait for the next scheduled one.
 
 #### Atlassian Organization Admin API Key
 
@@ -725,6 +728,30 @@ Each depot path and extension combination is listed in its own REST API request.
 | Login Ticket  | An all-hosts ticket from `p4 login -a -p`                                                               |
 | File Types    | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                           |
 | Exclude Paths | Optional comma-separated depot paths skipped within the synced paths (e.g., `//depot/docs/generated`)  |
+
+#### Permission Sync
+
+The connector supports [auto-sync permissions](#auto-sync-permissions). The REST API cannot read the protections table, so permission sync runs the `p4` CLI in a dedicated in-cluster pod — the p4 shim. This requires the Kubernetes orchestrator. The shim pod is isolated: it accepts connections only from platform pods and connects out only to the Perforce server. For `ssl:` targets the server's certificate fingerprint is trusted on first use, like `p4 trust`. The image contains no Perforce software; the backend downloads the pinned `p4` binary when it provisions the pod — see [Deployment](/docs/platform-deployment#perforce-permission-sync-p4-shim) for the image and binary-source variables (air-gapped installs point them at an internal mirror).
+
+Choosing the auto-sync-permissions visibility adds three fields to the form:
+
+| Field              | Description                                                                       |
+| ------------------ | --------------------------------------------------------------------------------- |
+| Admin Username     | The Perforce user permission sync authenticates as                                |
+| Admin Password     | That account's password                                                            |
+| P4 Port            | Wire-protocol address of the server, when that is not the Server URL's host        |
+
+The admin user needs `super` access — or `admin` with the `dm.protects.allow.admin=1` configurable — to read the full protections table (`p4 protects -a`), group definitions, and the user list.
+
+Leave P4 Port empty on a normal server. The P4 web server runs inside the Perforce server, so Archestra dials the Server URL's host on port 1666 and works out the transport by trying plain and SSL. Fill the field in only when something else serves the REST API — an ingress in front of the web server, for example.
+
+Test Connection checks the whole path. It reaches the server over the wire address, signs the admin user in, and reads the protections table, so a wrong address or an under-privileged account shows up here rather than at the first permission sync.
+
+Permission sync runs in a pod of its own, one per connector. The pod exists while the connector syncs permissions and is removed when it stops — when you delete the connector, disable it, or change its visibility. Changing the server, the admin user or any credential replaces the pod, so a revoked credential stops working straight away.
+
+A document's audience is the set of users whose effective read access to its depot path the protections table grants, walked with the exclusion lines honored. Access is evaluated as from an unnamed host, so host-restricted lines don't participate. Audiences are always individual users — granting through a group still resolves to its members, because an exclusion line can carve a member out of a granted group.
+
+Users are matched to Archestra accounts by the `Email` field of their Perforce user spec. A user without a resolvable email is dropped from audiences (fail-closed); assign such accounts to Archestra users from the connector's Users tab.
 
 ### M-Files
 

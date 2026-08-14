@@ -1662,6 +1662,19 @@ Permission sync for connectors using [auto-sync permissions](/docs/platform-know
   - Default: `1`
   - This lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so permission sync never competes with content sync for slots.
 
+#### Perforce Permission Sync (p4 Shim)
+
+Permission sync for the [Perforce connector](/docs/platform-knowledge#perforce-helix-core) runs the `p4` CLI in a small in-cluster pod — the p4 shim. It requires the Kubernetes orchestrator. The shim image ships no Perforce software: the `p4` client is proprietary and is never redistributed in Archestra images. The backend downloads the pinned binary when it provisions the pod, verifies its checksum, and pushes it in. Air-gapped installs point the URL variables at an internal mirror and update the checksums to match.
+
+Each connector gets its own shim, so one connector's Perforce credentials never pass through another's pod and its pod can only reach its own server. The shim is created when a connector starts syncing permissions and removed when it stops — deleted, disabled, or switched to another visibility. It runs one replica the whole time, with equal CPU and memory requests and limits, so Kubernetes places it in the Guaranteed quality-of-service class. Editing a connector's server URL, wire address, admin user or credentials replaces the pod and its access token, so nothing from the previous settings survives.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE`** - Override for the p4 shim image.
+  - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<platform version>`
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_AMD64`** / **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_URL_ARM64`** - Download URL for the `p4` binary, per architecture.
+  - Default: the Perforce CDN r25.2 builds (`https://cdist2.perforce.com/perforce/r25.2/bin.linux26x86_64/p4` and `https://cdist2.perforce.com/perforce/r25.2/bin.linux26aarch64/p4`)
+- **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_AMD64`** / **`ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_P4_SHA256_ARM64`** - Expected SHA-256 of each downloaded binary. A download that does not match is rejected.
+  - Default: the checksums of the r25.2 CDN builds. Update them together with the URL variables.
+
 The Google Drive connector's [individual auth mode](/docs/platform-knowledge#one-google-account) authorizes through a Google OAuth client that belongs to the deployment. Create a **Web application** client in the Google Cloud Console, enable the Google Drive API, and register `<your Archestra URL>/api/connectors/gdrive/oauth/callback` as an authorized redirect URI — the connector form shows the exact string this deployment sends. The service-account modes, domain-wide delegation included, need neither variable.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_GOOGLE_DRIVE_OAUTH_CLIENT_ID`** - Client ID of that OAuth client.

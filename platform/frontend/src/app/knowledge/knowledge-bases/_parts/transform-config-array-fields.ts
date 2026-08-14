@@ -83,6 +83,35 @@ export function transformConfigArrayFields(
       .filter((value) => Number.isInteger(value) && value >= 0);
   }
 
+  if (
+    result.type === "servicenow" &&
+    result.roleAudiences !== null &&
+    typeof result.roleAudiences === "object"
+  ) {
+    // Per-table comma-separated role names → Record<table, string[]>; empty
+    // entries (and an all-empty map) are dropped rather than stored.
+    const roleAudiences: Record<string, string[]> = {};
+    for (const [table, value] of Object.entries(
+      result.roleAudiences as Record<string, unknown>,
+    )) {
+      const roles =
+        typeof value === "string"
+          ? value
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : Array.isArray(value)
+            ? (value as string[]).filter(Boolean)
+            : [];
+      if (roles.length > 0) roleAudiences[table] = roles;
+    }
+    if (Object.keys(roleAudiences).length > 0) {
+      result.roleAudiences = roleAudiences;
+    } else {
+      delete result.roleAudiences;
+    }
+  }
+
   if (result.type === "mfiles") {
     if (typeof result.vaultGuid === "string") {
       result.vaultGuid = normalizeMFilesVaultGuid(result.vaultGuid);

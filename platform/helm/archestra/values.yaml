@@ -569,6 +569,15 @@ archestra:
         #       name: custom-binding-name  # Optional: override the auto-generated binding name
         additionalRoleBindings: []
 
+  # Knowledge base configuration
+  knowledgeBase:
+    # Perforce permission sync
+    perforceShim:
+      # Image for the p4 shim pod the backend provisions for Perforce
+      # permission sync. If not set, defaults to
+      # "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:<app version>"
+      image: ""
+
   # Background worker configuration
   # Deploys a separate Deployment for processing background jobs from the postgres queue
   # (e.g., knowledge base connector syncs, batch embeddings).

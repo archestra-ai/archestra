@@ -163,6 +163,10 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
   value: {{ .Values.archestra.orchestrator.baseImage | quote }}
 {{- end }}
+{{- if .Values.archestra.knowledgeBase.perforceShim.image }}
+- name: ARCHESTRA_KNOWLEDGE_BASE_PERFORCE_SHIM_IMAGE
+  value: {{ .Values.archestra.knowledgeBase.perforceShim.image | quote }}
+{{- end }}
 {{- with .Values.archestra.orchestrator.mcpServerResources }}
 {{- if .requests.cpu }}
 - name: ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST

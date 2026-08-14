@@ -416,7 +416,7 @@ export function getPermissionSyncCredentialNote(
     case "asana":
       return "Auto-sync permissions reads projects, memberships, teams, and member emails as this Personal Access Token's user. Use a token from a user who can see every synced project — typically a workspace admin or a dedicated service user — because audiences the token cannot read stay fail-closed.";
     case "dropbox":
-      return "The access token must have team scopes for auto-sync permissions to work.";
+      return "The access token needs team scopes to expand group members — with a regular member token, granted groups sync empty for manual assignment.";
     default:
       return null;
   }

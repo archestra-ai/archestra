@@ -352,6 +352,7 @@ const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "notion",
   "asana",
   "dropbox",
+  "linear",
 ]);
 
 export function connectorSupportsAutoSync(type: ConnectorType): boolean {

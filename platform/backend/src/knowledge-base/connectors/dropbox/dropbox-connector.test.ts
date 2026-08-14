@@ -18,6 +18,12 @@ const mockTeamGroupsMembersListContinue = vi.fn();
 const mockTeamTokenGetAuthenticatedAdmin = vi.fn();
 const mockDropboxCtor = vi.fn();
 
+/**
+ * Which client issued each call: user endpoints must ride the acting
+ * identity's client (select-user for a team token), team RPCs the bare one.
+ */
+const callLog: { method: string; options: { selectUser?: string } }[] = [];
+
 vi.mock("dropbox", () => {
   class MockDropbox {
     // Kept so token-flavor tests can answer differently per client: the
@@ -28,25 +34,40 @@ vi.mock("dropbox", () => {
       this.options = options;
       mockDropboxCtor(options);
     }
-    teamGroupsMembersList = (...args: unknown[]) =>
-      mockTeamGroupsMembersList(...args);
+    private record(method: string) {
+      callLog.push({ method, options: this.options ?? {} });
+    }
+    teamGroupsMembersList = (...args: unknown[]) => {
+      this.record("teamGroupsMembersList");
+      return mockTeamGroupsMembersList(...args);
+    };
     teamGroupsMembersListContinue = (...args: unknown[]) =>
       mockTeamGroupsMembersListContinue(...args);
     teamTokenGetAuthenticatedAdmin = (...args: unknown[]) =>
       mockTeamTokenGetAuthenticatedAdmin(...args);
-    filesListFolder = (...args: unknown[]) => mockFilesListFolder(...args);
+    filesListFolder = (...args: unknown[]) => {
+      this.record("filesListFolder");
+      return mockFilesListFolder(...args);
+    };
     filesListFolderContinue = (...args: unknown[]) =>
       mockFilesListFolderContinue(...args);
     filesListFolderGetLatestCursor = (...args: unknown[]) =>
       mockFilesListFolderGetLatestCursor(...args);
-    filesDownload = (...args: unknown[]) => mockFilesDownload(...args);
+    filesDownload = (...args: unknown[]) => {
+      this.record("filesDownload");
+      return mockFilesDownload(...args);
+    };
     usersGetCurrentAccount = () => mockUsersGetCurrentAccount(this.options);
-    sharingListFolderMembers = (...args: unknown[]) =>
-      mockSharingListFolderMembers(...args);
+    sharingListFolderMembers = (...args: unknown[]) => {
+      this.record("sharingListFolderMembers");
+      return mockSharingListFolderMembers(...args);
+    };
     sharingListFolderMembersContinue = (...args: unknown[]) =>
       mockSharingListFolderMembersContinue(...args);
-    sharingListFileMembers = (...args: unknown[]) =>
-      mockSharingListFileMembers(...args);
+    sharingListFileMembers = (...args: unknown[]) => {
+      this.record("sharingListFileMembers");
+      return mockSharingListFileMembers(...args);
+    };
     sharingListFileMembersContinue = (...args: unknown[]) =>
       mockSharingListFileMembersContinue(...args);
   }
@@ -164,6 +185,7 @@ describe("DropboxConnector", () => {
     mockTeamGroupsMembersListContinue.mockReset();
     mockTeamTokenGetAuthenticatedAdmin.mockReset();
     mockDropboxCtor.mockReset();
+    callLog.length = 0;
     // sync() and the permission hooks resolve the account first (team-space
     // path rooting); default to a personal account so content-sync tests
     // stay focused on listing/download behavior.
@@ -1499,6 +1521,41 @@ describe("DropboxConnector", () => {
       expect(
         yields.find((y) => y.groupId === "direct-grants")?.members,
       ).toEqual([expect.objectContaining({ accountId: "dbid:admin01" })]);
+      // Team RPCs must ride the BARE client — Dropbox refuses them from a
+      // member context.
+      expect(
+        callLog
+          .filter(({ method }) => method === "teamGroupsMembersList")
+          .every(({ options }) => options.selectUser === undefined),
+      ).toBe(true);
+    });
+
+    it("routes every files and sharing call through the acting admin, with no team space to path-root", async () => {
+      // No rootInfo: the admin has no separate team space, so select-user is
+      // the ONLY header distinguishing the acting client — dropping it would
+      // make every user-endpoint call fail against a real team token.
+      stubTeamToken();
+      stubWalk([makeCorpusFile("id:f1", { sharedFolderId: "sf-1" })]);
+      mockSharingListFolderMembers.mockResolvedValue(
+        makeMemberPage({
+          users: [makeUserMember("dbid:alice", "alice@corp.com", "editor")],
+        }),
+      );
+
+      const connector = new DropboxConnector();
+      await collectYields(
+        connector.syncPermissionSnapshot(makeSnapshotParams()),
+      );
+
+      const userEndpointCalls = callLog.filter(
+        ({ method }) => !method.startsWith("team"),
+      );
+      expect(userEndpointCalls.length).toBeGreaterThan(0);
+      expect(
+        userEndpointCalls.every(
+          ({ options }) => options.selectUser === "dbmid:admin01",
+        ),
+      ).toBe(true);
     });
   });
 

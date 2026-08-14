@@ -381,6 +381,9 @@ export class DropboxConnector extends BaseConnector {
       const members = await this.listFolderMembers(dbx, sharedFolderId);
       if (!members) continue; // audience phase owns fail-closing this container
       for (const groupMember of members.groups) {
+        // Mirror the audience filter: a traverse-only group grants no read,
+        // so it belongs in no roster either.
+        if (!canReadAccessLevel(groupMember.access_type)) continue;
         groups.set(
           groupMember.group.group_id,
           groupMember.group.group_name ?? null,
@@ -1301,7 +1304,10 @@ export class DropboxConnector extends BaseConnector {
             userMember.user.email ?? null,
           );
         }
-        this.droppedPrincipals += page.groups.length;
+        // Only read-granting group grants are real drops worth reporting.
+        this.droppedPrincipals += page.groups.filter((groupMember) =>
+          canReadAccessLevel(groupMember.access_type),
+        ).length;
         if (!page.cursor) break;
         await this.rateLimit();
         page = (

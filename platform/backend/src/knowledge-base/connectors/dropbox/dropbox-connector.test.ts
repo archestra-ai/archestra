@@ -1228,6 +1228,30 @@ describe("DropboxConnector", () => {
       ]);
     });
 
+    it("does not roster a traverse-only group — it grants no read", async () => {
+      stubAccount();
+      stubWalk([makeCorpusFile("id:f1", { sharedFolderId: "sf-1" })]);
+      mockSharingListFolderMembers.mockResolvedValue(
+        makeMemberPage({
+          users: [],
+          groups: [makeGroupMember("g:walkers", "Walkers", "traverse")],
+        }),
+      );
+
+      const connector = new DropboxConnector();
+      const yields = await collectYields(
+        connector.syncGroups(makeSnapshotParams()),
+      );
+
+      // Only the owner's direct-grants roster — no group yield at all.
+      expect(yields).toEqual([
+        {
+          groupId: "direct-grants",
+          members: [expect.objectContaining({ accountId: "dbid:owner" })],
+        },
+      ]);
+    });
+
     it("throws when the corpus walk fails instead of yielding a truncated roster", async () => {
       stubAccount();
       mockFilesListFolder.mockRejectedValue(new Error("network"));

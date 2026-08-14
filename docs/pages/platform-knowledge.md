@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and how retrieval works
-lastUpdated: 2026-08-13
+lastUpdated: 2026-08-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -199,9 +199,9 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 | OneDrive     | Supported                                                                                                 |
 | Outline      | Supported                                                                                                 |
 | Salesforce   | Supported                                                                                                 |
+| ServiceNow   | Supported ([details](#servicenow-auto-sync-permissions))                                                  |
 | SharePoint   | Supported                                                                                                 |
 | Perforce     | Not supported                                                                                             |
-| ServiceNow   | Not supported                                                                                             |
 | Web Crawler  | Not supported                                                                                             |
 
 **Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
@@ -217,6 +217,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 - **Notion** returns member emails only when the integration has the **"read user information including email addresses"** capability. Guests are never listed.
 - **Asana** returns workspace members' emails through the same personal access token the connector already uses. No extra credential is needed, but the token's user must be able to see the synced projects and their members.
 - **Outline** returns member emails only when listing workspace users, never inside collection or group membership listings. The connector reads every member's email from that user list, so an API key that cannot list workspace users leaves all members unresolvable. See [Outline](#outline).
+- **ServiceNow** reads user emails from the `sys_user` table with the same credential the connector uses. A user whose email field is empty stays unresolvable.
 
 **Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators, GitLab project members. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
 
@@ -351,9 +352,27 @@ Permission reads run as the token's user. A project or roster the token cannot r
 
 Sync ITSM records from a ServiceNow instance.
 
-**Indexed:** incidents, change requests, change tasks, problems, and business applications. Incidents are enabled by default; the rest are opt-in.
+**Indexed:** incidents, change requests, change tasks, problems, business applications, and published knowledge articles. Incidents are enabled by default; the rest are opt-in.
 
 **Authentication:** basic auth (username + password) or an OAuth bearer token. For basic auth, put the username in the Email field and the password in the API Token field. For OAuth, leave Email empty and put the bearer token in the API Token field.
+
+**Required roles.** Use a dedicated service account ("Web service access only" is fine). The account needs roles that can read every synced table:
+
+| Role | Grants read on |
+| --- | --- |
+| `itil` | Incidents, changes, change tasks, problems, and business applications |
+| `knowledge` | Knowledge articles |
+| `user_criteria_admin`, `user_admin` | User criteria definitions and the user, group, and role tables auto-sync reads |
+
+The Can Read / Cannot Read criteria mappings (`kb_uc_can_read_mtom`, `kb_uc_cannot_read_mtom`) have no role-based read access out of the box — built-in roles such as `knowledge_admin` do not open them. Auto-sync permissions needs explicit access control lists (ACLs) on both tables.
+
+Creating ACLs requires the `security_admin` role. ServiceNow grants it by elevation for the current session, and hides the **New** button on the ACL list until you elevate: open the profile menu, select **Elevate role**, and check **security_admin**. Then:
+
+1. Go to **System Security → Access Control (ACL)** and select **New**. Set Type `record`, Operation `read`, and Name `kb_uc_can_read_mtom` with the field left as `--None--`. Under **Requires role**, add a role the service account holds. Submit.
+2. Create a second ACL for the same table with the field set to `*`, which grants read on its fields.
+3. Repeat both ACLs for `kb_uc_cannot_read_mtom`.
+
+An account without the right roles fails in one of two ways, depending on the instance's ACLs: the sync errors with HTTP 403 "Insufficient rights to query records", or ServiceNow silently filters the rows and the sync succeeds with nothing ingested. Test the account directly before connecting: `curl -u '<user>:<password>' 'https://<instance>.service-now.com/api/now/table/incident?sysparm_limit=1'` should return a record, not an error and not an empty result.
 
 | Field                         | Description                                                                                                                   |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -363,9 +382,32 @@ Sync ITSM records from a ServiceNow instance.
 | Include Change Tasks          | Sync change tasks from the `change_task` table (default: off)                                                                 |
 | Include Problems              | Sync problems from the `problem` table (default: off)                                                                         |
 | Include Business Applications | Sync business applications from the `cmdb_ci_business_app` CMDB table (default: off)                                          |
+| Include Knowledge Articles    | Sync published knowledge articles from the `kb_knowledge` table (default: off)                                                |
+| Role audiences                | Per-table ServiceNow role names for auto-sync permissions — see below (optional)                                              |
 | States                        | Comma-separated state values to filter by (e.g. `1, 2`). Applies to incidents, changes, change tasks, and problems (optional) |
 | Assignment Groups             | Comma-separated assignment group sys_ids to filter by. Does not apply to business applications (optional)                     |
 | Batch Size                    | Records per batch (default: 50)                                                                                               |
+
+#### ServiceNow Auto-Sync Permissions
+
+ServiceNow decides record access with ACL rules, and those rules cannot be read through its REST API. For ITSM records and business applications, the connector grants each record to its participants instead: assignment group members plus the referenced users — the caller, the opener, and the assignee. That never grants wider than ServiceNow itself, but a user who could read a record upstream through roles or custom ACLs may not see it here. To widen a table's audience, add role names under **Role audiences** (`itil`, for example) — every holder of those roles may then read every synced record of that table, including business applications.
+
+Knowledge articles follow ServiceNow's own permission model: **Can Read** and **Cannot Read** user criteria at knowledge-base and article level. The connector expands each criteria to its users, groups, roles, companies, departments, and locations. Script-based (advanced) criteria cannot be evaluated over the API: on an allow path they grant nobody; on a deny path the affected knowledge base or article is hidden from everyone. A knowledge base without criteria follows the instance's `glide.knowman.block_access_with_no_user_criteria` property — open to your whole Archestra organization when `false`, hidden when `true` or unreadable.
+
+**Required access.** The connector account needs read access to these tables:
+
+| Tables | Used for |
+| --- | --- |
+| `incident`, `change_request`, `change_task`, `problem`, `cmdb_ci_business_app`, `kb_knowledge` | Content sync of the enabled entities. Reading the ITSM tables needs the `itil` role on most instances |
+| `sys_user`, `sys_user_group`, `sys_user_grmember`, `sys_user_has_role` | Resolving participants, group rosters, and role audiences to user emails |
+| `user_criteria`, `kb_uc_can_read_mtom`, `kb_uc_cannot_read_mtom`, `sys_properties` | Knowledge-article audiences |
+| `core_company`, `cmn_department`, `cmn_location` | Expanding criteria that reference them |
+
+The [Required roles](#servicenow) section above covers these, including the explicit ACLs the criteria mapping tables need.
+
+**Misconfiguration behaves silently.** ServiceNow filters out rows an account cannot read instead of returning an error. An under-privileged account therefore looks like missing data: content sync ingests nothing from a table it cannot read, and a permission table it cannot read makes the affected audiences fail closed — the documents exist but nobody can retrieve them. Each permission sync run reports how many audiences it could not read, so check the run details when documents seem to be missing or hidden. Knowledge bases in the HR Service Delivery scope (`sn_hr_core`) additionally need the `sn_hr_core.content_reader` role; without it their criteria read as empty and the articles fail closed.
+
+Users granted directly on records appear in the connector's **Users** tab under the synthetic `direct-grants` group. A user whose `sys_user` email is empty stays unresolvable; assign such an account manually from the Users tab.
 
 ### Notion
 

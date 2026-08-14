@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import type { ConnectorSyncBatch } from "@/types";
+import type {
+  ConnectorSyncBatch,
+  GroupMembershipYield,
+  PermissionSnapshotYield,
+  PermissionSyncParams,
+} from "@/types";
 import { LinearConnector } from "./linear-connector";
 
 const credentials = { apiToken: "lin_api_test" };
@@ -786,5 +791,392 @@ describe("LinearConnector", () => {
         expect(captureUpdatedAfter(0)).toBe(lockedAfter);
       });
     });
+  });
+});
+
+// ===== Permission sync =====
+
+describe("permission sync", () => {
+  type ContainerYield = Extract<PermissionSnapshotYield, { kind: "container" }>;
+  type DocumentYield = Extract<PermissionSnapshotYield, { kind: "document" }>;
+
+  const ORG = { id: "org-uuid-1", name: "Acme" };
+  const ENG = {
+    id: "team-uuid-eng",
+    key: "ENG",
+    name: "Engineering",
+    private: false,
+  };
+  const SEC = {
+    id: "team-uuid-sec",
+    key: "SEC",
+    name: "Security",
+    private: true,
+  };
+
+  const alice = {
+    id: "u-alice",
+    name: "Alice",
+    email: "Alice@example.com",
+    active: true,
+    guest: false,
+    app: false,
+  };
+  const bob = {
+    id: "u-bob",
+    name: "Bob",
+    email: "bob@example.com",
+    active: true,
+    guest: true,
+    app: false,
+  };
+  const carol = {
+    id: "u-carol",
+    name: "Carol",
+    email: "carol@example.com",
+    active: false,
+    guest: false,
+    app: false,
+  };
+  const botUser = {
+    id: "u-bot",
+    name: "Sync Bot",
+    email: null,
+    active: true,
+    guest: false,
+    app: true,
+  };
+
+  const permDocs = [
+    { sourceId: "i1", metadata: { kind: "issue", teamKey: "ENG" } },
+    { sourceId: "i2", metadata: { kind: "issue", teamKey: "ENG" } },
+    { sourceId: "i3", metadata: { kind: "issue", teamKey: "SEC" } },
+    {
+      sourceId: "linear-cycle-c1",
+      metadata: { kind: "cycle", teamKey: "ENG" },
+    },
+    {
+      sourceId: "linear-project-p1",
+      metadata: { kind: "project", projectId: "p1" },
+    },
+    // Ingested before the projectId stamp: id comes from the sourceId.
+    { sourceId: "linear-project-p2", metadata: { kind: "project" } },
+  ];
+
+  function makePermReadBack(
+    docs: Array<{ sourceId: string; metadata: Record<string, unknown> }>,
+  ) {
+    return vi.fn(
+      async (args: {
+        metadataFilter?: Record<string, string>;
+        afterId?: string | null;
+        limit: number;
+      }) => {
+        let rows = docs.filter(
+          (doc) =>
+            !args.metadataFilter ||
+            Object.entries(args.metadataFilter).every(
+              ([key, value]) => doc.metadata[key] === value,
+            ),
+        );
+        rows = rows
+          .filter((doc) => !args.afterId || doc.sourceId > args.afterId)
+          .sort((a, b) => (a.sourceId < b.sourceId ? -1 : 1));
+        const page = rows.slice(0, args.limit);
+        return {
+          documents: page,
+          nextAfterId: page.length ? page[page.length - 1].sourceId : null,
+        };
+      },
+    );
+  }
+
+  /**
+   * Route the raw GraphQL mock by operation name. Overridable per test via
+   * the overrides map (operation substring -> implementation).
+   */
+  function stubPermissionApi(
+    overrides: Partial<
+      Record<string, (variables: Record<string, unknown>) => unknown>
+    > = {},
+  ) {
+    mockRawRequest.mockImplementation(
+      (query: unknown, variables: Record<string, unknown>) => {
+        const q = String(query);
+        for (const [needle, impl] of Object.entries(overrides)) {
+          if (q.includes(needle)) return Promise.resolve(impl?.(variables));
+        }
+        if (q.includes("LinearPermissionOrganization")) {
+          return Promise.resolve({ data: { organization: ORG } });
+        }
+        if (q.includes("LinearPermissionTeamMembers")) {
+          const nodes =
+            variables.teamId === ENG.id ? [alice, bob, carol] : [alice];
+          return Promise.resolve({
+            data: {
+              team: {
+                members: {
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                  nodes,
+                },
+              },
+            },
+          });
+        }
+        if (q.includes("LinearPermissionTeams")) {
+          return Promise.resolve({
+            data: {
+              teams: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [ENG, SEC],
+              },
+            },
+          });
+        }
+        if (q.includes("LinearPermissionUsers")) {
+          return Promise.resolve({
+            data: {
+              users: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [alice, bob, carol, botUser],
+              },
+            },
+          });
+        }
+        if (q.includes("LinearPermissionProjectAudiences")) {
+          const filter = variables.filter as { id?: { in?: string[] } };
+          const known = (filter.id?.in ?? []).includes("p1")
+            ? [
+                {
+                  id: "p1",
+                  teams: {
+                    pageInfo: { hasNextPage: false },
+                    nodes: [{ id: SEC.id }],
+                  },
+                  members: {
+                    pageInfo: { hasNextPage: false },
+                    nodes: [
+                      {
+                        id: "u-eve",
+                        email: "Eve@example.com",
+                        active: true,
+                        app: false,
+                      },
+                      { id: "u-bot", email: null, active: true, app: true },
+                    ],
+                  },
+                },
+              ]
+            : [];
+          return Promise.resolve({
+            data: {
+              projects: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: known,
+              },
+            },
+          });
+        }
+        throw new Error(`Unexpected permission query: ${q.slice(0, 120)}`);
+      },
+    );
+  }
+
+  function syncParams(
+    overrides: Partial<PermissionSyncParams> = {},
+  ): PermissionSyncParams {
+    return {
+      config: { linearApiUrl: "https://api.linear.app" },
+      credentials,
+      cursor: null,
+      readIngestedDocuments: makePermReadBack(permDocs),
+      ...overrides,
+    };
+  }
+
+  async function collectSnapshot(gen: AsyncGenerator<PermissionSnapshotYield>) {
+    const containers = new Map<string, ContainerYield>();
+    const documents: DocumentYield[] = [];
+    const order: string[] = [];
+    for await (const y of gen) {
+      expect(y.cursor).toBe(y.containerKey);
+      if (y.kind === "container") {
+        containers.set(y.containerKey, y);
+        order.push(y.containerKey);
+      } else {
+        documents.push(y);
+      }
+    }
+    return { containers, documents, order };
+  }
+
+  beforeEach(() => {
+    mockRawRequest.mockReset();
+  });
+
+  test("supportsPermissionSync is true", () => {
+    expect(new LinearConnector().supportsPermissionSync).toBe(true);
+  });
+
+  test("full snapshot: team and project containers, sorted, fail-closed for a vanished project", async () => {
+    stubPermissionApi();
+    const connector = new LinearConnector();
+    const { containers, documents, order } = await collectSnapshot(
+      connector.syncPermissionSnapshot(syncParams()),
+    );
+
+    expect(order).toEqual(["project:p1", "project:p2", "team:ENG", "team:SEC"]);
+
+    // Public team: its own group plus the workspace-members group.
+    expect(containers.get("team:ENG")?.permissions.groups?.sort()).toEqual([
+      `team-${ENG.id}`,
+      `workspace-members-${ORG.id}`,
+    ]);
+    // Private team: its roster only.
+    expect(containers.get("team:SEC")?.permissions.groups).toEqual([
+      `team-${SEC.id}`,
+    ]);
+
+    // Project on a private team: no workspace group; explicit project
+    // members appear as direct (lowercased) user emails; app users dropped.
+    const p1 = containers.get("project:p1");
+    expect(p1?.permissions.groups).toEqual([`team-${SEC.id}`]);
+    expect(p1?.permissions.users).toEqual(["eve@example.com"]);
+    expect(p1?.audienceResolutionFailed).toBeUndefined();
+
+    // Vanished project: empty audience, flagged, docs still assigned.
+    const p2 = containers.get("project:p2");
+    expect(p2?.permissions).toEqual({ users: [], groups: [] });
+    expect(p2?.audienceResolutionFailed).toBe(true);
+
+    const byContainer = new Map<string, string[]>();
+    for (const doc of documents) {
+      const list = byContainer.get(doc.containerKey) ?? [];
+      list.push(doc.sourceId);
+      byContainer.set(doc.containerKey, list);
+    }
+    expect(byContainer.get("team:ENG")?.sort()).toEqual([
+      "i1",
+      "i2",
+      "linear-cycle-c1",
+    ]);
+    expect(byContainer.get("team:SEC")).toEqual(["i3"]);
+    expect(byContainer.get("project:p1")).toEqual(["linear-project-p1"]);
+    expect(byContainer.get("project:p2")).toEqual(["linear-project-p2"]);
+  });
+
+  test("resume cursor skips containers strictly below it", async () => {
+    stubPermissionApi();
+    const connector = new LinearConnector();
+    const { order } = await collectSnapshot(
+      connector.syncPermissionSnapshot(syncParams({ cursor: "team:ENG" })),
+    );
+    expect(order).toEqual(["team:ENG", "team:SEC"]);
+  });
+
+  test("delta scope enumerates only the requested containers", async () => {
+    stubPermissionApi();
+    const connector = new LinearConnector();
+    const { order, documents } = await collectSnapshot(
+      connector.syncPermissionSnapshot(
+        syncParams({ scope: { containerKeys: ["team:SEC"] } }),
+      ),
+    );
+    expect(order).toEqual(["team:SEC"]);
+    expect(documents.map((d) => d.sourceId)).toEqual(["i3"]);
+  });
+
+  test("syncGroups: one group per team plus workspace members, sorted, rosters filtered", async () => {
+    stubPermissionApi();
+    const connector = new LinearConnector();
+    const groups: GroupMembershipYield[] = [];
+    for await (const g of connector.syncGroups(syncParams())) groups.push(g);
+
+    expect(groups.map((g) => g.groupId)).toEqual([
+      `team-${ENG.id}`,
+      `team-${SEC.id}`,
+      `workspace-members-${ORG.id}`,
+    ]);
+
+    const eng = groups[0];
+    expect(eng.name).toBe("Engineering");
+    // Suspended carol is dropped; guest bob stays with accountType "guest".
+    expect(eng.members).toEqual([
+      {
+        accountId: "u-alice",
+        displayName: "Alice",
+        email: "alice@example.com",
+        accountType: "member",
+      },
+      {
+        accountId: "u-bob",
+        displayName: "Bob",
+        email: "bob@example.com",
+        accountType: "guest",
+      },
+    ]);
+
+    const workspace = groups[2];
+    expect(workspace.name).toBe("Acme workspace members");
+    // Guests never enter the workspace group; apps are rostered as "app".
+    expect(workspace.members).toEqual([
+      {
+        accountId: "u-alice",
+        displayName: "Alice",
+        email: "alice@example.com",
+        accountType: "member",
+      },
+      {
+        accountId: "u-bot",
+        displayName: "Sync Bot",
+        email: null,
+        accountType: "app",
+      },
+    ]);
+  });
+
+  test("syncGroups throws on a mid-pagination roster failure instead of truncating", async () => {
+    let membersCall = 0;
+    stubPermissionApi({
+      LinearPermissionTeamMembers: () => {
+        membersCall += 1;
+        if (membersCall === 1) {
+          return {
+            data: {
+              team: {
+                members: {
+                  pageInfo: { hasNextPage: true, endCursor: "page-2" },
+                  nodes: [alice],
+                },
+              },
+            },
+          };
+        }
+        throw new Error("boom");
+      },
+    });
+    const connector = new LinearConnector();
+    const gen = connector.syncGroups(syncParams());
+    await expect(async () => {
+      for await (const _ of gen) {
+        // drain
+      }
+    }).rejects.toThrow("boom");
+  });
+
+  test("scopeKeyForDocument maps kinds to their governing container", () => {
+    const connector = new LinearConnector();
+    expect(
+      connector.scopeKeyForDocument({ kind: "issue", teamKey: "ENG" }),
+    ).toBe("team:ENG");
+    expect(
+      connector.scopeKeyForDocument({ kind: "cycle", teamKey: "SEC" }),
+    ).toBe("team:SEC");
+    expect(
+      connector.scopeKeyForDocument({ kind: "project", projectId: "p1" }),
+    ).toBe("project:p1");
+    expect(connector.scopeKeyForDocument({ kind: "project" })).toBeNull();
+    expect(connector.scopeKeyForDocument({ kind: "issue" })).toBeNull();
+    expect(connector.scopeKeyForDocument({ kind: "mystery" })).toBeNull();
   });
 });

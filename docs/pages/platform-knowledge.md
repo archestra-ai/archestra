@@ -192,6 +192,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 | GitHub       | Supported                                                                                                 |
 | GitLab       | Supported                                                                                                 |
 | Jira         | Supported                                                                                                 |
+| Linear       | Supported                                                                                                 |
 | M-Files      | Supported with the VAF Add On                                                                             |
 | Google Drive | Supported                                                                                                 |
 | Notion       | Limited: every synced page is visible to all workspace members ([details](#notion-auto-sync-permissions)) |
@@ -199,7 +200,6 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 | Outline      | Supported                                                                                                 |
 | Salesforce   | Supported                                                                                                 |
 | SharePoint   | Supported                                                                                                 |
-| Linear       | Not supported                                                                                             |
 | Perforce     | Not supported                                                                                             |
 | ServiceNow   | Not supported                                                                                             |
 | Web Crawler  | Not supported                                                                                             |
@@ -211,6 +211,7 @@ Auto-sync permissions works with the connectors marked *Supported* below. *Limit
 - **GitLab** only exposes an email the user has made **public on their profile**. An instance admin token also reads private emails; a regular token does not.
 - **SharePoint** returns SharePoint user logins directly. Expanding a Microsoft 365 group or a SharePoint site group to its members needs the extra app permissions listed under [SharePoint](#sharepoint).
 - **OneDrive** resolves user grants and drive owners to emails through the `User.Read.All` app permission. Without it, those accounts stay unresolvable. See [OneDrive](#onedrive).
+- **Linear** returns member emails to any workspace API key. No extra credential is needed.
 - **Salesforce** reads user emails and group membership through the same login the connector already uses. No extra credential is needed.
 - **Dropbox** returns member emails directly in shared-folder member lists. Group member rosters expand when the access token is a Business **team access token** (`groups.read` + `members.read` team scopes); with a member token, granted groups appear in the Groups tab with no members — assign them manually. See [Dropbox](#dropbox).
 - **Notion** returns member emails only when the integration has the **"read user information including email addresses"** capability. Guests are never listed.
@@ -572,6 +573,10 @@ Sync issues, projects, and cycles from a Linear workspace.
 | Include Projects | Sync projects and recent project updates as documents (default: off)       |
 | Include Cycles   | Sync cycles as documents (default: off)                                    |
 | Batch Size       | Items fetched per request (optional, defaults to connector implementation) |
+
+**Auto-sync permissions.** Linear's access unit is the team. Issues and cycles get their team's audience: a public team admits every workspace member, a private team only its listed members. Guests get access only through teams they were invited to. A project's audience is the members of its teams plus the users listed on the project. Each sync also snapshots every team's roster, so the connector's **Users** and **Groups** tabs show each member with their assignment status. Suspended accounts belong to no audience.
+
+The API key sees what its owner can see. A private team the owner does not belong to syncs no content and grants no access. Use a key from an owner whose access matches what you want indexed.
 
 ### Outline
 

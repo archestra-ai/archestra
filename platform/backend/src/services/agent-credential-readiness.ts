@@ -32,20 +32,15 @@ export async function getAgentCredentialReadiness(params: {
   await Promise.all(
     enforcing.map(async (agent) => {
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
-      catalogIdsByAgent.set(
-        agent.id,
-        [
-          ...new Set(
-            tools.flatMap((tool) => (tool.catalogId ? [tool.catalogId] : [])),
-          ),
-        ],
-      );
+      catalogIdsByAgent.set(agent.id, [
+        ...new Set(
+          tools.flatMap((tool) => (tool.catalogId ? [tool.catalogId] : [])),
+        ),
+      ]);
     }),
   );
 
-  const allCatalogIds = [
-    ...new Set([...catalogIdsByAgent.values()].flat()),
-  ];
+  const allCatalogIds = [...new Set([...catalogIdsByAgent.values()].flat())];
   const catalogs = await InternalMcpCatalogModel.getByIds(allCatalogIds);
 
   const catalogsNeedingConnection = allCatalogIds.filter((catalogId) => {

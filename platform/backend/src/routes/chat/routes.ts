@@ -125,11 +125,11 @@ import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
 } from "@/services/active-chat-run";
+import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
 import {
   type OpenedApp,
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
-import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";

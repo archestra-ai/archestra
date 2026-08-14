@@ -52,6 +52,7 @@ import {
 } from "@/services/environments/environment";
 import {
   type Agent,
+  AgentCredentialReadinessSchema,
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -61,7 +62,6 @@ import {
   AgentSkillExclusionsSchema,
   AgentSubagentExclusionsSchema,
   AgentToolExclusionsSchema,
-  AgentCredentialReadinessSchema,
   ApiError,
   BuiltInAgentConfigSchema,
   CloneAgentBodySchema,

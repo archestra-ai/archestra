@@ -42,6 +42,7 @@ import {
   useOwnAppSessionRecorder,
 } from "@/components/app-session-recording/use-app-session-recorder";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { AgentConnectionNotice } from "@/components/chat/agent-connection-notice";
 import { AppsProvider } from "@/components/chat/apps-context";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import {
@@ -3314,6 +3315,7 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="max-w-4xl mx-auto space-y-3">
+                            <AgentConnectionNotice agentId={activeAgentId} />
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               toolsUnavailable={conversationToolsUnavailable}

@@ -61,6 +61,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  useAgentCredentialReadiness,
   useCreateProfile,
   useInternalAgents,
   useUpdateProfile,
@@ -75,6 +76,11 @@ import {
   useUnassignTool,
 } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  indexReadinessByAgent,
+  listServerNames,
+  resolveAgentConnectionGate,
+} from "@/lib/chat/agent-connection-gate";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -111,6 +117,11 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   onAgentChange,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useInternalAgents();
+  const { data: credentialReadiness } = useAgentCredentialReadiness();
+  const readinessByAgent = useMemo(
+    () => indexReadinessByAgent(credentialReadiness),
+    [credentialReadiness],
+  );
   const { data: session } = useSession();
   const userId = session?.user?.id;
   const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
@@ -322,18 +333,27 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               filteredAgents.map((agent) => {
                 const isSelected = currentAgentId === agent.id;
                 const canEdit = isAgentAdmin || agent.authorId === userId;
+                const gate = resolveAgentConnectionGate(
+                  readinessByAgent.get(agent.id),
+                );
+                const isBlocked = gate.kind === "block";
                 return (
                   <div
                     key={agent.id}
                     className={cn(
-                      "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors hover:bg-accent",
+                      "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors",
+                      isBlocked ? "opacity-60" : "hover:bg-accent",
                       isSelected && "bg-accent",
                     )}
                   >
                     <button
                       type="button"
+                      disabled={isBlocked}
                       onClick={() => handleAgentSelect(agent.id)}
-                      className="flex flex-1 items-center gap-2.5 text-left cursor-pointer min-w-0"
+                      className={cn(
+                        "flex flex-1 items-center gap-2.5 text-left min-w-0",
+                        isBlocked ? "cursor-not-allowed" : "cursor-pointer",
+                      )}
                     >
                       <div
                         className={cn(
@@ -358,6 +378,22 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                         {agent.description && (
                           <div className="text-[11px] text-muted-foreground truncate">
                             {agent.description}
+                          </div>
+                        )}
+                        {gate.kind !== "ok" && (
+                          <div
+                            className={cn(
+                              "text-[11px] truncate",
+                              isBlocked
+                                ? "text-muted-foreground"
+                                : "text-amber-600 dark:text-amber-500",
+                            )}
+                          >
+                            <span>
+                              {isBlocked
+                                ? `Unavailable — connect ${listServerNames(gate.serverNames)} to use this agent`
+                                : `Some tools need ${listServerNames(gate.serverNames)}`}
+                            </span>
                           </div>
                         )}
                       </div>

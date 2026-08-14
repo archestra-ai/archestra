@@ -2,9 +2,9 @@ import { IncomingEmailSecurityModeSchema } from "@archestra/shared";
 import { z } from "zod";
 import {
   AgentScopeSchema,
+  MissingCredentialBehaviorSchema,
   PassthroughHeadersSchema,
   SelectAgentSchema,
-  MissingCredentialBehaviorSchema,
   ToolExposureModeSchema,
 } from "./agent";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";

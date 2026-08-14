@@ -75,10 +75,12 @@ const kbChunksTable = pgTable(
     metadataSuffixSemantic: text("metadata_suffix_semantic"),
     metadataSuffixKeyword: text("metadata_suffix_keyword"),
     /**
-     * Document-level context produced once per document at ingest and copied
-     * onto each of its chunks (contextual retrieval). Denormalized rather than
-     * joined from `kb_documents` because the generated `search_vector` column
-     * can only reference columns of its own row.
+     * Contextual retrieval: a short blurb prepended to the chunk's text during
+     * ingestion to situate it within its document. Depending on configuration,
+     * this may be generated once per document (document-level context) and copied
+     * onto every chunk, or generated individually for each chunk. Denormalized
+     * rather than joined from `kb_documents` because the generated `search_vector`
+     * column can only reference columns of its own row.
      *
      * Prepended to the chunk's embedding input and folded into `search_vector`,
      * but deliberately NOT part of `content` — it is an indexing-time retrieval

@@ -113,6 +113,159 @@ export async function buildDocumentContext(params: {
 }
 
 /**
+ * Determines whether the per-chunk context path should be used for a document
+ * based on configuration and the document's length.
+ */
+export function shouldUsePerChunkContext(chunkCount: number): boolean {
+  return (
+    config.kb.contextualRetrievalEnabled &&
+    config.kb.perChunkContextualRetrievalEnabled &&
+    chunkCount >= MIN_CHUNKS_FOR_PER_CHUNK
+  );
+}
+
+/**
+ * Summarize a batch of chunks, returning an array of context passages aligned
+ * with the input chunks. Each context passage situates its chunk within the
+ * document.
+ */
+export async function buildChunkContexts(params: {
+  title: string;
+  content: string;
+  chunks: string[];
+  organizationId: string;
+  connectorId: string | null;
+}): Promise<(string | null)[]> {
+  const { title, content, chunks, organizationId, connectorId } = params;
+
+  if (chunks.length === 0) return [];
+  if (!shouldUsePerChunkContext(chunks.length)) {
+    return chunks.map(() => null);
+  }
+
+  let rerankerConfig: Awaited<ReturnType<typeof resolveRerankerConfig>>;
+  try {
+    rerankerConfig = await resolveRerankerConfig(organizationId);
+  } catch (error) {
+    logger.warn(
+      {
+        organizationId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "[ContextualRetrieval] Reranker config unresolvable, indexing without chunk context",
+    );
+    return chunks.map(() => null);
+  }
+
+  if (!rerankerConfig || rerankerConfig.kind !== "llm") {
+    logger.debug(
+      { organizationId },
+      `[ContextualRetrieval] ${!rerankerConfig ? "No reranking model configured" : "Reranking model is rerank-only"}, indexing without chunk context`,
+    );
+    return chunks.map(() => null);
+  }
+
+  // Rebind to a `const` so the "llm" narrowing above survives being read from
+  // inside the loop's closures below — TS re-widens a narrowed `let` there.
+  const llmRerankerConfig = rerankerConfig;
+
+  const contexts: (string | null)[] = new Array(chunks.length).fill(null);
+
+  for (let i = 0; i < chunks.length; i += CHUNK_CONTEXT_BATCH_SIZE) {
+    const batchChunks = chunks.slice(i, i + CHUNK_CONTEXT_BATCH_SIZE);
+    const chunksText = batchChunks
+      .map((c, idx) => `[Chunk ${i + idx}]\n${c}`)
+      .join("\n\n");
+
+    try {
+      const result = await withKbObservability({
+        operationName: "chat",
+        provider: llmRerankerConfig.provider as Parameters<
+          typeof withKbObservability
+        >[0]["provider"],
+        model: llmRerankerConfig.modelName,
+        source: "knowledge:contextual-retrieval",
+        connectorId,
+        type: getProviderChatInteractionType(
+          llmRerankerConfig.provider as Parameters<
+            typeof getProviderChatInteractionType
+          >[0],
+        ),
+        callback: () =>
+          generateText({
+            model: llmRerankerConfig.llmModel,
+            system: CHUNK_CONTEXT_SYSTEM_PROMPT,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: CHUNK_CONTEXT_USER_PROMPT_DOC.replace(
+                      "{document_title}",
+                      title,
+                    ).replace("{document_content}", truncateForPrompt(content)),
+                    providerOptions: {
+                      anthropic: { cacheControl: { type: "ephemeral" } },
+                    },
+                  },
+                  {
+                    type: "text",
+                    text: CHUNK_CONTEXT_USER_PROMPT_CHUNKS.replace(
+                      "{chunks}",
+                      chunksText,
+                    ),
+                  },
+                ],
+              },
+            ],
+          }),
+        buildInteraction: (res) =>
+          buildContextualRetrievalInteraction(
+            llmRerankerConfig,
+            `[${batchChunks.length} chunks]`,
+            res,
+          ),
+      });
+
+      const lines = result.text.split("\n");
+      let currentChunkIdx = -1;
+      let currentContext = "";
+
+      const finalizeChunk = () => {
+        if (currentChunkIdx >= i && currentChunkIdx < i + batchChunks.length) {
+          contexts[currentChunkIdx] = formatContext(currentContext);
+        }
+        currentContext = "";
+      };
+
+      for (const line of lines) {
+        const match = line.match(/^\[Chunk (\d+)\](.*)/);
+        if (match) {
+          finalizeChunk();
+          currentChunkIdx = parseInt(match[1], 10);
+          currentContext = match[2].trim();
+        } else if (currentChunkIdx !== -1 && line.trim()) {
+          currentContext += (currentContext ? " " : "") + line.trim();
+        }
+      }
+      finalizeChunk();
+    } catch (error) {
+      logger.warn(
+        {
+          organizationId,
+          connectorId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "[ContextualRetrieval] Failed to generate chunk context, indexing without it",
+      );
+    }
+  }
+
+  return contexts;
+}
+
+/**
  * Trim and wrap a raw model response into the header stored on each chunk.
  * Returns `null` for an empty response so callers treat "the model said
  * nothing" the same as "contextual retrieval is off".
@@ -132,6 +285,17 @@ export function formatContext(rawText: string | undefined): string | null {
 }
 
 // ===== Internal constants =====
+
+/**
+ * Minimum number of chunks a document must have to justify the cost of the
+ * per-chunk LLM passes instead of the single document-level pass.
+ */
+const MIN_CHUNKS_FOR_PER_CHUNK = 6;
+
+/**
+ * How many chunks are sent to the model per call for per-chunk context generation.
+ */
+const CHUNK_CONTEXT_BATCH_SIZE = 8;
 
 /**
  * How much of a document is shown to the summarizer. A document-level summary
@@ -220,3 +384,22 @@ Document title:
 
 Document content:
 {document_content}`;
+
+const CHUNK_CONTEXT_SYSTEM_PROMPT = `You write short context passages that will be prepended to excerpts (chunks) of a document in a search index. Your job is to situate each chunk within the wider document so that a search query naming a subject can match a chunk that discusses that subject without explicitly naming it.
+
+You will be given the document title, the document content, and a numbered list of chunks from that document.
+
+Output exactly one context passage per chunk, prefixed with the chunk's number like this:
+[Chunk X] The context passage...
+
+Write plain declarative prose (2-3 sentences max per chunk). Name the concrete entities: products, systems, teams, customers, and the time period. Do not evaluate or summarize conclusions.`;
+
+const CHUNK_CONTEXT_USER_PROMPT_DOC = `Document title:
+{document_title}
+
+Document content:
+{document_content}`;
+
+const CHUNK_CONTEXT_USER_PROMPT_CHUNKS = `Here are the chunks:
+
+{chunks}`;

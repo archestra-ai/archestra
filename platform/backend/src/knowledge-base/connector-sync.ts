@@ -27,7 +27,11 @@ import {
   extractErrorMessage,
 } from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
-import { buildDocumentContext } from "./contextual-retrieval";
+import {
+  buildChunkContexts,
+  buildDocumentContext,
+  shouldUsePerChunkContext,
+} from "./contextual-retrieval";
 import { resolveEmbeddingConfig } from "./kb-llm-client";
 import { enqueuePermissionSyncAfterContentSync } from "./permission-sync-trigger";
 import { knowledgeSourceAccessControlService } from "./source-access-control";
@@ -1117,23 +1121,36 @@ class ConnectorSyncService {
 
     if (chunks.length === 0) return;
 
-    // Best-effort and non-fatal: a document indexes without context rather than
-    // failing the sync. Generated once here and copied onto every chunk.
-    const contextualHeader = await buildDocumentContext({
-      title,
-      content,
-      organizationId,
-      connectorId,
-    });
+    // Decide per-chunk vs document-level context
+    let contextualHeaders: (string | null)[];
+    if (shouldUsePerChunkContext(chunks.length)) {
+      contextualHeaders = await buildChunkContexts({
+        title,
+        content,
+        chunks: chunks.map((c) => c.content),
+        organizationId,
+        connectorId,
+      });
+    } else {
+      // Best-effort and non-fatal: a document indexes without context rather than
+      // failing the sync. Generated once here and copied onto every chunk.
+      const docHeader = await buildDocumentContext({
+        title,
+        content,
+        organizationId,
+        connectorId,
+      });
+      contextualHeaders = chunks.map(() => docHeader);
+    }
 
     await KbChunkModel.insertMany(
-      chunks.map((chunk) => ({
+      chunks.map((chunk, i) => ({
         documentId,
         content: chunk.content,
         chunkIndex: chunk.chunkIndex,
         metadataSuffixSemantic: chunk.metadataSuffixSemantic,
         metadataSuffixKeyword: chunk.metadataSuffixKeyword,
-        contextualHeader,
+        contextualHeader: contextualHeaders[i] ?? null,
         ftsLanguage,
         acl,
       })),
@@ -1145,7 +1162,7 @@ class ConnectorSyncService {
       {
         documentId,
         chunkCount: chunks.length,
-        contextualHeader: contextualHeader !== null,
+        contextualHeader: contextualHeaders.some((h) => h !== null),
         ftsLanguage,
       },
       "Document chunked and stored",

@@ -2842,6 +2842,17 @@ const config = {
     contextualRetrievalEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED ===
       "true",
+    /**
+     * Per-chunk contextual retrieval: generate a context blurb per chunk
+     * rather than per document, for better situating of chunks within
+     * heterogeneous or long documents. More expensive than document-level
+     * (one LLM call per batch of ~8 chunks rather than one per document).
+     * Requires `contextualRetrievalEnabled` to also be true.
+     */
+    perChunkContextualRetrievalEnabled:
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_PER_CHUNK_CONTEXTUAL_RETRIEVAL_ENABLED ===
+      "true",
     taskWorkerPollIntervalSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
       5,

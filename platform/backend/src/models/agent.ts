@@ -54,6 +54,7 @@ import {
   type GatewayAgent,
   type InsertAgent,
   type McpServerAgentUsage,
+  type ReadinessAgent,
   type SortingQuery,
   type UpdateAgent,
 } from "@/types";
@@ -1590,6 +1591,27 @@ class AgentModel {
       .limit(1);
 
     return result?.environmentId ?? null;
+  }
+
+  /**
+   * The two fields that decide whether a caller missing an MCP connection is
+   * warned, blocked, or left alone. Kept narrow so the chat turn's pre-flight
+   * check costs one indexed row read.
+   */
+  static async findMissingCredentialEnforcement(
+    id: string,
+  ): Promise<ReadinessAgent | null> {
+    const [result] = await db
+      .select({
+        id: schema.agentsTable.id,
+        missingCredentialBehavior: schema.agentsTable.missingCredentialBehavior,
+        accessAllTools: schema.agentsTable.accessAllTools,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result ?? null;
   }
 
   static async findIdentityProviderId(id: string): Promise<string | null> {

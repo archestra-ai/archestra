@@ -39,6 +39,7 @@ import {
   TeamModel,
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
+import { getAgentCredentialReadiness } from "@/services/agent-credential-readiness";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
@@ -60,6 +61,7 @@ import {
   AgentSkillExclusionsSchema,
   AgentSubagentExclusionsSchema,
   AgentToolExclusionsSchema,
+  AgentCredentialReadinessSchema,
   ApiError,
   BuiltInAgentConfigSchema,
   CloneAgentBodySchema,
@@ -359,6 +361,37 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : undefined,
           status,
         }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/credential-readiness",
+    {
+      schema: {
+        operationId: RouteId.GetAgentCredentialReadiness,
+        description:
+          "For each internal agent that enforces a missing-credential behavior, the MCP servers the calling user has no usable connection to",
+        tags: ["Agents"],
+        response: constructResponseSchema(
+          z.array(AgentCredentialReadinessSchema),
+        ),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      const agents = await AgentModel.findAll(
+        user.id,
+        checker.isAdmin("agent"),
+        { agentTypes: ["agent"], excludeBuiltIn: true },
+      );
+
+      return reply.send(
+        await getAgentCredentialReadiness({ agents, userId: user.id }),
       );
     },
   );

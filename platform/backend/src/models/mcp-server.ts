@@ -1754,6 +1754,41 @@ class McpServerModel {
   }
 
   /**
+   * Of `catalogIds`, the ones the caller can already reach at least one live
+   * install of — their own personal install, an install shared with a team they
+   * belong to, or an org-scoped install. This is the batch, pre-flight shape of
+   * the same own → team → org precedence the runtime applies per call when it
+   * picks which install serves a tool, so a catalog missing from the result is
+   * one the caller would be prompted to connect at tool time.
+   */
+  static async getCatalogIdsWithAccessibleInstall(params: {
+    userId: string;
+    catalogIds: string[];
+  }): Promise<Set<string>> {
+    const { userId, catalogIds } = params;
+    if (catalogIds.length === 0) return new Set();
+
+    const accessibleServerIds =
+      await McpServerModel.getAccessibleInstallIds(userId);
+    if (accessibleServerIds.length === 0) return new Set();
+
+    const rows = await db
+      .selectDistinct({ catalogId: schema.mcpServersTable.catalogId })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, accessibleServerIds),
+          inArray(schema.mcpServersTable.catalogId, catalogIds),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+
+    return new Set(
+      rows.flatMap((row) => (row.catalogId ? [row.catalogId] : [])),
+    );
+  }
+
+  /**
    * Validate that an MCP server can be connected to with given secretId
    */
   static async validateConnection(

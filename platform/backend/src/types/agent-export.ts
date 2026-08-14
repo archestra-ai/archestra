@@ -4,6 +4,7 @@ import {
   AgentScopeSchema,
   PassthroughHeadersSchema,
   SelectAgentSchema,
+  MissingCredentialBehaviorSchema,
   ToolExposureModeSchema,
 } from "./agent";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
@@ -70,6 +71,8 @@ const ExportAgentConfigSchema = z.object({
   ),
   considerContextUntrusted: z.boolean(),
   toolExposureMode: ToolExposureModeSchema,
+  // Optional so payloads exported before this setting existed still import.
+  missingCredentialBehavior: MissingCredentialBehaviorSchema.optional(),
   // default(false) keeps exports from before the field existed importable
   accessAllTools: z.boolean().default(false),
   incomingEmailEnabled: z.boolean(),

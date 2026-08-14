@@ -129,6 +129,7 @@ import {
   type OpenedApp,
   resolveOpenedApp,
 } from "@/services/apps/opened-app-context";
+import { assertCallerMayStartTurn } from "@/services/agent-credential-readiness";
 import { conversationFilesService } from "@/services/conversation-files";
 import { projectService } from "@/services/project";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -417,6 +418,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "The agent associated with this conversation has been deleted",
         );
       }
+
+      // A shared agent may be configured to refuse callers who cannot reach one
+      // of the MCP servers its tools come from, rather than letting them find
+      // out mid-turn when such a tool errors. The picker greys these agents out,
+      // but that is advisory — this is the authoritative check, and it runs
+      // before anything is persisted or streamed. Agents left on the default
+      // `allow` behavior short-circuit inside the service with no extra queries.
+      await assertCallerMayStartTurn({
+        agentId: conversation.agentId,
+        userId: user.id,
+      });
 
       // Incognito: the browser-held key is required up front (fingerprint
       // checked, wrong key 409s before any side effect) and captured ONCE

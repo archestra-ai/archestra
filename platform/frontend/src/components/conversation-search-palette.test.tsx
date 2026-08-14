@@ -420,12 +420,12 @@ describe("ConversationSearchPalette", () => {
     const { rerender } = render(
       <ConversationSearchPalette {...defaultProps} />,
     );
-    expect(screen.queryByText("New incognito chat")).not.toBeInTheDocument();
+    expect(screen.queryByText("New locked chat")).not.toBeInTheDocument();
 
     vi.mocked(useFeature).mockReturnValue(true);
     rerender(<ConversationSearchPalette {...defaultProps} />);
 
-    fireEvent.click(screen.getByText("New incognito chat"));
+    fireEvent.click(screen.getByText("New locked chat"));
     expect(mockRouterPush).toHaveBeenCalledWith("/chat?incognito=1");
   });
 

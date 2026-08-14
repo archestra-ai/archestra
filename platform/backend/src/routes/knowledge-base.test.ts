@@ -11,6 +11,7 @@ import {
   buildContainerToken,
   buildGroupToken,
 } from "@/knowledge-base/acl-tokens";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   ConnectorRunModel,
   GithubAppConfigModel,
@@ -23,6 +24,7 @@ import {
   KnowledgeBaseModel,
   TaskModel,
 } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -51,6 +53,8 @@ describe("knowledge base routes", () => {
         }
       ).organizationId = organizationId;
     });
+
+    registerAuditLogHook(app);
 
     const { default: knowledgeBaseRoutes } = await import("./knowledge-base");
     await app.register(knowledgeBaseRoutes);
@@ -1082,24 +1086,25 @@ describe("knowledge base routes", () => {
     });
 
     test("rejects auto-sync-permissions for a connector type that does not support it", async () => {
-      // notion is not a permission-sync connector (Stage 1: jira/confluence/github;
-      // Stage 2: gdrive/salesforce/sharepoint) — so this must 400.
+      // A crawled site has no upstream ACL to mirror, so web_crawler is the
+      // stable stand-in here: connectors gaining permission sync one by one
+      // never turn this case green by accident.
       const response = await app.inject({
         method: "POST",
         url: "/api/connectors",
         payload: {
-          name: "Auto-sync Notion",
-          connectorType: "notion",
+          name: "Auto-sync Web Crawler",
+          connectorType: "web_crawler",
           visibility: "auto-sync-permissions",
           teamIds: [],
-          config: { type: "notion" },
+          config: { type: "web_crawler", startUrl: "https://example.com" },
           credentials: { apiToken: "token" },
         },
       });
 
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain(
-        "Auto-sync permissions is not supported for notion connectors",
+        "Auto-sync permissions is not supported for web_crawler connectors",
       );
     });
 
@@ -2797,13 +2802,13 @@ describe("knowledge base routes", () => {
       makeKnowledgeBaseConnector,
     }) => {
       const kb = await makeKnowledgeBase(organizationId);
-      // notion is not a permission-sync connector, but a stored row can still
-      // carry the auto-sync visibility; the trigger must reject it.
+      // web_crawler is not a permission-sync connector, but a stored row can
+      // still carry the auto-sync visibility; the trigger must reject it.
       const connector = await makeKnowledgeBaseConnector(
         kb.id,
         organizationId,
         {
-          connectorType: "notion",
+          connectorType: "web_crawler",
           visibility: "auto-sync-permissions",
         },
       );
@@ -3106,7 +3111,7 @@ describe("knowledge base routes", () => {
           displayName: "Alice A",
           email: "alice@example.com",
           accountType: null,
-          user: { id: alice.id, name: alice.name },
+          user: { id: alice.id, name: alice.name, email: alice.email },
           resolvedVia: "email",
         },
         {
@@ -3317,7 +3322,7 @@ describe("knowledge base routes", () => {
           displayName: "Hidden H",
           email: null,
           accountType: null,
-          user: { id: alice.id, name: alice.name },
+          user: { id: alice.id, name: alice.name, email: alice.email },
           resolvedVia: "override",
         },
       ]);
@@ -3363,7 +3368,7 @@ describe("knowledge base routes", () => {
         url: `/api/connectors/${connector.id}/user-groups`,
       });
       expect(response.json().groups[0].members[0]).toMatchObject({
-        user: { id: alice.id, name: alice.name },
+        user: { id: alice.id, name: alice.name, email: alice.email },
         resolvedVia: "email",
       });
     });
@@ -3491,6 +3496,89 @@ describe("knowledge base routes", () => {
       });
       expect(deleteResponse.statusCode).toBe(200);
       expect(await refreshTasks()).toHaveLength(2);
+    });
+
+    test("mapping writes a connector.updated audit row whose snapshot diffs the override", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: alice.id },
+      });
+      expect(response.statusCode).toBe(200);
+      // The audit row is written fire-and-forget after the response.
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "connector",
+        limit: 20,
+        offset: 0,
+      });
+      const row = data.find(
+        (r) => r.resourceId === connector.id && r.httpMethod === "PUT",
+      );
+      expect(row?.action).toBe("connector.updated");
+      expect(row?.outcome).toBe("success");
+      expect(row?.before?.memberOverrides).toEqual([]);
+      expect(row?.after?.memberOverrides).toEqual([
+        `acc-hidden -> alice@example.com (${alice.id})`,
+      ]);
+    });
+
+    test("unmapping writes connector.updated (not connector.deleted) with the override removed", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+      await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: alice.id },
+      });
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}/member-overrides/acc-hidden`,
+      });
+      expect(deleteResponse.statusCode).toBe(200);
+      await new Promise((r) => setTimeout(r, 50));
+
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "connector",
+        limit: 20,
+        offset: 0,
+      });
+      const row = data.find(
+        (r) => r.resourceId === connector.id && r.httpMethod === "DELETE",
+      );
+      // The mapping DELETE must read as a connector update (the connector
+      // survives), with the removed mapping visible in the diff.
+      expect(row?.action).toBe("connector.updated");
+      expect(row?.outcome).toBe("success");
+      expect(row?.before?.memberOverrides).toEqual([
+        `acc-hidden -> alice@example.com (${alice.id})`,
+      ]);
+      expect(row?.after?.memberOverrides).toEqual([]);
     });
   });
 

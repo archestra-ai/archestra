@@ -4,8 +4,13 @@ import type {
   ConnectorDocument,
   ConnectorItemFailure,
   ConnectorSyncBatch,
+  GroupMembershipYield,
+  GroupMemberYield,
   LinearCheckpoint,
   LinearConfig,
+  PermissionSnapshotYield,
+  PermissionSyncParams,
+  ReadIngestedDocuments,
 } from "@/types";
 import { LinearConfigSchema } from "@/types";
 import {
@@ -160,6 +165,112 @@ const CYCLES_QUERY = `
   }
 `;
 
+// ===== Permission-sync queries =====
+
+const PERMISSION_READBACK_PAGE_SIZE = 1000;
+const PERMISSION_TEAMS_PAGE_SIZE = 50;
+const PERMISSION_MEMBERS_PAGE_SIZE = 100;
+const PERMISSION_PROJECTS_CHUNK_SIZE = 50;
+
+const PERMISSION_ORGANIZATION_QUERY = `
+  query LinearPermissionOrganization {
+    organization {
+      id
+      name
+    }
+  }
+`;
+
+const PERMISSION_TEAMS_QUERY = `
+  query LinearPermissionTeams($first: Int!, $after: String) {
+    teams(first: $first, after: $after) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        key
+        name
+        private
+      }
+    }
+  }
+`;
+
+const PERMISSION_TEAM_MEMBERS_QUERY = `
+  query LinearPermissionTeamMembers($teamId: String!, $first: Int!, $after: String) {
+    team(id: $teamId) {
+      members(first: $first, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          name
+          email
+          active
+          guest
+          app
+        }
+      }
+    }
+  }
+`;
+
+const PERMISSION_WORKSPACE_USERS_QUERY = `
+  query LinearPermissionUsers($first: Int!, $after: String) {
+    users(first: $first, after: $after) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        name
+        email
+        active
+        guest
+        app
+      }
+    }
+  }
+`;
+
+const PERMISSION_PROJECT_AUDIENCES_QUERY = `
+  query LinearPermissionProjectAudiences($first: Int!, $filter: ProjectFilter) {
+    projects(first: $first, filter: $filter) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        teams(first: 50) {
+          pageInfo {
+            hasNextPage
+          }
+          nodes {
+            id
+          }
+        }
+        members(first: 100) {
+          pageInfo {
+            hasNextPage
+          }
+          nodes {
+            id
+            email
+            active
+            app
+          }
+        }
+      }
+    }
+  }
+`;
+
 type LinearSyncPhase = "issues" | "projects" | "cycles";
 type LinearPageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearLabelNode = { name?: string };
@@ -221,9 +332,49 @@ type LinearProjectsQueryData = {
 type LinearCyclesQueryData = {
   cycles?: { pageInfo?: LinearPageInfo; nodes?: LinearCycleNode[] };
 };
+type LinearPermissionTeamNode = {
+  id: string;
+  key?: string;
+  name?: string;
+  private?: boolean;
+};
+type LinearPermissionUserNode = {
+  id: string;
+  name?: string;
+  email?: string | null;
+  active?: boolean;
+  guest?: boolean;
+  app?: boolean;
+};
+type LinearOrganizationQueryData = {
+  organization?: { id?: string; name?: string } | null;
+};
+type LinearTeamsQueryData = {
+  teams?: { pageInfo?: LinearPageInfo; nodes?: LinearPermissionTeamNode[] };
+};
+type LinearTeamMembersQueryData = {
+  team?: {
+    members?: { pageInfo?: LinearPageInfo; nodes?: LinearPermissionUserNode[] };
+  } | null;
+};
+type LinearUsersQueryData = {
+  users?: { pageInfo?: LinearPageInfo; nodes?: LinearPermissionUserNode[] };
+};
+type LinearProjectAudienceNode = {
+  id: string;
+  teams?: { pageInfo?: LinearPageInfo; nodes?: Array<{ id?: string }> };
+  members?: { pageInfo?: LinearPageInfo; nodes?: LinearPermissionUserNode[] };
+};
+type LinearProjectAudiencesQueryData = {
+  projects?: {
+    pageInfo?: LinearPageInfo;
+    nodes?: LinearProjectAudienceNode[];
+  };
+};
 
 export class LinearConnector extends BaseConnector {
   type = "linear" as const;
+  supportsPermissionSync = true;
 
   async validateConfig(
     config: Record<string, unknown>,
@@ -376,6 +527,173 @@ export class LinearConnector extends BaseConnector {
         },
       });
     }
+  }
+
+  /**
+   * Linear's GraphQL API reports real access boundaries, so this projection
+   * is faithful rather than declared: the TEAM is Linear's ACL unit. Issues
+   * and cycles belong to exactly one team; a PUBLIC team is readable by every
+   * non-guest workspace member, while a PRIVATE team is readable only by its
+   * explicit members (guests included). A project is readable by the members
+   * of any of its teams plus the users explicitly listed on the project.
+   *
+   * Containers: `team:<teamKey>` per team visible to the API key (issues and
+   * cycles are assigned via read-back on the `teamKey` metadata both kinds
+   * already carry) and `project:<projectId>` per ingested project document
+   * (discovered from read-back; audiences batch-resolved in one query).
+   * Audiences reference the groups rostered by `syncGroups`: one group per
+   * team plus the synthetic workspace-members group for public teams. A doc
+   * whose team or project no longer resolves fails closed (empty audience,
+   * or the pass's unassigned sweep).
+   *
+   * The API key sees exactly what its owning user can see, so a private team
+   * outside that user's membership neither syncs content nor leaks audience.
+   * Sharing changes bump no queryable watermark, so there is no cheap probe:
+   * every scheduled pass is a full pass.
+   */
+  async *syncPermissionSnapshot(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<PermissionSnapshotYield> {
+    const parsed = parseLinearConfig(params.config);
+    if (!parsed) {
+      throw new Error("Invalid Linear configuration");
+    }
+    const client = createLinearClient(
+      params.credentials.apiToken,
+      parsed.linearApiUrl,
+    );
+
+    const organization = await this.fetchOrganization(client);
+    const teams = await this.fetchAllTeams(client);
+    const teamsById = new Map(teams.map((team) => [team.id, team]));
+
+    const projectDocs = await collectProjectDocs(params.readIngestedDocuments);
+    const projectAudiences = await this.fetchProjectAudiences(client, [
+      ...projectDocs.keys(),
+    ]);
+
+    const teamsByContainerKey = new Map<string, LinearPermissionTeamNode>();
+    for (const team of teams) {
+      if (team.key) teamsByContainerKey.set(teamContainerKey(team.key), team);
+    }
+    const projectIdsByContainerKey = new Map<string, string>();
+    for (const projectId of projectDocs.keys()) {
+      projectIdsByContainerKey.set(projectContainerKey(projectId), projectId);
+    }
+
+    const containerKeys = [
+      ...teamsByContainerKey.keys(),
+      ...projectIdsByContainerKey.keys(),
+    ].sort();
+
+    for (const containerKey of containerKeys) {
+      if (params.scope && !params.scope.containerKeys.includes(containerKey)) {
+        continue;
+      }
+      if (params.cursor && containerKey < params.cursor) continue;
+
+      const projectId = projectIdsByContainerKey.get(containerKey);
+      if (projectId) {
+        yield* this.emitProjectContainer({
+          containerKey,
+          audience: projectAudiences.get(projectId),
+          docIds: projectDocs.get(projectId) ?? [],
+          teamsById,
+          organizationId: organization.id,
+        });
+        continue;
+      }
+
+      const team = teamsByContainerKey.get(containerKey);
+      if (team) {
+        yield* this.emitTeamContainer({
+          containerKey,
+          team,
+          organizationId: organization.id,
+          readIngestedDocuments: params.readIngestedDocuments,
+        });
+      }
+    }
+  }
+
+  /**
+   * One group per Linear team plus the synthetic workspace-members group
+   * (every active non-guest user — the baseline audience of public teams).
+   * Group ids embed globally-unique Linear UUIDs, so two Linear connectors
+   * can never collide on a group token. Suspended users are omitted (they
+   * cannot sign in to Linear), guests appear only in the rosters of teams
+   * they were invited to, and integration users carry accountType "app" so
+   * admin stats separate them from unresolvable humans. A mid-pagination
+   * failure throws instead of yielding a partial roster: a group yield is an
+   * authoritative complete membership, and a truncated one would revoke
+   * every member in the unfetched tail.
+   */
+  async *syncGroups(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<GroupMembershipYield> {
+    const parsed = parseLinearConfig(params.config);
+    if (!parsed) {
+      throw new Error("Invalid Linear configuration");
+    }
+    const client = createLinearClient(
+      params.credentials.apiToken,
+      parsed.linearApiUrl,
+    );
+
+    const organization = await this.fetchOrganization(client);
+    const teams = await this.fetchAllTeams(client);
+
+    // Order the groups before fetching any roster: the yield cursor is the
+    // group id, so emission order must be stable, and resolving each roster
+    // only when its turn comes holds one roster in memory rather than every
+    // team's at once.
+    const groups: Array<{
+      groupId: string;
+      name: string | null;
+      fetchMembers: () => Promise<GroupMemberYield[]>;
+    }> = teams.map((team) => ({
+      groupId: teamGroupId(team.id),
+      name: team.name ?? team.key ?? null,
+      fetchMembers: () => this.fetchTeamMembers(client, team.id),
+    }));
+    groups.push({
+      groupId: workspaceMembersGroupId(organization.id),
+      name: organization.name
+        ? `${organization.name} workspace members`
+        : "Workspace members",
+      fetchMembers: () => this.fetchWorkspaceMembers(client),
+    });
+    groups.sort((a, b) => (a.groupId < b.groupId ? -1 : 1));
+
+    for (const group of groups) {
+      yield {
+        groupId: group.groupId,
+        name: group.name,
+        members: await group.fetchMembers(),
+        cursor: group.groupId,
+      };
+    }
+  }
+
+  /**
+   * Issues and cycles are governed by their team's container; project docs
+   * by their own project container. Docs whose metadata cannot place them
+   * (no teamKey, or a project doc ingested before projectId stamping) wait
+   * for the next full pass, which assigns project docs from their sourceId.
+   */
+  scopeKeyForDocument(metadata: Record<string, unknown>): string | null {
+    const kind = metadata.kind;
+    if (kind === "project") {
+      return typeof metadata.projectId === "string" && metadata.projectId
+        ? projectContainerKey(metadata.projectId)
+        : null;
+    }
+    if (kind === "issue" || kind === "cycle") {
+      return typeof metadata.teamKey === "string" && metadata.teamKey
+        ? teamContainerKey(metadata.teamKey)
+        : null;
+    }
+    return null;
   }
 
   private async *syncIssuesPhase(params: {
@@ -775,6 +1093,249 @@ export class LinearConnector extends BaseConnector {
       };
     }
   }
+
+  // ===== Permission-sync helpers =====
+
+  private async *emitTeamContainer(params: {
+    containerKey: string;
+    team: LinearPermissionTeamNode;
+    organizationId: string;
+    readIngestedDocuments: ReadIngestedDocuments;
+  }): AsyncGenerator<PermissionSnapshotYield> {
+    const { containerKey, team, organizationId, readIngestedDocuments } =
+      params;
+
+    // A private team is exactly its roster; a public team additionally
+    // admits every non-guest workspace member.
+    const groups = team.private
+      ? [teamGroupId(team.id)]
+      : [teamGroupId(team.id), workspaceMembersGroupId(organizationId)];
+    yield {
+      kind: "container",
+      containerKey,
+      permissions: { groups },
+      cursor: containerKey,
+    };
+
+    let afterId: string | null = null;
+    for (;;) {
+      const { documents, nextAfterId } = await readIngestedDocuments({
+        metadataFilter: { teamKey: team.key ?? "" },
+        afterId,
+        limit: PERMISSION_READBACK_PAGE_SIZE,
+      });
+      for (const doc of documents) {
+        yield {
+          kind: "document",
+          sourceId: doc.sourceId,
+          containerKey,
+          cursor: containerKey,
+        };
+      }
+      if (documents.length < PERMISSION_READBACK_PAGE_SIZE) break;
+      afterId = nextAfterId;
+    }
+  }
+
+  private async *emitProjectContainer(params: {
+    containerKey: string;
+    audience: LinearProjectAudienceNode | undefined;
+    docIds: string[];
+    teamsById: Map<string, LinearPermissionTeamNode>;
+    organizationId: string;
+  }): AsyncGenerator<PermissionSnapshotYield> {
+    const { containerKey, audience, docIds, teamsById, organizationId } =
+      params;
+
+    if (!audience) {
+      // The project vanished upstream or the key lost access to it: emit the
+      // container with an empty audience so every assigned doc fails closed.
+      yield {
+        kind: "container",
+        containerKey,
+        permissions: { users: [], groups: [] },
+        audienceResolutionFailed: true,
+        cursor: containerKey,
+      };
+    } else {
+      const groups = new Set<string>();
+      for (const team of audience.teams?.nodes ?? []) {
+        if (!team.id) continue;
+        groups.add(teamGroupId(team.id));
+        if (teamsById.get(team.id)?.private === false) {
+          groups.add(workspaceMembersGroupId(organizationId));
+        }
+      }
+      const users = new Set<string>();
+      for (const member of audience.members?.nodes ?? []) {
+        if (member.active === false || member.app === true) continue;
+        if (member.email) users.add(member.email.toLowerCase());
+      }
+      if (
+        audience.teams?.pageInfo?.hasNextPage ||
+        audience.members?.pageInfo?.hasNextPage
+      ) {
+        // Truncation under-grants (fail-closed direction); flag it loudly.
+        this.log.warn(
+          { containerKey },
+          "Linear project audience truncated beyond the first page of teams/members; unfetched principals will not be granted access.",
+        );
+      }
+      yield {
+        kind: "container",
+        containerKey,
+        permissions: {
+          users: [...users].sort(),
+          groups: [...groups].sort(),
+        },
+        cursor: containerKey,
+      };
+    }
+
+    for (const sourceId of docIds) {
+      yield {
+        kind: "document",
+        sourceId,
+        containerKey,
+        cursor: containerKey,
+      };
+    }
+  }
+
+  private async fetchOrganization(
+    client: LinearClient,
+  ): Promise<{ id: string; name?: string }> {
+    await this.rateLimit();
+    const payload = await linearRawRequest<LinearOrganizationQueryData>(
+      client,
+      PERMISSION_ORGANIZATION_QUERY,
+    );
+    const id = payload.organization?.id;
+    if (!id) {
+      throw new Error(
+        "Linear GraphQL: organization id missing; cannot derive collision-safe group ids",
+      );
+    }
+    return { id, name: payload.organization?.name };
+  }
+
+  private async fetchAllTeams(
+    client: LinearClient,
+  ): Promise<LinearPermissionTeamNode[]> {
+    const teams: LinearPermissionTeamNode[] = [];
+    let after: string | null = null;
+    let hasMore = true;
+    while (hasMore) {
+      await this.rateLimit();
+      const payload: LinearTeamsQueryData =
+        await linearRawRequest<LinearTeamsQueryData>(
+          client,
+          PERMISSION_TEAMS_QUERY,
+          { first: PERMISSION_TEAMS_PAGE_SIZE, after },
+        );
+      const conn = payload.teams;
+      if (!conn) {
+        throw new Error("Linear GraphQL: missing teams connection");
+      }
+      teams.push(...(conn.nodes ?? []));
+      hasMore = !!conn.pageInfo?.hasNextPage;
+      after = conn.pageInfo?.endCursor ?? null;
+      if (hasMore && !after) break;
+    }
+    return teams;
+  }
+
+  private async fetchTeamMembers(
+    client: LinearClient,
+    teamId: string,
+  ): Promise<GroupMemberYield[]> {
+    const members: GroupMemberYield[] = [];
+    let after: string | null = null;
+    let hasMore = true;
+    while (hasMore) {
+      await this.rateLimit();
+      const payload: LinearTeamMembersQueryData =
+        await linearRawRequest<LinearTeamMembersQueryData>(
+          client,
+          PERMISSION_TEAM_MEMBERS_QUERY,
+          { teamId, first: PERMISSION_MEMBERS_PAGE_SIZE, after },
+        );
+      const conn = payload.team?.members;
+      if (!conn) {
+        throw new Error(
+          `Linear GraphQL: missing members connection for team ${teamId}`,
+        );
+      }
+      members.push(...toGroupMembers(conn.nodes ?? []));
+      hasMore = !!conn.pageInfo?.hasNextPage;
+      after = conn.pageInfo?.endCursor ?? null;
+      if (hasMore && !after) break;
+    }
+    return members;
+  }
+
+  private async fetchWorkspaceMembers(
+    client: LinearClient,
+  ): Promise<GroupMemberYield[]> {
+    const members: GroupMemberYield[] = [];
+    let after: string | null = null;
+    let hasMore = true;
+    while (hasMore) {
+      await this.rateLimit();
+      const payload: LinearUsersQueryData =
+        await linearRawRequest<LinearUsersQueryData>(
+          client,
+          PERMISSION_WORKSPACE_USERS_QUERY,
+          { first: PERMISSION_MEMBERS_PAGE_SIZE, after },
+        );
+      const conn = payload.users;
+      if (!conn) {
+        throw new Error("Linear GraphQL: missing users connection");
+      }
+      // Guests are excluded here by design: the workspace group is the
+      // audience of PUBLIC teams, which guests cannot browse. Guests gain
+      // access only through the rosters of teams they were invited to.
+      members.push(
+        ...toGroupMembers(
+          (conn.nodes ?? []).filter((user) => user.guest !== true),
+        ),
+      );
+      hasMore = !!conn.pageInfo?.hasNextPage;
+      after = conn.pageInfo?.endCursor ?? null;
+      if (hasMore && !after) break;
+    }
+    return members;
+  }
+
+  private async fetchProjectAudiences(
+    client: LinearClient,
+    projectIds: string[],
+  ): Promise<Map<string, LinearProjectAudienceNode>> {
+    const audiences = new Map<string, LinearProjectAudienceNode>();
+    for (
+      let start = 0;
+      start < projectIds.length;
+      start += PERMISSION_PROJECTS_CHUNK_SIZE
+    ) {
+      const chunk = projectIds.slice(
+        start,
+        start + PERMISSION_PROJECTS_CHUNK_SIZE,
+      );
+      await this.rateLimit();
+      const payload = await linearRawRequest<LinearProjectAudiencesQueryData>(
+        client,
+        PERMISSION_PROJECT_AUDIENCES_QUERY,
+        {
+          first: PERMISSION_PROJECTS_CHUNK_SIZE,
+          filter: { id: { in: chunk } },
+        },
+      );
+      for (const node of payload.projects?.nodes ?? []) {
+        audiences.set(node.id, node);
+      }
+    }
+    return audiences;
+  }
 }
 
 // ===== SDK helpers =====
@@ -1169,9 +1730,92 @@ function projectNodeToDocument(project: LinearProjectNode): ConnectorDocument {
     metadata: {
       kind: "project",
       state: project.state,
+      projectId: project.id,
     },
+    // Permission-sync bookkeeping only (scopeKeyForDocument): must not
+    // re-chunk the corpus that predates the stamp.
+    operationalMetadataKeys: ["projectId"],
     updatedAt: project.updatedAt ? new Date(project.updatedAt) : undefined,
   };
+}
+
+// ===== Permission-sync mapping =====
+
+function teamContainerKey(teamKey: string): string {
+  return `team:${teamKey}`;
+}
+
+function projectContainerKey(projectId: string): string {
+  return `project:${projectId}`;
+}
+
+/**
+ * Group ids embed Linear's globally-unique UUIDs (team id / organization id)
+ * so the `group:linear_<id>` ACL tokens of two Linear connectors can never
+ * collide, even across separate Linear workspaces.
+ */
+function teamGroupId(teamId: string): string {
+  return `team-${teamId}`;
+}
+
+function workspaceMembersGroupId(organizationId: string): string {
+  return `workspace-members-${organizationId}`;
+}
+
+function toGroupMembers(nodes: LinearPermissionUserNode[]): GroupMemberYield[] {
+  const members: GroupMemberYield[] = [];
+  for (const user of nodes) {
+    // Suspended users cannot sign in to Linear; they belong in no audience.
+    if (user.active === false) continue;
+    members.push({
+      accountId: user.id,
+      displayName: user.name ?? null,
+      email: user.email ? user.email.toLowerCase() : null,
+      accountType:
+        user.app === true ? "app" : user.guest === true ? "guest" : "member",
+    });
+  }
+  return members;
+}
+
+/**
+ * Ingested project docs grouped by project id, discovered from read-back.
+ * The id comes from the stamped `projectId` metadata when present, else from
+ * the `linear-project-<id>` sourceId (docs ingested before the stamp).
+ * Unparseable docs stay unassigned and fail closed via the pass's sweep.
+ */
+async function collectProjectDocs(
+  readIngestedDocuments: ReadIngestedDocuments,
+): Promise<Map<string, string[]>> {
+  const byProject = new Map<string, string[]>();
+  let afterId: string | null = null;
+  for (;;) {
+    const { documents, nextAfterId } = await readIngestedDocuments({
+      metadataFilter: { kind: "project" },
+      afterId,
+      limit: PERMISSION_READBACK_PAGE_SIZE,
+    });
+    for (const doc of documents) {
+      const stamped = doc.metadata?.projectId;
+      const projectId =
+        typeof stamped === "string" && stamped
+          ? stamped
+          : sourceIdToProjectId(doc.sourceId);
+      if (!projectId) continue;
+      const docIds = byProject.get(projectId);
+      if (docIds) docIds.push(doc.sourceId);
+      else byProject.set(projectId, [doc.sourceId]);
+    }
+    if (documents.length < PERMISSION_READBACK_PAGE_SIZE) break;
+    afterId = nextAfterId;
+  }
+  for (const docIds of byProject.values()) docIds.sort();
+  return byProject;
+}
+
+function sourceIdToProjectId(sourceId: string): string | null {
+  const prefix = "linear-project-";
+  return sourceId.startsWith(prefix) ? sourceId.slice(prefix.length) : null;
 }
 
 function cycleNodeToDocument(cycle: LinearCycleNode): ConnectorDocument {

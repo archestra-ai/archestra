@@ -52,7 +52,7 @@ describe("LogDetail incognito content", () => {
     // Only the response accordion is open by default; the raw marker must
     // never reach the JSON block.
     expect(
-      await screen.findByText("Encrypted incognito content"),
+      await screen.findByText("Encrypted locked-chat content"),
     ).toBeVisible();
     expect(screen.queryByText(/__incognitoLocked/)).not.toBeInTheDocument();
   });

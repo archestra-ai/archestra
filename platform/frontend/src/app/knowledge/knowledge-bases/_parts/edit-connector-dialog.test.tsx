@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EditConnectorDialog } from "./edit-connector-dialog";
@@ -330,5 +336,84 @@ describe("EditConnectorDialog - permission sync interval (auto-sync)", () => {
 
     const [call] = mockMutateAsync.mock.calls;
     expect(call[0].body.permissionSyncIntervalSeconds).toBe(3600);
+  });
+});
+
+describe("EditConnectorDialog - Notion auto-sync limitation note", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+  });
+
+  function makeNotionConnector(
+    visibility: ConnectorFixture["visibility"],
+  ): ConnectorFixture {
+    return {
+      id: "conn-notion-1",
+      name: "Company Notion",
+      description: "",
+      visibility,
+      teamIds: [],
+      connectorType: "notion",
+      environmentId: null,
+      config: { type: "notion" },
+      schedule: "0 */6 * * *",
+      ftsLanguage: "english",
+      permissionSyncIntervalSeconds: 1800,
+      enabled: true,
+    } as ConnectorFixture;
+  }
+
+  it("shows the workspace-audience note with a Learn more link for auto-sync Notion", () => {
+    renderDialog(makeNotionConnector("auto-sync-permissions"));
+
+    const note = screen.getByText(
+      /every synced page visible to all workspace members/,
+    );
+    expect(note).toBeInTheDocument();
+    // The recommendation sentence and the docs link ride in the same note.
+    expect(note).toHaveTextContent(/Share only workspace-appropriate/);
+    // The generic connector-docs link is also a "Learn more"; the note's own
+    // link is the one pointing at the auto-sync section anchor.
+    expect(
+      within(note).getByRole("link", { name: /Learn more/ }),
+    ).toHaveAttribute(
+      "href",
+      expect.stringContaining("#notion-auto-sync-permissions"),
+    );
+  });
+
+  it("hides the note for a Notion connector without auto-sync visibility", () => {
+    renderDialog(makeNotionConnector("org-wide"));
+    expect(
+      screen.queryByText(/every synced page visible to all workspace members/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show the Notion note on other auto-sync connector types", () => {
+    renderDialog({
+      id: "conn-gh-2",
+      name: "Engineering GitHub",
+      description: "",
+      visibility: "auto-sync-permissions",
+      teamIds: [],
+      connectorType: "github",
+      environmentId: null,
+      config: {
+        type: "github",
+        githubUrl: "https://api.github.com",
+        owner: "test-org",
+        authMethod: "pat",
+      },
+      schedule: "0 */6 * * *",
+      ftsLanguage: "english",
+      permissionSyncIntervalSeconds: 1800,
+      enabled: true,
+    } as ConnectorFixture);
+    expect(
+      screen.queryByText(/every synced page visible to all workspace members/),
+    ).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { addNomicTaskPrefix } from "./knowledge-base";
+import {
+  addNomicTaskPrefix,
+  notionWorkspaceIdFromGroupId,
+} from "./knowledge-base";
+
+describe("notionWorkspaceIdFromGroupId", () => {
+  it("returns the workspace id carried by a synthetic members-group id", () => {
+    expect(notionWorkspaceIdFromGroupId("workspace-members-ws-abc123")).toBe(
+      "ws-abc123",
+    );
+  });
+
+  it("returns null for an id that carries no workspace id", () => {
+    // Another connector's real group id, and the bare prefix.
+    expect(notionWorkspaceIdFromGroupId("engineers")).toBeNull();
+    expect(notionWorkspaceIdFromGroupId("workspace-members-")).toBeNull();
+  });
+});
 
 describe("addNomicTaskPrefix", () => {
   it("adds search_document prefix for nomic models", () => {

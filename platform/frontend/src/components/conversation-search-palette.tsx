@@ -466,7 +466,7 @@ export function ConversationSearchPalette({
                 <TooltipTrigger asChild>
                   <IncognitoIcon className="mt-0.5 h-3.5 w-3.5" />
                 </TooltipTrigger>
-                <TooltipContent side="top">Incognito chat</TooltipContent>
+                <TooltipContent side="top">Locked chat</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}
@@ -571,12 +571,12 @@ export function ConversationSearchPalette({
                   </CommandItem>
                   {incognitoEnabled && (
                     <CommandItem
-                      value="new-incognito-chat private"
+                      value="new-incognito-chat private locked"
                       onSelect={handleNewIncognitoChat}
                       className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
                     >
                       <IncognitoIcon className="h-4 w-4 shrink-0" />
-                      <span className="font-medium">New incognito chat</span>
+                      <span className="font-medium">New locked chat</span>
                     </CommandItem>
                   )}
                 </CommandGroup>
@@ -691,7 +691,7 @@ export function ConversationSearchPalette({
           {incognitoEnabled && (
             <FooterShortcut
               keys={[altKey, SHORTCUT_NEW_INCOGNITO_CHAT.label]}
-              label="New Incognito Chat"
+              label="New Locked Chat"
             />
           )}
           <FooterShortcut

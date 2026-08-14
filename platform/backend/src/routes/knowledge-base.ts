@@ -1755,7 +1755,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     accountType: z.string().nullable(),
                     /** Org user this member resolves to; null = grant currently resolves to nobody. */
                     user: z
-                      .object({ id: z.string(), name: z.string() })
+                      .object({
+                        id: z.string(),
+                        name: z.string(),
+                        email: z.string(),
+                      })
                       .nullable(),
                     /** How `user` resolved: a manual admin mapping or the email join; null when unresolved. */
                     resolvedVia: z.enum(["override", "email"]).nullable(),
@@ -1812,7 +1816,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             displayName: string | null;
             email: string | null;
             accountType: string | null;
-            user: { id: string; name: string } | null;
+            user: { id: string; name: string; email: string } | null;
             resolvedVia: "override" | "email" | null;
           }[];
         }

@@ -38,12 +38,12 @@ export function IncognitoContentUnavailable({
       <IncognitoIcon className="mt-0.5 size-5" />
       <div className="space-y-1">
         <p className="text-sm font-medium">
-          {locked ? "Encrypted incognito content" : "Content not stored"}
+          {locked ? "Encrypted locked-chat content" : "Content not stored"}
         </p>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {locked
             ? "This content is encrypted with a key held only in the browser that started the chat. It can be recovered with the escrow key, which is held offline."
-            : "This incognito content could not be encrypted when it was written, so it was never stored. It cannot be recovered."}
+            : "This locked-chat content could not be encrypted when it was written, so it was never stored. It cannot be recovered."}
         </p>
       </div>
     </div>

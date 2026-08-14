@@ -917,7 +917,7 @@ const PromptInputContent = ({
         >
           <IncognitoIcon className="size-3.5" />
           <span>
-            Incognito chat — encrypted with a key that stays in this browser.{" "}
+            Locked chat — encrypted with a key that stays in this browser.{" "}
             {appName} cannot read it, and it isn't available on other devices.
           </span>
         </div>

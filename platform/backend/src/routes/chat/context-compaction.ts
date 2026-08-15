@@ -97,6 +97,14 @@ export type ContextCompactionParams = {
   agentId?: string | null;
   provider: SupportedProvider;
   selectedModel: string;
+  /**
+   * The conversation's `models` FK — the row `provider` / `selectedModel` were
+   * dereferenced from. Carried so the summary can be written by the model the
+   * conversation runs on when the compaction subagent pins none of its own;
+   * the dereferenced pair alone cannot say whether it came from a real row or
+   * from the env fallback.
+   */
+  modelId?: string | null;
   agentLlmApiKeyId?: string | null;
   messages: ChatMessage[];
   systemPrompt?: string;
@@ -279,6 +287,7 @@ async function runCompactMessagesForChat(
       userId: params.userId,
       agentId: params.agentId,
       provider: params.provider,
+      modelId: params.modelId,
       agentLlmApiKeyId: params.agentLlmApiKeyId,
       trigger: params.trigger,
       previousSummary: usableLatestCompaction?.summary ?? null,
@@ -561,6 +570,7 @@ async function createConversationCompaction(params: {
   agentId?: string | null;
   provider: SupportedProvider;
   selectedModel: string;
+  modelId?: string | null;
   agentLlmApiKeyId?: string | null;
   trigger: ConversationCompactionTrigger;
   previousSummary: string | null;
@@ -589,6 +599,16 @@ async function createConversationCompaction(params: {
   );
   const compactionLlm = await resolveAgentLlmOrDefault({
     agent: compactionAgent,
+    // The in-context path above summarizes on the conversation's own model;
+    // this transcript fallback used to jump to the organization default, so
+    // which model wrote a summary depended on which path ran. Inherit the same
+    // model unless an admin pinned one on the compaction subagent — the key is
+    // then resolved exactly as the in-context path resolves it, for the acting
+    // user and with the same agent-key hint.
+    inheritFrom: {
+      modelId: params.modelId ?? null,
+      agentLlmApiKeyId: params.agentLlmApiKeyId ?? null,
+    },
     organizationId: params.organizationId,
     userId: params.userId,
     conversationId: params.conversationId,

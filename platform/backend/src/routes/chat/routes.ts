@@ -1209,6 +1209,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     agentId: conversation.agentId,
                     provider,
                     selectedModel,
+                    modelId: conversation.modelId,
                     inputModalities: modelRow?.inputModalities ?? null,
                     agentLlmApiKeyId: agent.llmApiKeyId,
                     systemPrompt,
@@ -3153,6 +3154,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: conversation.agentId,
         provider,
         selectedModel,
+        modelId: conversation.modelId,
         agentLlmApiKeyId: conversation.agent.llmApiKeyId,
         messages: normalizedMessages,
         systemPrompt: conversation.agent.systemPrompt ?? undefined,
@@ -3497,8 +3499,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
         organizationId,
       );
+      // Unless an admin pinned a model on the title subagent, title the
+      // conversation with the model the conversation itself runs on — the pair
+      // chat resolution already picked and persisted. Falling straight to the
+      // organization default meant a chat on one self-hosted model was titled
+      // by another, with nothing in the UI to explain it.
+      //
+      // Except on Microsoft 365 Copilot, which cannot run a title generation at
+      // all (see the skip below). Inheriting it would turn a chat that used to
+      // get an organization-default title into one that gets none, so leave
+      // that conversation to the organization default.
+      const conversationModel = conversation.modelId
+        ? await ModelModel.findById(conversation.modelId)
+        : null;
       const titleLlm = await resolveAgentLlmOrDefault({
         agent: titleAgent,
+        inheritFrom:
+          conversationModel &&
+          conversationModel.provider !== "microsoft-365-copilot"
+            ? {
+                modelId: conversation.modelId,
+                agentLlmApiKeyId: conversation.agent?.llmApiKeyId ?? null,
+              }
+            : null,
         organizationId,
         userId: user.id,
         conversationId: id,

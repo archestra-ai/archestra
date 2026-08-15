@@ -253,14 +253,44 @@ export async function resolveBestAvailableLlm(params: {
 }
 
 /**
+ * A `(model, key)` pair an agent pins in its own configuration. Both halves are
+ * FKs, so a deleted row is simply NULL and the level is skipped.
+ */
+interface PinnedLlmSelection {
+  llmApiKeyId: string | null;
+  modelId: string | null;
+}
+
+/**
+ * The LLM of the work a built-in subagent is serving.
+ *
+ * Only the MODEL is inherited. The key is always re-resolved for the acting
+ * user, because the key a conversation carries is one the user picked in the
+ * model selector, and `getCurrentApiKey` re-checks their access to it on every
+ * use. Handing that stored secret out directly — as an agent's own configured
+ * key legitimately is, since permission there flows through agent access —
+ * would let a background title or compaction keep billing a team-scoped key
+ * after the user lost access to the team.
+ */
+interface InheritedLlmSelection {
+  modelId: string | null;
+  /**
+   * The serving AGENT's own key, as the resolution hint — never a
+   * conversation's. `getCurrentApiKey` reads it to decide whether the
+   * conversation's key IS the agent's key, which is the one case where the
+   * per-user access check is intentionally skipped.
+   */
+  agentLlmApiKeyId?: string | null;
+}
+
+/**
  * Resolve an agent's explicitly configured LLM (its `modelId` FK and API key),
  * including the API key secret. Returns null when the agent has no usable
  * configuration.
  */
-export async function resolveConfiguredAgentLlm(agent: {
-  llmApiKeyId: string | null;
-  modelId: string | null;
-}): Promise<ResolvedLlmSelection | null> {
+export async function resolveConfiguredAgentLlm(
+  agent: PinnedLlmSelection,
+): Promise<ResolvedLlmSelection | null> {
   if (agent.llmApiKeyId) {
     const apiKeyRecord = await LlmProviderApiKeyModel.findById(
       agent.llmApiKeyId,
@@ -333,77 +363,61 @@ export async function resolveConfiguredAgentLlm(agent: {
 /**
  * Resolve an agent's configured LLM, filling in the provider API key when the
  * agent only pins a model. If the agent has no usable model selection, fall
- * back to organization/default resolution.
+ * back to the inherited selection (see `inheritFrom`), then to
+ * organization/default resolution.
  */
 export async function resolveAgentLlmOrDefault(params: {
-  agent?: { llmApiKeyId: string | null; modelId: string | null } | null;
+  agent?: PinnedLlmSelection | null;
+  /**
+   * The LLM the work being served already runs on — the conversation's model
+   * for a chat subagent, the calling agent's model for an A2A run.
+   *
+   * Consulted after `agent`'s own configuration and before the organization
+   * default, so a built-in subagent nobody has pinned a model on follows the
+   * agent it is working for instead of jumping to whatever the org default
+   * happens to be. Without it, an agent running on one self-hosted model has
+   * its titles summarized and its context compacted on another — silently,
+   * because no error is raised when the org default is merely different rather
+   * than unusable.
+   */
+  inheritFrom?: InheritedLlmSelection | null;
   organizationId: string;
   userId?: string;
   conversationId?: string;
 }): Promise<ResolvedLlmSelection> {
-  const configuredLlm = params.agent
-    ? await resolveConfiguredAgentLlm(params.agent)
-    : null;
-
-  if (configuredLlm) {
-    const agentKeyId = params.agent?.llmApiKeyId ?? null;
-    // Providers whose keys are servers (vLLM, Ollama, …) need resolution even
-    // when the agent's own key already yielded a credential: the agent may be
-    // pinned to one endpoint while its model lives on a sibling one, and only
-    // the endpoint that hosts the model can answer for it. Resolution is given
-    // the agent's key, so it still wins whenever it does serve the model.
-    const resolveEndpointByModel =
-      providerHasEndpointLocalModels(configuredLlm.provider) &&
-      Boolean(configuredLlm.modelName);
-    const fallbackKey =
-      configuredLlm.apiKey && !resolveEndpointByModel
-        ? null
-        : await resolveProviderApiKey({
-            organizationId: params.organizationId,
-            userId: params.userId,
-            provider: configuredLlm.provider,
-            // A working agent key still outranks the conversation's here: this
-            // branch exists to correct the endpoint, not to re-rank ownership.
-            conversationId: configuredLlm.apiKey ? null : params.conversationId,
-            agentLlmApiKeyId: agentKeyId,
-            modelName: configuredLlm.modelName,
-          });
-    // Landing on another row means another server, whose credential and base
-    // URL describe that server and have to travel together. Scoped to the
-    // endpoint-local providers: elsewhere a row is an account, and which base
-    // URL wins is not this change's business.
-    const movedToAnotherEndpoint =
-      resolveEndpointByModel &&
-      fallbackKey?.chatApiKeyId != null &&
-      fallbackKey.chatApiKeyId !== (configuredLlm.chatApiKeyId ?? agentKeyId);
-
-    if (movedToAnotherEndpoint) {
-      return {
-        ...configuredLlm,
-        apiKey: fallbackKey.apiKey,
-        chatApiKeyId: fallbackKey.chatApiKeyId,
-        baseUrl: fallbackKey.baseUrl ?? null,
-      };
+  // 1. What the subagent itself is configured with.
+  if (params.agent) {
+    const configuredLlm = await resolveConfiguredAgentLlm(params.agent);
+    if (configuredLlm) {
+      return withResolvedKey(configuredLlm, params.agent.llmApiKeyId, params);
     }
+  }
 
-    return {
-      ...configuredLlm,
-      apiKey: configuredLlm.apiKey ?? fallbackKey?.apiKey,
-      // Identity travels with whichever row's secret is used.
-      chatApiKeyId: configuredLlm.apiKey
-        ? configuredLlm.chatApiKeyId
-        : fallbackKey?.chatApiKeyId,
-      baseUrl: configuredLlm.baseUrl ?? fallbackKey?.baseUrl ?? null,
-    };
+  // 2. The model the served work runs on — model only, key re-resolved under
+  //    the acting user. See InheritedLlmSelection for why the key is not taken.
+  if (params.inheritFrom?.modelId) {
+    const model = await ModelModel.findById(params.inheritFrom.modelId);
+    if (model) {
+      return withResolvedKey(
+        {
+          provider: model.provider,
+          apiKey: undefined,
+          modelName: model.modelId,
+          baseUrl: null,
+        },
+        params.inheritFrom.agentLlmApiKeyId ?? null,
+        params,
+      );
+    }
   }
 
   return resolveDefaultLlmSelection(params);
 }
 
 /**
- * Resolve the default LLM for built-in subagent operations:
- * organization default first, then best available DB-backed model, then the
- * env/Vertex/config fallback used during bootstrap.
+ * Resolve the default LLM for built-in subagent operations that have nothing
+ * to inherit from: organization default first, then best available DB-backed
+ * model, then the env/Vertex/config fallback used during bootstrap.
  */
 async function resolveDefaultLlmSelection(params: {
   organizationId: string;
@@ -450,6 +464,70 @@ async function resolveDefaultLlmSelection(params: {
 }
 
 // ===== Internal helpers =====
+
+/**
+ * Fill in the provider API key for a selection that pins a model but carries no
+ * usable secret of its own, resolving it for the acting user.
+ */
+async function withResolvedKey(
+  selection: ResolvedLlmSelection,
+  agentLlmApiKeyId: string | null,
+  params: {
+    organizationId: string;
+    userId?: string;
+    conversationId?: string;
+  },
+): Promise<ResolvedLlmSelection> {
+  // Providers whose keys are servers (vLLM, Ollama, …) need resolution even
+  // when the selection's own key already yielded a credential: the agent may be
+  // pinned to one endpoint while its model lives on a sibling one, and only
+  // the endpoint that hosts the model can answer for it. Resolution is given
+  // the agent's key, so it still wins whenever it does serve the model.
+  const resolveEndpointByModel =
+    providerHasEndpointLocalModels(selection.provider) &&
+    Boolean(selection.modelName);
+  const fallbackKey =
+    selection.apiKey && !resolveEndpointByModel
+      ? null
+      : await resolveProviderApiKey({
+          organizationId: params.organizationId,
+          userId: params.userId,
+          provider: selection.provider,
+          // A working agent key still outranks the conversation's here: this
+          // branch exists to correct the endpoint, not to re-rank ownership.
+          conversationId: selection.apiKey ? null : params.conversationId,
+          agentLlmApiKeyId,
+          modelName: selection.modelName,
+        });
+
+  // Landing on another row means another server, whose credential and base
+  // URL describe that server and have to travel together. Scoped to the
+  // endpoint-local providers: elsewhere a row is an account, and which base
+  // URL wins is not this change's business.
+  const movedToAnotherEndpoint =
+    resolveEndpointByModel &&
+    fallbackKey?.chatApiKeyId != null &&
+    fallbackKey.chatApiKeyId !== (selection.chatApiKeyId ?? agentLlmApiKeyId);
+
+  if (movedToAnotherEndpoint) {
+    return {
+      ...selection,
+      apiKey: fallbackKey.apiKey,
+      chatApiKeyId: fallbackKey.chatApiKeyId,
+      baseUrl: fallbackKey.baseUrl ?? null,
+    };
+  }
+
+  return {
+    ...selection,
+    apiKey: selection.apiKey ?? fallbackKey?.apiKey,
+    // Identity travels with whichever row's secret is used.
+    chatApiKeyId: selection.apiKey
+      ? selection.chatApiKeyId
+      : fallbackKey?.chatApiKeyId,
+    baseUrl: selection.baseUrl ?? fallbackKey?.baseUrl ?? null,
+  };
+}
 
 /**
  * Ranked (model, key) pairs across every API key the user can access — the

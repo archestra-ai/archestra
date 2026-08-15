@@ -972,6 +972,144 @@ describe("resolveAgentLlmOrDefault", () => {
     });
   });
 
+  test("falls back to the inherited selection, not the organization default, when the subagent pins no model", async () => {
+    // The reported shape: an agent on a self-hosted vLLM model while the
+    // organization default still points at Ollama. The subagent has no model of
+    // its own, so it must follow the agent's rather than the org's.
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      id: "org-1",
+      defaultModelId: "model-org-ollama",
+      defaultLlmApiKeyId: "key-org-ollama",
+    } as never);
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-vllm",
+      provider: "vllm",
+      secretId: null,
+      baseUrl: "https://vllm.example.test",
+      inferenceBaseUrl: null,
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) =>
+      id === "model-vllm"
+        ? mockModel({
+            id: "model-vllm",
+            provider: "vllm",
+            modelId: "qwen3-32b",
+          })
+        : mockModel({
+            id: "model-org-ollama",
+            provider: "ollama",
+            modelId: "llama3.1",
+          }),
+    );
+
+    const result = await resolveAgentLlmOrDefault({
+      // A seeded built-in subagent: no model, no key.
+      agent: { llmApiKeyId: null, modelId: null },
+      inheritFrom: { llmApiKeyId: "key-vllm", modelId: "model-vllm" },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toMatchObject({
+      provider: "vllm",
+      modelName: "qwen3-32b",
+      baseUrl: "https://vllm.example.test",
+    });
+  });
+
+  test("the subagent's own configured model wins over the inherited selection", async () => {
+    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
+      id: "key-pinned",
+      provider: "anthropic",
+      secretId: null,
+      baseUrl: null,
+      inferenceBaseUrl: null,
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) =>
+      mockModel({
+        id,
+        provider: "anthropic",
+        modelId: id === "model-pinned" ? "claude-pinned" : "claude-inherited",
+      }),
+    );
+
+    const result = await resolveAgentLlmOrDefault({
+      agent: { llmApiKeyId: "key-pinned", modelId: "model-pinned" },
+      inheritFrom: { llmApiKeyId: "key-pinned", modelId: "model-inherited" },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result.modelName).toBe("claude-pinned");
+  });
+
+  test("an inherited selection with no model falls through to the organization default", async () => {
+    // A conversation created before any model was synced carries a null
+    // model_id; the org default must still outrank the env fallback.
+    vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
+      id: "org-1",
+      defaultModelId: "model-org",
+      defaultLlmApiKeyId: "key-org",
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({
+        id: "model-org",
+        provider: "ollama",
+        modelId: "llama3.1",
+      }),
+    );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue({
+      apiKey: "org-key",
+      source: "organization",
+      chatApiKeyId: "key-org",
+      baseUrl: null,
+    });
+
+    const result = await resolveAgentLlmOrDefault({
+      agent: { llmApiKeyId: null, modelId: null },
+      inheritFrom: { llmApiKeyId: null, modelId: null },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toMatchObject({
+      provider: "ollama",
+      modelName: "llama3.1",
+    });
+  });
+
+  test("fills the provider key for an inherited model that pins none", async () => {
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({ id: "model-vllm", provider: "vllm", modelId: "qwen3-32b" }),
+    );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockImplementation(
+      async ({ provider }) =>
+        provider === "vllm"
+          ? {
+              apiKey: "vllm-key",
+              source: "organization",
+              chatApiKeyId: "key-vllm",
+              baseUrl: "https://vllm.example.test",
+            }
+          : NO_KEY,
+    );
+
+    const result = await resolveAgentLlmOrDefault({
+      agent: null,
+      inheritFrom: { llmApiKeyId: null, modelId: "model-vllm" },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      provider: "vllm",
+      apiKey: "vllm-key",
+      modelName: "qwen3-32b",
+      baseUrl: "https://vllm.example.test",
+      chatApiKeyId: "key-vllm",
+    });
+  });
+
   test("falls back to best available model when no organization default is set", async () => {
     vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
       id: "org-1",

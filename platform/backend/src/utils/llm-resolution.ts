@@ -253,14 +253,23 @@ export async function resolveBestAvailableLlm(params: {
 }
 
 /**
+ * A `(model, key)` pair pinned somewhere in the resolution chain — an agent's
+ * own configuration, or the conversation/run a built-in subagent is serving.
+ * Both halves are FKs, so a deleted row is simply NULL and the level is skipped.
+ */
+interface PinnedLlmSelection {
+  llmApiKeyId: string | null;
+  modelId: string | null;
+}
+
+/**
  * Resolve an agent's explicitly configured LLM (its `modelId` FK and API key),
  * including the API key secret. Returns null when the agent has no usable
  * configuration.
  */
-export async function resolveConfiguredAgentLlm(agent: {
-  llmApiKeyId: string | null;
-  modelId: string | null;
-}): Promise<ResolvedLlmSelection | null> {
+export async function resolveConfiguredAgentLlm(
+  agent: PinnedLlmSelection,
+): Promise<ResolvedLlmSelection | null> {
   if (agent.llmApiKeyId) {
     const apiKeyRecord = await LlmProviderApiKeyModel.findById(
       agent.llmApiKeyId,
@@ -336,17 +345,31 @@ export async function resolveConfiguredAgentLlm(agent: {
  * back to organization/default resolution.
  */
 export async function resolveAgentLlmOrDefault(params: {
-  agent?: { llmApiKeyId: string | null; modelId: string | null } | null;
+  agent?: PinnedLlmSelection | null;
+  /**
+   * The LLM the work being served already runs on — the conversation's model
+   * for a chat subagent, the calling agent's model for an A2A run.
+   *
+   * Consulted after `agent`'s own configuration and before the organization
+   * default, so a built-in subagent nobody has pinned a model on follows the
+   * agent it is working for instead of jumping to whatever the org default
+   * happens to be. Without it, an agent running on one self-hosted model has
+   * its titles summarized and its context compacted on another — silently,
+   * because no error is raised when the org default is merely different rather
+   * than unusable.
+   */
+  inheritFrom?: PinnedLlmSelection | null;
   organizationId: string;
   userId?: string;
   conversationId?: string;
 }): Promise<ResolvedLlmSelection> {
-  const configuredLlm = params.agent
-    ? await resolveConfiguredAgentLlm(params.agent)
-    : null;
+  for (const pinned of [params.agent, params.inheritFrom]) {
+    if (!pinned) continue;
 
-  if (configuredLlm) {
-    const agentKeyId = params.agent?.llmApiKeyId ?? null;
+    const configuredLlm = await resolveConfiguredAgentLlm(pinned);
+    if (!configuredLlm) continue;
+
+    const agentKeyId = pinned.llmApiKeyId ?? null;
     // Providers whose keys are servers (vLLM, Ollama, …) need resolution even
     // when the agent's own key already yielded a credential: the agent may be
     // pinned to one endpoint while its model lives on a sibling one, and only
@@ -401,9 +424,9 @@ export async function resolveAgentLlmOrDefault(params: {
 }
 
 /**
- * Resolve the default LLM for built-in subagent operations:
- * organization default first, then best available DB-backed model, then the
- * env/Vertex/config fallback used during bootstrap.
+ * Resolve the default LLM for built-in subagent operations that have nothing
+ * to inherit from: organization default first, then best available DB-backed
+ * model, then the env/Vertex/config fallback used during bootstrap.
  */
 async function resolveDefaultLlmSelection(params: {
   organizationId: string;

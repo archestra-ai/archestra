@@ -415,17 +415,20 @@ test.describe("Chat thinking block layout", () => {
     const thinkingCodeLine = page.getByText("reconcileEverything").first();
     await expect(thinkingCodeLine).toBeVisible({ timeout: 90_000 });
     expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
-    // The prose around that code must still wrap at the chat width rather than
-    // be dragged along by it — otherwise reading the thinking means scrolling
-    // sideways, even with the conversation itself no longer overflowing.
-    const { conversationWidth, proseWidth } = await thinkingProseWidth(page);
-    expect(proseWidth).toBeLessThanOrEqual(conversationWidth);
+    // Nothing here should scroll sideways: not the conversation, and not the
+    // block either. The long identifier in the thinking text has to wrap
+    // instead. The code line is the one thing that may still scroll, and it
+    // does so on its own tinted panel — never spilling off the end of it.
+    const streaming = await thinkingLayout(page);
+    expect(streaming.blockOverflow).toBeLessThanOrEqual(1);
+    expect(streaming.proseOverflow).toBeLessThanOrEqual(1);
+    expect(streaming.codePanelOverflow).toBeLessThanOrEqual(1);
 
     // And again once the block has settled and the reader reopens it. Wait for
     // the block's own auto-collapse rather than racing it: clicking the trigger
     // while it is still open would close the block instead of reopening it.
     await expect(
-      page.getByText("The helper reconciles every knob in one call.").first(),
+      page.getByText("The helper reconciles every knob").first(),
     ).toBeVisible({ timeout: 90_000 });
     await expect(thinkingCodeLine).toBeHidden({ timeout: 30_000 });
     await page
@@ -434,6 +437,16 @@ test.describe("Chat thinking block layout", () => {
       .click();
     await expect(thinkingCodeLine).toBeVisible({ timeout: 10_000 });
     expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
+
+    // Settled, the thinking text reads on the same line length as the answer
+    // below it — both are capped at the same share of the transcript column,
+    // so the block is not a wider column of its own.
+    const settled = await thinkingLayout(page);
+    expect(settled.blockOverflow).toBeLessThanOrEqual(1);
+    expect(settled.proseOverflow).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(settled.proseWidth - settled.answerWidth),
+    ).toBeLessThanOrEqual(2);
   });
 });
 
@@ -462,27 +475,47 @@ async function conversationHorizontalOverflow(page: Page): Promise<number> {
 }
 
 /**
- * Rendered width of the thinking block's first paragraph, next to the width of
- * the transcript it has to fit in.
+ * How the thinking block lays its markdown out: whether the block or its prose
+ * has to scroll sideways to show it, and the line length the prose wraps at
+ * next to the answer's. `answerWidth` is 0 until the answer has rendered.
  */
-async function thinkingProseWidth(
-  page: Page,
-): Promise<{ conversationWidth: number; proseWidth: number }> {
+async function thinkingLayout(page: Page): Promise<{
+  blockOverflow: number;
+  proseOverflow: number;
+  codePanelOverflow: number;
+  proseWidth: number;
+  answerWidth: number;
+}> {
   return page.evaluate(() => {
-    const log = document.querySelector('[role="log"]');
-    const conversation = log?.querySelector(":scope > div");
-    if (!conversation) {
-      throw new Error("Conversation transcript (role=log) not found");
-    }
     const prose = [...document.querySelectorAll("p")].find((paragraph) =>
       paragraph.textContent?.startsWith("Let me re-read the helper"),
     );
-    if (!prose) {
+    if (!prose?.parentElement) {
       throw new Error("Thinking paragraph not rendered");
     }
+    // The markdown root the thinking text renders into — the element that
+    // would carry the scrollbar if the content could not fit.
+    const block = prose.parentElement;
+    const answer = [...document.querySelectorAll(".is-assistant p")].find(
+      (paragraph) =>
+        paragraph.textContent?.startsWith("The helper reconciles every knob"),
+    );
+    // The tinted panel the code sits on. It may be wider than the block — its
+    // own container scrolls — but never narrower than the code, which would
+    // draw the line off the end of its own background.
+    const codePanel = block.querySelector(
+      "[data-streamdown='code-block-body'] pre",
+    );
     return {
-      conversationWidth: conversation.clientWidth,
+      blockOverflow: block.scrollWidth - block.clientWidth,
+      proseOverflow: prose.scrollWidth - prose.clientWidth,
+      codePanelOverflow: codePanel
+        ? codePanel.scrollWidth - codePanel.clientWidth
+        : 0,
       proseWidth: Math.round(prose.getBoundingClientRect().width),
+      answerWidth: answer
+        ? Math.round(answer.getBoundingClientRect().width)
+        : 0,
     };
   });
 }

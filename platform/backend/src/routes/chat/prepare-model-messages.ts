@@ -83,6 +83,13 @@ export async function buildModelMessages(params: {
   agentId?: string | null;
   provider: SupportedProvider;
   selectedModel: string;
+  /**
+   * The conversation's `(model, key)` FK pair, forwarded to compaction so the
+   * summary is written by the model the conversation runs on. See
+   * `ContextCompactionParams` in `./context-compaction`.
+   */
+  modelId?: string | null;
+  chatApiKeyId?: string | null;
   inputModalities?: ModelInputModality[] | null;
   agentLlmApiKeyId?: string | null;
   systemPrompt?: string;

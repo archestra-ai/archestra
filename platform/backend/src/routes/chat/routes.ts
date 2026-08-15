@@ -1209,6 +1209,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     agentId: conversation.agentId,
                     provider,
                     selectedModel,
+                    modelId: conversation.modelId,
+                    chatApiKeyId: conversation.chatApiKeyId,
                     inputModalities: modelRow?.inputModalities ?? null,
                     agentLlmApiKeyId: agent.llmApiKeyId,
                     systemPrompt,
@@ -3153,6 +3155,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: conversation.agentId,
         provider,
         selectedModel,
+        modelId: conversation.modelId,
+        chatApiKeyId: conversation.chatApiKeyId,
         agentLlmApiKeyId: conversation.agent.llmApiKeyId,
         messages: normalizedMessages,
         systemPrompt: conversation.agent.systemPrompt ?? undefined,
@@ -3499,6 +3503,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       const titleLlm = await resolveAgentLlmOrDefault({
         agent: titleAgent,
+        // Unless an admin pinned a model on the title subagent, title the
+        // conversation with the model the conversation itself runs on — the
+        // pair the chat already resolved and persisted. Falling straight to the
+        // organization default meant a chat on one self-hosted model was titled
+        // by another, with nothing in the UI to explain it.
+        inheritFrom: {
+          modelId: conversation.modelId,
+          llmApiKeyId: conversation.chatApiKeyId,
+        },
         organizationId,
         userId: user.id,
         conversationId: id,

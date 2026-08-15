@@ -344,6 +344,8 @@ function serializeForTranscript(messages: A2AMessage[]): string {
 async function buildSummarizer(params: {
   agent: {
     id: string;
+    llmApiKeyId: string | null;
+    modelId: string | null;
     organizationId: string;
   };
   userId: string | null;
@@ -356,6 +358,11 @@ async function buildSummarizer(params: {
   );
   const compactionLlm = await resolveAgentLlmOrDefault({
     agent: compactionAgent,
+    // Summarize on the calling agent's own model unless an admin pinned one on
+    // the compaction subagent. The threshold above is already computed from
+    // this agent's context window, so summarizing on a different model sized
+    // the compaction against a window it never ran in.
+    inheritFrom: params.agent,
     organizationId: params.agent.organizationId,
     userId: params.userId ?? undefined,
   });

@@ -7,6 +7,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import logger from "@/logging";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import { repairStructuredOutputText } from "@/utils/structured-output-repair";
 import {
   getProviderChatInteractionType,
   withKbObservability,
@@ -66,7 +67,9 @@ Query: ${queryText}
 Passages:
 ${numberedList}
 
-Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Return scores for all passages.`;
+Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Return scores for all passages.
+
+${RERANKER_OUTPUT_CONTRACT}`;
 
   const schema = z.object({
     scores: z.array(
@@ -99,6 +102,7 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
           model: rerankerConfig.llmModel,
           schema,
           prompt,
+          experimental_repairText: repairStructuredOutputText,
         }),
       buildInteraction: (res) =>
         buildRerankerInteraction(rerankerConfig, prompt, res),
@@ -151,6 +155,20 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
 }
 
 export default rerank;
+
+/**
+ * Spells out the response shape in the prompt itself.
+ *
+ * `generateObject` puts the schema in `response_format`, never in the prompt,
+ * so a provider client that can't send a JSON schema (or an endpoint that
+ * ignores one) leaves the model with no description of the object at all. It
+ * then answers in whatever shape it likes and the reply fails validation. Both
+ * the reranker and the settings probe that verifies it state the contract, so
+ * verifying a model proves the same thing reranking will ask of it.
+ */
+export const RERANKER_OUTPUT_CONTRACT =
+  'Respond with only a JSON object of the form {"scores":[{"index":0,"score":7}]}, ' +
+  "with one entry per passage — no prose, no markdown code fences.";
 
 // ===== Internal helpers =====
 

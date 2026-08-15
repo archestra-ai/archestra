@@ -493,6 +493,7 @@ export async function handleLLMProxy<
       tokenValue: rawApiKey,
       expectedProvider: providerName,
       agent: resolvedAgent,
+      requestedModel: requestAdapter.getModel(),
     });
     if (oauthResult) {
       apiKey = oauthResult.apiKey;

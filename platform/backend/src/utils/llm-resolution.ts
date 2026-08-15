@@ -3,6 +3,7 @@ import {
   isCompleteModelSelection,
   isSubscriptionCredential,
   type ModelSelection,
+  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   resolveModelSelection,
   type SupportedProvider,
@@ -345,15 +346,42 @@ export async function resolveAgentLlmOrDefault(params: {
     : null;
 
   if (configuredLlm) {
-    const fallbackKey = configuredLlm.apiKey
-      ? null
-      : await resolveProviderApiKey({
-          organizationId: params.organizationId,
-          userId: params.userId,
-          provider: configuredLlm.provider,
-          conversationId: params.conversationId,
-          agentLlmApiKeyId: params.agent?.llmApiKeyId ?? null,
-        });
+    const agentKeyId = params.agent?.llmApiKeyId ?? null;
+    // Providers whose keys are servers (vLLM, Ollama, …) need resolution even
+    // when the agent's own key already yielded a credential: the agent may be
+    // pinned to one endpoint while its model lives on a sibling one, and only
+    // the endpoint that hosts the model can answer for it. Resolution is given
+    // the agent's key, so it still wins whenever it does serve the model.
+    const resolveEndpointByModel =
+      providerHasEndpointLocalModels(configuredLlm.provider) &&
+      Boolean(configuredLlm.modelName);
+    const fallbackKey =
+      configuredLlm.apiKey && !resolveEndpointByModel
+        ? null
+        : await resolveProviderApiKey({
+            organizationId: params.organizationId,
+            userId: params.userId,
+            provider: configuredLlm.provider,
+            // A working agent key still outranks the conversation's here: this
+            // branch exists to correct the endpoint, not to re-rank ownership.
+            conversationId: configuredLlm.apiKey ? null : params.conversationId,
+            agentLlmApiKeyId: agentKeyId,
+            modelName: configuredLlm.modelName,
+          });
+    // Landing on another row means another server, whose credential and base
+    // URL describe that server and have to travel together.
+    const movedToAnotherEndpoint =
+      fallbackKey?.chatApiKeyId != null &&
+      fallbackKey.chatApiKeyId !== (configuredLlm.chatApiKeyId ?? agentKeyId);
+
+    if (movedToAnotherEndpoint) {
+      return {
+        ...configuredLlm,
+        apiKey: fallbackKey.apiKey,
+        chatApiKeyId: fallbackKey.chatApiKeyId,
+        baseUrl: fallbackKey.baseUrl ?? null,
+      };
+    }
 
     return {
       ...configuredLlm,
@@ -388,6 +416,7 @@ async function resolveDefaultLlmSelection(params: {
         userId: params.userId,
         provider: model.provider,
         agentLlmApiKeyId: organization.defaultLlmApiKeyId,
+        modelName: model.modelId,
       });
       return {
         provider: model.provider,

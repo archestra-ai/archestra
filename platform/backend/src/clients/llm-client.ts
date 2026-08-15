@@ -367,6 +367,7 @@ export async function createLLMModelForAgent(params: {
     provider,
     conversationId,
     agentLlmApiKeyId,
+    modelName,
   });
 
   // Check if Gemini with Vertex AI (doesn't require API key)

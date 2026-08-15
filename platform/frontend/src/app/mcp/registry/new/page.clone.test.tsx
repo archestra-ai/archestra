@@ -38,7 +38,15 @@ vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/environment.query", () => ({
   useEnvironments: vi.fn(() => ({
-    data: { environments: [], defaultAssignedCatalogCount: 0 },
+    data: {
+      environments: [],
+      defaultAssignedCatalogCount: 0,
+      resourceDefaults: {},
+    },
+  })),
+  useDefaultEnvironmentIdForResource: vi.fn(() => ({
+    environmentId: null,
+    isResolved: true,
   })),
 }));
 

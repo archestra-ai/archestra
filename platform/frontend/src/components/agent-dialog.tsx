@@ -182,6 +182,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
   useIsKnowledgeBaseConfigured,
@@ -1363,6 +1364,15 @@ function AgentDialogBody({
       lastAutoSelectedProviderRef.current = null;
     }
   }, [open, agent, freshAgent, refetchAgent, isInternalAgent]);
+
+  // A brand-new agent starts in the org's configured landing environment for
+  // its type. Kept out of the reset path above (same reasoning as the seeds
+  // below) and declared after it so the reset can't overwrite the seed.
+  useDefaultEnvironmentSeed({
+    resource: getResourceForAgentType(agentType),
+    enabled: open && !agent,
+    apply: setEnvironmentId,
+  });
 
   // Sync selectedDelegationTargetIds with currentDelegations when data loads.
   // Agent refetches can update freshAgent after delegations have loaded; keeping

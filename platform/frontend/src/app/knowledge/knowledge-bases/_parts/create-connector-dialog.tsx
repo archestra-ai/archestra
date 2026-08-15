@@ -43,6 +43,7 @@ import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
 import {
   useCreateConnector,
   useStartGoogleDriveOAuth,
@@ -154,6 +155,13 @@ export function CreateConnectorDialog({
   });
 
   const connectorType = form.watch("connectorType");
+  // A brand-new connector starts in the org's configured landing environment
+  // for knowledge connectors.
+  useDefaultEnvironmentSeed({
+    resource: "knowledgeSource",
+    enabled: open,
+    apply: (environmentId) => form.setValue("environmentId", environmentId),
+  });
 
   const handleSelectType = (type: ConnectorType) => {
     setSelectedType(type);

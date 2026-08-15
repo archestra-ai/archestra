@@ -57,6 +57,7 @@ import {
   resolveEditorDraftPolicy,
   resolveNetworkPolicyUpdate,
 } from "./environment-policy-draft";
+import { EnvironmentResourceDefaultsSection } from "./environment-resource-defaults-section";
 import { compileValidationRegex } from "./environment-validation-helpers";
 
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
@@ -291,6 +292,8 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         target={deleteTarget}
         onClose={() => setDeleteTarget(null)}
       />
+
+      <EnvironmentResourceDefaultsSection canEdit={canEdit} />
     </div>
   );
 }

@@ -248,6 +248,38 @@ function toolInstallNotUninstalled(agentTools = schema.agentToolsTable): SQL {
   ) as SQL;
 }
 
+/**
+ * Excludes a delegation tool whose target agent has been (soft-)deleted.
+ *
+ * Deleting an agent is a soft delete, so the `delegate_to_agent_id` FK's
+ * `on delete cascade` never fires and the `agent__<name>` tool outlives the
+ * agent it delegates to. Nothing can call it — the gateway resolves delegation
+ * targets through the same `notDeleted` filter (see
+ * {@link ToolModel.getDelegationToolsForAgent}) — so listing it only offers
+ * policy rows for an agent that no longer exists.
+ *
+ * Filtering here rather than deleting the row on agent delete keeps the tool
+ * (and its policies) intact for {@link AgentModel.restore}.
+ *
+ * Correlates on `tools`, so every caller must have it in its FROM.
+ */
+function delegationTargetNotDeleted(): SQL {
+  return or(
+    isNull(schema.toolsTable.delegateToAgentId),
+    exists(
+      db
+        .select({ one: sql`1` })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.id, schema.toolsTable.delegateToAgentId),
+            notDeleted(schema.agentsTable),
+          ),
+        ),
+    ),
+  ) as SQL;
+}
+
 class ToolModel {
   /**
    * Slugify a tool name to get a unique name for the MCP server's tool.
@@ -3596,29 +3628,9 @@ class ToolModel {
       );
     }
 
-    // A delegation tool outlives the agent it delegates to: agents are
-    // soft-deleted, so the FK's ON DELETE CASCADE never fires and the
-    // `agent__<name>` row stays behind. Such a tool can never be called (the
-    // gateway resolves delegation targets with the same notDeleted filter), so
-    // keep it out of the listing instead of showing policy rows for an agent
-    // that no longer exists. Query-time, not a cleanup on delete: restoring the
-    // agent brings its delegation tool back with it.
-    toolWhereConditions.push(
-      or(
-        isNull(schema.toolsTable.delegateToAgentId),
-        exists(
-          db
-            .select({ one: sql`1` })
-            .from(schema.agentsTable)
-            .where(
-              and(
-                eq(schema.agentsTable.id, schema.toolsTable.delegateToAgentId),
-                notDeleted(schema.agentsTable),
-              ),
-            ),
-        ),
-      ) ?? isNull(schema.toolsTable.delegateToAgentId),
-    );
+    // A deleted agent leaves its `agent__<name>` delegation tool behind; those
+    // rows are ghosts and must not be offered for policy configuration.
+    toolWhereConditions.push(delegationTargetNotDeleted());
 
     // Filter by origin ("llm-proxy", "agent", "app", or a catalogId)
     if (filters?.origin) {

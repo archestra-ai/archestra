@@ -1210,7 +1210,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     provider,
                     selectedModel,
                     modelId: conversation.modelId,
-                    chatApiKeyId: conversation.chatApiKeyId,
                     inputModalities: modelRow?.inputModalities ?? null,
                     agentLlmApiKeyId: agent.llmApiKeyId,
                     systemPrompt,
@@ -3156,7 +3155,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
         selectedModel,
         modelId: conversation.modelId,
-        chatApiKeyId: conversation.chatApiKeyId,
         agentLlmApiKeyId: conversation.agent.llmApiKeyId,
         messages: normalizedMessages,
         systemPrompt: conversation.agent.systemPrompt ?? undefined,
@@ -3521,7 +3519,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           conversationModel.provider !== "microsoft-365-copilot"
             ? {
                 modelId: conversation.modelId,
-                llmApiKeyId: conversation.chatApiKeyId,
+                agentLlmApiKeyId: conversation.agent?.llmApiKeyId ?? null,
               }
             : null,
         organizationId,

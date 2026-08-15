@@ -362,7 +362,10 @@ async function buildSummarizer(params: {
     // the compaction subagent. The threshold above is already computed from
     // this agent's context window, so summarizing on a different model sized
     // the compaction against a window it never ran in.
-    inheritFrom: params.agent,
+    inheritFrom: {
+      modelId: params.agent.modelId,
+      agentLlmApiKeyId: params.agent.llmApiKeyId,
+    },
     organizationId: params.agent.organizationId,
     userId: params.userId ?? undefined,
   });

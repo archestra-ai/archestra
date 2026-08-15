@@ -981,13 +981,6 @@ describe("resolveAgentLlmOrDefault", () => {
       defaultModelId: "model-org-ollama",
       defaultLlmApiKeyId: "key-org-ollama",
     } as never);
-    vi.spyOn(LlmProviderApiKeyModel, "findById").mockResolvedValue({
-      id: "key-vllm",
-      provider: "vllm",
-      secretId: null,
-      baseUrl: "https://vllm.example.test",
-      inferenceBaseUrl: null,
-    } as never);
     vi.spyOn(ModelModel, "findById").mockImplementation(async (id) =>
       id === "model-vllm"
         ? mockModel({
@@ -1001,11 +994,22 @@ describe("resolveAgentLlmOrDefault", () => {
             modelId: "llama3.1",
           }),
     );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockImplementation(
+      async ({ provider }) =>
+        provider === "vllm"
+          ? {
+              apiKey: "vllm-key",
+              source: "organization",
+              chatApiKeyId: "key-vllm",
+              baseUrl: "https://vllm.example.test",
+            }
+          : NO_KEY,
+    );
 
     const result = await resolveAgentLlmOrDefault({
       // A seeded built-in subagent: no model, no key.
       agent: { llmApiKeyId: null, modelId: null },
-      inheritFrom: { llmApiKeyId: "key-vllm", modelId: "model-vllm" },
+      inheritFrom: { modelId: "model-vllm", agentLlmApiKeyId: null },
       organizationId: "org-1",
       userId: "user-1",
     });
@@ -1015,6 +1019,57 @@ describe("resolveAgentLlmOrDefault", () => {
       modelName: "qwen3-32b",
       baseUrl: "https://vllm.example.test",
     });
+  });
+
+  test("resolves the inherited model's key for the acting user rather than reusing a stored one", async () => {
+    // The inherited level pins a model, never a key. A conversation's key is
+    // one the USER picked, and getCurrentApiKey re-checks their access to it on
+    // every use — so resolution has to go back through resolveProviderApiKey
+    // (with the conversation and the serving agent's key as the hint) instead
+    // of decrypting a stored secret by id, which would skip that check and let
+    // a background title keep billing a team key after the user lost the team.
+    const findById = vi
+      .spyOn(LlmProviderApiKeyModel, "findById")
+      .mockResolvedValue({
+        id: "key-conversation",
+        provider: "vllm",
+        secretId: "secret-conversation",
+        baseUrl: null,
+        inferenceBaseUrl: null,
+      } as never);
+    const getSecret = vi
+      .spyOn(secretsManager, "getSecretValueForLlmProviderApiKey")
+      .mockResolvedValue("leaked-secret" as never);
+    vi.spyOn(ModelModel, "findById").mockResolvedValue(
+      mockModel({ id: "model-vllm", provider: "vllm", modelId: "qwen3-32b" }),
+    );
+    vi.spyOn(llmApiKeyResolution, "resolveProviderApiKey").mockResolvedValue({
+      apiKey: "access-checked-key",
+      source: "organization",
+      chatApiKeyId: "key-conversation",
+      baseUrl: null,
+    });
+
+    const result = await resolveAgentLlmOrDefault({
+      agent: { llmApiKeyId: null, modelId: null },
+      inheritFrom: { modelId: "model-vllm", agentLlmApiKeyId: "key-agent" },
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    expect(result.apiKey).toBe("access-checked-key");
+    expect(getSecret).not.toHaveBeenCalled();
+    expect(findById).not.toHaveBeenCalledWith("key-conversation");
+    // The serving agent's key travels as the hint, so getCurrentApiKey can
+    // still apply its documented "conversation key IS the agent key" exemption.
+    expect(llmApiKeyResolution.resolveProviderApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: "conv-1",
+        userId: "user-1",
+        agentLlmApiKeyId: "key-agent",
+      }),
+    );
   });
 
   test("the subagent's own configured model wins over the inherited selection", async () => {
@@ -1035,7 +1090,7 @@ describe("resolveAgentLlmOrDefault", () => {
 
     const result = await resolveAgentLlmOrDefault({
       agent: { llmApiKeyId: "key-pinned", modelId: "model-pinned" },
-      inheritFrom: { llmApiKeyId: "key-pinned", modelId: "model-inherited" },
+      inheritFrom: { modelId: "model-inherited" },
       organizationId: "org-1",
       userId: "user-1",
     });
@@ -1067,7 +1122,7 @@ describe("resolveAgentLlmOrDefault", () => {
 
     const result = await resolveAgentLlmOrDefault({
       agent: { llmApiKeyId: null, modelId: null },
-      inheritFrom: { llmApiKeyId: null, modelId: null },
+      inheritFrom: { modelId: null },
       organizationId: "org-1",
       userId: "user-1",
     });
@@ -1096,7 +1151,7 @@ describe("resolveAgentLlmOrDefault", () => {
 
     const result = await resolveAgentLlmOrDefault({
       agent: null,
-      inheritFrom: { llmApiKeyId: null, modelId: "model-vllm" },
+      inheritFrom: { modelId: "model-vllm" },
       organizationId: "org-1",
       userId: "user-1",
     });

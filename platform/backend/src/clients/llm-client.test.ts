@@ -220,6 +220,46 @@ describe("createDirectLLMModel", () => {
     expect((model as { provider: string }).provider).toBe("vllm.chat");
   });
 
+  it("sends the json_schema response_format for vLLM structured outputs", async () => {
+    let sent: Record<string, unknown> | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: unknown, init: RequestInit | undefined) => {
+        sent = JSON.parse(init?.body as string);
+        return new Response("upstream stub", { status: 500 });
+      }),
+    );
+
+    const model = createDirectLLMModel({
+      provider: "vllm",
+      apiKey: undefined,
+      modelName: "qwen3-27b",
+      baseUrl: "http://localhost:8000/v1",
+    });
+
+    await generateObject({
+      model,
+      schema: z.object({ answer: z.number() }),
+      prompt: "2 + 2?",
+      maxRetries: 0,
+    }).catch(() => {});
+
+    if (!sent) {
+      throw new Error("Expected a request to reach the fetch stub");
+    }
+    // vLLM compiles a json_schema response_format into a decoding grammar. A
+    // schema-less `json_object` carries nothing to the model, and generateObject
+    // never puts the schema in the prompt — so the reranker's reasoning models
+    // answered with prose and fenced JSON that no parser accepts.
+    const responseFormat = (
+      sent as {
+        response_format?: { type?: string; json_schema?: { schema?: unknown } };
+      }
+    ).response_format;
+    expect(responseFormat?.type).toBe("json_schema");
+    expect(responseFormat?.json_schema?.schema).toBeDefined();
+  });
+
   it("rejects vllm models without a base URL", () => {
     // vLLM has no default base URL; without the guard a missing URL would
     // silently route the request to api.openai.com.

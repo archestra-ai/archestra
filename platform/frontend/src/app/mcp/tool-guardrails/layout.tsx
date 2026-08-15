@@ -16,8 +16,9 @@ export default function ToolGuardrailsLayout({
           called, and how their results are handled before being returned to the
           model.
           <br />
-          Tools displayed here are either detected from requests between agents
-          and LLMs or sourced from installed MCP servers.
+          Tools displayed here are detected from requests between agents and
+          LLMs, sourced from installed MCP servers, or provided by agents and
+          apps. Their Source tells you which.
         </>
       }
     >

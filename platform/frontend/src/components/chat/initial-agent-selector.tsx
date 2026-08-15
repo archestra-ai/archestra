@@ -381,9 +381,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                           </div>
                         )}
                         {gate.kind !== "ok" && (
+                          // Wraps to a second line rather than truncating: the
+                          // whole point of the line is the reason, and a
+                          // truncated one hides the server to connect.
                           <div
                             className={cn(
-                              "text-[11px] truncate",
+                              "text-[11px] line-clamp-2",
                               isBlocked
                                 ? "text-muted-foreground"
                                 : "text-amber-600 dark:text-amber-500",
@@ -391,7 +394,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                           >
                             <span>
                               {isBlocked
-                                ? `Unavailable — connect ${listServerNames(gate.serverNames)} to use this agent`
+                                ? `Connect ${listServerNames(gate.serverNames)} to use this agent`
                                 : `Some tools need ${listServerNames(gate.serverNames)}`}
                             </span>
                           </div>

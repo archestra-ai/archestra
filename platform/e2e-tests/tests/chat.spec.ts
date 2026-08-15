@@ -415,6 +415,11 @@ test.describe("Chat thinking block layout", () => {
     const thinkingCodeLine = page.getByText("reconcileEverything").first();
     await expect(thinkingCodeLine).toBeVisible({ timeout: 90_000 });
     expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
+    // The prose around that code must still wrap at the chat width rather than
+    // be dragged along by it — otherwise reading the thinking means scrolling
+    // sideways, even with the conversation itself no longer overflowing.
+    const { conversationWidth, proseWidth } = await thinkingProseWidth(page);
+    expect(proseWidth).toBeLessThanOrEqual(conversationWidth);
 
     // And again once the block has settled and the reader reopens it. Wait for
     // the block's own auto-collapse rather than racing it: clicking the trigger
@@ -453,6 +458,32 @@ async function conversationHorizontalOverflow(page: Page): Promise<number> {
     return Math.max(
       ...candidates.map((element) => element.scrollWidth - element.clientWidth),
     );
+  });
+}
+
+/**
+ * Rendered width of the thinking block's first paragraph, next to the width of
+ * the transcript it has to fit in.
+ */
+async function thinkingProseWidth(
+  page: Page,
+): Promise<{ conversationWidth: number; proseWidth: number }> {
+  return page.evaluate(() => {
+    const log = document.querySelector('[role="log"]');
+    const conversation = log?.querySelector(":scope > div");
+    if (!conversation) {
+      throw new Error("Conversation transcript (role=log) not found");
+    }
+    const prose = [...document.querySelectorAll("p")].find((paragraph) =>
+      paragraph.textContent?.startsWith("Let me re-read the helper"),
+    );
+    if (!prose) {
+      throw new Error("Thinking paragraph not rendered");
+    }
+    return {
+      conversationWidth: conversation.clientWidth,
+      proseWidth: Math.round(prose.getBoundingClientRect().width),
+    };
   });
 }
 

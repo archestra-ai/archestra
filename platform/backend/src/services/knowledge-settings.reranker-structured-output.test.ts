@@ -121,4 +121,24 @@ describe("validateRerankerConfig structured output", () => {
     // The reply itself is quoted so the cause is diagnosable from the UI.
     expect(result.error).toContain("I need more context");
   });
+
+  test("names the real cause when the model returns no text at all", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const key = await makeKeylessVllmKey(org.id);
+    // A reasoning model that spent its whole output budget thinking. No
+    // decoding setting fixes that, so the message must not suggest one.
+    serveContent("");
+
+    const result = await knowledgeSettingsService.validateRerankerConfig({
+      keyId: key.id,
+      model: MODEL,
+      organizationId: org.id,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("returned no text");
+    expect(result.error).not.toContain("guided/structured decoding");
+  });
 });

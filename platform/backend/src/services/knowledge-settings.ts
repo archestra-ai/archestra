@@ -201,12 +201,17 @@ function knowledgeValidationErrorMessage(error: unknown): string {
 function unstructuredRerankerResponseMessage(
   error: NoObjectGeneratedError,
 ): string {
+  const excerpt = responseExcerpt(error.text);
+  if (!excerpt) {
+    // The SDK saw no text at all. A reasoning model that spends its whole
+    // output budget thinking lands here, and no decoding setting fixes that.
+    return "The reranker model returned no text to score with. This usually means a reasoning model spent its whole output budget thinking; pick a model that answers directly.";
+  }
   return (
     "The reranker model replied, but not with the JSON object reranking needs. " +
     "Models that wrap their answer in reasoning tokens, prose, or markdown fences do this when the " +
     "endpoint does not constrain decoding to the requested JSON schema. Enable guided/structured " +
-    "decoding (JSON schema) on the endpoint, or pick a model that supports structured outputs." +
-    responseExcerpt(error.text)
+    `decoding (JSON schema) on the endpoint, or pick a model that supports structured outputs.${excerpt}`
   );
 }
 

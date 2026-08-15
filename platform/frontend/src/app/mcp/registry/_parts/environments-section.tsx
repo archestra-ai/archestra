@@ -49,6 +49,7 @@ import {
   clearEnvironmentDialogParams,
   ENVIRONMENT_CREATE_PARAM,
   ENVIRONMENT_DEFAULT_VALUE,
+  ENVIRONMENT_DEFAULTS_PARAM,
   ENVIRONMENT_EDIT_PARAM,
   setEnvironmentEditParam,
 } from "./environment-edit-link";
@@ -57,6 +58,7 @@ import {
   resolveEditorDraftPolicy,
   resolveNetworkPolicyUpdate,
 } from "./environment-policy-draft";
+import { EnvironmentResourceDefaultsDialog } from "./environment-resource-defaults-dialog";
 import { compileValidationRegex } from "./environment-validation-helpers";
 
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
@@ -117,6 +119,13 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   );
   const editDefaultOpen = canEdit && editId === ENVIRONMENT_DEFAULT_VALUE;
   const editTargetOpen = canEdit && editEnvironment !== null;
+  // Same gate as the cog that opens it: with no environments to choose from,
+  // every kind can only land in Default, so a hand-crafted link opens nothing.
+  const resourceDefaultsOpen =
+    canEdit &&
+    !editId &&
+    environments.length > 0 &&
+    searchParams.has(ENVIRONMENT_DEFAULTS_PARAM);
 
   const writeSearch = useCallback(
     (search: string) => {
@@ -290,6 +299,12 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
       <DeleteEnvironmentDialog
         target={deleteTarget}
         onClose={() => setDeleteTarget(null)}
+      />
+
+      <EnvironmentResourceDefaultsDialog
+        open={resourceDefaultsOpen}
+        onOpenChange={(open) => !open && closeEditor()}
+        canEdit={canEdit}
       />
     </div>
   );

@@ -34392,6 +34392,14 @@ export type ListEnvironmentsResponses = {
             assignedCatalogCount: number;
         }>;
         defaultAssignedCatalogCount: number;
+        resourceDefaults: {
+            mcpRegistry: string | null;
+            app: string | null;
+            agent: string | null;
+            mcpGateway: string | null;
+            llmProxy: string | null;
+            knowledgeSource: string | null;
+        };
     };
 };
 
@@ -34508,6 +34516,101 @@ export type CreateEnvironmentResponses = {
 };
 
 export type CreateEnvironmentResponse = CreateEnvironmentResponses[keyof CreateEnvironmentResponses];
+
+export type UpdateEnvironmentResourceDefaultsData = {
+    body: {
+        mcpRegistry?: string | null;
+        app?: string | null;
+        agent?: string | null;
+        mcpGateway?: string | null;
+        llmProxy?: string | null;
+        knowledgeSource?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/environments/defaults';
+};
+
+export type UpdateEnvironmentResourceDefaultsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateEnvironmentResourceDefaultsError = UpdateEnvironmentResourceDefaultsErrors[keyof UpdateEnvironmentResourceDefaultsErrors];
+
+export type UpdateEnvironmentResourceDefaultsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        mcpRegistry: string | null;
+        app: string | null;
+        agent: string | null;
+        mcpGateway: string | null;
+        llmProxy: string | null;
+        knowledgeSource: string | null;
+    };
+};
+
+export type UpdateEnvironmentResourceDefaultsResponse = UpdateEnvironmentResourceDefaultsResponses[keyof UpdateEnvironmentResourceDefaultsResponses];
 
 export type DeleteEnvironmentData = {
     body?: never;

@@ -1397,6 +1397,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateDefaultEnvironment]: {
     environment: ["update"],
   },
+  [RouteId.UpdateEnvironmentResourceDefaults]: {
+    environment: ["update"],
+  },
   [RouteId.GetK8sCapabilities]: {
     environment: ["update"],
   },

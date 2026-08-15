@@ -182,6 +182,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import {
   useIsKnowledgeBaseConfigured,
@@ -1137,6 +1138,13 @@ function AgentDialogBody({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const isAdvisorBuiltIn = builtInAgentName === BUILT_IN_AGENT_IDS.ADVISOR;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
+  // The Advisor is org-wide by design — every environment consults the one
+  // instance — so it is the one agent kind with no environment of its own.
+  const showsEnvironmentSelector =
+    (isInternalAgent ||
+      agentType === "llm_proxy" ||
+      agentType === "mcp_gateway") &&
+    !isAdvisorBuiltIn;
   const supportsIdentityProvider =
     agentType === "mcp_gateway" ||
     agentType === "llm_proxy" ||
@@ -1363,6 +1371,17 @@ function AgentDialogBody({
       lastAutoSelectedProviderRef.current = null;
     }
   }, [open, agent, freshAgent, refetchAgent, isInternalAgent]);
+
+  // A brand-new agent starts in the org's configured landing environment for
+  // its type. Kept out of the reset path above (same reasoning as the seeds
+  // below) and declared after it so the reset can't overwrite the seed. Gated
+  // on the same condition that renders the selector, so the dialog never
+  // submits an environment it did not show.
+  useDefaultEnvironmentSeed({
+    resource: getResourceForAgentType(agentType),
+    enabled: open && !agent && showsEnvironmentSelector,
+    apply: setEnvironmentId,
+  });
 
   // Sync selectedDelegationTargetIds with currentDelegations when data loads.
   // Agent refetches can update freshAgent after delegations have loaded; keeping
@@ -2142,17 +2161,14 @@ function AgentDialogBody({
                       The advisor renders no selector: it is configured once for
                       the organization and reachable from every environment.
                       Renders disabled when only the default environment exists. */}
-                    {(isInternalAgent ||
-                      agentType === "llm_proxy" ||
-                      agentType === "mcp_gateway") &&
-                      !isAdvisorBuiltIn && (
-                        <EnvironmentSelector
-                          value={environmentId ?? null}
-                          onChange={setEnvironmentId}
-                          resource={getResourceForAgentType(agentType)}
-                          helpText={environmentHelpText}
-                        />
-                      )}
+                    {showsEnvironmentSelector && (
+                      <EnvironmentSelector
+                        value={environmentId ?? null}
+                        onChange={setEnvironmentId}
+                        resource={getResourceForAgentType(agentType)}
+                        helpText={environmentHelpText}
+                      />
+                    )}
 
                     {/* Built-in agent config */}
                     {isPolicyConfigBuiltIn && (

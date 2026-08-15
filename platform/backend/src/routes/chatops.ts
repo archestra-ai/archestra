@@ -31,7 +31,12 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
-import { EventDedupMap, errorMessage } from "@/agents/chatops/utils";
+import {
+  buildAgentFooter,
+  EventDedupMap,
+  errorMessage,
+  stripDuplicateAgentFooter,
+} from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -2107,9 +2112,14 @@ async function handleAgentSelection(
       });
 
       if (result.success && result.agentResponse) {
-        // Send agent response via turn context (ensures correct thread)
+        // Send agent response via turn context (ensures correct thread).
+        // This path composes the reply itself instead of going through
+        // sendReply, so it owes the same "exactly one footer" guarantee: build
+        // the footer from the one helper that defines it, and drop the model's
+        // own sign-off before appending it.
+        const footer = buildAgentFooter(agent.name);
         await context.sendActivity(
-          `${result.agentResponse}\n\n---\n\n🤖 ${agent.name}`,
+          `${stripDuplicateAgentFooter(result.agentResponse, footer)}\n\n---\n\n${footer}`,
         );
       } else if (!result.success && result.error) {
         // Send error message via turn context (ensures correct thread)

@@ -3961,6 +3961,16 @@ describe("ChatOpsManager attachment passthrough", () => {
         timestamp: new Date(Date.now() - 30_000),
         isFromBot: true,
       },
+      {
+        messageId: "bot-3",
+        senderId: "bot",
+        senderName: "Bot",
+        // How a Slack turn actually reads back: the API returns emoji in colon
+        // notation, and the model's own echo ran onto the end of its prose.
+        text: "The slot is free now. :robot_face: Sales Bot\n\n:robot_face: Sales Bot",
+        timestamp: new Date(Date.now() - 15_000),
+        isFromBot: true,
+      },
     ]);
 
     const manager = new ChatOpsManager();
@@ -3980,7 +3990,9 @@ describe("ChatOpsManager attachment passthrough", () => {
     const sent = JSON.stringify(executorSpy.mock.calls[0][0].message);
     expect(sent).toContain("The deploy finished.");
     expect(sent).toContain("Sorry, I encountered an error.");
+    expect(sent).toContain("The slot is free now.");
     expect(sent).not.toContain("🤖");
+    expect(sent).not.toContain("robot_face");
   });
 });
 

@@ -1312,6 +1312,46 @@ describe("SlackProvider.sendReply", () => {
     expect(text).toBe("Here you go.\n\n🤖 Agent");
   });
 
+  test.each([
+    // Slack stores emoji in colon notation, so the footer the model is replayed
+    // — and copies — is spelled ":robot_face:", not "🤖".
+    ["shortcode on its own line", "Here you go.\n\n:robot_face: Agent"],
+    ["run onto the last sentence", "Here you go. 🤖 Agent"],
+    ["both at once", "Here you go. :robot_face: Agent\n\n:robot_face: Agent"],
+  ])("renders one branding line when the model signed off with %s", async (_shape, replyText) => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.sendReply({
+      originalMessage: {
+        messageId: "1234567890.123456",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        threadId: "1111111111.000000",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "hello",
+        rawText: "hello",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      text: replyText,
+      footer: "🤖 Agent",
+    });
+
+    const { blocks, text } = postMessage.mock.calls[0][0];
+    expect(blocks).toEqual([
+      { type: "markdown", text: "Here you go." },
+      {
+        type: "context",
+        elements: [{ type: "plain_text", text: "🤖 Agent", emoji: true }],
+      },
+    ]);
+    expect(text).toBe("Here you go.\n\n🤖 Agent");
+  });
+
   test("posts the footer alone when the reply was nothing but an echoed footer", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });

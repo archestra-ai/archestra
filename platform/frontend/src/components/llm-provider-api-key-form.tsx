@@ -256,6 +256,11 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://docs.vllm.ai/",
     consoleName: "vLLM Docs",
+    // A vLLM key is a server, not an account, so the endpoint is the whole
+    // point of the form and belongs above "advanced settings" rather than
+    // hidden inside it. It is also unusable when blank — vLLM has no default
+    // endpoint, so an unset base URL routes to api.openai.com.
+    baseUrlRequired: true,
   },
   ollama: {
     name: "Ollama (OpenAI-compatible)",
@@ -456,6 +461,7 @@ export function LlmProviderApiKeyForm({
     provider === "bedrock" && bedrockAuthMethod === "sigv4";
   const baseUrl = form.watch("baseUrl");
   const isBedrock = provider === "bedrock";
+  const isVllm = provider === "vllm";
   const authMethod = form.watch("authMethod");
   const providerSubscriptionKind = subscriptionKindForProvider(provider);
   // Credential-level subscription mode (e.g. ChatGPT on `openai`): the provider
@@ -1434,8 +1440,17 @@ export function LlmProviderApiKeyForm({
             <p className="text-xs text-muted-foreground">
               {isBedrock
                 ? "Filled in from the region above. Change it only for a VPC/PrivateLink endpoint or a Bedrock-compatible gateway."
-                : "Override the default API endpoint. Useful for self-hosted or proxy setups."}
+                : isVllm
+                  ? "The server's OpenAI-compatible API. Every model it lists is added."
+                  : "Override the default API endpoint. Useful for self-hosted or proxy setups."}
             </p>
+            {isVllm && (
+              <p className="text-xs text-muted-foreground">
+                A vLLM server runs one model. To serve more, run more servers
+                and add each one here — a model always goes to the server that
+                hosts it.
+              </p>
+            )}
             {isSelfHostedProvider(provider) && (
               <p className="text-xs text-muted-foreground">
                 If this app runs in Docker, <code>localhost</code> points at the

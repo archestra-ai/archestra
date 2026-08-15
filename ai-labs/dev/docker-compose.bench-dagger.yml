@@ -24,7 +24,7 @@
 # reachable off-host.
 services:
   bench-dagger:
-    image: registry.dagger.io/engine:v0.21.7
+    image: registry.dagger.io/engine:v0.21.8
     privileged: true
     command:
       - --addr

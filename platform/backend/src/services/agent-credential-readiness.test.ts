@@ -254,6 +254,126 @@ test("refuses the turn for a blocking agent and names what to connect", async ({
   ).rejects.toThrow(/Acme Docs/);
 });
 
+test("treats a statically pinned tool as connected for everyone", async ({
+  makeUser,
+  makeAgent,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAgentTool,
+  makeMcpServer,
+}) => {
+  // A static pin is the service-account case: the runtime routes every caller
+  // through the pinned install without checking they can reach it, so refusing
+  // the caller here would block a tool call that would have worked.
+  const caller = await makeUser();
+  const author = await makeUser();
+  const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
+  const agent = await makeAgent({
+    agentType: "agent",
+    scope: "org",
+    missingCredentialBehavior: "block",
+    accessAllTools: false,
+  });
+  const tool = await makeTool({ catalogId: catalog.id });
+  const pinnedInstall = await makeMcpServer({
+    catalogId: catalog.id,
+    ownerId: author.id,
+    scope: "personal",
+  });
+  await makeAgentTool(agent.id, tool.id, {
+    mcpServerId: pinnedInstall.id,
+    credentialResolutionMode: "static",
+  });
+
+  const [readiness] = await getAgentCredentialReadiness({
+    agents: [
+      {
+        id: agent.id,
+        missingCredentialBehavior: "block",
+        accessAllTools: false,
+      },
+    ],
+    userId: caller.id,
+  });
+
+  expect(readiness.missingConnections).toEqual([]);
+  await expect(
+    assertCallerMayStartTurn({ agentId: agent.id, userId: caller.id }),
+  ).resolves.toBeUndefined();
+});
+
+test("falls back to the caller's own connection when a static pin is gone", async ({
+  makeUser,
+  makeAgent,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAgentTool,
+}) => {
+  // Uninstalling the pinned server clears the assignment's pin but keeps the
+  // assignment. The runtime then resolves per caller, so readiness must too.
+  const caller = await makeUser();
+  const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
+  const agent = await makeAgent({
+    agentType: "agent",
+    scope: "org",
+    missingCredentialBehavior: "block",
+    accessAllTools: false,
+  });
+  const tool = await makeTool({ catalogId: catalog.id });
+  await makeAgentTool(agent.id, tool.id, {
+    credentialResolutionMode: "static",
+  });
+
+  const [readiness] = await getAgentCredentialReadiness({
+    agents: [
+      {
+        id: agent.id,
+        missingCredentialBehavior: "block",
+        accessAllTools: false,
+      },
+    ],
+    userId: caller.id,
+  });
+
+  expect(readiness.missingConnections).toEqual([
+    { catalogId: catalog.id, catalogName: "Acme Docs" },
+  ]);
+});
+
+test("treats enterprise-managed credentials as connected for everyone", async ({
+  makeUser,
+  makeAgent,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAgentTool,
+}) => {
+  const caller = await makeUser();
+  const catalog = await makeInternalMcpCatalog({ name: "Acme Docs" });
+  const agent = await makeAgent({
+    agentType: "agent",
+    scope: "org",
+    missingCredentialBehavior: "block",
+    accessAllTools: false,
+  });
+  const tool = await makeTool({ catalogId: catalog.id });
+  await makeAgentTool(agent.id, tool.id, {
+    credentialResolutionMode: "enterprise_managed",
+  });
+
+  const [readiness] = await getAgentCredentialReadiness({
+    agents: [
+      {
+        id: agent.id,
+        missingCredentialBehavior: "block",
+        accessAllTools: false,
+      },
+    ],
+    userId: caller.id,
+  });
+
+  expect(readiness.missingConnections).toEqual([]);
+});
+
 test("lets the turn through when the agent only warns", async ({
   makeUser,
   makeAgent,

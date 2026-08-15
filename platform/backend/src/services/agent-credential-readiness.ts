@@ -1,4 +1,5 @@
 import AgentModel from "@/models/agent";
+import AgentToolModel from "@/models/agent-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpServerModel from "@/models/mcp-server";
 import ToolModel from "@/models/tool";
@@ -7,10 +8,19 @@ import type { AgentCredentialReadiness, ReadinessAgent } from "@/types/agent";
 
 /**
  * For each agent that enforces a missing-credential behavior, the MCP servers
- * the caller cannot reach. A server counts as reachable when the caller has any
- * live install of it (their own, a team's, or an org-wide one), when the server
- * pins a fixed credential every caller shares, or when it needs no credential
- * at all (built-in servers and apps).
+ * the caller cannot reach.
+ *
+ * A server is reachable when the agent's assignment supplies the credential for
+ * everyone — a static pin to a live install, or enterprise-managed credentials
+ * the pod fetches itself — or when the server needs no credential at all
+ * (built-in servers and apps), or when the catalog pins one default connection
+ * every caller shares. Only what is left over is resolved per caller, and that
+ * is the case where the caller needs their own, a team's, or an org-wide
+ * install.
+ *
+ * Mirroring the assignment's credential mode matters: the runtime honours a
+ * static pin regardless of who is calling, so treating those servers as
+ * per-caller would refuse people whose tool calls would have worked.
  *
  * Agents left on `allow` are skipped entirely, so the default configuration
  * costs no extra queries.
@@ -28,43 +38,107 @@ export async function getAgentCredentialReadiness(params: {
   // runtime resolves for the agent (environment isolation, uninstalled pins,
   // soft deletes), so the pre-flight answer cannot drift from what a tool call
   // would actually do. Only agents that opted into warn/block pay for it.
-  const catalogIdsByAgent = new Map<string, string[]>();
+  const toolsByAgent = new Map<string, { id: string; catalogId: string }[]>();
   await Promise.all(
     enforcing.map(async (agent) => {
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
-      catalogIdsByAgent.set(agent.id, [
-        ...new Set(
-          tools.flatMap((tool) => (tool.catalogId ? [tool.catalogId] : [])),
+      toolsByAgent.set(
+        agent.id,
+        tools.flatMap((tool) =>
+          tool.catalogId ? [{ id: tool.id, catalogId: tool.catalogId }] : [],
         ),
-      ]);
+      );
     }),
   );
 
-  const allCatalogIds = [...new Set([...catalogIdsByAgent.values()].flat())];
+  const assignmentsByAgent = await AgentToolModel.findAssignmentsByAgents(
+    enforcing.map((agent) => agent.id),
+  );
+
+  const allCatalogIds = [
+    ...new Set([...toolsByAgent.values()].flat().map((tool) => tool.catalogId)),
+  ];
   const catalogs = await InternalMcpCatalogModel.getByIds(allCatalogIds);
 
-  const catalogsNeedingConnection = allCatalogIds.filter((catalogId) => {
-    const catalog = catalogs.get(catalogId);
-    if (!catalog) return false;
-    return requiresCallerConnection(catalog);
-  });
+  // One liveness read covers both kinds of pin. A pin whose install was since
+  // uninstalled is not a credential — the runtime falls back to resolving per
+  // caller, so readiness has to fall back with it.
+  const pinnedServerIds = [
+    ...new Set([
+      ...[...assignmentsByAgent.values()]
+        .flat()
+        .flatMap((assignment) =>
+          assignment.credentialResolutionMode === "static" &&
+          assignment.mcpServerId
+            ? [assignment.mcpServerId]
+            : [],
+        ),
+      ...[...catalogs.values()].flatMap((catalog) =>
+        catalog.dynamicConnectionMcpServerId
+          ? [catalog.dynamicConnectionMcpServerId]
+          : [],
+      ),
+    ]),
+  ];
+  const liveServers = await McpServerModel.findByIdsBasic(pinnedServerIds);
+  const liveServerIds = new Set(liveServers.map((server) => server.id));
+
+  // Catalogs still resolved per caller, per agent — the same catalog can be
+  // pinned by one agent and left dynamic by another.
+  const perCallerCatalogsByAgent = new Map<string, Set<string>>();
+  for (const agent of enforcing) {
+    const assignmentByToolId = new Map(
+      (assignmentsByAgent.get(agent.id) ?? []).map((assignment) => [
+        assignment.toolId,
+        assignment,
+      ]),
+    );
+    const perCaller = new Set<string>();
+
+    for (const tool of toolsByAgent.get(agent.id) ?? []) {
+      const catalog = catalogs.get(tool.catalogId);
+      if (!catalog) continue;
+      if (isCredentialLess(catalog)) continue;
+
+      const assignment = assignmentByToolId.get(tool.id);
+      if (assignment?.credentialResolutionMode === "enterprise_managed") {
+        continue;
+      }
+      if (
+        assignment?.credentialResolutionMode === "static" &&
+        assignment.mcpServerId &&
+        liveServerIds.has(assignment.mcpServerId)
+      ) {
+        continue;
+      }
+      if (
+        catalog.dynamicConnectionMcpServerId &&
+        liveServerIds.has(catalog.dynamicConnectionMcpServerId)
+      ) {
+        continue;
+      }
+
+      perCaller.add(tool.catalogId);
+    }
+
+    perCallerCatalogsByAgent.set(agent.id, perCaller);
+  }
 
   const connectedCatalogIds =
     await McpServerModel.getCatalogIdsWithAccessibleInstall({
       userId,
-      catalogIds: catalogsNeedingConnection,
+      catalogIds: [
+        ...new Set(
+          [...perCallerCatalogsByAgent.values()].flatMap((s) => [...s]),
+        ),
+      ],
     });
-
-  const needsConnection = new Set(catalogsNeedingConnection);
 
   return enforcing.map((agent) => ({
     agentId: agent.id,
     missingCredentialBehavior: agent.missingCredentialBehavior,
-    missingConnections: (catalogIdsByAgent.get(agent.id) ?? [])
-      .filter(
-        (catalogId) =>
-          needsConnection.has(catalogId) && !connectedCatalogIds.has(catalogId),
-      )
+    missingConnections: [...(perCallerCatalogsByAgent.get(agent.id) ?? [])]
+      .filter((catalogId) => !connectedCatalogIds.has(catalogId))
       .map((catalogId) => ({
         catalogId,
         catalogName: catalogs.get(catalogId)?.name ?? "Unknown server",
@@ -115,14 +189,7 @@ function isEnforcing(agent: ReadinessAgent): boolean {
   return agent.missingCredentialBehavior !== "allow" && !agent.accessAllTools;
 }
 
-function requiresCallerConnection(catalog: {
-  serverType: string;
-  dynamicConnectionMcpServerId?: string | null;
-}): boolean {
-  // Built-in servers and apps run in-process with no stored credential.
-  if (catalog.serverType === "builtin" || catalog.serverType === "app") {
-    return false;
-  }
-  // A pinned default credential serves every caller, so nobody is missing one.
-  return !catalog.dynamicConnectionMcpServerId;
+/** Built-in servers and apps run in-process with no stored credential. */
+function isCredentialLess(catalog: { serverType: string }): boolean {
+  return catalog.serverType === "builtin" || catalog.serverType === "app";
 }

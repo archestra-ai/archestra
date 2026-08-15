@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertTask, Task, TaskType } from "@/types";
 
@@ -321,6 +321,37 @@ class TaskModel {
       ) AS exists
     `);
     return (rows[0] as { exists: boolean } | undefined)?.exists ?? false;
+  }
+
+  /**
+   * Drop queued periodic tasks whose type the running build no longer defines.
+   *
+   * A periodic task is seeded once and re-scheduled by its own handler, so a
+   * type that is renamed or retired between releases leaves a `pending` row
+   * behind: the upgraded build picks it up, finds no handler, and logs an error
+   * for a task nothing asked for. The seeding loop only ever adds, so nothing
+   * else would clear it. Scoped to `periodic = true` rows, which are the only
+   * ones seeded from a static list — ordinary work is enqueued with a payload
+   * and must never be swept.
+   */
+  static async deleteRetiredPeriodicTasks(
+    knownTaskTypes: string[],
+  ): Promise<number> {
+    if (knownTaskTypes.length === 0) return 0;
+    const t = schema.tasksTable;
+    // `.returning()` rather than `rowCount`, which this driver leaves unset —
+    // read as a count it would silently report every sweep as a no-op.
+    const deleted = await db
+      .delete(t)
+      .where(
+        and(
+          eq(t.periodic, true),
+          inArray(t.status, ["pending", "processing"]),
+          notInArray(t.taskType, knownTaskTypes as TaskType[]),
+        ),
+      )
+      .returning({ id: t.id });
+    return deleted.length;
   }
 
   /**

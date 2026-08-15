@@ -112,6 +112,17 @@ export function transformConfigArrayFields(
     }
   }
 
+  if (result.type === "perforce") {
+    // Optional permission-sync fields: an empty string (rendered then cleared,
+    // or left behind after switching away from auto-sync visibility) must be
+    // absent rather than fail the backend's regex/min-length validation.
+    for (const field of ["p4Port", "adminUsername"]) {
+      if (result[field] === "" || result[field] === undefined) {
+        delete result[field];
+      }
+    }
+  }
+
   if (result.type === "mfiles") {
     if (typeof result.vaultGuid === "string") {
       result.vaultGuid = normalizeMFilesVaultGuid(result.vaultGuid);

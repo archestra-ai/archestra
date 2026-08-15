@@ -31,6 +31,8 @@ import {
   knowledgeSourceAccessControlService,
   queryService,
 } from "@/knowledge-base";
+import { supersedePermissionSyncAfterSettingsChange } from "@/knowledge-base/connector-settings-change";
+import { reconcileP4ShimForConnector } from "@/knowledge-base/connectors/perforce/p4-shim-service";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
 import {
   deleteConnector,
@@ -920,6 +922,9 @@ async function handleCreateKnowledgeConnector(params: {
         environmentId: agentEnvironmentId,
       }),
     );
+    // Same lifecycle rule as the REST create route: a Perforce connector that
+    // syncs permissions gets its shim now, not on its first pass.
+    await reconcileP4ShimForConnector(connector.id);
     return structuredSuccessResult(
       { knowledgeConnector: connector },
       `Knowledge connector created successfully.\n\n${JSON.stringify(connector, null, 2)}`,
@@ -1150,6 +1155,24 @@ async function handleUpdateKnowledgeConnector(params: {
         args.id,
       );
     }
+    const nextEnabled = updates.enabled ?? existingConnector.enabled;
+    if (
+      existingConnector.visibility === "auto-sync-permissions" &&
+      (updates.config !== undefined ||
+        nextVisibility !== "auto-sync-permissions" ||
+        nextEnabled !== existingConnector.enabled)
+    ) {
+      // Mirrors the REST update route: a pass computed against the settings
+      // this update replaced must not finish against them.
+      await supersedePermissionSyncAfterSettingsChange({
+        connectorId: args.id,
+        visibility: nextVisibility,
+        enabled: nextEnabled,
+      });
+    }
+    // ...and the same shim lifecycle: this row decides whether a Perforce
+    // permission-sync pod exists, whatever wrote it.
+    await reconcileP4ShimForConnector(args.id);
     return structuredSuccessResult(
       { knowledgeConnector: connector },
       `Knowledge connector updated successfully.\n\n${JSON.stringify(connector, null, 2)}`,

@@ -355,9 +355,22 @@ const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
   "linear",
   "outline",
   "servicenow",
+  "perforce",
 ]);
 
-export function connectorSupportsAutoSync(type: ConnectorType): boolean {
+export function connectorSupportsAutoSync(
+  type: ConnectorType,
+  /**
+   * Value of the `orchestratorK8sRuntime` feature
+   * (`useFeature("orchestratorK8sRuntime")` in the calling component).
+   * Perforce permission sync runs the p4 client from an in-cluster pod, so
+   * its backend only sets `supportsPermissionSync` when the Kubernetes
+   * orchestrator is configured; without it Perforce must behave exactly like
+   * a non-perm-sync connector.
+   */
+  orchestratorK8sRuntime: boolean,
+): boolean {
+  if (type === "perforce" && !orchestratorK8sRuntime) return false;
   return AUTO_SYNC_CONNECTOR_TYPES.has(type);
 }
 

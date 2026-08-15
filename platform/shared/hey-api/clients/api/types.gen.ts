@@ -56244,6 +56244,8 @@ export type GetConnectorsResponses = {
                 depotPaths: Array<string>;
                 excludePaths?: Array<string>;
                 fileTypes?: Array<string>;
+                p4Port?: string;
+                adminUsername?: string;
             } | {
                 type: 'mfiles';
                 baseUrl: unknown;
@@ -56450,6 +56452,8 @@ export type CreateConnectorData = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: string;
@@ -56714,6 +56718,8 @@ export type CreateConnectorResponses = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: unknown;
@@ -57068,6 +57074,8 @@ export type GetConnectorResponses = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: unknown;
@@ -57258,6 +57266,8 @@ export type UpdateConnectorData = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: string;
@@ -57523,6 +57533,8 @@ export type UpdateConnectorResponses = {
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            p4Port?: string;
+            adminUsername?: string;
         } | {
             type: 'mfiles';
             baseUrl: unknown;

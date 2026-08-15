@@ -101,31 +101,84 @@ class KbExternalUserGroupModel {
    * name, so a member whose email BECOMES visible upstream starts resolving
    * on the next pass.
    */
-  static async upsertMany(rows: InsertKbExternalUserGroup[]): Promise<void> {
-    if (rows.length === 0) return;
+  /**
+   * @param fence The run these memberships belong to. The write is skipped
+   *   unless that run is still `running` at the given lease epoch. Membership
+   *   is the second route into a document: a `group:` token here is matched
+   *   against container audiences by `findContainerTokensForUser`, so a pass
+   *   whose lease was reclaimed could otherwise put a removed member back into
+   *   a group and restore their read access without touching an ACL row.
+   * @returns whether the rows were written.
+   */
+  static async upsertMany(
+    rows: InsertKbExternalUserGroup[],
+    fence?: { runId: string; epoch: number },
+  ): Promise<boolean> {
+    if (rows.length === 0) return true;
 
-    await db
-      .insert(schema.kbExternalUserGroupsTable)
-      .values(
-        rows.map((row) => ({
-          ...row,
-          memberEmail: row.memberEmail ? normalizeEmail(row.memberEmail) : null,
-        })),
+    const values = rows.map((row) => ({
+      ...row,
+      memberEmail: row.memberEmail ? normalizeEmail(row.memberEmail) : null,
+    }));
+
+    if (!fence) {
+      await db
+        .insert(schema.kbExternalUserGroupsTable)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [
+            schema.kbExternalUserGroupsTable.connectorId,
+            schema.kbExternalUserGroupsTable.groupId,
+            schema.kbExternalUserGroupsTable.externalAccountId,
+          ],
+          set: {
+            stale: false,
+            memberEmail: sql`excluded.member_email`,
+            displayName: sql`excluded.display_name`,
+            accountType: sql`excluded.account_type`,
+            updatedAt: new Date(),
+          },
+        });
+      return true;
+    }
+
+    // One statement, for the same reason the container fence is one: this runs
+    // once per batch across a whole roster, and the ownership test belongs in
+    // the write's own snapshot rather than a transaction around it.
+    const tuples = sql.join(
+      values.map(
+        (row) =>
+          sql`(${row.organizationId}, ${row.connectorId}::uuid, ${row.connectorType}, ${row.groupId}, ${row.externalAccountId}, ${row.displayName ?? null}, ${row.memberEmail ?? null}, ${row.accountType ?? null})`,
+      ),
+      sql`, `,
+    );
+    const result = await db.execute(sql`
+      INSERT INTO kb_external_user_groups
+        (organization_id, connector_id, connector_type, group_id,
+         external_account_id, display_name, member_email, account_type,
+         stale, updated_at)
+      SELECT v.organization_id, v.connector_id, v.connector_type, v.group_id,
+             v.external_account_id, v.display_name, v.member_email,
+             v.account_type, false, now()
+      FROM (VALUES ${tuples})
+        AS v(organization_id, connector_id, connector_type, group_id,
+             external_account_id, display_name, member_email, account_type)
+      WHERE EXISTS (
+        SELECT 1 FROM connector_runs
+        WHERE id = ${fence.runId}::uuid
+          AND status = 'running'
+          AND lease_epoch = ${fence.epoch}
       )
-      .onConflictDoUpdate({
-        target: [
-          schema.kbExternalUserGroupsTable.connectorId,
-          schema.kbExternalUserGroupsTable.groupId,
-          schema.kbExternalUserGroupsTable.externalAccountId,
-        ],
-        set: {
-          stale: false,
-          memberEmail: sql`excluded.member_email`,
-          displayName: sql`excluded.display_name`,
-          accountType: sql`excluded.account_type`,
-          updatedAt: new Date(),
-        },
-      });
+      ON CONFLICT (connector_id, group_id, external_account_id) DO UPDATE SET
+        stale = false,
+        member_email = excluded.member_email,
+        display_name = excluded.display_name,
+        account_type = excluded.account_type,
+        updated_at = now()
+      RETURNING id
+    `);
+    const written = Array.isArray(result) ? result : (result.rows ?? []);
+    return written.length > 0;
   }
 
   /**

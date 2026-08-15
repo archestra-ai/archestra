@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [Platform, MCP Server Base]
+        name: [Platform, MCP Server Base, p4 Shim]
     steps:
       - name: Skip full image scan on ordinary PR updates
         run: echo "Docker image scanning runs on merge queue or when the run-docker-scan label is added."
@@ -59,6 +59,15 @@ jobs:
             local-tag-prefix: mcp-server-base
             use-build-action: false
             scan-exit-code: "true"
+            cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:buildcache
+          - name: p4 Shim
+            runner: ubuntu-latest
+            context: ./platform/p4_shim_docker_image
+            dockerfile: ./platform/p4_shim_docker_image/Dockerfile
+            local-tag-prefix: p4-shim
+            use-build-action: false
+            scan-exit-code: "true"
+            cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/p4-shim:buildcache-amd64
     steps:
       # Standard runners ship ~14 GB free; drop the unused preinstalled
       # toolchains so the image build + scan never run out of disk.
@@ -90,7 +99,7 @@ jobs:
           # Read-only: the e2e build job owns cache export for this image.
           cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
 
-      - name: Build MCP server base image
+      - name: Build ${{ matrix.name }} image
         if: ${{ !matrix.use-build-action }}
         uses: ./.github/actions/build-docker-image
         with:
@@ -100,7 +109,7 @@ jobs:
           push: "false"
           load: "true"
           tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
-          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:buildcache
+          cache-from: ${{ matrix.cache-from }}
 
       - name: Scan image for CVEs
         uses: ./.github/actions/scan-docker-image

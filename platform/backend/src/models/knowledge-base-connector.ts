@@ -544,6 +544,7 @@ class KnowledgeBaseConnectorModel {
         ),
       );
   }
+
   // SPDX-SnippetEnd
 
   /**

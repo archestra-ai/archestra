@@ -7,12 +7,14 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import logger from "@/logging";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import { repairStructuredOutputText } from "@/utils/structured-output-repair";
 import {
   getProviderChatInteractionType,
   withKbObservability,
 } from "./kb-interaction";
 import { resolveRerankerConfig } from "./kb-llm-client";
 import { callNativeRerank } from "./native-rerank";
+import { RERANKER_OUTPUT_CONTRACT } from "./reranker-prompt";
 
 async function rerank(params: {
   queryText: string;
@@ -66,7 +68,9 @@ Query: ${queryText}
 Passages:
 ${numberedList}
 
-Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Return scores for all passages.`;
+Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Return scores for all passages.
+
+${RERANKER_OUTPUT_CONTRACT}`;
 
   const schema = z.object({
     scores: z.array(
@@ -99,6 +103,7 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
           model: rerankerConfig.llmModel,
           schema,
           prompt,
+          experimental_repairText: repairStructuredOutputText,
         }),
       buildInteraction: (res) =>
         buildRerankerInteraction(rerankerConfig, prompt, res),

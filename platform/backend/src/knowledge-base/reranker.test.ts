@@ -141,6 +141,34 @@ describe("rerank", () => {
     expect(result.map((r) => r.id)).toEqual(["b", "c", "a"]);
   });
 
+  it("reads scores out of a reply wrapped in reasoning tokens and a markdown fence", async () => {
+    // A reasoning model behind an endpoint that doesn't constrain decoding
+    // leaves its chain of thought in `content` and fences the object; scoring
+    // must still happen rather than silently degrading to the original order.
+    setupRerankerConfig();
+    const chunks = [makeChunk("a", "low relevance"), makeChunk("b", "high")];
+
+    serveScores(
+      "<think>\nPassage 1 answers the query directly.\n</think>\n\n" +
+        "```json\n" +
+        JSON.stringify({
+          scores: [
+            { index: 0, score: 4 },
+            { index: 1, score: 9 },
+          ],
+        }) +
+        "\n```",
+    );
+
+    const result = await rerank({
+      queryText: "test query",
+      chunks,
+      organizationId: "test-org-id",
+    });
+
+    expect(result.map((r) => r.id)).toEqual(["b", "a"]);
+  });
+
   it("filters out chunks below minimum relevance score", async () => {
     setupRerankerConfig();
     const chunks = [

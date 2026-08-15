@@ -954,6 +954,14 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       name: "vllm",
       missingBaseUrlMessage: "vLLM base URL is required.",
       keyless: true,
+      // vLLM implements OpenAI's `response_format: json_schema` by compiling
+      // the schema into a decoding grammar. Without this the compatible client
+      // downgrades generateObject flows (KB reranker, dual-LLM subagents) to a
+      // schema-less `json_object`, and since nothing else carries the schema to
+      // the model, the model is left to guess the shape — a reasoning model
+      // then answers with `<think>` text and a fenced object that no JSON
+      // parser accepts.
+      supportsStructuredOutputs: true,
     }),
     defaultBaseUrl: config.llm.vllm.baseUrl,
     // No apiKeyRequiredMessage — key is optional

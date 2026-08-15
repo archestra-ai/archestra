@@ -1,5 +1,5 @@
 import { addNomicTaskPrefix } from "@archestra/shared";
-import { generateObject } from "ai";
+import { generateObject, NoObjectGeneratedError } from "ai";
 import { z } from "zod";
 import { createDirectLLMModel } from "@/clients/llm-client";
 import { callEmbedding } from "@/knowledge-base/embedding-clients";
@@ -9,8 +9,10 @@ import {
   callNativeRerank,
   isNativeRerankModel,
 } from "@/knowledge-base/native-rerank";
+import { RERANKER_OUTPUT_CONTRACT } from "@/knowledge-base/reranker-prompt";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, ModelModel } from "@/models";
+import { repairStructuredOutputText } from "@/utils/structured-output-repair";
 
 interface KnowledgeConfigValidationResult {
   ok: boolean;
@@ -140,6 +142,7 @@ class KnowledgeSettingsService {
         model: llmModel,
         schema: RERANKER_VALIDATION_SCHEMA,
         prompt: RERANKER_VALIDATION_PROMPT,
+        experimental_repairText: repairStructuredOutputText,
       });
       if (Array.isArray(result.object?.scores)) {
         return { ok: true };
@@ -156,12 +159,19 @@ class KnowledgeSettingsService {
       // A rerank-named model on a provider with no native rerank surface went
       // through the chat-completions probe, which such deployments reject with
       // an unhelpful raw error — explain the mismatch when the name gives it
-      // away.
+      // away. Checked first: a wrong kind of model is a more specific (and more
+      // actionable) diagnosis than whatever it answered with.
       const rerankApiHint =
         /rerank/i.test(model) &&
         !isNativeRerankModel({ provider: resolved.provider, model })
           ? " — this looks like a dedicated rerank-API model, which is supported with Cohere and Azure AI Foundry keys. With this provider, select a chat model instead."
           : "";
+      // The model answered — it just didn't answer with an object. That is a
+      // structured-output problem, not a connectivity or credential one, so it
+      // gets its own explanation rather than the raw-error wrapper below.
+      if (!rerankApiHint && NoObjectGeneratedError.isInstance(error)) {
+        return { ok: false, error: unstructuredRerankerResponseMessage(error) };
+      }
       return {
         ok: false,
         error: `Failed to verify reranker model. Raw error: ${knowledgeValidationErrorMessage(error)}${rerankApiHint}`,
@@ -181,6 +191,46 @@ function knowledgeValidationErrorMessage(error: unknown): string {
   );
 }
 
+/**
+ * The model answered, but not with an object reranking can read — the repair
+ * pass could not find one either. Worth its own message: the raw AI SDK text
+ * ("No object generated: could not parse the response.") names neither the
+ * cause nor the fix, and the fix is a property of the deployment rather than of
+ * the credential or the model name.
+ */
+function unstructuredRerankerResponseMessage(
+  error: NoObjectGeneratedError,
+): string {
+  const excerpt = responseExcerpt(error.text);
+  if (!excerpt) {
+    // The SDK saw no text at all. A reasoning model that spends its whole
+    // output budget thinking lands here, and no decoding setting fixes that.
+    return "The reranker model returned no text to score with. This usually means a reasoning model spent its whole output budget thinking; pick a model that answers directly.";
+  }
+  return (
+    "The reranker model replied, but not with the JSON object reranking needs. " +
+    "Models that wrap their answer in reasoning tokens, prose, or markdown fences do this when the " +
+    "endpoint does not constrain decoding to the requested JSON schema. Enable guided/structured " +
+    `decoding (JSON schema) on the endpoint, or pick a model that supports structured outputs.${excerpt}`
+  );
+}
+
+/**
+ * A short, quoted piece of the model's reply, so an admin can tell a reasoning
+ * preamble from a refusal without reading server logs. Safe to surface: the
+ * probe prompt is a fixed synthetic passage, so the reply carries no
+ * organization content.
+ */
+function responseExcerpt(text: string | undefined): string {
+  const collapsed = text?.replace(/\s+/g, " ").trim();
+  if (!collapsed) return "";
+  const clipped =
+    collapsed.length > RESPONSE_EXCERPT_MAX_LENGTH
+      ? `${collapsed.slice(0, RESPONSE_EXCERPT_MAX_LENGTH)}…`
+      : collapsed;
+  return ` The model replied: "${clipped}"`;
+}
+
 // ===== Internal constants =====
 
 const RERANKER_VALIDATION_SCHEMA = z.object({
@@ -190,4 +240,6 @@ const RERANKER_VALIDATION_SCHEMA = z.object({
 const RERANKER_VALIDATION_PROMPT =
   "You are a relevance scoring assistant. Score the passage from 0 to 10 for how " +
   "relevant it is to the query.\n\nQuery: hello\n\nPassages:\n[0] hello world\n\n" +
-  "Return a score for the passage.";
+  `Return a score for the passage.\n\n${RERANKER_OUTPUT_CONTRACT}`;
+
+const RESPONSE_EXCERPT_MAX_LENGTH = 200;

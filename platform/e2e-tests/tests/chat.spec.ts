@@ -366,6 +366,96 @@ test.describe("Chat active run reconnect", () => {
   });
 });
 
+test.describe("Chat thinking block layout", () => {
+  test.setTimeout(120_000);
+
+  // A thinking block renders markdown, so it can hold a code line or a URL that
+  // has no break opportunity to shrink at. Those must scroll inside the block:
+  // if they size the block instead, the conversation itself scrolls sideways.
+  test("keeps a streaming thinking block within the conversation width", async ({
+    page,
+    request,
+    makeApiRequest,
+    syncModels,
+  }) => {
+    await expectWireMockReady();
+
+    const { apiKeyId, runtimeModel } =
+      await ensureWireMockAnthropicChatProvider({
+        request,
+        makeApiRequest,
+        syncModels,
+      });
+
+    await goToChat(page);
+    await expectChatReady(page);
+    await selectApiKeyById(page, apiKeyId);
+
+    const modelSelectorTrigger = page
+      .getByTestId(E2eTestId.ChatModelSelectorTrigger)
+      .or(page.getByRole("button", { name: /select model/i }))
+      .or(page.getByRole("button", { name: /claude|gpt|gemini/i }))
+      .first();
+    await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
+    await modelSelectorTrigger.click();
+
+    const modelDialog = page.getByRole("dialog", { name: "Select Model" });
+    await expect(modelDialog).toBeVisible({ timeout: 5_000 });
+    await selectRuntimeModelFromDialog(page, runtimeModel);
+
+    const testMessageId = makeTestMessageId("chat-thinking-overflow-e2e-test");
+    await page
+      .getByTestId(E2eTestId.ChatPromptTextarea)
+      .fill(`Test message ${testMessageId}: think it through.`);
+    await page.keyboard.press("Enter");
+
+    // A live block is expanded while it streams, so this is the state the
+    // overflow shows up in. Wait for the widest content — the long code line —
+    // to be on screen before measuring.
+    await expect(page.getByText("reconcileEverything").first()).toBeVisible({
+      timeout: 90_000,
+    });
+    expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
+
+    // And again once the block has settled and the reader reopens it.
+    await expect(
+      page.getByText("The helper reconciles every knob in one call.").first(),
+    ).toBeVisible({ timeout: 90_000 });
+    await page
+      .getByText(/Thought for \d+ seconds?/)
+      .first()
+      .click();
+    await expect(page.getByText("reconcileEverything").first()).toBeVisible({
+      timeout: 10_000,
+    });
+    expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
+  });
+});
+
+/**
+ * Widest horizontal overflow, in pixels, of the conversation transcript and of
+ * the page itself — the two surfaces a too-wide message part pushes a scrollbar
+ * onto. Content that legitimately scrolls (a code block, a wide table) does so
+ * inside its own container and is not counted here.
+ */
+async function conversationHorizontalOverflow(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const log = document.querySelector('[role="log"]');
+    if (!log) {
+      throw new Error("Conversation transcript (role=log) not found");
+    }
+    const candidates = [
+      document.documentElement,
+      log,
+      // use-stick-to-bottom owns the scrolling element inside the transcript.
+      ...log.querySelectorAll(":scope > div"),
+    ];
+    return Math.max(
+      ...candidates.map((element) => element.scrollWidth - element.clientWidth),
+    );
+  });
+}
+
 async function expectWireMockReady() {
   try {
     const response = await fetch(`${WIREMOCK_BASE_URL}/__admin/health`);

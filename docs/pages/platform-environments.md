@@ -35,7 +35,7 @@ Every organization has an implicit **Default** environment. Any resource whose e
 
 ## Where new resources land
 
-New resources go to Default unless you say otherwise. In **Settings → Environments**, the "Where new resources land" panel sets a landing environment per kind of resource: MCP servers, MCP Apps, agents, MCP gateways, LLM proxies, and knowledge connectors are each configured on their own. A new MCP server can start in `explore` while a new MCP App starts in `launch`.
+New resources go to Default unless you say otherwise. In **Settings → Environments**, the cog beside "Add environment" opens "Where new resources land", which sets a landing environment per kind of resource: MCP servers, MCP Apps, agents, MCP gateways, LLM proxies, and knowledge connectors are each configured on their own. A new MCP server can start in `explore` while a new MCP App starts in `launch`. The cog appears once you have at least one environment besides Default.
 
 The setting only applies when nobody picks an environment. Choosing one on the create form always wins, including choosing Default. Changing the setting never moves resources that already exist.
 

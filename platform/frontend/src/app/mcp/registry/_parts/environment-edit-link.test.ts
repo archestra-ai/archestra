@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clearEnvironmentDialogParams,
   setEnvironmentCreateParam,
+  setEnvironmentDefaultsParam,
   setEnvironmentEditParam,
 } from "./environment-edit-link";
 
@@ -33,6 +34,14 @@ describe("setEnvironmentEditParam", () => {
   it("accepts the default sentinel as an id", () => {
     expect(setEnvironmentEditParam("", "default")).toBe("edit=default");
   });
+
+  it("drops the resource-defaults param", () => {
+    const result = new URLSearchParams(
+      setEnvironmentEditParam("resource-defaults=1", "env-1"),
+    );
+    expect(result.has("resource-defaults")).toBe(false);
+    expect(result.get("edit")).toBe("env-1");
+  });
 });
 
 describe("setEnvironmentCreateParam", () => {
@@ -45,12 +54,42 @@ describe("setEnvironmentCreateParam", () => {
     expect(result.has("edit")).toBe(false);
     expect(result.get("create")).toBe("1");
   });
+
+  it("drops the resource-defaults param", () => {
+    const result = new URLSearchParams(
+      setEnvironmentCreateParam("resource-defaults=1"),
+    );
+    expect(result.has("resource-defaults")).toBe(false);
+    expect(result.get("create")).toBe("1");
+  });
+});
+
+describe("setEnvironmentDefaultsParam", () => {
+  it("adds the resource-defaults param to an empty search", () => {
+    expect(setEnvironmentDefaultsParam("")).toBe("resource-defaults=1");
+  });
+
+  it("drops the editor params (dialogs are mutually exclusive)", () => {
+    const result = new URLSearchParams(
+      setEnvironmentDefaultsParam("edit=env-1&create=1"),
+    );
+    expect(result.has("edit")).toBe(false);
+    expect(result.has("create")).toBe(false);
+    expect(result.get("resource-defaults")).toBe("1");
+  });
+
+  it("preserves other params", () => {
+    const result = new URLSearchParams(setEnvironmentDefaultsParam("foo=bar"));
+    expect(result.get("foo")).toBe("bar");
+    expect(result.get("resource-defaults")).toBe("1");
+  });
 });
 
 describe("clearEnvironmentDialogParams", () => {
-  it("removes both dialog params", () => {
+  it("removes every dialog param", () => {
     expect(clearEnvironmentDialogParams("edit=env-1")).toBe("");
     expect(clearEnvironmentDialogParams("create=1")).toBe("");
+    expect(clearEnvironmentDialogParams("resource-defaults=1")).toBe("");
   });
 
   it("preserves other params", () => {

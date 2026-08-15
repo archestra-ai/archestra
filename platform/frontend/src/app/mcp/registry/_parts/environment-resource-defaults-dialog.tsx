@@ -5,8 +5,10 @@ import {
   ENVIRONMENT_DEFAULTABLE_RESOURCES,
   type EnvironmentDefaultableResource,
 } from "@archestra/shared";
-import { SettingsBlock } from "@/components/settings/settings-block";
+import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -29,10 +31,18 @@ const DEFAULT_ENVIRONMENT_VALUE = "__default__";
  * Chooses, per resource kind, which environment newly created items of that
  * kind land in when their creator does not pick one. Unset kinds keep landing
  * in the org Default environment.
+ *
+ * Each select saves on change rather than on a submit: the rows are
+ * independent settings, so there is nothing to validate across them and
+ * nothing a Cancel could usefully roll back.
  */
-export function EnvironmentResourceDefaultsSection({
+export function EnvironmentResourceDefaultsDialog({
+  open,
+  onOpenChange,
   canEdit,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   canEdit: boolean;
 }) {
   const { data: environmentList } = useEnvironments();
@@ -41,32 +51,37 @@ export function EnvironmentResourceDefaultsSection({
   const defaultEnvironment = useDefaultEnvironment();
   const updateMutation = useUpdateEnvironmentResourceDefaults();
 
-  // With no environments to choose from every kind can only land in Default,
-  // so the whole panel would be a column of disabled selects.
-  if (environments.length === 0) return null;
-
   return (
-    <SettingsBlock
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
       title="Where new resources land"
       description={`New resources land in the environment chosen here, unless whoever creates them picks another one. A kind left on “${defaultEnvironment.name}” keeps landing there. Changing a choice never moves resources that already exist.`}
-      control={null}
+      size="medium"
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        {ENVIRONMENT_DEFAULTABLE_RESOURCES.map((resource) => (
-          <ResourceDefaultRow
-            key={resource}
-            resource={resource}
-            value={resourceDefaults?.[resource] ?? null}
-            environments={environments}
-            defaultEnvironmentName={defaultEnvironment.name}
-            disabled={!canEdit || updateMutation.isPending}
-            onChange={(environmentId) =>
-              updateMutation.mutate({ [resource]: environmentId })
-            }
-          />
-        ))}
-      </div>
-    </SettingsBlock>
+      <DialogBody>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {ENVIRONMENT_DEFAULTABLE_RESOURCES.map((resource) => (
+            <ResourceDefaultRow
+              key={resource}
+              resource={resource}
+              value={resourceDefaults?.[resource] ?? null}
+              environments={environments}
+              defaultEnvironmentName={defaultEnvironment.name}
+              disabled={!canEdit || updateMutation.isPending}
+              onChange={(environmentId) =>
+                updateMutation.mutate({ [resource]: environmentId })
+              }
+            />
+          ))}
+        </div>
+      </DialogBody>
+      <DialogStickyFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Close
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
   );
 }
 

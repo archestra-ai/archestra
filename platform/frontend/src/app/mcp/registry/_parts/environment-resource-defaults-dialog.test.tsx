@@ -6,7 +6,7 @@ import {
   useUpdateEnvironmentResourceDefaults,
 } from "@/lib/environment.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
-import { EnvironmentResourceDefaultsSection } from "./environment-resource-defaults-section";
+import { EnvironmentResourceDefaultsDialog } from "./environment-resource-defaults-dialog";
 
 // Radix Select relies on pointer-capture / scrollIntoView, which jsdom omits.
 Element.prototype.scrollIntoView = vi.fn();
@@ -43,7 +43,21 @@ function setEnvironments(
   } as unknown as ReturnType<typeof useEnvironments>);
 }
 
-describe("EnvironmentResourceDefaultsSection", () => {
+function renderDialog(
+  props: { canEdit: boolean; open?: boolean } = {
+    canEdit: true,
+  },
+) {
+  return render(
+    <EnvironmentResourceDefaultsDialog
+      open={props.open ?? true}
+      onOpenChange={vi.fn()}
+      canEdit={props.canEdit}
+    />,
+  );
+}
+
+describe("EnvironmentResourceDefaultsDialog", () => {
   beforeEach(() => {
     mutate.mockClear();
     vi.mocked(useUpdateEnvironmentResourceDefaults).mockReturnValue({
@@ -55,14 +69,6 @@ describe("EnvironmentResourceDefaultsSection", () => {
     } as unknown as ReturnType<typeof useDefaultEnvironment>);
   });
 
-  test("renders nothing when the org has no environments to choose from", () => {
-    setEnvironments([]);
-    const { container } = render(
-      <EnvironmentResourceDefaultsSection canEdit />,
-    );
-    expect(container).toBeEmptyDOMElement();
-  });
-
   test("shows the configured environment per resource kind", () => {
     setEnvironments(
       [
@@ -71,7 +77,7 @@ describe("EnvironmentResourceDefaultsSection", () => {
       ],
       { mcpRegistry: "env-explore", app: "env-launch" },
     );
-    render(<EnvironmentResourceDefaultsSection canEdit />);
+    renderDialog();
 
     expect(screen.getByLabelText("MCP servers")).toHaveTextContent("Explore");
     expect(screen.getByLabelText("MCP Apps")).toHaveTextContent("Launch");
@@ -81,7 +87,7 @@ describe("EnvironmentResourceDefaultsSection", () => {
 
   test("saves only the kind that changed", async () => {
     setEnvironments([{ id: "env-launch", name: "Launch", restricted: false }]);
-    render(<EnvironmentResourceDefaultsSection canEdit />);
+    renderDialog();
 
     await userEvent.click(screen.getByLabelText("MCP Apps"));
     await userEvent.click(screen.getByRole("option", { name: "Launch" }));
@@ -93,7 +99,7 @@ describe("EnvironmentResourceDefaultsSection", () => {
     setEnvironments([{ id: "env-locked", name: "Locked", restricted: true }], {
       mcpRegistry: "env-locked",
     });
-    render(<EnvironmentResourceDefaultsSection canEdit />);
+    renderDialog();
 
     expect(
       screen.getByText(/Creators without permission to deploy here fall back/i),
@@ -102,8 +108,15 @@ describe("EnvironmentResourceDefaultsSection", () => {
 
   test("is read-only without environment:update", () => {
     setEnvironments([{ id: "env-launch", name: "Launch", restricted: false }]);
-    render(<EnvironmentResourceDefaultsSection canEdit={false} />);
+    renderDialog({ canEdit: false });
 
     expect(screen.getByLabelText("MCP Apps")).toBeDisabled();
+  });
+
+  test("renders nothing while closed", () => {
+    setEnvironments([{ id: "env-launch", name: "Launch", restricted: false }]);
+    renderDialog({ canEdit: true, open: false });
+
+    expect(screen.queryByLabelText("MCP Apps")).not.toBeInTheDocument();
   });
 });

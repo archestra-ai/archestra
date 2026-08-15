@@ -55,23 +55,17 @@ Exclusions are stored per agent and have no effect in **Custom** mode. Cloning a
 
 ## Missing Tool Connections
 
-An agent's tools can come from MCP servers that each person connects with their own account. Share that agent, and a teammate may have no connection to one of those servers. By default they still start the chat. They find out only when a tool from that server runs.
+An agent's tools can come from MCP servers that each person connects with their own account. Share that agent, and a teammate who has not connected one of those servers finds out only when a tool from it runs.
 
-**When someone is missing a tool connection** sits in **Custom** mode, under Tools & Knowledge Sources.
+**When someone is missing a tool connection** sits in **Custom** mode, under Tools & Knowledge Sources:
 
-![The missing tool connection setting in the agent dialog](/docs/automated_screenshots/platform-agents_missing-tool-connections.webp)
+- **Let them continue** — the default. Nothing is shown up front.
+- **Let them continue, with a warning** — the chat names the servers they have not connected, and offers to connect them.
+- **Stop them from using the agent** — the agent is marked unavailable in the chat picker, and the run is refused wherever it is triggered from.
 
-- **Let them continue** — nothing is shown up front. This is the default.
-- **Let them continue, with a warning** — the chat names the servers they have not connected.
-- **Stop them from using the agent** — the agent is greyed out in the chat picker, and the run is refused. This holds wherever the agent is triggered from, not just chat.
+A server counts as connected when the person's own connection covers it, when a team or organization connection does, or when the agent pins one shared account. Servers that need no credentials never count as missing.
 
-A server counts as connected when the person's own connection covers it, when a team or organization connection does, or when the agent pins one shared account for everyone. Servers that need no credentials never count as missing.
-
-The setting does nothing in **Auto** mode. There, each caller's tools come from what that caller can already reach.
-
-### Use Case
-
-The Platform team shares a **Release Reporter** agent with everyone. Its tools read build data from an MCP server that each person connects themselves. Set the agent to **Stop them from using the agent**. A teammate in Support who never connected that server sees the agent greyed out with the reason — instead of a failed tool call three messages in.
+The setting does nothing in **Auto** mode, where each caller's tools come from what they can already reach.
 
 ## Invocation Paths
 

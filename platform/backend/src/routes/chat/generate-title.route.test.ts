@@ -792,4 +792,71 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
       modelId: "qwen3-32b",
     });
   });
+
+  test("a Microsoft 365 Copilot chat still titles on the organization default", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Copilot cannot run a title generation at all, so inheriting the
+    // conversation's model here would trade an organization-default title for
+    // no title. The conversation is left to the organization default instead.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeConversationWithExchange(agent.id);
+
+    const orgSecret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const orgApiKey = await makeLlmProviderApiKey(
+      organizationId,
+      orgSecret.id,
+      {
+        provider: "anthropic",
+        scope: "org",
+        name: "Anthropic",
+      },
+    );
+    const orgModel = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(orgModel.id, orgApiKey.id);
+
+    const chatSecret = await makeSecret({
+      secret: { apiKey: "refresh-token" },
+    });
+    const chatApiKey = await makeLlmProviderApiKey(
+      organizationId,
+      chatSecret.id,
+      {
+        provider: "microsoft-365-copilot",
+        scope: "personal",
+        userId: currentUser.id,
+        name: "Microsoft 365 Copilot",
+      },
+    );
+    const chatModel = await makeModelRow(
+      "microsoft-365-copilot",
+      "microsoft-365-copilot",
+    );
+    await db
+      .update(schema.conversationsTable)
+      .set({ modelId: chatModel.id, chatApiKeyId: chatApiKey.id })
+      .where(eq(schema.conversationsTable.id, conversation.id));
+
+    mockGenerateText.mockResolvedValue({
+      text: "Friendly greeting",
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().title).toBe("Friendly greeting");
+    expect(mockGenerateText.mock.calls[0][0].model).toMatchObject({
+      modelId: "claude-sonnet-5",
+    });
+  });
 });

@@ -342,7 +342,8 @@ export async function resolveConfiguredAgentLlm(
 /**
  * Resolve an agent's configured LLM, filling in the provider API key when the
  * agent only pins a model. If the agent has no usable model selection, fall
- * back to organization/default resolution.
+ * back to the inherited selection (see `inheritFrom`), then to
+ * organization/default resolution.
  */
 export async function resolveAgentLlmOrDefault(params: {
   agent?: PinnedLlmSelection | null;

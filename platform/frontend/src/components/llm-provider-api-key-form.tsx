@@ -256,6 +256,13 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://docs.vllm.ai/",
     consoleName: "vLLM Docs",
+    // A vLLM key is a server, not an account, so the endpoint is the whole
+    // point of the form and belongs above "advanced settings" rather than
+    // hidden inside it. It is also unusable when blank — vLLM has no default
+    // endpoint, so an unset base URL routes to api.openai.com.
+    baseUrlRequired: true,
+    description:
+      "Point this at a vLLM server's OpenAI-compatible API (e.g. http://your-vllm-host:8000/v1). Every model that server lists is added. Serving more models means more servers — add each one here and the platform sends each model to the server that hosts it.",
   },
   ollama: {
     name: "Ollama (OpenAI-compatible)",

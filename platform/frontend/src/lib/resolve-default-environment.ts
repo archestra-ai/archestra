@@ -13,7 +13,9 @@ import type { EnvironmentDefaultableResource } from "@archestra/shared";
  */
 export function resolveDefaultEnvironmentId(params: {
   environments: { id: string; restricted: boolean }[];
-  resourceDefaults: Partial<Record<EnvironmentDefaultableResource, string | null>>;
+  resourceDefaults: Partial<
+    Record<EnvironmentDefaultableResource, string | null>
+  >;
   resource: EnvironmentDefaultableResource;
   canDeployToRestricted: boolean;
 }): string | null {

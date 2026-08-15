@@ -90,10 +90,9 @@ describe("EnvironmentResourceDefaultsSection", () => {
   });
 
   test("warns that a restricted target falls back for creators without permission", () => {
-    setEnvironments(
-      [{ id: "env-locked", name: "Locked", restricted: true }],
-      { mcpRegistry: "env-locked" },
-    );
+    setEnvironments([{ id: "env-locked", name: "Locked", restricted: true }], {
+      mcpRegistry: "env-locked",
+    });
     render(<EnvironmentResourceDefaultsSection canEdit />);
 
     expect(

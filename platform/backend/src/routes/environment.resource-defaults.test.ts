@@ -242,7 +242,9 @@ describe("environment resource defaults", () => {
       offset: 0,
     });
     const defaultsRow = rows.find(
-      (row) => row.resourceId === organization.id && row.action === "environment.updated",
+      (row) =>
+        row.resourceId === organization.id &&
+        row.action === "environment.updated",
     );
     expect(defaultsRow).toBeDefined();
     expect(defaultsRow?.outcome).toBe("success");

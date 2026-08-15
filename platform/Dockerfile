@@ -350,7 +350,16 @@ RUN apk --no-cache upgrade && \
     # Install PostgreSQL 17, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
-    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec git git-daemon && \
+    #
+    # 18 HIGH PostgreSQL CVEs (CVE-2026-19385, CVE-2026-18408, CVE-2026-16239/16238,
+    # CVE-2026-15742/15741, CVE-2026-14680/14679/14677/14676/14671/14670/14669/14668/14664/14662,
+    # CVE-2026-6471, CVE-2026-6464) are fixed in 17.11-r0 and 18.5-r0. Both majors are pinned
+    # because postgresql-pgvector depends on postgresql18, so that major lands in the image
+    # alongside the 17 we actually run. Same stale-layer hazard as the curl pin above: the bare
+    # `apk upgrade` cannot help a Docker-cached layer, so the explicit floors both guarantee the
+    # fixed versions and bust the cache.
+    apk add --no-cache --upgrade "postgresql17>=17.11-r0" "postgresql17-contrib>=17.11-r0" \
+        "postgresql18>=18.5-r0" postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
@@ -401,7 +410,11 @@ RUN chmod +x /usr/local/bin/dagger
 # point the SDK at the baked-in CLI so it never downloads one at runtime.
 ENV _EXPERIMENTAL_DAGGER_CLI_BIN=/usr/local/bin/dagger
 
-RUN apk add --no-cache supervisor && \
+# CVE-2026-6100 (CRITICAL) plus CVE-2026-15308, CVE-2026-11972, CVE-2026-11940, CVE-2026-4786
+# and CVE-2026-4519 (HIGH) in python3, all fixed in 3.12.14-r0. python3 arrives transitively via
+# supervisor, so pin an explicit floor here — the bare `apk upgrade` earlier in this stage runs
+# before python3 is installed and cannot lift it.
+RUN apk add --no-cache --upgrade supervisor "python3>=3.12.14-r0" && \
     # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \

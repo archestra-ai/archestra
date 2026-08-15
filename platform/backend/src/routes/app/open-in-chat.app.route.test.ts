@@ -1,4 +1,9 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  getArchestraToolFullName,
+  TOOL_EDIT_APP_SHORT_NAME,
+} from "@archestra/shared";
+import { executeArchestraTool } from "@/archestra-mcp-server";
 import {
   AgentModel,
   AppModel,
@@ -17,6 +22,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
   let organizationId: string;
   let user: User;
   let memberDefaultAgentId: string;
+  let memberDefaultAgentName: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
     const organization = await makeOrganization();
@@ -27,6 +33,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     // The seeded conversation binds to the caller's default chat agent.
     const agent = await makeAgent({ organizationId, agentType: "agent" });
     memberDefaultAgentId = agent.id;
+    memberDefaultAgentName = agent.name;
     await MemberModel.setDefaultAgent(user.id, organizationId, agent.id);
 
     app = createFastifyInstance();
@@ -162,6 +169,44 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(messages).toHaveLength(2);
     expect(expectSeededRender(messages[0])).toBe(id);
     expectSeededGreeting(messages[1], "Inline");
+  });
+
+  test("an app the org's default locked opens into a chat that can still build it", async () => {
+    // The Apps page creates the app and drops the user into this conversation
+    // to build it, so the new-app lock default must not refuse that chat the
+    // moment it opens — while every other chat meets the lock straight away.
+    await OrganizationModel.patch(organizationId, {
+      newAppsLockedByDefault: true,
+    });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Kickoff", openInChat: true },
+    });
+    expect(created.statusCode).toBe(200);
+    const { id, conversationId, locked } = created.json();
+    expect(locked).toBe(true);
+    expect(conversationId).toBeTruthy();
+
+    const editFrom = (conversation: string) =>
+      executeArchestraTool(
+        getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+        { appId: id, baseVersion: 1, replacementHtml: "<h1>built</h1>" },
+        {
+          agent: { id: memberDefaultAgentId, name: memberDefaultAgentName },
+          organizationId,
+          userId: user.id,
+          conversationId: conversation,
+          isolationKey: conversation,
+        },
+      );
+
+    expect((await editFrom(conversationId)).isError).toBe(false);
+
+    const elsewhere = await editFrom(crypto.randomUUID());
+    expect(elsewhere.isError).toBe(true);
+    expect(JSON.stringify(elsewhere.content)).toContain("locked");
   });
 
   test("the seeded greeting omits the app description", async () => {

@@ -68,7 +68,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ExternalAppResolutionSchema,
-  SelectAppSchema,
+  PublicAppSchema,
   SelectAppVersionSchema,
   SelectToolSchema,
   UpdateAppSchema,
@@ -105,7 +105,7 @@ const UpdateAppBodySchema = UpdateAppSchema.extend({
 
 // Create/update responses carry soft save-time validation warnings (the save
 // succeeded; the html has structural issues worth surfacing to the author).
-const AppWithWarningsSchema = SelectAppSchema.extend({
+const AppWithWarningsSchema = PublicAppSchema.extend({
   warnings: z.array(z.string()).optional(),
 });
 
@@ -133,7 +133,7 @@ const OpenExternalAppInChatResponseSchema = OpenAppInChatResponseSchema.extend({
 // render team-name badges and seed the visibility editor, plus the caller's
 // viewerRole so the settings surface can show a "Viewing as administrator"
 // banner when an admin opens an app they only see through oversight.
-const AppWithTeamsSchema = SelectAppSchema.extend({
+const AppWithTeamsSchema = PublicAppSchema.extend({
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
   // People the app is shared with individually. A non-empty list on a
   // `personal`-scoped app is what the settings form renders as "Users" — the
@@ -558,6 +558,15 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
             organizationId,
           }));
+          // The Apps page creates a blank app and drops the user straight into
+          // this conversation to build it. When the organization's default is
+          // what locked the app, that build has to be able to start, so the
+          // conversation gets the same creation-time grace `scaffold_app`
+          // gives its own (chat carries the conversation id as its session
+          // key). Everyone else meets the lock immediately.
+          if (lifecycleDefaults.locked) {
+            await AppModel.setLockGraceSessionKey(app.id, conversationId);
+          }
         } catch (error) {
           logger.warn(
             { err: error, appId: app.id },

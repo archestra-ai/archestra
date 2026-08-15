@@ -4,8 +4,8 @@ use std::sync::Arc;
 use axum::Router;
 use jsonschema::{Draft, Validator};
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, ContentBlock, Implementation, ListToolsResult, PaginatedRequestParams,
-    ServerCapabilities, ServerInfo,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, Implementation, ListToolsResult,
+    PaginatedRequestParams, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::transport::streamable_http_server::{
@@ -86,7 +86,7 @@ impl BenchmarkMcp {
         };
 
         let config = StreamableHttpServerConfig::default()
-            .with_stateful_mode(false)
+            .with_legacy_session_mode(false)
             .with_json_response(true)
             .with_sse_keep_alive(None)
             .with_cancellation_token(cancel.child_token());
@@ -278,27 +278,30 @@ impl ServerHandler for BenchmarkMcpHandler {
         &self,
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + rmcp::service::MaybeSendFuture + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + rmcp::service::MaybeSendFuture + '_
+    {
         let ctx = self.ctx.clone();
         async move {
             let mut guard = ctx.lock().await;
             let Some(task_ctx) = guard.as_mut() else {
-                return Ok(text_result("No task is active; this submission was ignored."));
+                return Ok(text_result("No task is active; this submission was ignored.").into());
             };
             if !task_ctx.accepting {
                 return Ok(text_result(
                     "This task has more steps to complete. Keep following the instructions and call submit_result only when the final step asks you to hand in your answer.",
-                ));
+                )
+                .into());
             }
             if task_ctx.accepted.is_some() {
-                return Ok(text_result(
-                    "A result was already accepted for this task; ignoring this submission.",
-                ));
+                return Ok(
+                    text_result("A result was already accepted for this task; ignoring this submission.").into(),
+                );
             }
             if task_ctx.failed {
                 return Ok(text_result(
                     "The format-correction budget for this task is exhausted; this submission was ignored.",
-                ));
+                )
+                .into());
             }
 
             task_ctx.attempts += 1;
@@ -306,23 +309,23 @@ impl ServerHandler for BenchmarkMcpHandler {
                 Some(args) => args,
                 None => {
                     let errors = vec!["- at (root): missing `result` argument".to_string()];
-                    return Ok(reject(task_ctx, errors));
+                    return Ok(reject(task_ctx, errors).into());
                 }
             };
 
             let result = args.get("result").cloned().unwrap_or(JsonValue::Null);
             if !result.is_object() {
                 let errors = vec!["- at (root): `result` must be a JSON object".to_string()];
-                return Ok(reject(task_ctx, errors));
+                return Ok(reject(task_ctx, errors).into());
             }
 
             let errors = schema_errors(&task_ctx.validator, &result);
             if errors.is_empty() {
                 task_ctx.accepted = Some(canonical_bytes(&result));
-                return Ok(text_result("Result accepted. The format is valid; you are done."));
+                return Ok(text_result("Result accepted. The format is valid; you are done.").into());
             }
 
-            Ok(reject(task_ctx, errors))
+            Ok(reject(task_ctx, errors).into())
         }
     }
 }

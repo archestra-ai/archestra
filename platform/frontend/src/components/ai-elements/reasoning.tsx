@@ -217,7 +217,18 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Response className="grid gap-2">{children}</Response>
+      {/* Thinking is markdown like any other turn, so it can carry code
+          blocks, long identifiers or URLs that have no break opportunity to
+          shrink at. `grid` sized its single `auto` track from the widest of
+          those, which stretched the whole column — prose included — past the
+          chat and put a horizontal scrollbar on the conversation. `flex-col`
+          keeps the same gap rhythm while leaving every child at the
+          container's width, and `overflow-x-auto` mirrors MessageContent:
+          anything that still can't shrink (a long token, a wide table)
+          scrolls inside the block instead of widening the page. */}
+      <Response className="flex flex-col gap-2 overflow-x-auto">
+        {children}
+      </Response>
     </CollapsibleContent>
   ),
 );

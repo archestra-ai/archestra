@@ -98,12 +98,15 @@ describe("getToolSource", () => {
   // cannot read apps, or any catalog they cannot see) used to fall through to
   // "Observed tools" — a label the source filter then contradicted, since those
   // tools are catalog-backed and never match the observed-tools origin.
-  it("keeps a tool with an unknown catalog on the MCP source", () => {
+  it("keeps a tool with an unknown catalog on the MCP source, listed or not", () => {
+    // Catalog absent from a loaded list.
     expect(
       getToolSource({ catalogId: "catalog-missing", name: "whatever__open" }, [
         makeCatalogItem({ id: "catalog-1" }),
       ]),
     ).toEqual({ kind: "mcp", catalogItem: undefined });
+    // No list at all — the first render, before the catalog query resolves,
+    // which is exactly when a wrong badge would flash.
     expect(
       getToolSource({ catalogId: "catalog-missing", name: "whatever__open" }),
     ).toEqual({ kind: "mcp", catalogItem: undefined });

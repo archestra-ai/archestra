@@ -48,7 +48,7 @@ export function EnvironmentResourceDefaultsSection({
   return (
     <SettingsBlock
       title="Where new resources land"
-      description={`Newly created resources are assigned to the environment chosen here unless whoever creates them picks another one. Leave a kind on “${defaultEnvironment.name}” to keep the previous behavior.`}
+      description={`New resources land in the environment chosen here, unless whoever creates them picks another one. A kind left on “${defaultEnvironment.name}” keeps landing there. Changing a choice never moves resources that already exist.`}
       control={null}
     >
       <div className="grid gap-4 sm:grid-cols-2">

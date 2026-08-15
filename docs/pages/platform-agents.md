@@ -63,9 +63,9 @@ An agent's tools can come from MCP servers that each person connects with their 
 
 - **Let them continue** — nothing is shown up front. This is the default.
 - **Let them continue, with a warning** — the chat names the servers they have not connected.
-- **Stop them from using the agent** — the agent is greyed out in the chat picker, and the chat refuses to start.
+- **Stop them from using the agent** — the agent is greyed out in the chat picker, and the run is refused. This holds wherever the agent is triggered from, not just chat.
 
-A server counts as connected when the person's own connection covers it, when a team or organization connection does, or when the server uses one shared account. Servers that need no credentials never count as missing.
+A server counts as connected when the person's own connection covers it, when a team or organization connection does, or when the agent pins one shared account for everyone. Servers that need no credentials never count as missing.
 
 The setting does nothing in **Auto** mode. There, each caller's tools come from what that caller can already reach.
 

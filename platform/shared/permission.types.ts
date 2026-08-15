@@ -302,7 +302,9 @@ export type AgentScope = "personal" | "team" | "org";
  * - "llm_proxy" → "llmProxy"
  * - "profile" → "agent" (legacy profiles use the "agent" resource)
  */
-export function getResourceForAgentType(agentType: AgentType): Resource {
+export function getResourceForAgentType(
+  agentType: AgentType,
+): Extract<Resource, "agent" | "mcpGateway" | "llmProxy"> {
   switch (agentType) {
     case "mcp_gateway":
       return "mcpGateway";

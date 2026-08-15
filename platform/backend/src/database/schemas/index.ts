@@ -100,6 +100,7 @@ export {
 export { default as encryptionKeyCanariesTable } from "./encryption-key-canary";
 export { default as environmentsTable } from "./environment";
 export { default as environmentDefaultUserLimitsTable } from "./environment-default-user-limits";
+export { default as environmentResourceDefaultsTable } from "./environment-resource-default";
 export { default as filesTable } from "./file";
 export { default as githubAppConfigsTable } from "./github-app-config";
 export { default as githubPatsTable } from "./github-pat";

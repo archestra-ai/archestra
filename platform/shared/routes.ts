@@ -517,6 +517,7 @@ export const RouteId = {
   UpdateEnvironment: "updateEnvironment",
   DeleteEnvironment: "deleteEnvironment",
   UpdateDefaultEnvironment: "updateDefaultEnvironment",
+  UpdateEnvironmentResourceDefaults: "updateEnvironmentResourceDefaults",
   GetK8sCapabilities: "getK8sCapabilities",
 
   // GitHub App Configuration Routes

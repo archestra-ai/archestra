@@ -1,14 +1,21 @@
+import type { EnvironmentDefaultableResource } from "@archestra/shared";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import logger from "@/logging";
-import { EnvironmentModel, OrganizationModel } from "@/models";
+import {
+  EnvironmentModel,
+  EnvironmentResourceDefaultModel,
+  OrganizationModel,
+} from "@/models";
 import {
   ApiError,
   type CreateEnvironment,
   type Environment,
   type EnvironmentList,
+  type EnvironmentResourceDefaults,
   type InternalMcpCatalogServerType,
   type TrustedImageRegistries,
   type UpdateEnvironment,
+  type UpdateEnvironmentResourceDefaults,
 } from "@/types";
 import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "./remote-server-network-policy";
@@ -52,11 +59,82 @@ function teardownEnvironmentEngine(environment: Environment): void {
 export async function listEnvironments(
   organizationId: string,
 ): Promise<EnvironmentList> {
-  const [environments, defaultAssignedCatalogCount] = await Promise.all([
-    EnvironmentModel.listForOrganization(organizationId),
-    EnvironmentModel.countDefaultAssigned(organizationId),
-  ]);
-  return { environments, defaultAssignedCatalogCount };
+  const [environments, defaultAssignedCatalogCount, resourceDefaults] =
+    await Promise.all([
+      EnvironmentModel.listForOrganization(organizationId),
+      EnvironmentModel.countDefaultAssigned(organizationId),
+      EnvironmentResourceDefaultModel.getForOrganization(organizationId),
+    ]);
+  return { environments, defaultAssignedCatalogCount, resourceDefaults };
+}
+
+/**
+ * Point one or more resource kinds at the environment their new items should
+ * land in. Omitted kinds are untouched; an explicit null resets that kind to
+ * the org Default environment. Each named environment must belong to the
+ * organization, so a default can never point across tenants.
+ */
+export async function updateEnvironmentResourceDefaults(params: {
+  organizationId: string;
+  data: UpdateEnvironmentResourceDefaults;
+}): Promise<EnvironmentResourceDefaults> {
+  const { organizationId, data } = params;
+  const changes = entriesOf(data);
+
+  // Validate every named environment before writing any of them, so a payload
+  // with one bad id is rejected whole rather than applied halfway.
+  for (const [, environmentId] of changes) {
+    if (environmentId === null) continue;
+    const environment = await EnvironmentModel.findByIdForOrganization(
+      environmentId,
+      organizationId,
+    );
+    if (!environment) {
+      throw new ApiError(404, "Environment not found");
+    }
+  }
+
+  for (const [resource, environmentId] of changes) {
+    await EnvironmentResourceDefaultModel.setForResource({
+      organizationId,
+      resource,
+      environmentId,
+    });
+  }
+
+  return EnvironmentResourceDefaultModel.getForOrganization(organizationId);
+}
+
+/**
+ * The environment a newly created resource of this kind should be bound to when
+ * its creator did not choose one. Returns null — the org Default environment,
+ * i.e. the historical behavior — when no default is configured, or when the
+ * configured one is restricted and the caller may not deploy there. Falling
+ * back rather than throwing keeps an admin's convenience setting from blocking
+ * a create the caller is otherwise allowed to perform; explicitly *choosing*
+ * that environment is still refused by `assertCanAssignEnvironment`.
+ */
+export async function resolveDefaultEnvironmentForNewResource(params: {
+  organizationId: string;
+  resource: EnvironmentDefaultableResource;
+  canDeployToRestricted: boolean;
+}): Promise<string | null> {
+  const { organizationId, resource, canDeployToRestricted } = params;
+
+  const environmentId = await EnvironmentResourceDefaultModel.findForResource({
+    organizationId,
+    resource,
+  });
+  if (!environmentId) return null;
+
+  const environment = await EnvironmentModel.findByIdForOrganization(
+    environmentId,
+    organizationId,
+  );
+  if (!environment) return null;
+  if (environment.restricted && !canDeployToRestricted) return null;
+
+  return environment.id;
 }
 
 export async function createEnvironment(params: {
@@ -277,6 +355,21 @@ export async function deleteEnvironment(params: {
 }
 
 // === Internal helpers ===
+
+/**
+ * The resource kinds a partial defaults payload actually names, with their
+ * keys typed (`Object.entries` widens them to `string`). A kind that is absent
+ * — or present but undefined — is dropped, so only an explicit null clears a
+ * kind and everything else is left unchanged.
+ */
+function entriesOf(
+  data: UpdateEnvironmentResourceDefaults,
+): Array<[EnvironmentDefaultableResource, string | null]> {
+  return Object.entries(data).filter(
+    (entry): entry is [EnvironmentDefaultableResource, string | null] =>
+      entry[1] !== undefined,
+  );
+}
 
 /**
  * Resolve the allowlist validation regex governing a catalog item, plus the

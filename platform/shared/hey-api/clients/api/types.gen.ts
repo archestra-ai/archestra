@@ -12142,6 +12142,7 @@ export type GetAgentsResponses = {
             environmentId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
+            missingCredentialBehavior: 'allow' | 'warn' | 'block';
             accessAllTools: boolean;
             accessAllSkills: boolean;
             accessAllSubagents: boolean;
@@ -12266,6 +12267,7 @@ export type CreateAgentData = {
         environmentId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
+        missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
         builtInAgentConfig?: {
@@ -12400,6 +12402,7 @@ export type CreateAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
         accessAllSubagents: boolean;
@@ -12623,6 +12626,7 @@ export type GetAllAgentsResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
         accessAllSubagents: boolean;
@@ -12715,6 +12719,94 @@ export type GetAllAgentsResponses = {
 };
 
 export type GetAllAgentsResponse = GetAllAgentsResponses[keyof GetAllAgentsResponses];
+
+export type GetAgentCredentialReadinessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/credential-readiness';
+};
+
+export type GetAgentCredentialReadinessErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentCredentialReadinessError = GetAgentCredentialReadinessErrors[keyof GetAgentCredentialReadinessErrors];
+
+export type GetAgentCredentialReadinessResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        agentId: string;
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
+        missingConnections: Array<{
+            catalogId: string;
+            catalogName: string;
+        }>;
+    }>;
+};
+
+export type GetAgentCredentialReadinessResponse = GetAgentCredentialReadinessResponses[keyof GetAgentCredentialReadinessResponses];
 
 export type GetDefaultMcpGatewayData = {
     body?: never;
@@ -12817,6 +12909,7 @@ export type GetDefaultMcpGatewayResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
         accessAllSubagents: boolean;
@@ -13011,6 +13104,7 @@ export type GetDefaultLlmProxyResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
         accessAllSubagents: boolean;
@@ -13133,6 +13227,7 @@ export type ImportAgentData = {
             scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
             toolExposureMode: 'full' | 'search_and_run_only';
+            missingCredentialBehavior?: 'allow' | 'warn' | 'block';
             accessAllTools?: boolean;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
@@ -13284,6 +13379,7 @@ export type ImportAgentResponses = {
             environmentId: string | null;
             passthroughHeaders: Array<string> | null;
             toolExposureMode: 'full' | 'search_and_run_only';
+            missingCredentialBehavior: 'allow' | 'warn' | 'block';
             accessAllTools: boolean;
             accessAllSkills: boolean;
             accessAllSubagents: boolean;
@@ -13571,6 +13667,7 @@ export type GetAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
         accessAllSubagents: boolean;
@@ -13686,6 +13783,7 @@ export type UpdateAgentData = {
         environmentId?: string | null;
         passthroughHeaders?: Array<string> | null;
         toolExposureMode?: 'full' | 'search_and_run_only';
+        missingCredentialBehavior?: 'allow' | 'warn' | 'block';
         accessAllTools?: boolean;
         accessAllSubagents?: boolean;
         builtInAgentConfig?: {
@@ -13822,6 +13920,7 @@ export type UpdateAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
         accessAllSubagents: boolean;
@@ -14108,6 +14207,7 @@ export type GetAgentVersionResponses = {
             systemPrompt: string | null;
             considerContextUntrusted: boolean;
             toolExposureMode: string;
+            missingCredentialBehavior: string;
             accessAllTools: boolean;
             accessAllSubagents: boolean;
             passthroughHeaders: Array<string>;
@@ -14273,6 +14373,7 @@ export type RestoreAgentVersionResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
         accessAllSubagents: boolean;
@@ -14478,6 +14579,7 @@ export type CloneAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
         accessAllSubagents: boolean;
@@ -14677,6 +14779,7 @@ export type ExportAgentResponses = {
             scope: 'personal' | 'team' | 'org';
             considerContextUntrusted: boolean;
             toolExposureMode: 'full' | 'search_and_run_only';
+            missingCredentialBehavior?: 'allow' | 'warn' | 'block';
             accessAllTools: boolean;
             incomingEmailEnabled: boolean;
             incomingEmailSecurityMode: 'private' | 'internal' | 'public';
@@ -15619,6 +15722,7 @@ export type RestoreAgentResponses = {
         environmentId: string | null;
         passthroughHeaders: Array<string> | null;
         toolExposureMode: 'full' | 'search_and_run_only';
+        missingCredentialBehavior: 'allow' | 'warn' | 'block';
         accessAllTools: boolean;
         accessAllSkills: boolean;
         accessAllSubagents: boolean;

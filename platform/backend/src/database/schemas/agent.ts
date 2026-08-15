@@ -14,6 +14,7 @@ import type {
   AgentScope,
   AgentType,
   BuiltInAgentConfig,
+  MissingCredentialBehavior,
   ToolExposureMode,
 } from "@/types/agent";
 import environmentsTable from "./environment";
@@ -132,6 +133,24 @@ const agentsTable = softDeletablePgTable(
       .$type<ToolExposureMode>()
       .notNull()
       .default("full"),
+
+    /**
+     * How a shared agent behaves for a caller who has no usable connection to
+     * one of the MCP servers its tools come from — the case where an agent is
+     * shared org-wide but one of its servers is only connected personally by
+     * its author. `allow` (the default) preserves the historical behavior: the
+     * caller starts the conversation normally and only hits an error when a
+     * tool from the unconnected server runs. `warn` and `block` move that
+     * discovery to conversation start; `block` refuses the turn outright.
+     *
+     * Only meaningful for agents with explicitly assigned tools — under
+     * `accessAllTools` ("Auto") every caller resolves their own tools, so
+     * there is nothing to be missing.
+     */
+    missingCredentialBehavior: text("missing_credential_behavior")
+      .$type<MissingCredentialBehavior>()
+      .notNull()
+      .default("allow"),
 
     /**
      * "Auto" tool mode (vs "Custom"): whether search_tools/run_tool may

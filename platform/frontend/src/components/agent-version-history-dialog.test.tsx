@@ -60,6 +60,7 @@ const snapshot = (
   systemPrompt: "be helpful",
   considerContextUntrusted: false,
   toolExposureMode: "full",
+  missingCredentialBehavior: "allow",
   accessAllTools: false,
   accessAllSubagents: false,
   passthroughHeaders: [],

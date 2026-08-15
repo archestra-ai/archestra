@@ -54,6 +54,58 @@ export type AgentScope = ResourceVisibilityScope;
 export const ToolExposureModeSchema = z.enum(["full", "search_and_run_only"]);
 export type ToolExposureMode = z.infer<typeof ToolExposureModeSchema>;
 
+/**
+ * What happens when someone starts a conversation with an agent whose tools
+ * come from MCP servers they have no usable connection to.
+ *
+ * - `allow`  — nothing up front; the caller only learns about it when a tool
+ *              from the unconnected server is actually invoked (default, and
+ *              the behavior that predates this setting).
+ * - `warn`   — the caller may still use the agent, but the chat surfaces which
+ *              connections are missing before they send anything.
+ * - `block`  — the agent cannot be started at all until every connection its
+ *              tools need resolves for the caller.
+ */
+export const MissingCredentialBehaviorSchema = z.enum([
+  "allow",
+  "warn",
+  "block",
+]);
+export type MissingCredentialBehavior = z.infer<
+  typeof MissingCredentialBehaviorSchema
+>;
+
+/**
+ * The agent fields a missing-credential readiness check needs. Any richer agent
+ * shape satisfies it.
+ */
+export type ReadinessAgent = {
+  id: string;
+  missingCredentialBehavior: MissingCredentialBehavior;
+  accessAllTools: boolean;
+};
+
+/** An MCP server an agent needs but the caller has no usable connection to. */
+const MissingAgentConnectionSchema = z.object({
+  catalogId: z.string(),
+  catalogName: z.string(),
+});
+
+/**
+ * Pre-flight answer to "can this caller actually run this agent's tools?".
+ * Only computed for agents that opted out of `allow`, so an empty
+ * `missingConnections` on a `warn`/`block` agent means the caller is fully
+ * connected.
+ */
+export const AgentCredentialReadinessSchema = z.object({
+  agentId: z.string(),
+  missingCredentialBehavior: MissingCredentialBehaviorSchema,
+  missingConnections: z.array(MissingAgentConnectionSchema),
+});
+export type AgentCredentialReadiness = z.infer<
+  typeof AgentCredentialReadinessSchema
+>;
+
 export const AgentScopeFilterSchema = z.enum([
   "personal",
   "team",
@@ -155,6 +207,7 @@ const selectExtendedFields = {
   agentType: AgentTypeSchema,
   scope: AgentScopeSchema,
   toolExposureMode: ToolExposureModeSchema,
+  missingCredentialBehavior: MissingCredentialBehaviorSchema,
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable(),
   passthroughHeaders: z.array(z.string()).nullable(),
 };
@@ -164,6 +217,7 @@ const insertExtendedFields = {
   agentType: AgentTypeSchema.optional(),
   scope: AgentScopeSchema.optional(),
   toolExposureMode: ToolExposureModeSchema.optional(),
+  missingCredentialBehavior: MissingCredentialBehaviorSchema.optional(),
   builtInAgentConfig: BuiltInAgentConfigSchema.nullable().optional(),
   passthroughHeaders: PassthroughHeadersSchema,
 };

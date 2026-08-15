@@ -204,6 +204,7 @@ import {
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
+type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
 
 /** The API caps `limit` at 100, which is as much as the skill picker can load. */
 const SKILL_PICKER_PAGE_SIZE = 100;
@@ -1075,6 +1076,8 @@ function AgentDialogBody({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
+  const [missingCredentialBehavior, setMissingCredentialBehavior] =
+    useState<MissingCredentialBehavior>("allow");
   // New agents default to Auto mode (implicit access to all tools); editing an
   // existing agent overwrites this from its stored value.
   const [accessAllTools, setAccessAllTools] = useState(true);
@@ -1294,6 +1297,8 @@ function AgentDialogBody({
                 : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
             toolExposureMode: agentData.toolExposureMode ?? "full",
+            missingCredentialBehavior:
+              agentData.missingCredentialBehavior ?? "allow",
             accessAllTools: agentData.accessAllTools ?? false,
             accessAllSubagents: agentData.accessAllSubagents ?? false,
           }
@@ -1323,6 +1328,7 @@ function AgentDialogBody({
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
+            missingCredentialBehavior: "allow",
             accessAllTools: true,
             accessAllSubagents: true,
           };
@@ -1346,6 +1352,7 @@ function AgentDialogBody({
       setScope(nextValues.scope);
       setPassthroughHeaders(nextValues.passthroughHeaders);
       setToolExposureMode(nextValues.toolExposureMode);
+      setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
       setAccessAllSubagents(nextValues.accessAllSubagents);
       setAutoConfigureOnToolDiscovery(nextValues.autoConfigureOnToolDiscovery);
@@ -1764,6 +1771,7 @@ function AgentDialogBody({
               knowledgeBaseIds: knowledgeBaseIds,
               connectorIds: connectorIds,
               toolExposureMode,
+              missingCredentialBehavior,
               accessAllTools,
               accessAllSubagents,
             }),
@@ -1814,6 +1822,7 @@ function AgentDialogBody({
             knowledgeBaseIds: knowledgeBaseIds,
             connectorIds: connectorIds,
             toolExposureMode,
+            missingCredentialBehavior,
             accessAllTools,
             accessAllSubagents,
           }),
@@ -1966,6 +1975,7 @@ function AgentDialogBody({
     passthroughHeaders,
     deleteAgent,
     toolExposureMode,
+    missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
     supportsEnvironment,
@@ -2009,6 +2019,7 @@ function AgentDialogBody({
     dualLlmMaxRounds,
     passthroughHeaders,
     toolExposureMode,
+    missingCredentialBehavior,
     accessAllTools,
     accessAllSubagents,
   });
@@ -2831,6 +2842,57 @@ function AgentDialogBody({
                         />
                       </div>
                     )}
+
+                    {/* Only meaningful for Custom mode: an Auto agent resolves
+                      tools from what each caller can already reach, so no
+                      caller can be missing a connection. */}
+                    {!autoToolsMode && (
+                      <div className="space-y-2">
+                        <Label htmlFor="missing-credential-behavior">
+                          When someone is missing a tool connection
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Applies when this agent is shared and a teammate has
+                          no connection to one of the MCP servers its tools come
+                          from.
+                        </p>
+                        <Select
+                          value={missingCredentialBehavior}
+                          onValueChange={(value) =>
+                            setMissingCredentialBehavior(
+                              value as MissingCredentialBehavior,
+                            )
+                          }
+                        >
+                          <SelectTrigger
+                            id="missing-credential-behavior"
+                            className="w-full"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.map(
+                              (option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          {
+                            MISSING_CREDENTIAL_BEHAVIOR_OPTIONS.find(
+                              (option) =>
+                                option.value === missingCredentialBehavior,
+                            )?.description
+                          }
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -3524,9 +3586,35 @@ type AgentFormFields = {
   dualLlmMaxRounds: string;
   passthroughHeaders: string[];
   toolExposureMode: ToolExposureMode;
+  missingCredentialBehavior: MissingCredentialBehavior;
   accessAllTools: boolean;
   accessAllSubagents: boolean;
 };
+
+const MISSING_CREDENTIAL_BEHAVIOR_OPTIONS: Array<{
+  value: MissingCredentialBehavior;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "allow",
+    label: "Let them continue",
+    description:
+      "Nothing is shown up front. The tools they can reach work normally, and they are asked to connect only if they run one that needs it.",
+  },
+  {
+    value: "warn",
+    label: "Let them continue, with a warning",
+    description:
+      "The conversation opens with a note naming the servers they have not connected, so they know some tools will not run.",
+  },
+  {
+    value: "block",
+    label: "Stop them from using the agent",
+    description:
+      "The agent cannot be picked or messaged until they have connected every server its tools come from.",
+  },
+];
 
 // Normalizes set-like id arrays (order-independent) so reselecting the same
 // teams/knowledge bases/connectors in a different order isn't mistaken for an

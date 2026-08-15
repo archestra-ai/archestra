@@ -54,6 +54,7 @@ import {
   type GatewayAgent,
   type InsertAgent,
   type McpServerAgentUsage,
+  type ReadinessAgent,
   type SortingQuery,
   type UpdateAgent,
 } from "@/types";
@@ -649,6 +650,12 @@ class AgentModel {
       scope?: AgentScope;
       excludeOtherPersonalAgents?: boolean;
       status?: AgentRecordStatus;
+      /**
+       * Keep only agents that enforce a missing-credential behavior. The
+       * readiness pre-flight has nothing to say about the rest, and this keeps
+       * it from loading an organization's whole agent roster to discard it.
+       */
+      onlyEnforcingMissingCredentials?: boolean;
     },
   ): Promise<Agent[]> {
     let query = db
@@ -678,6 +685,12 @@ class AgentModel {
     // Filter by agentType if specified (single type, backwards compatible)
     else if (options?.agentType !== undefined) {
       whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
+    }
+
+    if (options?.onlyEnforcingMissingCredentials) {
+      whereConditions.push(
+        ne(schema.agentsTable.missingCredentialBehavior, "allow"),
+      );
     }
 
     // Exclude built-in agents when explicitly requested or when user is not an admin
@@ -1590,6 +1603,27 @@ class AgentModel {
       .limit(1);
 
     return result?.environmentId ?? null;
+  }
+
+  /**
+   * The two fields that decide whether a caller missing an MCP connection is
+   * warned, blocked, or left alone. Kept narrow so the chat turn's pre-flight
+   * check costs one indexed row read.
+   */
+  static async findMissingCredentialEnforcement(
+    id: string,
+  ): Promise<ReadinessAgent | null> {
+    const [result] = await db
+      .select({
+        id: schema.agentsTable.id,
+        missingCredentialBehavior: schema.agentsTable.missingCredentialBehavior,
+        accessAllTools: schema.agentsTable.accessAllTools,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result ?? null;
   }
 
   static async findIdentityProviderId(id: string): Promise<string | null> {

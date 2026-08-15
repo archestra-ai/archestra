@@ -2864,7 +2864,10 @@ function AgentDialogBody({
                             )
                           }
                         >
-                          <SelectTrigger id="missing-credential-behavior">
+                          <SelectTrigger
+                            id="missing-credential-behavior"
+                            className="w-full"
+                          >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
